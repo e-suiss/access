@@ -135,7 +135,10 @@ impl SessionTx for PgTx {
         &mut self,
         subject: [u8; 16],
     ) -> Result<Option<(String, String)>, SessionError> {
-        Ok(self.0.contact(subject).await?)
+        let Some((kind, stored)) = self.0.contact(subject).await? else {
+            return Ok(None);
+        };
+        Ok(self.reveal(subject, &stored).await?.map(|v| (kind, v)))
     }
 
     async fn notify<N: Notifier + Sync>(

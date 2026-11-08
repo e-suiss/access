@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT class, wrapped_dek AS \"wrapped!\" FROM access.identity_subject_keys\n                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND wrapped_dek IS NOT NULL\n                ORDER BY class FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "class",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_subject_keys",
+            "name": "class"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "wrapped!",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_subject_keys",
+            "name": "wrapped_dek"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "978c362a271b6b1920f24f24b92e61529c9981878557f607a9bbdbc9226be3f7"
+}

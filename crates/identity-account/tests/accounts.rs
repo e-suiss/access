@@ -36,7 +36,7 @@ use access_identity_account::domain::login::{PasswordLogin, REJECTED};
 use access_identity_account::domain::password::{Argon2Params, PasswordRejected};
 use access_identity_account::domain::status::AccountStatus;
 use access_identity_account::domain::throttle::ThrottlePolicy;
-use access_identity_account::ports::{BreachRanges, Clock, RangeUnavailable};
+use access_identity_account::ports::{AccountDb, AccountTx, BreachRanges, Clock, RangeUnavailable};
 use access_store::authority::{LogRecord, create_domain};
 use access_store::identity::{RealmId, TenantId, TenantTx};
 use access_store::scope::DomainId;
@@ -80,6 +80,7 @@ struct Env {
     tenant: TenantId,
     realm: RealmId,
     kek: SoftKek,
+    vault: access_identity_account::app::vault::Vault,
     ids: IdKey,
     clock: TestClock,
     hasher: Hasher,
@@ -98,7 +99,7 @@ impl Env {
     }
 
     fn pg(&self) -> PgAccounts {
-        PgAccounts(self.db.app.clone())
+        PgAccounts::sealed(self.db.app.clone(), self.vault.clone())
     }
 
     async fn audit_types(&self) -> Vec<String> {
@@ -209,6 +210,10 @@ async fn env(seed: u8, slug: &str) -> Env {
         tenant,
         realm,
         kek: SoftKek::new("realm-kek:1", [seed; 32]),
+        vault: access_identity_account::app::vault::Vault::in_memory(
+            std::sync::Arc::new(SoftKek::new("realm-kek:1", [seed; 32])),
+            [seed; 32],
+        ),
         ids: IdKey::new(Secret::new([seed.wrapping_add(1); 32])),
         clock: TestClock(AtomicU64::new(1_800_000_000_000)),
         hasher: Hasher::new(HasherConfig::sized(Argon2Params::CANONICAL, 4, None)),
@@ -543,7 +548,7 @@ async fn a_taken_identifier_creates_nothing() {
         .await
         .unwrap_err();
     assert!(matches!(err, AccountError::IdentifierTaken));
-    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let mut tx = e.pg().begin(e.tenant, e.realm).await.unwrap();
     assert!(tx.subject_by_identifier("hank2").await.unwrap().is_none());
     tx.commit().await.unwrap();
 }
@@ -600,4 +605,82 @@ async fn no_dummy_argon2_for_absent_or_inactive_accounts() {
         .await;
     assert_eq!(r.problem(), Some(REJECTED));
     assert_eq!(hasher.metrics().hashes(), 1);
+}
+
+// U58, TN-76, OP-42, OP-74, OP-153 m.3 (aa)
+#[tokio::test]
+async fn shredded_keys_leave_the_rows_and_the_blind_index() {
+    use access_identity_account::app::vault;
+    let e = env(30, "ia-vault").await;
+    let id = Identifier::new(IdentifierKind::Email, "Vera@Example.com").unwrap();
+    let s = create(&e.pg(), &e.realm(), &[id], &ADMIN).await.unwrap();
+    let mut tx = e.pg().begin(e.tenant, e.realm).await.unwrap();
+    vault::set_profile(&mut tx.0, &e.vault, s, "name", "Vera Doe")
+        .await
+        .unwrap();
+    assert!(matches!(
+        vault::set_profile(&mut tx.0, &e.vault, s, "shoe_size", "42").await,
+        Err(AccountError::Invalid)
+    ));
+    let rows = tx.0.identifiers(s).await.unwrap();
+    assert_eq!(rows.len(), 1);
+    let access_store::accounts::StoredValue::Sealed { ciphertext, .. } = &rows[0].stored else {
+        panic!("a new identifier is sealed");
+    };
+    assert!(!ciphertext.windows(4).any(|w| w == b"Vera"));
+    assert_eq!(
+        tx.reveal(s, &rows[0].stored).await.unwrap().as_deref(),
+        Some("Vera@Example.com")
+    );
+    assert_eq!(
+        vault::profile(&mut tx.0, &e.vault, s).await.unwrap(),
+        vec![(String::from("name"), String::from("Vera Doe"))]
+    );
+    for (from, to) in [
+        ("staged", "deactivated"),
+        ("deactivated", "tombstone"),
+        ("tombstone", "purging"),
+    ] {
+        assert!(tx.0.set_subject_status(s, from, to).await.unwrap());
+    }
+    let gone = tx.0.shred_subject(s).await.unwrap();
+    assert_eq!(
+        gone.iter().map(|(c, _)| c.as_str()).collect::<Vec<_>>(),
+        ["contact", "profile", "credential"]
+    );
+    let rows = tx.0.identifiers(s).await.unwrap();
+    assert_eq!(rows.len(), 1, "the row stays");
+    assert_eq!(tx.reveal(s, &rows[0].stored).await.unwrap(), None);
+    assert_eq!(
+        vault::profile(&mut tx.0, &e.vault, s).await.unwrap(),
+        Vec::<(String, String)>::new()
+    );
+    assert_eq!(
+        tx.subject_by_identifier("vera@example.COM").await.unwrap(),
+        Some(s),
+        "the blind index outlives the key"
+    );
+    tx.commit().await.unwrap();
+    let again = Identifier::new(IdentifierKind::Email, "vera@example.com").unwrap();
+    assert!(matches!(
+        create(&e.pg(), &e.realm(), &[again], &ADMIN).await,
+        Err(AccountError::IdentifierTaken)
+    ));
+}
+
+// OP-153 m.3 (aa), TI-9
+#[tokio::test]
+async fn no_identifier_is_touched_without_the_vault() {
+    let e = env(31, "ia-novault").await;
+    let id = Identifier::new(IdentifierKind::Email, "nv@example.com").unwrap();
+    let bare = PgAccounts::new(e.db.app.clone());
+    assert!(matches!(
+        create(&bare, &e.realm(), &[id], &ADMIN).await,
+        Err(AccountError::Vault)
+    ));
+    let mut tx = bare.begin(e.tenant, e.realm).await.unwrap();
+    assert!(matches!(
+        tx.subject_by_identifier("nv@example.com").await,
+        Err(AccountError::Vault)
+    ));
 }

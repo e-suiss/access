@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT wrapped_dek AS \"wrapped!\" FROM access.identity_subjects\n                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'purging'\n                  AND wrapped_dek IS NOT NULL FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "wrapped!",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_subjects",
+            "name": "wrapped_dek"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "b394b0bdbe5b1d45662159a2c631cb5ac73de36ea2a239d8c0f8d52fee0306e0"
+}

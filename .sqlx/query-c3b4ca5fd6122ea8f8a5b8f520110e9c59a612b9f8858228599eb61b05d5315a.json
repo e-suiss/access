@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT subject_id FROM access.identity_identifiers\n              WHERE tenant_id = $1 AND realm_id = $2 AND lower(value) = lower($3) AND status = 'active'",
+  "query": "SELECT subject_id FROM access.identity_identifiers\n              WHERE tenant_id = $1 AND realm_id = $2 AND status = 'active'\n                AND (value_index = $3 OR (value IS NOT NULL AND lower(value) = lower($4)))\n              ORDER BY identifier_id LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -19,6 +19,7 @@
       "Left": [
         "Uuid",
         "Uuid",
+        "Bytea",
         "Text"
       ]
     },
@@ -26,5 +27,5 @@
       false
     ]
   },
-  "hash": "37b948ad9cba0493028ab730c7bdf2281f19067ff0f2c23b7bc2b62cba790875"
+  "hash": "c3b4ca5fd6122ea8f8a5b8f520110e9c59a612b9f8858228599eb61b05d5315a"
 }

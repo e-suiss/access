@@ -49,6 +49,79 @@ pub struct SealedSecret {
     pub pepper_version: Option<i16>,
 }
 
+/// A sealed identifier as the vault writes it (OP-153 m.3 (aa)).
+pub struct SealedIdentifier {
+    /// The realm's blind index of the folded value.
+    pub index: [u8; 32],
+    /// The vault class whose subject DEK sealed it: `contact` or `profile`.
+    pub class: &'static str,
+    /// AEAD nonce.
+    pub nonce: [u8; 12],
+    /// Ciphertext and tag.
+    pub ciphertext: Vec<u8>,
+}
+
+/// How an identifier is stored.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StoredValue {
+    /// Written before the vault; the retention job seals it.
+    Plain(String),
+    /// Sealed under the subject's class key.
+    Sealed {
+        /// Vault class.
+        class: String,
+        /// AEAD nonce.
+        nonce: [u8; 12],
+        /// Ciphertext and tag.
+        ciphertext: Vec<u8>,
+    },
+}
+
+/// A stored identifier.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IdentifierRow {
+    /// Internal id.
+    pub id: [u8; 16],
+    /// Kind.
+    pub kind: String,
+    /// The value, plain or sealed.
+    pub stored: StoredValue,
+    /// Whether it is live (not released).
+    pub live: bool,
+    /// When it was added, Unix milliseconds.
+    pub created_ms: i64,
+}
+
+/// A subject's class DEK row.
+pub struct SubjectKeyRow {
+    /// The KEK that wrapped it.
+    pub kek_id: String,
+    /// The wrapped DEK; `None` once shredded.
+    pub wrapped_dek: Option<Vec<u8>>,
+}
+
+/// The stored form of an identifier's columns.
+///
+/// # Errors
+/// [`StoreError::Corrupt`] for a row that is neither plain nor sealed.
+pub fn stored(
+    value: Option<String>,
+    index: Option<Vec<u8>>,
+    class: Option<String>,
+    nonce_bytes: Option<Vec<u8>>,
+    ciphertext: Option<Vec<u8>>,
+) -> Result<StoredValue, StoreError> {
+    match (value, index, class, nonce_bytes, ciphertext) {
+        (Some(v), None, None, None, None) => Ok(StoredValue::Plain(v)),
+        (None, Some(_), Some(class), Some(n), Some(ciphertext)) => Ok(StoredValue::Sealed {
+            class,
+            nonce: nonce(n)?,
+            ciphertext,
+        }),
+        _ => Err(StoreError::Corrupt),
+    }
+}
+
 /// A stored, active credential.
 pub struct CredentialRow {
     /// Internal id.
@@ -243,7 +316,9 @@ impl TenantTx {
         Ok(Some(epoch))
     }
 
-    /// Adds a login identifier; false when the realm already has it in any letter case.
+    /// Adds a sealed login identifier (OP-153 m.3 (aa)); false when the realm already holds its
+    /// blind index, live or tombstoned (TN-76 m.3). A plaintext row written before the vault is
+    /// found by [`Self::subject_by_identifier`] before this is called.
     ///
     /// # Errors
     /// [`StoreError`].
@@ -251,18 +326,23 @@ impl TenantTx {
         &mut self,
         subject: [u8; 16],
         kind: &str,
-        value: &str,
+        sealed: &SealedIdentifier,
     ) -> Result<bool, StoreError> {
         let (tenant, realm) = self.scope()?;
         let n = sqlx::query!(
-            "INSERT INTO access.identity_identifiers (tenant_id, realm_id, subject_id, kind, value)
-             VALUES ($1, $2, $3, $4, $5)
-             ON CONFLICT (tenant_id, realm_id, lower(value)) WHERE status = 'active' DO NOTHING",
+            "INSERT INTO access.identity_identifiers
+               (tenant_id, realm_id, subject_id, kind, value_index, pii_class, nonce, ciphertext)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             ON CONFLICT (tenant_id, realm_id, value_index) WHERE status = 'active' AND value_index IS NOT NULL
+             DO NOTHING",
             tenant,
             realm,
             uuid(subject),
             kind,
-            value,
+            sealed.index.as_slice(),
+            sealed.class,
+            sealed.nonce.as_slice(),
+            sealed.ciphertext,
         )
         .execute(&mut *self.tx)
         .await?
@@ -270,50 +350,329 @@ impl TenantTx {
         Ok(n == 1)
     }
 
-    /// The subject holding `value` in this realm, compared without letter case.
+    /// The subject holding the identifier with blind index `index` in this realm; a row written
+    /// before the vault is matched on `legacy`, its folded plaintext, until it is sealed.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn subject_by_identifier(
         &mut self,
-        value: &str,
+        index: &[u8; 32],
+        legacy: &str,
     ) -> Result<Option<[u8; 16]>, StoreError> {
         let (tenant, realm) = self.scope()?;
         let id = sqlx::query_scalar!(
             "SELECT subject_id FROM access.identity_identifiers
-              WHERE tenant_id = $1 AND realm_id = $2 AND lower(value) = lower($3) AND status = 'active'",
+              WHERE tenant_id = $1 AND realm_id = $2 AND status = 'active'
+                AND (value_index = $3 OR (value IS NOT NULL AND lower(value) = lower($4)))
+              ORDER BY identifier_id LIMIT 1",
             tenant,
             realm,
-            value,
+            index.as_slice(),
+            legacy,
         )
         .fetch_optional(&mut *self.tx)
         .await?;
         Ok(id.map(|u| *u.as_bytes()))
     }
 
-    /// Releases the subject's identifier `value` so it can be taken again.
+    /// Releases the subject's identifier so it can be taken again: by blind index, or by its
+    /// folded plaintext on a row written before the vault.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn release_identifier(
         &mut self,
         subject: [u8; 16],
-        value: &str,
+        index: &[u8; 32],
+        legacy: &str,
     ) -> Result<bool, StoreError> {
         let (tenant, realm) = self.scope()?;
         let n = sqlx::query!(
             "UPDATE access.identity_identifiers SET status = 'released', released_at = now()
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
-                AND lower(value) = lower($4) AND status = 'active'",
+              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'
+                AND (value_index = $4 OR (value IS NOT NULL AND lower(value) = lower($5)))",
             tenant,
             realm,
             uuid(subject),
-            value,
+            index.as_slice(),
+            legacy,
+        )
+        .execute(&mut *self.tx)
+        .await?
+        .rows_affected();
+        Ok(n >= 1)
+    }
+
+    /// The subject's identifiers, live and released, oldest first.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn identifiers(
+        &mut self,
+        subject: [u8; 16],
+    ) -> Result<Vec<IdentifierRow>, StoreError> {
+        let (tenant, realm) = self.scope()?;
+        let rows = sqlx::query!(
+            r#"SELECT identifier_id, kind, value, value_index, pii_class, nonce, ciphertext, status,
+                      (extract(epoch FROM created_at) * 1000)::bigint AS "created_ms!"
+                 FROM access.identity_identifiers
+                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+                ORDER BY identifier_id"#,
+            tenant,
+            realm,
+            uuid(subject),
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        rows.into_iter()
+            .map(|r| {
+                Ok(IdentifierRow {
+                    id: *r.identifier_id.as_bytes(),
+                    kind: r.kind,
+                    stored: stored(r.value, r.value_index, r.pii_class, r.nonce, r.ciphertext)?,
+                    live: r.status == "active",
+                    created_ms: r.created_ms,
+                })
+            })
+            .collect()
+    }
+
+    /// Up to `limit` identifiers of this realm still written in plaintext, for the retention
+    /// job to seal (OP-153 m.3 (aa)): `(identifier, subject, kind, value)`.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn plaintext_identifiers(
+        &mut self,
+        limit: i64,
+    ) -> Result<Vec<([u8; 16], [u8; 16], String, String)>, StoreError> {
+        let (tenant, realm) = self.scope()?;
+        let rows = sqlx::query!(
+            r#"SELECT identifier_id, subject_id, kind, value AS "value!"
+                 FROM access.identity_identifiers
+                WHERE tenant_id = $1 AND realm_id = $2 AND value IS NOT NULL
+                ORDER BY identifier_id LIMIT $3"#,
+            tenant,
+            realm,
+            limit,
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                (
+                    *r.identifier_id.as_bytes(),
+                    *r.subject_id.as_bytes(),
+                    r.kind,
+                    r.value,
+                )
+            })
+            .collect())
+    }
+
+    /// Seals an identifier written in plaintext and clears the plaintext; false when it was
+    /// sealed already.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn seal_identifier(
+        &mut self,
+        id: [u8; 16],
+        sealed: &SealedIdentifier,
+    ) -> Result<bool, StoreError> {
+        let (tenant, realm) = self.scope()?;
+        let n = sqlx::query!(
+            "UPDATE access.identity_identifiers
+                SET value = NULL, value_index = $4, pii_class = $5, nonce = $6, ciphertext = $7
+              WHERE tenant_id = $1 AND realm_id = $2 AND identifier_id = $3 AND value IS NOT NULL",
+            tenant,
+            realm,
+            uuid(id),
+            sealed.index.as_slice(),
+            sealed.class,
+            sealed.nonce.as_slice(),
+            sealed.ciphertext,
         )
         .execute(&mut *self.tx)
         .await?
         .rows_affected();
         Ok(n == 1)
+    }
+
+    /// The subject's DEK of vault class `class` (OP-74 m.1).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn subject_key(
+        &mut self,
+        subject: [u8; 16],
+        class: &str,
+    ) -> Result<Option<SubjectKeyRow>, StoreError> {
+        let (tenant, realm) = self.scope()?;
+        let row = sqlx::query!(
+            "SELECT kek_id, wrapped_dek FROM access.identity_subject_keys
+              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND class = $4",
+            tenant,
+            realm,
+            uuid(subject),
+            class,
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?;
+        Ok(row.map(|r| SubjectKeyRow {
+            kek_id: r.kek_id,
+            wrapped_dek: r.wrapped_dek,
+        }))
+    }
+
+    /// Stores the subject's DEK of vault class `class`; false when it has one already.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn insert_subject_key(
+        &mut self,
+        subject: [u8; 16],
+        class: &str,
+        kek_id: &str,
+        wrapped_dek: &[u8],
+    ) -> Result<bool, StoreError> {
+        let (tenant, realm) = self.scope()?;
+        let n = sqlx::query!(
+            "INSERT INTO access.identity_subject_keys (tenant_id, realm_id, subject_id, class, kek_id, wrapped_dek)
+             VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
+            tenant,
+            realm,
+            uuid(subject),
+            class,
+            kek_id,
+            wrapped_dek,
+        )
+        .execute(&mut *self.tx)
+        .await?
+        .rows_affected();
+        Ok(n == 1)
+    }
+
+    /// Crypto-shreds every key of a `purging` subject: its class DEKs and its own DEK
+    /// (OP-42, OP-74, U58). The rows, `kek_id`s, ciphertexts and blind indexes stay. Returns
+    /// what was shredded as `(class, wrapped key)`, the subject's own DEK last as `credential`;
+    /// empty when nothing was left.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn shred_subject(
+        &mut self,
+        subject: [u8; 16],
+    ) -> Result<Vec<(String, Vec<u8>)>, StoreError> {
+        let (tenant, realm) = self.scope()?;
+        let live = sqlx::query!(
+            r#"SELECT class, wrapped_dek AS "wrapped!" FROM access.identity_subject_keys
+                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND wrapped_dek IS NOT NULL
+                ORDER BY class FOR UPDATE"#,
+            tenant,
+            realm,
+            uuid(subject),
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        sqlx::query!(
+            "UPDATE access.identity_subject_keys SET wrapped_dek = NULL, shredded_at = clock_timestamp()
+              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND wrapped_dek IS NOT NULL",
+            tenant,
+            realm,
+            uuid(subject),
+        )
+        .execute(&mut *self.tx)
+        .await?;
+        let mut out: Vec<(String, Vec<u8>)> =
+            live.into_iter().map(|r| (r.class, r.wrapped)).collect();
+        let own = sqlx::query_scalar!(
+            r#"SELECT wrapped_dek AS "wrapped!" FROM access.identity_subjects
+                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'purging'
+                  AND wrapped_dek IS NOT NULL FOR UPDATE"#,
+            tenant,
+            realm,
+            uuid(subject),
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?;
+        if let Some(w) = own {
+            sqlx::query!(
+                "UPDATE access.identity_subjects SET wrapped_dek = NULL, shredded_at = clock_timestamp()
+                  WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'purging'",
+                tenant,
+                realm,
+                uuid(subject),
+            )
+            .execute(&mut *self.tx)
+            .await?;
+            out.push((String::from("credential"), w));
+        }
+        Ok(out)
+    }
+
+    /// Sets a profile field: the live value is superseded and kept, the new one is sealed under
+    /// the subject's `profile` key (OP-153 m.3 (aa)).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn set_profile_field(
+        &mut self,
+        subject: [u8; 16],
+        field: &str,
+        nonce_bytes: &[u8; 12],
+        ciphertext: &[u8],
+    ) -> Result<(), StoreError> {
+        let (tenant, realm) = self.scope()?;
+        sqlx::query!(
+            "UPDATE access.identity_profile_fields SET superseded_at = clock_timestamp()
+              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND field = $4 AND superseded_at IS NULL",
+            tenant,
+            realm,
+            uuid(subject),
+            field,
+        )
+        .execute(&mut *self.tx)
+        .await?;
+        sqlx::query!(
+            "INSERT INTO access.identity_profile_fields (tenant_id, realm_id, subject_id, field, nonce, ciphertext)
+             VALUES ($1, $2, $3, $4, $5, $6)",
+            tenant,
+            realm,
+            uuid(subject),
+            field,
+            nonce_bytes.as_slice(),
+            ciphertext,
+        )
+        .execute(&mut *self.tx)
+        .await?;
+        Ok(())
+    }
+
+    /// The subject's live profile fields as `(field, nonce, ciphertext)`, by field name.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn profile_fields(
+        &mut self,
+        subject: [u8; 16],
+    ) -> Result<Vec<(String, [u8; 12], Vec<u8>)>, StoreError> {
+        let (tenant, realm) = self.scope()?;
+        let rows = sqlx::query!(
+            "SELECT field, nonce, ciphertext FROM access.identity_profile_fields
+              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND superseded_at IS NULL
+              ORDER BY field",
+            tenant,
+            realm,
+            uuid(subject),
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        rows.into_iter()
+            .map(|r| Ok((r.field, nonce(r.nonce)?, r.ciphertext)))
+            .collect()
     }
 
     /// Stores a credential; returns its id.

@@ -525,7 +525,10 @@ async fn inv_24_a_lost_delivery_changes_no_decision() {
         kek: kek.as_ref(),
         ids: &id_key,
     };
-    let db = PgAccounts(w.db.app.clone());
+    let db = PgAccounts::sealed(
+        w.db.app.clone(),
+        access_identity_account::app::vault::Vault::in_memory(kek.clone(), [9; 32]),
+    );
     let ident = Identifier::new(IdentifierKind::Username, "ada").unwrap();
     let s = create(&db, &realm, &[ident], &ACTOR).await.unwrap();
     change_status(&db, &realm, s, AccountStatus::PendingUserAction, &ACTOR)

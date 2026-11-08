@@ -134,6 +134,7 @@ struct Env {
     tenant: TenantId,
     realm: RealmId,
     kek: SoftKek,
+    vault: access_identity_account::app::vault::Vault,
     ids: IdKey,
     clock: TestClock,
     hasher: Hasher,
@@ -180,7 +181,7 @@ impl Env {
     }
 
     async fn with<T>(&self, f: impl AsyncFnOnce(&TestAuth<'_>) -> T) -> T {
-        let db = PgAccounts(self.db.app.clone());
+        let db = PgAccounts::sealed(self.db.app.clone(), self.vault.clone());
         let registry = PgPasskeys {
             pool: &self.db.app,
             tenant: self.tenant,
@@ -219,7 +220,7 @@ impl Env {
     }
 
     async fn account(&self, who: &str) -> [u8; 16] {
-        let pg = PgAccounts(self.db.app.clone());
+        let pg = PgAccounts::sealed(self.db.app.clone(), self.vault.clone());
         let id = Identifier::new(IdentifierKind::Email, who).unwrap();
         let s = create(&pg, &self.realm(), &[id], &ADMIN).await.unwrap();
         let services = PasswordServices {
@@ -265,6 +266,10 @@ async fn env(seed: u8, slug: &str) -> Env {
         tenant,
         realm,
         kek: SoftKek::new("realm-kek:1", [seed; 32]),
+        vault: access_identity_account::app::vault::Vault::in_memory(
+            std::sync::Arc::new(SoftKek::new("realm-kek:1", [seed; 32])),
+            [seed; 32],
+        ),
         ids: IdKey::new(Secret::new([seed.wrapping_add(1); 32])),
         clock: TestClock(AtomicU64::new(1_800_000_000_000)),
         hasher: Hasher::new(HasherConfig::sized(Argon2Params::CANONICAL, 4, None)),
@@ -426,9 +431,14 @@ async fn identifier_first_does_not_tell_whether_the_account_exists() {
     let e = env(1, "is-a").await;
     e.account("alice@example.com").await;
     let gone = e.account("gone@example.com").await;
-    deactivate(&PgAccounts(e.db.app.clone()), &e.realm(), gone, &ADMIN)
-        .await
-        .unwrap();
+    deactivate(
+        &PgAccounts::sealed(e.db.app.clone(), e.vault.clone()),
+        &e.realm(),
+        gone,
+        &ADMIN,
+    )
+    .await
+    .unwrap();
     let mut shapes = Vec::new();
     for who in [
         "alice@example.com",
@@ -1203,9 +1213,14 @@ async fn deactivation_ends_sessions_in_the_same_transaction() {
     let e = env(9, "is-i").await;
     let alice = e.account("alice@example.com").await;
     let cookie = sign_in(&e, "alice@example.com").await;
-    deactivate(&PgAccounts(e.db.app.clone()), &e.realm(), alice, &ADMIN)
-        .await
-        .unwrap();
+    deactivate(
+        &PgAccounts::sealed(e.db.app.clone(), e.vault.clone()),
+        &e.realm(),
+        alice,
+        &ADMIN,
+    )
+    .await
+    .unwrap();
     assert_eq!(
         status(&e, &cookie).await,
         SessionStatus::Invalid(SessionCheck::Ended)
@@ -1279,7 +1294,7 @@ async fn login_fails_closed_when_the_database_is_unreachable() {
 async fn the_epoch_cache_fails_closed_and_learns_revocations() {
     let e = env(12, "is-l").await;
     let alice = e.account("alice@example.com").await;
-    let db = PgAccounts(e.db.app.clone());
+    let db = PgAccounts::sealed(e.db.app.clone(), e.vault.clone());
     let epochs = Epochs::new(e.tenant, e.realm, 250);
     let now = e.clock.now_ms();
     assert!(!epochs.current(&db, [7; 16], 0, now).await.unwrap());
@@ -1431,7 +1446,7 @@ async fn sign_in_queues_its_claims_and_signals_never_gate() {
             if a.method == AuthMethod::Webauthn && a.webauthn.is_some_and(|w| w.aaguid == [0x11; 16]) && a.evidence.is_some()
     ));
 
-    let pg = PgAccounts(e.db.app.clone());
+    let pg = PgAccounts::sealed(e.db.app.clone(), e.vault.clone());
     let mut tx = pg.begin(e.tenant, e.realm).await.unwrap();
     let rows = tx.credentials(alice, PASSKEY).await.unwrap();
     tx.commit().await.unwrap();

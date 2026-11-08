@@ -393,7 +393,10 @@ fn kit(tenant: TenantId, realm: RealmId, seed: u8, auth: AuthPolicy) -> RealmKit
         realm,
         issuer: format!("https://{HOST}"),
         name: "Acme".into(),
-        kek: Box::new(SoftKek::new("realm-kek:1", [seed; 32])),
+        kek: std::sync::Arc::new(SoftKek::new("realm-kek:1", [seed; 32])),
+        index: std::sync::Arc::new(access_crypto::realm_index::RealmIndexKey::new(Secret::new(
+            [seed; 32],
+        ))),
         ids: IdKey::new(Secret::new([seed.wrapping_add(1); 32])),
         decoys: RealmDecoyKeys::default().with(wa, DecoyKey::new(Secret::new([9; 32]))),
         rp: RelyingParty {
@@ -521,7 +524,7 @@ impl Env {
     }
 
     async fn account(&self, who: &str) -> [u8; 16] {
-        let pg = PgAccounts(self.db.app.clone());
+        let pg = PgAccounts::sealed(self.db.app.clone(), self.kit.vault());
         let id = Identifier::new(IdentifierKind::Email, who).unwrap();
         let s = create(&pg, &self.realm(), &[id], &ADMIN).await.unwrap();
         let services = PasswordServices {
@@ -1681,7 +1684,7 @@ async fn a_known_device_binds_a_later_session() {
     let (mut bob_key, bob_id, bob_user) =
         register_passkey_with(&mut g, "bob@example.com", 0xc2).await;
     let (bob_device, _) = SoftSigner::generate_ed25519().unwrap();
-    let mut tx = PgTx(TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap());
+    let mut tx = PgTx::new(TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap());
     assert!(
         bind_party(&mut tx, &bob, &[6; 16], &[0xd2; 40])
             .await
@@ -1895,7 +1898,7 @@ async fn enumeration_parity_on_login() {
     e.account("ann1@example.com").await;
     let locked = e.account("ann3@example.com").await;
     let gone = e.account("ann4@example.com").await;
-    let pg = PgAccounts(e.db.app.clone());
+    let pg = PgAccounts::sealed(e.db.app.clone(), e.kit.vault());
     change_status(&pg, &e.realm(), locked, AccountStatus::Locked, &ADMIN)
         .await
         .unwrap();
@@ -1945,7 +1948,7 @@ async fn enumeration_timing_parity_nightly() {
     const N: usize = 200;
     const PER_CLASS: usize = 4;
     let e = env_with(10, "lg-t", AuthPolicy::DEFAULT, true).await;
-    let pg = PgAccounts(e.db.app.clone());
+    let pg = PgAccounts::sealed(e.db.app.clone(), e.kit.vault());
     let mut classes: Vec<Vec<String>> = vec![Vec::new(); 4];
     for i in 0..PER_CLASS {
         let active = format!("act{i}@example.com");

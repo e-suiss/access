@@ -161,7 +161,7 @@ async fn the_realm_issuer_claims_are_accepted_for_actor_binding() {
         ),
         Some(Quarantine::SourceNotAccepted)
     );
-    let mut tx = access_identity_account::adapters::pg::PgTx(
+    let mut tx = access_identity_account::adapters::pg::PgTx::new(
         TenantTx::begin(&w.db.app, t, r).await.unwrap(),
     );
     emit(&mut tx, &login).await.unwrap();

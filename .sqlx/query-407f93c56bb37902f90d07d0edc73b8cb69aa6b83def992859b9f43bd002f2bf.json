@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT field, nonce, ciphertext FROM access.identity_profile_fields\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND superseded_at IS NULL\n              ORDER BY field",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "field",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_profile_fields",
+            "name": "field"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "nonce",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_profile_fields",
+            "name": "nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "ciphertext",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_profile_fields",
+            "name": "ciphertext"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "407f93c56bb37902f90d07d0edc73b8cb69aa6b83def992859b9f43bd002f2bf"
+}

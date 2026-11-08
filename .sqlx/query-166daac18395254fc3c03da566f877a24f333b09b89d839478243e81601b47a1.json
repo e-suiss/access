@@ -1,0 +1,121 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT identifier_id, kind, value, value_index, pii_class, nonce, ciphertext, status,\n                      (extract(epoch FROM created_at) * 1000)::bigint AS \"created_ms!\"\n                 FROM access.identity_identifiers\n                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3\n                ORDER BY identifier_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "identifier_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "identifier_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "value",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "value"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "value_index",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "value_index"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "pii_class",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "pii_class"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "nonce",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "ciphertext",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "ciphertext"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "created_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "166daac18395254fc3c03da566f877a24f333b09b89d839478243e81601b47a1"
+}

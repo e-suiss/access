@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_profile_fields SET superseded_at = clock_timestamp()\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND field = $4 AND superseded_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1df6f1482ba9cf9d17235fe5b31a402840d8b21976f161a749b0abf82ec65ad1"
+}

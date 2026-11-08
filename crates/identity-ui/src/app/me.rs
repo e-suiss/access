@@ -212,7 +212,7 @@ async fn bind_party(
     party: &[u8; 16],
     proof: &[u8],
 ) -> Result<(), Reply> {
-    let mut tx = access_identity_account::adapters::pg::PgTx(
+    let mut tx = access_identity_account::adapters::pg::PgTx::new(
         TenantTx::begin(db, kit.tenant, kit.realm)
             .await
             .map_err(|_| unavailable())?,
@@ -242,7 +242,7 @@ async fn device_registered(
         return Err(invalid());
     }
     let s = &proven.session;
-    let mut tx = access_identity_account::adapters::pg::PgTx(
+    let mut tx = access_identity_account::adapters::pg::PgTx::new(
         TenantTx::begin(db, kit.tenant, kit.realm)
             .await
             .map_err(|_| unavailable())?,
@@ -281,7 +281,7 @@ async fn device_bound(
     proven: &access_identity_session::app::devices::ProvenKey,
 ) -> Result<Result<[u8; 16], devices::NotBound>, Reply> {
     let s = &proven.session;
-    let mut tx = access_identity_account::adapters::pg::PgTx(
+    let mut tx = access_identity_account::adapters::pg::PgTx::new(
         TenantTx::begin(db, kit.tenant, kit.realm)
             .await
             .map_err(|_| unavailable())?,
@@ -313,7 +313,7 @@ async fn device_retired(
     use access_identity_account::app::claims::emit;
     use access_identity_account::domain::claims::authenticator_removed;
     use access_kernel::claim::body::AuthenticatorKind;
-    let mut tx = access_identity_account::adapters::pg::PgTx(
+    let mut tx = access_identity_account::adapters::pg::PgTx::new(
         TenantTx::begin(db, kit.tenant, kit.realm)
             .await
             .map_err(|_| unavailable())?,

@@ -175,6 +175,7 @@ struct Env {
     tenant: TenantId,
     realm: RealmId,
     kek: SoftKek,
+    vault: access_identity_account::app::vault::Vault,
     ids: IdKey,
     clock: TestClock,
     relay: FakeRelay,
@@ -221,6 +222,10 @@ async fn env(seed: u8, slug: &str) -> Env {
         tenant,
         realm,
         kek: SoftKek::new("realm-kek:1", [seed; 32]),
+        vault: access_identity_account::app::vault::Vault::in_memory(
+            std::sync::Arc::new(SoftKek::new("realm-kek:1", [seed; 32])),
+            [seed; 32],
+        ),
         ids: IdKey::new(Secret::new([seed.wrapping_add(1); 32])),
         clock,
         relay,
@@ -266,7 +271,7 @@ impl Env {
     async fn subject(&self, who: &str) -> [u8; 16] {
         let id = Identifier::new(IdentifierKind::Email, who).unwrap();
         let s = create(
-            &PgAccounts(self.db.app.clone()),
+            &PgAccounts::sealed(self.db.app.clone(), self.vault.clone()),
             &self.realm(),
             &[id],
             &ADMIN,
@@ -561,7 +566,7 @@ async fn a_shredded_subject_gets_nothing() {
     let e = env(8, "rn-h").await;
     let s = e.subject(EMAIL).await;
     e.queue(&notice(s, START_MS)).await;
-    let pg = PgAccounts(e.db.app.clone());
+    let pg = PgAccounts::sealed(e.db.app.clone(), e.vault.clone());
     for to in [
         AccountStatus::Deactivated,
         AccountStatus::Tombstone,

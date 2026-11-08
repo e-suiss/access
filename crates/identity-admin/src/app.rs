@@ -690,7 +690,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         bound: &idp::Bound,
         exercise: &Digest,
     ) -> Result<Option<ClientSecret>, AdminError> {
-        let mut t = PgTx(t);
+        let mut t = PgTx::new(t);
         let g = idp::governance(&mut t.0)
             .await?
             .ok_or(AdminError::NoRealm)?;

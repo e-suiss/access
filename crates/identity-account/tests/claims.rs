@@ -99,6 +99,7 @@ struct Env {
     realm: RealmId,
     domain: [u8; 32],
     kek: SoftKek,
+    vault: access_identity_account::app::vault::Vault,
     ids: IdKey,
 }
 
@@ -139,6 +140,10 @@ impl Env {
             realm,
             domain,
             kek: SoftKek::new("realm-kek:1", [seed; 32]),
+            vault: access_identity_account::app::vault::Vault::in_memory(
+                std::sync::Arc::new(SoftKek::new("realm-kek:1", [seed; 32])),
+                [seed; 32],
+            ),
             ids: IdKey::new(Secret::new([seed; 32])),
         }
     }
@@ -153,7 +158,7 @@ impl Env {
     }
 
     async fn subject(&self, party: Option<[u8; 16]>) -> [u8; 16] {
-        let mut tx = PgAccounts(self.db.app.clone())
+        let mut tx = PgAccounts::sealed(self.db.app.clone(), self.vault.clone())
             .begin(self.tenant, self.realm)
             .await
             .unwrap();
@@ -231,7 +236,7 @@ fn statements(plane: &Plane) -> Vec<Statement> {
 async fn status_changes_become_superseding_status_claims() {
     let e = Env::new(0x31, true).await;
     let s = e.subject(Some(PARTY)).await;
-    let pg = PgAccounts(e.db.app.clone());
+    let pg = PgAccounts::sealed(e.db.app.clone(), e.vault.clone());
     change_status(&pg, &e.realm(), s, AccountStatus::Suspended, &ADMIN)
         .await
         .unwrap();
@@ -276,7 +281,7 @@ async fn orders_wait_for_the_plane_and_need_a_party_and_an_issuer() {
     let bound = e.subject(Some(PARTY)).await;
     let plane = Plane::default();
     plane.down.store(true, Ordering::SeqCst);
-    let pg = PgAccounts(e.db.app.clone());
+    let pg = PgAccounts::sealed(e.db.app.clone(), e.vault.clone());
     change_status(&pg, &e.realm(), lone, AccountStatus::Suspended, &ADMIN)
         .await
         .unwrap();
@@ -334,7 +339,7 @@ async fn session_authentications_bind_the_registered_instance() {
     .unwrap()
     .unwrap();
     t.commit().await.unwrap();
-    let mut tx = PgAccounts(e.db.app.clone())
+    let mut tx = PgAccounts::sealed(e.db.app.clone(), e.vault.clone())
         .begin(e.tenant, e.realm)
         .await
         .unwrap();
@@ -384,7 +389,7 @@ async fn password_changes_become_authenticator_binding_claims() {
     use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
     use access_identity_account::domain::password::Argon2Params;
     let e = Env::new(0x36, true).await;
-    let pg = PgAccounts(e.db.app.clone());
+    let pg = PgAccounts::sealed(e.db.app.clone(), e.vault.clone());
     let id = Identifier::new(IdentifierKind::Username, "pat").unwrap();
     let s = create(&pg, &e.realm(), &[id], &ADMIN).await.unwrap();
     let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();

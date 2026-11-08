@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_identifiers SET status = 'released', released_at = now()\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'\n                AND (value_index = $4 OR (value IS NOT NULL AND lower(value) = lower($5)))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "561ede3924cfa7369225a107ad0924de63772be8b634d5c457cb8c2a5ee0b694"
+}

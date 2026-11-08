@@ -76,7 +76,10 @@ fn kit(f: &support::Fixture, seed: u8) -> RealmKit {
         realm: f.realm.realm,
         issuer: f.issuer.clone(),
         name: f.slug.clone(),
-        kek: Box::new(SoftKek::new("realm-kek:1", [seed; 32])),
+        kek: std::sync::Arc::new(SoftKek::new("realm-kek:1", [seed; 32])),
+        index: std::sync::Arc::new(access_crypto::realm_index::RealmIndexKey::new(Secret::new(
+            [seed; 32],
+        ))),
         ids: IdKey::new(Secret::new([seed.wrapping_add(1); 32])),
         decoys: RealmDecoyKeys::default().with(wa, DecoyKey::new(Secret::new([seed; 32]))),
         rp: RelyingParty {

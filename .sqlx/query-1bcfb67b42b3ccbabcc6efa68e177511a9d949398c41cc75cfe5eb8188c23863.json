@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_identifiers\n                SET value = NULL, value_index = $4, pii_class = $5, nonce = $6, ciphertext = $7\n              WHERE tenant_id = $1 AND realm_id = $2 AND identifier_id = $3 AND value IS NOT NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Text",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1bcfb67b42b3ccbabcc6efa68e177511a9d949398c41cc75cfe5eb8188c23863"
+}

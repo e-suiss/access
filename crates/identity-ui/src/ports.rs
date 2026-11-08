@@ -36,7 +36,9 @@ pub struct RealmKit {
     /// The name shown in authenticator apps (TOTP issuer, RP name).
     pub name: String,
     /// The realm KEK that wraps subject DEKs (OP-42, OP-135).
-    pub kek: Box<dyn Kek + Send + Sync>,
+    pub kek: std::sync::Arc<dyn Kek + Send + Sync>,
+    /// The realm's blind index key of the PII vault (OP-153 m.3 (aa)).
+    pub index: std::sync::Arc<access_crypto::realm_index::RealmIndexKey>,
     /// The cell's id key (OP-137).
     pub ids: IdKey,
     /// The realm's decoy key (TN-97).
@@ -60,6 +62,15 @@ impl RealmKit {
             realm: self.realm,
             kek: &*self.kek,
             ids: &self.ids,
+        }
+    }
+
+    /// The realm's PII vault keys (OP-153 m.3 (aa)).
+    #[must_use]
+    pub fn vault(&self) -> access_identity_account::app::vault::Vault {
+        access_identity_account::app::vault::Vault {
+            kek: self.kek.clone(),
+            index: self.index.clone(),
         }
     }
 }

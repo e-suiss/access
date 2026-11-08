@@ -652,17 +652,18 @@ impl TenantTx {
     }
 
     /// The subject's oldest active e-mail identifier, else its oldest phone identifier, as
-    /// `(kind, value)`: where sign-in messages go (E42).
+    /// `(kind, stored value)`: where sign-in messages go (E42). A sealed value is opened by the
+    /// vault (OP-153 m.3 (aa)).
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn contact(
         &mut self,
         subject: [u8; 16],
-    ) -> Result<Option<(String, String)>, StoreError> {
+    ) -> Result<Option<(String, crate::accounts::StoredValue)>, StoreError> {
         let (tenant, realm) = self.realm_scope()?;
         let row = sqlx::query!(
-            "SELECT kind, value FROM access.identity_identifiers
+            "SELECT kind, value, value_index, pii_class, nonce, ciphertext FROM access.identity_identifiers
               WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'
                 AND kind IN ('email', 'phone')
               ORDER BY kind = 'email' DESC, identifier_id LIMIT 1",
@@ -672,7 +673,19 @@ impl TenantTx {
         )
         .fetch_optional(&mut *self.tx)
         .await?;
-        Ok(row.map(|r| (r.kind, r.value)))
+        row.map(|r| {
+            Ok((
+                r.kind,
+                crate::accounts::stored(
+                    r.value,
+                    r.value_index,
+                    r.pii_class,
+                    r.nonce,
+                    r.ciphertext,
+                )?,
+            ))
+        })
+        .transpose()
     }
 
     /// Subjects whose `session_epoch` moved after `since_ms` (database clock), oldest first,

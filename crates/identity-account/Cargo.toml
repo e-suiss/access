@@ -8,6 +8,10 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[features]
+# OP-153 m.3 (aa): in-memory vault keys for tests of other crates
+testing = ["access-crypto/testing"]
+
 [dependencies]
 access-crypto = { workspace = true }
 access-identity-hooks = { workspace = true }
@@ -15,6 +19,7 @@ access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 access-store = { workspace = true }
 access-telemetry = { workspace = true }
+suiss-retention = { workspace = true }
 suiss-crypto = { workspace = true, features = ["aead"] }
 argon2 = { workspace = true, features = ["alloc", "password-hash"] }
 unicode-normalization = { workspace = true, features = ["std"] }
@@ -30,6 +35,7 @@ httparse = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
 access-crypto = { workspace = true, features = ["testing"] }
+access-identity-account = { path = ".", features = ["testing"] }
 access-store = { workspace = true, features = ["testing"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }

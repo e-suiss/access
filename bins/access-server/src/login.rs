@@ -9,7 +9,9 @@ use std::sync::{Arc, Mutex};
 
 use access_crypto::Secret;
 use access_crypto::opaque_id::IdKey;
+use access_crypto::realm_index::{RealmIndexKey, label as index_label};
 use access_crypto::webauthn::{DecoyKey, decoy_label};
+use access_identity_account::app::vault::Vault;
 use access_identity_events::adapters::RealmKek;
 use access_identity_oauth::ports::{RealmEntry, Unavailable};
 use access_identity_session::domain::realm_policy::RealmSignin;
@@ -143,11 +145,12 @@ impl Kek for SharedKek {
 }
 
 /// The realms' KEKs from the token, opened once per realm and shared by the hosted login and
-/// event delivery.
+/// event delivery, with each realm's PII vault index key (OP-153 m.3 (aa)).
 #[derive(Clone)]
 pub(crate) struct RealmKeks {
     keys: Arc<KeyStore>,
     loaded: Arc<Mutex<HashMap<[u8; 16], Arc<LockedKek>>>>,
+    indexes: Arc<Mutex<HashMap<[u8; 16], Arc<RealmIndexKey>>>>,
 }
 
 impl RealmKeks {
@@ -155,6 +158,44 @@ impl RealmKeks {
         Self {
             keys,
             loaded: Arc::new(Mutex::new(HashMap::new())),
+            indexes: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// The realm's blind index key, made in the token on first use (OP-153 m.3 (aa)).
+    fn index(&self, realm: &[u8; 16]) -> Result<Arc<RealmIndexKey>, String> {
+        let mut loaded = self.indexes.lock().map_err(|_| "index cache")?;
+        if let Some(k) = loaded.get(realm) {
+            return Ok(k.clone());
+        }
+        let label = index_label(realm);
+        let mac = self
+            .keys
+            .mac(&label)
+            .or_else(|_| {
+                self.keys.generate_mac(&label)?;
+                self.keys.mac(&label)
+            })
+            .map_err(|e| e.to_string())?;
+        let key = Arc::new(RealmIndexKey::token(mac));
+        loaded.insert(*realm, key.clone());
+        Ok(key)
+    }
+
+    /// The realm's PII vault keys: its KEK and its index key (OP-153 m.3 (aa)). `None` when the
+    /// token refuses either; nothing personal is read or written then (TI-9).
+    pub(crate) fn vault(&self, realm: RealmId) -> Option<Vault> {
+        let kek = self.get(realm.as_bytes());
+        let index = self.index(realm.as_bytes());
+        match (kek, index) {
+            (Ok(k), Ok(i)) => Some(Vault {
+                kek: Arc::new(SharedKek(k)),
+                index: i,
+            }),
+            (Err(error), _) | (_, Err(error)) => {
+                tracing::error!(%error, "PII vault keys unavailable");
+                None
+            }
         }
     }
 
@@ -249,6 +290,7 @@ impl HsmKits {
         settings: &Settings,
     ) -> Result<RealmKit, String> {
         let kek = self.keks.get(entry.realm.as_bytes())?;
+        let index = self.keks.index(entry.realm.as_bytes())?;
         let decoy = self
             .keys
             .mac(&decoy_label(entry.realm.as_bytes()))
@@ -279,7 +321,8 @@ impl HsmKits {
             realm: entry.realm,
             issuer: issuer.clone(),
             name: entry.slug.clone(),
-            kek: Box::new(SharedKek(kek)),
+            kek: Arc::new(SharedKek(kek)),
+            index,
             ids: IdKey::new(Secret::new(ids)),
             decoys: RealmDecoyKeys::default().with(wa, DecoyKey::token(decoy)),
             rp: RelyingParty {

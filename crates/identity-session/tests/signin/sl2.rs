@@ -120,7 +120,7 @@ async fn reviews(e: &Env) -> Vec<access_store::risk::ReviewRow> {
 
 async fn status_of(e: &Env, s: [u8; 16]) -> String {
     use access_identity_account::ports::{AccountDb, AccountTx};
-    let pg = PgAccounts(e.db.app.clone());
+    let pg = PgAccounts::sealed(e.db.app.clone(), e.vault.clone());
     let mut tx = pg.begin(e.tenant, e.realm).await.unwrap();
     let status = tx.subject(s, false).await.unwrap().unwrap().status;
     tx.commit().await.unwrap();

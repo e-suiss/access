@@ -377,7 +377,12 @@ async fn local_fixtures_are_made_once_and_produce_events() {
     assert!(!format!("{plan:?}").contains("correct horse"));
 
     let route = route_by_slug(&w.db.router, "acme").await.unwrap().unwrap();
-    let accounts = PgAccounts(w.db.app.clone());
+    let accounts = PgAccounts::sealed(
+        w.db.app.clone(),
+        crate::login::RealmKeks::new(w.keys.clone())
+            .vault(route.realm)
+            .unwrap(),
+    );
     let mut tx = accounts.begin(route.tenant, route.realm).await.unwrap();
     let subject = tx
         .subject_by_identifier("Test.User@acme.example")

@@ -193,7 +193,10 @@ macro_rules! signin {
         $crate::app::signin!($self, $kit, $auth, None);
     };
     ($self:ident, $kit:ident, $auth:ident, $client:expr) => {
-        let db = ::access_identity_account::adapters::pg::PgAccounts($self.db.clone());
+        let db = ::access_identity_account::adapters::pg::PgAccounts::sealed(
+            $self.db.clone(),
+            $kit.vault(),
+        );
         let registry = ::access_identity_session::adapters::passkeys::PgPasskeys {
             pool: &$self.db,
             tenant: $kit.tenant,

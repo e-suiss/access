@@ -176,7 +176,7 @@ impl<I: DeviceInstances> ConsoleDevices<I> {
         key: &PublicKey,
         instance: [u8; 16],
     ) -> Result<(), Unavailable> {
-        let mut tx = PgTx(
+        let mut tx = PgTx::new(
             TenantTx::begin(&self.app, row.tenant, row.realm)
                 .await
                 .map_err(down)?,

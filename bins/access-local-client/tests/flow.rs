@@ -220,7 +220,10 @@ fn kit(entry: &RealmEntry) -> RealmKit {
         realm: entry.realm,
         issuer: String::from(entry.issuer.as_str()),
         name: String::from("Acme"),
-        kek: Box::new(SoftKek::new("realm-kek:1", [3; 32])),
+        kek: std::sync::Arc::new(SoftKek::new("realm-kek:1", [3; 32])),
+        index: std::sync::Arc::new(access_crypto::realm_index::RealmIndexKey::new(Secret::new(
+            [3; 32],
+        ))),
         ids: IdKey::new(Secret::new([4; 32])),
         decoys: RealmDecoyKeys::default().with(wa, DecoyKey::new(Secret::new([9; 32]))),
         rp: RelyingParty {
@@ -268,7 +271,7 @@ async fn register_passkey(
     };
     let authenticator =
         access_identity_webauthn::domain::software::SoftwareAuthenticator::ed25519(public);
-    let db = PgAccounts(pool.clone());
+    let db = PgAccounts::sealed(pool.clone(), kit.vault());
     let registry = PgPasskeys {
         pool,
         tenant: kit.tenant,
@@ -355,7 +358,7 @@ async fn the_headless_client_runs_the_code_flow() {
         risk: access_identity_session::app::RiskServices::without_sources(),
     });
     // OP-149
-    let accounts = PgAccounts(c.db.app.clone());
+    let accounts = PgAccounts::sealed(c.db.app.clone(), kit.vault());
     let who = Actor {
         actor: "test",
         correlation: "test",
@@ -550,7 +553,7 @@ async fn the_headless_client_runs_the_code_flow() {
 
     // OP-149 m.32, m.28 (b), INV-13, §5.1
     let (device, _) = SoftSigner::generate_ed25519().unwrap();
-    let mut tx = PgTx(
+    let mut tx = PgTx::new(
         TenantTx::begin(&c.db.app, kit.tenant, kit.realm)
             .await
             .unwrap(),

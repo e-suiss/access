@@ -235,7 +235,10 @@ where
             kek: &*kek,
             ids,
         };
-        let accounts = PgAccounts(self.app.clone());
+        let vault = keks
+            .vault(realm)
+            .ok_or_else(|| BootstrapError::Unavailable(String::from("PII vault keys")))?;
+        let accounts = PgAccounts::sealed(self.app.clone(), vault);
         let mut tx = accounts.begin(tenant, realm).await?;
         let existing = tx.subject_by_identifier(identifier.value()).await?;
         tx.commit().await?;
@@ -345,7 +348,7 @@ where
         {
             return Ok(authenticator.credential_id);
         }
-        let db = PgAccounts(self.app.clone());
+        let db = PgAccounts::sealed(self.app.clone(), kit.vault());
         let realm = kit.realm();
         let notifier = Outbox.notifier(&realm);
         let link_base = format!("{}/login/link#", kit.issuer);
@@ -437,7 +440,7 @@ where
         let onboarded = self
             .register(tenant, realm, domain, &key, party, subject)
             .await?;
-        let mut tx = PgTx(TenantTx::begin(self.app, tenant, realm).await?);
+        let mut tx = PgTx::new(TenantTx::begin(self.app, tenant, realm).await?);
         devices::bind_party(&mut tx, &subject, &party.0, &onboarded.register_ais).await?;
         let device = DeviceKey {
             subject,

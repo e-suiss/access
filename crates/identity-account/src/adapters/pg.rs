@@ -1,4 +1,6 @@
 //! PostgreSQL adapter of [`AccountDb`], as `access_app` under the realm's scope (OP-12, OP-66).
+//! Identifiers go through the realm's PII vault (OP-153 m.3 (aa)): a transaction without the
+//! vault's keys reads and writes no identifier (TI-9).
 
 use access_store::Pool;
 use access_store::accounts::{CredentialRow, NewCredential, Revoke, SealedSecret, SubjectRow};
@@ -7,22 +9,70 @@ use access_store::identity::{RealmId, TenantId, TenantTx};
 use access_store::throttle::ThrottleRow;
 
 use crate::AccountError;
+use crate::app::vault::{self, Vault, folded};
 use crate::domain::identifier::Identifier;
 use crate::domain::status::AccountStatus;
 use crate::ports::{AccountDb, AccountTx};
 
-/// The account tables in PostgreSQL.
-pub struct PgAccounts(pub Pool);
+/// The account tables in PostgreSQL, with the realm's vault keys when identifiers are touched.
+pub struct PgAccounts(pub Pool, pub Option<Vault>);
 
-/// One scoped transaction; the inner transaction is open to other identity adapters that
-/// add tables to the same unit of work (OP-63).
-pub struct PgTx(pub TenantTx);
+impl PgAccounts {
+    /// The account tables without the vault: no identifier is read or written.
+    #[must_use]
+    pub const fn new(pool: Pool) -> Self {
+        Self(pool, None)
+    }
+
+    /// The account tables with the realm's vault keys.
+    #[must_use]
+    pub const fn sealed(pool: Pool, vault: Vault) -> Self {
+        Self(pool, Some(vault))
+    }
+}
+
+/// One scoped transaction, with the realm's vault keys when it has them; the inner
+/// transaction is open to other identity adapters that add tables to the same unit of work
+/// (OP-63).
+pub struct PgTx(pub TenantTx, pub Option<Vault>);
+
+impl PgTx {
+    /// A transaction without the vault.
+    #[must_use]
+    pub const fn new(tx: TenantTx) -> Self {
+        Self(tx, None)
+    }
+
+    /// The vault's keys.
+    ///
+    /// # Errors
+    /// [`AccountError::Vault`] when this transaction has none.
+    pub fn vault(&self) -> Result<&Vault, AccountError> {
+        self.1.as_ref().ok_or(AccountError::Vault)
+    }
+
+    /// The readable stored identifier `stored` of `subject`; `None` once its key is shredded.
+    ///
+    /// # Errors
+    /// [`AccountError`].
+    pub async fn reveal(
+        &mut self,
+        subject: [u8; 16],
+        stored: &access_store::accounts::StoredValue,
+    ) -> Result<Option<String>, AccountError> {
+        let v = self.vault()?.clone();
+        vault::reveal(&mut self.0, &v, subject, stored).await
+    }
+}
 
 impl AccountDb for PgAccounts {
     type Tx = PgTx;
 
     async fn begin(&self, tenant: TenantId, realm: RealmId) -> Result<PgTx, AccountError> {
-        Ok(PgTx(TenantTx::begin(&self.0, tenant, realm).await?))
+        Ok(PgTx(
+            TenantTx::begin(&self.0, tenant, realm).await?,
+            self.1.clone(),
+        ))
     }
 }
 
@@ -68,9 +118,25 @@ impl AccountTx for PgTx {
         subject: [u8; 16],
         identifier: &Identifier,
     ) -> Result<bool, AccountError> {
+        let v = self.vault()?.clone();
+        if self
+            .subject_by_identifier(identifier.value())
+            .await?
+            .is_some()
+        {
+            return Ok(false);
+        }
+        let sealed = vault::seal_identifier(
+            &mut self.0,
+            &v,
+            subject,
+            identifier.kind(),
+            identifier.value(),
+        )
+        .await?;
         Ok(self
             .0
-            .add_identifier(subject, identifier.kind().name(), identifier.value())
+            .add_identifier(subject, identifier.kind().name(), &sealed)
             .await?)
     }
 
@@ -78,7 +144,11 @@ impl AccountTx for PgTx {
         &mut self,
         value: &str,
     ) -> Result<Option<[u8; 16]>, AccountError> {
-        Ok(self.0.subject_by_identifier(value).await?)
+        let realm = self.0.realm().ok_or(AccountError::Corrupt)?;
+        let index = self
+            .vault()?
+            .index_of(self.0.tenant().as_bytes(), realm.as_bytes(), value)?;
+        Ok(self.0.subject_by_identifier(&index, &folded(value)).await?)
     }
 
     async fn insert_credential(

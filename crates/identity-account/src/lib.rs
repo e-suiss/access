@@ -60,6 +60,16 @@ pub enum AccountError {
     /// Stored data does not match the model.
     #[error("stored data is malformed")]
     Corrupt,
+    /// The PII vault's keys are not at hand: nothing personal is written or read without them
+    /// (OP-153 m.3 (aa), TI-9).
+    #[error("PII vault unavailable")]
+    Vault,
+    /// The subject's key was crypto-shredded; nothing can be sealed or read under it (U58).
+    #[error("subject key shredded")]
+    Shredded,
+    /// The request names a field or value the vault does not keep.
+    #[error("invalid personal data")]
+    Invalid,
 }
 
 impl AccountError {
@@ -68,8 +78,14 @@ impl AccountError {
     #[must_use]
     pub const fn problem(&self) -> Problem {
         match self {
-            Self::Busy | Self::BreachUnavailable | Self::Store(_) => unavailable(1),
-            Self::NotFound => Problem {
+            Self::Busy | Self::BreachUnavailable | Self::Store(_) | Self::Vault => unavailable(1),
+            Self::Invalid => Problem {
+                status: 422,
+                code: "invalid-personal-data",
+                title: "The personal data cannot be kept",
+                retry_after_s: None,
+            },
+            Self::NotFound | Self::Shredded => Problem {
                 status: 404,
                 code: "account-not-found",
                 title: "No such account",
