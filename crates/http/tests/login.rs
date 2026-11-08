@@ -49,6 +49,7 @@ use access_identity_account::ports::{BreachRanges, RangeUnavailable};
 use access_identity_oauth::app::Discovery;
 use access_identity_oauth::domain::issuer::Issuer;
 use access_identity_oauth::ports::{Directory, Keys, RealmEntry, Unavailable};
+use access_identity_session::domain::realm_policy::RealmSignin;
 use access_identity_session::domain::requirement::AuthPolicy;
 use access_identity_session::domain::session::SessionPolicy;
 use access_identity_ui::app::{Devices, Hosted};
@@ -111,9 +112,12 @@ impl BreachRanges for Corpus {
     }
 }
 
-/// The Relay seam as a recorder: what would be queued, with its secret.
+/// The Relay seam as a recorder: what would be queued, with its secret, and each message's
+/// kind, `Require-Recipient-Valid-Since` and subject.
+type Sent = Vec<(&'static str, Option<u64>, [u8; 16])>;
+
 #[derive(Clone, Default)]
-struct Outbox(Arc<Mutex<Vec<String>>>);
+struct Outbox(Arc<Mutex<Vec<String>>>, Arc<Mutex<Sent>>);
 
 struct Recording<'a>(&'a Outbox);
 
@@ -129,7 +133,13 @@ impl Notifier for Recording<'_> {
             _ => String::new(),
         };
         self.0.0.lock().unwrap().push(secret);
-        std::future::ready(Ok(EventId([1; 16])))
+        self.0
+            .1
+            .lock()
+            .unwrap()
+            .push((m.body.kind(), m.valid_since_ms, m.subject));
+        let checked = m.validate().map_err(NotifyError::from);
+        std::future::ready(checked.map(|()| EventId([1; 16])))
     }
 }
 
@@ -409,6 +419,7 @@ fn kit(tenant: TenantId, realm: RealmId, seed: u8, auth: AuthPolicy) -> RealmKit
         webauthn: RealmPolicy::default(),
         auth,
         lifetimes: SessionPolicy::DEFAULT,
+        signin: access_identity_session::domain::realm_policy::RealmSignin::default(),
     }
 }
 
@@ -436,6 +447,10 @@ async fn env(seed: u8, slug: &str, auth: AuthPolicy) -> Env {
 }
 
 async fn env_with(seed: u8, slug: &str, auth: AuthPolicy, live: bool) -> Env {
+    env_full(seed, slug, auth, live, RealmSignin::default()).await
+}
+
+async fn env_full(seed: u8, slug: &str, auth: AuthPolicy, live: bool, signin: RealmSignin) -> Env {
     let db = fresh().await.unwrap();
     let tenant = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = DomainId::from_bytes([seed; 32]);
@@ -454,7 +469,9 @@ async fn env_with(seed: u8, slug: &str, auth: AuthPolicy, live: bool) -> Env {
         .await
         .unwrap();
     tx.commit().await.unwrap();
-    let kit = Arc::new(kit(tenant, realm, seed, auth));
+    let mut built = kit(tenant, realm, seed, auth);
+    built.signin = signin;
+    let kit = Arc::new(built);
     let clock = TestClock {
         at: Arc::new(AtomicU64::new(1_800_000_000_000)),
         live: live.then(std::time::Instant::now),
@@ -478,6 +495,7 @@ async fn env_with(seed: u8, slug: &str, auth: AuthPolicy, live: bool) -> Env {
         redirect_to: "/".into(),
         hooks: std::sync::Arc::new(access_identity_hooks::ports::NoHooks),
         risk: access_identity_session::app::RiskServices::without_sources(),
+        signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
     });
     let assets = Assets::load(&fixture()).unwrap();
     let signer = ArtifactKey(Arc::new(SoftSigner::generate_ed25519().unwrap().0));
@@ -2736,4 +2754,355 @@ async fn a_live_session_steps_up_in_place() {
     let after = b.get("/v1/sessions/current").await.json();
     assert_eq!(after["id"], before["id"]);
     assert_ne!(after["assurance"]["aal"], json!("Aal1"));
+}
+
+impl Env {
+    /// The subject an address belongs to now, through the realm's vault.
+    async fn holder(&self, email: &str) -> Option<[u8; 16]> {
+        use access_identity_account::ports::{AccountDb as _, AccountTx as _};
+        let pg = PgAccounts::sealed(self.db.app.clone(), self.kit.vault());
+        let mut tx = pg.begin(self.tenant, self.realm).await.unwrap();
+        let s = tx.subject_by_identifier(email).await.unwrap();
+        tx.commit().await.unwrap();
+        s
+    }
+
+    fn sent(&self) -> Sent {
+        self.outbox.1.lock().unwrap().clone()
+    }
+}
+
+impl Web {
+    async fn signup(&mut self) -> Answer {
+        let a = self
+            .post("/v1/login/flows", Some(json!({ "kind": "registration" })))
+            .await;
+        assert_eq!(
+            a.status,
+            StatusCode::CREATED,
+            "{}",
+            String::from_utf8_lossy(&a.body)
+        );
+        assert_eq!(a.json()["kind"], "registration");
+        a
+    }
+
+    async fn register(&mut self, email: &str) -> Answer {
+        let at = self.signup().await;
+        self.submit(&at, "register", json!({ "email": email }))
+            .await
+    }
+}
+
+// TN-80, TN-64, OP-153 m.3 (g), (i)
+#[tokio::test]
+async fn sign_up_creates_the_account_only_when_the_code_returns() {
+    let e = env(31, "su-a", AuthPolicy::DEFAULT).await;
+    let mut b = e.browser("su-a");
+    let code_step = b.register("New.Person@Example.com").await;
+    assert_eq!(code_step.status, StatusCode::OK);
+    assert_eq!(code_step.step(), "authenticate");
+    assert_eq!(code_step.messages(), vec!["registration.code_sent"]);
+    // TN-80
+    assert_eq!(e.holder("new.person@example.com").await, None);
+    let (kind, since, _) = *e.sent().last().unwrap();
+    assert_eq!(kind, "relay.message.otp.v1");
+    assert_eq!(since, Some(e.clock.now_ms()));
+    let code = e.outbox.last();
+    assert_eq!(code.len(), 8);
+    let wrong = b
+        .submit(
+            &code_step,
+            "email_code",
+            json!({ "email_code": "00000000", "display_name": "N" }),
+        )
+        .await;
+    assert_eq!(wrong.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(wrong.messages(), vec!["registration.failed"]);
+    assert_eq!(e.holder("new.person@example.com").await, None);
+    let done = b
+        .submit(
+            &code_step,
+            "email_code",
+            json!({ "email_code": code, "display_name": "New Person" }),
+        )
+        .await;
+    assert_eq!(
+        done.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+    assert_eq!(done.step(), "complete");
+    let subject = e.holder("NEW.PERSON@example.com").await.unwrap();
+    let me = b.get("/v1/sessions/current").await;
+    assert_eq!(me.status, StatusCode::OK);
+    assert_eq!(me.json()["subject"], e.realm().external(subject).unwrap());
+    // TN-66
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let since = t.mailbox_since(subject).await.unwrap();
+    t.commit().await.unwrap();
+    assert_eq!(
+        since.and_then(|v| u64::try_from(v).ok()),
+        Some(e.clock.now_ms())
+    );
+    let again = b
+        .submit(
+            &code_step,
+            "email_code",
+            json!({ "email_code": code, "display_name": "N" }),
+        )
+        .await;
+    assert_eq!(again.status, StatusCode::GONE);
+}
+
+// CR-40, §10.2.1 m.6, TN-80, U44, SAI-5, X-L1
+#[tokio::test]
+async fn sign_up_answers_the_same_whether_or_not_the_address_has_an_account() {
+    let e = env(32, "su-b", AuthPolicy::DEFAULT).await;
+    let owner = e.account("taken@example.com").await;
+    let mut answers = Vec::new();
+    for (i, who) in ["taken@example.com", "free@example.com"].iter().enumerate() {
+        let mut b = e.browser(&format!("su-b{i}"));
+        let at = b.signup().await;
+        let started = std::time::Instant::now();
+        let a = b.submit(&at, "register", json!({ "email": who })).await;
+        // TN-80
+        assert!(started.elapsed() >= std::time::Duration::from_millis(250));
+        answers.push(masked(&a));
+    }
+    assert_eq!(answers[0], answers[1]);
+    assert_eq!(answers[0].0, 200);
+    let sent = e.sent();
+    assert_eq!(sent.len(), 2);
+    // §10.2.1 m.6
+    assert_eq!(sent[0].0, "relay.message.signup_existing.v1");
+    assert_eq!(sent[0].2, owner);
+    assert!(sent[0].1.is_some());
+    assert_eq!(sent[1].0, "relay.message.otp.v1");
+}
+
+// TN-80, TN-83, OP-153 m.3 (g)
+#[tokio::test]
+async fn the_cheap_gate_and_the_address_limits_answer_before_any_lookup() {
+    let e = env(33, "su-c", AuthPolicy::DEFAULT).await;
+    let mut statuses = Vec::new();
+    for i in 0..6_u8 {
+        let mut b = e.browser(&format!("su-c{i}"));
+        b.ip = Ipv4Addr::new(10, 9, 9, i + 1);
+        statuses.push(b.register(&format!("p{i}@example.com")).await.status);
+    }
+    assert_eq!(statuses[..5], [StatusCode::OK; 5]);
+    assert_eq!(statuses[5], StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(e.sent().len(), 5);
+    let mut statuses = Vec::new();
+    for (i, who) in [
+        "ann.lee@gmail.com",
+        "annlee+a@gmail.com",
+        "AnnLee@googlemail.com",
+        "a.nnlee@gmail.com",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let mut b = e.browser(&format!("su-cc{i}"));
+        statuses.push(b.register(who).await.status);
+    }
+    assert_eq!(statuses[..3], [StatusCode::OK; 3]);
+    assert_eq!(statuses[3], StatusCode::TOO_MANY_REQUESTS);
+}
+
+// TN-81, OP-153 m.3 (h)
+#[tokio::test]
+async fn a_disposable_address_is_scored_and_never_refused() {
+    let e = env(34, "su-d", AuthPolicy::DEFAULT).await;
+    let mut b = e.browser("su-d");
+    let a = b.register("someone@mailinator.com").await;
+    assert_eq!(a.status, StatusCode::OK);
+    assert_eq!(e.sent().last().unwrap().0, "relay.message.otp.v1");
+    let mut r = e.browser("su-d2");
+    assert_eq!(
+        r.register("me@privaterelay.appleid.com").await.status,
+        StatusCode::OK
+    );
+}
+
+// TN-132, OP-153 m.3 (g)
+#[tokio::test]
+async fn the_realm_domain_lists_and_required_name_hold_at_sign_up() {
+    let signin = RealmSignin {
+        domain_deny: std::collections::BTreeSet::from([String::from("blocked.example")]),
+        required_fields: std::collections::BTreeSet::from([
+            String::from("email"),
+            String::from("name"),
+        ]),
+        ..RealmSignin::default()
+    };
+    let e = env_full(35, "su-e", AuthPolicy::DEFAULT, false, signin).await;
+    let mut b = e.browser("su-e");
+    let refused = b.register("x@blocked.example").await;
+    assert_eq!(refused.status, StatusCode::BAD_REQUEST);
+    assert_eq!(refused.messages(), vec!["registration.failed"]);
+    assert_eq!(e.sent().len(), 0);
+    let at = b.register("x@fine.example").await;
+    let code = e.outbox.last();
+    let nameless = b
+        .submit(&at, "email_code", json!({ "email_code": code }))
+        .await;
+    assert_eq!(nameless.status, StatusCode::BAD_REQUEST);
+    let done = b
+        .submit(
+            &at,
+            "email_code",
+            json!({ "email_code": code, "display_name": "X" }),
+        )
+        .await;
+    assert_eq!(done.step(), "complete");
+}
+
+// TN-64, TNI-5, §12.3.3 rule 1
+#[tokio::test]
+async fn the_mailbox_proof_kills_a_password_set_before_it() {
+    use access_identity_account::ports::{AccountDb as _, AccountTx as _};
+    let e = env(36, "su-f", AuthPolicy::DEFAULT).await;
+    let pg = PgAccounts::sealed(e.db.app.clone(), e.kit.vault());
+    let id = Identifier::new(IdentifierKind::Email, "victim@example.com").unwrap();
+    let staged = create(&pg, &e.realm(), &[id], &ADMIN).await.unwrap();
+    let services = PasswordServices {
+        hasher: &e.hasher,
+        ranges: &Corpus,
+        entropy: &SystemEntropy,
+    };
+    set_password(
+        &pg,
+        &e.realm(),
+        &services,
+        staged,
+        "attacker chose this",
+        &ADMIN,
+    )
+    .await
+    .unwrap();
+    let mut b = e.browser("su-f");
+    let at = b.register("victim@example.com").await;
+    assert_eq!(e.sent().last().unwrap().0, "relay.message.otp.v1");
+    let code = e.outbox.last();
+    let done = b
+        .submit(
+            &at,
+            "email_code",
+            json!({ "email_code": code, "display_name": "V" }),
+        )
+        .await;
+    assert_eq!(
+        done.step(),
+        "complete",
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+    assert_eq!(e.holder("victim@example.com").await, Some(staged));
+    let mut tx = pg.begin(e.tenant, e.realm).await.unwrap();
+    assert!(tx.credentials(staged, "password").await.unwrap().is_empty());
+    let row = tx.subject(staged, false).await.unwrap().unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(row.status, "active");
+    let mut attacker = e.browser("su-f2");
+    let at = attacker.identify("victim@example.com").await;
+    let refused = attacker
+        .submit(
+            &at,
+            "password",
+            json!({ "password": "attacker chose this" }),
+        )
+        .await;
+    assert_eq!(refused.status, StatusCode::UNAUTHORIZED);
+}
+
+// OP-153 m.3 (i), TN-64, TN-66, TN-69, TN-76 m.5, §8.6
+#[tokio::test]
+async fn an_email_change_proves_the_new_address_and_tells_the_old_one() {
+    let e = env(37, "su-g", AuthPolicy::DEFAULT).await;
+    let subject = e.account("old@example.com").await;
+    let mut b = e.browser("su-g");
+    assert_eq!(b.sign_in("old@example.com").await.step(), "complete");
+    let started = b
+        .post(
+            "/v1/account/email",
+            Some(json!({ "email": "new@example.com" })),
+        )
+        .await;
+    assert_eq!(
+        started.status,
+        StatusCode::ACCEPTED,
+        "{}",
+        String::from_utf8_lossy(&started.body)
+    );
+    let change = started.json()["change"].as_str().unwrap().to_owned();
+    let (kind, since, _) = *e.sent().last().unwrap();
+    assert_eq!(kind, "relay.message.otp.v1");
+    assert_eq!(since, Some(e.clock.now_ms()));
+    let code = e.outbox.last();
+    let wrong = b
+        .post(
+            &format!("/v1/account/email/{change}"),
+            Some(json!({ "code": "00000000" })),
+        )
+        .await;
+    assert_eq!(wrong.status, StatusCode::UNAUTHORIZED);
+    let done = b
+        .post(
+            &format!("/v1/account/email/{change}"),
+            Some(json!({ "code": code })),
+        )
+        .await;
+    assert_eq!(
+        done.status,
+        StatusCode::NO_CONTENT,
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+    assert_eq!(e.holder("new@example.com").await, Some(subject));
+    assert_eq!(e.holder("old@example.com").await, None);
+    let notice = e.sent().last().copied().unwrap();
+    assert_eq!(notice.0, "relay.message.email_changed.v1");
+    assert_eq!(notice.2, subject);
+    assert!(notice.1.is_some());
+    assert_eq!(
+        b.get("/v1/sessions/current").await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    // TN-76 m.5
+    let before = e.sent().len();
+    let mut other = e.browser("su-g2");
+    assert_eq!(
+        other.register("old@example.com").await.status,
+        StatusCode::OK
+    );
+    assert_eq!(e.sent().len(), before);
+}
+
+// OP-153 m.3 (i), X29
+#[tokio::test]
+async fn an_email_change_needs_a_fresh_step_up() {
+    let e = env(38, "su-h", AuthPolicy::DEFAULT).await;
+    e.account("stale@example.com").await;
+    let mut b = e.browser("su-h");
+    b.sign_in("stale@example.com").await;
+    e.advance(600_000);
+    let a = b
+        .post(
+            "/v1/account/email",
+            Some(json!({ "email": "n@example.com" })),
+        )
+        .await;
+    assert_eq!(a.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(a.json()["code"], "step-up-required");
+    let mut anon = e.browser("su-h2");
+    let a = anon
+        .post(
+            "/v1/account/email",
+            Some(json!({ "email": "n@example.com" })),
+        )
+        .await;
+    assert_eq!(a.json()["code"], "session-required");
 }

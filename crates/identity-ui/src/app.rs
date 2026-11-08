@@ -16,6 +16,7 @@ mod credential;
 pub mod devices;
 mod me;
 pub mod privacy;
+pub mod signup;
 
 pub use me::Devices;
 
@@ -260,6 +261,8 @@ pub struct Hosted<K, C, M> {
     pub hooks: std::sync::Arc<dyn ::access_identity_hooks::ports::HookCaller + Sync>,
     /// SL2 risk sources (TN-46, OP-151 m.1 (b)).
     pub risk: access_identity_session::app::RiskServices,
+    /// What sign-up needs: the bot signal and the disposable list (OP-153 m.1 (b), m.3 (h)).
+    pub signup: signup::Signup,
 }
 
 fn failed(e: &SessionError) -> Reply {

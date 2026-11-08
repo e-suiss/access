@@ -116,6 +116,14 @@ where
             .route(
                 &format!("{prefix}/v1/account/deletion"),
                 delete(web::cancel_deletion::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/email"),
+                post(web::start_email_change::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/email/{{change}}"),
+                post(web::confirm_email_change::<D, K, KI, C, M>),
             );
         reads = reads
             .route(

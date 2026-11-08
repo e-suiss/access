@@ -86,6 +86,23 @@ const fn served(
     }
 }
 
+const fn live(
+    owner: Owner,
+    verb: Verb,
+    path: &'static str,
+    operation: &'static str,
+    summary: &'static str,
+) -> Route {
+    Route {
+        verb,
+        path,
+        operation,
+        summary,
+        owner,
+        live: true,
+    }
+}
+
 const fn planned(
     owner: Owner,
     verb: Verb,
@@ -250,14 +267,14 @@ pub const ROUTES: &[Route] = &[
         "createGuest",
         "Opens a guest sign-in for a client that allows guests (OP-153 m.3 (k)).",
     ),
-    planned(
+    live(
         Owner::N1,
         Verb::Post,
         "/v1/account/email",
         "startEmailChange",
         "Starts changing the e-mail address after a step-up (OP-153 m.3 (i)).",
     ),
-    planned(
+    live(
         Owner::N1,
         Verb::Post,
         "/v1/account/email/{change}",
@@ -543,6 +560,6 @@ mod tests {
         assert_eq!(ops.len(), ROUTES.len());
         let keys: BTreeSet<_> = ROUTES.iter().map(|r| (r.verb.name(), r.path)).collect();
         assert_eq!(keys.len(), ROUTES.len());
-        assert!(ROUTES.iter().all(|r| r.live == (r.owner == Owner::Served)));
+        assert!(ROUTES.iter().all(|r| r.live || r.owner != Owner::Served));
     }
 }

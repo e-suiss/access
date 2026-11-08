@@ -335,6 +335,7 @@ impl HsmKits {
             webauthn: RealmPolicy::default(),
             auth: signin.apply(AuthPolicy::DEFAULT),
             lifetimes: self.lifetimes,
+            signin,
         })
     }
 }

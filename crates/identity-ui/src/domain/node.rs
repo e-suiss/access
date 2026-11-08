@@ -36,11 +36,13 @@ pub enum FieldName {
     InvitationCode,
     /// The cross-device link code shown on the other device (OP-153 m.3 (d)).
     LinkCode,
+    /// N1: the hosted page's non-interactive bot token, if any (OP-153 m.1 (b), m.3 (h)).
+    BotToken,
 }
 
 impl FieldName {
     /// All names.
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::Identifier,
         Self::Password,
         Self::TotpCode,
@@ -53,6 +55,7 @@ impl FieldName {
         Self::Acknowledged,
         Self::InvitationCode,
         Self::LinkCode,
+        Self::BotToken,
     ];
 
     /// The wire name.
@@ -71,6 +74,7 @@ impl FieldName {
             Self::Acknowledged => "acknowledged",
             Self::InvitationCode => "invitation_code",
             Self::LinkCode => "link_code",
+            Self::BotToken => "bot_token",
         }
     }
 
@@ -97,6 +101,7 @@ impl FieldName {
             Self::Acknowledged => 8,
             // OP-153 m.3 (d)
             Self::LinkCode => 32,
+            Self::BotToken => 4096,
         }
     }
 
@@ -217,6 +222,8 @@ pub enum InputKind {
     Password,
     /// Short numeric or alphanumeric code.
     Code,
+    /// N1: not drawn; the page fills it itself (a bot token, OP-153 m.1 (b)).
+    Hidden,
 }
 
 /// The HTML `autocomplete` token list of an input.

@@ -51,6 +51,9 @@ pub struct RealmKit {
     pub auth: AuthPolicy,
     /// Session lifetimes (TN-36).
     pub lifetimes: SessionPolicy,
+    /// The realm's stored sign-in policy: registration rules, enumeration mode and e-mail reuse
+    /// (TN-132, OP-153 m.3 (g), (i), (j)).
+    pub signin: access_identity_session::domain::realm_policy::RealmSignin,
 }
 
 impl RealmKit {

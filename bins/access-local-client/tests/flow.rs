@@ -236,6 +236,7 @@ fn kit(entry: &RealmEntry) -> RealmKit {
         webauthn: RealmPolicy::default(),
         auth: AuthPolicy::DEFAULT,
         lifetimes: SessionPolicy::DEFAULT,
+        signin: access_identity_session::domain::realm_policy::RealmSignin::default(),
     }
 }
 
@@ -356,6 +357,7 @@ async fn the_headless_client_runs_the_code_flow() {
         redirect_to: String::from("/"),
         hooks: std::sync::Arc::new(access_identity_hooks::ports::NoHooks),
         risk: access_identity_session::app::RiskServices::without_sources(),
+        signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
     });
     // OP-149
     let accounts = PgAccounts::sealed(c.db.app.clone(), kit.vault());

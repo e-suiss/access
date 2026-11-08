@@ -465,7 +465,8 @@
           "display_name",
           "acknowledged",
           "invitation_code",
-          "link_code"
+          "link_code",
+          "bot_token"
         ]
       },
       "Method": {

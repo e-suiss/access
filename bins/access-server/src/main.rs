@@ -853,6 +853,8 @@ fn login(
         redirect_to: config.login.redirect_to.clone(),
         hooks,
         risk,
+        signup: access_identity_ui::app::signup::Signup::without_providers()
+            .map_err(|e| e.to_string())?,
     });
     Ok((login_router(discovery, hosted.clone(), assets), hosted))
 }

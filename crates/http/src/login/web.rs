@@ -373,11 +373,56 @@ fn param<'a>(p: &'a HashMap<String, String>, name: &str) -> &'a str {
     p.get(name).map_or("", String::as_str)
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CreateBody {
+    #[serde(default)]
+    kind: access_identity_ui::domain::flow::FlowKind,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EmailBody {
+    email: String,
+}
+
 handler! {
-    /// `POST /v1/login/flows`.
+    /// `POST /v1/login/flows`: a login flow, or a sign-up flow when the body names
+    /// `kind: registration` (OP-153 m.3 (g)).
     create(s, entry, b, p, bytes, headers) true {
-        let _ = (&p, &bytes);
-        Ok(s.hosted.create(&entry, &b).await)
+        let _ = &p;
+        let req: CreateBody = if bytes.is_empty() {
+            CreateBody { kind: access_identity_ui::domain::flow::FlowKind::Login }
+        } else {
+            body(&bytes)?
+        };
+        Ok(match req.kind {
+            access_identity_ui::domain::flow::FlowKind::Login => s.hosted.create(&entry, &b).await,
+            access_identity_ui::domain::flow::FlowKind::Registration => {
+                s.hosted.create_signup(&entry, &b).await
+            }
+            _ => return Err(problem(StatusCode::BAD_REQUEST, "invalid-request", "Bad Request")),
+        })
+    }
+}
+
+handler! {
+    /// `POST /v1/account/email` (OP-153 m.3 (i)).
+    start_email_change(s, entry, b, p, bytes, headers) true {
+        let _ = &p;
+        let req: EmailBody = body(&bytes)?;
+        let email = bounded(&req.email, 320)?;
+        Ok(s.hosted.start_email_change(&entry, &b, email).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/account/email/{change}` (OP-153 m.3 (i)).
+    confirm_email_change(s, entry, b, p, bytes, headers) true {
+        let req: CodeBody = body(&bytes)?;
+        let code = bounded(&req.code, 16)?;
+        let change = bounded(param(&p, "change"), 64)?;
+        Ok(s.hosted.confirm_email_change(&entry, &b, change, code).await)
     }
 }
 
@@ -399,7 +444,12 @@ handler! {
     /// `GET /v1/login/flows/{flow}`.
     get_flow(s, entry, b, p, bytes, headers) false {
         let _ = &bytes;
-        Ok(s.hosted.get(&entry, &b, param(&p, "flow")).await)
+        let flow = param(&p, "flow");
+        // OP-153 m.3 (g)
+        if access_identity_ui::app::signup::is_signup(flow) {
+            return Ok(s.hosted.get_signup(&entry, &b, flow).await);
+        }
+        Ok(s.hosted.get(&entry, &b, flow).await)
     }
 }
 
@@ -413,7 +463,12 @@ handler! {
                 "The submission does not match the sign-in step",
             )
         })?;
-        Ok(s.hosted.submit(&entry, &b, param(&p, "flow"), submission).await)
+        let flow = param(&p, "flow");
+        // OP-153 m.3 (g)
+        if access_identity_ui::app::signup::is_signup(flow) {
+            return Ok(s.hosted.submit_signup(&entry, &b, flow, submission).await);
+        }
+        Ok(s.hosted.submit(&entry, &b, flow, submission).await)
     }
 }
 

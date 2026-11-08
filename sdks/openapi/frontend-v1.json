@@ -291,15 +291,21 @@
           }
         },
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "Starts changing the e-mail address after a step-up (OP-153 m.3 (i)).",
-        "x-suiss-status": "planned"
+        "summary": "Starts changing the e-mail address after a step-up (OP-153 m.3 (i))."
       }
     },
     "/v1/account/email/{change}": {
@@ -325,15 +331,21 @@
           }
         },
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "Confirms the new address with its out-of-band code.",
-        "x-suiss-status": "planned"
+        "summary": "Confirms the new address with its out-of-band code."
       }
     },
     "/v1/account/link-codes": {
