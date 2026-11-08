@@ -8105,3 +8105,211 @@ async fn an_undeclared_causal_ref_is_audit_only() {
         assert_eq!(r.causal, Some(false));
     }
 }
+
+/// ROOT's Instance, opened by `onboard(.., (1, 2))`.
+fn root_instance(d: Digest) -> Id {
+    meta::object_id(&meta::exercise_id(&d, &[2; 16]).unwrap(), kind::INSTANCE, 0)
+}
+
+/// ROOT's statement of its own authority act `req` (§9.14.1 B step 2).
+fn authority_act(d: Digest, req: &Request, render: Digest, act: Act) -> ApprovalAct {
+    ApprovalAct {
+        act,
+        instance: root_instance(d),
+        party: ROOT,
+        capacity: Capacity::Own,
+        target: access_kernel::intent::intent_digest(&req.intent).unwrap(),
+        domain: d,
+        nonce: req.nonce.clone(),
+        work_gate: None,
+        surface_profile: "suiss-approval-surface".to_owned(),
+        surface_version: 1,
+        render_digest: render,
+        material_fields: ["action".to_owned(), "resource".to_owned()]
+            .into_iter()
+            .collect(),
+        issued_at: NOW - 1_000,
+        expires_at: NOW + 60_000,
+    }
+}
+
+/// The realm issuer's `authentication` Claim about ROOT for the assertion over `statement`.
+fn act_claim(d: Digest, statement: Digest) -> Vec<u8> {
+    sign_claim(
+        &access_kernel::claim::Statement {
+            domain: d,
+            issuer: ALICE,
+            subject: ROOT,
+            class: "authentication".to_owned(),
+            value: Some(EqValue::Bytes(vec![0xab; 32])),
+            issued_at: NOW - 5_000,
+            validity: Window {
+                from: NOW - 5_000,
+                until: NOW + 3_600_000,
+            },
+            assurance: PASSKEY_UV
+                .iter()
+                .map(|(k, v)| ((*k).to_owned(), *v))
+                .collect(),
+            bound_intent: Some(statement),
+            bound_instance: None,
+            bound_resource: None,
+            supersedes: None,
+        },
+        ALICE_KEY,
+    )
+}
+
+// OP-152 m.7 (d), §9.14.1 B, §9.14.3, AP-6, P29
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one authority act through each way its statement can fail"
+)]
+async fn an_authority_act_meets_the_actors_own_intent_bound_authentication() {
+    // SI-5, INV-20
+    let db = fresh().await.unwrap();
+    let authentication = term(
+        ProofKind::Claim,
+        "authentication",
+        ProofBinding::IntentDigest,
+    );
+    let (mut core, d) = setup_with(&db, gated(&[authentication])).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let shop = meta::object_id(&d, kind::ANCHOR, 1);
+    let issue = Payload::GrantIssue(GrantContent {
+        basis: GrantBasis::Anchor(shop),
+        holder: SubjectSelector::Party(BOB),
+        authority: authority(vec![action("shop", "read")], selector("shop")),
+        agency: BTreeSet::from([Capacity::Own]),
+        named: None,
+    });
+    let req = meta_request(d, 9, ExerciseBasis::Anchor(shop), issue);
+    let digest = access_kernel::intent::intent_digest(&req.intent).unwrap();
+
+    let early = authority_act(d, &req, Digest([0; 32]), Act::AuthorityAct);
+    let h = access_kernel::aas::digest(&early).unwrap();
+    assert_eq!(
+        protocol(
+            send(
+                &mut core,
+                with_proofs(
+                    req.clone(),
+                    vec![
+                        ProofRef::Aas(early.to_bytes().unwrap()),
+                        ProofRef::Claim(act_claim(d, h)),
+                    ],
+                ),
+                ROOT_KEY,
+            )
+            .await
+        ),
+        "aas-target"
+    );
+
+    let asked = send(&mut core, req.clone(), ROOT_KEY).await.unwrap();
+    assert_eq!(asked.decision.outcome, Outcome::RequireAction, "{asked:?}");
+    let render = Digest(
+        access_store::authority::find_opening(&db.app, &DomainId::from_bytes(d.0), &digest.0)
+            .await
+            .unwrap()
+            .unwrap()
+            .render_digest,
+    );
+
+    let act = authority_act(d, &req, render, Act::AuthorityAct);
+    let h = access_kernel::aas::digest(&act).unwrap();
+    let claim_only = send(
+        &mut core,
+        with_proofs(req.clone(), vec![ProofRef::Claim(act_claim(d, h))]),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        claim_only.decision.outcome,
+        Outcome::RequireAction,
+        "an H(AAS)-bound Claim alone is bound to another digest"
+    );
+
+    let contribution = authority_act(d, &req, render, Act::Contribution("approve".to_owned()));
+    let hc = access_kernel::aas::digest(&contribution).unwrap();
+    assert_eq!(
+        protocol(
+            send(
+                &mut core,
+                with_proofs(
+                    req.clone(),
+                    vec![
+                        ProofRef::Aas(contribution.to_bytes().unwrap()),
+                        ProofRef::Claim(act_claim(d, hc)),
+                    ],
+                ),
+                ROOT_KEY,
+            )
+            .await
+        ),
+        "aas-act"
+    );
+    let other = authority_act(d, &req, render, Act::AuthorityAct);
+    let other = ApprovalAct {
+        issued_at: NOW - 2_000,
+        ..other
+    };
+    assert_eq!(
+        unbound(
+            send(
+                &mut core,
+                with_proofs(
+                    req.clone(),
+                    vec![
+                        ProofRef::Aas(act.to_bytes().unwrap()),
+                        ProofRef::Claim(act_claim(d, access_kernel::aas::digest(&other).unwrap())),
+                    ],
+                ),
+                ROOT_KEY,
+            )
+            .await
+        ),
+        vec![BindingFacet::BoundIntent]
+    );
+    let on_behalf = ApprovalAct {
+        capacity: Capacity::For(ALICE),
+        ..authority_act(d, &req, render, Act::AuthorityAct)
+    };
+    let hb = access_kernel::aas::digest(&on_behalf).unwrap();
+    assert_eq!(
+        protocol(
+            send(
+                &mut core,
+                with_proofs(
+                    req.clone(),
+                    vec![
+                        ProofRef::Aas(on_behalf.to_bytes().unwrap()),
+                        ProofRef::Claim(act_claim(d, hb)),
+                    ],
+                ),
+                ROOT_KEY,
+            )
+            .await
+        ),
+        "aas-capacity"
+    );
+
+    let done = send(
+        &mut core,
+        with_proofs(
+            req,
+            vec![
+                ProofRef::Aas(act.to_bytes().unwrap()),
+                ProofRef::Claim(act_claim(d, h)),
+            ],
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&done);
+    fold_check(&db.sequencer, d).await.unwrap();
+}

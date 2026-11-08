@@ -595,9 +595,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     ) -> Result<Evaluation, CoreError> {
         let exercise =
             meta::exercise_id(&req.domain, &req.nonce).map_err(|_| CoreError::Protocol("nonce"))?;
-        let resolved = self
+        let mut resolved = self
             .resolve(req, actor.map(|a| a.party), at, record.saturating_sub(1))
             .await?;
+        self.rebind(req, actor, &digest, &mut resolved, at).await?;
         let compromised = self.compromised(actor, at).await?;
         let frame = Frame {
             intent_digest: digest,
@@ -1456,7 +1457,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         };
         for _ in 0..MAX_RETRIES {
             let head = self.leader.head().pos;
-            let resolved = self.resolve(req, actor.map(|a| a.party), now, head).await?;
+            let mut resolved = self.resolve(req, actor.map(|a| a.party), now, head).await?;
+            self.rebind(req, actor, &digest, &mut resolved, now).await?;
             let compromised = self.compromised(actor, now).await?;
             let records = u64::try_from(resolved.claims.len())
                 .map_err(|_| CoreError::Protocol("proofs"))?

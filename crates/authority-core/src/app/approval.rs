@@ -122,6 +122,24 @@ pub struct Approved {
     pub auth_time: u64,
 }
 
+/// The statement is the actor's, for this request's nonce and capacity, within the tier's
+/// ceiling (§9.14, §13.7.3, INV-4).
+fn fits(act: &ApprovalAct, actor: Actor, req: &Request, tier: Tier) -> Result<(), CoreError> {
+    if act.party != actor.party {
+        return Err(CoreError::Protocol("aas-approver"));
+    }
+    if act.capacity != req.capacity {
+        return Err(CoreError::Protocol("aas-capacity"));
+    }
+    if act.nonce != req.nonce {
+        return Err(CoreError::Protocol("aas-nonce"));
+    }
+    if !assurance::aas_within_ceiling(tier, act.issued_at, act.expires_at) {
+        return Err(CoreError::Protocol("aas-expiry"));
+    }
+    Ok(())
+}
+
 fn protocol(e: aas::AasError) -> CoreError {
     CoreError::Protocol(e.code())
 }
@@ -159,6 +177,76 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         aas::check(&act, expected).map_err(protocol)?;
         let h = aas::digest(&act).map_err(|_| CoreError::Protocol("aas-malformed"))?;
         Ok((act, h))
+    }
+
+    /// The actor's own authority act (§9.14.1 B, §9.14.3, AP-6, P29, OP-152 m.7 (d) E19): a
+    /// meta-Exercise other than `contribute` that carries an Approval Act Statement with
+    /// `act = authority-act` over its own intent, nonce and the render the decision point recorded
+    /// when it asked (`REQUIRE_ACTION`). The `authentication` Claim bound to H(AAS) then stands
+    /// for the actor's intent-bound authentication: its binding is read as this intent's digest.
+    /// Without a statement nothing changes; a statement that does not fit is a protocol
+    /// rejection, and one no Claim is bound to is `aas-binding`.
+    pub(crate) async fn rebind(
+        &self,
+        req: &Request,
+        actor: Option<Actor>,
+        digest: &Digest,
+        resolved: &mut Resolved,
+        now: u64,
+    ) -> Result<(), CoreError> {
+        if matches!(req.payload, None | Some(Payload::Contribute { .. })) {
+            return Ok(());
+        }
+        let statements: Vec<&Vec<u8>> = req
+            .proofs
+            .iter()
+            .filter_map(|p| match p {
+                ProofRef::Aas(b) => Some(b),
+                _ => None,
+            })
+            .collect();
+        let bytes = match statements.as_slice() {
+            [] => return Ok(()),
+            [bytes] => *bytes,
+            _ => return Err(CoreError::Protocol("aas")),
+        };
+        let actor = actor.ok_or(CoreError::Protocol("aas-approver"))?;
+        // §9.14.1 step 1
+        let Opening { render, tier } = self
+            .reader
+            .opening(digest)
+            .await?
+            .ok_or(CoreError::Protocol("aas-target"))?;
+        let expected = Expected {
+            domain: &self.domain,
+            target: digest,
+            instance: &actor.instance,
+            render_digest: &render,
+            now,
+        };
+        let (act, h) = self.statement(bytes, actor, &expected).await?;
+        if act.act != Act::AuthorityAct {
+            return Err(CoreError::Protocol("aas-act"));
+        }
+        fits(&act, actor, req, tier)?;
+        let class_name = Class::Authentication.name();
+        let mut bound = false;
+        for p in &mut resolved.proofs {
+            if p.kind == ProofKind::Claim
+                && p.class == class_name
+                && p.party == actor.party
+                && p.binding.actor_instance.is_none_or(|i| i == actor.instance)
+                && p.binding.intent_digest == Some(h)
+            {
+                p.binding.intent_digest = Some(*digest);
+                bound = true;
+            }
+        }
+        if bound {
+            Ok(())
+        } else {
+            Err(CoreError::AasBinding(unbound(&resolved.proofs, actor, h)))
+        }
     }
 
     /// Checks the approval of an allowed `contribute` (§9.14.1 A step 4, §13.7.3) and writes
@@ -212,16 +300,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if act.act != Act::Contribution(class.clone()) {
             return Err(CoreError::Protocol("aas-act"));
         }
-        if act.party != actor.party {
-            return Err(CoreError::Protocol("aas-approver"));
-        }
-        if act.nonce != req.nonce {
-            return Err(CoreError::Protocol("aas-nonce"));
-        }
-        // §13.7.3
-        if !assurance::aas_within_ceiling(tier, act.issued_at, act.expires_at) {
-            return Err(CoreError::Protocol("aas-expiry"));
-        }
+        fits(&act, actor, req, tier)?;
         // SI-5
         let class_name = Class::Authentication.name();
         let bound = resolved
