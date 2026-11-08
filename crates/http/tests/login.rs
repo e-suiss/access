@@ -3132,3 +3132,59 @@ async fn a_second_step_and_new_recovery_codes_are_told_to_the_account() {
     assert_eq!(regenerated.0, "relay.message.recovery_codes_regenerated.v1");
     assert_eq!(regenerated.2, subject);
 }
+
+// OP-153 m.3 (j), TN-96, TN-82, CR-40
+#[tokio::test]
+async fn strict_mode_takes_identifier_and_password_on_one_screen() {
+    let signin = RealmSignin {
+        strict: true,
+        ..RealmSignin::default()
+    };
+    let e = env_full(40, "su-j", AuthPolicy::DEFAULT, false, signin).await;
+    e.account("strict@example.com").await;
+    let mut answers = Vec::new();
+    for (i, (who, pw)) in [
+        ("strict@example.com", "not the one"),
+        ("nobody@example.com", "not the one"),
+    ]
+    .iter()
+    .enumerate()
+    {
+        let mut b = e.browser(&format!("su-j{i}"));
+        let first = b.start().await;
+        let nodes = first.json()["nodes"].as_array().unwrap().clone();
+        assert!(nodes.iter().any(|n| n["name"] == "password"));
+        assert!(
+            !nodes
+                .iter()
+                .any(|n| n["type"] == "submit" && n["method"] == "identifier")
+        );
+        assert!(nodes.iter().any(|n| n["type"] == "passkey_get"));
+        let a = b
+            .submit(
+                &first,
+                "password",
+                json!({ "identifier": who, "password": pw }),
+            )
+            .await;
+        answers.push(masked(&a));
+    }
+    assert_eq!(answers[0], answers[1]);
+    assert_eq!(answers[0].0, 401);
+    e.advance(2_000);
+    let mut b = e.browser("su-j3");
+    let first = b.start().await;
+    let done = b
+        .submit(
+            &first,
+            "password",
+            json!({ "identifier": "strict@example.com", "password": PW }),
+        )
+        .await;
+    assert_eq!(
+        done.step(),
+        "complete",
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+}

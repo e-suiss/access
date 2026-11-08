@@ -312,12 +312,75 @@ fn typed(b: &Browser<'_>, handle: &str) -> Option<String> {
     String::from_utf8(b64url_decode(id).ok()?).ok()
 }
 
+/// The first step of a realm in strict enumeration mode (OP-153 m.3 (j), TN-96): identifier and
+/// password on one screen, submitted together, with the passkey path kept; nothing branches on
+/// the identifier before the answer.
+fn strict(mut ui: Ui) -> Ui {
+    let mut nodes = Vec::with_capacity(ui.nodes.len().saturating_add(1));
+    for node in ui.nodes {
+        match node {
+            crate::domain::node::Node::Input {
+                name: FieldName::Identifier,
+                kind,
+                autocomplete,
+                required,
+                max_length,
+                label,
+                value,
+                read_only,
+                ..
+            } => nodes.push(crate::domain::node::Node::Input {
+                name: FieldName::Identifier,
+                method: Method::Password,
+                kind,
+                autocomplete,
+                required,
+                max_length,
+                label,
+                value,
+                read_only,
+            }),
+            crate::domain::node::Node::Submit {
+                method: Method::Identifier,
+                ..
+            } => {
+                nodes.push(crate::domain::node::Node::input(
+                    FieldName::Password,
+                    Method::Password,
+                    crate::domain::node::InputKind::Password,
+                    crate::domain::node::Autocomplete::CurrentPassword,
+                    TextId::PasswordLabel.into(),
+                ));
+                nodes.push(crate::domain::node::Node::Submit {
+                    method: Method::Password,
+                    label: TextId::SignIn.into(),
+                });
+            }
+            other => nodes.push(other),
+        }
+    }
+    ui.nodes = nodes;
+    ui
+}
+
+/// The identifier step as the realm's enumeration mode draws it.
+fn first_step(kit: &RealmKit, ui: Ui) -> Ui {
+    if kit.signin.strict && kit.auth.password {
+        strict(ui)
+    } else {
+        ui
+    }
+}
+
 fn shape(kit: &RealmKit, flow: &FlowId, current: &Current) -> Option<Ui> {
     let blank = PasskeyOptions::new(json!({}))?;
     let reqs = policy(kit);
     Some(match current {
-        Current::Identifier => Ui::identifier(flow.clone(), blank, &reqs)
-            .with_first_steps(kit.auth.password, kit.auth.passkey),
+        Current::Identifier => first_step(
+            kit,
+            Ui::identifier(flow.clone(), blank, &reqs)
+                .with_first_steps(kit.auth.password, kit.auth.passkey),
+        ),
         Current::Authenticate(id) => Ui::authenticate(flow.clone(), id, blank, &reqs)
             .with_email(email(kit))
             .with_first_steps(kit.auth.password, kit.auth.passkey),
@@ -442,8 +505,11 @@ where
         let reqs = policy(kit);
         let (ui, login) = match identifier {
             None => (
-                Ui::identifier(flow, passkey, &reqs)
-                    .with_first_steps(kit.auth.password, kit.auth.passkey),
+                first_step(
+                    kit,
+                    Ui::identifier(flow, passkey, &reqs)
+                        .with_first_steps(kit.auth.password, kit.auth.passkey),
+                ),
                 clear_cookie(LOGIN_COOKIE),
             ),
             Some(id) => (
@@ -534,6 +600,18 @@ where
                     .await;
             }
             (Method::Restart, _) => return self.start(auth, kit, b, None, 200).await,
+            // OP-153 m.3 (j), TN-96
+            (Method::Password, Current::Identifier) if kit.signin.strict => {
+                return self
+                    .strict_password(
+                        auth,
+                        kit,
+                        b,
+                        field(FieldName::Identifier),
+                        field(FieldName::Password),
+                    )
+                    .await;
+            }
             (Method::Password, Current::Authenticate(identifier)) => auth
                 .password(
                     &fref,
@@ -577,6 +655,70 @@ where
             _ => return Err(Reply::problem(INVALID_SUBMISSION)),
         };
         self.outcome(auth, kit, b, &flow, &fref, outcome).await
+    }
+
+    /// The strict mode's one-screen step (OP-153 m.3 (j)): the identifier opens the flow and the
+    /// password is checked in the same request, so the answer never depends on the identifier
+    /// alone.
+    async fn strict_password<N: Notifier + Sync>(
+        &self,
+        auth: &Signin<'_, C, N>,
+        kit: &RealmKit,
+        b: &Browser<'_>,
+        identifier: &str,
+        password: &str,
+    ) -> Result<Reply, Reply> {
+        let started = auth
+            .identify(&Identify {
+                identifier: Some(identifier),
+                device: b.flow,
+                marker: b.marker,
+                keep_signed_in: false,
+                remember_device: false,
+            })
+            .await
+            .map_err(|e| failed(&e))?;
+        let flow = flow_id(&started.handle)?;
+        let fref = FlowRef {
+            handle: &started.handle,
+            device: &started.device,
+        };
+        let outcome = auth
+            .password(
+                &fref,
+                &PasswordStep {
+                    identifier,
+                    password,
+                    ip: b.ip,
+                    correlation: b.correlation,
+                },
+            )
+            .await
+            .map_err(|e| failed(&e))?;
+        if let Outcome::Rejected(Refusal { problem, pad_ms }) = outcome
+            && problem.status == 401
+        {
+            let mut reply = self.start(auth, kit, b, None, 401).await?;
+            if let Body::Ui(ui) = &mut reply.body {
+                ui.messages.push(Message::error(TextId::LoginFailed));
+            }
+            reply.pad_ms = pad_ms;
+            return Ok(reply.cookie(started.set_cookie));
+        }
+        if let Outcome::Throttled { retry_after_s } = outcome {
+            let mut reply = self.start(auth, kit, b, None, 429).await?;
+            if let Body::Ui(ui) = &mut reply.body {
+                let seconds = u32::try_from(retry_after_s).unwrap_or(u32::MAX);
+                ui.messages
+                    .push(Message::error(TextId::TooManyAttempts).retry_after(seconds));
+            }
+            reply.retry_after_s = Some(retry_after_s);
+            return Ok(reply.cookie(started.set_cookie));
+        }
+        let reply = match self.outcome(auth, kit, b, &flow, &fref, outcome).await {
+            Ok(r) | Err(r) => r,
+        };
+        Ok(reply.cookie(started.set_cookie))
     }
 
     /// Where the flow stands: `resume` moves nothing but a flow whose e-mail step was
@@ -656,12 +798,16 @@ where
         let ui = match current {
             Current::Done(r) => return Ok(r),
             // TN-132
-            Current::Identifier if !kit.auth.passkey => {
+            Current::Identifier if !kit.auth.passkey => first_step(
+                kit,
                 Ui::identifier(flow.clone(), blank()?, &reqs)
-                    .with_first_steps(kit.auth.password, false)
-            }
-            Current::Identifier => Ui::identifier(flow.clone(), fresh(None).await?, &reqs)
-                .with_first_steps(kit.auth.password, true),
+                    .with_first_steps(kit.auth.password, false),
+            ),
+            Current::Identifier => first_step(
+                kit,
+                Ui::identifier(flow.clone(), fresh(None).await?, &reqs)
+                    .with_first_steps(kit.auth.password, true),
+            ),
             Current::Authenticate(id) => {
                 let passkey = if kit.auth.passkey {
                     fresh(Some(&id)).await?
