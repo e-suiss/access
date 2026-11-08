@@ -6,6 +6,7 @@ pub mod dpop;
 pub mod event_id;
 pub mod ip_pseudonym;
 pub mod jose;
+pub mod legacy_hash;
 pub mod oauth;
 pub mod opaque_id;
 pub mod platform;

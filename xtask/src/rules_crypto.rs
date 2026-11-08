@@ -274,6 +274,10 @@ pub(crate) const HMAC_ALLOWED: &[(&str, &str)] = &[
         "OP-146 m.3: TOTP codes (RFC 6238), one-party: the server both holds the seed and checks",
     ),
     (
+        "crates/crypto/src/legacy_hash/transform.rs",
+        "TN-85, OP-153 m.11 (h): an imported hash's HMAC pepper, recomputed only to verify the source identity provider's stored hash",
+    ),
+    (
         "crates/crypto/src/webhook.rs",
         "OP-149 m.4: Standard Webhooks signatures; two-party like client_secret_jwt (CR-3): one secret per subscription, between Access and that one receiver",
     ),
