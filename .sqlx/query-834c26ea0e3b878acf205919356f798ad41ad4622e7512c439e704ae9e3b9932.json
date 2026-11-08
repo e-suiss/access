@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (\n                 SELECT 1 FROM access.upstream_domain_assertions a\n                   JOIN access.org_memberships m\n                     ON m.tenant_id = a.tenant_id AND m.realm_id = a.realm_id\n                    AND m.subject_id = a.subject_id\n                  WHERE a.tenant_id = $1 AND a.realm_id = $2 AND m.org_id = $3\n                    AND m.owner AND m.ended_at IS NULL AND a.domain = $4\n                    AND a.asserted_at > clock_timestamp() - make_interval(secs => $5)\n               ) AS \"found!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "found!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "834c26ea0e3b878acf205919356f798ad41ad4622e7512c439e704ae9e3b9932"
+}

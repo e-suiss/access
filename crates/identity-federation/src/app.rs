@@ -76,6 +76,9 @@ pub struct External {
     pub email: Option<ProviderEmail>,
     /// The display name the provider gave, attacker-controlled text.
     pub name: Option<String>,
+    /// The provider's issuer and the domain it asserted for the person, with the tenant it
+    /// named (TN-90).
+    pub asserted: Option<(String, String, Option<String>)>,
 }
 
 impl core::fmt::Debug for External {
@@ -192,6 +195,8 @@ impl<H: ProviderHttp, S: SocialSecrets> Federation<'_, H, S> {
             key: identity_key(&p.issuer, &subject),
             email: email_of(p, &claims, emails.as_ref()),
             name: name_of(&claims),
+            asserted: crate::domain::token::asserted_domain(p, &claims)
+                .map(|(d, t)| (p.issuer.clone(), d, t)),
         })
     }
 

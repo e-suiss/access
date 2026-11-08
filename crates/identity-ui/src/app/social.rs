@@ -186,6 +186,22 @@ where
     }
 
     /// The session's subject and its last authentication time, fresh within `max_age_ms`.
+    /// Records the domain upstream `issuer` asserted for `subject` (TN-90, Ek B 3611).
+    async fn assert_domain(
+        &self,
+        kit: &RealmKit,
+        subject: [u8; 16],
+        issuer: &str,
+        domain: &str,
+        tenant: Option<&str>,
+    ) -> Result<(), access_store::StoreError> {
+        let mut t =
+            access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+        t.assert_upstream_domain(subject, issuer, domain, tenant)
+            .await?;
+        t.commit().await
+    }
+
     async fn fresh(
         &self,
         kit: &RealmKit,
@@ -434,6 +450,15 @@ where
             Ok(Resolved::Unusable) => return Reply::problem(SOCIAL_FAILED),
             Err(e) => return failed(&e.into()),
         };
+        // TN-90, Ek B 3611
+        if let Some((issuer, domain, tenant)) = &external.asserted
+            && let Err(e) = self
+                .assert_domain(&kit, subject, issuer, domain, tenant.as_deref())
+                .await
+        {
+            tracing::warn!(error = %e, "upstream domain assertion not recorded");
+            return Reply::problem(SOCIAL_FAILED);
+        }
         signin!(self, kit, auth, Some(b.ip));
         match auth.federated(subject, now, b.flow, b.correlation).await {
             Ok(opened) => match opened.step {

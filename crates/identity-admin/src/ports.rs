@@ -213,12 +213,4 @@ pub trait DomainProbe: Send + Sync {
         &self,
         domain: &str,
     ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
-
-    /// Whether an upstream identity provider of the realm asserted `domain` (`hd` or `tid`) for
-    /// organization Party `org` in a verified sign-in.
-    fn idp_asserts(
-        &self,
-        org: [u8; 16],
-        domain: &str,
-    ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
 }

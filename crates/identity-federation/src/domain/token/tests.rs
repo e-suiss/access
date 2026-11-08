@@ -233,3 +233,26 @@ fn the_authorization_request_carries_pkce_state_and_nonce() {
     );
     assert!(format!("{s:?}").contains("redacted"));
 }
+
+// TN-90, Ek B 3611: only a hosted-domain claim that equals the verified address's domain is an
+// assertion of that domain; `tid` names a tenant, never a domain
+#[test]
+fn an_upstream_asserts_only_the_verified_addresss_hosted_domain() {
+    let p = Presets::shipped().unwrap();
+    let google = p.get("google").unwrap();
+    let workspace =
+        json!({ "email": "ada@acme.example", "email_verified": true, "hd": "Acme.Example" });
+    assert_eq!(
+        asserted_domain(google, &workspace),
+        Some((String::from("acme.example"), None))
+    );
+    let unverified = json!({ "email": "ada@acme.example", "hd": "acme.example" });
+    assert_eq!(asserted_domain(google, &unverified), None);
+    let elsewhere =
+        json!({ "email": "ada@other.example", "email_verified": true, "hd": "acme.example" });
+    assert_eq!(asserted_domain(google, &elsewhere), None);
+    assert_eq!(asserted_domain(google, &claims()), None);
+    let ms = p.get("microsoft").unwrap();
+    let tenant = json!({ "email": "a@acme.example", "email_verified": true, "tid": "t-1" });
+    assert_eq!(asserted_domain(ms, &tenant), None);
+}

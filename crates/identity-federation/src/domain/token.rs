@@ -377,5 +377,34 @@ pub fn email_of(p: &Preset, claims: &Value, emails: Option<&Value>) -> Option<Pr
     })
 }
 
+/// The domain an upstream asserts for the person in a sign-in it vouched for (TN-90, Ek B
+/// 3611): the preset's hosted-domain claim (Google's `hd`) when it equals the domain of the
+/// verified address, with Microsoft's `tid` as the tenant it names, never as a domain.
+#[must_use]
+pub fn asserted_domain(p: &Preset, claims: &Value) -> Option<(String, Option<String>)> {
+    let EmailAssurance::AuthoritativeDomains {
+        hosted_domain_claim: Some(c),
+        ..
+    } = &p.email
+    else {
+        return None;
+    };
+    let hd = claims.get(c.as_str())?.as_str()?.to_ascii_lowercase();
+    let address = claims.get("email")?.as_str()?;
+    let verified = matches!(claims.get("email_verified"), Some(Value::Bool(true)))
+        || matches!(claims.get("email_verified"), Some(Value::String(s)) if s == "true");
+    let dns = !hd.is_empty()
+        && hd.len() <= 253
+        && hd
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'.' || b == b'-');
+    let tenant = claims
+        .get("tid")
+        .and_then(Value::as_str)
+        .filter(|t| t.len() <= 64)
+        .map(String::from);
+    (verified && dns && domain(address).as_deref() == Some(hd.as_str())).then_some((hd, tenant))
+}
+
 #[cfg(test)]
 mod tests;

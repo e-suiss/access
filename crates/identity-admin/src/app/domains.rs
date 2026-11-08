@@ -49,6 +49,10 @@ pub struct WatchPass {
     pub memberships: u32,
 }
 
+/// How recent an upstream's domain assertion must be to verify an `idp` claim: 30 days (TN-90,
+/// PD).
+pub const IDP_ASSERTION_S: i64 = 30 * 86_400;
+
 /// The Claim line of a membership of organization `org`.
 #[must_use]
 pub fn membership_line(org: [u8; 16]) -> [u8; 32] {
@@ -105,7 +109,7 @@ pub struct DomainWatch<'a, P> {
 
 impl<P: DomainProbe> DomainWatch<'_, P> {
     /// Whether the claim's challenge is published now; `None` when the probe cannot answer.
-    async fn proved(&self, c: &DomainClaim) -> Option<bool> {
+    async fn proved(&self, at: (TenantId, RealmId), c: &DomainClaim) -> Option<bool> {
         match Method::parse(&c.method)? {
             Method::DnsTxt => self
                 .probe
@@ -119,8 +123,24 @@ impl<P: DomainProbe> DomainWatch<'_, P> {
                 .await
                 .ok()
                 .map(|body| body.is_some_and(|b| answers(&b, &c.challenge_hash))),
-            Method::Idp => self.probe.idp_asserts(c.party, &c.domain).await.ok(),
+            // Ek B 3611
+            Method::Idp => self.idp_asserted(at, c).await.ok(),
         }
+    }
+
+    /// Whether an upstream identity provider asserted the claim's domain for one of its
+    /// organization's owners in a sign-in it vouched for within [`IDP_ASSERTION_S`] (TN-90).
+    async fn idp_asserted(
+        &self,
+        at: (TenantId, RealmId),
+        c: &DomainClaim,
+    ) -> Result<bool, AdminError> {
+        let mut t = TenantTx::begin(self.app, at.0, at.1).await?;
+        let found = t
+            .owner_domain_asserted(c.org, &c.domain, IDP_ASSERTION_S)
+            .await?;
+        t.commit().await?;
+        Ok(found)
     }
 
     /// The MX and registrar digests of the claim's domain; `None` when a probe cannot answer.
@@ -180,7 +200,7 @@ impl<P: DomainProbe> DomainWatch<'_, P> {
             );
             match step {
                 Watch::Rest => {}
-                Watch::Verify => match self.proved(c).await {
+                Watch::Verify => match self.proved(at, c).await {
                     Some(true) => {
                         let Some(seen) = self.seen(c).await else {
                             out.unavailable = out.unavailable.saturating_add(1);
@@ -207,7 +227,7 @@ impl<P: DomainProbe> DomainWatch<'_, P> {
                     }
                     t.domain_checked(c.id).await?;
                     t.commit().await?;
-                    if reverify && self.proved(c).await == Some(true) {
+                    if reverify && self.proved(at, c).await == Some(true) {
                         self.verified(at, c, seen).await?;
                         out.verified = out.verified.saturating_add(1);
                     }

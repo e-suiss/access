@@ -125,15 +125,6 @@ impl DomainProbe for WebProbe {
             _ => Err(down("rdap status")),
         }
     }
-
-    fn idp_asserts(
-        &self,
-        _org: [u8; 16],
-        _domain: &str,
-    ) -> impl Future<Output = Result<bool, Unavailable>> + Send {
-        // TN-90
-        std::future::ready(Ok(false))
-    }
 }
 
 /// Schedules this slot's watch pass and runs it over every live realm when this node claims it.

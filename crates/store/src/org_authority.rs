@@ -899,6 +899,71 @@ impl TenantTx {
         Ok(done.rows_affected() == 1)
     }
 
+    /// Records that upstream `issuer` asserted `domain` for `subject` in a sign-in it vouched
+    /// for, now (TN-90, Ek B 3611); a repeated assertion moves its time forward.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn assert_upstream_domain(
+        &mut self,
+        subject: [u8; 16],
+        issuer: &str,
+        domain: &str,
+        tenant_hint: Option<&str>,
+    ) -> Result<(), StoreError> {
+        let (tenant, realm) = self.org_scope()?;
+        sqlx::query!(
+            r#"INSERT INTO access.upstream_domain_assertions
+                 (tenant_id, realm_id, subject_id, issuer, domain, tenant_hint)
+               VALUES ($1, $2, $3, $4, $5, $6)
+               ON CONFLICT (tenant_id, realm_id, subject_id, issuer, domain)
+               DO UPDATE SET asserted_at = clock_timestamp(), tenant_hint = EXCLUDED.tenant_hint"#,
+            tenant,
+            realm,
+            uuid(subject),
+            issuer,
+            domain,
+            tenant_hint,
+        )
+        .execute(&mut *self.tx)
+        .await?;
+        Ok(())
+    }
+
+    /// Whether an upstream identity provider asserted `domain` in the last `within_s` seconds for
+    /// one of organization `org`'s active owners (TN-90, Ek B 3611).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn owner_domain_asserted(
+        &mut self,
+        org: [u8; 16],
+        domain: &str,
+        within_s: i64,
+    ) -> Result<bool, StoreError> {
+        let (tenant, realm) = self.org_scope()?;
+        let within = secs(within_s)?;
+        let found = sqlx::query_scalar!(
+            r#"SELECT EXISTS (
+                 SELECT 1 FROM access.upstream_domain_assertions a
+                   JOIN access.org_memberships m
+                     ON m.tenant_id = a.tenant_id AND m.realm_id = a.realm_id
+                    AND m.subject_id = a.subject_id
+                  WHERE a.tenant_id = $1 AND a.realm_id = $2 AND m.org_id = $3
+                    AND m.owner AND m.ended_at IS NULL AND a.domain = $4
+                    AND a.asserted_at > clock_timestamp() - make_interval(secs => $5)
+               ) AS "found!""#,
+            tenant,
+            realm,
+            uuid(org),
+            domain,
+            within,
+        )
+        .fetch_one(&mut *self.tx)
+        .await?;
+        Ok(found)
+    }
+
     /// Records an enterprise connection draft committed by `exercise` (TN-120).
     ///
     /// # Errors

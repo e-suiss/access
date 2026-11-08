@@ -175,6 +175,7 @@ struct Says {
     nonce: String,
     sub: String,
     email: Option<(String, bool)>,
+    hd: Option<String>,
     aud: Option<String>,
     iss: Option<String>,
     forms: Vec<String>,
@@ -219,6 +220,9 @@ impl Provider {
         if let Some((e, v)) = &s.email {
             claims["email"] = json!(e);
             claims["email_verified"] = json!(v);
+        }
+        if let Some(hd) = &s.hd {
+            claims["hd"] = json!(hd);
         }
         let input = format!(
             "{}.{}",
@@ -709,6 +713,7 @@ impl Env {
         let mut s = self.provider.says.lock().unwrap();
         s.sub = sub.to_owned();
         s.email = email.map(|(e, v)| (e.to_owned(), v));
+        s.hd = None;
         s.aud = None;
         s.iss = None;
     }
@@ -1703,4 +1708,40 @@ async fn connecting_an_app_opens_an_s1_draft_of_its_typed_bounds_and_nothing_mor
         )
         .await;
     assert_eq!(none.code(), "no-such-app");
+}
+
+// TN-90, Ek B 3611: a sign-in the upstream vouched for records the hosted domain it asserted
+#[tokio::test]
+async fn a_vouched_sign_in_records_the_hosted_domain_its_upstream_asserted() {
+    let e = env(0x4e, "soc-hd").await;
+    e.enable(Some("own-client")).await;
+    e.says("g-hd", Some(("ada@acme.example", true)));
+    e.provider.says.lock().unwrap().hd = Some(String::from("acme.example"));
+    let mut w = e.browser(1);
+    assert_eq!(w.social(&e).await.status, StatusCode::SEE_OTHER);
+    let subject = e.link_of("g-hd").await.unwrap();
+    let org_owner = {
+        let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+        let org = t.insert_org([0x0a; 16], "Acme", &[1; 32]).await.unwrap();
+        t.insert_membership(
+            org,
+            subject,
+            access_store::orgs::Source::Founder,
+            true,
+            None,
+        )
+        .await
+        .unwrap();
+        let asserted = t
+            .owner_domain_asserted(org, "acme.example", 60)
+            .await
+            .unwrap();
+        let other = t
+            .owner_domain_asserted(org, "other.example", 60)
+            .await
+            .unwrap();
+        t.commit().await.unwrap();
+        (asserted, other)
+    };
+    assert_eq!(org_owner, (true, false));
 }

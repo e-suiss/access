@@ -513,14 +513,6 @@ impl access_identity_admin::ports::DomainProbe for Probe {
     ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send {
         std::future::ready(Ok(self.registrar.lock().unwrap().clone()))
     }
-
-    fn idp_asserts(
-        &self,
-        _: [u8; 16],
-        _: &str,
-    ) -> impl Future<Output = Result<bool, Unavailable>> + Send {
-        std::future::ready(Ok(false))
-    }
 }
 
 async fn watch_pass(
@@ -1448,4 +1440,57 @@ async fn members_delegate_only_to_the_apps_their_role_lists() {
             .await
             .unwrap(),
     );
+}
+
+// TN-90, §12.3.8, OP-153 m.3 (gg), Ek B 3611: an `idp` claim is verified only by an upstream's
+// domain assertion for one of the organization's owners, recent enough; a member's assertion or
+// another domain's does not count
+#[tokio::test]
+async fn an_idp_domain_claim_is_verified_by_an_owners_upstream_assertion() {
+    let (w, at, d, founder) = ready("org-idp").await;
+    let org = create_org(&w, at, d, founder).await;
+    let claim = compile(
+        Op::ClaimOrganizationDomain,
+        Some(&b64url_encode(&ORG)),
+        &json!({ "domain": "acme.example", "method": "idp" }),
+        &w.ids,
+    )
+    .unwrap();
+    written(
+        &exercise(&w, &as_founder(at, d, claim, 0x61, founder), ROOT_KEY)
+            .await
+            .unwrap(),
+    );
+    let probe = Probe::default();
+    *probe.mx.lock().unwrap() = vec![String::from("mx1.acme.example")];
+    *probe.registrar.lock().unwrap() = Some(String::from("1910"));
+    let member = account(&w, at, "member@acme.example").await;
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    t.open_member((org, member), Source::Invite, None, None, None)
+        .await
+        .unwrap();
+    t.assert_upstream_domain(member, "https://accounts.google.com", "acme.example", None)
+        .await
+        .unwrap();
+    t.assert_upstream_domain(
+        founder,
+        "https://accounts.google.com",
+        "other.example",
+        None,
+    )
+    .await
+    .unwrap();
+    t.commit().await.unwrap();
+    assert_eq!(watch_pass(&w, at, &probe).await.verified, 0);
+    assert!(claims_of(&w, at, org).await[0].verified_ms.is_none());
+
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    t.assert_upstream_domain(founder, "https://accounts.google.com", "acme.example", None)
+        .await
+        .unwrap();
+    t.commit().await.unwrap();
+    assert_eq!(watch_pass(&w, at, &probe).await.verified, 1);
+    let c = claims_of(&w, at, org).await;
+    assert!(c[0].verified_ms.is_some() && c[0].claimed);
+    assert_eq!(c[0].method, "idp");
 }
