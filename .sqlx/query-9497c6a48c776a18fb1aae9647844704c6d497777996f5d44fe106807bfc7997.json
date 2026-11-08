@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(m.owner_since_ms, (extract(epoch FROM i.created_at) * 1000)::bigint) AS \"since!\"\n                 FROM access.identity_identifiers i\n                 LEFT JOIN access.identity_mailboxes m\n                   ON m.tenant_id = i.tenant_id AND m.realm_id = i.realm_id\n                  AND m.identifier_id = i.identifier_id\n                WHERE i.tenant_id = $1 AND i.realm_id = $2 AND i.subject_id = $3\n                  AND i.status = 'active' AND i.kind = 'email'\n                ORDER BY i.identifier_id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "since!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9497c6a48c776a18fb1aae9647844704c6d497777996f5d44fe106807bfc7997"
+}

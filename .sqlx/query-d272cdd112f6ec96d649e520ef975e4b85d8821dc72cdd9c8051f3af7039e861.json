@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_address_challenges SET attempts_left = $4\n              WHERE tenant_id = $1 AND realm_id = $2 AND challenge_id = $3 AND status = 'open'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int2"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d272cdd112f6ec96d649e520ef975e4b85d8821dc72cdd9c8051f3af7039e861"
+}

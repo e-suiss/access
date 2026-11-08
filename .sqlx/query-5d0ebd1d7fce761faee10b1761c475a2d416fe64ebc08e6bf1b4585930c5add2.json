@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT identifier_id FROM access.identity_identifiers\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'\n                AND value_index = $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "identifier_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "identifier_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5d0ebd1d7fce761faee10b1761c475a2d416fe64ebc08e6bf1b4585930c5add2"
+}

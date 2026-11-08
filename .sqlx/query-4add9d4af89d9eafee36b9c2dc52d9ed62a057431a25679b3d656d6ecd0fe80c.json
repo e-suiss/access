@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM access.identity_identifier_tombstones\n                 WHERE tenant_id = $1 AND realm_id = $2 AND value_index = $3\n                   AND (reusable_ms IS NULL OR reusable_ms > $4)) AS \"hit!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "hit!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4add9d4af89d9eafee36b9c2dc52d9ed62a057431a25679b3d656d6ecd0fe80c"
+}

@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT kek_id, wrapped_dek FROM access.identity_address_challenges\n              WHERE tenant_id = $1 AND realm_id = $2 AND challenge_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kek_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_address_challenges",
+            "name": "kek_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "wrapped_dek",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_address_challenges",
+            "name": "wrapped_dek"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "08684475729f628b209d4bc10419d7603b4b5c92fcd1a6b570eeda7dd2cc25f8"
+}

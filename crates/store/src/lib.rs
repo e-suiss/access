@@ -13,6 +13,7 @@ pub mod authority;
 pub mod authority_checkpoint;
 pub mod backchannel;
 pub mod bodies;
+pub mod challenges;
 pub mod claims;
 pub mod connect;
 pub mod console;
