@@ -157,8 +157,7 @@ mod tests {
 
     use super::*;
 
-    // SSF 1.0 §8.1.4: a verification request names its stream; the SET's subject is the stream
-    // and its one event echoes the state
+    // SSF §8.1.4
     #[test]
     fn verification_echoes_the_state() {
         let r = parse_verify(br#"{"stream_id":"s-1","state":"abc"}"#).unwrap();
@@ -180,7 +179,7 @@ mod tests {
         assert_eq!(c["events"][VERIFICATION_EVENT], json!({}));
     }
 
-    // E30: a semantic ack is applied or ignored, apart from delivery
+    // E30
     #[test]
     fn semantic_acks_are_closed() {
         let a = parse_ack(br#"{"jti":"j","state":"applied"}"#).unwrap();
@@ -192,7 +191,7 @@ mod tests {
         assert_eq!(parse_ack(br#"{"state":"ignored"}"#), Err(Invalid("jti")));
     }
 
-    // SSF 1.0 §8.1.2: a status update is enabled, paused or disabled
+    // SSF §8.1.2
     #[test]
     fn a_status_update_is_closed() {
         let u = parse_status(br#"{"stream_id":"s","status":"paused","reason":"m"}"#).unwrap();

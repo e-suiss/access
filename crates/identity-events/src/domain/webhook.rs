@@ -215,7 +215,7 @@ impl WebhookChange {
 mod tests {
     use super::*;
 
-    // TN-136, OP-151 m.3 (i): 1 min doubling to at most 24 h between attempts, for 7 days
+    // TN-136, OP-151 m.3 (i)
     #[test]
     fn tn_136_retry_schedule() {
         let q = 1_000_000;
@@ -236,8 +236,7 @@ mod tests {
         assert_eq!(next_attempt(1, q, q + GIVE_UP_AFTER_MS), None);
     }
 
-    // TN-136, §14.3: a webhook target is https on a public DNS name, and only identity events
-    // of the catalogue are asked for
+    // TN-136, §14.3
     #[test]
     fn tn_136_registrations_are_checked() {
         let ok = WebhookSpec {
@@ -287,7 +286,7 @@ mod tests {
         );
     }
 
-    // TN-136, §12.4.2: an event nothing produces cannot be subscribed to
+    // TN-136, §12.4.2
     #[test]
     fn unproduced_events_are_not_subscribable() {
         for name in crate::domain::catalog::UNPRODUCED {
@@ -296,7 +295,7 @@ mod tests {
         assert!(event_names(&[String::from("account.suspended")]).is_ok());
     }
 
-    // EI-25: each change names its action and binds its own digest
+    // EI-25
     #[test]
     fn webhook_changes_name_their_action() {
         let w = Window { from: 0, until: 1 };

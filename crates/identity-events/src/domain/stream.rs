@@ -347,7 +347,7 @@ pub const fn classify(status: u16, retry_after_ms: Option<u64>) -> Answer {
 mod tests {
     use super::*;
 
-    // OP-149 m.7: one channel per stream, only catalog events, https endpoints
+    // OP-149 m.7
     #[test]
     fn stream_requests_are_checked() {
         let ok = br#"{"delivery":{"method":"urn:suiss:access:delivery:webhook","endpoint_url":"https://work.example/v1/access/events"},"aud":"work","events_requested":["urn:suiss:access:event:party.disabled","urn:suiss:access:event:authority-revoked","urn:suiss:access:event:party.disabled"]}"#;

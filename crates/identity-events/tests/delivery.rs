@@ -513,11 +513,8 @@ fn compromised(d: &DomainId) -> Event {
     }
 }
 
-// OP-149 m.4, m.7, OP-63, OP-131: identity and authority outbox events reach a webhook
-// subscriber signed per Standard Webhooks, at least once with backoff, and the same id on a
-// redelivery; a repeated fan-out queues nothing twice
-// OP-21, §7.9.2.4, MD-7, OP-150 m.2: an admitted party.compromised ends the sessions and grants
-// of the Party's subject in the realms its domain governs, through the session epoch
+// OP-149 m.4, m.7, OP-63, OP-131
+// OP-21, §7.9.2.4, MD-7, OP-150 m.2
 #[tokio::test]
 async fn a_party_compromise_raises_its_subjects_session_epoch() {
     // TN-50, CMP-15.2
@@ -627,15 +624,13 @@ async fn webhook_delivery_is_signed_retried_and_deduplicated() {
         assert_eq!(ce["data"]["aud"], "work");
         ids.push(id.to_owned());
     }
-    // the first answer was 503: the same id came again, so the receiver deduplicates by it
     let unique: BTreeSet<&String> = ids.iter().collect();
     assert_eq!(unique.len(), 2);
     assert_eq!(ids.iter().filter(|i| **i == ids[0]).count(), 2);
     for id in unique {
         assert_eq!(w.state(hook.id, id).await.0, "delivered");
     }
-    // OP-149 m.34 (d), RFC 8417 §2.2: the retry carries the time of its own attempt in iat;
-    // jti, the event and the CloudEvent's occurrence time are the same
+    // OP-149 m.34 (d), RFC 8417 §2.2
     let (first, retry): (Json, Json) = (
         serde_json::from_slice(&got[0].body).unwrap(),
         serde_json::from_slice(&got[2].body).unwrap(),
@@ -647,9 +642,7 @@ async fn webhook_delivery_is_signed_retried_and_deduplicated() {
     assert_eq!(first["time"], retry["time"]);
 }
 
-// OP-149 m.34 (d), RFC 8417 §2.2, RFC 8935, Work T-102: an SSF push tried again after the
-// receiver's freshness window is signed with iat of that attempt, so the receiver takes it and
-// deduplicates by the unchanged jti; the stored payload is not rewritten
+// OP-149 m.34 (d), RFC 8417 §2.2, RFC 8935 T-102
 #[tokio::test]
 async fn a_push_retry_is_stamped_with_the_time_of_its_attempt() {
     let w = World::new().await;
@@ -698,7 +691,7 @@ async fn a_push_retry_is_stamped_with_the_time_of_its_attempt() {
     assert_eq!(c1["events"], c2["events"]);
     assert_eq!(c1["aud"], c2["aud"]);
     assert_eq!(c1["sub_id"], c2["sub_id"]);
-    // OP-73: the queued payload still says when it was queued
+    // OP-73
     let mut t = TenantTx::begin(&w.db.app, w.tenant, w.realm).await.unwrap();
     let row = t.delivery(w.realm, push.id, &id).await.unwrap().unwrap();
     t.commit().await.unwrap();
@@ -706,8 +699,7 @@ async fn a_push_retry_is_stamped_with_the_time_of_its_attempt() {
     assert_eq!(stored["iat"], T0 / 1000);
 }
 
-// RFC 8936 §2.4, §2.5, OP-149 m.7, SI-9: a poll stream returns its pending SETs signed with
-// the realm key, the compromise window as declared, and settles what the receiver acknowledged
+// RFC 8936 §2.4, §2.5, OP-149 m.7, SI-9
 #[tokio::test]
 async fn poll_returns_and_settles_sets() {
     let w = World::new().await;
@@ -733,7 +725,6 @@ async fn poll_returns_and_settles_sets() {
     let fanout = w.fanout();
     assert_eq!(fanout.identity_step().await.unwrap(), 0);
     assert_eq!(settle_domain(&fanout, &w.domain, 2).await, 2);
-    // a push courier leaves poll deliveries alone
     assert_eq!(w.courier(Local(1)).step().await.unwrap(), Step::default());
 
     let answer = streams
@@ -749,7 +740,7 @@ async fn poll_returns_and_settles_sets() {
         .unwrap();
     support::assert_valid("poll-response.schema.json", &answer);
     assert_eq!(answer["moreAvailable"], true);
-    // OP-149 m.34 (d): a SET polled later carries the time it is handed out
+    // OP-149 m.34 (d)
     w.advance(6 * 60_000);
     let answer = streams
         .poll(&ClearSigner, &w.clock, w.tenant, w.realm, &token, b"{}")
@@ -792,8 +783,7 @@ async fn poll_returns_and_settles_sets() {
     ));
 }
 
-// EI-9, E30, PI-9: delivering semantic events, the receiver's delivery ack and its semantic ack
-// change no authority truth: the domain's log head and state are what the commit left
+// EI-9, E30, PI-9
 #[tokio::test]
 async fn delivery_and_acks_never_change_authority_state() {
     use access_identity_events::domain::control::parse_ack;
@@ -846,9 +836,8 @@ async fn delivery_and_acks_never_change_authority_state() {
     assert_eq!(state(&w.db.sequencer, &w.domain).await.unwrap(), truth);
 }
 
-// §14.3, OP-149 m.4, m.23: an endpoint the SSRF guard refuses fails at once, without retry,
-// also one declared when the stream was created but not by the delivering client, and a
-// disabled stream gets nothing more (OP-73: it stays as a row)
+// §14.3, OP-149 m.4, m.23
+// OP-73
 #[tokio::test]
 async fn refused_endpoints_and_disabled_streams_get_nothing() {
     let w = World::new().await;
@@ -906,8 +895,7 @@ async fn refused_endpoints_and_disabled_streams_get_nothing() {
     ));
 }
 
-// OP-149 m.23, §14.3: a stream endpoint on a private address literal or another port than 443
-// is accepted only when the operator declared it byte for byte
+// OP-149 m.23, §14.3
 #[tokio::test]
 async fn only_declared_private_endpoints_open_streams() {
     let w = World::new().await;
@@ -958,9 +946,7 @@ async fn only_declared_private_endpoints_open_streams() {
     assert_eq!(created.stream["delivery"]["endpoint_url"], declared);
 }
 
-// SSF 1.0 §8.1.2, §8.1.4, §9.16.2, PI-9: a stream reads and sets its own status by its
-// credential; verification queues a SET whose subject is the stream and which echoes the state,
-// delivered through the stream like any event; another stream's id is refused
+// SSF §8.1.2, §8.1.4, §9.16.2, PI-9
 #[tokio::test]
 async fn a_stream_verifies_and_sets_its_status() {
     use access_identity_events::domain::control::{VERIFICATION_EVENT, parse_status, parse_verify};
@@ -1026,9 +1012,7 @@ async fn a_stream_verifies_and_sets_its_status() {
     ));
 }
 
-// OP-149 m.4 at-least-once, m.7, OP-67, Work A24: a push SET that cannot be signed is that
-// delivery's transient failure, retried with backoff, and never holds back the other
-// deliveries of the step; once the signer is back the delivery goes out
+// OP-149 m.4, m.7, OP-67 A24
 #[tokio::test]
 async fn an_unsignable_delivery_is_retried_without_blocking_the_others() {
     let w = World::new().await;

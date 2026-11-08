@@ -212,8 +212,7 @@ impl<C: Clock + Send + Sync> WebhookFanout<C> {
     async fn queue(&self, tenant: TenantId, ready: &Ready) -> Result<u32, Unavailable> {
         let now = self.clock.now().map_err(down)?;
         let event_realm = ready.payload.get("realm").and_then(Value::as_str);
-        // OP-132 m.5: the webhooks of every realm are read tenant-wide, each delivery is queued
-        // in its own realm
+        // OP-132 m.5
         let mut wide = TenantTx::begin_tenant_wide(&self.db.app, tenant)
             .await
             .map_err(down)?;

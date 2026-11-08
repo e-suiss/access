@@ -62,8 +62,7 @@ fn expect(events: &[String]) -> Expect<'_> {
     }
 }
 
-// TN-42, OP-151 m.3 (l), RFC 8935 §2.3: iss, aud, iat skew ≤ 5 min, the key, exactly one event
-// of a declared type; each failure has its RFC 8935 code
+// TN-42, OP-151 m.3 (l), RFC 8935 §2.3
 #[test]
 fn inbound_sets_are_checked() {
     let k = key();
@@ -158,7 +157,7 @@ fn inbound_sets_are_checked() {
     );
 }
 
-// TN-42, RFC 8935 §2.3: undeclared types and other issuers are refused
+// TN-42, RFC 8935 §2.3
 #[test]
 fn inbound_sets_name_their_transmitter_and_types() {
     let k = key();
@@ -197,8 +196,7 @@ fn inbound_sets_name_their_transmitter_and_types() {
     assert_eq!(Reject::Key.body()["err"], "invalid_key");
 }
 
-// §9.16.2 k.4, TN-42, PI-9, CI-2: no inbound event revokes a Grant or widens; session-revoked
-// only ends sessions; a lower risk or a compliant device does nothing
+// §9.16.2 k.4, TN-42, PI-9, CI-2
 #[test]
 fn inbound_events_only_narrow_and_never_revoke_a_grant() {
     // EI-19
@@ -241,8 +239,7 @@ fn inbound_events_only_narrow_and_never_revoke_a_grant() {
     );
 }
 
-// §8.13, L18: a transmitter is delayed once its interval passes; the notice says decisions
-// use declared validity windows
+// §8.13, L18
 #[test]
 fn delay_is_declared() {
     assert_eq!(delayed_since(Some(1_000), 0, 60, 60_000), None);
@@ -255,7 +252,7 @@ fn delay_is_declared() {
     );
 }
 
-// TN-42: a transmitter declares https issuer and keys, an audience and known event types
+// TN-42
 #[test]
 fn transmitter_declarations_are_checked() {
     let ok = serde_json::json!({

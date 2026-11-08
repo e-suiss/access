@@ -197,7 +197,7 @@ pub fn counterpart_body(kind: SignalKind, access: &str, at_ms: u64) -> Value {
 mod tests {
     use super::*;
 
-    // TN-41: every row of the §12.2.2 table is present, once
+    // TN-41, §12.2.2
     #[test]
     fn the_mapping_table_is_complete() {
         let expect = [
@@ -246,7 +246,7 @@ mod tests {
         }
     }
 
-    // TN-41, §9.16: authority-revoked is a new type in the Access namespace, no CAEP counterpart
+    // TN-41, §9.16
     #[test]
     fn authority_revoked_has_no_caep_counterpart() {
         assert_eq!(counterpart("authority-revoked"), None);
@@ -262,7 +262,7 @@ mod tests {
         }
     }
 
-    // §9.16, §9.16.2 k.3: with or instead of the CAEP counterpart, by profile
+    // §9.16, §9.16.2 k.3
     #[test]
     fn the_profile_decides_with_or_instead() {
         let caep = signal_uri(SignalKind::SessionRevoked);
@@ -288,7 +288,7 @@ mod tests {
         assert!(Profile::parse("other").is_err());
     }
 
-    // TN-41: official CAEP and RISC type URIs
+    // TN-41
     #[test]
     fn standard_uris_are_the_official_ones() {
         assert_eq!(

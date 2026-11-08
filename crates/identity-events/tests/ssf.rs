@@ -168,7 +168,7 @@ impl World {
         let (lease, mut head) = acquire_lease(&db.sequencer, &domain, "a", Duration::from_secs(10))
             .await
             .unwrap();
-        // two ALLOWs: the client's registration and the upstream's (EI-25)
+        // EI-25
         for n in 1..=2_u8 {
             let next = HeadRow {
                 pos: head.pos + 1,
@@ -370,9 +370,7 @@ fn client_row() -> ClientRow {
     }
 }
 
-// TN-39, TN-41, MD-10, TI-RT10: a realm holds several streams; an identity plane signal reaches
-// a receiver only through the pairwise sub it already has; the SET is iss_sub, one event, txn,
-// no sub, no exp
+// TN-39, TN-41, MD-10, TI-RT10
 #[tokio::test]
 async fn signals_name_the_subject_by_the_receivers_own_sub() {
     let w = World::new().await;
@@ -430,7 +428,7 @@ async fn signals_name_the_subject_by_the_receivers_own_sub() {
     assert!(other[0]["events"].get(&uri).is_none());
 }
 
-// CR-27: a realm key compromise reaches every stream that asked, naming the realm issuer
+// CR-27
 #[tokio::test]
 async fn a_realm_key_compromise_reaches_every_stream() {
     let w = World::new().await;
@@ -451,7 +449,7 @@ async fn a_realm_key_compromise_reaches_every_stream() {
     }
 }
 
-// TN-40, OP-151 m.3 (k): ES256 is the default; RS256 is refused with unsupported_alg
+// TN-40, OP-151 m.3 (k)
 #[tokio::test]
 async fn rs256_streams_are_refused() {
     let w = World::new().await;
@@ -572,10 +570,7 @@ impl World {
     }
 }
 
-// §9.16.2 k.4, TN-42, OP-151 m.3 (l), MD-7, U38, EP-5: an inbound session-revoked ends the
-// subject's sessions by the time it is taken (the declared processing time is the receipt
-// itself) and steps its session_epoch; it is no Grant revocation and writes no authority
-// state; a replayed jti does nothing twice
+// §9.16.2 k.4, TN-42, OP-151 m.3 (l), MD-7, U38, EP-5
 #[tokio::test]
 async fn inbound_session_revoked_ends_sessions_and_revokes_no_grant() {
     let w = World::new().await;
@@ -615,8 +610,7 @@ async fn inbound_session_revoked_ends_sessions_and_revokes_no_grant() {
     );
 }
 
-// TN-42, CI-2, PI-9: inbound risk only narrows: a higher level is a risk_signal Claim order, a
-// lower level, a compliant device and an unlinked subject do nothing
+// TN-42, CI-2, PI-9
 #[tokio::test]
 async fn inbound_risk_is_a_narrowing_claim_only() {
     let w = World::new().await;
@@ -683,7 +677,7 @@ async fn inbound_risk_is_a_narrowing_claim_only() {
     assert_eq!(w.epoch().await, epoch);
 }
 
-// RFC 8935 §2.3: a SET under another key is refused with invalid_key and takes nothing
+// RFC 8935 §2.3
 #[tokio::test]
 async fn inbound_sets_under_other_keys_are_refused() {
     let w = World::new().await;
@@ -698,7 +692,7 @@ async fn inbound_sets_under_other_keys_are_refused() {
     assert_eq!(w.outbox_kinds().await, Vec::<String>::new());
 }
 
-// §8.13, L18, INV-24: a silent transmitter is declared delayed; nothing else changes
+// §8.13, L18, INV-24
 #[tokio::test]
 async fn a_silent_transmitter_is_delayed() {
     let w = World::new().await;
@@ -718,8 +712,7 @@ async fn a_silent_transmitter_is_delayed() {
     assert_eq!(h[0].issuer, UPSTREAM);
 }
 
-// E30: delivery ack, semantic ack and authority-state ack are apart; a semantic ack is taken
-// only for a SET the stream was delivered, once
+// E30
 #[tokio::test]
 async fn acks_are_apart_and_counted() {
     let w = World::new().await;
@@ -860,9 +853,7 @@ async fn poll_transmitter(
     (port, Arc::new(tls), seen)
 }
 
-// OP-151 m.3 (l), RFC 8936, OP-149 m.23 (S-1): the poll client reads the transmitter's answer
-// through the SSRF-guarded client, reaches a declared poll endpoint, takes the SETs it returns
-// with the bearer credential, and acknowledges them in the next request
+// OP-151 m.3 (l), RFC 8936, OP-149 m.23 (S-1)
 #[tokio::test]
 async fn polling_a_declared_transmitter_takes_its_sets() {
     use access_identity_events::adapters::OutboundTransport;

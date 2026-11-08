@@ -33,7 +33,7 @@ use access_kernel::model::Id;
 use serde_json::Value as Json;
 use support::{assert_cloud_event, assert_set, assert_valid, contracts, load};
 
-// OP-149 m.1, m.7: one schema and one example per catalog event, and the URN prefix
+// OP-149 m.1, m.7
 #[test]
 fn every_event_has_a_schema_and_an_example() {
     for name in NAMES {
@@ -54,7 +54,7 @@ fn every_event_has_a_schema_and_an_example() {
     assert_eq!(listed, NAMES.len() + 7 + SignalKind::ALL.len());
 }
 
-// OP-149 m.4, m.7: every committed example meets its schema
+// OP-149 m.4, m.7
 #[test]
 fn every_example_is_valid() {
     for name in NAMES {
@@ -81,8 +81,7 @@ fn every_example_is_valid() {
     );
 }
 
-// OP-149 m.7, m.17 (d): the schemas refuse what the contract forbids; a compromise without
-// its window start is malformed
+// OP-149 m.7, m.17 (d)
 #[test]
 fn schemas_refuse_malformed_events() {
     let mut e = load("examples/party.compromised.json");
@@ -110,7 +109,7 @@ fn schemas_refuse_malformed_events() {
 const TENANT: &str = "tnt_0123456789abcdefghjkmnpqrs";
 const OTHER: &str = "tnt_zyxwvtsrqpnmkjhgfedcba9876";
 
-// OP-149 m.15 (i): every surface names a tenant by its opaque tnt_ id, never its UUID
+// OP-149 m.15 (i)
 #[test]
 fn tenants_are_named_by_their_opaque_id() {
     use access_crypto::opaque_id::IdKey;
@@ -250,16 +249,14 @@ fn sample(kind: Kind) -> Event {
     }
 }
 
-// OP-149 m.4, m.7: what the transmitter builds for every event meets the contracts, in both
-// the SET and the webhook form
+// OP-149 m.4, m.7
 #[test]
 fn built_events_meet_the_contracts() {
     let mut built = Vec::new();
     for (i, kind) in Kind::ALL.into_iter().enumerate() {
         built.push(authority_ready(&sample(kind), &[i as u8; 32]));
     }
-    // OP-150 m.3 (m), MUST-NEVER-13: the product name in api_client.* is any registered
-    // product's, first or third party
+    // OP-150 m.3 (m), MUST-NEVER-13
     let change = |kind, product: &str| {
         IdentityEvent::api_client(
             kind,
@@ -305,7 +302,6 @@ fn built_events_meet_the_contracts() {
         assert_eq!(back, e);
         built.push(e.ready());
     }
-    // the realm's authorization server writes what the transmitter reads
     assert_eq!(
         IdentityKind::ProjectionInvalidated.outbox_kind(),
         access_identity_oauth::domain::tokens::INVALIDATED_OUTBOX
@@ -328,7 +324,7 @@ fn built_events_meet_the_contracts() {
     }
 }
 
-// SSF 1.0 §7.1, §8.1.1, RFC 8936 §2.5
+// §7.1, §8.1.1, §2.5
 #[test]
 fn transmitter_documents_meet_the_contracts() {
     let iss = "https://id.example/realms/shop";
@@ -403,8 +399,7 @@ fn signal_set(s: &Signal, receiver: &[u8]) -> Json {
     )
 }
 
-// TN-39, TN-41, TN-43: every CAEP and RISC event has a schema and an example, and what the
-// transmitter builds meets them: one event per SET, `txn`, `sub_id`, no `sub`, no `exp`
+// TN-39, TN-41, TN-43
 #[test]
 fn caep_and_risc_sets_meet_the_contracts() {
     let built = every_signal();
@@ -428,8 +423,7 @@ fn caep_and_risc_sets_meet_the_contracts() {
     }
 }
 
-// TI-RT10: a signal's ids are not a subject hash, and two receivers of the same signal get
-// unrelated jti and txn, so they cannot link their copies of one subject
+// TI-RT10
 #[test]
 fn signal_ids_are_per_receiver_and_not_subject_hashes() {
     let s = Signal::session_established([7; 32], [2; 16], 0);
@@ -446,8 +440,7 @@ fn signal_ids_are_per_receiver_and_not_subject_hashes() {
     assert_ne!(a["jti"], Json::from(subject_hash));
 }
 
-// TN-41, §9.16: an Access event's CAEP counterpart meets the CAEP schema and shares the
-// Access event's txn; authority-revoked has none
+// TN-41, §9.16
 #[test]
 fn counterparts_meet_the_caep_contracts() {
     for kind in [

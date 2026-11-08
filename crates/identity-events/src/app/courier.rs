@@ -175,8 +175,7 @@ where
                 status: None,
             }
         } else {
-            // OP-149 m.4 at-least-once: a delivery that cannot be built or signed now is this
-            // delivery's transient failure, not the batch's; the others are still sent
+            // OP-149 m.4
             let sent = self
                 .send(tenant, realm, &row, &s, now)
                 .await

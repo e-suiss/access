@@ -379,9 +379,7 @@ fn verify(pk: &WebhookPublicKey, g: &Got, now_s: u64) -> bool {
     )
 }
 
-// TN-136, TI-7, E42: an outbox event reaches the webhook as a signed CloudEvent; a failed
-// attempt is retried after a minute with the same webhook-id, and each attempt is logged with
-// status and latency, never a body
+// TN-136, TI-7, E42
 #[tokio::test]
 async fn tn_136_events_are_delivered_signed_and_at_least_once() {
     let w = World::new(91).await;
@@ -428,8 +426,7 @@ async fn tn_136_events_are_delivered_signed_and_at_least_once() {
     );
 }
 
-// TN-136, OP-151 m.3 (i): one failing endpoint never blocks another, and there is no ordering
-// guarantee: a later event may arrive first
+// TN-136, OP-151 m.3 (i)
 #[tokio::test]
 async fn tn_136_deliveries_are_isolated_and_unordered() {
     let w = World::new(92).await;
@@ -464,8 +461,7 @@ async fn tn_136_deliveries_are_isolated_and_unordered() {
     }
 }
 
-// TN-136: a rotated key keeps signing beside the new one for 24 h; a delivery that fails for 7
-// days is exhausted; a retired webhook's pending delivery ends failed
+// TN-136
 #[tokio::test]
 async fn tn_136_rotation_overlaps_and_retries_end() {
     let w = World::new(93).await;
@@ -515,9 +511,7 @@ async fn tn_136_rotation_overlaps_and_retries_end() {
     assert_eq!(w.state(1, &pending).await, "failed");
 }
 
-// INV-24, TN-136: a webhook is a notification, not an authority source. With no courier running
-// and the receiver unreachable, a suspension still ends the account's sessions and refuses its
-// sign-ins at once; the delivery only waits
+// INV-24, TN-136
 #[tokio::test]
 async fn inv_24_a_lost_delivery_changes_no_decision() {
     let w = World::new(94).await;
