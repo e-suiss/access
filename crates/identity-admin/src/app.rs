@@ -1,7 +1,9 @@
 //! Use cases over the domain and its ports (OP-63): realm creation (TN-111) and the `idp.*`
 //! write path (MD-14, EI-25), and the platform product API (OP-149 m.4).
 
+pub mod domains;
 pub mod issuer;
+pub mod org_flows;
 pub mod orgs;
 pub mod platform;
 pub mod provision;
@@ -371,6 +373,32 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 if t.invitation_org(*invitation).await? != Some((org.id, true)) {
                     return Err(Invalid::NoInvitation.into());
                 }
+            }
+            // TN-90
+            Change::OrgDomainClaim(d) => {
+                let org = orgs::live_org(t, d.org).await?;
+                if t.open_domain_claims(Some(org.id))
+                    .await?
+                    .iter()
+                    .any(|c| c.domain == d.domain)
+                {
+                    return Err(Invalid::NoDomain.into());
+                }
+            }
+            Change::OrgDomainRelease { org, claim } => {
+                let org = orgs::live_org(t, *org).await?;
+                if !t
+                    .open_domain_claims(Some(org.id))
+                    .await?
+                    .iter()
+                    .any(|c| c.id == *claim)
+                {
+                    return Err(Invalid::NoDomain.into());
+                }
+            }
+            // TN-120
+            Change::OrgSsoDraft(d) => {
+                orgs::live_org(t, d.org).await?;
             }
             Change::ClientRegister(c) => {
                 if idp::client(t, c.id.as_str()).await?.is_some() {
@@ -953,6 +981,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // TN-89, OP-153 m.3 (o)
             self.invite(&mut t.0, p, &g, i, exercise).await?;
         }
+        // TN-90, TN-120, OP-153 m.3 (o), (p)
+        secret = org_flows::committed(&mut t.0, &p.change, p.subject, &exercise.0)
+            .await?
+            .or(secret);
         declare_transmitter(&mut t.0, bound, &p.change, exercise).await?;
         self.announce(&mut t.0, p, exercise).await?;
         let at = access_store::authority::server_time(self.app).await?;
@@ -1366,9 +1398,14 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::AccountDelete(_)
             | Change::OrgCreate(_)
             | Change::OrgInvite(_)
+            | Change::OrgDomainClaim(_)
+            | Change::OrgSsoDraft(_)
             | Change::AccountResetIntent { .. }
             | Change::AccountTapIssue(_) => true,
             Change::OrgInviteRevoke { invitation, .. } => t.revoke_invitation(*invitation).await?,
+            Change::OrgDomainRelease { org, claim } => {
+                org_flows::release_domain(t, *org, *claim).await?
+            }
             Change::OrgUpdate(u) => orgs::update(t, self.ids, u, self.app).await?,
             Change::SocialEnable(s) | Change::SocialUpdate(s) => {
                 write_social(t, bound, s).await?;

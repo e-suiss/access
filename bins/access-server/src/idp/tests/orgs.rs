@@ -3,6 +3,7 @@
 //! as first owner, and `idp.org.member_remove` never leaves it without an owner.
 
 use access_identity_account::app::SUBJECT_PREFIX;
+use access_identity_account::domain::claims::ClaimOrder;
 use access_identity_admin::app::rest::{Op, compile};
 use access_identity_admin::domain::Invalid;
 use access_internal_api::instances::{RegistrationVerdict, SelfSigned};
@@ -470,4 +471,207 @@ async fn home_realm_discovery_needs_a_verified_uncontested_domain() {
         .await,
         Invalid::HrdUnverified
     );
+}
+
+/// The outside world a domain verification reads, as a test sets it.
+#[derive(Default)]
+struct Probe {
+    txt: std::sync::Mutex<Vec<String>>,
+    mx: std::sync::Mutex<Vec<String>>,
+    registrar: std::sync::Mutex<Option<String>>,
+    down: std::sync::atomic::AtomicBool,
+}
+
+impl access_identity_admin::ports::DomainProbe for Probe {
+    fn txt(&self, name: &str) -> impl Future<Output = Result<Vec<String>, Unavailable>> + Send {
+        assert!(name.starts_with("_suiss-access."));
+        std::future::ready(if self.down.load(std::sync::atomic::Ordering::SeqCst) {
+            Err(Unavailable(String::from("down")))
+        } else {
+            Ok(self.txt.lock().unwrap().clone())
+        })
+    }
+
+    fn mx(&self, _: &str) -> impl Future<Output = Result<Vec<String>, Unavailable>> + Send {
+        std::future::ready(Ok(self.mx.lock().unwrap().clone()))
+    }
+
+    fn https(&self, _: &str) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send {
+        std::future::ready(Ok(None))
+    }
+
+    fn registrar(
+        &self,
+        _: &str,
+    ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send {
+        std::future::ready(Ok(self.registrar.lock().unwrap().clone()))
+    }
+
+    fn idp_asserts(
+        &self,
+        _: [u8; 16],
+        _: &str,
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send {
+        std::future::ready(Ok(false))
+    }
+}
+
+async fn watch_pass(
+    w: &World,
+    at: (TenantId, RealmId),
+    probe: &Probe,
+) -> access_identity_admin::app::domains::WatchPass {
+    access_identity_admin::app::domains::DomainWatch {
+        app: &w.db.app,
+        probe,
+    }
+    .realm(at)
+    .await
+    .unwrap()
+}
+
+async fn claims_of(
+    w: &World,
+    at: (TenantId, RealmId),
+    org: [u8; 16],
+) -> Vec<access_store::org_authority::DomainClaim> {
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let c = t.open_domain_claims(Some(org)).await.unwrap();
+    t.commit().await.unwrap();
+    c
+}
+
+fn orders(events: &[access_store::identity::OutboxEvent]) -> Vec<ClaimOrder> {
+    events
+        .iter()
+        .filter_map(|e| ClaimOrder::from_bytes(&e.payload).ok())
+        .collect()
+}
+
+async fn age(w: &World, at: (TenantId, RealmId), checked_s: i64, changed_s: i64) {
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    t.age_domain_watch(checked_s, changed_s).await.unwrap();
+    t.commit().await.unwrap();
+}
+
+// TN-90, TN-98, §10.2.6, OP-153 m.3 (o), (gg), Ek B 3611, 3436, 3454, 3612, 4039
+#[tokio::test]
+async fn a_domain_is_verified_by_its_challenge_watched_contested_and_lapsed() {
+    let (w, at, d, founder) = ready("org-domains").await;
+    let org = create_org(&w, at, d, founder).await;
+    let claim = |domain: &str| {
+        compile(
+            Op::ClaimOrganizationDomain,
+            Some(&b64url_encode(&ORG)),
+            &json!({ "domain": domain, "method": "dns_txt" }),
+            &w.ids,
+        )
+        .unwrap()
+    };
+    let patch = |body: serde_json::Value| {
+        compile(
+            Op::PatchOrganization,
+            Some(&b64url_encode(&ORG)),
+            &body,
+            &w.ids,
+        )
+        .unwrap()
+    };
+    let founder_does = |change: Change, nonce: u8| as_founder(at, d, change, nonce, founder);
+    let challenge = match exercise(&w, &founder_does(claim("acme.example"), 1), ROOT_KEY)
+        .await
+        .unwrap()
+    {
+        Applied::Written {
+            secret: Some(s), ..
+        } => s.expose().to_owned(),
+        other => panic!("{other:?}"),
+    };
+    let probe = Probe::default();
+    *probe.mx.lock().unwrap() = vec![String::from("mx1.acme.example")];
+    *probe.registrar.lock().unwrap() = Some(String::from("1910"));
+
+    // TN-90
+    assert_eq!(watch_pass(&w, at, &probe).await.verified, 0);
+    *probe.txt.lock().unwrap() = vec![format!("suiss-access-verify={challenge}")];
+    probe.down.store(true, std::sync::atomic::Ordering::SeqCst);
+    let p = watch_pass(&w, at, &probe).await;
+    assert_eq!((p.verified, p.unavailable), (0, 1));
+    probe.down.store(false, std::sync::atomic::Ordering::SeqCst);
+    *probe.txt.lock().unwrap() = vec![String::from("suiss-access-verify=someone-else")];
+    assert_eq!(watch_pass(&w, at, &probe).await.verified, 0);
+    assert!(claims_of(&w, at, org).await[0].verified_ms.is_none());
+
+    *probe.txt.lock().unwrap() = vec![format!("suiss-access-verify={challenge}")];
+    assert_eq!(watch_pass(&w, at, &probe).await.verified, 1);
+    let c = claims_of(&w, at, org).await;
+    assert!(c[0].verified_ms.is_some() && c[0].claimed);
+    let issued = orders(&identity_events(&w.db, "claim.domain_verification", 1).await);
+    assert!(issued.iter().any(|o| o.party() == Some(ORG) && !o.retract));
+
+    // TN-98, Ek B 3454
+    written(
+        &exercise(
+            &w,
+            &founder_does(patch(json!({ "hrd": true })), 2),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    // TN-90, OP-153 m.1 (d), Ek B 3612, 4039
+    written(
+        &exercise(&w, &founder_does(claim("gmail.com"), 3), ROOT_KEY)
+            .await
+            .unwrap(),
+    );
+    let autojoin = |domain: &str| patch(json!({ "autojoin": { "domain": domain, "on": true } }));
+    assert_eq!(
+        refused(&w, &founder_does(autojoin("gmail.com"), 4)).await,
+        Invalid::ConsumerDomain
+    );
+    written(
+        &exercise(&w, &founder_does(autojoin("acme.example"), 5), ROOT_KEY)
+            .await
+            .unwrap(),
+    );
+
+    // TN-90
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let other = t
+        .insert_org([0x0d; 16], "Not Acme", &[4; 32])
+        .await
+        .unwrap();
+    t.claim_domain(other, ("acme.example", "dns_txt"), &[5; 32], &[6; 32])
+        .await
+        .unwrap();
+    t.commit().await.unwrap();
+    assert_eq!(watch_pass(&w, at, &probe).await.contested, 2);
+    let mine = claims_of(&w, at, org).await;
+    let acme = mine.iter().find(|c| c.domain == "acme.example").unwrap();
+    assert!(acme.contested_ms.is_some() && !acme.autojoin);
+    assert_eq!(
+        refused(&w, &founder_does(autojoin("acme.example"), 6)).await,
+        Invalid::DomainContested
+    );
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    assert_eq!(t.hrd_domains(org).await.unwrap(), Vec::<String>::new());
+    t.commit().await.unwrap();
+
+    // TN-90
+    *probe.txt.lock().unwrap() = Vec::new();
+    *probe.mx.lock().unwrap() = vec![String::from("mx.elsewhere.example")];
+    age(&w, at, 2 * 86_400, 0).await;
+    assert_eq!(watch_pass(&w, at, &probe).await.changed, 1);
+    assert_eq!(watch_pass(&w, at, &probe).await.lapsed, 0);
+    age(&w, at, 0, 73 * 3_600).await;
+    assert_eq!(watch_pass(&w, at, &probe).await.lapsed, 1);
+    let acme = claims_of(&w, at, org)
+        .await
+        .into_iter()
+        .find(|c| c.domain == "acme.example")
+        .unwrap();
+    assert!(acme.verified_ms.is_none() && !acme.claimed);
+    let issued = orders(&identity_events(&w.db, "claim.domain_verification", 2).await);
+    assert!(issued.iter().any(|o| o.retract && o.party() == Some(ORG)));
 }

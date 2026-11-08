@@ -411,3 +411,40 @@ pub const HRD_NEEDS_VERIFIED_DOMAIN: Code = code(
     "Conflict",
     "Home realm discovery goes on only with a verified domain no other organization claims (TN-98).",
 );
+/// A domain that is not a lower-case DNS name, or a verification method other than `dns_txt`,
+/// `https` or `idp` (TN-90).
+pub const INVALID_DOMAIN_CLAIM: Code = code(
+    "invalid-domain-claim",
+    400,
+    "Bad Request",
+    "A domain that is not a lower-case DNS name, or a verification method other than dns_txt, https or idp (TN-90).",
+);
+/// Autojoin is refused on a consumer, free mail, ISP or university domain (TN-90).
+pub const CONSUMER_DOMAIN: Code = code(
+    "consumer-domain",
+    409,
+    "Conflict",
+    "Autojoin is refused on a consumer, free mail, ISP or university domain (TN-90).",
+);
+/// Another organization claims the domain too, so none of them gets autojoin (TN-90).
+pub const DOMAIN_CONTESTED: Code = code(
+    "domain-contested",
+    409,
+    "Conflict",
+    "Another organization claims the domain too, so none of them gets autojoin (TN-90).",
+);
+/// The organization's claim of the domain is not verified now (TN-90).
+pub const DOMAIN_NOT_VERIFIED: Code = code(
+    "domain-not-verified",
+    409,
+    "Conflict",
+    "The organization's claim of the domain is not verified now (TN-90).",
+);
+/// A connection draft whose issuer is not an https URL or whose client id is empty or too long
+/// (TN-120).
+pub const INVALID_CONNECTION_DRAFT: Code = code(
+    "invalid-connection-draft",
+    400,
+    "Bad Request",
+    "A connection draft whose issuer is not an https URL or whose client id is empty or too long (TN-120).",
+);

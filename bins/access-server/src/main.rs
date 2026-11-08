@@ -23,6 +23,7 @@ mod ingest;
 mod jobs;
 mod login;
 mod oauth;
+mod orgs;
 mod platform;
 mod product;
 mod retention;
@@ -1034,6 +1035,7 @@ struct Background {
     events: events::Delivery,
     opening: tokio::task::JoinHandle<()>,
     retaining: tokio::task::JoinHandle<()>,
+    watching: tokio::task::JoinHandle<()>,
     sampling: tokio::task::JoinHandle<()>,
     ready: Readiness,
     /// Every realm's JWKS loaded at start-up (OP-138, §17.9.7).
@@ -1050,6 +1052,12 @@ impl Background {
     ) -> Result<Self, String> {
         let identity = config.identity.as_ref().ok_or("no identity section")?;
         let logout = courier(config, pools, outbound.clone())?;
+        // TN-90, OP-153 m.3 (o)
+        let probe = orgs::WebProbe {
+            outbound: outbound.clone(),
+            doh: identity.org_domains.as_ref().map(|d| d.doh_url.clone()),
+            rdap: identity.org_domains.as_ref().map(|d| d.rdap_url.clone()),
+        };
         let ready = readiness(config, pools);
         // OP-67 m.3
         let consumers = ready.flag("outbox.consumers");
@@ -1082,6 +1090,12 @@ impl Background {
             ids.clone(),
             holder()?,
         ));
+        let watching = tokio::spawn(orgs::run(
+            pools.app.clone(),
+            pools.router.clone(),
+            probe,
+            holder()?,
+        ));
         consumers.set(true);
         Ok(Self {
             stop,
@@ -1089,6 +1103,7 @@ impl Background {
             events,
             opening,
             retaining,
+            watching,
             // §17.8.2, OP-53
             sampling: tokio::spawn(sample_pools(PoolGauges::of(pools))),
             jwks: ready.flag("jwks.realms"),
@@ -1103,6 +1118,7 @@ impl Background {
         self.events.stop().await;
         self.opening.abort();
         self.retaining.abort();
+        self.watching.abort();
         self.sampling.abort();
     }
 }

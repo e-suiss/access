@@ -109,6 +109,15 @@ impl RiskSignal {
 pub enum Content {
     /// A scalar value.
     Scalar(EqValue),
+    /// A body of a class of the identity plane's registry (OP-153 m.2 N0), always sent beside
+    /// the Claim; `party` names a subject Party that is no identity subject, such as an
+    /// organization (TN-90).
+    About {
+        /// The class body.
+        body: Value,
+        /// The subject Party, when it is not the order's subject's Party.
+        party: Option<[u8; 16]>,
+    },
     /// A body, sent beside the Claim when `disclose`, else the Claim stays digest-valued.
     Body {
         /// The body.
@@ -610,6 +619,39 @@ pub fn recovery_result(subject: [u8; 16], r: &RecoveryResult, at: u64) -> ClaimO
 }
 
 impl ClaimOrder {
+    /// The subject Party a registry order names itself, if any.
+    #[must_use]
+    pub const fn party(&self) -> Option<[u8; 16]> {
+        match &self.content {
+            Content::About { party, .. } => *party,
+            _ => None,
+        }
+    }
+
+    /// An order of a registry class `class` about `party`, or about `subject`'s Party, holding
+    /// for `ttl_ms` from `at` on its own line (OP-153 m.2 N0).
+    #[must_use]
+    pub fn registry(
+        subject: [u8; 16],
+        class: crate::domain::claim_classes::IdentityClass,
+        body: Value,
+        party: Option<[u8; 16]>,
+        (at, ttl_ms): (u64, u64),
+        line: [u8; 32],
+    ) -> Self {
+        Self {
+            subject,
+            class: String::from(class.name()),
+            at,
+            ttl_ms,
+            content: Content::About { body, party },
+            assurance: BTreeMap::new(),
+            bind: Bind::None,
+            line: Some(line),
+            retract: false,
+        }
+    }
+
     /// The outbox kind.
     #[must_use]
     pub fn kind(&self) -> String {
@@ -623,6 +665,14 @@ impl ClaimOrder {
     pub fn prepare(&self, p: &Placement) -> Result<Prepared, BadOrder> {
         let (value, body) = match &self.content {
             Content::Scalar(v) => (Some(v.clone()), None),
+            Content::About { body, .. } => {
+                let class = crate::domain::claim_classes::IdentityClass::parse(&self.class)
+                    .ok_or(BadOrder)?;
+                let digest =
+                    crate::domain::claim_classes::digest(class, body).map_err(|_| BadOrder)?;
+                let bytes = dcbor::encode(body, Limits::CEILING).map_err(|_| BadOrder)?;
+                (Some(EqValue::Bytes(digest.to_vec())), Some(bytes))
+            }
             Content::Body { body, disclose } => {
                 let class = Class::parse(&self.class).ok_or(BadOrder)?;
                 let v = body.to_value();
@@ -684,6 +734,14 @@ impl ClaimOrder {
         let (content, disclose) = match &self.content {
             Content::Scalar(v) => (
                 Value::Array(vec![Value::text("scalar"), v.to_value()]),
+                None,
+            ),
+            Content::About { body, party } => (
+                Value::Array(vec![
+                    Value::text("about"),
+                    body.clone(),
+                    Value::Bytes(party.map_or_else(Vec::new, |p| p.to_vec())),
+                ]),
                 None,
             ),
             Content::Body { body, disclose } => (
@@ -783,6 +841,14 @@ fn content_of(value: Option<&Value>, class: &str, disclose: bool) -> Result<Cont
         [Value::Text(tag), inner] if tag == "scalar" => Ok(Content::Scalar(
             EqValue::from_value(inner).map_err(|_| BadOrder)?,
         )),
+        [Value::Text(tag), body, about] if tag == "about" => Ok(Content::About {
+            body: body.clone(),
+            party: match about {
+                Value::Bytes(b) if b.is_empty() => None,
+                Value::Bytes(b) => Some(b.as_slice().try_into().map_err(|_| BadOrder)?),
+                _ => return Err(BadOrder),
+            },
+        }),
         [Value::Text(tag), inner] if tag == "body" => {
             let parsed = Class::parse(class).ok_or(BadOrder)?;
             Ok(Content::Body {

@@ -113,10 +113,13 @@ impl<S: ClaimSigner, I: ClaimIngest, C: Clock> Courier<S, I, C> {
         let Some(g) = idp::governance(&mut t).await.map_err(down)? else {
             return Ok(Err("no-realm"));
         };
-        let Some(party) = idp::subject_party(&mut t, &order.subject)
-            .await
-            .map_err(down)?
-        else {
+        let party = match order.party() {
+            Some(p) => Some(p),
+            None => idp::subject_party(&mut t, &order.subject)
+                .await
+                .map_err(down)?,
+        };
+        let Some(party) = party else {
             return Ok(Err("no-party"));
         };
         let instance = match order.bind {

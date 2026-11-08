@@ -127,6 +127,12 @@ pub enum Op {
     PutSocial,
     /// `disableSocialProvider`: `idp.social.disable`.
     DisableSocial,
+    /// `claimOrganizationDomain`: `idp.org.domain_claim` (TN-90).
+    ClaimOrganizationDomain,
+    /// `releaseOrganizationDomain`: `idp.org.domain_release` (TN-90).
+    ReleaseOrganizationDomain,
+    /// `draftOrganizationConnection`: `idp.org.sso_draft` (TN-120).
+    DraftOrganizationConnection,
 }
 
 impl Op {
@@ -175,6 +181,9 @@ impl Op {
             "patchOrganization" => Self::PatchOrganization,
             "putSocialProvider" | "patchSocialProvider" => Self::PutSocial,
             "disableSocialProvider" => Self::DisableSocial,
+            "claimOrganizationDomain" => Self::ClaimOrganizationDomain,
+            "releaseOrganizationDomain" => Self::ReleaseOrganizationDomain,
+            "draftOrganizationConnection" => Self::DraftOrganizationConnection,
             _ => return None,
         })
     }
@@ -353,6 +362,9 @@ fn subject(ids: &IdKey, s: &str) -> Result<[u8; 16], Invalid> {
 /// Prefix of an invitation's external id (OP-137).
 pub const INVITATION_PREFIX: &str = "inv";
 
+/// Prefix of a domain claim's external id (OP-137).
+pub const DOMAIN_CLAIM_PREFIX: &str = "dom";
+
 /// An organization's Party from its external id, the base64url of its 16 bytes (TN-3).
 fn party_of(s: &str, missing: Invalid) -> Result<[u8; 16], Invalid> {
     b64url_decode(s)
@@ -466,7 +478,7 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             })
         }
         Op::PatchOrganization => {
-            only(m, &["display_name", "hrd"])?;
+            only(m, &["display_name", "hrd", "autojoin"])?;
             Change::OrgUpdate(OrgUpdate {
                 org: party_of(key_of(key)?, Invalid::NoOrg)?,
                 display_name: opt_text(m, "display_name")?.map(String::from),
@@ -475,6 +487,43 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     Some(Json::Bool(b)) => Some(*b),
                     Some(_) => return Err(Invalid::Body),
                 },
+                autojoin: match m.get("autojoin") {
+                    None | Some(Json::Null) => None,
+                    Some(Json::Object(a)) => {
+                        only(a, &["domain", "on"])?;
+                        let on = a.get("on").and_then(Json::as_bool).ok_or(Invalid::Body)?;
+                        Some((text(a, "domain")?.to_ascii_lowercase(), on))
+                    }
+                    Some(_) => return Err(Invalid::Body),
+                },
+            })
+        }
+        Op::ClaimOrganizationDomain => {
+            only(m, &["domain", "method"])?;
+            Change::OrgDomainClaim(crate::domain::org::DomainClaim {
+                org: party_of(key_of(key)?, Invalid::NoOrg)?,
+                domain: text(m, "domain")?
+                    .trim_end_matches('.')
+                    .to_ascii_lowercase(),
+                method: crate::domain::org::Method::parse(text(m, "method")?)
+                    .ok_or(Invalid::DomainClaim)?,
+            })
+        }
+        Op::ReleaseOrganizationDomain => {
+            only(m, &["claim_id"])?;
+            Change::OrgDomainRelease {
+                org: party_of(key_of(key)?, Invalid::NoOrg)?,
+                claim: ids
+                    .decode(DOMAIN_CLAIM_PREFIX, text(m, "claim_id")?)
+                    .map_err(|_| Invalid::NoDomain)?,
+            }
+        }
+        Op::DraftOrganizationConnection => {
+            only(m, &["issuer", "client_id"])?;
+            Change::OrgSsoDraft(crate::domain::org::SsoDraft {
+                org: party_of(key_of(key)?, Invalid::NoOrg)?,
+                issuer: String::from(text(m, "issuer")?),
+                client_id: String::from(text(m, "client_id")?),
             })
         }
         Op::RevokeInvitation => {

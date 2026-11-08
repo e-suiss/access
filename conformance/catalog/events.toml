@@ -409,3 +409,19 @@ severity = "info"
 since = "unreleased"
 fields = ["job", "sealed", "tombstoned", "destroyed", "kept", "deactivated"]
 ocsf = "application_lifecycle"
+
+[[event]]
+name = "org.domain.contested"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = []
+ocsf = "detection_finding"
+
+[[event]]
+name = "org.domain.changed"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = []
+ocsf = "detection_finding"

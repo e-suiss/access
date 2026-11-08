@@ -284,6 +284,24 @@ pub const ROWS: &[Route] = &[
         "revokeInvitation",
         "Revokes an open invitation (OP-153 m.3 (o)).",
     ),
+    secret(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/organizations/{organization}/domains",
+        "claimOrganizationDomain",
+        "Claims a domain for an organization; its challenge, shown once, is published as a DNS TXT record or an HTTPS document, and the domain counts as verified only while its time-limited domain_verification Claim holds (TN-90).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/organizations/{organization}/domains/release",
+        "releaseOrganizationDomain",
+        "Releases an organization's domain claim and retracts its verification (TN-90).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/organizations/{organization}/connection-drafts",
+        "draftOrganizationConnection",
+        "Drafts an enterprise connection; only idp.upstream.register (CT3) at the organization's root puts it into effect (TN-120).",
+    ),
     write(
         Verb::Post,
         "/admin/v1/realms/{slug}/upstream-idps/{name}/links",
@@ -673,7 +691,10 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "createTemporaryAccessPass"
         | "createInvitation"
         | "revokeInvitation"
-        | "patchOrganization" => (Accounts, w(false)),
+        | "patchOrganization"
+        | "claimOrganizationDomain"
+        | "releaseOrganizationDomain"
+        | "draftOrganizationConnection" => (Accounts, w(false)),
         "listUpstreamIdps" => (UpstreamIdps, Shape::List(&["name", "issuer", "status"])),
         "getUpstreamIdp" => (UpstreamIdps, Shape::Get),
         "putUpstreamIdp" => (UpstreamIdps, w(true)),
@@ -793,12 +814,19 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::RecoveryOption => &r::RECOVERY_OPTION_OFF,
             Invalid::SelfIssue => &r::SELF_ISSUE_REFUSED,
             Invalid::NotOrganization => &r::NOT_AN_ORGANIZATION,
-            Invalid::OrgLimit | Invalid::InviteLimit => &codes::RATE_LIMITED,
+            Invalid::OrgLimit | Invalid::InviteLimit | Invalid::InviteReputation => {
+                &codes::RATE_LIMITED
+            }
             Invalid::Invitation => &r::INVALID_INVITATION,
             Invalid::HrdUnverified => &r::HRD_NEEDS_VERIFIED_DOMAIN,
             Invalid::Social => &r::INVALID_SOCIAL_PROVIDER,
             Invalid::SharedSocialKey => &r::SHARED_SOCIAL_KEY_IN_PRODUCTION,
             Invalid::RecoveryGrace => &r::RECOVERY_GRACE,
+            Invalid::DomainClaim => &r::INVALID_DOMAIN_CLAIM,
+            Invalid::ConsumerDomain => &r::CONSUMER_DOMAIN,
+            Invalid::DomainContested => &r::DOMAIN_CONTESTED,
+            Invalid::DomainUnverified => &r::DOMAIN_NOT_VERIFIED,
+            Invalid::SsoDraft => &r::INVALID_CONNECTION_DRAFT,
             Invalid::NoClient
             | Invalid::NoKey
             | Invalid::NoGroup
@@ -809,7 +837,8 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             | Invalid::NoOrg
             | Invalid::NoMember
             | Invalid::NoInvitation
-            | Invalid::NoSocial => &codes::NOT_FOUND,
+            | Invalid::NoSocial
+            | Invalid::NoDomain => &codes::NOT_FOUND,
         },
         AdminError::Issuer(_) | AdminError::NoRealm => &codes::NOT_FOUND,
         AdminError::Refused(_) => &codes::EXERCISE_REFUSED,

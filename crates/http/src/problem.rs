@@ -453,6 +453,11 @@ pub const CODES: &[Code] = &[
     codes::realm::INVALID_SOCIAL_PROVIDER,
     codes::realm::SHARED_SOCIAL_KEY_IN_PRODUCTION,
     codes::realm::RECOVERY_GRACE,
+    codes::realm::INVALID_DOMAIN_CLAIM,
+    codes::realm::CONSUMER_DOMAIN,
+    codes::realm::DOMAIN_CONTESTED,
+    codes::realm::DOMAIN_NOT_VERIFIED,
+    codes::realm::INVALID_CONNECTION_DRAFT,
     codes::realm::INVALID_AUDIT_FORMAT,
 ];
 

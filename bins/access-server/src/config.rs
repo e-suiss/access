@@ -264,6 +264,20 @@ pub(crate) struct Identity {
     /// requests fail and the server still starts.
     #[serde(default)]
     pub(crate) outbound_ca_file: Option<PathBuf>,
+    /// Where organization domains are verified and watched (TN-90). Without it no domain is
+    /// verified.
+    #[serde(default)]
+    pub(crate) org_domains: Option<OrgDomains>,
+}
+
+/// The services a domain verification reads (TN-90, OP-153 m.3 (o)).
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct OrgDomains {
+    /// The DNS-over-HTTPS resolver, `https://…/dns-query` (RFC 8484).
+    pub(crate) doh_url: String,
+    /// The RDAP service the domain is appended to, `https://…/domain/` (RFC 9082).
+    pub(crate) rdap_url: String,
 }
 
 /// TLS files, read once before the lockdown.
@@ -628,6 +642,10 @@ mod tests {
                 realm_base: "https://id.access.example".to_owned(),
                 signer: "/run/access/identity-signer.sock".into(),
                 outbound_ca_file: None,
+                org_domains: Some(OrgDomains {
+                    doh_url: "https://dns.example/dns-query".to_owned(),
+                    rdap_url: "https://rdap.example/domain/".to_owned(),
+                }),
             }),
             suiss: Some(Suiss {
                 region: "eu-central".to_owned(),
@@ -806,6 +824,7 @@ mod tests {
                     realm_base: base.to_owned(),
                     signer: "/run/s.sock".into(),
                     outbound_ca_file: None,
+                    org_domains: None,
                 }),
                 ..with_tls()
             };

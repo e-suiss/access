@@ -194,6 +194,24 @@ pub(crate) async fn update_current(
     if u.hrd == Some(true) && t.hrd_domains(org.id).await?.is_empty() {
         return Err(crate::domain::Invalid::HrdUnverified.into());
     }
+    // TN-90, OP-153 m.1 (d)
+    if let Some((domain, true)) = &u.autojoin {
+        let consumer =
+            access_identity_account::domain::consumer_domains::ConsumerDomains::embedded()
+                .map_err(|_| AdminError::Unavailable(String::from("consumer-domains")))?;
+        let claims = t.domain_claims(domain).await?;
+        crate::domain::org::autojoin(domain, org.id, &claims, &consumer).map_err(|r| match r {
+            crate::domain::org::AutojoinRefused::ConsumerDomain => {
+                crate::domain::Invalid::ConsumerDomain
+            }
+            crate::domain::org::AutojoinRefused::Contested => {
+                crate::domain::Invalid::DomainContested
+            }
+            crate::domain::org::AutojoinRefused::Unverified => {
+                crate::domain::Invalid::DomainUnverified
+            }
+        })?;
+    }
     Ok(())
 }
 
@@ -211,6 +229,15 @@ pub(crate) async fn update(
     }
     if let Some(h) = u.hrd {
         done &= t.set_org_hrd(org.id, h).await?;
+    }
+    if let Some((domain, on)) = &u.autojoin {
+        let claim = t
+            .domain_claims(domain)
+            .await?
+            .into_iter()
+            .find(|c| c.org == org.id)
+            .ok_or(crate::domain::Invalid::NoDomain)?;
+        done &= t.set_autojoin(claim.id, *on).await?;
     }
     let at = access_store::authority::server_time(app).await?;
     organization_event(t, ids, IdentityKind::OrganizationUpdated, org.id, at).await?;

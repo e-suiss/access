@@ -23,6 +23,7 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::digest::context_digest;
 use suiss_crypto::rotation::Policy;
 
+pub mod dns;
 pub mod org;
 pub mod provision;
 pub use access_identity_risk::domain::mode::ProtectionMode;
@@ -388,6 +389,30 @@ pub enum Invalid {
     /// The shared development client named in a realm that is not a sandbox (IDP-31 (4)).
     #[error("shared social key in production")]
     SharedSocialKey,
+    /// A domain that is not a lower-case DNS name, or a verification method Access does not
+    /// know (TN-90).
+    #[error("invalid domain claim")]
+    DomainClaim,
+    /// The organization claims the domain already, or the claim does not exist or was released.
+    #[error("no such domain claim")]
+    NoDomain,
+    /// Autojoin is refused on a consumer, free mail, ISP or university domain (TN-90,
+    /// OP-153 m.1 (d)).
+    #[error("consumer domain")]
+    ConsumerDomain,
+    /// Another organization claims the domain too: no autojoin for any of them (TN-90).
+    #[error("domain contested")]
+    DomainContested,
+    /// The claim is not verified now (TN-90).
+    #[error("domain not verified")]
+    DomainUnverified,
+    /// An enterprise connection draft whose issuer is not an https URL or whose client id is
+    /// empty or too long (TN-120).
+    #[error("invalid connection draft")]
+    SsoDraft,
+    /// The organization's invitations are mostly ignored: invitations wait (TN-89 (11)).
+    #[error("invitation reputation")]
+    InviteReputation,
 }
 
 impl Invalid {
@@ -410,6 +435,13 @@ impl Invalid {
             Self::NoSocial => "no-such-social-provider",
             Self::SocialExists => "social-provider-exists",
             Self::SharedSocialKey => "shared-social-key-in-production",
+            Self::DomainClaim => "invalid-domain-claim",
+            Self::NoDomain => "no-such-domain-claim",
+            Self::ConsumerDomain => "consumer-domain",
+            Self::DomainContested => "domain-contested",
+            Self::DomainUnverified => "domain-not-verified",
+            Self::SsoDraft => "invalid-connection-draft",
+            Self::InviteReputation => "invitation-reputation",
             Self::DisplayName => "invalid-display-name",
             Self::RedirectUri | Self::RedirectUris => "invalid-redirect-uri",
             Self::JwksUri => "invalid-jwks-uri",
@@ -1346,6 +1378,17 @@ pub enum Change {
     SocialUpdate(Social),
     /// `idp.social.disable`.
     SocialDisable(Name),
+    /// `idp.org.domain_claim` (TN-90, OP-153 m.3 (o)).
+    OrgDomainClaim(crate::domain::org::DomainClaim),
+    /// `idp.org.domain_release` (TN-90).
+    OrgDomainRelease {
+        /// The organization's Party.
+        org: [u8; 16],
+        /// The claim.
+        claim: [u8; 16],
+    },
+    /// `idp.org.sso_draft` (TN-120, OP-153 m.3 (p)).
+    OrgSsoDraft(crate::domain::org::SsoDraft),
 }
 
 /// A change to an organization's profile (TN-98): its name, and whether home realm discovery
@@ -1358,12 +1401,19 @@ pub struct OrgUpdate {
     pub display_name: Option<String>,
     /// Home realm discovery on or off.
     pub hrd: Option<bool>,
+    /// A verified domain's autojoin rule on or off, off by default (TN-90).
+    pub autojoin: Option<(String, bool)>,
 }
 
 impl OrgUpdate {
     fn check(&self) -> Result<(), Invalid> {
-        if self.display_name.is_none() && self.hrd.is_none() {
+        if self.display_name.is_none() && self.hrd.is_none() && self.autojoin.is_none() {
             return Err(Invalid::Body);
+        }
+        if let Some((d, _)) = &self.autojoin
+            && !crate::domain::org::domain_ok(d)
+        {
+            return Err(Invalid::DomainClaim);
         }
         if let Some(n) = &self.display_name {
             OrgCreate {
@@ -1382,6 +1432,15 @@ impl OrgUpdate {
         }
         if let Some(h) = self.hrd {
             m.push((Value::text("hrd"), Value::Bool(h)));
+        }
+        if let Some((d, on)) = &self.autojoin {
+            m.push((
+                Value::text("autojoin"),
+                Value::Map(vec![
+                    (Value::text("domain"), Value::text(d)),
+                    (Value::text("on"), Value::Bool(*on)),
+                ]),
+            ));
         }
         Value::Map(m)
     }
@@ -1611,6 +1670,9 @@ impl Change {
             Self::SocialEnable(_) => IdpAction::SocialEnable,
             Self::SocialUpdate(_) => IdpAction::SocialUpdate,
             Self::SocialDisable(_) => IdpAction::SocialDisable,
+            Self::OrgDomainClaim(_) => IdpAction::OrgDomainClaim,
+            Self::OrgDomainRelease { .. } => IdpAction::OrgDomainRelease,
+            Self::OrgSsoDraft(_) => IdpAction::OrgSsoDraft,
         }
     }
 
@@ -1655,8 +1717,11 @@ impl Change {
             Self::SocialEnable(c) | Self::SocialUpdate(c) => c.check(),
             Self::OrgInvite(i) => i.check(),
             Self::OrgUpdate(u) => u.check(),
+            Self::OrgDomainClaim(d) => d.check(),
+            Self::OrgSsoDraft(d) => d.check(),
             Self::OrgInviteRevoke { .. }
             | Self::SocialDisable(_)
+            | Self::OrgDomainRelease { .. }
             | Self::OrgMemberRemove(_)
             | Self::Hook(_)
             | Self::Webhook(_)
@@ -1762,6 +1827,12 @@ impl Change {
             Self::SocialDisable(n) => {
                 Value::Map(vec![(Value::text("preset"), Value::text(n.as_str()))])
             }
+            Self::OrgDomainClaim(d) => d.to_value(),
+            Self::OrgDomainRelease { org, claim } => Value::Map(vec![
+                (Value::text("org"), Value::Bytes(org.to_vec())),
+                (Value::text("claim"), Value::Bytes(claim.to_vec())),
+            ]),
+            Self::OrgSsoDraft(d) => d.to_value(),
         }
     }
 
@@ -1838,7 +1909,10 @@ impl Change {
             | Self::OrgMemberRemove(OrgMember { org, .. })
             | Self::OrgInvite(OrgInvite { org, .. })
             | Self::OrgUpdate(OrgUpdate { org, .. })
-            | Self::OrgInviteRevoke { org, .. } => {
+            | Self::OrgInviteRevoke { org, .. }
+            | Self::OrgDomainRelease { org, .. }
+            | Self::OrgDomainClaim(crate::domain::org::DomainClaim { org, .. })
+            | Self::OrgSsoDraft(crate::domain::org::SsoDraft { org, .. }) => {
                 path.extend([String::from("org"), b64url_encode(org)]);
             }
             Self::SocialEnable(Social { preset, .. })

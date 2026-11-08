@@ -455,7 +455,13 @@ pub(super) async fn commit<E: Env>(
         }
         if let Some(s) = secret {
             // CR-38, TN-135, TN-136
-            o.insert(secret_member(kind).to_owned(), Value::String(s));
+            let member = if ctx.row.operation_id == "claimOrganizationDomain" {
+                // TN-90
+                "challenge"
+            } else {
+                secret_member(kind)
+            };
+            o.insert(member.to_owned(), Value::String(s));
         }
         // IDI-4
         if ctx.row.operation_id == "putRpId" {

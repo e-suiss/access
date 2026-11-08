@@ -193,3 +193,32 @@ impl OrgRegistration {
         }
     }
 }
+
+/// What a domain's verification and watch read from the outside world (TN-90, OP-153 m.3 (o)):
+/// DNS TXT and MX records, the HTTPS challenge document, the registrar from RDAP, and what an
+/// upstream identity provider asserted. Each answer is a fact or [`Unavailable`]; an
+/// unavailable probe verifies nothing and lapses nothing by itself.
+pub trait DomainProbe: Send + Sync {
+    /// The TXT strings at `name`, each record's strings joined.
+    fn txt(&self, name: &str) -> impl Future<Output = Result<Vec<String>, Unavailable>> + Send;
+
+    /// The MX hosts of `domain`.
+    fn mx(&self, domain: &str) -> impl Future<Output = Result<Vec<String>, Unavailable>> + Send;
+
+    /// The body of the `https` document at `url` when it answers `200`, else `None`.
+    fn https(&self, url: &str) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
+
+    /// The registrar RDAP names for `domain`, if any.
+    fn registrar(
+        &self,
+        domain: &str,
+    ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
+
+    /// Whether an upstream identity provider of the realm asserted `domain` (`hd` or `tid`) for
+    /// organization Party `org` in a verified sign-in.
+    fn idp_asserts(
+        &self,
+        org: [u8; 16],
+        domain: &str,
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
+}

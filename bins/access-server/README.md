@@ -87,6 +87,15 @@ Each login is `{ user = "...", password_file = "...", pool = N }` with `pool` at
 | `signer` | yes | The identity signer's Unix socket. |
 | `outbound_ca_file` | no | PEM trust anchors for clients' own endpoints (`jwks_uri`, back-channel logout); the system bundle otherwise. |
 
+### `[identity.org_domains]`
+
+Organization domain verification (DNS TXT or HTTPS challenge) and its daily MX and registrar watch. Without this section no domain is verified, so autojoin and home realm discovery stay off.
+
+| Key | Required | Meaning |
+|---|---|---|
+| `doh_url` | yes | A DNS-over-HTTPS resolver (RFC 8484), `https://…/dns-query`. |
+| `rdap_url` | yes | An RDAP service the domain is appended to, `https://…/domain/`. |
+
 ### `[login]`
 
 | Key | Default | Meaning |
