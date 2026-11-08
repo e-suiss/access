@@ -373,8 +373,42 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** One advisory search page (L1-ADP-16). Graph kinds `subject`, `resource`, `action`; developer kinds `schema-publications` (a namespace's published versions and where each stands here: there is no accept, a domain accepts only by its own `acceptance.amend` with the exact fingerprint, X21), `change-impact` (a role move or a `policy.set` candidate: abilities gained and lost per holder count, expansion requirements, orphan rows; X20, TN-121, §5.8; the SMT relation is `unknown` until proved), `revocation-impact` (subtree, staleness exposure, index lag, orphan tuples; §5.4) and `compromise-impact` (Exercises, Grants, contributions, projections and Claims in a window; SEC15). Developer kinds answer only the domain's auditors; anyone else gets an empty page. Nothing is recorded. */
+        /** One advisory search page (L1-ADP-16). Graph kinds `subject`, `resource`, `action`; management kinds `roles` and `role` (a role version with its computed "Not included" block, §8.17.9.2, E11), `admin-grant` (an admin Grant's meta-actions one by one, reserved ones apart), `holdings` (the viewer's own holdings, each a usable ADP `holding` basis, IA-5) and `changes` (information only, IA-2: an auditor sees every change, anyone else only those about them); `bulk-impact` (each Grant revoke of a bulk job and their sum, E17); developer kinds `schema-publications` (a namespace's published versions and where each stands here: there is no accept, a domain accepts only by its own `acceptance.amend` with the exact fingerprint, X21), `change-impact` (a role move or a `policy.set` candidate: abilities gained and lost per holder count, expansion requirements, orphan rows; X20, TN-121, §5.8; the SMT relation is `unknown` until proved), `revocation-impact` (subtree, staleness exposure, index lag, orphan tuples; §5.4) and `compromise-impact` (Exercises, Grants, contributions, projections and Claims in a window; SEC15). Developer kinds answer only the domain's auditors; anyone else gets an empty page. Nothing is recorded. */
         post: operations["search"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access/v1/publications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publishes a Schema Publication Package and offers it to the named domains (§8.17.10.2, E10–E12, X21). The publisher is the actor of the `check` AIS; a package whose authority-relevant parameter has no closed type is refused with its warnings and nothing is kept. A kept package changes no domain: each domain accepts only with its own reserved `acceptance.amend` naming the exact fingerprint, and there is no accept here, not even for a publisher who administers a target domain. */
+        post: operations["publishSchema"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access/v1/publications:status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Where the caller's own publication stands in the named domains (§8.17.10.2, X21): "Pending acceptance in: …" and where it is accepted. Only its publisher reads it; a domain that never accepted the publisher for the namespace is left out. Advisory; nothing is recorded. */
+        post: operations["publicationStatus"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1009,6 +1043,789 @@ export interface components {
             capped?: boolean;
             /** @constant */
             advisory: true;
+        };
+        RolesQuery: Record<string, never>;
+        RoleQuery: {
+            /** @description The Named AuthoritySet. */
+            name: string;
+            /** @description The version; the latest when absent. */
+            version?: number;
+        };
+        AdminGrantQuery: {
+            /** @description The Grant. */
+            grant: string;
+        };
+        HoldingsQuery: Record<string, never>;
+        ChangesQuery: {
+            /** @description Only changes recorded before this position; the newest when absent. */
+            before?: number;
+        };
+        BulkImpactQuery: {
+            revoke: string[];
+        };
+        Roles: {
+            /** @constant */
+            type: "roles";
+            /** @description The domain's Named AuthoritySets. */
+            roles: {
+                /** @description Name. */
+                name: string;
+                /** @description Latest version. */
+                latest: number;
+            }[];
+            /** @constant */
+            advisory: true;
+        };
+        RoleVersion: {
+            /** @constant */
+            type: "role";
+            /** @description Name. */
+            name: string;
+            /** @description This version. */
+            version: number;
+            /** @description The latest version of the name. */
+            latest: number;
+            /** @description The digest a Grant pins it by. */
+            digest: string;
+            /** @description The position that defined it. */
+            since: number;
+            authority: components["schemas"]["AuthoritySet"];
+            not_included: {
+                /** @description Reserved actions of its prefix namespaces it does not name: only a delegation that names one includes it. */
+                reserved: components["schemas"]["KernelActionRef"][];
+                /** @description `{namespace, catalog, catalog_version, newer}`: a catalog-pinned prefix ("as of catalog vN") and the actions accepted after it, not included (E11). */
+                catalogs: Record<string, never>[];
+            };
+            /** @constant */
+            advisory: true;
+        };
+        AdminGrant: {
+            /** @constant */
+            type: "admin_grant";
+            /** @description The Grant. */
+            grant: string;
+            /** @description `{name, version}`: its role pin. */
+            role?: Record<string, never> | null;
+            /** @description Covered meta-actions that are not reserved, one by one; only what it covers. */
+            actions: {
+                /** @description The core meta-action (L0-META-1); the console shows its plain label, never this id. */
+                action: string;
+                /** @enum {string} */
+                tier_when_widening: "ct0" | "ct1" | "ct2" | "ct3";
+                /** @description Contributions the Grant's own requirements ask for. */
+                grant_quorum: number;
+                /** @description Further `co_root` contributions a joint root needs at CT3 (§13.7.3). */
+                joint_root_quorum: number;
+            }[];
+            /** @description Covered reserved meta-actions (`acceptance.*`, `anchor.*`), shown apart: only a pinned Grant that names them covers them. */
+            reserved: {
+                /** @description The core meta-action (L0-META-1); the console shows its plain label, never this id. */
+                action: string;
+                /** @enum {string} */
+                tier_when_widening: "ct0" | "ct1" | "ct2" | "ct3";
+                /** @description Contributions the Grant's own requirements ask for. */
+                grant_quorum: number;
+                /** @description Further `co_root` contributions a joint root needs at CT3 (§13.7.3). */
+                joint_root_quorum: number;
+            }[];
+            /** @constant */
+            advisory: true;
+        };
+        Holding: {
+            /** @constant */
+            type: "holding";
+            /** @description The Grant. */
+            grant: string;
+            /** @description The viewer's own Party. */
+            holder: string;
+            /** @description The position that opened the holding episode; with `grant` and `holder` it is an ADP `holding` basis. */
+            since: number;
+            /** @description The actions it covers now. */
+            actions: components["schemas"]["KernelActionRef"][];
+            resource: components["schemas"]["KernelResourceSelector"];
+            /** @constant */
+            advisory: true;
+        };
+        Change: {
+            /** @constant */
+            type: "change";
+            /** @description The decision record's position. */
+            position: number;
+            /** @description Its trusted time, Unix ms. */
+            at: number;
+            /** @enum {string} */
+            kind: "grant" | "anchor" | "party" | "instance" | "mandate" | "acceptance" | "policy" | "authority_set";
+            /** @description The object: an id in base64url, or a role's name. */
+            id: string;
+            /** @description For a role: the version defined. */
+            version?: number | null;
+            /** @description The change ended the object. */
+            ended: boolean;
+            /** @description The viewer's own Instance made it. */
+            own: boolean;
+            /** @constant */
+            advisory: true;
+        };
+        BulkImpact: {
+            /** @constant */
+            type: "bulk_impact";
+            /** @description The Grants of the job. */
+            revoke: string[];
+            /** @description Each item's own preview, in order. */
+            items: components["schemas"]["RevocationImpact"][];
+            /** @description Every Grant that ends with the job, once. */
+            subtree: string[];
+            /** @description `{grants_ending, projections_open, honoured_until_ms, running_copies, confirmed_applied}` over the job (XI-3). */
+            aftermath: Record<string, never>;
+            /** @description The longest window of any item. */
+            max_exposure_ms: number;
+            /** @constant */
+            advisory: true;
+        };
+        PublicationDraft: {
+            /** @description The action namespace. */
+            namespace: string;
+            /** @description The catalog version; after the publisher's latest one (E10). */
+            catalog_version: number;
+            /** @description The typed Action Schemas. */
+            actions: components["schemas"]["KernelActionSchema"][];
+            /** @description The class of every declared parameter (§9.13.3). */
+            classes: {
+                /** @description Action name. */
+                action: string;
+                /** @description Parameter name. */
+                parameter: string;
+                /**
+                 * @description `opaque`, or what an authority-relevant parameter decides (E12).
+                 * @enum {string}
+                 */
+                class: "opaque" | "recipient" | "amount" | "count" | "choice" | "flag";
+            }[];
+            /** @description Retired actions. */
+            retirements?: components["schemas"]["KernelActionRef"][];
+            /** @description Lowest core spec version it needs. */
+            core_spec_min?: number;
+            compatibility?: {
+                /** @description An earlier published version. */
+                from: number;
+                /** @enum {string} */
+                relation: "representation-equivalent" | "narrowing" | "broadening" | "incompatible";
+            };
+        };
+        PublishRequest: {
+            /** @description The publisher's `check` context (L1-ADP-5…9): the intent's action is `access`/`publish`, its resource `access.publication` with the path `[namespace]`, and `opaque.package` the digest of `package` (L1-ADP-18). Its AIS makes the publisher known. */
+            context: Record<string, never>;
+            package: components["schemas"]["PublicationDraft"];
+            /** @description Where it is offered; each keeps it in its own scope (TN-20). */
+            domains: string[];
+        };
+        Published: {
+            /** @description The exact digest a `schema-definition` Acceptance pins (E10). */
+            fingerprint: string;
+            /** @description The publisher Party: the actor of the AIS. */
+            publisher: string;
+            /** @description The namespace. */
+            namespace: string;
+            /** @description The catalog version. */
+            catalog_version: number;
+            /** @description Kept now; `false` when every domain already had this exact package. */
+            new: boolean;
+            /** @constant */
+            existing_grants_unchanged: true;
+            /** @description Not included in delegations whose catalog is pinned (E11). */
+            new_actions: string[];
+            /** @description Text keys, in order. */
+            text: string[];
+        };
+        PublicationWarnings: {
+            /** @description Authority-relevant parameters without a closed type (E12); nothing was kept. */
+            warnings: {
+                /** @description Action name. */
+                action: string;
+                /** @description Parameter name. */
+                parameter: string;
+                /** @enum {string} */
+                reason: "affects_recipient" | "affects_amount" | "affects_count" | "affects_choice" | "affects_flag";
+                /** @description The parameter type to map it to. */
+                suggestion: string;
+            }[];
+        };
+        PublicationStatusRequest: {
+            /** @description The publisher's `check` context: `access`/`read` on `access.publication` with the path `[namespace]`. */
+            context: Record<string, never>;
+            /** @description The publication. */
+            fingerprint: string;
+            domains: string[];
+        };
+        PublicationStatus: {
+            /** @description The publication. */
+            fingerprint: string;
+            /** @description "Pending acceptance in: …": domains that accept the publisher for the namespace, but not this fingerprint. */
+            pending_acceptance: string[];
+            /** @description Domains whose `schema-definition` Acceptance pins this fingerprint. */
+            accepted_in: string[];
+            /** @constant */
+            existing_grants_unchanged: true;
+            /** @description Not included in delegations whose catalog is pinned (E11). */
+            new_actions: string[];
+            /** @description Text keys, in order. */
+            text: string[];
+        };
+        MetaPayload: {
+            anchor_create: {
+                scope: "domain" | ({
+                    resource: components["schemas"]["KernelResourceSelector"];
+                } | {
+                    /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                    party: string;
+                });
+                root: {
+                    /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                    sole: string;
+                } | {
+                    joint: {
+                        /** @description A set: any order, no repeats; the canonical form sorts it. */
+                        parties: string[];
+                        k: number;
+                    };
+                };
+                /** @description A set: any order, no repeats; the canonical form sorts it. */
+                root_terms?: components["schemas"]["KernelRequirementTerm"][];
+            };
+        } | {
+            anchor_transfer: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                anchor: string;
+                root: {
+                    /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                    sole: string;
+                } | {
+                    joint: {
+                        /** @description A set: any order, no repeats; the canonical form sorts it. */
+                        parties: string[];
+                        k: number;
+                    };
+                };
+                /** @description A set: any order, no repeats; the canonical form sorts it. */
+                disposition: {
+                    /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                    grant: string;
+                    /** @enum {string} */
+                    disposition: "keep" | "revoke";
+                }[];
+            };
+        } | {
+            anchor_amend: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                anchor: string;
+                root?: {
+                    /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                    sole: string;
+                } | {
+                    joint: {
+                        /** @description A set: any order, no repeats; the canonical form sorts it. */
+                        parties: string[];
+                        k: number;
+                    };
+                };
+                /** @description A set: any order, no repeats; the canonical form sorts it. */
+                root_terms?: components["schemas"]["KernelRequirementTerm"][];
+            };
+        } | {
+            anchor_retire: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                anchor: string;
+                /** @description A set: any order, no repeats; the canonical form sorts it. */
+                disposition: {
+                    /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                    grant: string;
+                    /** @enum {string} */
+                    disposition: "keep" | "revoke";
+                }[];
+            };
+        } | {
+            party_register: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                party: string;
+                root: {
+                    /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                    sole: string;
+                } | {
+                    joint: {
+                        /** @description A set: any order, no repeats; the canonical form sorts it. */
+                        parties: string[];
+                        k: number;
+                    };
+                };
+                /** @enum {string} */
+                actor_kind: "human" | "agent" | "system" | "machine" | "organization";
+            };
+        } | {
+            party_depart: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                party: string;
+                /** @description A set: any order, no repeats; the canonical form sorts it. */
+                disposition: {
+                    /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                    grant: string;
+                    /** @enum {string} */
+                    disposition: "keep" | "revoke";
+                }[];
+            };
+        } | {
+            instance_create: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                party: string;
+                key: components["schemas"]["KernelPublicKey"];
+                mandate?: components["schemas"]["KernelMandateEnvelope"];
+            };
+        } | {
+            instance_rekey: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                instance: string;
+                key: components["schemas"]["KernelPublicKey"];
+            };
+        } | {
+            instance_terminate: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                instance: string;
+            };
+        } | {
+            instance_recover: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                instance: string;
+                key: components["schemas"]["KernelPublicKey"];
+            };
+        } | {
+            mandate_bind: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                instance: string;
+                envelope: components["schemas"]["KernelMandateEnvelope"];
+            };
+        } | {
+            mandate_rebind: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                mandate: string;
+                envelope: components["schemas"]["KernelMandateEnvelope"];
+            };
+        } | {
+            mandate_revoke: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                mandate: string;
+            };
+        } | {
+            grant_issue: components["schemas"]["KernelGrantContent"];
+        } | {
+            grant_amend: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                grant: string;
+                authority: components["schemas"]["CanonicalAuthority"];
+                /** @description A set: any order, no repeats; the canonical form sorts it. */
+                agency?: ("own" | {
+                    /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                    for: string;
+                })[];
+                named?: {
+                    name: string;
+                    version: number;
+                    /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
+                    digest: string;
+                };
+            };
+        } | {
+            grant_revoke: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                grant: string;
+            };
+        } | {
+            grant_renounce: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                grant: string;
+            };
+        } | {
+            acceptance_establish: components["schemas"]["KernelAcceptanceContent"];
+        } | {
+            acceptance_amend: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                acceptance: string;
+                content: components["schemas"]["KernelAcceptanceContent"];
+            };
+        } | {
+            acceptance_revoke: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                acceptance: string;
+            };
+        } | {
+            policy_set: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                policy?: string;
+                content: components["schemas"]["KernelPolicyContent"];
+            };
+        } | {
+            policy_retire: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                policy: string;
+            };
+        } | {
+            claim_issue: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                subject: string;
+                class: string;
+                value: string | number | boolean | {
+                    /** @description Bytes. */
+                    bytes: string;
+                };
+                validity?: components["schemas"]["KernelWindow"];
+                /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
+                bound_intent?: string;
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                supersedes?: string;
+            };
+        } | {
+            contribute: {
+                /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
+                target: string;
+                class: string;
+            };
+        } | {
+            consumption_release: {
+                /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
+                exercise: string;
+                /** @description A set: any order, no repeats; the canonical form sorts it. */
+                grounds: string[];
+            };
+        } | {
+            authority_set_define: {
+                name: string;
+                authority: components["schemas"]["AuthoritySet"];
+            };
+        } | {
+            projection_issue: {
+                bounds: components["schemas"]["CanonicalAuthority"];
+                /** @description A set: any order, no repeats; the canonical form sorts it. */
+                audience: string[];
+                profile: {
+                    /** @enum {string} */
+                    class: "online" | "intermittent" | "offline" | "long-running";
+                    /** @enum {string} */
+                    variant: "online-strict" | "bounded-staleness" | "revalidate-on-reconnect" | "checkpointed-offline" | "checkpoint-continuation";
+                };
+                max_staleness_ms?: number;
+                offline_slice?: {
+                    count?: number;
+                    amounts?: {
+                        [key: string]: number;
+                    };
+                };
+            };
+        };
+        AuthoritySet: {
+            actions: {
+                /** @description A set: any order, no repeats; the canonical form sorts it. */
+                exact?: components["schemas"]["KernelActionRef"][];
+                /** @description A set: any order, no repeats; the canonical form sorts it. */
+                prefix?: {
+                    namespace: string;
+                    /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
+                    catalog: string;
+                }[];
+            };
+            resource: components["schemas"]["KernelResourceSelector"];
+            params?: {
+                [key: string]: components["schemas"]["KernelParamBound"];
+            };
+            recipient?: components["schemas"]["KernelSubjectSelector"];
+            /** @description A set: any order, no repeats; the canonical form sorts it. */
+            purpose?: ({
+                code: string;
+            } | {
+                /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
+                work: string;
+            } | {
+                /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
+                aim: string;
+            })[];
+        };
+        CanonicalAuthority: {
+            authority: components["schemas"]["AuthoritySet"];
+            constraints: components["schemas"]["KernelConstraintSet"];
+            delegation: {
+                depth?: number;
+                downstream_holder_class?: components["schemas"]["KernelSubjectSelector"];
+            };
+            /** @description A set: any order, no repeats; the canonical form sorts it. */
+            requirements: components["schemas"]["KernelRequirementTerm"][];
+        };
+        KernelSubjectSelector: "public" | ({
+            /** @description Bytes, base64url without padding (an id is 16 bytes). */
+            party: string;
+        } | {
+            /** @description A set: any order, no repeats; the canonical form sorts it. */
+            pred: {
+                claim_class: string;
+                value?: string | number | boolean | {
+                    /** @description Bytes. */
+                    bytes: string;
+                };
+            }[];
+        } | {
+            foreign: {
+                /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
+                domain: string;
+                authority_class: string;
+            };
+        });
+        KernelResourceSelector: {
+            exact: {
+                namespace: string;
+                path: string[];
+                incarnation: number;
+            };
+        } | {
+            namespace: string;
+            prefix?: string[];
+            type?: string;
+            where?: {
+                [key: string]: string | number | boolean | {
+                    /** @description Bytes. */
+                    bytes: string;
+                };
+            };
+        };
+        KernelActionRef: {
+            namespace: string;
+            name: string;
+            major: number;
+            /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
+            schema: string;
+        };
+        KernelParamBound: {
+            /** @description A set: any order, no repeats; the canonical form sorts it. */
+            enum: string[];
+        } | {
+            eq: string | number | boolean | {
+                /** @description Bytes. */
+                bytes: string;
+            };
+        } | {
+            range: {
+                min?: number;
+                max?: number;
+                unit: string;
+            };
+        } | {
+            count_max: number;
+        } | {
+            interval: components["schemas"]["KernelWindow"];
+        } | {
+            resource: components["schemas"]["KernelResourceSelector"];
+        } | {
+            subject: components["schemas"]["KernelSubjectSelector"];
+        } | {
+            /** @description A set: any order, no repeats; the canonical form sorts it. */
+            purpose: ({
+                code: string;
+            } | {
+                /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
+                work: string;
+            } | {
+                /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
+                aim: string;
+            })[];
+        } | {
+            flag: boolean;
+        };
+        KernelConstraintSet: {
+            validity: components["schemas"]["KernelWindow"];
+            /** @description A set: any order, no repeats; the canonical form sorts it. */
+            while?: ({
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                instance_alive: string;
+            } | {
+                claim_held: {
+                    class: string;
+                    subject: components["schemas"]["KernelSubjectSelector"];
+                    /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
+                    acceptance: string;
+                };
+            })[];
+            /** @description A set: any order, no repeats; the canonical form sorts it. */
+            budget?: {
+                dimension: "count" | {
+                    amount: string;
+                };
+                capacity: number;
+                window: "total" | {
+                    rolling_s: number;
+                };
+            }[];
+        };
+        KernelRequirementTerm: {
+            /** @enum {string} */
+            proof_kind: "claim" | "contribution" | "authentication" | "foreign_authority";
+            class: string;
+            count?: number;
+            /** @enum {string} */
+            binding?: "actor_instance" | "intent_digest" | "resource";
+            freshness_ms?: number;
+            independence?: {
+                /** @enum {string} */
+                distinct: "party" | "instance" | "issuer";
+            };
+            /** @enum {string} */
+            consumption?: "single_use";
+            source?: components["schemas"]["KernelSubjectSelector"];
+            assurance?: {
+                [key: string]: number;
+            };
+        };
+        KernelWindow: {
+            from: number;
+            until: number;
+        };
+        KernelGrantContent: {
+            basis: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                anchor: string;
+            } | {
+                holding: {
+                    /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                    grant: string;
+                    /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                    holder: string;
+                    since: number;
+                };
+            };
+            holder: components["schemas"]["KernelSubjectSelector"];
+            authority: components["schemas"]["CanonicalAuthority"];
+            /** @description A set: any order, no repeats; the canonical form sorts it. */
+            agency?: ("own" | {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                for: string;
+            })[];
+            named?: {
+                name: string;
+                version: number;
+                /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
+                digest: string;
+            };
+        };
+        KernelAcceptanceContent: {
+            issuer: string | {
+                foreign: {
+                    /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
+                    domain: string;
+                    /** @description A set: any order, no repeats; the canonical form sorts it. */
+                    binding: {
+                        /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                        kid: string;
+                        alg: number;
+                        key: components["schemas"]["KernelPublicKey"];
+                        scope: "domain" | {
+                            /** @description A set: any order, no repeats; the canonical form sorts it. */
+                            provider: string[];
+                        };
+                        superseded?: {
+                            /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
+                            at: string;
+                            /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
+                            cited: string;
+                        };
+                    }[];
+                };
+            };
+            /** @enum {string} */
+            use: "actor-binding" | "predicate-input" | "subject-selection" | "foreign-authority" | "schema-definition";
+            /** @description A set: any order, no repeats; the canonical form sorts it. */
+            classes: string[];
+            subject: components["schemas"]["KernelSubjectSelector"];
+            /** @description Bytes, base64url without padding (an id is 16 bytes). */
+            anchor?: string;
+            assurance_floor?: {
+                [key: string]: number;
+            };
+            validity: components["schemas"]["KernelWindow"];
+            ingest_until?: number;
+            issued_until?: number;
+            quota?: {
+                count: number;
+                window_s: number;
+            };
+            spp?: components["schemas"]["KernelSpp"];
+            pinned?: {
+                iss: string;
+                aud: string;
+                /** @description A set: any order, no repeats; the canonical form sorts it. */
+                keys: components["schemas"]["KernelPublicKey"][];
+            };
+        };
+        KernelPolicyContent: {
+            schema: string;
+            source: string;
+            target: "domain" | ({
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                anchor: string;
+            } | {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                party: string;
+            } | {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                instance: string;
+            });
+            requirements?: {
+                [key: string]: components["schemas"]["KernelRequirementTerm"][];
+            };
+        };
+        KernelMandateEnvelope: {
+            authority: components["schemas"]["AuthoritySet"];
+            constraints: components["schemas"]["KernelConstraintSet"];
+            /** @description A set: any order, no repeats; the canonical form sorts it. */
+            requirements?: components["schemas"]["KernelRequirementTerm"][];
+            pin?: {
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                grant: string;
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                holder: string;
+                since: number;
+            };
+        };
+        KernelPublicKey: {
+            /** @description Bytes, base64url without padding (an id is 16 bytes). */
+            ed25519: string;
+        } | {
+            /** @description Bytes, base64url without padding (an id is 16 bytes). */
+            p256: string;
+        } | {
+            ml_dsa: {
+                alg: number;
+                /** @description Bytes, base64url without padding (an id is 16 bytes). */
+                key: string;
+            };
+        };
+        KernelSpp: {
+            /** @description Bytes, base64url without padding (an id is 16 bytes). */
+            publisher: string;
+            namespace: string;
+            catalog_version: number;
+            /** @description A set: any order, no repeats; the canonical form sorts it. */
+            actions: components["schemas"]["KernelActionSchema"][];
+            /** @description A set: any order, no repeats; the canonical form sorts it. */
+            retirements?: components["schemas"]["KernelActionRef"][];
+            core_spec_min?: number;
+        };
+        KernelActionSchema: {
+            name: string;
+            major: number;
+            /** @enum {string} */
+            effect_class: "none" | "reversible" | "irreversible";
+            reserved?: boolean;
+            consumption_bearing?: boolean;
+            params?: {
+                [key: string]: "amount" | "int" | "text" | "bool" | "bytes" | "id" | "opaque";
+            };
+            /** @description A set: any order, no repeats; the canonical form sorts it. */
+            resource_types?: string[];
+            render?: string;
         };
     };
     responses: never;
@@ -2443,7 +3260,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                kind: "subject" | "resource" | "action" | "schema-publications" | "change-impact" | "revocation-impact" | "compromise-impact";
+                kind: "subject" | "resource" | "action" | "roles" | "role" | "admin-grant" | "holdings" | "changes" | "bulk-impact" | "schema-publications" | "change-impact" | "revocation-impact" | "compromise-impact";
             };
             cookie?: never;
         };
@@ -2461,7 +3278,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         /** @description One page. */
-                        results: (Record<string, never> | components["schemas"]["SchemaPublication"] | components["schemas"]["ChangeImpact"] | components["schemas"]["RevocationImpact"] | components["schemas"]["CompromiseImpact"])[];
+                        results: (Record<string, never> | components["schemas"]["SchemaPublication"] | components["schemas"]["ChangeImpact"] | components["schemas"]["RevocationImpact"] | components["schemas"]["CompromiseImpact"] | components["schemas"]["Roles"] | components["schemas"]["RoleVersion"] | components["schemas"]["AdminGrant"] | components["schemas"]["Holding"] | components["schemas"]["Change"] | components["schemas"]["BulkImpact"])[];
                         page: Record<string, never>;
                         context: Record<string, never>;
                     };
@@ -2482,6 +3299,119 @@ export interface operations {
                 content?: never;
             };
             /** @description No answer within the search deadline, never a partial list. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    publishSchema: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishRequest"];
+            };
+        };
+        responses: {
+            /** @description Kept (or already kept with the same fingerprint). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Published"];
+                };
+            };
+            /** @description Not a publish request (a protocol error, L1-ADP-3). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No AIS: an anonymous caller publishes nothing. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `publication-version`: another package was already published as this version (E10). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `publication-unmappable` with the warnings, or `publication-invalid`. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationWarnings"];
+                };
+            };
+            /** @description Temporarily unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    publicationStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description The status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationStatus"];
+                };
+            };
+            /** @description Not a status request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No AIS. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such publication of the caller in those domains. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Temporarily unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;

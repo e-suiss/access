@@ -1,0 +1,673 @@
+{
+  "track": "management",
+  "version": "1",
+  "operation": "meta_payload.json",
+  "rule": "L1-ADP-17",
+  "cases": [
+    {
+      "name": "authority_set_define",
+      "json": {
+        "authority_set_define": {
+          "name": "finance_approver",
+          "authority": {
+            "actions": {
+              "exact": [
+                {
+                  "namespace": "access",
+                  "name": "grant_amend",
+                  "major": 1,
+                  "schema": "H0c5RUU60nVkSsV4gbpudLi3KJkM73p03_6Z_xeXYw8"
+                },
+                {
+                  "namespace": "access",
+                  "name": "grant_revoke",
+                  "major": 1,
+                  "schema": "OoU1EcDKytzopzpvsJUcwfNgrVx3HlFxRF3lkssoksA"
+                }
+              ],
+              "prefix": [
+                {
+                  "namespace": "commerce",
+                  "catalog": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc"
+                }
+              ]
+            },
+            "resource": {
+              "namespace": "commerce",
+              "prefix": [
+                "eu"
+              ],
+              "type": "order",
+              "where": {
+                "tier": -2
+              }
+            },
+            "params": {
+              "amount": {
+                "range": {
+                  "max": 5000,
+                  "unit": "try"
+                }
+              },
+              "channel": {
+                "enum": [
+                  "app",
+                  "web"
+                ]
+              },
+              "note": {
+                "eq": {
+                  "bytes": "AQI"
+                }
+              }
+            },
+            "recipient": {
+              "pred": [
+                {
+                  "claim_class": "member",
+                  "value": "finance"
+                }
+              ]
+            },
+            "purpose": [
+              {
+                "code": "refund"
+              }
+            ]
+          }
+        }
+      },
+      "cbor": "a174617574686f726974795f7365745f646566696e65a2646e616d657066696e616e63655f617070726f76657269617574686f72697479a566706172616d73a3646e6f7465a162657142010266616d6f756e74a16572616e6765a2636d617819138864756e697463747279676368616e6e656ca164656e756d82636170706377656267616374696f6e73a265657861637482a4646e616d656b6772616e745f616d656e64656d616a6f720166736368656d61822f58201f473945453ad275644ac57881ba6e74b8b728990cef7a74dffe99ff1797630f696e616d65737061636566616363657373a4646e616d656c6772616e745f7265766f6b65656d616a6f720166736368656d61822f58203a853511c0cacadce8a73a6fb0951cc1f360ad5c771e5171445de592cb2892c0696e616d657370616365666163636573736670726566697881a267636174616c6f67822f58200707070707070707070707070707070707070707070707070707070707070707696e616d65737061636568636f6d6d6572636567707572706f736581a164636f646566726566756e64687265736f75726365a46474797065656f72646572657768657265a16474696572216670726566697881626575696e616d65737061636568636f6d6d6572636569726563697069656e74a1647072656481a26576616c75656766696e616e63656b636c61696d5f636c617373666d656d626572",
+      "digest": "359fee842c86d76abf92ee55b86569cdb24fbed81a00d5ef5845738072d2a65c"
+    },
+    {
+      "name": "grant_issue",
+      "json": {
+        "grant_issue": {
+          "basis": {
+            "anchor": "AQEBAQEBAQEBAQEBAQEBAQ"
+          },
+          "holder": {
+            "party": "AgICAgICAgICAgICAgICAg"
+          },
+          "authority": {
+            "authority": {
+              "actions": {
+                "exact": [
+                  {
+                    "namespace": "access",
+                    "name": "grant_amend",
+                    "major": 1,
+                    "schema": "H0c5RUU60nVkSsV4gbpudLi3KJkM73p03_6Z_xeXYw8"
+                  },
+                  {
+                    "namespace": "access",
+                    "name": "grant_revoke",
+                    "major": 1,
+                    "schema": "OoU1EcDKytzopzpvsJUcwfNgrVx3HlFxRF3lkssoksA"
+                  }
+                ],
+                "prefix": [
+                  {
+                    "namespace": "commerce",
+                    "catalog": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc"
+                  }
+                ]
+              },
+              "resource": {
+                "namespace": "commerce",
+                "prefix": [
+                  "eu"
+                ],
+                "type": "order",
+                "where": {
+                  "tier": -2
+                }
+              },
+              "params": {
+                "amount": {
+                  "range": {
+                    "max": 5000,
+                    "unit": "try"
+                  }
+                },
+                "channel": {
+                  "enum": [
+                    "app",
+                    "web"
+                  ]
+                },
+                "note": {
+                  "eq": {
+                    "bytes": "AQI"
+                  }
+                }
+              },
+              "recipient": {
+                "pred": [
+                  {
+                    "claim_class": "member",
+                    "value": "finance"
+                  }
+                ]
+              },
+              "purpose": [
+                {
+                  "code": "refund"
+                }
+              ]
+            },
+            "constraints": {
+              "validity": {
+                "from": 1000,
+                "until": 9000000
+              },
+              "budget": [
+                {
+                  "dimension": {
+                    "amount": "try"
+                  },
+                  "capacity": 50000,
+                  "window": {
+                    "rolling_s": 86400
+                  }
+                }
+              ]
+            },
+            "delegation": {
+              "depth": 1
+            },
+            "requirements": [
+              {
+                "proof_kind": "contribution",
+                "class": "approval",
+                "count": 2,
+                "binding": "intent_digest",
+                "freshness_ms": 600000,
+                "independence": {
+                  "distinct": "party"
+                },
+                "consumption": "single_use",
+                "assurance": {
+                  "aal": 2
+                }
+              }
+            ]
+          },
+          "agency": [
+            "own",
+            {
+              "for": "AwMDAwMDAwMDAwMDAwMDAw"
+            }
+          ],
+          "named": {
+            "name": "finance_approver",
+            "version": 1,
+            "digest": "RI1S9oZT8OVFvVQeO3SU9ZUI1POUXgqOiAF06Rbfd5Q"
+          }
+        }
+      },
+      "cbor": "a16b6772616e745f6973737565a5656261736973a166616e63686f725001010101010101010101010101010101656e616d6564a3646e616d657066696e616e63655f617070726f76657266646967657374822f5820448d52f68653f0e545bd541e3b7494f59508d4f3945e0a8e880174e916df77946776657273696f6e01666167656e637982636f776ea163666f72500303030303030303030303030303030366686f6c646572a1657061727479500202020202020202020202020202020269617574686f72697479a469617574686f72697479a566706172616d73a3646e6f7465a162657142010266616d6f756e74a16572616e6765a2636d617819138864756e697463747279676368616e6e656ca164656e756d82636170706377656267616374696f6e73a265657861637482a4646e616d656b6772616e745f616d656e64656d616a6f720166736368656d61822f58201f473945453ad275644ac57881ba6e74b8b728990cef7a74dffe99ff1797630f696e616d65737061636566616363657373a4646e616d656c6772616e745f7265766f6b65656d616a6f720166736368656d61822f58203a853511c0cacadce8a73a6fb0951cc1f360ad5c771e5171445de592cb2892c0696e616d657370616365666163636573736670726566697881a267636174616c6f67822f58200707070707070707070707070707070707070707070707070707070707070707696e616d65737061636568636f6d6d6572636567707572706f736581a164636f646566726566756e64687265736f75726365a46474797065656f72646572657768657265a16474696572216670726566697881626575696e616d65737061636568636f6d6d6572636569726563697069656e74a1647072656481a26576616c75656766696e616e63656b636c61696d5f636c617373666d656d6265726a64656c65676174696f6ea1656465707468016b636f6e73747261696e7473a26662756467657481a36677696e646f77a169726f6c6c696e675f731a0001518068636170616369747919c3506964696d656e73696f6ea166616d6f756e74637472796876616c6964697479821903e81a008954406c726571756972656d656e747381a865636c61737368617070726f76616c65636f756e74026762696e64696e676d696e74656e745f646967657374696173737572616e6365a16361616c026a70726f6f665f6b696e646c636f6e747269627574696f6e6b636f6e73756d7074696f6e6a73696e676c655f7573656c66726573686e6573735f6d731a000927c06c696e646570656e64656e6365a16864697374696e6374657061727479",
+      "digest": "d3d25d3f4579dcde2b9e7746df08083c3b4d83e69e9807c05c602b3e880e4c26"
+    },
+    {
+      "name": "grant_issue_from_holding",
+      "json": {
+        "grant_issue": {
+          "basis": {
+            "holding": {
+              "grant": "BAQEBAQEBAQEBAQEBAQEBA",
+              "holder": "AgICAgICAgICAgICAgICAg",
+              "since": 17
+            }
+          },
+          "holder": "public",
+          "authority": {
+            "authority": {
+              "actions": {
+                "exact": [
+                  {
+                    "namespace": "access",
+                    "name": "grant_amend",
+                    "major": 1,
+                    "schema": "H0c5RUU60nVkSsV4gbpudLi3KJkM73p03_6Z_xeXYw8"
+                  },
+                  {
+                    "namespace": "access",
+                    "name": "grant_revoke",
+                    "major": 1,
+                    "schema": "OoU1EcDKytzopzpvsJUcwfNgrVx3HlFxRF3lkssoksA"
+                  }
+                ],
+                "prefix": [
+                  {
+                    "namespace": "commerce",
+                    "catalog": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc"
+                  }
+                ]
+              },
+              "resource": {
+                "namespace": "commerce",
+                "prefix": [
+                  "eu"
+                ],
+                "type": "order",
+                "where": {
+                  "tier": -2
+                }
+              },
+              "params": {
+                "amount": {
+                  "range": {
+                    "max": 5000,
+                    "unit": "try"
+                  }
+                },
+                "channel": {
+                  "enum": [
+                    "app",
+                    "web"
+                  ]
+                },
+                "note": {
+                  "eq": {
+                    "bytes": "AQI"
+                  }
+                }
+              },
+              "recipient": {
+                "pred": [
+                  {
+                    "claim_class": "member",
+                    "value": "finance"
+                  }
+                ]
+              },
+              "purpose": [
+                {
+                  "code": "refund"
+                }
+              ]
+            },
+            "constraints": {
+              "validity": {
+                "from": 1000,
+                "until": 9000000
+              },
+              "budget": [
+                {
+                  "dimension": {
+                    "amount": "try"
+                  },
+                  "capacity": 50000,
+                  "window": {
+                    "rolling_s": 86400
+                  }
+                }
+              ]
+            },
+            "delegation": {
+              "depth": 1
+            },
+            "requirements": [
+              {
+                "proof_kind": "contribution",
+                "class": "approval",
+                "count": 2,
+                "binding": "intent_digest",
+                "freshness_ms": 600000,
+                "independence": {
+                  "distinct": "party"
+                },
+                "consumption": "single_use",
+                "assurance": {
+                  "aal": 2
+                }
+              }
+            ]
+          }
+        }
+      },
+      "cbor": "a16b6772616e745f6973737565a3656261736973a167686f6c64696e6783500404040404040404040404040404040450020202020202020202020202020202021166686f6c646572667075626c696369617574686f72697479a469617574686f72697479a566706172616d73a3646e6f7465a162657142010266616d6f756e74a16572616e6765a2636d617819138864756e697463747279676368616e6e656ca164656e756d82636170706377656267616374696f6e73a265657861637482a4646e616d656b6772616e745f616d656e64656d616a6f720166736368656d61822f58201f473945453ad275644ac57881ba6e74b8b728990cef7a74dffe99ff1797630f696e616d65737061636566616363657373a4646e616d656c6772616e745f7265766f6b65656d616a6f720166736368656d61822f58203a853511c0cacadce8a73a6fb0951cc1f360ad5c771e5171445de592cb2892c0696e616d657370616365666163636573736670726566697881a267636174616c6f67822f58200707070707070707070707070707070707070707070707070707070707070707696e616d65737061636568636f6d6d6572636567707572706f736581a164636f646566726566756e64687265736f75726365a46474797065656f72646572657768657265a16474696572216670726566697881626575696e616d65737061636568636f6d6d6572636569726563697069656e74a1647072656481a26576616c75656766696e616e63656b636c61696d5f636c617373666d656d6265726a64656c65676174696f6ea1656465707468016b636f6e73747261696e7473a26662756467657481a36677696e646f77a169726f6c6c696e675f731a0001518068636170616369747919c3506964696d656e73696f6ea166616d6f756e74637472796876616c6964697479821903e81a008954406c726571756972656d656e747381a865636c61737368617070726f76616c65636f756e74026762696e64696e676d696e74656e745f646967657374696173737572616e6365a16361616c026a70726f6f665f6b696e646c636f6e747269627574696f6e6b636f6e73756d7074696f6e6a73696e676c655f7573656c66726573686e6573735f6d731a000927c06c696e646570656e64656e6365a16864697374696e6374657061727479",
+      "digest": "043e93afb5bbcdc4428c4b28af1328599a82d74dc4f1e0e3472dbfde99ba1783"
+    },
+    {
+      "name": "grant_amend",
+      "json": {
+        "grant_amend": {
+          "grant": "BQUFBQUFBQUFBQUFBQUFBQ",
+          "authority": {
+            "authority": {
+              "actions": {
+                "exact": [
+                  {
+                    "namespace": "access",
+                    "name": "grant_amend",
+                    "major": 1,
+                    "schema": "H0c5RUU60nVkSsV4gbpudLi3KJkM73p03_6Z_xeXYw8"
+                  },
+                  {
+                    "namespace": "access",
+                    "name": "grant_revoke",
+                    "major": 1,
+                    "schema": "OoU1EcDKytzopzpvsJUcwfNgrVx3HlFxRF3lkssoksA"
+                  }
+                ],
+                "prefix": [
+                  {
+                    "namespace": "commerce",
+                    "catalog": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc"
+                  }
+                ]
+              },
+              "resource": {
+                "namespace": "commerce",
+                "prefix": [
+                  "eu"
+                ],
+                "type": "order",
+                "where": {
+                  "tier": -2
+                }
+              },
+              "params": {
+                "amount": {
+                  "range": {
+                    "max": 5000,
+                    "unit": "try"
+                  }
+                },
+                "channel": {
+                  "enum": [
+                    "app",
+                    "web"
+                  ]
+                },
+                "note": {
+                  "eq": {
+                    "bytes": "AQI"
+                  }
+                }
+              },
+              "recipient": {
+                "pred": [
+                  {
+                    "claim_class": "member",
+                    "value": "finance"
+                  }
+                ]
+              },
+              "purpose": [
+                {
+                  "code": "refund"
+                }
+              ]
+            },
+            "constraints": {
+              "validity": {
+                "from": 1000,
+                "until": 9000000
+              },
+              "budget": [
+                {
+                  "dimension": {
+                    "amount": "try"
+                  },
+                  "capacity": 50000,
+                  "window": {
+                    "rolling_s": 86400
+                  }
+                }
+              ]
+            },
+            "delegation": {
+              "depth": 1
+            },
+            "requirements": [
+              {
+                "proof_kind": "contribution",
+                "class": "approval",
+                "count": 2,
+                "binding": "intent_digest",
+                "freshness_ms": 600000,
+                "independence": {
+                  "distinct": "party"
+                },
+                "consumption": "single_use",
+                "assurance": {
+                  "aal": 2
+                }
+              }
+            ]
+          },
+          "named": {
+            "name": "finance_approver",
+            "version": 2,
+            "digest": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk"
+          }
+        }
+      },
+      "cbor": "a16b6772616e745f616d656e64a3656772616e745005050505050505050505050505050505656e616d6564a3646e616d657066696e616e63655f617070726f76657266646967657374822f582009090909090909090909090909090909090909090909090909090909090909096776657273696f6e0269617574686f72697479a469617574686f72697479a566706172616d73a3646e6f7465a162657142010266616d6f756e74a16572616e6765a2636d617819138864756e697463747279676368616e6e656ca164656e756d82636170706377656267616374696f6e73a265657861637482a4646e616d656b6772616e745f616d656e64656d616a6f720166736368656d61822f58201f473945453ad275644ac57881ba6e74b8b728990cef7a74dffe99ff1797630f696e616d65737061636566616363657373a4646e616d656c6772616e745f7265766f6b65656d616a6f720166736368656d61822f58203a853511c0cacadce8a73a6fb0951cc1f360ad5c771e5171445de592cb2892c0696e616d657370616365666163636573736670726566697881a267636174616c6f67822f58200707070707070707070707070707070707070707070707070707070707070707696e616d65737061636568636f6d6d6572636567707572706f736581a164636f646566726566756e64687265736f75726365a46474797065656f72646572657768657265a16474696572216670726566697881626575696e616d65737061636568636f6d6d6572636569726563697069656e74a1647072656481a26576616c75656766696e616e63656b636c61696d5f636c617373666d656d6265726a64656c65676174696f6ea1656465707468016b636f6e73747261696e7473a26662756467657481a36677696e646f77a169726f6c6c696e675f731a0001518068636170616369747919c3506964696d656e73696f6ea166616d6f756e74637472796876616c6964697479821903e81a008954406c726571756972656d656e747381a865636c61737368617070726f76616c65636f756e74026762696e64696e676d696e74656e745f646967657374696173737572616e6365a16361616c026a70726f6f665f6b696e646c636f6e747269627574696f6e6b636f6e73756d7074696f6e6a73696e676c655f7573656c66726573686e6573735f6d731a000927c06c696e646570656e64656e6365a16864697374696e6374657061727479",
+      "digest": "035ff629da7c1ab4b84040612b4bd40bf8f87ec84dcb6658082390bec0ab019f"
+    },
+    {
+      "name": "grant_revoke",
+      "json": {
+        "grant_revoke": {
+          "grant": "BQUFBQUFBQUFBQUFBQUFBQ"
+        }
+      },
+      "cbor": "a16c6772616e745f7265766f6b65a1656772616e745005050505050505050505050505050505",
+      "digest": "2132bd47efa296ec477549b298622ded59af4bae8b735bd2cfb8b27e7affa215"
+    },
+    {
+      "name": "instance_terminate",
+      "json": {
+        "instance_terminate": {
+          "instance": "BgYGBgYGBgYGBgYGBgYGBg"
+        }
+      },
+      "cbor": "a172696e7374616e63655f7465726d696e617465a168696e7374616e63655006060606060606060606060606060606",
+      "digest": "25d67c2d4c5cc5288b60341ee152f57439b560b7c41d0b360f4245c883df633a"
+    },
+    {
+      "name": "party_depart",
+      "json": {
+        "party_depart": {
+          "party": "AgICAgICAgICAgICAgICAg",
+          "disposition": [
+            {
+              "grant": "BQUFBQUFBQUFBQUFBQUFBQ",
+              "disposition": "revoke"
+            },
+            {
+              "grant": "CAgICAgICAgICAgICAgICA",
+              "disposition": "keep"
+            }
+          ]
+        }
+      },
+      "cbor": "a16c70617274795f646570617274a265706172747950020202020202020202020202020202026b646973706f736974696f6e82825005050505050505050505050505050505667265766f6b65825008080808080808080808080808080808646b656570",
+      "digest": "2de2126a7c066e7d003032a208ae29686c7ac42685e335ccf96f753c8b3956d9"
+    },
+    {
+      "name": "acceptance_amend",
+      "json": {
+        "acceptance_amend": {
+          "acceptance": "CQkJCQkJCQkJCQkJCQkJCQ",
+          "content": {
+            "use": "predicate-input",
+            "issuer": "AgICAgICAgICAgICAgICAg",
+            "classes": [
+              "member"
+            ],
+            "subject": "public",
+            "validity": {
+              "from": 0,
+              "until": 9000000
+            }
+          }
+        }
+      },
+      "cbor": "a170616363657074616e63655f616d656e64a267636f6e74656e74a5637573656f7072656469636174652d696e70757466697373756572500202020202020202020202020202020267636c617373657381666d656d626572677375626a656374667075626c69636876616c696469747982001a008954406a616363657074616e63655009090909090909090909090909090909",
+      "digest": "9ffa4b802bb79feabb134dfb904eed52329bfad13fdf1b2e9b29c23784be7024"
+    },
+    {
+      "name": "policy_set",
+      "json": {
+        "policy_set": {
+          "content": {
+            "schema": "access/restriction/v1",
+            "source": "forbid (principal, action, resource) when { context.amount > 9000 };",
+            "target": "domain"
+          }
+        }
+      },
+      "cbor": "a16a706f6c6963795f736574a167636f6e74656e74a366736368656d61756163636573732f7265737472696374696f6e2f763166736f757263657844666f7262696420287072696e636970616c2c20616374696f6e2c207265736f7572636529207768656e207b20636f6e746578742e616d6f756e74203e2039303030207d3b6674617267657466646f6d61696e",
+      "digest": "b4eca2fdbd97a7432e406bd59fc2b1fa058079465785284ad6dee48f0cc91176"
+    },
+    {
+      "name": "anchor_create",
+      "json": {
+        "anchor_create": {
+          "scope": {
+            "resource": {
+              "exact": {
+                "namespace": "commerce",
+                "path": [
+                  "eu"
+                ],
+                "incarnation": 0
+              }
+            }
+          },
+          "root": {
+            "joint": {
+              "parties": [
+                "AgICAgICAgICAgICAgICAg",
+                "AwMDAwMDAwMDAwMDAwMDAw"
+              ],
+              "k": 2
+            }
+          }
+        }
+      },
+      "cbor": "a16d616e63686f725f637265617465a264726f6f74a1656a6f696e74a2616b02677061727469657382500202020202020202020202020202020250030303030303030303030303030303036573636f7065a1687265736f75726365a1656578616374a3647061746881626575696e616d65737061636568636f6d6d657263656b696e6361726e6174696f6e00",
+      "digest": "9d8a67a61f0ae94cebae3c360f75621e3b5659d9d187481339514da70c0af5e1"
+    },
+    {
+      "name": "mandate_bind",
+      "json": {
+        "mandate_bind": {
+          "instance": "BgYGBgYGBgYGBgYGBgYGBg",
+          "envelope": {
+            "authority": {
+              "actions": {
+                "exact": [
+                  {
+                    "namespace": "access",
+                    "name": "grant_amend",
+                    "major": 1,
+                    "schema": "H0c5RUU60nVkSsV4gbpudLi3KJkM73p03_6Z_xeXYw8"
+                  },
+                  {
+                    "namespace": "access",
+                    "name": "grant_revoke",
+                    "major": 1,
+                    "schema": "OoU1EcDKytzopzpvsJUcwfNgrVx3HlFxRF3lkssoksA"
+                  }
+                ],
+                "prefix": [
+                  {
+                    "namespace": "commerce",
+                    "catalog": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc"
+                  }
+                ]
+              },
+              "resource": {
+                "namespace": "commerce",
+                "prefix": [
+                  "eu"
+                ],
+                "type": "order",
+                "where": {
+                  "tier": -2
+                }
+              },
+              "params": {
+                "amount": {
+                  "range": {
+                    "max": 5000,
+                    "unit": "try"
+                  }
+                },
+                "channel": {
+                  "enum": [
+                    "app",
+                    "web"
+                  ]
+                },
+                "note": {
+                  "eq": {
+                    "bytes": "AQI"
+                  }
+                }
+              },
+              "recipient": {
+                "pred": [
+                  {
+                    "claim_class": "member",
+                    "value": "finance"
+                  }
+                ]
+              },
+              "purpose": [
+                {
+                  "code": "refund"
+                }
+              ]
+            },
+            "constraints": {
+              "validity": {
+                "from": 1000,
+                "until": 9000000
+              },
+              "budget": [
+                {
+                  "dimension": {
+                    "amount": "try"
+                  },
+                  "capacity": 50000,
+                  "window": {
+                    "rolling_s": 86400
+                  }
+                }
+              ]
+            },
+            "pin": {
+              "grant": "BAQEBAQEBAQEBAQEBAQEBA",
+              "holder": "AgICAgICAgICAgICAgICAg",
+              "since": 17
+            }
+          }
+        }
+      },
+      "cbor": "a16c6d616e646174655f62696e64a268656e76656c6f7065a36370696e83500404040404040404040404040404040450020202020202020202020202020202021169617574686f72697479a566706172616d73a3646e6f7465a162657142010266616d6f756e74a16572616e6765a2636d617819138864756e697463747279676368616e6e656ca164656e756d82636170706377656267616374696f6e73a265657861637482a4646e616d656b6772616e745f616d656e64656d616a6f720166736368656d61822f58201f473945453ad275644ac57881ba6e74b8b728990cef7a74dffe99ff1797630f696e616d65737061636566616363657373a4646e616d656c6772616e745f7265766f6b65656d616a6f720166736368656d61822f58203a853511c0cacadce8a73a6fb0951cc1f360ad5c771e5171445de592cb2892c0696e616d657370616365666163636573736670726566697881a267636174616c6f67822f58200707070707070707070707070707070707070707070707070707070707070707696e616d65737061636568636f6d6d6572636567707572706f736581a164636f646566726566756e64687265736f75726365a46474797065656f72646572657768657265a16474696572216670726566697881626575696e616d65737061636568636f6d6d6572636569726563697069656e74a1647072656481a26576616c75656766696e616e63656b636c61696d5f636c617373666d656d6265726b636f6e73747261696e7473a26662756467657481a36677696e646f77a169726f6c6c696e675f731a0001518068636170616369747919c3506964696d656e73696f6ea166616d6f756e74637472796876616c6964697479821903e81a0089544068696e7374616e63655006060606060606060606060606060606",
+      "digest": "976e00651a6b8b999bd4bee37c4bd2c5c12ce004c128e10125f37418ab104349"
+    },
+    {
+      "name": "party_register",
+      "json": {
+        "party_register": {
+          "party": "CgoKCgoKCgoKCgoKCgoKCg",
+          "root": {
+            "sole": "CgoKCgoKCgoKCgoKCgoKCg"
+          },
+          "actor_kind": "agent"
+        }
+      },
+      "cbor": "a16e70617274795f7265676973746572a364726f6f74a164736f6c65500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a657061727479500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a6a6163746f725f6b696e64656167656e74",
+      "digest": "4668e4d81d49abf54c6a5902ceb562709494957f5b55aed2a101f9e89f1e9973"
+    }
+  ]
+}

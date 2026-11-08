@@ -1892,7 +1892,7 @@
     "/access/v1/search/{kind}": {
       "post": {
         "operationId": "search",
-        "summary": "One advisory search page (L1-ADP-16). Graph kinds `subject`, `resource`, `action`; developer kinds `schema-publications` (a namespace's published versions and where each stands here: there is no accept, a domain accepts only by its own `acceptance.amend` with the exact fingerprint, X21), `change-impact` (a role move or a `policy.set` candidate: abilities gained and lost per holder count, expansion requirements, orphan rows; X20, TN-121, §5.8; the SMT relation is `unknown` until proved), `revocation-impact` (subtree, staleness exposure, index lag, orphan tuples; §5.4) and `compromise-impact` (Exercises, Grants, contributions, projections and Claims in a window; SEC15). Developer kinds answer only the domain's auditors; anyone else gets an empty page. Nothing is recorded.",
+        "summary": "One advisory search page (L1-ADP-16). Graph kinds `subject`, `resource`, `action`; management kinds `roles` and `role` (a role version with its computed \"Not included\" block, §8.17.9.2, E11), `admin-grant` (an admin Grant's meta-actions one by one, reserved ones apart), `holdings` (the viewer's own holdings, each a usable ADP `holding` basis, IA-5) and `changes` (information only, IA-2: an auditor sees every change, anyone else only those about them); `bulk-impact` (each Grant revoke of a bulk job and their sum, E17); developer kinds `schema-publications` (a namespace's published versions and where each stands here: there is no accept, a domain accepts only by its own `acceptance.amend` with the exact fingerprint, X21), `change-impact` (a role move or a `policy.set` candidate: abilities gained and lost per holder count, expansion requirements, orphan rows; X20, TN-121, §5.8; the SMT relation is `unknown` until proved), `revocation-impact` (subtree, staleness exposure, index lag, orphan tuples; §5.4) and `compromise-impact` (Exercises, Grants, contributions, projections and Claims in a window; SEC15). Developer kinds answer only the domain's auditors; anyone else gets an empty page. Nothing is recorded.",
         "parameters": [
           {
             "name": "kind",
@@ -1904,6 +1904,12 @@
                 "subject",
                 "resource",
                 "action",
+                "roles",
+                "role",
+                "admin-grant",
+                "holdings",
+                "changes",
+                "bulk-impact",
                 "schema-publications",
                 "change-impact",
                 "revocation-impact",
@@ -1954,6 +1960,24 @@
                           },
                           {
                             "$ref": "#/components/schemas/CompromiseImpact"
+                          },
+                          {
+                            "$ref": "#/components/schemas/Roles"
+                          },
+                          {
+                            "$ref": "#/components/schemas/RoleVersion"
+                          },
+                          {
+                            "$ref": "#/components/schemas/AdminGrant"
+                          },
+                          {
+                            "$ref": "#/components/schemas/Holding"
+                          },
+                          {
+                            "$ref": "#/components/schemas/Change"
+                          },
+                          {
+                            "$ref": "#/components/schemas/BulkImpact"
                           }
                         ]
                       },
@@ -1978,6 +2002,96 @@
           },
           "503": {
             "description": "No answer within the search deadline, never a partial list."
+          }
+        }
+      }
+    },
+    "/access/v1/publications": {
+      "post": {
+        "operationId": "publishSchema",
+        "summary": "Publishes a Schema Publication Package and offers it to the named domains (§8.17.10.2, E10–E12, X21). The publisher is the actor of the `check` AIS; a package whose authority-relevant parameter has no closed type is refused with its warnings and nothing is kept. A kept package changes no domain: each domain accepts only with its own reserved `acceptance.amend` naming the exact fingerprint, and there is no accept here, not even for a publisher who administers a target domain.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Kept (or already kept with the same fingerprint).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Published"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a publish request (a protocol error, L1-ADP-3)."
+          },
+          "401": {
+            "description": "No AIS: an anonymous caller publishes nothing."
+          },
+          "409": {
+            "description": "`publication-version`: another package was already published as this version (E10)."
+          },
+          "422": {
+            "description": "`publication-unmappable` with the warnings, or `publication-invalid`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationWarnings"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable."
+          }
+        }
+      }
+    },
+    "/access/v1/publications:status": {
+      "post": {
+        "operationId": "publicationStatus",
+        "summary": "Where the caller's own publication stands in the named domains (§8.17.10.2, X21): \"Pending acceptance in: …\" and where it is accepted. Only its publisher reads it; a domain that never accepted the publisher for the namespace is left out. Advisory; nothing is recorded.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublicationStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicationStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a status request."
+          },
+          "401": {
+            "description": "No AIS."
+          },
+          "404": {
+            "description": "No such publication of the caller in those domains."
+          },
+          "503": {
+            "description": "Temporarily unavailable."
           }
         }
       }
@@ -3959,6 +4073,3405 @@
           },
           "advisory": {
             "const": true
+          }
+        }
+      },
+      "RolesQuery": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {}
+      },
+      "RoleQuery": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The Named AuthoritySet."
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The version; the latest when absent."
+          }
+        }
+      },
+      "AdminGrantQuery": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "grant"
+        ],
+        "properties": {
+          "grant": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The Grant."
+          }
+        }
+      },
+      "HoldingsQuery": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {}
+      },
+      "ChangesQuery": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "before": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Only changes recorded before this position; the newest when absent."
+          }
+        }
+      },
+      "BulkImpactQuery": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revoke"
+        ],
+        "properties": {
+          "revoke": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "A Grant the job revokes, one Exercise each."
+            }
+          }
+        }
+      },
+      "Roles": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "roles",
+          "advisory"
+        ],
+        "properties": {
+          "type": {
+            "const": "roles"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "latest"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Name."
+                },
+                "latest": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Latest version."
+                }
+              }
+            },
+            "description": "The domain's Named AuthoritySets."
+          },
+          "advisory": {
+            "const": true
+          }
+        }
+      },
+      "RoleVersion": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "name",
+          "version",
+          "latest",
+          "digest",
+          "since",
+          "authority",
+          "not_included",
+          "advisory"
+        ],
+        "properties": {
+          "type": {
+            "const": "role"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name."
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "This version."
+          },
+          "latest": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The latest version of the name."
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The digest a Grant pins it by."
+          },
+          "since": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The position that defined it."
+          },
+          "authority": {
+            "$ref": "#/components/schemas/AuthoritySet"
+          },
+          "not_included": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "reserved",
+              "catalogs"
+            ],
+            "properties": {
+              "reserved": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/KernelActionRef"
+                },
+                "description": "Reserved actions of its prefix namespaces it does not name: only a delegation that names one includes it."
+              },
+              "catalogs": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                },
+                "description": "`{namespace, catalog, catalog_version, newer}`: a catalog-pinned prefix (\"as of catalog vN\") and the actions accepted after it, not included (E11)."
+              }
+            }
+          },
+          "advisory": {
+            "const": true
+          }
+        }
+      },
+      "AdminGrant": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "grant",
+          "actions",
+          "reserved",
+          "advisory"
+        ],
+        "properties": {
+          "type": {
+            "const": "admin_grant"
+          },
+          "grant": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The Grant."
+          },
+          "role": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "`{name, version}`: its role pin."
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "tier_when_widening",
+                "grant_quorum",
+                "joint_root_quorum"
+              ],
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "description": "The core meta-action (L0-META-1); the console shows its plain label, never this id."
+                },
+                "tier_when_widening": {
+                  "type": "string",
+                  "enum": [
+                    "ct0",
+                    "ct1",
+                    "ct2",
+                    "ct3"
+                  ]
+                },
+                "grant_quorum": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Contributions the Grant's own requirements ask for."
+                },
+                "joint_root_quorum": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Further `co_root` contributions a joint root needs at CT3 (§13.7.3)."
+                }
+              }
+            },
+            "description": "Covered meta-actions that are not reserved, one by one; only what it covers."
+          },
+          "reserved": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "tier_when_widening",
+                "grant_quorum",
+                "joint_root_quorum"
+              ],
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "description": "The core meta-action (L0-META-1); the console shows its plain label, never this id."
+                },
+                "tier_when_widening": {
+                  "type": "string",
+                  "enum": [
+                    "ct0",
+                    "ct1",
+                    "ct2",
+                    "ct3"
+                  ]
+                },
+                "grant_quorum": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Contributions the Grant's own requirements ask for."
+                },
+                "joint_root_quorum": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Further `co_root` contributions a joint root needs at CT3 (§13.7.3)."
+                }
+              }
+            },
+            "description": "Covered reserved meta-actions (`acceptance.*`, `anchor.*`), shown apart: only a pinned Grant that names them covers them."
+          },
+          "advisory": {
+            "const": true
+          }
+        }
+      },
+      "Holding": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "grant",
+          "holder",
+          "since",
+          "actions",
+          "resource",
+          "advisory"
+        ],
+        "properties": {
+          "type": {
+            "const": "holding"
+          },
+          "grant": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The Grant."
+          },
+          "holder": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The viewer's own Party."
+          },
+          "since": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The position that opened the holding episode; with `grant` and `holder` it is an ADP `holding` basis."
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KernelActionRef"
+            },
+            "description": "The actions it covers now."
+          },
+          "resource": {
+            "$ref": "#/components/schemas/KernelResourceSelector"
+          },
+          "advisory": {
+            "const": true
+          }
+        }
+      },
+      "Change": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "position",
+          "at",
+          "kind",
+          "id",
+          "ended",
+          "own",
+          "advisory"
+        ],
+        "properties": {
+          "type": {
+            "const": "change"
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The decision record's position."
+          },
+          "at": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Its trusted time, Unix ms."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "grant",
+              "anchor",
+              "party",
+              "instance",
+              "mandate",
+              "acceptance",
+              "policy",
+              "authority_set"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "description": "The object: an id in base64url, or a role's name."
+          },
+          "version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "For a role: the version defined."
+          },
+          "ended": {
+            "type": "boolean",
+            "description": "The change ended the object."
+          },
+          "own": {
+            "type": "boolean",
+            "description": "The viewer's own Instance made it."
+          },
+          "advisory": {
+            "const": true
+          }
+        }
+      },
+      "BulkImpact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "revoke",
+          "items",
+          "subtree",
+          "aftermath",
+          "max_exposure_ms",
+          "advisory"
+        ],
+        "properties": {
+          "type": {
+            "const": "bulk_impact"
+          },
+          "revoke": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Grant"
+            },
+            "description": "The Grants of the job."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RevocationImpact"
+            },
+            "description": "Each item's own preview, in order."
+          },
+          "subtree": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Grant"
+            },
+            "description": "Every Grant that ends with the job, once."
+          },
+          "aftermath": {
+            "type": "object",
+            "description": "`{grants_ending, projections_open, honoured_until_ms, running_copies, confirmed_applied}` over the job (XI-3)."
+          },
+          "max_exposure_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The longest window of any item."
+          },
+          "advisory": {
+            "const": true
+          }
+        }
+      },
+      "PublicationDraft": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "namespace",
+          "catalog_version",
+          "actions",
+          "classes"
+        ],
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "The action namespace."
+          },
+          "catalog_version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The catalog version; after the publisher's latest one (E10)."
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KernelActionSchema"
+            },
+            "description": "The typed Action Schemas."
+          },
+          "classes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "parameter",
+                "class"
+              ],
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "description": "Action name."
+                },
+                "parameter": {
+                  "type": "string",
+                  "description": "Parameter name."
+                },
+                "class": {
+                  "type": "string",
+                  "enum": [
+                    "opaque",
+                    "recipient",
+                    "amount",
+                    "count",
+                    "choice",
+                    "flag"
+                  ],
+                  "description": "`opaque`, or what an authority-relevant parameter decides (E12)."
+                }
+              }
+            },
+            "description": "The class of every declared parameter (§9.13.3)."
+          },
+          "retirements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KernelActionRef"
+            },
+            "description": "Retired actions."
+          },
+          "core_spec_min": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Lowest core spec version it needs."
+          },
+          "compatibility": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from",
+              "relation"
+            ],
+            "properties": {
+              "from": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "An earlier published version."
+              },
+              "relation": {
+                "type": "string",
+                "enum": [
+                  "representation-equivalent",
+                  "narrowing",
+                  "broadening",
+                  "incompatible"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "PublishRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "context",
+          "package",
+          "domains"
+        ],
+        "properties": {
+          "context": {
+            "type": "object",
+            "description": "The publisher's `check` context (L1-ADP-5…9): the intent's action is `access`/`publish`, its resource `access.publication` with the path `[namespace]`, and `opaque.package` the digest of `package` (L1-ADP-18). Its AIS makes the publisher known."
+          },
+          "package": {
+            "$ref": "#/components/schemas/PublicationDraft"
+          },
+          "domains": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "A domain the package is offered to."
+            },
+            "description": "Where it is offered; each keeps it in its own scope (TN-20)."
+          }
+        }
+      },
+      "Published": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fingerprint",
+          "publisher",
+          "namespace",
+          "catalog_version",
+          "new",
+          "existing_grants_unchanged",
+          "new_actions",
+          "text"
+        ],
+        "properties": {
+          "fingerprint": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The exact digest a `schema-definition` Acceptance pins (E10)."
+          },
+          "publisher": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The publisher Party: the actor of the AIS."
+          },
+          "namespace": {
+            "type": "string",
+            "description": "The namespace."
+          },
+          "catalog_version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The catalog version."
+          },
+          "new": {
+            "type": "boolean",
+            "description": "Kept now; `false` when every domain already had this exact package."
+          },
+          "existing_grants_unchanged": {
+            "const": true
+          },
+          "new_actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Not included in delegations whose catalog is pinned (E11)."
+          },
+          "text": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Text keys, in order."
+          }
+        }
+      },
+      "PublicationWarnings": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "warnings"
+        ],
+        "properties": {
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "action",
+                "parameter",
+                "reason",
+                "suggestion"
+              ],
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "description": "Action name."
+                },
+                "parameter": {
+                  "type": "string",
+                  "description": "Parameter name."
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "affects_recipient",
+                    "affects_amount",
+                    "affects_count",
+                    "affects_choice",
+                    "affects_flag"
+                  ]
+                },
+                "suggestion": {
+                  "type": "string",
+                  "description": "The parameter type to map it to."
+                }
+              }
+            },
+            "description": "Authority-relevant parameters without a closed type (E12); nothing was kept."
+          }
+        }
+      },
+      "PublicationStatusRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "context",
+          "fingerprint",
+          "domains"
+        ],
+        "properties": {
+          "context": {
+            "type": "object",
+            "description": "The publisher's `check` context: `access`/`read` on `access.publication` with the path `[namespace]`."
+          },
+          "fingerprint": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The publication."
+          },
+          "domains": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "A domain it was offered to."
+            }
+          }
+        }
+      },
+      "PublicationStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fingerprint",
+          "pending_acceptance",
+          "accepted_in",
+          "existing_grants_unchanged",
+          "new_actions",
+          "text"
+        ],
+        "properties": {
+          "fingerprint": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The publication."
+          },
+          "pending_acceptance": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Domain"
+            },
+            "description": "\"Pending acceptance in: …\": domains that accept the publisher for the namespace, but not this fingerprint."
+          },
+          "accepted_in": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Domain"
+            },
+            "description": "Domains whose `schema-definition` Acceptance pins this fingerprint."
+          },
+          "existing_grants_unchanged": {
+            "const": true
+          },
+          "new_actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Not included in delegations whose catalog is pinned (E11)."
+          },
+          "text": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Text keys, in order."
+          }
+        }
+      },
+      "MetaPayload": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "anchor_create"
+            ],
+            "properties": {
+              "anchor_create": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "scope",
+                  "root"
+                ],
+                "properties": {
+                  "scope": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "domain"
+                        ]
+                      },
+                      {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "resource"
+                            ],
+                            "properties": {
+                              "resource": {
+                                "$ref": "#/components/schemas/KernelResourceSelector"
+                              }
+                            }
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "party"
+                            ],
+                            "properties": {
+                              "party": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9_-]*$",
+                                "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "root": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "sole"
+                        ],
+                        "properties": {
+                          "sole": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_-]*$",
+                            "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "joint"
+                        ],
+                        "properties": {
+                          "joint": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "parties",
+                              "k"
+                            ],
+                            "properties": {
+                              "parties": {
+                                "type": "array",
+                                "uniqueItems": true,
+                                "items": {
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z0-9_-]*$",
+                                  "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                                },
+                                "description": "A set: any order, no repeats; the canonical form sorts it."
+                              },
+                              "k": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "root_terms": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/components/schemas/KernelRequirementTerm"
+                    },
+                    "description": "A set: any order, no repeats; the canonical form sorts it."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "anchor_transfer"
+            ],
+            "properties": {
+              "anchor_transfer": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "anchor",
+                  "root",
+                  "disposition"
+                ],
+                "properties": {
+                  "anchor": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  },
+                  "root": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "sole"
+                        ],
+                        "properties": {
+                          "sole": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_-]*$",
+                            "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "joint"
+                        ],
+                        "properties": {
+                          "joint": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "parties",
+                              "k"
+                            ],
+                            "properties": {
+                              "parties": {
+                                "type": "array",
+                                "uniqueItems": true,
+                                "items": {
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z0-9_-]*$",
+                                  "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                                },
+                                "description": "A set: any order, no repeats; the canonical form sorts it."
+                              },
+                              "k": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "disposition": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "grant",
+                        "disposition"
+                      ],
+                      "properties": {
+                        "grant": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]*$",
+                          "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                        },
+                        "disposition": {
+                          "type": "string",
+                          "enum": [
+                            "keep",
+                            "revoke"
+                          ]
+                        }
+                      }
+                    },
+                    "description": "A set: any order, no repeats; the canonical form sorts it."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "anchor_amend"
+            ],
+            "properties": {
+              "anchor_amend": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "anchor"
+                ],
+                "properties": {
+                  "anchor": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  },
+                  "root": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "sole"
+                        ],
+                        "properties": {
+                          "sole": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_-]*$",
+                            "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "joint"
+                        ],
+                        "properties": {
+                          "joint": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "parties",
+                              "k"
+                            ],
+                            "properties": {
+                              "parties": {
+                                "type": "array",
+                                "uniqueItems": true,
+                                "items": {
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z0-9_-]*$",
+                                  "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                                },
+                                "description": "A set: any order, no repeats; the canonical form sorts it."
+                              },
+                              "k": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "root_terms": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/components/schemas/KernelRequirementTerm"
+                    },
+                    "description": "A set: any order, no repeats; the canonical form sorts it."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "anchor_retire"
+            ],
+            "properties": {
+              "anchor_retire": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "anchor",
+                  "disposition"
+                ],
+                "properties": {
+                  "anchor": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  },
+                  "disposition": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "grant",
+                        "disposition"
+                      ],
+                      "properties": {
+                        "grant": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]*$",
+                          "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                        },
+                        "disposition": {
+                          "type": "string",
+                          "enum": [
+                            "keep",
+                            "revoke"
+                          ]
+                        }
+                      }
+                    },
+                    "description": "A set: any order, no repeats; the canonical form sorts it."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "party_register"
+            ],
+            "properties": {
+              "party_register": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "party",
+                  "root",
+                  "actor_kind"
+                ],
+                "properties": {
+                  "party": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  },
+                  "root": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "sole"
+                        ],
+                        "properties": {
+                          "sole": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_-]*$",
+                            "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "joint"
+                        ],
+                        "properties": {
+                          "joint": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "parties",
+                              "k"
+                            ],
+                            "properties": {
+                              "parties": {
+                                "type": "array",
+                                "uniqueItems": true,
+                                "items": {
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z0-9_-]*$",
+                                  "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                                },
+                                "description": "A set: any order, no repeats; the canonical form sorts it."
+                              },
+                              "k": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "actor_kind": {
+                    "type": "string",
+                    "enum": [
+                      "human",
+                      "agent",
+                      "system",
+                      "machine",
+                      "organization"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "party_depart"
+            ],
+            "properties": {
+              "party_depart": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "party",
+                  "disposition"
+                ],
+                "properties": {
+                  "party": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  },
+                  "disposition": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "grant",
+                        "disposition"
+                      ],
+                      "properties": {
+                        "grant": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]*$",
+                          "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                        },
+                        "disposition": {
+                          "type": "string",
+                          "enum": [
+                            "keep",
+                            "revoke"
+                          ]
+                        }
+                      }
+                    },
+                    "description": "A set: any order, no repeats; the canonical form sorts it."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "instance_create"
+            ],
+            "properties": {
+              "instance_create": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "party",
+                  "key"
+                ],
+                "properties": {
+                  "party": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  },
+                  "key": {
+                    "$ref": "#/components/schemas/KernelPublicKey"
+                  },
+                  "mandate": {
+                    "$ref": "#/components/schemas/KernelMandateEnvelope"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "instance_rekey"
+            ],
+            "properties": {
+              "instance_rekey": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "instance",
+                  "key"
+                ],
+                "properties": {
+                  "instance": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  },
+                  "key": {
+                    "$ref": "#/components/schemas/KernelPublicKey"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "instance_terminate"
+            ],
+            "properties": {
+              "instance_terminate": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "instance"
+                ],
+                "properties": {
+                  "instance": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "instance_recover"
+            ],
+            "properties": {
+              "instance_recover": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "instance",
+                  "key"
+                ],
+                "properties": {
+                  "instance": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  },
+                  "key": {
+                    "$ref": "#/components/schemas/KernelPublicKey"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mandate_bind"
+            ],
+            "properties": {
+              "mandate_bind": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "instance",
+                  "envelope"
+                ],
+                "properties": {
+                  "instance": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  },
+                  "envelope": {
+                    "$ref": "#/components/schemas/KernelMandateEnvelope"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mandate_rebind"
+            ],
+            "properties": {
+              "mandate_rebind": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "mandate",
+                  "envelope"
+                ],
+                "properties": {
+                  "mandate": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  },
+                  "envelope": {
+                    "$ref": "#/components/schemas/KernelMandateEnvelope"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mandate_revoke"
+            ],
+            "properties": {
+              "mandate_revoke": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "mandate"
+                ],
+                "properties": {
+                  "mandate": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "grant_issue"
+            ],
+            "properties": {
+              "grant_issue": {
+                "$ref": "#/components/schemas/KernelGrantContent"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "grant_amend"
+            ],
+            "properties": {
+              "grant_amend": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "grant",
+                  "authority"
+                ],
+                "properties": {
+                  "grant": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  },
+                  "authority": {
+                    "$ref": "#/components/schemas/CanonicalAuthority"
+                  },
+                  "agency": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "own"
+                          ]
+                        },
+                        {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "for"
+                              ],
+                              "properties": {
+                                "for": {
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z0-9_-]*$",
+                                  "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "description": "A set: any order, no repeats; the canonical form sorts it."
+                  },
+                  "named": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "name",
+                      "version",
+                      "digest"
+                    ],
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "version": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "digest": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]*$",
+                        "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "grant_revoke"
+            ],
+            "properties": {
+              "grant_revoke": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "grant"
+                ],
+                "properties": {
+                  "grant": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "grant_renounce"
+            ],
+            "properties": {
+              "grant_renounce": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "grant"
+                ],
+                "properties": {
+                  "grant": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "acceptance_establish"
+            ],
+            "properties": {
+              "acceptance_establish": {
+                "$ref": "#/components/schemas/KernelAcceptanceContent"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "acceptance_amend"
+            ],
+            "properties": {
+              "acceptance_amend": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "acceptance",
+                  "content"
+                ],
+                "properties": {
+                  "acceptance": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  },
+                  "content": {
+                    "$ref": "#/components/schemas/KernelAcceptanceContent"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "acceptance_revoke"
+            ],
+            "properties": {
+              "acceptance_revoke": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "acceptance"
+                ],
+                "properties": {
+                  "acceptance": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "policy_set"
+            ],
+            "properties": {
+              "policy_set": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "content"
+                ],
+                "properties": {
+                  "policy": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  },
+                  "content": {
+                    "$ref": "#/components/schemas/KernelPolicyContent"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "policy_retire"
+            ],
+            "properties": {
+              "policy_retire": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "policy"
+                ],
+                "properties": {
+                  "policy": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "claim_issue"
+            ],
+            "properties": {
+              "claim_issue": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "subject",
+                  "class",
+                  "value"
+                ],
+                "properties": {
+                  "subject": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  },
+                  "class": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "bytes"
+                        ],
+                        "properties": {
+                          "bytes": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_-]*$",
+                            "description": "Bytes."
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "validity": {
+                    "$ref": "#/components/schemas/KernelWindow"
+                  },
+                  "bound_intent": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+                  },
+                  "supersedes": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "contribute"
+            ],
+            "properties": {
+              "contribute": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "target",
+                  "class"
+                ],
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+                  },
+                  "class": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "consumption_release"
+            ],
+            "properties": {
+              "consumption_release": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "exercise",
+                  "grounds"
+                ],
+                "properties": {
+                  "exercise": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+                  },
+                  "grounds": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]*$",
+                      "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                    },
+                    "description": "A set: any order, no repeats; the canonical form sorts it."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "authority_set_define"
+            ],
+            "properties": {
+              "authority_set_define": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "authority"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "authority": {
+                    "$ref": "#/components/schemas/AuthoritySet"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "projection_issue"
+            ],
+            "properties": {
+              "projection_issue": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "bounds",
+                  "audience",
+                  "profile"
+                ],
+                "properties": {
+                  "bounds": {
+                    "$ref": "#/components/schemas/CanonicalAuthority"
+                  },
+                  "audience": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "A set: any order, no repeats; the canonical form sorts it."
+                  },
+                  "profile": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "class",
+                      "variant"
+                    ],
+                    "properties": {
+                      "class": {
+                        "type": "string",
+                        "enum": [
+                          "online",
+                          "intermittent",
+                          "offline",
+                          "long-running"
+                        ]
+                      },
+                      "variant": {
+                        "type": "string",
+                        "enum": [
+                          "online-strict",
+                          "bounded-staleness",
+                          "revalidate-on-reconnect",
+                          "checkpointed-offline",
+                          "checkpoint-continuation"
+                        ]
+                      }
+                    }
+                  },
+                  "max_staleness_ms": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "offline_slice": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [],
+                    "properties": {
+                      "count": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "amounts": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "AuthoritySet": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "actions",
+          "resource"
+        ],
+        "properties": {
+          "actions": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [],
+            "properties": {
+              "exact": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/KernelActionRef"
+                },
+                "description": "A set: any order, no repeats; the canonical form sorts it."
+              },
+              "prefix": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "namespace",
+                    "catalog"
+                  ],
+                  "properties": {
+                    "namespace": {
+                      "type": "string"
+                    },
+                    "catalog": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]*$",
+                      "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+                    }
+                  }
+                },
+                "description": "A set: any order, no repeats; the canonical form sorts it."
+              }
+            }
+          },
+          "resource": {
+            "$ref": "#/components/schemas/KernelResourceSelector"
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/KernelParamBound"
+            }
+          },
+          "recipient": {
+            "$ref": "#/components/schemas/KernelSubjectSelector"
+          },
+          "purpose": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "code"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "work"
+                  ],
+                  "properties": {
+                    "work": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]*$",
+                      "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "aim"
+                  ],
+                  "properties": {
+                    "aim": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]*$",
+                      "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+                    }
+                  }
+                }
+              ]
+            },
+            "description": "A set: any order, no repeats; the canonical form sorts it."
+          }
+        }
+      },
+      "CanonicalAuthority": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "authority",
+          "constraints",
+          "delegation",
+          "requirements"
+        ],
+        "properties": {
+          "authority": {
+            "$ref": "#/components/schemas/AuthoritySet"
+          },
+          "constraints": {
+            "$ref": "#/components/schemas/KernelConstraintSet"
+          },
+          "delegation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [],
+            "properties": {
+              "depth": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "downstream_holder_class": {
+                "$ref": "#/components/schemas/KernelSubjectSelector"
+              }
+            }
+          },
+          "requirements": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/KernelRequirementTerm"
+            },
+            "description": "A set: any order, no repeats; the canonical form sorts it."
+          }
+        }
+      },
+      "KernelSubjectSelector": {
+        "oneOf": [
+          {
+            "type": "string",
+            "enum": [
+              "public"
+            ]
+          },
+          {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "party"
+                ],
+                "properties": {
+                  "party": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "pred"
+                ],
+                "properties": {
+                  "pred": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "claim_class"
+                      ],
+                      "properties": {
+                        "claim_class": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "oneOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "bytes"
+                              ],
+                              "properties": {
+                                "bytes": {
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z0-9_-]*$",
+                                  "description": "Bytes."
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "description": "A set: any order, no repeats; the canonical form sorts it."
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "foreign"
+                ],
+                "properties": {
+                  "foreign": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "domain",
+                      "authority_class"
+                    ],
+                    "properties": {
+                      "domain": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]*$",
+                        "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+                      },
+                      "authority_class": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "KernelResourceSelector": {
+        "oneOf": [
+          {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "exact"
+                ],
+                "properties": {
+                  "exact": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "namespace",
+                      "path",
+                      "incarnation"
+                    ],
+                    "properties": {
+                      "namespace": {
+                        "type": "string"
+                      },
+                      "path": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "incarnation": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "namespace"
+            ],
+            "properties": {
+              "namespace": {
+                "type": "string"
+              },
+              "prefix": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "type": {
+                "type": "string"
+              },
+              "where": {
+                "type": "object",
+                "additionalProperties": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "bytes"
+                      ],
+                      "properties": {
+                        "bytes": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]*$",
+                          "description": "Bytes."
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "KernelActionRef": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "namespace",
+          "name",
+          "major",
+          "schema"
+        ],
+        "properties": {
+          "namespace": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "major": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+          }
+        }
+      },
+      "KernelParamBound": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "enum"
+            ],
+            "properties": {
+              "enum": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string"
+                },
+                "description": "A set: any order, no repeats; the canonical form sorts it."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "eq"
+            ],
+            "properties": {
+              "eq": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "bytes"
+                    ],
+                    "properties": {
+                      "bytes": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]*$",
+                        "description": "Bytes."
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "range"
+            ],
+            "properties": {
+              "range": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "unit"
+                ],
+                "properties": {
+                  "min": {
+                    "type": "integer"
+                  },
+                  "max": {
+                    "type": "integer"
+                  },
+                  "unit": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "count_max"
+            ],
+            "properties": {
+              "count_max": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "interval"
+            ],
+            "properties": {
+              "interval": {
+                "$ref": "#/components/schemas/KernelWindow"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "resource"
+            ],
+            "properties": {
+              "resource": {
+                "$ref": "#/components/schemas/KernelResourceSelector"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "subject"
+            ],
+            "properties": {
+              "subject": {
+                "$ref": "#/components/schemas/KernelSubjectSelector"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "purpose"
+            ],
+            "properties": {
+              "purpose": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "code"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "work"
+                      ],
+                      "properties": {
+                        "work": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]*$",
+                          "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "aim"
+                      ],
+                      "properties": {
+                        "aim": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]*$",
+                          "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+                        }
+                      }
+                    }
+                  ]
+                },
+                "description": "A set: any order, no repeats; the canonical form sorts it."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "flag"
+            ],
+            "properties": {
+              "flag": {
+                "type": "boolean"
+              }
+            }
+          }
+        ]
+      },
+      "KernelConstraintSet": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "validity"
+        ],
+        "properties": {
+          "validity": {
+            "$ref": "#/components/schemas/KernelWindow"
+          },
+          "while": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "instance_alive"
+                  ],
+                  "properties": {
+                    "instance_alive": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]*$",
+                      "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "claim_held"
+                  ],
+                  "properties": {
+                    "claim_held": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "class",
+                        "subject",
+                        "acceptance"
+                      ],
+                      "properties": {
+                        "class": {
+                          "type": "string"
+                        },
+                        "subject": {
+                          "$ref": "#/components/schemas/KernelSubjectSelector"
+                        },
+                        "acceptance": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]*$",
+                          "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "description": "A set: any order, no repeats; the canonical form sorts it."
+          },
+          "budget": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "dimension",
+                "capacity",
+                "window"
+              ],
+              "properties": {
+                "dimension": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "count"
+                      ]
+                    },
+                    {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "amount"
+                          ],
+                          "properties": {
+                            "amount": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "capacity": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "window": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "total"
+                      ]
+                    },
+                    {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "rolling_s"
+                          ],
+                          "properties": {
+                            "rolling_s": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "A set: any order, no repeats; the canonical form sorts it."
+          }
+        }
+      },
+      "KernelRequirementTerm": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "proof_kind",
+          "class"
+        ],
+        "properties": {
+          "proof_kind": {
+            "type": "string",
+            "enum": [
+              "claim",
+              "contribution",
+              "authentication",
+              "foreign_authority"
+            ]
+          },
+          "class": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "binding": {
+            "type": "string",
+            "enum": [
+              "actor_instance",
+              "intent_digest",
+              "resource"
+            ]
+          },
+          "freshness_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "independence": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "distinct"
+                ],
+                "properties": {
+                  "distinct": {
+                    "type": "string",
+                    "enum": [
+                      "party",
+                      "instance",
+                      "issuer"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "consumption": {
+            "type": "string",
+            "enum": [
+              "single_use"
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/KernelSubjectSelector"
+          },
+          "assurance": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      },
+      "KernelWindow": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "from",
+          "until"
+        ],
+        "properties": {
+          "from": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "until": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "KernelGrantContent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "basis",
+          "holder",
+          "authority"
+        ],
+        "properties": {
+          "basis": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "anchor"
+                ],
+                "properties": {
+                  "anchor": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "holding"
+                ],
+                "properties": {
+                  "holding": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "grant",
+                      "holder",
+                      "since"
+                    ],
+                    "properties": {
+                      "grant": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]*$",
+                        "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                      },
+                      "holder": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]*$",
+                        "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                      },
+                      "since": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "holder": {
+            "$ref": "#/components/schemas/KernelSubjectSelector"
+          },
+          "authority": {
+            "$ref": "#/components/schemas/CanonicalAuthority"
+          },
+          "agency": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "own"
+                  ]
+                },
+                {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "for"
+                      ],
+                      "properties": {
+                        "for": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]*$",
+                          "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "description": "A set: any order, no repeats; the canonical form sorts it."
+          },
+          "named": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "version",
+              "digest"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]*$",
+                "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+              }
+            }
+          }
+        }
+      },
+      "KernelAcceptanceContent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "issuer",
+          "use",
+          "classes",
+          "subject",
+          "validity"
+        ],
+        "properties": {
+          "issuer": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]*$",
+                "description": "Bytes, base64url without padding (an id is 16 bytes)."
+              },
+              {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "foreign"
+                    ],
+                    "properties": {
+                      "foreign": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "domain",
+                          "binding"
+                        ],
+                        "properties": {
+                          "domain": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_-]*$",
+                            "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+                          },
+                          "binding": {
+                            "type": "array",
+                            "uniqueItems": true,
+                            "items": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "kid",
+                                "alg",
+                                "key",
+                                "scope"
+                              ],
+                              "properties": {
+                                "kid": {
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z0-9_-]*$",
+                                  "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                                },
+                                "alg": {
+                                  "type": "integer"
+                                },
+                                "key": {
+                                  "$ref": "#/components/schemas/KernelPublicKey"
+                                },
+                                "scope": {
+                                  "oneOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "domain"
+                                      ]
+                                    },
+                                    {
+                                      "oneOf": [
+                                        {
+                                          "type": "object",
+                                          "additionalProperties": false,
+                                          "required": [
+                                            "provider"
+                                          ],
+                                          "properties": {
+                                            "provider": {
+                                              "type": "array",
+                                              "uniqueItems": true,
+                                              "items": {
+                                                "type": "string",
+                                                "pattern": "^[A-Za-z0-9_-]*$",
+                                                "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+                                              },
+                                              "description": "A set: any order, no repeats; the canonical form sorts it."
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "superseded": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "at",
+                                    "cited"
+                                  ],
+                                  "properties": {
+                                    "at": {
+                                      "type": "string",
+                                      "pattern": "^[A-Za-z0-9_-]*$",
+                                      "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+                                    },
+                                    "cited": {
+                                      "type": "string",
+                                      "pattern": "^[A-Za-z0-9_-]*$",
+                                      "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "description": "A set: any order, no repeats; the canonical form sorts it."
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "use": {
+            "type": "string",
+            "enum": [
+              "actor-binding",
+              "predicate-input",
+              "subject-selection",
+              "foreign-authority",
+              "schema-definition"
+            ]
+          },
+          "classes": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            },
+            "description": "A set: any order, no repeats; the canonical form sorts it."
+          },
+          "subject": {
+            "$ref": "#/components/schemas/KernelSubjectSelector"
+          },
+          "anchor": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "Bytes, base64url without padding (an id is 16 bytes)."
+          },
+          "assurance_floor": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "validity": {
+            "$ref": "#/components/schemas/KernelWindow"
+          },
+          "ingest_until": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "issued_until": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "quota": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "count",
+              "window_s"
+            ],
+            "properties": {
+              "count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "window_s": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "spp": {
+            "$ref": "#/components/schemas/KernelSpp"
+          },
+          "pinned": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "iss",
+              "aud",
+              "keys"
+            ],
+            "properties": {
+              "iss": {
+                "type": "string"
+              },
+              "aud": {
+                "type": "string"
+              },
+              "keys": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/components/schemas/KernelPublicKey"
+                },
+                "description": "A set: any order, no repeats; the canonical form sorts it."
+              }
+            }
+          }
+        }
+      },
+      "KernelPolicyContent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema",
+          "source",
+          "target"
+        ],
+        "properties": {
+          "schema": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "domain"
+                ]
+              },
+              {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "anchor"
+                    ],
+                    "properties": {
+                      "anchor": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]*$",
+                        "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "party"
+                    ],
+                    "properties": {
+                      "party": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]*$",
+                        "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "instance"
+                    ],
+                    "properties": {
+                      "instance": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]*$",
+                        "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "requirements": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/components/schemas/KernelRequirementTerm"
+              },
+              "description": "A set: any order, no repeats; the canonical form sorts it."
+            }
+          }
+        }
+      },
+      "KernelMandateEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "authority",
+          "constraints"
+        ],
+        "properties": {
+          "authority": {
+            "$ref": "#/components/schemas/AuthoritySet"
+          },
+          "constraints": {
+            "$ref": "#/components/schemas/KernelConstraintSet"
+          },
+          "requirements": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/KernelRequirementTerm"
+            },
+            "description": "A set: any order, no repeats; the canonical form sorts it."
+          },
+          "pin": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "grant",
+              "holder",
+              "since"
+            ],
+            "properties": {
+              "grant": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]*$",
+                "description": "Bytes, base64url without padding (an id is 16 bytes)."
+              },
+              "holder": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]*$",
+                "description": "Bytes, base64url without padding (an id is 16 bytes)."
+              },
+              "since": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      },
+      "KernelPublicKey": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ed25519"
+            ],
+            "properties": {
+              "ed25519": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]*$",
+                "description": "Bytes, base64url without padding (an id is 16 bytes)."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "p256"
+            ],
+            "properties": {
+              "p256": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]*$",
+                "description": "Bytes, base64url without padding (an id is 16 bytes)."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ml_dsa"
+            ],
+            "properties": {
+              "ml_dsa": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "alg",
+                  "key"
+                ],
+                "properties": {
+                  "alg": {
+                    "type": "integer"
+                  },
+                  "key": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]*$",
+                    "description": "Bytes, base64url without padding (an id is 16 bytes)."
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "KernelSpp": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "publisher",
+          "namespace",
+          "catalog_version",
+          "actions"
+        ],
+        "properties": {
+          "publisher": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "Bytes, base64url without padding (an id is 16 bytes)."
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "catalog_version": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "actions": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/KernelActionSchema"
+            },
+            "description": "A set: any order, no repeats; the canonical form sorts it."
+          },
+          "retirements": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/KernelActionRef"
+            },
+            "description": "A set: any order, no repeats; the canonical form sorts it."
+          },
+          "core_spec_min": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "KernelActionSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "major",
+          "effect_class"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "major": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "effect_class": {
+            "type": "string",
+            "enum": [
+              "none",
+              "reversible",
+              "irreversible"
+            ]
+          },
+          "reserved": {
+            "type": "boolean"
+          },
+          "consumption_bearing": {
+            "type": "boolean"
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "amount",
+                "int",
+                "text",
+                "bool",
+                "bytes",
+                "id",
+                "opaque"
+              ]
+            }
+          },
+          "resource_types": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            },
+            "description": "A set: any order, no repeats; the canonical form sorts it."
+          },
+          "render": {
+            "type": "string"
           }
         }
       }
