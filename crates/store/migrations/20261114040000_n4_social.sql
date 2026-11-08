@@ -46,7 +46,18 @@ CREATE TABLE access.identity_federated (
   verified_ms bigint NOT NULL CHECK (verified_ms >= created_ms),
   ended_ms bigint,
   end_reason text CHECK (end_reason IN ('unlinked', 'combined')),
+  -- OP-153 m.3 (l): the address the provider gave, sealed under the account's contact key; an
+  -- unvouched one stays unconfirmed until our own code proves it
+  address_nonce bytea CHECK (octet_length(address_nonce) = 12),
+  -- pii:contact
+  address_ciphertext bytea CHECK (octet_length(address_ciphertext) <= 4096),
+  -- pii:none
+  address_index bytea CHECK (octet_length(address_index) = 32),
+  address_vouched boolean,
   CHECK ((ended_ms IS NULL) = (end_reason IS NULL)),
+  CHECK ((address_ciphertext IS NULL) = (address_nonce IS NULL)
+         AND (address_ciphertext IS NULL) = (address_index IS NULL)
+         AND (address_ciphertext IS NULL) = (address_vouched IS NULL)),
   PRIMARY KEY (tenant_id, realm_id, link_id),
   FOREIGN KEY (tenant_id, realm_id, subject_id)
     REFERENCES access.identity_subjects (tenant_id, realm_id, subject_id)
@@ -65,9 +76,11 @@ BEGIN
     RAISE EXCEPTION 'identity_federated: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
   END IF;
   IF (NEW.tenant_id, NEW.realm_id, NEW.link_id, NEW.subject_id, NEW.provider, NEW.identity_key,
-      NEW.created_ms)
+      NEW.created_ms, NEW.address_nonce, NEW.address_ciphertext, NEW.address_index,
+      NEW.address_vouched)
      IS DISTINCT FROM (OLD.tenant_id, OLD.realm_id, OLD.link_id, OLD.subject_id, OLD.provider,
-                       OLD.identity_key, OLD.created_ms)
+                       OLD.identity_key, OLD.created_ms, OLD.address_nonce, OLD.address_ciphertext,
+                       OLD.address_index, OLD.address_vouched)
      OR NEW.verified_ms < OLD.verified_ms
      OR (OLD.ended_ms IS NOT NULL AND (NEW.ended_ms, NEW.end_reason, NEW.verified_ms)
                                       IS DISTINCT FROM (OLD.ended_ms, OLD.end_reason, OLD.verified_ms)) THEN

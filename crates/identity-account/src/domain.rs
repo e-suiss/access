@@ -4,6 +4,7 @@ pub mod bot;
 pub mod breach;
 pub mod claim_classes;
 pub mod claims;
+pub mod combine;
 pub mod consumer_domains;
 pub mod events;
 pub mod gcra;

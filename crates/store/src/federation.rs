@@ -64,6 +64,18 @@ pub struct FederatedRow {
     pub verified_ms: u64,
 }
 
+/// The address a provider gave, sealed under the account's contact key (OP-153 m.3 (l)).
+pub struct ProviderAddress {
+    /// AEAD nonce.
+    pub nonce: [u8; 12],
+    /// Ciphertext and tag.
+    pub ciphertext: Vec<u8>,
+    /// The realm's blind index.
+    pub index: [u8; 32],
+    /// Whether the preset vouches for it.
+    pub vouched: bool,
+}
+
 /// A social attempt taken from the redirect.
 #[derive(Clone, PartialEq, Eq)]
 pub struct AttemptRow {
@@ -374,8 +386,8 @@ impl TenantTx {
             .collect()
     }
 
-    /// Links the external identity `key` of `provider` to `subject`, proven now; false when it
-    /// is already linked to an account.
+    /// Links the external identity `key` of `provider` to `subject`, proven now, with the
+    /// sealed address the provider gave; false when it is already linked to an account.
     ///
     /// # Errors
     /// [`StoreError`].
@@ -384,13 +396,15 @@ impl TenantTx {
         subject: [u8; 16],
         provider: &str,
         key: &[u8; 32],
+        address: Option<&ProviderAddress>,
         now_ms: u64,
     ) -> Result<bool, StoreError> {
         let (tenant, realm) = scope(self)?;
         let n = sqlx::query!(
             "INSERT INTO access.identity_federated (tenant_id, realm_id, subject_id, provider,
-                    identity_key, created_ms, verified_ms)
-             VALUES ($1, $2, $3, $4, $5, $6, $6)
+                    identity_key, created_ms, verified_ms, address_nonce, address_ciphertext,
+                    address_index, address_vouched)
+             VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10)
              ON CONFLICT (tenant_id, realm_id, identity_key) WHERE ended_ms IS NULL DO NOTHING",
             tenant,
             realm,
@@ -398,6 +412,10 @@ impl TenantTx {
             provider,
             key.as_slice(),
             i64_of(now_ms)?,
+            address.map(|a| a.nonce.to_vec()),
+            address.map(|a| a.ciphertext.clone()),
+            address.map(|a| a.index.to_vec()),
+            address.map(|a| a.vouched),
         )
         .execute(&mut *self.tx)
         .await?
@@ -456,6 +474,40 @@ impl TenantTx {
         .await?
         .rows_affected();
         Ok(n == 1)
+    }
+
+    /// Whether `subject` keeps a way to sign in without its live link `except` (TN-68): an
+    /// active credential, a proven mailbox or another live link.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn keeps_a_method(
+        &mut self,
+        subject: [u8; 16],
+        except: [u8; 16],
+    ) -> Result<bool, StoreError> {
+        let (tenant, realm) = scope(self)?;
+        let s = Uuid::from_bytes(subject);
+        Ok(sqlx::query_scalar!(
+            r#"SELECT (EXISTS (SELECT 1 FROM access.identity_credentials c
+                               WHERE c.tenant_id = $1 AND c.realm_id = $2 AND c.subject_id = $3
+                                 AND c.status = 'active')
+                    OR EXISTS (SELECT 1 FROM access.identity_mailboxes m
+                                 JOIN access.identity_identifiers i
+                                   ON i.tenant_id = m.tenant_id AND i.realm_id = m.realm_id
+                                  AND i.identifier_id = m.identifier_id
+                                WHERE m.tenant_id = $1 AND m.realm_id = $2 AND m.subject_id = $3
+                                  AND i.status = 'active')
+                    OR EXISTS (SELECT 1 FROM access.identity_federated f
+                                WHERE f.tenant_id = $1 AND f.realm_id = $2 AND f.subject_id = $3
+                                  AND f.ended_ms IS NULL AND f.link_id <> $4)) AS "kept!""#,
+            tenant,
+            realm,
+            s,
+            Uuid::from_bytes(except),
+        )
+        .fetch_one(&mut *self.tx)
+        .await?)
     }
 
     /// Issues a combine ticket for `subject`, authenticated at `auth_ms`.

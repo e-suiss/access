@@ -24,6 +24,8 @@ pub enum MethodClass {
     Push,
     /// App PIN plus an app-bound key pair (MD-11, IDP-9); reserved.
     AppControlled,
+    /// A social or upstream provider's checked assertion (IDP-31, OP-153 m.3 (l)): AAL1, no CT.
+    Federated,
 }
 
 impl MethodClass {
@@ -38,6 +40,7 @@ impl MethodClass {
             Self::EmailOtp | Self::MagicLink => "mail",
             Self::Push => "mca",
             Self::AppControlled => "pin",
+            Self::Federated => "fed",
         }
     }
 }
@@ -224,6 +227,13 @@ impl Factor {
                 at_ms,
             )
         }
+    }
+
+    /// A provider's assertion checked in the back end (IDP-31): AAL1, no CT; the provider's own
+    /// factors are not ours to count.
+    #[must_use]
+    pub fn federated(at_ms: u64) -> Self {
+        Self::base(MethodClass::Federated, vec![FactorKind::Possession], at_ms)
     }
 
     /// An e-mail code or link (§10.2.2): AAL1, no CT.

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.identity_federated (tenant_id, realm_id, subject_id, provider,\n                    identity_key, created_ms, verified_ms, address_nonce, address_ciphertext,\n                    address_index, address_vouched)\n             VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10)\n             ON CONFLICT (tenant_id, realm_id, identity_key) WHERE ended_ms IS NULL DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Int8",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b78333fc87b2150669c0f3a408e03fe3f970310e21859a1d5aefe6df150eafab"
+}

@@ -47,12 +47,41 @@ where
         device: Option<&str>,
         correlation: &str,
     ) -> Result<Opened, SessionError> {
+        self.open_with(
+            subject,
+            Factor::email(MethodClass::EmailOtp, proven_ms),
+            device,
+            correlation,
+        )
+        .await
+    }
+
+    /// Opens the login flow of `subject` whose social or upstream provider's assertion was
+    /// checked at `proven_ms` (IDP-31, OP-153 m.3 (l)); it completes like any other first step.
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub async fn federated(
+        &self,
+        subject: [u8; 16],
+        proven_ms: u64,
+        device: Option<&str>,
+        correlation: &str,
+    ) -> Result<Opened, SessionError> {
+        self.open_with(subject, Factor::federated(proven_ms), device, correlation)
+            .await
+    }
+
+    async fn open_with(
+        &self,
+        subject: [u8; 16],
+        factor: Factor,
+        device: Option<&str>,
+        correlation: &str,
+    ) -> Result<Opened, SessionError> {
         let now = self.now();
         let mut state = FlowState::new(Purpose::Login, now);
-        if state
-            .record(subject, Factor::email(MethodClass::EmailOtp, proven_ms))
-            .is_err()
-        {
+        if state.record(subject, factor).is_err() {
             return Err(SessionError::Corrupt);
         }
         let handle = self.random32()?;

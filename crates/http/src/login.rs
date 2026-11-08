@@ -9,6 +9,7 @@ pub mod assets;
 mod idempotency;
 mod me;
 mod recovery;
+mod social;
 pub(crate) mod web;
 
 use std::sync::Arc;
@@ -24,6 +25,7 @@ use axum::routing::{delete, get, post, put};
 pub use assets::{Assets, AssetsError};
 pub use idempotency::{CAPACITY as IDEMPOTENCY_CAPACITY, RETENTION as IDEMPOTENCY_RETENTION};
 pub use me::router as me_router;
+pub use social::router as social_router;
 
 /// The client's address, set by the connection layer.
 #[derive(Clone, Copy, Debug)]

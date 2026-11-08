@@ -155,6 +155,14 @@ pub(crate) async fn send(reply: Reply, headers: &HeaderMap) -> Response {
         Body::Html(page) => hosted(code, page, "text/html; charset=utf-8", "no-store"),
         Body::Script(source) => hosted(code, source, "text/javascript; charset=utf-8", "no-cache"),
         Body::Empty => code.into_response(),
+        // OP-153 m.3 (l)
+        Body::Redirect(to) => {
+            let mut r = code.into_response();
+            if let Ok(v) = HeaderValue::from_str(&to) {
+                r.headers_mut().insert(header::LOCATION, v);
+            }
+            r
+        }
     };
     let h = response.headers_mut();
     api_headers(h);

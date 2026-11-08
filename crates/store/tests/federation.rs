@@ -45,9 +45,15 @@ async fn an_external_identity_links_to_one_account_and_a_link_ends_once() {
     assert!(!tx.realm_is_sandbox().await.unwrap());
     let a = tx.insert_subject("active", "k:1", &[1; 40]).await.unwrap();
     let b = tx.insert_subject("active", "k:1", &[1; 40]).await.unwrap();
-    assert!(tx.link_federated(a, "google", &[7; 32], 10).await.unwrap());
     assert!(
-        !tx.link_federated(b, "google", &[7; 32], 11).await.unwrap(),
+        tx.link_federated(a, "google", &[7; 32], None, 10)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !tx.link_federated(b, "google", &[7; 32], None, 11)
+            .await
+            .unwrap(),
         "one live link per external identity"
     );
     let row = tx.federated_by_key(&[7; 32]).await.unwrap().unwrap();
@@ -59,7 +65,11 @@ async fn an_external_identity_links_to_one_account_and_a_link_ends_once() {
     assert!(tx.end_federated(a, row.link, "unlinked", 30).await.unwrap());
     assert!(!tx.end_federated(a, row.link, "unlinked", 31).await.unwrap());
     assert!(tx.federated_by_key(&[7; 32]).await.unwrap().is_none());
-    assert!(tx.link_federated(b, "google", &[7; 32], 40).await.unwrap());
+    assert!(
+        tx.link_federated(b, "google", &[7; 32], None, 40)
+            .await
+            .unwrap()
+    );
     tx.commit().await.unwrap();
 
     let reopened = sqlx::query(

@@ -20,6 +20,7 @@ pub mod privacy;
 pub mod recovery;
 pub mod shell;
 pub mod signup;
+pub mod social;
 
 pub use me::Devices;
 
@@ -97,6 +98,9 @@ pub enum Body {
     Script(&'static str),
     /// Nothing.
     Empty,
+    /// A `303 See Other` to this URL: the browser leaves for a provider or comes back from one
+    /// (OP-153 m.3 (l)).
+    Redirect(String),
 }
 
 /// A transport-neutral answer.
@@ -115,7 +119,7 @@ pub struct Reply {
 }
 
 impl Reply {
-    fn new(status: u16, body: Body) -> Self {
+    pub(crate) fn new(status: u16, body: Body) -> Self {
         Self {
             status,
             body,
@@ -137,7 +141,7 @@ impl Reply {
         r
     }
 
-    fn json(status: u16, value: Value) -> Self {
+    pub(crate) fn json(status: u16, value: Value) -> Self {
         Self::new(status, Body::Json(value))
     }
 
@@ -151,7 +155,7 @@ impl Reply {
         Self::new(200, Body::Script(source))
     }
 
-    fn cookie(mut self, c: Option<String>) -> Self {
+    pub(crate) fn cookie(mut self, c: Option<String>) -> Self {
         self.cookies.extend(c);
         self
     }
@@ -399,7 +403,7 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    async fn kit(&self, entry: &RealmEntry) -> Result<Arc<RealmKit>, Reply> {
+    pub(crate) async fn kit(&self, entry: &RealmEntry) -> Result<Arc<RealmKit>, Reply> {
         self.kits.kit(entry).await.map_err(|_| {
             Reply::problem(Problem {
                 status: 503,

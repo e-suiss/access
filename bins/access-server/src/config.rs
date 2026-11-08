@@ -70,6 +70,33 @@ pub(crate) struct Config {
     /// SL2 risk sources (TN-46, OP-151 m.1 (b), m.3 (o)).
     #[serde(default)]
     pub(crate) risk: Risk,
+    /// Social sign-in (IDP-31, OP-153 m.3 (l)).
+    #[serde(default)]
+    pub(crate) social: Social,
+}
+
+/// Social sign-in (IDP-31, OP-153 m.3 (l)): where the realms' client secrets are mounted and the
+/// shared development clients, which only a sandbox realm may use.
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Social {
+    /// The directory a `secret://<path>` reference resolves under; without it every social
+    /// sign-in is unavailable (MD-8).
+    #[serde(default)]
+    pub(crate) secrets_dir: Option<PathBuf>,
+    /// Shared development clients by preset id (`social.dev_clients`).
+    #[serde(default)]
+    pub(crate) dev_clients: BTreeMap<String, DevClient>,
+}
+
+/// One shared development client.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DevClient {
+    /// The client id at the provider.
+    pub(crate) client_id: String,
+    /// Its secret's reference, `secret://…`.
+    pub(crate) secret_ref: String,
 }
 
 /// SL2 risk sources (TN-46, OP-151 m.1 (b), m.3 (o)). Each one is optional; a missing source
@@ -358,6 +385,7 @@ impl Default for Config {
             provider: access_http::declarations::Stated::default(),
             telemetry: access_telemetry::Settings::default(),
             risk: Risk::default(),
+            social: Social::default(),
         }
     }
 }

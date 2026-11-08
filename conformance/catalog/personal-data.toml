@@ -147,3 +147,21 @@ basis = "contract"
 portable = "derived"
 export = false
 note = "Digest of (provider, provider subject); the provider's own id is never stored (P-ID-9)."
+
+[[field]]
+column = "access.identity_federated.address_ciphertext"
+vault = "contact"
+retention = "profile"
+basis = "contract"
+portable = "observed"
+export = true
+note = "The address a social provider gave; unconfirmed unless the preset vouches for it (OP-153 m.3 (l))."
+
+[[field]]
+column = "access.identity_federated.address_index"
+vault = "none"
+retention = "profile"
+basis = "contract"
+portable = "derived"
+export = false
+note = "Keyed blind index of the provider's address."

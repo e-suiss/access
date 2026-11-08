@@ -93,6 +93,7 @@ pub const fn is_first_factor(m: MethodClass) -> bool {
             | MethodClass::Passkey
             | MethodClass::EmailOtp
             | MethodClass::MagicLink
+            | MethodClass::Federated
     )
 }
 

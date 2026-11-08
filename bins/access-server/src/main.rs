@@ -803,6 +803,15 @@ where
     Q: access_identity_ui::ports::ApprovalClaims + 'static,
 {
     let identity = config.identity.as_ref().ok_or("no identity section")?;
+    // IDP-31, OP-153 m.3 (l)
+    let social = access_http::login::social_router(
+        RealmDiscovery::new(
+            PgDirectory::new(router.clone()),
+            SignerKeys::new(identity.signer.clone()),
+        ),
+        hosted.clone(),
+        social(config)?,
+    );
     let me = me_router(
         RealmDiscovery::new(
             PgDirectory::new(router),
@@ -817,6 +826,7 @@ where
             pep: String::from(IDENTITY_PEP),
         },
     );
+    let me = me.merge(social);
     // OP-65, OP-67 m.1
     Ok(me.layer(axum::middleware::from_fn_with_state(
         RequestIds::new(Arc::new(admin::OsEntropy)),
@@ -863,6 +873,42 @@ where
         RequestIds::new(Arc::new(admin::OsEntropy)),
         request_id,
     ))
+}
+
+/// Social sign-in's services (IDP-31, OP-153 m.3 (l)): providers through the SSRF-guarded
+/// outbound client, secrets from the mounted directory, the shipped presets.
+fn social(
+    config: &Config,
+) -> Result<
+    access_identity_ui::app::social::Social<
+        access_identity_federation::adapters::OutboundProviders,
+        access_identity_federation::adapters::FileSecrets,
+    >,
+    String,
+> {
+    let presets = access_identity_federation::app::presets().map_err(|e| e.to_string())?;
+    let dev = config
+        .social
+        .dev_clients
+        .iter()
+        .map(|(k, v)| {
+            (
+                k.clone(),
+                access_identity_federation::app::DevClient {
+                    client_id: v.client_id.clone(),
+                    secret_ref: v.secret_ref.clone(),
+                },
+            )
+        })
+        .collect();
+    Ok(access_identity_ui::app::social::Social {
+        http: access_identity_federation::adapters::OutboundProviders(outbound(config)?),
+        secrets: access_identity_federation::adapters::FileSecrets(
+            config.social.secrets_dir.clone(),
+        ),
+        dev,
+        presets,
+    })
 }
 
 /// The hosted login (OP-146 m.12): the request's `Host` selects the realm as for discovery;

@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT (EXISTS (SELECT 1 FROM access.identity_credentials c\n                               WHERE c.tenant_id = $1 AND c.realm_id = $2 AND c.subject_id = $3\n                                 AND c.status = 'active')\n                    OR EXISTS (SELECT 1 FROM access.identity_mailboxes m\n                                 JOIN access.identity_identifiers i\n                                   ON i.tenant_id = m.tenant_id AND i.realm_id = m.realm_id\n                                  AND i.identifier_id = m.identifier_id\n                                WHERE m.tenant_id = $1 AND m.realm_id = $2 AND m.subject_id = $3\n                                  AND i.status = 'active')\n                    OR EXISTS (SELECT 1 FROM access.identity_federated f\n                                WHERE f.tenant_id = $1 AND f.realm_id = $2 AND f.subject_id = $3\n                                  AND f.ended_ms IS NULL AND f.link_id <> $4)) AS \"kept!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kept!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f907d560ab0e724216ec22b02fb70d99b09dec4693daa6176734f4ccfac48fed"
+}

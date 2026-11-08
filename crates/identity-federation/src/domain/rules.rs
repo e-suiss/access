@@ -1,13 +1,9 @@
 //! The social sign-in rules that do not need a provider: shared development clients only in a
 //! sandbox realm (IDP-31 (4)), client id reuse and the Apple transfer window (TN-87), the App
-//! Store warning (IDP-31 (5)), and the freshness of linking and combining accounts (TN-65,
-//! TN-67, OP-153 m.3 (m)).
+//! Store warning (IDP-31 (5)), and the freshness of linking (TN-65).
 
 /// How long Apple's transfer identifiers stay usable after a client id change (TN-87).
 pub const APPLE_TRANSFER_MS: u64 = 60 * 24 * 3_600_000;
-
-/// How fresh each account's last authentication must be to combine them (OP-153 m.3 (m)).
-pub const COMBINE_FRESHNESS_MS: u64 = 5 * 60_000;
 
 /// How fresh the session's last authentication must be to link another sign-in (TN-65 (3)).
 pub const LINK_FRESHNESS_MS: u64 = 5 * 60_000;
@@ -116,20 +112,6 @@ pub fn apple_recommended<'a>(
     native_client && other && !apple
 }
 
-/// Whether two accounts may be combined at `now_ms` (OP-153 m.3 (m)): two different accounts
-/// of one realm, each authenticated within [`COMBINE_FRESHNESS_MS`].
-#[must_use]
-pub fn combine_allowed(
-    survivor: [u8; 16],
-    survivor_auth_ms: u64,
-    absorbed: [u8; 16],
-    absorbed_auth_ms: u64,
-    now_ms: u64,
-) -> bool {
-    let fresh = |at: u64| now_ms.saturating_sub(at) <= COMBINE_FRESHNESS_MS;
-    survivor != absorbed && fresh(survivor_auth_ms) && fresh(absorbed_auth_ms)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -178,15 +160,5 @@ mod tests {
         assert!(!apple_recommended(true, ["google", APPLE]));
         assert!(!apple_recommended(false, ["google"]));
         assert!(!apple_recommended(true, [APPLE]));
-    }
-
-    // OP-153 m.3 (m), TN-67
-    #[test]
-    fn combining_needs_two_accounts_both_fresh() {
-        let (a, b) = ([1; 16], [2; 16]);
-        assert!(combine_allowed(a, 1_000, b, 2_000, 300_000));
-        assert!(!combine_allowed(a, 1_000, a, 2_000, 300_000));
-        assert!(!combine_allowed(a, 0, b, 2_000, 300_001));
-        assert!(!combine_allowed(a, 300_000, b, 0, 300_001));
     }
 }

@@ -390,42 +390,42 @@ pub const ROUTES: &[Route] = &[
         "requestAccess",
         "Asks an organization's administrators for access.",
     ),
-    planned(
+    live(
         Owner::N4,
         Verb::Get,
         "/v1/login/social/{provider}",
         "startSocial",
         "Starts sign-in with a social provider (OP-153 m.3 (l)).",
     ),
-    planned(
+    live(
         Owner::N4,
         Verb::Get,
         "/v1/login/social/{provider}/callback",
         "finishSocial",
         "The provider's redirect back; checked in the back end.",
     ),
-    planned(
+    live(
         Owner::N4,
         Verb::Get,
         "/v1/account/linked",
         "listLinkedSignIns",
         "The account's linked sign-ins.",
     ),
-    planned(
+    live(
         Owner::N4,
         Verb::Post,
         "/v1/account/linked",
         "startLink",
         "Links another sign-in after re-authentication (OP-153 m.3 (m)).",
     ),
-    planned(
+    live(
         Owner::N4,
         Verb::Delete,
         "/v1/account/linked/{link}",
         "unlink",
         "Ends a linked sign-in; the record is kept.",
     ),
-    planned(
+    live(
         Owner::N4,
         Verb::Post,
         "/v1/account/combine",
