@@ -4,4 +4,9 @@
 //! authority and has no write path: a write goes from the reader's device to Access directly,
 //! and this service only renders what Access recorded (XI-3, IA-4).
 
+pub mod adapters;
+pub mod app;
 pub mod contract;
+pub mod domain;
+pub mod https;
+pub mod ports;

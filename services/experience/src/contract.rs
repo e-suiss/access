@@ -516,6 +516,7 @@ fn requests() -> Map<String, Value> {
     m
 }
 
+#[allow(clippy::too_many_lines, reason = "one schema table")]
 fn rows() -> Map<String, Value> {
     let freshness = json!({ "type": "string", "enum": ["current", "unknown", "needs_refresh"] });
     let capacity = object(

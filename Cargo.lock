@@ -115,12 +115,18 @@ dependencies = [
  "axum",
  "esuiss-access-kernel",
  "esuiss-access-sdk",
+ "esuiss-crypto",
  "futures-util",
+ "httparse",
+ "rustls",
  "serde",
  "serde_json",
  "thiserror",
  "tokio",
+ "tokio-rustls",
  "tower",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
