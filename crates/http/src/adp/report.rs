@@ -217,6 +217,12 @@ fn role_change(c: &RoleChange) -> Out {
         "pin": { "name": name, "version": version, "digest": digest(pin) },
         "relation": c.relation.word(),
         "moves": ids(&c.moves),
+        "amends": c.amends.iter().map(|b| {
+            access_kernel::meta::Payload::from_bytes(b)
+                .ok()
+                .and_then(|p| crate::adp::payload::to_json_value(&p).ok())
+                .unwrap_or(Out::Null)
+        }).collect::<Vec<_>>(),
         "holders": {
             "parties": c.holders.parties,
             "everyone": c.holders.everyone,

@@ -115,6 +115,11 @@ pub struct RoleChange {
     pub relation: SetRelation,
     /// The Grants to amend, one Exercise each.
     pub moves: Vec<Id>,
+    /// The `grant_amend` payload of each move, in the order of `moves`: the Grant's own
+    /// constraints, delegation terms, requirements and agency kept, its authority set and pin
+    /// those of v`to` (C28), as canonical payload bytes. Each is still its own attributable
+    /// Exercise (§8.17.9.8).
+    pub amends: Vec<Vec<u8>>,
     /// Who holds them.
     pub holders: Holders,
     /// Gained, widened, narrowed and lost abilities.
@@ -437,6 +442,21 @@ pub fn role_change(
         pin: (name.to_owned(), to, authority_set_digest(&new)),
         relation: rel,
         moves: pinned.iter().map(|(g, _)| *g).collect(),
+        amends: pinned
+            .iter()
+            .map(|(g, s)| {
+                let mut authority = s.content.authority.clone();
+                authority.authority = new.clone();
+                meta::Payload::GrantAmend {
+                    grant: *g,
+                    authority,
+                    agency: s.content.agency.clone(),
+                    named: Some((name.to_owned(), to, authority_set_digest(&new))),
+                }
+                .to_bytes()
+                .unwrap_or_default()
+            })
+            .collect(),
         holders,
         abilities: abilities(&old, &new, &catalog, holders.parties),
         expansion,

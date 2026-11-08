@@ -338,6 +338,7 @@ fn reports() -> Value {
                 "relation": { "type": "string", "enum": ["equivalent", "narrowing", "widening", "incomparable", "may_error", "unknown"] },
                 "refused": { "type": ["string", "null"], "description": "The candidate's compile error." },
                 "moves": list(&b64("Grant"), "The Grants to amend, one Exercise each."),
+                "amends": list(&r("MetaPayload"), "The `grant_amend` payload of each move, in the order of `moves` (L1-ADP-17): the Grant's own constraints, requirements and agency kept, the authority set and pin of the new version; the console drafts, shows and signs each as its own Exercise (X20, §8.17.9.8)."),
                 "holders": { "type": "object", "description": "`{parties, everyone, upper_bound}`." },
                 "abilities": list(&json!({ "type": "object" }), "`{ability: {action, bounds}, holders_gaining, holders_losing}`."),
                 "expansion": { "type": ["object", "null"], "description": "What a widening move needs (INV-10): `{tier, joint_root_quorum, delay_s, requirements}`." },

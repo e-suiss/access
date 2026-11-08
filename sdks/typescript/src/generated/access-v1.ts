@@ -989,6 +989,8 @@ export interface components {
             refused?: string | null;
             /** @description The Grants to amend, one Exercise each. */
             moves?: string[];
+            /** @description The `grant_amend` payload of each move, in the order of `moves` (L1-ADP-17): the Grant's own constraints, requirements and agency kept, the authority set and pin of the new version; the console drafts, shows and signs each as its own Exercise (X20, §8.17.9.8). */
+            amends?: components["schemas"]["MetaPayload"][];
             /** @description `{parties, everyone, upper_bound}`. */
             holders?: Record<string, never>;
             /** @description `{ability: {action, bounds}, holders_gaining, holders_losing}`. */

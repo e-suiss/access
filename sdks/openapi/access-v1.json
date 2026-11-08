@@ -3893,6 +3893,13 @@
             },
             "description": "The Grants to amend, one Exercise each."
           },
+          "amends": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetaPayload"
+            },
+            "description": "The `grant_amend` payload of each move, in the order of `moves` (L1-ADP-17): the Grant's own constraints, requirements and agency kept, the authority set and pin of the new version; the console drafts, shows and signs each as its own Exercise (X20, §8.17.9.8)."
+          },
           "holders": {
             "type": "object",
             "description": "`{parties, everyone, upper_bound}`."

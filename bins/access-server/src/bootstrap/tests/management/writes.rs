@@ -219,8 +219,28 @@ async fn the_console_defines_a_role_and_moves_its_delegation_through_the_sequenc
             },
         } })
     };
+    assert!(c.w.domains.derive().await.is_empty());
+    let preview = c
+        .search(
+            "change-impact",
+            serde_json::json!({ "role": "helpdesk", "from": 1, "to": 2 }),
+        )
+        .await;
+    let preview = &preview["results"][0];
+    assert_eq!(preview["relation"], "narrowing", "{preview}");
+    assert_eq!(
+        preview["moves"],
+        serde_json::json!([b64url_encode(&grant.0)])
+    );
+    let moved = &preview["amends"][0]["grant_amend"];
+    assert_eq!(moved["grant"], b64url_encode(&grant.0));
+    assert_eq!(
+        moved["authority"]["authority"],
+        authority_set_to_json(&v2).unwrap()
+    );
+    assert_eq!(moved["named"], amend(&v2, 2)["grant_amend"]["named"]);
     let w = c
-        .meta_write("grant_amend", amend(&v2, 2), c.idp_anchor())
+        .meta_write("grant_amend", preview["amends"][0].clone(), c.idp_anchor())
         .await;
     assert_eq!(w.body["decision"], true, "{}", w.body);
     // INV-10, XI-4

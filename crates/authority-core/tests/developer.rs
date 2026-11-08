@@ -680,6 +680,20 @@ async fn a_role_move_is_previewed_and_never_applied() {
     let wider = core.change_role("clerk", 1, 2, NOW).await.unwrap().unwrap();
     assert_eq!(wider.relation, SetRelation::Widening);
     assert_eq!(wider.moves, [grant]);
+    // X20, §8.17.9.8
+    let amend = Payload::from_bytes(&wider.amends[0]).unwrap();
+    let Payload::GrantAmend {
+        grant: amended,
+        authority,
+        named,
+        ..
+    } = amend
+    else {
+        panic!("{amend:?}")
+    };
+    assert_eq!(amended, grant);
+    assert_eq!(authority.authority, role_set(&["read", "refund"], &[]));
+    assert_eq!(named.map(|(n, v, _)| (n, v)), Some(("clerk".to_owned(), 2)));
     assert_eq!(wider.holders.parties, 1);
     let refund: Vec<_> = wider
         .abilities
