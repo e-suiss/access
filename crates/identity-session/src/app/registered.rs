@@ -128,6 +128,28 @@ where
         notice: Notice,
         at_ms: u64,
     ) -> Result<(), SessionError> {
+        self.account_message(
+            tx,
+            subject,
+            Body::Notice {
+                notice,
+                at_ms,
+                until_ms: None,
+            },
+        )
+        .await
+    }
+
+    /// Queues `body` to the account's own address, as [`Self::account_notice`] does.
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub(crate) async fn account_message(
+        &self,
+        tx: &mut D::Tx,
+        subject: [u8; 16],
+        body: Body,
+    ) -> Result<(), SessionError> {
         let to = match tx.contact(subject).await? {
             Some((kind, value)) if kind == "email" => Address::Email(value),
             Some((kind, value)) if kind == "phone" => Address::Phone(value),
@@ -144,11 +166,7 @@ where
                 to,
                 locale: None,
                 valid_since_ms,
-                body: Body::Notice {
-                    notice,
-                    at_ms,
-                    until_ms: None,
-                },
+                body,
             },
         )
         .await

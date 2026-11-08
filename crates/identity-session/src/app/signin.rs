@@ -17,7 +17,7 @@ use access_identity_account::domain::signal::Signal;
 use access_identity_account::domain::throttle::{
     DAY_MS as THROTTLE_DAY_MS, Gate, HARD_LOCK_AT, KeyKind, KeyPolicy, KeyState, Penalty,
 };
-use access_identity_account::notify::message::{Address, Body, Message, OtpPurpose};
+use access_identity_account::notify::message::{Address, Body, Message, OtpPurpose, SignInMethod};
 use access_identity_account::ports::Entropy;
 use access_identity_webauthn::app::{AuthenticationOutcome, Identified};
 use access_identity_webauthn::domain::assurance::Binding;
@@ -1354,6 +1354,20 @@ where
         // F17, TN-103, OP-150 L2
         let unknown_device = self.policy.remember_device_days.is_some() && !marker;
         super::claims::signed_in(&mut tx, &l.state, &signed, unknown_device).await?;
+        // OP-148, §7.9.8, E42, SEC18
+        if unknown_device && matches!(l.state.purpose, Purpose::Login) {
+            let method = match l.state.factors.first().map(|f| f.method) {
+                Some(MethodClass::Passkey) => SignInMethod::Passkey,
+                Some(MethodClass::EmailOtp | MethodClass::Totp | MethodClass::RecoveryCode) => {
+                    SignInMethod::Otp
+                }
+                Some(MethodClass::MagicLink) => SignInMethod::MagicLink,
+                Some(MethodClass::Federated) => SignInMethod::Federated,
+                _ => SignInMethod::Password,
+            };
+            self.account_message(&mut tx, subject, Body::NewSignIn { at_ms: now, method })
+                .await?;
+        }
         if matches!(l.state.purpose, Purpose::Login) {
             self.sl2_signed_in(&mut tx, &l.state, subject, now, marker)
                 .await?;

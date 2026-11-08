@@ -1157,3 +1157,33 @@ async fn a_reset_intent_is_an_exercise_and_opens_a_rebind_window_once() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(audited(&c, "recovery.tap.issued").await.len(), 1);
 }
+
+// 4109, OP-148, §7.9.8, E42, TN-49, OP-153 m.3 (gg)
+#[tokio::test]
+async fn a_suspension_and_its_lifting_are_told_to_the_account() {
+    let c = console("status-notice", false).await;
+    let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
+    let kim = account(&c, "kim@example.com", true).await;
+    let key = ids
+        .encode(access_identity_account::app::SUBJECT_PREFIX, kim)
+        .unwrap();
+    let (status, body) = admin_write(
+        &c,
+        "suspendAccount",
+        Some(&key),
+        &format!("/admin/realms/acme/accounts/{key}/suspend"),
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let m = relayed(&c, kim, "relay.message.account_status.v1").await;
+    assert!(matches!(&m.to, Address::Email(v) if v == "kim@example.com"));
+    assert!(matches!(
+        m.body,
+        MessageBody::AccountStatus {
+            status: AccountStatus::Suspended,
+            ..
+        }
+    ));
+    assert!(m.valid_since_ms.is_some());
+}

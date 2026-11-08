@@ -925,6 +925,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             status_moved(&mut t, &named, subject, (from, to), &who)
                 .await
                 .map_err(account)?;
+            // OP-148, §7.9.8, E42, TN-49
+            self.status_notice(&mut t, p, subject, to).await?;
         }
         if let Change::AccountDelete(subject) = &p.change {
             // OP-153 m.3 (bb), TN-78
@@ -1600,6 +1602,61 @@ async fn recovery_policy(t: &mut TenantTx) -> Result<RecoveryPolicy, AdminError>
 }
 
 impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
+    /// Tells the account's own address that its status changed (`relay.message.account_status.v1`).
+    async fn status_notice(
+        &self,
+        t: &mut PgTx,
+        p: &Proposal,
+        subject: [u8; 16],
+        status: AccountStatus,
+    ) -> Result<(), AdminError> {
+        use access_identity_account::adapters::system::{SystemClock, SystemEntropy};
+        use access_identity_account::notify::message::{Address, Body, Message};
+        use access_identity_account::notify::notifier::OutboxNotifier;
+        use access_identity_account::notify::ports::Notifier as _;
+        let kek = self
+            .vault
+            .and_then(|v| v.realm_kek(p.tenant, p.realm))
+            .ok_or_else(|| AdminError::Unavailable(String::from("kek")))?;
+        let realm = access_identity_account::app::Realm {
+            tenant: p.tenant,
+            realm: p.realm,
+            kek: &*kek,
+            ids: self.ids,
+        };
+        let Some((kind, stored)) = t.0.contact(subject).await? else {
+            return Ok(());
+        };
+        let Some(value) =
+            access_identity_account::app::vault::reveal_with_kek(&mut t.0, &*kek, subject, &stored)
+                .await
+                .map_err(account)?
+        else {
+            return Ok(());
+        };
+        let to = if kind == "phone" {
+            Address::Phone(value)
+        } else {
+            Address::Email(value)
+        };
+        let valid_since_ms = mailbox_since(&mut t.0, subject, &to).await?;
+        let now = access_store::authority::server_time(self.app).await?;
+        OutboxNotifier::new(&realm, &SystemEntropy, &SystemClock)
+            .notify(
+                &mut t.0,
+                &Message {
+                    subject,
+                    to,
+                    locale: None,
+                    valid_since_ms,
+                    body: Body::AccountStatus { status, at_ms: now },
+                },
+            )
+            .await
+            .map_err(|_| AdminError::Unavailable(String::from("relay")))?;
+        Ok(())
+    }
+
     /// The token a committed `idp.account.reset_intent` or `idp.account.tap_issue` issues, in
     /// the transaction that applies it (TN-61, TN-62): stored by digest only and bound to its
     /// Exercise. A reset intent goes to the account's own registered address, never to a

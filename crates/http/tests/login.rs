@@ -3233,6 +3233,24 @@ async fn a_legacy_idp_outage_fails_the_login_closed() {
     );
 }
 
+// 4109, OP-148, §7.9.8, E42, SEC18
+#[tokio::test]
+async fn a_sign_in_from_an_unknown_device_is_told_to_the_account() {
+    let e = env(42, "ns-a", AuthPolicy::DEFAULT).await;
+    let ann = e.account("ns@example.com").await;
+    let before = e.sent().len();
+    let mut b = e.browser("ns1");
+    assert_eq!(b.sign_in("ns@example.com").await.step(), "complete");
+    let sent = e.sent();
+    let told: Vec<_> = sent[before..]
+        .iter()
+        .filter(|s| s.0 == "relay.message.new_sign_in.v1")
+        .collect();
+    assert_eq!(told.len(), 1, "{sent:?}");
+    assert_eq!(told[0].2, ann);
+    assert!(told[0].1.is_some());
+}
+
 /// A resolver with fixed answers (OP-153 m.11 (f)).
 struct FakeDns;
 
