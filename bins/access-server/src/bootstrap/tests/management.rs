@@ -1009,3 +1009,5 @@ async fn the_audit_stream_is_served_in_three_renderings_and_each_read_is_audited
     assert_eq!(reads.len(), before + 3, "one audit.read per answered query");
     assert!(reads.iter().all(|r| r.domain == Some(domain.0)));
 }
+
+mod writes;

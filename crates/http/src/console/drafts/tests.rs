@@ -1,9 +1,91 @@
-#![allow(clippy::unwrap_used, reason = "test")]
+#![allow(clippy::unwrap_used, clippy::indexing_slicing, reason = "test")]
 
 use access_internal_api::idp::IdpAction;
 use access_kernel::json::b64url_encode;
 use access_kernel::meta::core_action;
 use serde_json::json;
+
+fn revoke(grant: u8) -> Value {
+    json!({ "grant_revoke": { "grant": b64url_encode(&[grant; 16]) } })
+}
+
+// OP-151 m.20 (b), OP-152 m.7 (d), L1-ADP-17, TN-110
+#[test]
+fn a_meta_write_is_drafted_with_its_payload_for_the_commit() {
+    let ask_meta = json!({
+        "action": { "namespace": "access", "name": "grant_revoke", "major": 1 },
+        "payload": revoke(5),
+        "mode": "commit",
+    });
+    let d = ask(&ask_meta).unwrap();
+    let payload = Payload::GrantRevoke { grant: Id([5; 16]) };
+    assert_eq!(d.payload.as_deref(), Some(&payload.to_bytes().unwrap()[..]));
+    assert_eq!(
+        d.envelope.opaque[meta::PAYLOAD_PARAM],
+        payload.digest().unwrap()
+    );
+    assert_eq!(d.envelope.resources, [object_resource(&payload, "acme")]);
+    assert_eq!(d.envelope.resources[0].namespace, "access.grant");
+    assert_eq!(d.probe, None);
+    let answer = d.answer(&Digest([3; 32]));
+    let body = json!({
+        "subject": { "type": "access_party", "id": b64url_encode(&[1; 16]) },
+        "action": { "name": "grant_revoke" },
+        "resource": { "type": "access.grant", "id": d.envelope.resources[0].path[0] },
+        "context": {
+            "domain": b64url_encode(&[3; 32]),
+            "mode": "commit",
+            "nonce": b64url_encode(&[7; 16]),
+            "intent": answer["intent"],
+            "payload": answer["payload"],
+            "basis": { "anchor": b64url_encode(&[2; 16]) },
+            "capacity": "own",
+        },
+    });
+    let decoded = crate::adp::domain::decode(body.to_string().as_bytes(), 1 << 16).unwrap();
+    assert_eq!(decoded.request.intent, d.envelope);
+    assert_eq!(decoded.request.payload, Some(payload));
+}
+
+// OP-151 m.20 (b), L1-ADP-17
+#[test]
+fn a_payload_must_be_the_actions_own_and_a_console_write() {
+    let base = |name: &str, payload: Value| {
+        json!({
+            "action": { "namespace": "access", "name": name, "major": 1 },
+            "payload": payload,
+            "mode": "commit",
+        })
+    };
+    assert_eq!(
+        ask(&base("grant_amend", revoke(5))),
+        Err(DraftError::Payload)
+    );
+    assert_eq!(
+        ask(&base("grant_revoke", json!({ "grant_revoke": {} }))),
+        Err(DraftError::Payload)
+    );
+    let anchor =
+        json!({ "anchor_retire": { "anchor": b64url_encode(&[1; 16]), "disposition": [] } });
+    assert_eq!(
+        ask(&base("anchor_retire", anchor)),
+        Err(DraftError::Payload)
+    );
+    let mut idp = wanted("idp.account", "suspend", "idp", &["acme"], "commit");
+    idp["payload"] = revoke(5);
+    assert_eq!(ask(&idp), Err(DraftError::Payload));
+    let mut elsewhere = base("grant_revoke", revoke(5));
+    elsewhere["resources"] = json!([{ "namespace": "access.grant", "path": ["0606"] }]);
+    assert_eq!(ask(&elsewhere), Err(DraftError::Resource));
+    let no_payload = wanted(
+        "access",
+        "grant_revoke",
+        "access.domain",
+        &["acme"],
+        "commit",
+    );
+    assert_eq!(ask(&no_payload), Err(DraftError::Mode));
+}
 
 use super::*;
 use crate::adp::domain::decode_eligibility;

@@ -3,6 +3,10 @@
 //! into a canonical intent envelope and its ADP wire JSON. Only a catalogued action of this build
 //! is drafted, with its pinned schema digest, on the session's own realm, for the validity the
 //! write path takes; anything else is refused (fail closed). Pure: the caller gives the clock.
+//!
+//! A meta-action write carries its payload in the JSON form of L1-ADP-17 (OP-151 m.20 (b),
+//! OP-152 m.7 (d)): the BFF drafts its exact dCBOR, puts the payload digest in the intent and
+//! answers the bytes for the commit body; the browser signs, and the BFF only forwards.
 
 use std::collections::BTreeMap;
 
@@ -12,8 +16,8 @@ use access_kernel::combinator::Mode;
 use access_kernel::digest::Digest;
 use access_kernel::intent::{ContextRefs, IntentEnvelope, ParamValue};
 use access_kernel::json::b64url_encode;
-use access_kernel::meta::{self, core_action};
-use access_kernel::model::{ActionRef, ResourceRef, Window};
+use access_kernel::meta::{self, Payload, core_action};
+use access_kernel::model::{ActionRef, Id, ResourceRef, Window};
 use serde_json::{Map, Value, json};
 
 /// The core read action (§9.13.7).
@@ -45,6 +49,20 @@ pub const VALID_BEFORE_MS: u64 = 60_000;
 /// How long a drafted intent stays valid (OP-151 m.11 (a), PD 10 minutes).
 pub const VALID_FOR_MS: u64 = 10 * 60_000;
 
+/// The meta-actions the console writes (OP-152 m.7 (d)): role define and version, Grant issue,
+/// amend and revoke, Acceptance amend, Instance terminate, departure and policy set.
+pub const META_WRITES: [&str; 9] = [
+    "authority_set_define",
+    "grant_issue",
+    "grant_amend",
+    "grant_revoke",
+    "acceptance_amend",
+    "instance_terminate",
+    "party_depart",
+    "policy_set",
+    "policy_retire",
+];
+
 /// Longest segment of a resource path.
 const MAX_SEGMENT: usize = 128;
 
@@ -69,6 +87,9 @@ pub enum DraftError {
     /// The mode is not one the action may be drafted in.
     #[error("mode not allowed")]
     Mode,
+    /// The payload is not the JSON form of the action's meta payload, or names another action.
+    #[error("payload not allowed")]
+    Payload,
 }
 
 impl DraftError {
@@ -81,6 +102,7 @@ impl DraftError {
             Self::Resource => "intent-resource-not-allowed",
             Self::Params => "intent-params-not-allowed",
             Self::Mode => "intent-mode-not-allowed",
+            Self::Payload => "intent-payload-not-allowed",
         }
     }
 }
@@ -119,6 +141,8 @@ pub struct Drafted {
     pub bytes: Vec<u8>,
     /// For a `check`, the root an eligibility probe of it names.
     pub probe: Option<ProbeRoot>,
+    /// The meta payload's canonical dCBOR, whose digest is the intent's `opaque.payload`.
+    pub payload: Option<Vec<u8>>,
 }
 
 impl Drafted {
@@ -128,6 +152,9 @@ impl Drafted {
     pub fn answer(&self, domain: &Digest) -> Value {
         let mut out =
             json!({ "intent": wire(&self.envelope), "envelope": b64url_encode(&self.bytes) });
+        if let (Some(p), Value::Object(o)) = (&self.payload, &mut out) {
+            o.insert(String::from("payload"), Value::from(b64url_encode(p)));
+        }
         if let (Some(root), Value::Object(o)) = (self.probe, &mut out) {
             o.insert(
                 String::from("probe"),
@@ -271,8 +298,9 @@ fn mode(v: Option<&Value>) -> Result<Mode, DraftError> {
 
 /// Drafts the intent `body` asks for in the session's realm `realm` at trusted time `now_ms`.
 ///
-/// A core meta-action carries its payload's digest, which a draft has none of, so it is drafted
-/// for `check` only; the read is never committed; `idp.*` actions and the export may be either.
+/// A core meta-action carries its payload's digest: without `payload` it is drafted for `check`
+/// only (an eligibility probe), with one of [`META_WRITES`] it may be committed; the read is
+/// never committed; `idp.*` actions and the export may be either.
 ///
 /// # Errors
 /// [`DraftError`].
@@ -302,6 +330,40 @@ fn tenant_resource(namespace: &str, _realm: &str) -> bool {
         && !namespace.starts_with("idp.")
 }
 
+/// The payload of a meta write and the intent's resources: named, or the payload's object
+/// when only the payload is given (OP-151 m.20 (b), L1-ADP-17).
+fn payload_and_resources(
+    o: &Map<String, Value>,
+    family: Family,
+    action: &ActionRef,
+    realm: &str,
+) -> Result<(Option<Payload>, Vec<ResourceRef>), DraftError> {
+    let payload = match o.get("payload") {
+        None => None,
+        Some(j) if family == Family::Meta && META_WRITES.contains(&action.name.as_str()) => {
+            let p = crate::adp::payload::from_json(j).map_err(|_| DraftError::Payload)?;
+            if p.action() != action.name {
+                return Err(DraftError::Payload);
+            }
+            Some(p)
+        }
+        Some(_) => return Err(DraftError::Payload),
+    };
+    let resources = match (o.get("resources"), &payload) {
+        (None, Some(p)) => vec![object_resource(p, realm)],
+        (Some(r), Some(p)) => {
+            let r = resources(r)?;
+            if r != [object_resource(p, realm)] {
+                return Err(DraftError::Resource);
+            }
+            r
+        }
+        (Some(r), None) => resources(r)?,
+        (None, None) => return Err(DraftError::Malformed),
+    };
+    Ok((payload, resources))
+}
+
 /// [`draft`], and when the action is not this build's, the domain's accepted tenant action
 /// `tenant` with its pinned schema digest, for a `check` on a resource of its namespace only
 /// (OP-151 m.20 (a): the decision lab drafts the domain's accepted tenant actions).
@@ -316,9 +378,12 @@ pub fn draft_with(
 ) -> Result<Drafted, DraftError> {
     let root: Value = serde_json::from_slice(body).map_err(|_| DraftError::Malformed)?;
     let o = root.as_object().ok_or(DraftError::Malformed)?;
-    if o.keys()
-        .any(|k| !matches!(k.as_str(), "action" | "resources" | "params" | "mode"))
-    {
+    if o.keys().any(|k| {
+        !matches!(
+            k.as_str(),
+            "action" | "resources" | "params" | "mode" | "payload"
+        )
+    }) {
         return Err(DraftError::Malformed);
     }
     let a = o
@@ -346,7 +411,7 @@ pub fn draft_with(
                 .map(|t| (t.clone(), Family::Tenant))
         })
         .ok_or(DraftError::Action)?;
-    let resources = resources(o.get("resources").ok_or(DraftError::Malformed)?)?;
+    let (payload, resources) = payload_and_resources(o, family, &action, realm)?;
     if !allowed(family, &resources, realm)
         || (family == Family::Tenant
             && !resources.iter().all(|r| {
@@ -357,15 +422,26 @@ pub fn draft_with(
         return Err(DraftError::Resource);
     }
     let params = params(family, o.get("params"))?;
-    let committable = matches!(family, Family::Idp | Family::Export);
+    let committable = matches!(family, Family::Idp | Family::Export) || payload.is_some();
     if mode == Mode::Commit && !committable {
         return Err(DraftError::Mode);
     }
+    let payload_bytes = payload
+        .as_ref()
+        .map(|p| p.to_bytes().map_err(|_| DraftError::Payload))
+        .transpose()?;
+    let opaque = match &payload {
+        Some(p) => BTreeMap::from([(
+            String::from(meta::PAYLOAD_PARAM),
+            p.digest().map_err(|_| DraftError::Payload)?,
+        )]),
+        None => BTreeMap::new(),
+    };
     let envelope = IntentEnvelope {
         action,
         resources,
         params,
-        opaque: BTreeMap::new(),
+        opaque,
         recipient: None,
         purpose: None,
         context: ContextRefs::default(),
@@ -376,7 +452,7 @@ pub fn draft_with(
     };
     let bytes = envelope.to_bytes().map_err(|_| DraftError::Malformed)?;
     // PI-7
-    let probe = (mode == Mode::Check).then_some(if family == Family::Idp {
+    let probe = (mode == Mode::Check && payload.is_none()).then_some(if family == Family::Idp {
         ProbeRoot::Idp
     } else {
         ProbeRoot::Meta
@@ -386,8 +462,46 @@ pub fn draft_with(
             envelope,
             bytes,
             probe,
+            payload: payload_bytes,
         }),
         _ => Err(DraftError::Action),
+    }
+}
+
+fn hex(id: &Id) -> String {
+    id.0.iter().fold(String::with_capacity(32), |mut s, b| {
+        use std::fmt::Write as _;
+        let _ = write!(s, "{b:02x}");
+        s
+    })
+}
+
+/// The object a console meta write is about, as its intent's one resource: the Grant, role,
+/// Acceptance, Instance, Party or policy it names, or the session's realm in `access.domain`
+/// for a new Grant or policy.
+#[must_use]
+pub fn object_resource(p: &Payload, realm: &str) -> ResourceRef {
+    let (namespace, segment) = match p {
+        Payload::AuthoritySetDefine { name, .. } => ("access.role", name.clone()),
+        Payload::GrantAmend { grant, .. }
+        | Payload::GrantRevoke { grant }
+        | Payload::GrantRenounce { grant } => ("access.grant", hex(grant)),
+        Payload::AcceptanceAmend { acceptance, .. } | Payload::AcceptanceRevoke { acceptance } => {
+            ("access.acceptance", hex(acceptance))
+        }
+        Payload::InstanceTerminate { instance } => ("access.instance", hex(instance)),
+        Payload::PartyDepart { party, .. } => ("access.party", hex(party)),
+        Payload::PolicySet {
+            policy: Some(policy),
+            ..
+        }
+        | Payload::PolicyRetire { policy } => ("access.policy", hex(policy)),
+        _ => ("access.domain", realm.to_owned()),
+    };
+    ResourceRef {
+        namespace: String::from(namespace),
+        path: vec![segment],
+        incarnation: 0,
     }
 }
 
@@ -408,7 +522,12 @@ pub fn wire(e: &IntentEnvelope) -> Value {
         .iter()
         .map(|(k, v)| (k.clone(), param_json(v)))
         .collect();
-    json!({
+    let opaque: Map<String, Value> = e
+        .opaque
+        .iter()
+        .map(|(k, d)| (k.clone(), Value::from(b64url_encode(&d.0))))
+        .collect();
+    let mut out = json!({
         "action": {
             "namespace": e.action.namespace,
             "name": e.action.name,
@@ -422,7 +541,11 @@ pub fn wire(e: &IntentEnvelope) -> Value {
         })).collect::<Vec<_>>(),
         "params": params,
         "validity": { "from": e.validity.from, "until": e.validity.until },
-    })
+    });
+    if let (false, Value::Object(o)) = (opaque.is_empty(), &mut out) {
+        o.insert(String::from("opaque"), Value::Object(opaque));
+    }
+    out
 }
 
 #[cfg(test)]
