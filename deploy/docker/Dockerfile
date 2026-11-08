@@ -4,6 +4,8 @@ ARG RUST_IMAGE=rust@sha256:24e632c09342c20abf8312cf4f61430a911c01ed3a5e4c02b8729
 ARG RUNTIME_IMAGE=gcr.io/distroless/cc-debian13@sha256:e792ab3d241a468a4fd7519ddbbebe66b49b5f365771716ea688ad40b6c6f1c2
 # trixie-slim, the release the Rust image builds on
 ARG LOCAL_IMAGE=debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
+# node:24.21.0-trixie-slim, the Node release CI builds the web packages with
+ARG NODE_IMAGE=node@sha256:173f125896c3b47ddf056734c7ea789d04595a6a08769a8f78e0df642781fb66
 
 FROM ${RUST_IMAGE} AS chef
 WORKDIR /src
@@ -31,6 +33,27 @@ RUN cargo auditable build --release --locked \
  && scripts/checksec.sh target/release/access-server target/release/access-signer \
       target/release/access-identity-signer target/release/access-local-client target/release/access-cli
 
+# OP-116 m.6: the Kernel's Wasm build the TypeScript SDK loads, as `just wasm` makes it
+FROM chef AS wasm
+RUN rustup target add wasm32-unknown-unknown \
+ && cargo install --locked wasm-bindgen-cli --version 0.2.129
+COPY . .
+RUN cargo build --release --locked --target wasm32-unknown-unknown -p access-kernel-wasm \
+ && wasm-bindgen --target web --out-dir sdks/typescript/wasm \
+      target/wasm32-unknown-unknown/release/access_kernel_wasm.wasm
+
+# TN-128, OP-146 m.12 (f): the console and the hosted login, built from their lockfiles without
+# install scripts (OP-97); the server reads each dist directory once before its lockdown
+FROM ${NODE_IMAGE} AS web
+WORKDIR /src
+COPY sdks/typescript sdks/typescript
+COPY --from=wasm /src/sdks/typescript/wasm sdks/typescript/wasm
+COPY web/console web/console
+COPY web/login web/login
+RUN cd sdks/typescript && npm ci --ignore-scripts \
+ && cd /src/web/console && npm ci --ignore-scripts && npm run build \
+ && cd /src/web/login && npm ci --ignore-scripts && npm run build
+
 # OP-69, CR-28: the same binaries with SoftHSM as the local PKCS#11 token, provisioning for a
 # local deployment (deploy/compose/access.yaml), the database administrator's setup and the
 # headless client of OP-149 m.26 (b), (c). Not a production image: production runs the
@@ -56,6 +79,8 @@ COPY --chmod=0755 deploy/compose/access/init.sh /usr/local/bin/access-local-init
 COPY --chmod=0644 deploy/compose/access/*.toml deploy/compose/access/softhsm2.conf /etc/access/local/
 COPY --chmod=0644 crates/store/bootstrap/roles.sql crates/store/bootstrap/database.sql /usr/share/access/postgres/
 COPY --chmod=0755 deploy/compose/access/postgres-init.sh /usr/share/access/postgres/
+COPY --from=web /src/web/console/dist /usr/share/access/console
+COPY --from=web /src/web/login/dist /usr/share/access/login
 LABEL org.opencontainers.image.title="access-local" \
       org.opencontainers.image.source="https://github.com/e-suiss/access" \
       org.opencontainers.image.licenses="Apache-2.0"
@@ -70,6 +95,8 @@ LABEL org.opencontainers.image.title="access-server" \
       org.opencontainers.image.licenses="Apache-2.0"
 COPY --from=builder /src/target/release/access-server /src/target/release/access-signer \
      /src/target/release/access-identity-signer /src/target/release/access-cli /usr/local/bin/
+COPY --from=web /src/web/console/dist /usr/share/access/console
+COPY --from=web /src/web/login/dist /usr/share/access/login
 # §14.5, RAUTHY-008
 USER 65532:65532
 EXPOSE 8443

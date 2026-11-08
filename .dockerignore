@@ -13,6 +13,12 @@ node_modules
 **/dist
 web
 sdks/typescript
+!web/console
+!web/login
+!sdks/typescript
+**/node_modules
+**/dist
+sdks/typescript/wasm
 .env
 .env.*
 *.pem
