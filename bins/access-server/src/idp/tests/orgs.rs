@@ -459,7 +459,7 @@ async fn home_realm_discovery_needs_a_verified_uncontested_domain() {
     t.insert_domain_claim(other, "acme.example", "dns_txt", &[5; 32])
         .await
         .unwrap();
-    assert!(t.hrd_domains(org).await.unwrap().is_empty());
+    assert_eq!(t.hrd_domains(org).await.unwrap(), Vec::<String>::new());
     t.commit().await.unwrap();
     realm_events(&w, at.1, "event.organization.updated", 1).await;
     assert_eq!(
