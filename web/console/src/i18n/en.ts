@@ -332,7 +332,7 @@ export const en = {
     "Your iOS app offers another social sign-in without Sign in with Apple. The App Store asks for Sign in with Apple next to it: enable Apple too.",
   socialClientChanged:
     "The client id changed on {at}: the provider names every user by a new identifier, so earlier sign-ins no longer match.",
-  socialAppleTransfer:
+  socialAppleWindow:
     "Apple moves existing users over to the new client until {until}; after that they can't be moved.",
   upstreamLinkTitle: "Link a provider's user to an account",
   upstreamLinkIntro:

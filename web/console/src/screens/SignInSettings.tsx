@@ -275,16 +275,10 @@ interface Socials {
 
 /** One social warning as text; a warning never refuses anything (TN-87, IDP-31 (5)). */
 function socialWarning(w: SocialWarning): string {
-  switch (w.code) {
-    case "apple-sign-in-recommended":
-      return t("socialAppleRecommended");
-    case "social-client-id-changed":
-      return t("socialClientChanged", { at: w.at ?? "" });
-    case "apple-transfer-window":
-      return t("socialAppleTransfer", { until: w.until ?? "" });
-    default:
-      return w.code;
-  }
+  if (w.until !== undefined) return t("socialAppleWindow", { until: w.until });
+  if (w.at !== undefined) return t("socialClientChanged", { at: w.at });
+  if (w.code === "apple-sign-in-recommended") return t("socialAppleRecommended");
+  return w.code;
 }
 
 /** IDP-31, TN-87, Ek B 3572, 3655: the social presets and their warnings. */

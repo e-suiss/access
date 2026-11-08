@@ -235,7 +235,7 @@ impl<E: Env> OAuth<E> {
         let Some(client) = client.and_then(crate::domain::client::Client::from_row) else {
             return Ok(unauthorized("invalid_token"));
         };
-        // §10.4.6, OIDC Core §5.3.2
+        // §10.4.6
         let mut body = self
             .released(
                 realm,

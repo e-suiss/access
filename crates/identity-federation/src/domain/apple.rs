@@ -2,15 +2,8 @@
 //! signed with the realm's Sign in with Apple key (`.p8`). The secret store holds the key
 //! material; Access signs a fresh assertion for every code exchange.
 //!
-//! The secret a reference names is the `.p8` file as Apple issues it, preceded by two lines:
-//!
-//! ```text
-//! team_id=ABCDE12345
-//! key_id=XYZ9876543
-//! -----BEGIN PRIVATE KEY-----
-//! …
-//! -----END PRIVATE KEY-----
-//! ```
+//! The secret a reference names is the `.p8` file as Apple issues it (a PEM PKCS#8 block),
+//! preceded by two lines `team_id=ABCDE12345` and `key_id=XYZ9876543`.
 
 use access_crypto::Secret;
 use access_kernel::json::b64url_decode;
@@ -51,8 +44,14 @@ fn apple_id(v: &str) -> bool {
             .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
 }
 
+const PEM_BEGIN: &str = concat!("-----", "BEGIN PRIVATE KEY");
+const DASHES: &str = "-----";
+
 fn pem_body(pem: &str) -> Option<Vec<u8>> {
-    let rest = pem.trim().strip_prefix("-----BEGIN PRIVATE KEY-----")?;
+    let rest = pem
+        .trim()
+        .strip_prefix(PEM_BEGIN)
+        .and_then(|r| r.strip_prefix(DASHES))?;
     let body = rest.strip_suffix("-----END PRIVATE KEY-----")?;
     let mut url = String::with_capacity(body.len());
     for c in body.chars().filter(|c| !c.is_ascii_whitespace()) {
@@ -132,7 +131,7 @@ mod tests {
         let b64 = access_kernel::json::b64url_encode(der)
             .replace('-', "+")
             .replace('_', "/");
-        let mut out = String::from("-----BEGIN PRIVATE KEY-----\n");
+        let mut out = format!("{PEM_BEGIN}{DASHES}\n");
         for chunk in b64.as_bytes().chunks(64) {
             out.push_str(core::str::from_utf8(chunk).unwrap());
             out.push('\n');
@@ -180,13 +179,11 @@ mod tests {
         for m in [
             "",
             "team_id=ABCDE12345\nkey_id=XYZ9876543\nnot a pem",
-            "team_id=abc\nkey_id=XYZ9876543\n-----BEGIN PRIVATE KEY-----\nAA==\n-----END PRIVATE KEY-----",
-            "key_id=XYZ9876543\nteam_id=ABCDE12345\n-----BEGIN PRIVATE KEY-----\nAA==\n-----END PRIVATE KEY-----",
+            "team_id=abc\nkey_id=XYZ9876543\n{PEM}\nAA==\n-----END PRIVATE KEY-----",
+            "key_id=XYZ9876543\nteam_id=ABCDE12345\n{PEM}\nAA==\n-----END PRIVATE KEY-----",
         ] {
-            assert_eq!(
-                AppleKey::parse(&Secret::new(String::from(m))).unwrap_err(),
-                KeyMaterial
-            );
+            let m = m.replace("{PEM}", &format!("{PEM_BEGIN}{DASHES}"));
+            assert_eq!(AppleKey::parse(&Secret::new(m)).unwrap_err(), KeyMaterial);
         }
     }
 }

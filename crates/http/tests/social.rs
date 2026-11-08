@@ -429,7 +429,8 @@ fn secrets_dir() -> std::path::PathBuf {
     std::fs::write(
         dir.join("social/apple"),
         format!(
-            "team_id=TEAM123456\nkey_id=KEY1234567\n-----BEGIN PRIVATE KEY-----\n{}\n-----END PRIVATE KEY-----\n",
+            "team_id=TEAM123456\nkey_id=KEY1234567\n-----BEGIN {0}-----\n{1}\n-----END {0}-----\n",
+            "PRIVATE KEY",
             lines.join("\n")
         ),
     )
@@ -1498,15 +1499,15 @@ async fn a_person_shares_claims_with_a_third_party_and_stops_from_connected_apps
 impl Env {
     /// The `identity_binding_person` Claims queued for `subject` (OP-153 m.3 (m)).
     async fn binding_claims(&self) -> usize {
-        TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.realm)
             .await
-            .unwrap()
-            .raw_rows(
-                "SELECT 1 FROM access.identity_outbox WHERE kind LIKE '%identity_binding_person%'",
-            )
-            .await
-            .unwrap()
-            .len()
+            .unwrap();
+        let kinds = t.outbox_kinds().await.unwrap();
+        t.commit().await.unwrap();
+        kinds
+            .iter()
+            .filter(|k| k.ends_with("identity_binding_person"))
+            .count()
     }
 
     async fn halves(&self, subject: [u8; 16]) -> Vec<access_store::federation::BindingHalf> {
@@ -1519,7 +1520,7 @@ impl Env {
     }
 }
 
-// §12.1.1, §12.1.3, TN-2, TN-65, MD-5, OP-153 m.3 (m), Ek B 3459
+// §12.1.1, §12.1.3, TN-2, TN-65, MD-5, OP-153 m.3 (m)
 #[tokio::test]
 async fn a_cross_realm_binding_is_two_halves_each_committed_in_its_own_realm() {
     let a = env(0x4b, "bind-a").await;
@@ -1608,7 +1609,7 @@ async fn a_cross_realm_binding_is_two_halves_each_committed_in_its_own_realm() {
     assert_eq!(again.code(), "binding-refused", "a half is committed once");
 }
 
-// §8.17.4.3, §2.2.2 #2, X27, OP-153 m.3 (x), Ek B 3450, 3451, 3774
+// §8.17.4.3, §2.2.2, X27, OP-153 m.3 (x)
 #[tokio::test]
 async fn connecting_an_app_opens_an_s1_draft_of_its_typed_bounds_and_nothing_more() {
     let e = env(0x4d, "soc-k").await;

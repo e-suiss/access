@@ -256,7 +256,7 @@ fn the_exercise_must_say_what_the_request_says() {
     assert!(!within(&more, &details));
 }
 
-// §2.2.2 #2, X27, OP-153 m.3 (x)
+// §2.2.2, X27, OP-153 m.3 (x)
 #[test]
 fn a_connect_draft_is_typed_bounds_only_and_an_intent_is_not_a_delegation() {
     let (kind, details) = parse_details(

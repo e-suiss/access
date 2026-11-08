@@ -2221,7 +2221,7 @@ impl World {
     }
 }
 
-// OP-148, §10.4.6, OIDC Core §5.5, IDP-31 (3), OP-153 m.3 (l)
+// OP-148, §10.4.6, IDP-31, OP-153 m.3 (l)
 #[tokio::test]
 async fn the_claims_parameter_releases_only_what_the_account_holds_honestly() {
     let w = world().await;
@@ -2268,7 +2268,7 @@ async fn the_claims_parameter_releases_only_what_the_account_holds_honestly() {
     assert_eq!(query(&location(&r), "error"), "invalid_request");
 }
 
-// IDP-31 (3), TN-66
+// IDP-31, TN-66
 #[tokio::test]
 async fn an_address_the_account_never_proved_is_not_released() {
     let w = world().await;
@@ -2280,7 +2280,7 @@ async fn an_address_the_account_never_proved_is_not_released() {
     assert!(info.get("email").is_none());
 }
 
-// OP-153 m.3 (z), OIDC Core §3.1.2.6
+// OP-153 m.3 (z)
 #[tokio::test]
 async fn a_third_party_asks_before_it_receives_claims_and_stopping_ends_the_release() {
     let w = world().await;

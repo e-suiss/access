@@ -339,7 +339,7 @@ export const tr: Record<Key, string> = {
     "iOS uygulamanız Apple ile Giriş olmadan başka bir sosyal giriş sunuyor. App Store bunun yanında Apple ile Giriş ister: Apple'ı da açın.",
   socialClientChanged:
     "İstemci kimliği {at} tarihinde değişti: sağlayıcı her kullanıcıyı yeni bir kimlikle adlandırır, eski girişler artık eşleşmez.",
-  socialAppleTransfer:
+  socialAppleWindow:
     "Apple mevcut kullanıcıları {until} tarihine kadar yeni istemciye taşır; sonra taşınamazlar.",
   upstreamLinkTitle: "Sağlayıcıdaki kullanıcıyı bir hesaba bağla",
   upstreamLinkIntro:
