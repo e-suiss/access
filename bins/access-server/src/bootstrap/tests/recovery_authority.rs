@@ -733,3 +733,317 @@ async fn recovery_is_tightened_after_an_rp_id_change() {
         .unwrap();
     assert!(after >= now() + DAY_MS - 60_000, "{after}");
 }
+
+fn start_body(email: &str, method: &str) -> serde_json::Value {
+    serde_json::json!({"identifier": email, "method": method})
+}
+
+// TN-52, TN-59, TN-61, OP-153 m.3 (d), (gg)
+// TN-52, Ek B 3538, 3539, 3969
+#[tokio::test]
+async fn recovery_starts_only_with_the_nist_classes_and_registered_codes_are_spent_one_by_one() {
+    let c = console("recovery-classes", false).await;
+    let sent = Recording::default();
+    let app = super::recovery::hosted(&c, sent.clone());
+    let cara = account(&c, "cara@example.com", true).await;
+
+    // TN-52
+    for method in [
+        "registered_code",
+        "sent_code",
+        "recovery_contact",
+        "second_authenticator",
+    ] {
+        let mut p = Page::default();
+        let r = p
+            .call(
+                &app,
+                &Method::POST,
+                "/v1/recovery",
+                Some(start_body("nobody@example.com", method)),
+            )
+            .await;
+        assert_eq!(r.status, StatusCode::CREATED, "{method}: {}", r.json);
+    }
+    for method in [
+        "identity_reproofing",
+        "reset_intent",
+        "temporary_access_pass",
+    ] {
+        let mut p = Page::default();
+        let r = p
+            .call(
+                &app,
+                &Method::POST,
+                "/v1/recovery",
+                Some(start_body("nobody@example.com", method)),
+            )
+            .await;
+        assert_eq!(r.status, StatusCode::BAD_REQUEST, "{method}: {}", r.json);
+    }
+
+    // TN-59
+    let mut me = Page::default();
+    me.jar.insert(
+        String::from("__Host-access-session"),
+        session(&c, cara).await,
+    );
+    let codes = me
+        .call(&app, &Method::POST, "/v1/account/recovery-codes", None)
+        .await;
+    let codes: Vec<String> = codes.json["recovery_codes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(codes.len(), 10);
+    for code in &codes {
+        let raw: String = code.chars().filter(char::is_ascii_alphanumeric).collect();
+        // TN-59
+        assert_eq!(raw.len(), 16, "{code}");
+    }
+    assert!(
+        sent.sent()
+            .iter()
+            .any(|s| s.kind == "relay.message.recovery_codes_regenerated.v1"),
+        "regeneration is notified"
+    );
+    // TN-59
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+        .await
+        .unwrap();
+    let stored = t.credentials(cara, "recovery_code").await.unwrap();
+    t.commit().await.unwrap();
+    assert_eq!(stored.len(), 10);
+    for s in &stored {
+        for code in &codes {
+            let raw: String = code.chars().filter(char::is_ascii_alphanumeric).collect();
+            assert!(
+                !s.sealed
+                    .ciphertext
+                    .windows(raw.len())
+                    .any(|w| w == raw.as_bytes()),
+                "a code is never kept in the clear"
+            );
+        }
+    }
+
+    // TN-59
+    let mut page = Page::default();
+    let started = page
+        .call(
+            &app,
+            &Method::POST,
+            "/v1/recovery",
+            Some(start_body("cara@example.com", "registered_code")),
+        )
+        .await;
+    let path = format!("/v1/recovery/{}", started.json["attempt"].as_str().unwrap());
+    let used = page
+        .call(
+            &app,
+            &Method::POST,
+            &path,
+            Some(serde_json::json!({"code": codes[0]})),
+        )
+        .await;
+    assert_eq!(used.status, StatusCode::OK, "{}", used.json);
+    let replacement = used.json["replacement_code"].as_str().unwrap().to_owned();
+    assert!(!codes.contains(&replacement));
+    let mut again = Page::default();
+    let second = again
+        .call(
+            &app,
+            &Method::POST,
+            "/v1/recovery",
+            Some(start_body("cara@example.com", "registered_code")),
+        )
+        .await;
+    let path = format!("/v1/recovery/{}", second.json["attempt"].as_str().unwrap());
+    let other = again
+        .call(
+            &app,
+            &Method::POST,
+            &path,
+            Some(serde_json::json!({"code": codes[1]})),
+        )
+        .await;
+    assert_eq!(other.status, StatusCode::OK, "{}", other.json);
+    let mut third = Page::default();
+    let reuse = third
+        .call(
+            &app,
+            &Method::POST,
+            "/v1/recovery",
+            Some(start_body("cara@example.com", "registered_code")),
+        )
+        .await;
+    let path = format!("/v1/recovery/{}", reuse.json["attempt"].as_str().unwrap());
+    let reused = third
+        .call(
+            &app,
+            &Method::POST,
+            &path,
+            Some(serde_json::json!({"code": codes[0]})),
+        )
+        .await;
+    assert_eq!(reused.status, StatusCode::UNAUTHORIZED, "{}", reused.json);
+}
+
+// TN-54, OP-153 m.3 (d), CR-40, (gg), Ek B 3544
+#[tokio::test]
+async fn starting_recoveries_never_locks_the_account_out() {
+    let c = console("recovery-dos", false).await;
+    let sent = Recording::default();
+    let app = super::recovery::hosted(&c, sent.clone());
+    let dina = account(&c, "dina@example.com", true).await;
+    let mut me = Page::default();
+    me.jar.insert(
+        String::from("__Host-access-session"),
+        session(&c, dina).await,
+    );
+    let setup = me
+        .call(
+            &app,
+            &Method::PUT,
+            "/v1/account/recovery-contacts",
+            Some(serde_json::json!({"recovery_email": "dina.backup@example.net"})),
+        )
+        .await;
+    assert_eq!(setup.status, StatusCode::OK, "{}", setup.json);
+    let mut answers = Vec::new();
+    for _ in 0..5 {
+        let mut p = Page::default();
+        let r = p
+            .call(
+                &app,
+                &Method::POST,
+                "/v1/recovery",
+                Some(start_body("dina@example.com", "sent_code")),
+            )
+            .await;
+        answers.push(r.status);
+    }
+    // CR-40
+    assert!(
+        answers.iter().all(|s| *s == StatusCode::CREATED),
+        "{answers:?}"
+    );
+    let codes = sent
+        .sent()
+        .iter()
+        .filter(|s| s.to == "dina.backup@example.net" && s.kind == "relay.message.otp.v1")
+        .count();
+    assert_eq!(codes, 3, "three starts a day per account send codes");
+    assert_eq!(
+        super::recovery::audited(&c, "recovery.start_limited")
+            .await
+            .len(),
+        2
+    );
+    // TN-54
+    let still = me
+        .call(&app, &Method::GET, "/v1/account/recovery-contacts", None)
+        .await;
+    assert_eq!(still.status, StatusCode::OK, "{}", still.json);
+}
+
+// TN-60, TNI-6, TN-62, OP-153 m.3 (f), (gg), Ek B 3549, 3913
+#[tokio::test]
+async fn turning_assisted_recovery_off_leaves_only_the_owners_own_codes() {
+    let c = console("recovery-unassisted", false).await;
+    let sent = Recording::default();
+    let app = super::recovery::hosted(&c, sent.clone());
+    let eve = account(&c, "eve@example.com", true).await;
+    let mut me = Page::default();
+    me.jar.insert(
+        String::from("__Host-access-session"),
+        session(&c, eve).await,
+    );
+    let codes = me
+        .call(&app, &Method::POST, "/v1/account/recovery-codes", None)
+        .await;
+    let code = codes.json["recovery_codes"][0].as_str().unwrap().to_owned();
+    // TN-60
+    let unacknowledged = me
+        .call(
+            &app,
+            &Method::PUT,
+            "/v1/account/recovery-contacts",
+            Some(serde_json::json!({
+                "recovery_email": "eve.backup@example.net",
+                "assisted_recovery": false
+            })),
+        )
+        .await;
+    assert_eq!(
+        unacknowledged.status,
+        StatusCode::BAD_REQUEST,
+        "{}",
+        unacknowledged.json
+    );
+    let off = me
+        .call(
+            &app,
+            &Method::PUT,
+            "/v1/account/recovery-contacts",
+            Some(serde_json::json!({
+                "recovery_email": "eve.backup@example.net",
+                "assisted_recovery": false,
+                "permanent_loss_acknowledged": true
+            })),
+        )
+        .await;
+    assert_eq!(off.status, StatusCode::OK, "{}", off.json);
+    assert_eq!(off.json["assisted_recovery"], false);
+
+    // TN-60
+    let mut p = Page::default();
+    let r = p
+        .call(
+            &app,
+            &Method::POST,
+            "/v1/recovery",
+            Some(start_body("eve@example.com", "sent_code")),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::CREATED);
+    assert!(
+        !sent
+            .sent()
+            .iter()
+            .any(|s| s.to == "eve.backup@example.net" && s.kind == "relay.message.otp.v1")
+    );
+    // TN-60
+    let mut q = Page::default();
+    let own = q
+        .call(
+            &app,
+            &Method::POST,
+            "/v1/recovery",
+            Some(start_body("eve@example.com", "registered_code")),
+        )
+        .await;
+    let path = format!("/v1/recovery/{}", own.json["attempt"].as_str().unwrap());
+    let proved = q
+        .call(
+            &app,
+            &Method::POST,
+            &path,
+            Some(serde_json::json!({"code": code})),
+        )
+        .await;
+    assert_eq!(proved.status, StatusCode::OK, "{}", proved.json);
+
+    // TNI-6
+    for (method, route) in [
+        (Method::POST, "/v1/account/totp"),
+        (Method::POST, "/v1/account/recovery-codes"),
+    ] {
+        let g = q
+            .call(&app, &method, route, Some(serde_json::json!({})))
+            .await;
+        assert_eq!(g.status, StatusCode::UNAUTHORIZED, "{route}: {}", g.json);
+    }
+}

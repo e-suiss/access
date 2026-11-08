@@ -918,7 +918,7 @@ async fn relayed(c: &Console, subject: [u8; 16], kind: &str) -> Message {
     }
 }
 
-async fn audited(c: &Console, event: &str) -> Vec<access_store::audit::AuditRow> {
+pub(super) async fn audited(c: &Console, event: &str) -> Vec<access_store::audit::AuditRow> {
     let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
         .await
         .unwrap();
