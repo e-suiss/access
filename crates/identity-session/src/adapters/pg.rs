@@ -165,4 +165,12 @@ impl SessionTx for PgTx {
             .await?
             .and_then(|v| u64::try_from(v).ok()))
     }
+
+    async fn cancel_recoveries(
+        &mut self,
+        subject: [u8; 16],
+        at_ms: u64,
+    ) -> Result<u64, SessionError> {
+        crate::app::recovery::cancel(self, subject, at_ms).await
+    }
 }

@@ -120,6 +120,24 @@ const fn planned(
     }
 }
 
+/// A Stage 8 route its lane serves now (OP-153 m.9 (e)).
+const fn lane(
+    owner: Owner,
+    verb: Verb,
+    path: &'static str,
+    operation: &'static str,
+    summary: &'static str,
+) -> Route {
+    Route {
+        verb,
+        path,
+        operation,
+        summary,
+        owner,
+        live: true,
+    }
+}
+
 /// Every route, served ones first.
 pub const ROUTES: &[Route] = &[
     served(
@@ -281,49 +299,49 @@ pub const ROUTES: &[Route] = &[
         "confirmEmailChange",
         "Confirms the new address with its out-of-band code.",
     ),
-    planned(
+    lane(
         Owner::N2,
         Verb::Post,
         "/v1/recovery",
         "startRecovery",
         "Starts a recovery attempt; the answer is the same whether or not an account exists (OP-153 m.3 (d)).",
     ),
-    planned(
+    lane(
         Owner::N2,
         Verb::Get,
         "/v1/recovery/{attempt}",
         "getRecovery",
         "A recovery attempt's state.",
     ),
-    planned(
+    lane(
         Owner::N2,
         Verb::Post,
         "/v1/recovery/{attempt}",
         "proveRecovery",
         "Submits one proof to a recovery attempt.",
     ),
-    planned(
+    lane(
         Owner::N2,
         Verb::Post,
         "/v1/recovery/intents/{token}",
         "redeemResetIntent",
         "Opens the credential-only sign-in of a reset intent (TN-61).",
     ),
-    planned(
+    lane(
         Owner::N2,
         Verb::Get,
         "/v1/account/recovery-contacts",
         "getRecoveryContacts",
         "The account's recovery contacts, at most three.",
     ),
-    planned(
+    lane(
         Owner::N2,
         Verb::Put,
         "/v1/account/recovery-contacts",
         "setRecoveryContacts",
         "Replaces the account's recovery contacts.",
     ),
-    planned(
+    lane(
         Owner::N2,
         Verb::Post,
         "/v1/account/link-codes",

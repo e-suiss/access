@@ -8,6 +8,7 @@
 pub mod assets;
 mod idempotency;
 mod me;
+mod recovery;
 pub(crate) mod web;
 
 use std::sync::Arc;
@@ -124,6 +125,27 @@ where
             .route(
                 &format!("{prefix}/v1/account/email/{{change}}"),
                 post(web::confirm_email_change::<D, K, KI, C, M>),
+            )
+            // OP-153 m.2 N2
+            .route(
+                &format!("{prefix}/v1/recovery"),
+                post(recovery::start::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/recovery/{{attempt}}"),
+                post(recovery::prove::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/recovery/intents/{{token}}"),
+                post(recovery::redeem::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/recovery-contacts"),
+                put(recovery::set_contacts::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/link-codes"),
+                post(recovery::link_code::<D, K, KI, C, M>),
             );
         reads = reads
             .route(
@@ -157,6 +179,14 @@ where
             .route(
                 &format!("{prefix}/v1/account/data-requests"),
                 get(web::data_requests::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/recovery/{{attempt}}"),
+                get(recovery::get::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/recovery-contacts"),
+                get(recovery::contacts::<D, K, KI, C, M>),
             );
     }
     // OP-153 m.4

@@ -3,6 +3,7 @@
 
 pub mod passkeys;
 pub mod pg;
+mod recovery;
 
 use crate::SessionError;
 use crate::ports::Random;

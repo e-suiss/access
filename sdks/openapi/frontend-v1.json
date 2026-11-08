@@ -361,15 +361,21 @@
           }
         },
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "Makes a cross-device link code, never sent by e-mail (OP-153 m.3 (d)).",
-        "x-suiss-status": "planned"
+        "summary": "Makes a cross-device link code, never sent by e-mail (OP-153 m.3 (d))."
       }
     },
     "/v1/account/linked": {
@@ -602,15 +608,21 @@
       "get": {
         "operationId": "getRecoveryContacts",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "The account's recovery contacts, at most three.",
-        "x-suiss-status": "planned"
+        "summary": "The account's recovery contacts, at most three."
       },
       "put": {
         "operationId": "setRecoveryContacts",
@@ -624,15 +636,21 @@
           }
         },
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "Replaces the account's recovery contacts.",
-        "x-suiss-status": "planned"
+        "summary": "Replaces the account's recovery contacts."
       }
     },
     "/v1/account/security-history": {
@@ -1165,15 +1183,21 @@
           }
         },
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "Starts a recovery attempt; the answer is the same whether or not an account exists (OP-153 m.3 (d)).",
-        "x-suiss-status": "planned"
+        "summary": "Starts a recovery attempt; the answer is the same whether or not an account exists (OP-153 m.3 (d))."
       }
     },
     "/v1/recovery/intents/{token}": {
@@ -1199,15 +1223,21 @@
           }
         },
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "Opens the credential-only sign-in of a reset intent (TN-61).",
-        "x-suiss-status": "planned"
+        "summary": "Opens the credential-only sign-in of a reset intent (TN-61)."
       }
     },
     "/v1/recovery/{attempt}": {
@@ -1224,15 +1254,21 @@
           }
         ],
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "A recovery attempt's state.",
-        "x-suiss-status": "planned"
+        "summary": "A recovery attempt's state."
       },
       "post": {
         "operationId": "proveRecovery",
@@ -1256,15 +1292,21 @@
           }
         },
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "Submits one proof to a recovery attempt.",
-        "x-suiss-status": "planned"
+        "summary": "Submits one proof to a recovery attempt."
       }
     },
     "/v1/sessions": {

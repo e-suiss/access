@@ -10,6 +10,7 @@ use access_identity_account::app::signal::{emit as signal, fresh_id};
 use access_identity_account::domain::events::CredentialChange;
 use access_identity_account::domain::password::Password;
 use access_identity_account::domain::signal::{ChangeType, CredentialType, Initiator, Signal};
+use access_identity_account::notify::message::Notice;
 use access_identity_webauthn::app::RegistrationOutcome;
 use access_identity_webauthn::domain::ceremony::{RegistrationResponse, RegistrationState};
 use access_identity_webauthn::domain::ids::UserHandle;
@@ -629,6 +630,9 @@ where
                 correlation,
             )
             .await?;
+            // SEC18, Ek B 3657
+            self.account_notice(&mut tx, subject, Notice::NewMethod, now)
+                .await?;
             tx.commit().await?;
         }
         Ok(outcome)

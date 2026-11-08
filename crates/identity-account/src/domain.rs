@@ -10,6 +10,7 @@ pub mod gcra;
 pub mod identifier;
 pub mod login;
 pub mod password;
+pub mod recovery_token;
 pub mod registration;
 pub mod signal;
 pub mod status;

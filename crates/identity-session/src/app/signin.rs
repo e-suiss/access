@@ -181,7 +181,7 @@ impl<R: Random> Entropy for Salts<'_, R> {
     }
 }
 
-fn address(contact: Option<(String, String)>) -> Option<Address> {
+pub(crate) fn address(contact: Option<(String, String)>) -> Option<Address> {
     match contact {
         Some((kind, value)) if kind == "email" => Some(Address::Email(value)),
         Some((kind, value)) if kind == "phone" => Some(Address::Phone(value)),
@@ -189,7 +189,7 @@ fn address(contact: Option<(String, String)>) -> Option<Address> {
     }
 }
 
-fn key_state(r: &ThrottleRow) -> Result<KeyState, SessionError> {
+pub(crate) fn key_state(r: &ThrottleRow) -> Result<KeyState, SessionError> {
     let u = |v: i64| u64::try_from(v).map_err(|_| SessionError::Corrupt);
     Ok(KeyState {
         tat_ms: u(r.tat_ms)?,
@@ -200,7 +200,7 @@ fn key_state(r: &ThrottleRow) -> Result<KeyState, SessionError> {
     })
 }
 
-fn throttle_row(s: &KeyState) -> ThrottleRow {
+pub(crate) fn throttle_row(s: &KeyState) -> ThrottleRow {
     let i = |v: u64| i64::try_from(v).unwrap_or(i64::MAX);
     ThrottleRow {
         tat_ms: i(s.tat_ms),
@@ -257,7 +257,7 @@ where
     P: CredentialRegistry + Sync,
     S: SignalSink + Sync,
 {
-    fn folded(raw: &str) -> Result<String, SessionError> {
+    pub(crate) fn folded(raw: &str) -> Result<String, SessionError> {
         let n = normalize(raw);
         if n.is_empty() || n.chars().count() > MAX_CHARS || n.chars().any(char::is_control) {
             return Err(SessionError::Invalid);
@@ -574,7 +574,7 @@ where
         self.advance(tx, l, now, correlation).await
     }
 
-    async fn factor_gate(
+    pub(crate) async fn factor_gate(
         &self,
         tx: &mut D::Tx,
         key: &[u8; 32],
@@ -594,7 +594,7 @@ where
         }
     }
 
-    async fn factor_counted(
+    pub(crate) async fn factor_counted(
         &self,
         tx: &mut D::Tx,
         key: &[u8; 32],
@@ -612,7 +612,7 @@ where
         Ok(())
     }
 
-    fn factor_key(&self, subject: [u8; 16], kind: &str) -> [u8; 32] {
+    pub(crate) fn factor_key(&self, subject: [u8; 16], kind: &str) -> [u8; 32] {
         let id = format!("factor:{}:{kind}", encode(&subject));
         counter_key(
             KeyKind::Account,
@@ -1077,7 +1077,11 @@ where
         self.advance(tx, l, now, correlation).await
     }
 
-    async fn enrolled(&self, tx: &mut D::Tx, subject: [u8; 16]) -> Result<Enrolled, SessionError> {
+    pub(crate) async fn enrolled(
+        &self,
+        tx: &mut D::Tx,
+        subject: [u8; 16],
+    ) -> Result<Enrolled, SessionError> {
         Ok(Enrolled {
             totp: !tx.credentials(subject, TOTP).await?.is_empty(),
             recovery_codes: !tx.credentials(subject, RECOVERY_CODE).await?.is_empty(),
@@ -1293,6 +1297,10 @@ where
         }
         let signed = match &l.state.purpose {
             Purpose::Login => {
+                // TN-54, U67
+                if tx.cancel_recoveries(subject, now).await? > 0 {
+                    audit(&mut tx, "recovery.denied", &target, &target, correlation).await?;
+                }
                 self.issue_login(
                     &mut tx,
                     &l,

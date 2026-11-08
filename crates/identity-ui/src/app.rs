@@ -16,6 +16,7 @@ mod credential;
 pub mod devices;
 mod me;
 pub mod privacy;
+pub mod recovery;
 pub mod shell;
 pub mod signup;
 

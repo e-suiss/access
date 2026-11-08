@@ -160,9 +160,187 @@ pub trait SessionTx: AccountTx + RiskTx {
         &mut self,
         subject: [u8; 16],
     ) -> impl Future<Output = Result<Option<u64>, SessionError>> + Send;
+    /// Denies the subject's running recoveries: its own sign-in cancels them (TN-54); how many.
+    fn cancel_recoveries(
+        &mut self,
+        subject: [u8; 16],
+        at_ms: u64,
+    ) -> impl Future<Output = Result<u64, SessionError>> + Send;
 }
 
 /// Opens session transactions in one realm.
 pub trait SessionDb: AccountDb<Tx: SessionTx> {}
 
 impl<T: AccountDb<Tx: SessionTx>> SessionDb for T {}
+
+pub use access_store::recovery::{
+    AccountPolicyRow, AttemptRow, EvidenceRow, MethodRow, NewAttempt, NewToken, NewTransition,
+    TokenRow, TransitionRow,
+};
+
+/// A notice address as the recovery service reads it.
+#[derive(Clone, PartialEq, Eq)]
+pub struct NoticeAddress {
+    /// Its id, `[0; 16]` before it is stored.
+    pub id: [u8; 16],
+    /// Where.
+    pub to: access_identity_account::notify::message::Address,
+    /// Recovery codes go to it.
+    pub recovery_target: bool,
+    /// A recovery contact's.
+    pub recovery_contact: bool,
+}
+
+impl core::fmt::Debug for NoticeAddress {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("NoticeAddress")
+            .field("to", &self.to)
+            .field("recovery_target", &self.recovery_target)
+            .field("recovery_contact", &self.recovery_contact)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The recovery tables in the same unit of work (§12.3.2; OP-153 m.4: an addition beside
+/// [`SessionTx`]).
+pub trait RecoveryTx: SessionTx {
+    /// Serialises the work on one attempt or one subject's recovery (TN-54).
+    fn recovery_lock(
+        &mut self,
+        key: &[u8; 16],
+    ) -> impl Future<Output = Result<(), SessionError>> + Send;
+    /// The subject's live notice addresses, opened; one whose key is shredded is left out.
+    fn notice_addresses(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<Vec<NoticeAddress>, SessionError>> + Send;
+    /// Seals and stores a notice address.
+    fn add_notice_address(
+        &mut self,
+        subject: [u8; 16],
+        address: &NoticeAddress,
+    ) -> impl Future<Output = Result<[u8; 16], SessionError>> + Send;
+    /// Retires a notice address.
+    fn retire_notice_address(
+        &mut self,
+        subject: [u8; 16],
+        id: [u8; 16],
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// The subject's live recovery methods.
+    fn recovery_methods(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<Vec<MethodRow>, SessionError>> + Send;
+    /// Adds a recovery method.
+    fn add_recovery_method(
+        &mut self,
+        subject: [u8; 16],
+        class: &str,
+        assurance: &str,
+        address: Option<[u8; 16]>,
+    ) -> impl Future<Output = Result<[u8; 16], SessionError>> + Send;
+    /// Retires a recovery method.
+    fn retire_recovery_method(
+        &mut self,
+        subject: [u8; 16],
+        id: [u8; 16],
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// The account's recovery settings.
+    fn account_recovery_policy(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<Option<AccountPolicyRow>, SessionError>> + Send;
+    /// Records the account's recovery settings.
+    fn set_account_recovery_policy(
+        &mut self,
+        subject: [u8; 16],
+        policy: &AccountPolicyRow,
+    ) -> impl Future<Output = Result<(), SessionError>> + Send;
+    /// The realm's recovery policy, encoded.
+    fn recovery_realm_policy(
+        &mut self,
+    ) -> impl Future<Output = Result<Option<Vec<u8>>, SessionError>> + Send;
+    /// Opens an attempt.
+    fn insert_attempt(
+        &mut self,
+        attempt: &NewAttempt<'_>,
+    ) -> impl Future<Output = Result<[u8; 16], SessionError>> + Send;
+    /// The attempt of a handle digest.
+    fn attempt(
+        &mut self,
+        handle_hash: &[u8; 32],
+    ) -> impl Future<Output = Result<Option<AttemptRow>, SessionError>> + Send;
+    /// The subject's attempts since `since_ms`, newest first.
+    fn attempts_since(
+        &mut self,
+        subject: [u8; 16],
+        since_ms: i64,
+    ) -> impl Future<Output = Result<Vec<AttemptRow>, SessionError>> + Send;
+    /// The attempt's transitions, in order.
+    fn transitions(
+        &mut self,
+        attempt: [u8; 16],
+    ) -> impl Future<Output = Result<Vec<TransitionRow>, SessionError>> + Send;
+    /// Appends a transition; `false` when another transaction took its place (TN-54).
+    fn transition(
+        &mut self,
+        attempt: [u8; 16],
+        t: &NewTransition<'_>,
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// Stores a sent code.
+    fn insert_evidence(
+        &mut self,
+        attempt: [u8; 16],
+        class: &str,
+        code_hash: &[u8; 32],
+        address: Option<[u8; 16]>,
+        expires_ms: i64,
+    ) -> impl Future<Output = Result<[u8; 16], SessionError>> + Send;
+    /// The attempt's unspent codes.
+    fn evidence(
+        &mut self,
+        attempt: [u8; 16],
+    ) -> impl Future<Output = Result<Vec<EvidenceRow>, SessionError>> + Send;
+    /// Spends a code once.
+    fn consume_evidence(
+        &mut self,
+        id: [u8; 16],
+        at_ms: i64,
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// Counts a wrong try.
+    fn spend_try(&mut self, id: [u8; 16]) -> impl Future<Output = Result<(), SessionError>> + Send;
+    /// Stores a single-use token; `None` for a second live pass of the user (TN-62).
+    fn insert_token(
+        &mut self,
+        token: &NewToken<'_>,
+    ) -> impl Future<Output = Result<Option<[u8; 16]>, SessionError>> + Send;
+    /// The live token of a digest.
+    fn token(
+        &mut self,
+        token_hash: &[u8; 32],
+        kinds: &[String],
+        at_ms: i64,
+    ) -> impl Future<Output = Result<Option<TokenRow>, SessionError>> + Send;
+    /// Uses a token once.
+    fn use_token(
+        &mut self,
+        id: [u8; 16],
+        at_ms: i64,
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// Revokes the subject's live tokens of `kinds`.
+    fn revoke_tokens(
+        &mut self,
+        subject: [u8; 16],
+        kinds: &[String],
+    ) -> impl Future<Output = Result<u64, SessionError>> + Send;
+    /// The subject's live federated links (TN-64).
+    fn federated_links(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<u64, SessionError>> + Send;
+    /// Cuts the subject's federated links (TN-64).
+    fn cut_federated_links(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<u64, SessionError>> + Send;
+}

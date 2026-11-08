@@ -7,6 +7,7 @@ use access_identity_account::domain::login::Problem;
 use access_identity_oauth::ports::RealmEntry;
 use access_identity_session::app::sessions::{SessionStatus, SessionView};
 use access_identity_session::app::{Refusal, Step as Outcome};
+use access_identity_session::domain::recovery::Restricted;
 use access_identity_session::domain::session::{SESSION_COOKIE, clear_cookie};
 use access_identity_session::ports::Clock;
 use access_identity_webauthn::app::RegistrationOutcome;
@@ -193,6 +194,13 @@ where
             Ok(k) => k,
             Err(r) => return r,
         };
+        // TN-56
+        if let Some(r) = self
+            .grace_refusal(&kit, b, Restricted::SecondAuthenticator)
+            .await
+        {
+            return r;
+        }
         signin!(self, kit, auth);
         match auth
             .begin_totp(b.session.unwrap_or_default(), &kit.name, label)
@@ -253,6 +261,10 @@ where
             Ok(k) => k,
             Err(r) => return r,
         };
+        // TN-56
+        if let Some(r) = self.grace_refusal(&kit, b, Restricted::RecoveryCodes).await {
+            return r;
+        }
         signin!(self, kit, auth);
         match auth
             .regenerate_recovery_codes(b.session.unwrap_or_default(), b.correlation)
@@ -276,6 +288,13 @@ where
             Ok(k) => k,
             Err(r) => return r,
         };
+        // TN-56
+        if let Some(r) = self
+            .grace_refusal(&kit, b, Restricted::SecondAuthenticator)
+            .await
+        {
+            return r;
+        }
         signin!(self, kit, auth);
         match auth
             .begin_passkey(b.session.unwrap_or_default(), name, display_name)

@@ -222,6 +222,30 @@ pub static RISK_SIGNALS: Counter<1> = Counter::new(
     [Label::Kind],
 );
 
+/// §12.3.2, IDP-36, Ek B K06: recovery transitions by `kind` (the path class it started on) and
+/// `outcome` (the state entered); success is `grace_period` over `requested`.
+pub static RECOVERY_TRANSITIONS: Counter<2> = Counter::new(
+    "access_recovery_transitions_total",
+    "Account recovery transitions by path class and state entered (§12.3.2, IDP-36)",
+    [Label::Kind, Label::Outcome],
+);
+
+/// TN-63, MKT-D13: recoveries started by an account that finished another within 30 days, by
+/// `kind` (the path class): the re-trigger rate's numerator.
+pub static RECOVERY_RETRIGGERS: Counter<1> = Counter::new(
+    "access_recovery_retriggers_total",
+    "Recoveries started again within 30 days of a finished one, by path class (TN-63)",
+    [Label::Kind],
+);
+
+/// TN-53 rule 3, §18.4: the weakest recovery path class of each saved recovery configuration,
+/// by `kind`; the console row reads its distribution.
+pub static RECOVERY_WEAKEST_PATH: Counter<1> = Counter::new(
+    "access_recovery_weakest_path_total",
+    "Weakest recovery path class of each saved recovery configuration (TN-53)",
+    [Label::Kind],
+);
+
 /// OP-151 m.3 (o): review items marked false positive per step-up request over the last 30
 /// days, in parts per million; the FP budget is 5000 (0.5 %).
 pub static RISK_FP_RATIO: Gauge<0> = Gauge::new(

@@ -317,6 +317,25 @@ pub async fn set_password<D: AccountDb, B: BreachRanges, E: Entropy>(
         .hash(&password, services.entropy.salt()?)
         .await?;
     let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let id = store_password(&mut tx, realm, subject, phc.expose(), who).await?;
+    tx.commit().await?;
+    Ok(id)
+}
+
+/// Stores the hashed password `phc` of `subject` in `tx`, as [`set_password`] does after its
+/// policy and breach checks: the new credential before the old ones are revoked (TN-68), with
+/// their Claims, signal, event and audit row. A recovery's rebind uses it inside the
+/// transaction that consumes its evidence (TN-54).
+///
+/// # Errors
+/// [`AccountError::NotFound`] for a deleted account; [`AccountError`].
+pub async fn store_password<T: AccountTx>(
+    tx: &mut T,
+    realm: &Realm<'_>,
+    subject: [u8; 16],
+    phc: &str,
+    who: &Actor<'_>,
+) -> Result<[u8; 16], AccountError> {
     let row = tx
         .subject(subject, true)
         .await?
@@ -328,7 +347,7 @@ pub async fn set_password<D: AccountDb, B: BreachRanges, E: Entropy>(
         return Err(AccountError::NotFound);
     }
     let dek = subject_key(realm, &row)?;
-    let sealed = seal_password(realm, &dek, &subject, phc.expose().as_bytes())?;
+    let sealed = seal_password(realm, &dek, &subject, phc.as_bytes())?;
     let old = tx.credentials(subject, PASSWORD).await?;
     let replaced = if old.is_empty() {
         CredentialChange::Added
@@ -355,7 +374,7 @@ pub async fn set_password<D: AccountDb, B: BreachRanges, E: Entropy>(
         }
         // §10.1.3, OP-150 m.12 (j)
         crate::app::claims::emit(
-            &mut tx,
+            tx,
             &crate::domain::claims::authenticator_removed(
                 subject,
                 AuthenticatorKind::Password,
@@ -367,21 +386,20 @@ pub async fn set_password<D: AccountDb, B: BreachRanges, E: Entropy>(
     }
     // §10.1.3, OP-150 m.12 (j)
     crate::app::claims::emit(
-        &mut tx,
+        tx,
         &crate::domain::claims::secret_binding(subject, AuthenticatorKind::Password, &id, at),
     )
     .await?;
-    credential_signal(&mut tx, subject, CredentialType::Password, change).await?;
+    credential_signal(tx, subject, CredentialType::Password, change).await?;
     // OP-151 m.3 (i)
-    events::credential(&mut tx, realm, subject, PASSWORD, replaced).await?;
+    events::credential(tx, realm, subject, PASSWORD, replaced).await?;
     audit(
-        &mut tx,
+        tx,
         "credential.password.set",
         who,
         &realm.external(subject)?,
     )
     .await?;
-    tx.commit().await?;
     Ok(id)
 }
 
