@@ -33,6 +33,7 @@ Access treats both questions as first-class:
 - Approvals with exact intent binding; no impersonation, ever
 - Immediate revocation with cascade
 - Signed, independently verifiable decision records and an offline verifier
+- An authority hub — who acts for you, what you shared, what you hold, every use and every change — from an open experience backend that holds no authority itself
 
 **Built for AI agents**
 - Agent identities with accountable human owners
