@@ -180,14 +180,14 @@ pub struct DomainStatus {
     /// `DomainID`.
     pub domain: String,
     /// The reader's label, when more than one domain is shown (IA-6).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     /// Owner.
     pub owner: Owner,
     /// Current or unknown.
     pub freshness: Freshness,
     /// When it was read, Unix ms; absent when unknown.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub as_of: Option<u64>,
     /// The text key.
     pub text: String,
@@ -199,10 +199,10 @@ pub struct Who {
     /// `party`, `everyone`, `group` or `foreign`.
     pub kind: String,
     /// The Party, when one.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub party: Option<String>,
     /// The claim classes of a rule-shaped holder (XI-15).
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub classes: Vec<String>,
 }
 
@@ -212,7 +212,7 @@ pub struct CapacityLabel {
     /// `capacity.own_use`, `capacity.on_behalf_of` or `capacity.as_yourself`.
     pub text: String,
     /// The Party acted for.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub party: Option<String>,
 }
 
@@ -244,7 +244,7 @@ pub struct Offer {
     /// Whether the reader can take it.
     pub available: bool,
     /// Who can, when the reader cannot: a text key.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub who_can: Option<String>,
     /// How many steps from this row it takes; never more than two (XI-5).
     pub steps: u8,
@@ -260,7 +260,7 @@ pub struct Expert {
     /// Revision.
     pub revision: u64,
     /// Role pinned.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub role: Option<Value>,
 }
 
@@ -270,7 +270,7 @@ pub struct Row {
     /// `DomainID`.
     pub domain: String,
     /// The reader's domain label, with more than one domain (IA-6).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     /// The Grant.
     pub grant: String,
@@ -295,7 +295,7 @@ pub struct Row {
     /// Actions (XI-11, XI-5).
     pub offers: Vec<Offer>,
     /// The expert part, at `expert` or `audit` depth.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expert: Option<Expert>,
 }
 
@@ -305,7 +305,7 @@ pub struct RootRow {
     /// `DomainID`.
     pub domain: String,
     /// The reader's domain label.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     /// The Anchor.
     pub anchor: String,
@@ -323,24 +323,24 @@ pub struct ActivityRow {
     /// `DomainID`.
     pub domain: String,
     /// The reader's domain label.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     /// Owner.
     pub owner: Owner,
     /// The record's position.
     pub pos: u64,
     /// Its time, Unix ms.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at: Option<u64>,
     /// `activity.by_you` or `activity.for_you`.
     pub text: String,
     /// Capacity (XI-10).
     pub capacity: CapacityLabel,
     /// The Grant it rested on.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grant: Option<String>,
     /// The acting Instance, at `expert` depth.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instance: Option<String>,
 }
 
@@ -350,14 +350,14 @@ pub struct ChangeRow {
     /// `DomainID`.
     pub domain: String,
     /// The reader's domain label.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     /// Owner.
     pub owner: Owner,
     /// The record's position.
     pub pos: u64,
     /// Its time, Unix ms.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at: Option<u64>,
     /// `grant_to_you`, `grant_for_you`, `instance_added`, `acceptance` or `key_event`.
     pub kind: String,
@@ -366,7 +366,7 @@ pub struct ChangeRow {
     /// What it is about: the Grant, Instance, Acceptance or Claim.
     pub about: String,
     /// For a key event: the Claim class and who signed it (U26, SI-13).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key_event: Option<Value>,
     /// Always derived.
     pub derived: bool,
