@@ -131,8 +131,7 @@ fn advance(ring: &mut Keyring, factory: &mut Factory, from: u64, to: u64, step: 
     }
 }
 
-// MD-3, CR-2, CR-24: ES256 by default and Ed25519 when selected; the token verifies against
-// the JWKS, whose kid is the key's RFC 7638 thumbprint
+// MD-3, CR-2, CR-24
 #[test]
 fn tokens_verify_against_the_jwks() {
     for (alg, kty) in [(JwsAlg::Es256, "EC"), (JwsAlg::Ed25519, "OKP")] {
@@ -151,16 +150,14 @@ fn tokens_verify_against_the_jwks() {
         assert!(!doc.contains("EdDSA"));
         assert!(!doc.contains("AKP"));
         assert!(!doc.contains(r#""d":"#));
-        // CR-27, MD-6: the active key first, then a published backup
+        // CR-27, MD-6
         let listed = read_jwks(doc);
         assert_eq!(listed.len(), 2);
         assert_eq!(listed[0].0, b64url_encode(&signed.kid));
     }
 }
 
-// CR-59, CR-25, SAI-46, CR-23: the founding key signs before the lead has passed, published
-// beside its backup; the backup neither signs nor rotates in before its lead, so once the
-// founding key is dropped nothing is signed until the lead passes, then the backup signs
+// CR-59, CR-25, SAI-46, CR-23
 #[test]
 fn the_founding_key_signs_before_the_lead_and_the_second_does_not() {
     let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
@@ -200,9 +197,7 @@ fn the_founding_key_signs_before_the_lead_and_the_second_does_not() {
     );
 }
 
-// CR-25, CR-27, CR-59, SAI-46, MD-6: over 400 days the realm signs from the minute it is
-// opened; every signing key but the founding one was in the JWKS for at least the lead; the
-// JWKS always holds the active key and a published backup
+// CR-25, CR-27, CR-59, SAI-46, MD-6
 #[test]
 fn rotation_runs_without_gaps() {
     let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
@@ -238,7 +233,7 @@ fn rotation_runs_without_gaps() {
         assert!(listed.len() <= 4, "{} keys at {now}", listed.len());
         now += HOUR;
     }
-    // CR-19: 90 days ±20 % per key
+    // CR-19
     assert!(
         (4..=6).contains(&signing_kids.len()),
         "{}",
@@ -246,8 +241,7 @@ fn rotation_runs_without_gaps() {
     );
 }
 
-// CR-26, CR-27: a token signed with key N verifies while N is retiring and until at least
-// T_token_max after N's last signature; once N is dropped it no longer verifies
+// CR-26, CR-27
 #[test]
 fn a_retiring_key_still_verifies() {
     let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
@@ -286,14 +280,13 @@ fn a_retiring_key_still_verifies() {
     assert!(dropped_at.unwrap() >= last_at + TOKEN_MAX_MS);
     let dropped = ring.keys().into_iter().find(|k| k.kid == first).unwrap();
     assert_eq!(dropped.state, State::Dropped);
-    // CR-27, OP-73: the dropped key's private material is gone
+    // CR-27, OP-73
     let saved = ring.saved();
     let s = saved.iter().find(|s| s.record.kid == first).unwrap();
     assert!(s.sealed.is_none());
 }
 
-// CR-23, G42: through a key-generation outage the realm signs to the end of the last key's
-// window; after that nothing is signed, never an unsigned token
+// CR-23, G42
 #[test]
 fn an_outage_signs_to_the_window_end_then_refuses() {
     let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
@@ -325,7 +318,7 @@ fn an_outage_signs_to_the_window_end_then_refuses() {
     assert!(end - last_ok < HOUR);
 }
 
-// CR-25, CR-26, CR-27: policies that break the rules are refused when the key set is made
+// CR-25, CR-26, CR-27
 #[test]
 fn incoherent_policies_are_refused() {
     assert!(matches!(
@@ -334,7 +327,7 @@ fn incoherent_policies_are_refused() {
     ));
 }
 
-// OP-149 m.8, CR-24: an artifact's COSE_Sign1 verifies with the realm key the JWKS lists
+// OP-149 m.8, CR-24
 #[test]
 fn artifacts_are_cose_signed_with_the_jwks_key() {
     const CT: &str = "application/access-auth-context+cbor";
@@ -367,9 +360,7 @@ fn artifacts_are_cose_signed_with_the_jwks_key() {
     }
 }
 
-// TN-118, MD-6, CR-25, CR-59, SAI-46: a decided rotation makes the published backup past its
-// lead sign at once; the old key retires and still verifies its tokens; without such a backup
-// nothing changes
+// TN-118, MD-6, CR-25, CR-59, SAI-46
 #[test]
 fn a_decided_rotation_uses_the_ready_backup() {
     let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
@@ -416,9 +407,7 @@ fn a_decided_rotation_uses_the_ready_backup() {
     );
 }
 
-// §13.2, CR-23, MD-7, OP-73: an emergency drop takes the key out of the JWKS at once and
-// destroys its material, so its tokens stop verifying; with no backup past its lead nothing
-// is signed until one is, and signing then resumes with a key that was published first
+// §13.2, CR-23, MD-7, OP-73
 #[test]
 fn an_emergency_drop_ends_a_key_at_once() {
     let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
@@ -452,8 +441,7 @@ fn an_emergency_drop_ends_a_key_at_once() {
     assert!(verify(ring.jwks(), &next.token).is_ok());
 }
 
-// TN-118, CR-26: a decided policy is checked like any other; one that would let a key sign
-// shorter than a token lives is refused and the set keeps its policy
+// TN-118, CR-26
 #[test]
 fn a_decided_policy_is_checked() {
     let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
@@ -468,9 +456,7 @@ fn a_decided_policy_is_checked() {
     assert_eq!(ring.policy(), faster);
 }
 
-// §10.4.5, §12.1.2, TI-RT6: a realm key never signs an access token carrying authority, in
-// any spelling of the type, nor one whose claims cannot be read; a protocol-scope-only access
-// token and other types are signed
+// §10.4.5, §12.1.2, TI-RT6
 // TNI-2
 #[test]
 fn a_realm_key_refuses_authority_tokens() {
@@ -496,7 +482,7 @@ fn a_realm_key_refuses_authority_tokens() {
     assert!(ring.sign("JWT", authority, LEAD).is_ok());
 }
 
-// OP-64 (A-13): a signed token prints its key and algorithm, never the token
+// OP-64 (A-13)
 #[test]
 fn signed_tokens_do_not_print_the_token() {
     let signed = Signed {

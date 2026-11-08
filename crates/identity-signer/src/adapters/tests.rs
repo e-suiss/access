@@ -4,7 +4,7 @@ use suiss_crypto::rotation::Policy;
 use super::*;
 use crate::app::Keyring;
 
-// CR-21 m.3: a sealed realm key loads back under the same KEK and not under another
+// CR-21 m.3
 #[test]
 fn sealed_keys_open_only_under_their_kek() {
     let mut factory = SealedFactory::new(SoftKek::new("realm-kek-1", [1; 32]));
@@ -17,7 +17,7 @@ fn sealed_keys_open_only_under_their_kek() {
     }
 }
 
-// CR-23: a restarted signer loads its sealed keys back and signs on with the same key
+// CR-23
 #[test]
 fn a_restart_signs_with_the_same_key() {
     let mut factory = SealedFactory::new(SoftKek::new("realm-kek-1", [1; 32]));
@@ -64,8 +64,7 @@ fn listening(dir: &Path, offset: u32) -> (PathBuf, Shared) {
     (path, service)
 }
 
-// CMP-22b, OP-143 m.9 (e): a declared caller opens a realm over the socket and reads its JWKS;
-// the vault keeps one file per realm
+// CMP-22b, OP-143 m.9 (e)
 #[tokio::test]
 async fn the_socket_serves_realm_keys() {
     let dir = temp("serve");
@@ -84,7 +83,7 @@ async fn the_socket_serves_realm_keys() {
     assert_eq!(DirVault::new(&dir).all().unwrap().len(), 1);
 }
 
-// CMP-22: a caller whose user id is not declared is closed unanswered
+// CMP-22
 #[tokio::test]
 async fn undeclared_callers_get_no_answer() {
     let dir = temp("undeclared");
@@ -92,8 +91,7 @@ async fn undeclared_callers_get_no_answer() {
     assert!(call(&path, &Request::Ping).await.is_err());
 }
 
-// OP-150, CMP-22b: the cell key is served over the socket and kept in its own vault file, apart
-// from the realm files
+// OP-150, CMP-22b
 #[tokio::test]
 async fn the_socket_serves_the_cell_key() {
     let dir = temp("cell");
@@ -108,8 +106,7 @@ async fn the_socket_serves_the_cell_key() {
     assert_eq!(DirVault::new(&dir).all().unwrap().len(), 0);
 }
 
-// CMP-22b: a caller that never sends its frame is closed after the read timeout instead of
-// holding a connection task forever
+// CMP-22b
 #[tokio::test]
 async fn a_silent_caller_times_out() {
     let dir = temp("silent");

@@ -1,6 +1,6 @@
 use super::*;
 
-// CMP-22b, OP-143 m.9 (e), OP-149 m.8, OP-150: every message survives its frame
+// CMP-22b, OP-143 m.9 (e), OP-149 m.8, OP-150
 #[test]
 fn messages_round_trip() {
     let realm = Realm([3; 16]);
@@ -86,7 +86,7 @@ fn messages_round_trip() {
     }
 }
 
-// OP-143 m.4: oversized and foreign frames are refused
+// OP-143 m.4
 #[test]
 fn bad_frames_are_refused() {
     let too_big = u32::try_from(MAX_FRAME + 1).unwrap().to_be_bytes();
@@ -98,7 +98,7 @@ fn bad_frames_are_refused() {
     )
     .unwrap();
     assert_eq!(decode_request(&short_realm), Err(FrameError::Malformed));
-    // MD-3: EdDSA is not an algorithm name
+    // MD-3
     let eddsa = dcbor::encode(
         &map(vec![(
             "open",
@@ -113,7 +113,7 @@ fn bad_frames_are_refused() {
     assert_eq!(decode_request(&eddsa), Err(FrameError::Malformed));
 }
 
-// TN-118, §13.2: the decided key changes survive their frames
+// TN-118, §13.2
 #[test]
 fn key_changes_round_trip() {
     let realm = Realm([3; 16]);
@@ -141,8 +141,7 @@ fn key_changes_round_trip() {
     );
 }
 
-// OP-67 m.1: a request carries the caller's traceparent; without one it is the plain frame and
-// an oversized value is not carried
+// OP-67 m.1
 #[test]
 fn traceparent_rides_along() {
     let tp = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";

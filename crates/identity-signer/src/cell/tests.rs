@@ -7,8 +7,7 @@ fn factory() -> SealedFactory<SoftKek> {
     SealedFactory::new(SoftKek::new("identity-kek", [5; 32]))
 }
 
-// OP-150, CR-21 m.3, T31: the stored key holds only sealed material under the identity KEK and
-// loads back to the same key; a tampered public key or a cell name that is no key name is refused
+// OP-150, CR-21 m.3, T31
 #[test]
 fn the_cell_key_is_sealed_and_restored() {
     let mut f = factory();
@@ -41,8 +40,7 @@ fn the_cell_key_is_sealed_and_restored() {
     );
 }
 
-// OP-44, OP-39: the same cell key signs the operational chain under its own origin, and nothing
-// else; a body of the identity origin with the operational chain's tree is a different log
+// OP-44, OP-39
 #[test]
 fn the_cell_key_signs_its_two_chains_only() {
     let mut f = factory();

@@ -63,7 +63,7 @@ fn jwks(s: &mut Service<SealedFactory<SoftKek>, MemVault>, r: Realm) -> String {
 const A: Realm = Realm([1; 16]);
 const B: Realm = Realm([2; 16]);
 
-// CMP-22b, CR-19, CR-27: opening a realm publishes its own key at once; realms share no key
+// CMP-22b, CR-19, CR-27
 #[test]
 fn each_realm_has_its_own_published_keys() {
     let mut s = Service::start(factory(), MemVault::default(), Policy::REALM).unwrap();
@@ -86,8 +86,7 @@ fn each_realm_has_its_own_published_keys() {
     assert_eq!(s.realms(), vec![A, B]);
 }
 
-// OP-146 m.8 (e), m.16 (m), MD-6: a realm's new JOSE algorithm reaches its open key set and
-// survives a restart; the next keys use it and are published before use
+// OP-146 m.8 (e), m.16 (m), MD-6
 #[test]
 fn another_alg_applies_to_the_next_keys() {
     let vault = MemVault::default();
@@ -107,9 +106,7 @@ fn another_alg_applies_to_the_next_keys() {
     assert!(rotated);
 }
 
-// CR-59, SAI-46, CR-25: a realm signs with its founding key the moment it is opened; the
-// backup published beside it waits the full lead before a rotation may bring it in, after
-// which it signs and the founding key retires
+// CR-59, SAI-46, CR-25
 #[test]
 fn the_founding_key_signs_at_once_and_the_next_waits_for_the_lead() {
     let mut s = Service::start(factory(), MemVault::default(), Policy::REALM).unwrap();
@@ -202,8 +199,7 @@ fn without_founding(bytes: &[u8]) -> Vec<u8> {
     dcbor::encode(&Value::Map(top), Limits::CEILING).unwrap()
 }
 
-// CR-59, CR-23: a vault written before the founding key was recorded restores with no founding
-// key, so its keys keep the full lead; one written now restores the founding key as it was
+// CR-59, CR-23
 #[test]
 fn an_older_vault_restores_without_a_founding_key() {
     let vault = MemVault::default();
@@ -250,7 +246,7 @@ fn an_older_vault_restores_without_a_founding_key() {
     ));
 }
 
-// CR-23, OP-143 m.9 (e): a restarted signer restores every realm from its vault
+// CR-23, OP-143 m.9 (e)
 #[test]
 fn a_restart_restores_every_realm() {
     let vault = MemVault::default();
@@ -281,8 +277,7 @@ fn checkpoint(origin: &str, size: u64) -> String {
     .unwrap()
 }
 
-// OP-150, CMP-22b, OP-143 m.10, L2-CKP-3: the cell key signs its own audit log's checkpoints
-// as notes its published verifier key verifies; another origin or no cell is refused
+// OP-150, CMP-22b, OP-143 m.10, L2-CKP-3
 #[test]
 fn the_cell_key_signs_audit_checkpoints() {
     let mut s = Service::start(factory(), MemVault::default(), Policy::REALM).unwrap();
@@ -323,8 +318,7 @@ fn the_cell_key_signs_audit_checkpoints() {
     );
 }
 
-// OP-150, CR-23: the cell key survives a restart and realm rotation; a vault holding another
-// cell's key is refused
+// OP-150, CR-23
 #[test]
 fn the_cell_key_survives_a_restart() {
     let vault = MemVault::default();
@@ -376,9 +370,7 @@ impl KeyFactory for Flaky {
     }
 }
 
-// CR-23, CR-27, OP-150, TN-12, TN-118: each round reports the realm key transitions, the realm audit events;
-// while keys can be made no rotation is late, and a key-generation outage makes the round report
-// the delayed rotation of that realm
+// CR-23, CR-27, OP-150, TN-12, TN-118
 #[test]
 fn rounds_report_transitions_and_delays() {
     let down = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -411,8 +403,7 @@ fn rounds_report_transitions_and_delays() {
     assert!(late.is_some_and(|(r, ms)| r == A && ms > 0));
 }
 
-// TN-118, §13.2, CR-23: decided rotation, emergency drop and policy reach the realm's key set
-// and survive a restart; another realm is untouched
+// TN-118, §13.2, CR-23
 #[test]
 fn decided_key_changes_survive_a_restart() {
     let vault = MemVault::default();
@@ -531,9 +522,7 @@ fn claim_payload(issuer: [u8; 16], at: u64) -> Vec<u8> {
     .unwrap()
 }
 
-// OP-144 carry-over, §10.1.7, MD-6, CR-23: each realm's Claim issuer key is its own Ed25519
-// key, apart from the realm's token keys, bound to the issuer Party it was opened for, and it
-// survives a restart; the token key never signs a Claim
+// OP-144, §10.1.7, MD-6, CR-23
 #[test]
 fn the_claim_issuer_key_is_separate_and_survives_a_restart() {
     let vault = MemVault::default();

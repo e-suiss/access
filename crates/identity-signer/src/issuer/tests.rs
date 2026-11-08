@@ -49,8 +49,7 @@ fn statement(class: &str, issuer: [u8; 16], at: u64) -> Statement {
     }
 }
 
-// OP-144, §10.1.7, MD-3, L2-CLM-1: the realm issuer's own Ed25519 key signs a Claim that verifies
-// as its Party's in the domain under the Instance key Access holds for it
+// OP-144, §10.1.7, MD-3, L2-CLM-1
 #[test]
 fn the_issuer_key_signs_claims_of_its_party() {
     let key = IssuerKey::generate(REALM, PARTY, &mut factory()).unwrap();
@@ -67,8 +66,7 @@ fn the_issuer_key_signs_claims_of_its_party() {
     assert_eq!(claim::kid(&sign1).unwrap(), key.kid());
 }
 
-// §10.1.5, §13.2, K07 (identity issuer ≠ authority issuer): the key signs only its own Party's
-// statements, only identity issuer classes, only canonical bytes, only at the stated time
+// §10.1.5, §13.2, K07
 #[test]
 fn the_issuer_key_refuses_what_is_not_its_own() {
     let key = IssuerKey::generate(REALM, PARTY, &mut factory()).unwrap();
@@ -98,8 +96,7 @@ fn the_issuer_key_refuses_what_is_not_its_own() {
     assert!(!issues("party_terminated"));
 }
 
-// OP-149 m.16 (a), L0-META-7: the key signs the AIS of its own Party's registration and of the
-// Instance that is itself, under the bootstrap basis, and nothing else
+// OP-149 m.16 (a), L0-META-7
 #[test]
 fn the_issuer_key_signs_its_own_registration() {
     let key = IssuerKey::generate(REALM, PARTY, &mut factory()).unwrap();
@@ -176,8 +173,7 @@ fn the_issuer_key_signs_its_own_registration() {
     );
 }
 
-// OP-73, CR-21 m.3: the stored form is sealed, restores the same key, and is never another
-// realm's
+// OP-73, CR-21 m.3
 #[test]
 fn the_issuer_key_restores_from_its_sealed_form() {
     let key = IssuerKey::generate(REALM, PARTY, &mut factory()).unwrap();
