@@ -61,6 +61,25 @@ export function oauthClass(code: string): OAuthClass {
   return Object.hasOwn(OAUTH_CLASSES, code) ? (OAUTH_CLASSES[code] ?? "refused") : "refused";
 }
 
+/** What an app shows when the access token expired and the refresh failed (§8.13). */
+export const SIGN_IN_AGAIN = "Please sign in again to continue.";
+
+/**
+ * The text an app shows for a failed refresh: the one sign-in-again line, never a cause the app
+ * cannot verify (§8.13); `undefined` for a refusal the person cannot fix by signing in.
+ */
+export function refreshFailedText(e: AuthError): string | undefined {
+  switch (e.oauthClass) {
+    case "invalid_grant":
+    case "interaction_required":
+    case "invalid_client":
+    case "unauthorized_client":
+      return SIGN_IN_AGAIN;
+    default:
+      return undefined;
+  }
+}
+
 export function base64url(bytes: Uint8Array): string {
   let s = "";
   for (const b of bytes) s += String.fromCharCode(b);

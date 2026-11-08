@@ -15,6 +15,8 @@ import {
   parseMetadata,
   parseTokenResponse,
   pkceChallenge,
+  refreshFailedText,
+  SIGN_IN_AGAIN,
   tokenRequestBody,
 } from "./auth.js";
 import { reason, reasons } from "./reason.js";
@@ -211,5 +213,19 @@ describe("auth", () => {
         context: { blockers: [{ class: "budget-exhausted", subcode: "budget-exhausted/x" }] },
       }),
     ).toEqual([{ class: "budget-exhausted" }]);
+  });
+});
+
+// §8.13
+describe("a failed refresh", () => {
+  it("says only to sign in again", () => {
+    const expired = new AuthError("invalid_grant", oauthClass("invalid_grant"));
+    expect(refreshFailedText(expired)).toBe("Please sign in again to continue.");
+    expect(refreshFailedText(new AuthError("login_required", oauthClass("login_required")))).toBe(
+      SIGN_IN_AGAIN,
+    );
+    expect(refreshFailedText(new AuthError("temporarily_unavailable", "unavailable"))).toBe(
+      undefined,
+    );
   });
 });
