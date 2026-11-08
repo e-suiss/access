@@ -48,8 +48,7 @@ fn envelope() -> IntentEnvelope {
     }
 }
 
-// OP-151 m.3 (e), X11: the browser's path signs what the Kernel verifies, and the screen shows
-// what the Kernel decoded from the very bytes signed
+// OP-151 m.3 (e), X11
 #[test]
 fn a_webcrypto_style_signature_makes_a_verifiable_ais() {
     let (key, _) = SoftSigner::generate_p256().unwrap();
@@ -106,7 +105,7 @@ fn a_webcrypto_style_signature_makes_a_verifiable_ais() {
     assert!(i.contains("\"until\":\"2000\""));
 }
 
-// OP-151 m.3 (e): malformed input is refused, never encoded
+// OP-151 m.3 (e)
 #[test]
 fn malformed_input_is_refused() {
     let basis_cbor = basis("anchor", &[1; 16]).unwrap();
@@ -154,7 +153,7 @@ fn malformed_input_is_refused() {
     assert!(describe_intent(b"\x00").is_err());
 }
 
-// CR-10: `coseToBeSigned` refuses a payload above the limits instead of returning empty bytes
+// CR-10
 #[test]
 fn oversized_sig_structure_is_refused() {
     let prot = protected(-9, &[0; 32]).unwrap();
