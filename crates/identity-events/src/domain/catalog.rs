@@ -58,16 +58,11 @@ pub fn urn(name: &str) -> String {
     format!("{URN_PREFIX}{name}")
 }
 
-/// Catalog events nothing produces yet: organizations and their memberships arrive with the
-/// organization model, preferences, documents and agent suspension with their own domains. A
-/// subscription cannot name them until a producer exists (TN-136, §12.4.2).
-pub const UNPRODUCED: [&str; 5] = [
-    "membership.added",
-    "membership.removed",
-    "preference.changed",
-    "document.accepted",
-    "agent.suspended",
-];
+/// Catalog events nothing produces yet: organization memberships arrive with the organization
+/// model and agent suspension with agent connections. A subscription cannot name them until a
+/// producer exists (TN-136, §12.4.2). Preferences and document acceptances are produced by the
+/// preference center (IDP-37, OP-153 m.4).
+pub const UNPRODUCED: [&str; 3] = ["membership.added", "membership.removed", "agent.suspended"];
 
 /// Whether a webhook or stream may subscribe to `name`: a catalog event with a producer.
 #[must_use]
@@ -113,9 +108,9 @@ pub enum IdentityKind {
     MembershipAdded,
     /// `membership.removed`; its producer arrives with organization membership.
     MembershipRemoved,
-    /// `preference.changed` (IDP-37); its producer arrives with the preference center.
+    /// `preference.changed` (IDP-37), from the preference center.
     PreferenceChanged,
-    /// `document.accepted`; its producer arrives with document acceptance.
+    /// `document.accepted` (IDP-37), from document acceptance.
     DocumentAccepted,
     /// `agent.suspended`; its producer arrives with agent connections.
     AgentSuspended,

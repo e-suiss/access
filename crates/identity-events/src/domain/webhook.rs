@@ -293,6 +293,9 @@ mod tests {
             assert!(event_names(&[String::from(name)]).is_err(), "{name}");
         }
         assert!(event_names(&[String::from("account.suspended")]).is_ok());
+        // IDP-37, OP-153 m.4
+        assert!(event_names(&[String::from("preference.changed")]).is_ok());
+        assert!(event_names(&[String::from("document.accepted")]).is_ok());
     }
 
     // EI-25
