@@ -115,7 +115,7 @@ impl Settings {
 mod tests {
     use super::*;
 
-    // OP-67, TI-9: only a plain collector endpoint is accepted; anything else refuses to start
+    // OP-67, TI-9
     #[test]
     fn the_endpoint_is_checked() {
         let ok = Settings {
@@ -141,7 +141,7 @@ mod tests {
         }
     }
 
-    // OP-47: sampling stays within bounds; the environment is a short token
+    // OP-47
     #[test]
     fn ratio_and_environment_are_checked() {
         let s = Settings {

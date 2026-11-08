@@ -240,7 +240,7 @@ mod tests {
 
     const GOOD: &str = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
 
-    // OP-67 m.1: a well-formed W3C traceparent is accepted as is
+    // OP-67 m.1
     #[test]
     fn well_formed_traceparent_round_trips() {
         let t = TraceParent::parse(GOOD).unwrap_or_else(TraceParent::generate);
@@ -250,7 +250,7 @@ mod tests {
         assert!(t.sampled());
     }
 
-    // OP-67 m.1: malformed values are never trusted; the caller starts a new trace
+    // OP-67 m.1
     #[test]
     fn malformed_traceparent_is_refused() {
         for bad in [
@@ -269,7 +269,7 @@ mod tests {
         }
     }
 
-    // OP-67 m.1: a generated trace is well formed and unique
+    // OP-67 m.1
     #[test]
     fn generated_traces_are_well_formed() {
         let a = TraceParent::generate();
@@ -278,7 +278,7 @@ mod tests {
         assert_eq!(TraceParent::parse(&a.header()), Some(a));
     }
 
-    // OP-67 m.1: tracestate is passed on only when it is short printable ASCII
+    // OP-67 m.1
     #[test]
     fn tracestate_is_passed_not_trusted() {
         assert_eq!(tracestate("congo=t61rcWkgMzE"), Some("congo=t61rcWkgMzE"));

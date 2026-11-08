@@ -52,7 +52,7 @@ pub fn issuer_quota(window_s: u64) -> u64 {
 mod tests {
     use super::*;
 
-    // §15.4, CR-7, OP-150, §13.7.8: each refused unknown-version artefact counts once
+    // §15.4, CR-7, OP-150, §13.7.8
     #[test]
     fn unknown_versions_are_counted() {
         let before = UNKNOWN_VERSION.get();

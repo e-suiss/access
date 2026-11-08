@@ -208,7 +208,7 @@ pub static ORACLE: std::sync::LazyLock<OracleTable> = std::sync::LazyLock::new(O
 mod tests {
     use super::*;
 
-    // SEC31, §17.8.2: per Instance volume is kept and ranked, heaviest first
+    // SEC31, §17.8.2
     #[test]
     fn heaviest_requesters_come_first() {
         let t = OracleTable::new();
@@ -223,7 +223,7 @@ mod tests {
         assert_eq!(w.current.get(1).map(|r| r.explain), Some(1));
     }
 
-    // SEC31, OP-47: the table is bounded; an evicted slot's count is carried as error
+    // SEC31, OP-47
     #[test]
     fn the_table_is_bounded() {
         let t = OracleTable::new();
@@ -236,7 +236,7 @@ mod tests {
         assert!(w.current.iter().any(|r| r.error > 0));
     }
 
-    // SEC31: windows tumble; the previous complete window stays visible
+    // SEC31
     #[test]
     fn windows_tumble() {
         let t = OracleTable::new();

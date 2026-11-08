@@ -36,8 +36,7 @@ impl<'a> MakeWriter<'a> for Capture {
     }
 }
 
-// OP-67 m.1, m.2: every line has trace_id, span_id, service, version, event and outcome; the
-// trace id is the caller's traceparent; a new span gets a new span id
+// OP-67 m.1, m.2
 #[test]
 fn log_lines_carry_the_common_fields() {
     let capture = Capture::default();
@@ -72,7 +71,7 @@ fn log_lines_carry_the_common_fields() {
     assert_eq!(v["outcome"], "deny");
     assert_eq!(v["message"], "sign-in refused");
 
-    // OP-67 m.1: without a caller's traceparent a span still gets a trace of its own
+    // OP-67 m.1
     let fresh = tracing::info_span!("request");
     let own = trace::of(&fresh).unwrap();
     assert_ne!(own.trace_id(), incoming.trace_id());

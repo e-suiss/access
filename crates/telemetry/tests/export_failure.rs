@@ -17,8 +17,7 @@ fn decide(amount: u64) -> &'static str {
     outcome
 }
 
-// TI-18, OP-47: with the collector unreachable, recording metrics and spans neither fails nor
-// waits, and the same inputs give the same decisions
+// TI-18, OP-47
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_failing_exporter_never_changes_a_decision() {
     let before: Vec<&str> = [1, 20, 5].into_iter().map(decide).collect();

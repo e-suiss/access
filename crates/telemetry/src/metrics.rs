@@ -543,7 +543,7 @@ pub const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4; charset=ut
 mod tests {
     use super::*;
 
-    // OP-47: the label allowlist never contains a tenant, realm, domain or personal identifier
+    // OP-47
     #[test]
     fn the_allowlist_has_no_forbidden_label() {
         for label in Label::ALL {
@@ -572,7 +572,7 @@ mod tests {
     static TEST_GAUGE: Gauge<1> =
         Gauge::new("access_test_render_depth", "test gauge", [Label::Pool]);
 
-    // OP-67 m.3: counters, gauges and histograms reach the pull exposition with their labels
+    // OP-67 m.3
     #[test]
     fn prometheus_exposition_carries_every_kind() {
         TEST_COUNTER.incr(["ok"]);
@@ -607,7 +607,7 @@ mod tests {
         assert!(TEST_COUNTER.get() >= 3);
     }
 
-    // OP-47: label values are escaped, never raw
+    // OP-47
     #[test]
     fn label_values_are_escaped() {
         assert_eq!(escape("a\"b\\c\nd"), "a\\\"b\\\\c\\nd");
