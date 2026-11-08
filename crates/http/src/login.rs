@@ -15,6 +15,7 @@ use std::sync::Arc;
 use access_identity_oauth::app::Discovery;
 use access_identity_oauth::ports::{Directory, Keys};
 use access_identity_ui::app::Hosted;
+use access_identity_ui::domain::frontend_v1::{ROUTES, Verb};
 use access_identity_ui::ports::{Clock, Kits, Messages};
 use axum::Router;
 use axum::routing::{delete, get, post, put};
@@ -149,6 +150,18 @@ where
                 &format!("{prefix}/v1/account/data-requests"),
                 get(web::data_requests::<D, K, KI, C, M>),
             );
+    }
+    // OP-153 m.4
+    for r in ROUTES.iter().filter(|r| !r.live) {
+        for prefix in ["", "/realms/{slug}"] {
+            let path = format!("{prefix}{}", r.path);
+            reads = match r.verb {
+                Verb::Get => reads.route(&path, get(web::not_yet_served::<D, K, KI, C, M>)),
+                Verb::Post => reads.route(&path, post(web::not_yet_served::<D, K, KI, C, M>)),
+                Verb::Put => reads.route(&path, put(web::not_yet_served::<D, K, KI, C, M>)),
+                Verb::Delete => reads.route(&path, delete(web::not_yet_served::<D, K, KI, C, M>)),
+            };
+        }
     }
     let reads = reads
         .route(

@@ -1,0 +1,1395 @@
+{
+  "components": {
+    "responses": {
+      "NotYetServed": {
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description": "The route is declared and not served yet (OP-153 m.4)."
+      },
+      "Problem": {
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description": "An RFC 9457 problem."
+      }
+    },
+    "schemas": {
+      "Problem": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "The realm-scoped routes of the hosted pages and embedded components (TN-133), served under the realm's host and under /realms/{slug}. A planned route answers 501 not-yet-served.",
+    "title": "Access hosted Frontend API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/csp-reports": {
+      "post": {
+        "operationId": "reportCsp",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Receives CSP reports, 100 a minute per realm (OP-153 m.3 (t)).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/combine": {
+      "post": {
+        "operationId": "combineAccounts",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Combines two re-authenticated accounts, irreversibly (OP-153 m.3 (m)).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/connected-apps": {
+      "get": {
+        "operationId": "listConnectedApps",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "The apps the person shares claims with (OP-153 m.3 (z)).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/connected-apps/{client}": {
+      "delete": {
+        "operationId": "stopSharing",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Stops sharing claims with an app.",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/data-requests": {
+      "get": {
+        "operationId": "listDataRequests",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "The person's export and deletion requests."
+      },
+      "post": {
+        "operationId": "requestExport",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Asks for the person's export: idp.account.export (OP-153 m.3 (cc)).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/deletion": {
+      "delete": {
+        "operationId": "cancelDeletion",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Cancels a scheduled deletion inside its window."
+      },
+      "get": {
+        "operationId": "getDeletion",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Whether the account is scheduled for deletion, and when."
+      }
+    },
+    "/v1/account/documents": {
+      "get": {
+        "operationId": "listDocuments",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "The documents the person accepted and those awaiting acceptance."
+      },
+      "post": {
+        "operationId": "acceptDocument",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Accepts one version of a document."
+      }
+    },
+    "/v1/account/email": {
+      "post": {
+        "operationId": "startEmailChange",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Starts changing the e-mail address after a step-up (OP-153 m.3 (i)).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/email/{change}": {
+      "post": {
+        "operationId": "confirmEmailChange",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "change",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Confirms the new address with its out-of-band code.",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/link-codes": {
+      "post": {
+        "operationId": "createLinkCode",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Makes a cross-device link code, never sent by e-mail (OP-153 m.3 (d)).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/linked": {
+      "get": {
+        "operationId": "listLinkedSignIns",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "The account's linked sign-ins.",
+        "x-suiss-status": "planned"
+      },
+      "post": {
+        "operationId": "startLink",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Links another sign-in after re-authentication (OP-153 m.3 (m)).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/linked/{link}": {
+      "delete": {
+        "operationId": "unlink",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "link",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Ends a linked sign-in; the record is kept.",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/organizations": {
+      "get": {
+        "operationId": "listOrganizations",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "The organizations the person belongs to.",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/passkeys": {
+      "post": {
+        "operationId": "beginPasskey",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Starts adding a passkey."
+      }
+    },
+    "/v1/account/passkeys/{registration}": {
+      "post": {
+        "operationId": "finishPasskey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "registration",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Finishes adding a passkey."
+      }
+    },
+    "/v1/account/preferences": {
+      "get": {
+        "operationId": "getPreferences",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "The person's channel and topic preferences."
+      },
+      "put": {
+        "operationId": "setPreferences",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Replaces the person's preferences."
+      }
+    },
+    "/v1/account/recovery-codes": {
+      "post": {
+        "operationId": "regenerateRecoveryCodes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Makes new recovery codes, shown once."
+      }
+    },
+    "/v1/account/recovery-contacts": {
+      "get": {
+        "operationId": "getRecoveryContacts",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "The account's recovery contacts, at most three.",
+        "x-suiss-status": "planned"
+      },
+      "put": {
+        "operationId": "setRecoveryContacts",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Replaces the account's recovery contacts.",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/security-history": {
+      "get": {
+        "operationId": "getSecurityHistory",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "The account's security history, 90 days, address prefixes only."
+      }
+    },
+    "/v1/account/totp": {
+      "post": {
+        "operationId": "beginTotp",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Starts adding an authenticator app."
+      }
+    },
+    "/v1/account/totp/{enrollment}": {
+      "post": {
+        "operationId": "confirmTotp",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "enrollment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Confirms an authenticator app with its first code."
+      }
+    },
+    "/v1/dbsc/refresh": {
+      "post": {
+        "operationId": "refreshBoundSignIn",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Refreshes a device-tied sign-in.",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/dbsc/register": {
+      "post": {
+        "operationId": "registerBoundSignIn",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Ties this sign-in to the device (DBSC, OP-153 m.3 (y)).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/invitations/{code}": {
+      "get": {
+        "operationId": "getInvitation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "An invitation's organization and inviter, as text; a scanner's GET does not consume it.",
+        "x-suiss-status": "planned"
+      },
+      "post": {
+        "operationId": "acceptInvitation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Accepts an invitation (OP-153 m.3 (o)).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/login/flows": {
+      "post": {
+        "operationId": "createFlow",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Starts a flow; its kind is login unless the body names another."
+      }
+    },
+    "/v1/login/flows/{flow}": {
+      "get": {
+        "operationId": "getFlow",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "flow",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "The flow's current step."
+      },
+      "post": {
+        "operationId": "submitFlow",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "flow",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Submits one method of the current step."
+      }
+    },
+    "/v1/login/guest": {
+      "post": {
+        "operationId": "createGuest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Opens a guest sign-in for a client that allows guests (OP-153 m.3 (k)).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/login/link/confirm": {
+      "post": {
+        "operationId": "confirmLink",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Confirms a sign-in link on the device that asked for it."
+      }
+    },
+    "/v1/login/link/preview": {
+      "post": {
+        "operationId": "previewLink",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "What a sign-in link would do, before it is confirmed."
+      }
+    },
+    "/v1/login/social/{provider}": {
+      "get": {
+        "operationId": "startSocial",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Starts sign-in with a social provider (OP-153 m.3 (l)).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/login/social/{provider}/callback": {
+      "get": {
+        "operationId": "finishSocial",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "The provider's redirect back; checked in the back end.",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/login/step-up": {
+      "post": {
+        "operationId": "stepUp",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Starts a step-up for an exact action and reason (X29)."
+      }
+    },
+    "/v1/organizations": {
+      "post": {
+        "operationId": "createOrganization",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Creates an organization: party_register and idp.org.create (OP-153 m.3 (b)).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/organizations/{organization}/access-requests": {
+      "post": {
+        "operationId": "requestAccess",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Asks an organization's administrators for access.",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/recovery": {
+      "post": {
+        "operationId": "startRecovery",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Starts a recovery attempt; the answer is the same whether or not an account exists (OP-153 m.3 (d)).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/recovery/intents/{token}": {
+      "post": {
+        "operationId": "redeemResetIntent",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Opens the credential-only sign-in of a reset intent (TN-61).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/recovery/{attempt}": {
+      "get": {
+        "operationId": "getRecovery",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attempt",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "A recovery attempt's state.",
+        "x-suiss-status": "planned"
+      },
+      "post": {
+        "operationId": "proveRecovery",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attempt",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Submits one proof to a recovery attempt.",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/sessions": {
+      "get": {
+        "operationId": "listSignIns",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Where the account is signed in."
+      }
+    },
+    "/v1/sessions/current": {
+      "get": {
+        "operationId": "getCurrentSignIn",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "This device's sign-in."
+      }
+    },
+    "/v1/sessions/current/sign-out": {
+      "post": {
+        "operationId": "signOut",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Signs out on this device."
+      }
+    },
+    "/v1/sessions/sign-out-everywhere": {
+      "post": {
+        "operationId": "signOutEverywhere",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Signs out on every device; delegations remain."
+      }
+    },
+    "/v1/sessions/{instance}/end": {
+      "post": {
+        "operationId": "endSignIn",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Ends another device's sign-in: instance.terminate (OP-153 m.3 (y)).",
+        "x-suiss-status": "planned"
+      }
+    }
+  }
+}

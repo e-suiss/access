@@ -1071,6 +1071,30 @@ async fn unknown_hosts_and_forms_are_refused() {
     b.jar.clear();
 }
 
+// OP-153 m.4, §17.9.6
+#[tokio::test]
+async fn a_planned_frontend_route_answers_not_yet_served_only_for_a_known_realm() {
+    use access_identity_ui::domain::frontend_v1::{ROUTES, Verb};
+    let e = env(4, "lg-planned", AuthPolicy::DEFAULT).await;
+    let mut b = e.browser("b");
+    for r in ROUTES.iter().filter(|r| !r.live) {
+        let path = r.path.replace('{', "x").replace('}', "");
+        let method = match r.verb {
+            Verb::Get => "GET",
+            Verb::Post => "POST",
+            Verb::Put => "PUT",
+            Verb::Delete => "DELETE",
+        };
+        let a = b.send(method, &path, None, Some("k")).await;
+        assert_eq!(a.status, StatusCode::NOT_IMPLEMENTED, "{}", r.operation);
+        let problem: serde_json::Value = serde_json::from_slice(&a.body).unwrap();
+        assert_eq!(problem["code"], "not-yet-served", "{}", r.operation);
+    }
+    b.host = "evil.example".into();
+    let a = b.send("POST", "/v1/recovery", None, Some("k")).await;
+    assert_eq!(a.status, StatusCode::NOT_FOUND);
+}
+
 // OP-146 m.12 (f), TN-18
 #[tokio::test]
 async fn the_login_app_carries_its_security_headers() {

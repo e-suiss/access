@@ -3,6 +3,7 @@
 pub mod approval;
 pub mod flow;
 pub mod frontend;
+pub mod frontend_v1;
 pub mod locale;
 pub mod message;
 pub mod node;

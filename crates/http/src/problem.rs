@@ -151,6 +151,13 @@ pub mod codes {
         "Service Unavailable",
         "A dependency is unavailable; nothing was decided or changed (MD-8).",
     );
+    /// A declared route its lane does not serve yet; nothing was read or changed (OP-153 m.4).
+    pub const NOT_YET_SERVED: Code = code(
+        "not-yet-served",
+        501,
+        "Not Implemented",
+        "The route is declared in the Frontend API and not served yet; nothing was read or changed (OP-153 m.4).",
+    );
     /// The request path is not in its one canonical spelling (TN-113).
     pub const PATH_NOT_CANONICAL: Code = code(
         "path-not-canonical",
@@ -354,6 +361,7 @@ pub const CODES: &[Code] = &[
     codes::NOT_FOUND,
     codes::INTERNAL,
     codes::UNAVAILABLE,
+    codes::NOT_YET_SERVED,
     codes::PATH_NOT_CANONICAL,
     codes::BODY_TOO_LARGE,
     codes::METHOD_NOT_ALLOWED,

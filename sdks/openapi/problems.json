@@ -25,6 +25,13 @@
       "description": "A dependency is unavailable; nothing was decided or changed (MD-8)."
     },
     {
+      "code": "not-yet-served",
+      "type": "urn:suiss:access:problem:not-yet-served",
+      "status": 501,
+      "title": "Not Implemented",
+      "description": "The route is declared in the Frontend API and not served yet; nothing was read or changed (OP-153 m.4)."
+    },
+    {
       "code": "path-not-canonical",
       "type": "urn:suiss:access:problem:path-not-canonical",
       "status": 400,
@@ -583,6 +590,13 @@
       "status": 409,
       "title": "Conflict",
       "description": "The call point has a live hook already; retire it first (OP-151 m.10 (d))."
+    },
+    {
+      "code": "catalog-upgrade-required",
+      "type": "urn:suiss:access:problem:catalog-upgrade-required",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The realm does not accept this action's catalog yet; its catalog upgrade must commit first (OP-153 m.3 (a))."
     },
     {
       "code": "invalid-audit-format",

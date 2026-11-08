@@ -281,6 +281,10 @@ login-e2e:
 login-contract:
     ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-identity-ui --test contract --test frontend_contract
 
+# OP-65, OP-153 m.4: rewrite sdks/openapi/frontend-v1.json from the hosted route table
+frontend-contract:
+    ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-identity-ui --test frontend_v1_contract
+
 # OP-65, OP-149: rewrite sdks/openapi/access-v1.json and its examples from crates/http
 access-contract:
     ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-http --test product

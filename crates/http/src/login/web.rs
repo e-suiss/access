@@ -545,6 +545,30 @@ where
     }
 }
 
+/// A declared Frontend API route whose lane does not serve it yet: an unknown host is the
+/// router's plain 404 as for every hosted route (§17.9.6), a known one `501 not-yet-served`
+/// (OP-153 m.4).
+pub(super) async fn not_yet_served<D, K, KI, C, M>(
+    State(s): St<D, K, KI, C, M>,
+    Path(p): Params,
+    uri: Uri,
+    headers: HeaderMap,
+) -> Response
+where
+    D: Directory,
+    K: Keys,
+    KI: Kits,
+    C: Clock + Sync,
+    M: Messages,
+{
+    if let Err(r) = realm(&s, &p, &uri, &headers).await {
+        return r;
+    }
+    crate::problem::codes::NOT_YET_SERVED
+        .problem()
+        .into_response()
+}
+
 /// The login app's page.
 pub(super) async fn page<D, K, KI, C, M>(
     State(s): St<D, K, KI, C, M>,
