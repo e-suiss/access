@@ -91,7 +91,29 @@ pub(crate) async fn invite_current(
     {
         return Err(crate::domain::Invalid::InviteLimit.into());
     }
+    // TN-89 (11), TN-95
+    let (sent, accepted) = t.invitation_outcomes(org.id, REPUTATION_WINDOW_S).await?;
+    if !reputable(sent, accepted) {
+        return Err(crate::domain::Invalid::InviteReputation.into());
+    }
     Ok(())
+}
+
+/// The window an organization's invitation reputation is read over: seven days (PD).
+pub const REPUTATION_WINDOW_S: i64 = 7 * DAY_S;
+
+/// Invitations sent in the window before the reputation counts (PD).
+pub const REPUTATION_MIN_SENT: i64 = 20;
+
+/// Least share of them accepted, per thousand (PD): below it the organization's invitations
+/// wait, as a poisoned tenant's mostly ignored phishing invitations would (TN-89 (11), HL-39).
+pub const REPUTATION_MIN_ACCEPTED_PER_MILLE: i64 = 50;
+
+/// Whether `accepted` of `sent` invitations in the window keep the organization reputable.
+#[must_use]
+pub fn reputable(sent: i64, accepted: i64) -> bool {
+    sent < REPUTATION_MIN_SENT
+        || accepted.saturating_mul(1000) >= sent.saturating_mul(REPUTATION_MIN_ACCEPTED_PER_MILLE)
 }
 
 /// What a committed `idp.org.invite` writes with (TN-89, OP-153 m.3 (o)).
@@ -247,6 +269,16 @@ pub(crate) async fn update(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // TN-89 (11), HL-39, Ek B 3607
+    #[test]
+    fn mostly_ignored_invitations_make_an_organization_wait() {
+        assert!(reputable(19, 0));
+        assert!(reputable(20, 1));
+        assert!(!reputable(20, 0));
+        assert!(!reputable(400, 19));
+        assert!(reputable(400, 20));
+    }
 
     // OP-153 m.3 (o)
     #[test]

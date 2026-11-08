@@ -209,6 +209,77 @@ pub const SSO_MANAGER_DAYS: u64 = 7;
 /// The Named `AuthoritySet` of the enterprise connection manager template (TN-120).
 pub const SSO_MANAGER_ROLE: &str = "enterprise-connection-manager";
 
+/// The enterprise connection manager's Named `AuthoritySet` in realm `slug` for organization
+/// Party `org` (TN-120): `idp.org.sso_draft` on that organization only.
+#[must_use]
+pub fn sso_manager_set(slug: &str, org: [u8; 16]) -> access_kernel::model::AuthoritySet {
+    use access_kernel::model::{ActionSet, AuthoritySet, ResourceSelector, Structural};
+    AuthoritySet {
+        actions: ActionSet {
+            exact: std::collections::BTreeSet::from([
+                access_internal_api::idp::IdpAction::OrgSsoDraft.action_ref(),
+            ]),
+            prefix: std::collections::BTreeSet::new(),
+        },
+        resource: ResourceSelector::Structural(Structural {
+            namespace: String::from(access_internal_api::idp::RESOURCE_NAMESPACE),
+            prefix: vec![
+                String::from(slug),
+                String::from("org"),
+                access_kernel::json::b64url_encode(&org),
+            ],
+            kind: None,
+            attrs: std::collections::BTreeMap::new(),
+        }),
+        params: std::collections::BTreeMap::new(),
+        recipient: None,
+        purpose: None,
+    }
+}
+
+/// The enterprise connection manager template Grant (TN-120, OP-153 m.3 (p)): narrow
+/// ([`sso_manager_set`] at `version`), [`SSO_MANAGER_DAYS`] from `from_ms`, not delegable
+/// (depth 0), held by `holder` in its own capacity only.
+#[must_use]
+pub fn sso_manager_grant(
+    (slug, org): (&str, [u8; 16]),
+    holder: access_kernel::model::Id,
+    basis: access_kernel::meta::GrantBasis,
+    version: u64,
+    from_ms: u64,
+) -> access_kernel::meta::GrantContent {
+    use access_kernel::model::{
+        CanonicalAuthority, ConstraintSet, DelegationTerms, SubjectSelector,
+    };
+    let set = sso_manager_set(slug, org);
+    access_kernel::meta::GrantContent {
+        basis,
+        holder: SubjectSelector::Party(holder),
+        authority: CanonicalAuthority {
+            authority: set.clone(),
+            constraints: ConstraintSet {
+                validity: access_kernel::model::Window {
+                    from: from_ms,
+                    until: from_ms.saturating_add(SSO_MANAGER_DAYS.saturating_mul(86_400_000)),
+                },
+                conditions: std::collections::BTreeSet::new(),
+                budget: std::collections::BTreeSet::new(),
+            },
+            delegation: DelegationTerms {
+                depth: 0,
+                downstream_holder_class: None,
+            },
+            requirements: std::collections::BTreeSet::new(),
+        },
+        agency: std::collections::BTreeSet::from([access_kernel::combinator::Capacity::Own]),
+        named: Some((
+            String::from(SSO_MANAGER_ROLE),
+            version,
+            access_kernel::meta::authority_set_digest(&set),
+        )),
+    }
+}
+
 /// Whether a published challenge `text` answers the claim's challenge hash: the text is the
 /// token itself or [`CHALLENGE_PREFIX`] and the token, surrounding space ignored.
 #[must_use]

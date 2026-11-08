@@ -134,7 +134,7 @@ CREATE TABLE access.org_sso_drafts (
   draft_id uuid NOT NULL DEFAULT uuidv7(),
   org_id uuid NOT NULL,
   protocol text NOT NULL CHECK (protocol IN ('oidc')),
-  issuer text NOT NULL CHECK (issuer ~ '^https://[^\s#?]{1,2040}$'),
+  issuer text NOT NULL CHECK (char_length(issuer) <= 2048 AND issuer ~ '^https://[^\s#?]+$'),
   client_id text NOT NULL CHECK (char_length(client_id) BETWEEN 1 AND 256),
   drafted_by bytea NOT NULL CHECK (octet_length(drafted_by) = 16),
   created_exercise bytea NOT NULL CHECK (octet_length(created_exercise) = 32),
