@@ -94,13 +94,22 @@ impl Https {
         })
     }
 
-    async fn post(&self, at: &Endpoint, path: &str, body: &[u8]) -> Option<Response> {
+    async fn post(
+        &self,
+        at: &Endpoint,
+        path: &str,
+        authorization: Option<&str>,
+        body: &[u8],
+    ) -> Option<Response> {
         let name = ServerName::try_from(at.host.clone()).ok()?;
         let tcp = TcpStream::connect((at.host.as_str(), at.port)).await.ok()?;
         let mut tls = self.connector.connect(name, tcp).await.ok()?;
+        let credential = authorization
+            .map(|a| format!("Authorization: {a}\r\n"))
+            .unwrap_or_default();
         let head = format!(
             "POST {path} HTTP/1.1\r\nHost: {}:{}\r\nContent-Type: application/json\r\n\
-             Accept: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+             Accept: application/json\r\n{credential}Content-Length: {}\r\nConnection: close\r\n\r\n",
             at.host,
             at.port,
             body.len()
@@ -177,7 +186,68 @@ impl Upstream for Https {
     async fn search(&self, domain: &str, kind: Kind, body: Vec<u8>) -> Answer {
         let at = self.routes.get(domain).unwrap_or(&self.default);
         let path = format!("/access/v1/search/{}", kind.search());
-        match tokio::time::timeout(TIMEOUT, self.post(at, &path, &body)).await {
+        match tokio::time::timeout(TIMEOUT, self.post(at, &path, None, &body)).await {
+            Ok(Some(r)) => Answer::Response(r),
+            Ok(None) => Answer::Unanswered(Fault::Unreachable),
+            Err(_) => Answer::Unanswered(Fault::Timeout),
+        }
+    }
+}
+
+/// Where to poll and with what: `https://host[:port]/path` and a bearer credential that is one
+/// header-safe token; `None` otherwise.
+#[must_use]
+pub fn poll_target(url: &str, bearer: &str) -> Option<(Endpoint, String, String)> {
+    let rest = url.strip_prefix("https://")?;
+    let at = rest.find('/')?;
+    let (origin, path) = rest.split_at(at);
+    let endpoint = Endpoint::parse(&format!("https://{origin}"))?;
+    let bearer = bearer.trim();
+    if bearer.is_empty() || !bearer.bytes().all(|b| b.is_ascii_graphic()) {
+        return None;
+    }
+    Some((endpoint, path.to_owned(), format!("Bearer {bearer}")))
+}
+
+/// Access's SSF poll route for this service's stream (RFC 8936), with the stream's bearer
+/// credential (OP-153 m.8 (d)).
+pub struct SsfPoll {
+    https: Https,
+    path: String,
+    authorization: Credential,
+}
+
+/// The `Authorization` value of the stream; never printed (OP-64).
+struct Credential(String);
+
+impl std::fmt::Debug for Credential {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Credential(redacted)")
+    }
+}
+
+impl SsfPoll {
+    /// Polls `url` through `https` with `bearer` (see [`poll_target`]).
+    #[must_use]
+    pub fn new(https: Https, url: &str, bearer: &str) -> Option<Self> {
+        let (default, path, authorization) = poll_target(url, bearer)?;
+        Some(Self {
+            https: Https { default, ..https },
+            path,
+            authorization: Credential(authorization),
+        })
+    }
+}
+
+impl crate::feed::Poll for SsfPoll {
+    async fn poll(&self, body: Vec<u8>) -> Answer {
+        let call = self.https.post(
+            &self.https.default,
+            &self.path,
+            Some(self.authorization.0.as_str()),
+            &body,
+        );
+        match tokio::time::timeout(TIMEOUT, call).await {
             Ok(Some(r)) => Answer::Response(r),
             Ok(None) => Answer::Unanswered(Fault::Unreachable),
             Err(_) => Answer::Unanswered(Fault::Timeout),
@@ -205,6 +275,21 @@ mod tests {
         assert_eq!(Endpoint::parse("http://access.test"), None);
         assert_eq!(Endpoint::parse("https://access.test/x"), None);
         assert_eq!(Endpoint::parse("https://u@access.test"), None);
+    }
+
+    // OP-153 m.8 (d)
+    #[test]
+    fn the_poll_target_is_an_https_path_and_one_credential_token() {
+        let (at, path, auth) =
+            poll_target("https://access.test:8443/realms/acme/ssf/poll", " t0k ").unwrap();
+        assert_eq!(
+            (at.port, path.as_str(), auth.as_str()),
+            (8443, "/realms/acme/ssf/poll", "Bearer t0k")
+        );
+        assert!(poll_target("https://access.test", "t").is_none());
+        assert!(poll_target("http://access.test/ssf/poll", "t").is_none());
+        assert!(poll_target("https://access.test/ssf/poll", "a\r\nX: y").is_none());
+        assert!(poll_target("https://access.test/ssf/poll", " ").is_none());
     }
 
     #[test]

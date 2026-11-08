@@ -8,5 +8,6 @@ pub mod adapters;
 pub mod app;
 pub mod contract;
 pub mod domain;
+pub mod feed;
 pub mod https;
 pub mod ports;

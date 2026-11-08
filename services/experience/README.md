@@ -12,7 +12,7 @@ The contract is [`sdks/openapi/experience-v1.json`](../../sdks/openapi/experienc
 |---|---|
 | `POST /experience/v1/hub/plan` | The search reads to sign, one per domain and kind (`inventory`, `activity`, `changes`), with the PEP name the AIS must carry. Reads and writes nothing. |
 | `POST /experience/v1/hub` | Sends the signed reads to each domain's Access and assembles the hub. |
-| `GET /experience/v1/stream` | Server-sent events `{kind, at_least}`: a hint to read again, never the data. |
+| `GET /experience/v1/stream` | Server-sent events `{kind, at_least}`: a hint to read again, never the data. Fed by polling the service's SSF stream at Access (`ACCESS_EXPERIENCE_SSF_POLL`, `ACCESS_EXPERIENCE_SSF_TOKEN`); the events themselves are never forwarded or trusted. |
 
 ## What a row always says
 

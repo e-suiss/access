@@ -9,13 +9,17 @@
 //!   for domains served by another Access.
 //! - `ACCESS_EXPERIENCE_CA`, `ACCESS_EXPERIENCE_CERT`, `ACCESS_EXPERIENCE_KEY`: PEM files of the
 //!   trusted roots, this service's certificate chain and its key.
+//! - `ACCESS_EXPERIENCE_SSF_POLL`, `ACCESS_EXPERIENCE_SSF_TOKEN`: optional, together: the SSF poll
+//!   URL of this service's stream (`https://host[:port]/…/ssf/poll`) and a file holding its
+//!   bearer credential; each batch of events moves the stream's signal (OP-153 m.8 (d)).
 
 use std::collections::BTreeMap;
 use std::process::ExitCode;
 
 use access_experience::adapters::{Beacon, router};
 use access_experience::app::Experience;
-use access_experience::https::{Endpoint, Https, pep_name};
+use access_experience::feed;
+use access_experience::https::{Endpoint, Https, SsfPoll, pep_name};
 use access_experience::ports::{Clock, Random};
 use rustls::pki_types::pem::PemObject as _;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
@@ -96,6 +100,30 @@ async fn run() -> Result<(), Startup> {
     );
     let key = PrivateKeyDer::from_pem_file(var("ACCESS_EXPERIENCE_KEY")?)
         .map_err(|_| Startup::Config("ACCESS_EXPERIENCE_KEY"))?;
+    let beacon = Beacon::default();
+    // OP-153 m.8 (d)
+    let (_keep, stopped) = tokio::sync::watch::channel(false);
+    let _feed = match (
+        std::env::var("ACCESS_EXPERIENCE_SSF_POLL"),
+        std::env::var("ACCESS_EXPERIENCE_SSF_TOKEN"),
+    ) {
+        (Ok(url), Ok(file)) => {
+            let token = std::fs::read_to_string(file)
+                .map_err(|_| Startup::Config("ACCESS_EXPERIENCE_SSF_TOKEN"))?;
+            let https = Https::new(
+                roots.clone(),
+                chain.clone(),
+                key.clone_key(),
+                default.clone(),
+                BTreeMap::new(),
+            )?;
+            let poll = SsfPoll::new(https, &url, &token)
+                .ok_or(Startup::Config("ACCESS_EXPERIENCE_SSF_POLL"))?;
+            Some(tokio::spawn(feed::run(poll, beacon.clone(), stopped)))
+        }
+        (Err(_), Err(_)) => None,
+        _ => return Err(Startup::Config("ACCESS_EXPERIENCE_SSF_POLL")),
+    };
     let upstream = Https::new(roots, chain, key, default, routes)?;
     let experience = Experience::new(
         upstream,
@@ -105,7 +133,7 @@ async fn run() -> Result<(), Startup> {
         )),
         pep,
     );
-    let app = router(experience, Beacon::default());
+    let app = router(experience, beacon);
     let listener = tokio::net::TcpListener::bind(&listen).await?;
     axum::serve(listener, app).await?;
     Ok(())
