@@ -648,6 +648,20 @@
       "description": "Home realm discovery goes on only with a verified domain no other organization claims (TN-98)."
     },
     {
+      "code": "invalid-social-provider",
+      "type": "urn:suiss:access:problem:invalid-social-provider",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The preset is not one Access ships, or the client id and secret reference are not given together (IDP-31)."
+    },
+    {
+      "code": "shared-social-key-in-production",
+      "type": "urn:suiss:access:problem:shared-social-key-in-production",
+      "status": 409,
+      "title": "Conflict",
+      "description": "Only a sandbox realm may use the shared development client; give the realm its own client id and secret reference (IDP-31)."
+    },
+    {
       "code": "invalid-audit-format",
       "type": "urn:suiss:access:problem:invalid-audit-format",
       "status": 400,

@@ -1171,8 +1171,15 @@
         "operationId": "startSocial",
         "summary": "Starts sign-in with a social provider (OP-153 m.3 (l)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -1187,8 +1194,7 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       }
     },
     "/v1/login/social/{provider}/callback": {
@@ -1196,8 +1202,15 @@
         "operationId": "finishSocial",
         "summary": "The provider's redirect back; checked in the back end.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -1212,8 +1225,7 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       }
     },
     "/v1/account/linked": {
@@ -1221,21 +1233,34 @@
         "operationId": "listLinkedSignIns",
         "summary": "The account's linked sign-ins.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       },
       "post": {
         "operationId": "startLink",
         "summary": "Links another sign-in after re-authentication (OP-153 m.3 (m)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -1249,8 +1274,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/account/linked/{link}": {
@@ -1258,8 +1282,15 @@
         "operationId": "unlink",
         "summary": "Ends a linked sign-in; the record is kept.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -1274,8 +1305,7 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       }
     },
     "/v1/account/combine": {
@@ -1283,8 +1313,15 @@
         "operationId": "combineAccounts",
         "summary": "Combines two re-authenticated accounts, irreversibly (OP-153 m.3 (m)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -1298,8 +1335,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/account/connected-apps": {
