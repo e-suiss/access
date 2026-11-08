@@ -226,6 +226,12 @@ pub const ROWS: &[Route] = &[
         "retireUpstreamIdp",
         "Retires an upstream identity provider.",
     ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/upstream-idps/{name}/links",
+        "linkUpstreamSubject",
+        "Links a subject of the upstream identity provider to an account; its inbound signals then reach the account.",
+    ),
     read(
         "/admin/v1/realms/{slug}/settings",
         "getSettings",
@@ -585,7 +591,7 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "getUpstreamIdp" => (UpstreamIdps, Shape::Get),
         "putUpstreamIdp" => (UpstreamIdps, w(true)),
         "patchUpstreamIdp" => (UpstreamIdps, patch(UPSTREAM_PATCH, None)),
-        "retireUpstreamIdp" => (UpstreamIdps, w(false)),
+        "retireUpstreamIdp" | "linkUpstreamSubject" => (UpstreamIdps, w(false)),
         "getSettings" => (Settings, Shape::Get),
         "putSigninPolicy" => (Settings, put("signin_policy")),
         "patchSigninPolicy" => (Settings, patch(SIGNIN_PATCH, Some("signin_policy"))),
@@ -663,6 +669,8 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::MembershipIssuer => &r::INVALID_MEMBERSHIP_ISSUER,
             Invalid::Members => &r::INVALID_MEMBERS,
             Invalid::Upstream => &r::INVALID_UPSTREAM,
+            Invalid::UpstreamSubject => &r::INVALID_UPSTREAM_SUBJECT,
+            Invalid::UpstreamSubjectLinked => &r::UPSTREAM_SUBJECT_LINKED,
             Invalid::SigninPolicy => &r::INVALID_SIGNIN_POLICY,
             Invalid::SessionPolicy => &r::INVALID_SESSION_POLICY,
             Invalid::ClientExists | Invalid::GroupExists | Invalid::UpstreamExists => {

@@ -451,6 +451,19 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     return Err(Invalid::NoAccount.into());
                 }
             }
+            Change::UpstreamLink(l) => {
+                let u = resources::upstream(t, l.upstream.as_str())
+                    .await?
+                    .filter(|u| u.active)
+                    .ok_or(Invalid::NoUpstream)?;
+                if resources::account(t, l.account).await?.is_none() {
+                    return Err(Invalid::NoAccount.into());
+                }
+                let held = t.upstream_subject(&link_digest(&u, &l.sub)).await?;
+                if held.is_some_and(|s| s != l.account) {
+                    return Err(Invalid::UpstreamSubjectLinked.into());
+                }
+            }
             Change::ProtectionMode { mode, loosens } => {
                 // OP-151 m.14 (f)
                 let tier = access_identity_risk::app::settings::change_tier(t, mode)
@@ -949,6 +962,15 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .await
                     .map_err(risk)?
             }
+            Change::UpstreamLink(l) => {
+                let u = resources::upstream(t, l.upstream.as_str())
+                    .await?
+                    .filter(|u| u.active)
+                    .ok_or(Invalid::NoUpstream)?;
+                t.link_upstream_subject_decided(bound, &link_digest(&u, &l.sub), l.account)
+                    .await?
+                    .ok_or(Invalid::UpstreamSubjectLinked)?
+            }
         };
         if done {
             Ok(secret)
@@ -1262,6 +1284,18 @@ fn group_row(g: &Group) -> GroupRow {
         active: true,
         position: 0,
     }
+}
+
+/// H(iss, sub) of an upstream subject (OP-152 m.7 (d) E6): `iss` is the issuer the provider's
+/// signals name their subjects under, its SSF transmitter's when it has one, else its own.
+fn link_digest(u: &UpstreamRow, sub: &str) -> [u8; 32] {
+    let issuer = u
+        .ssf
+        .as_deref()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+        .and_then(|v| v.get("issuer").and_then(|i| i.as_str()).map(String::from))
+        .unwrap_or_else(|| u.issuer.clone());
+    access_identity_events::domain::inbound::subject_digest(&issuer, sub)
 }
 
 fn upstream_row(u: &Upstream) -> UpstreamRow {

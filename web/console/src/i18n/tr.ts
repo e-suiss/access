@@ -322,6 +322,12 @@ export const tr: Record<Key, string> = {
     "Her ilişkili köken, public suffix listesindeki kayıt edilebilir bir alan adında olmalıdır ve en çok 5 farklı etikete izin verilir.",
   settingsClients: "Uygulamalar",
   settingsUpstreams: "Üst kimlik sağlayıcılar",
+  upstreamLinkTitle: "Sağlayıcıdaki kullanıcıyı bir hesaba bağla",
+  upstreamLinkIntro:
+    "Sağlayıcının bu kullanıcı hakkında gönderdiği güvenlik sinyalleri artık hesaba ulaşır. Yalnız oturumları bitirebilir ya da hesabı kısıtlayabilir, hiçbir şey vermez.",
+  upstreamLinkProvider: "Sağlayıcı adı",
+  upstreamLinkSubject: "Sağlayıcıdaki kullanıcı kimliği",
+  upstreamLinkSave: "Bağla",
   settingsKeys: "İmza anahtarları",
   keyPending: "Henüz yayımlanmış anahtar yok",
   keyPublished: "Yayımlandı, henüz imzalamıyor",

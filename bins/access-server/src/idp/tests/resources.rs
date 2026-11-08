@@ -542,3 +542,167 @@ fn reserved_operations_compile_to_nothing() {
         Err(Invalid::Reserved)
     );
 }
+
+mod inbound {
+    use std::sync::Arc;
+
+    use access_identity_account::domain::signal::SignalKind;
+    use access_identity_events::adapters::{KekSealer, RealmKek};
+    use access_identity_events::app::Db;
+    use access_identity_events::app::receiver::Receiver;
+    use access_identity_events::domain::mapping::signal_uri;
+    use access_identity_events::ports::Unavailable;
+    use access_identity_oauth::adapters::PgDirectory;
+    use access_identity_oauth::adapters::dpop::SystemClock;
+    use access_identity_oauth::ports::oauth::ClientKeys;
+    use access_kernel::json::b64url_encode;
+    use aws_lc_rs::rand::SystemRandom;
+    use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair as _};
+    use suiss_crypto::envelope::Kek;
+
+    use super::*;
+
+    const UPSTREAM: &str = "https://upstream.example";
+    const AUDIENCE: &str = "https://linked.id.test";
+
+    struct Keys(String);
+
+    impl ClientKeys for Keys {
+        fn fetch(
+            &self,
+            _: &str,
+        ) -> impl std::future::Future<Output = Result<Vec<u8>, Unavailable>> + Send {
+            std::future::ready(Ok(self.0.clone().into_bytes()))
+        }
+    }
+
+    struct OneKek(Arc<SoftKek>);
+
+    impl RealmKek for OneKek {
+        fn kek(&self, _: TenantId, _: RealmId) -> Option<Arc<dyn Kek + Send + Sync>> {
+            Some(self.0.clone())
+        }
+    }
+
+    fn jwks(k: &EcdsaKeyPair) -> String {
+        let p = k.public_key().as_ref();
+        format!(
+            r#"{{"keys":[{{"kty":"EC","crv":"P-256","kid":"k1","use":"sig","x":"{}","y":"{}"}}]}}"#,
+            b64url_encode(&p[1..33]),
+            b64url_encode(&p[33..])
+        )
+    }
+
+    fn set(k: &EcdsaKeyPair, sub: &str, jti: &str) -> Vec<u8> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let claims = json!({
+            "iss": UPSTREAM,
+            "aud": AUDIENCE,
+            "iat": now,
+            "jti": jti,
+            "sub_id": {"format": "iss_sub", "iss": UPSTREAM, "sub": sub},
+            "events": {signal_uri(SignalKind::SessionRevoked): {"event_timestamp": now}},
+        });
+        let input = format!(
+            "{}.{}",
+            b64url_encode(br#"{"alg":"ES256","kid":"k1","typ":"secevent+jwt"}"#),
+            b64url_encode(&serde_json::to_vec(&claims).unwrap())
+        );
+        let sig = k.sign(&SystemRandom::new(), input.as_bytes()).unwrap();
+        format!("{input}.{}", b64url_encode(sig.as_ref())).into_bytes()
+    }
+
+    async fn epoch(w: &World, at: (TenantId, RealmId), subject: [u8; 16]) -> i64 {
+        let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+        let e = t
+            .subject(subject, false)
+            .await
+            .unwrap()
+            .unwrap()
+            .session_epoch;
+        t.commit().await.unwrap();
+        e
+    }
+
+    // OP-152 m.7 (d), §9.16.2 k.4, TN-42, EI-25
+    #[tokio::test]
+    async fn a_linked_upstream_subject_takes_inbound_signals_without_seeding() {
+        let (w, at, d) = ready("linked").await;
+        let up = compile(
+            Op::PutUpstream,
+            Some("google"),
+            &json!({"issuer": "https://accounts.google.com", "client_id": "c",
+                    "jwks_uri": "https://www.googleapis.com/oauth2/v3/certs",
+                    "ssf": {"issuer": UPSTREAM,
+                            "jwks_uri": "https://upstream.example/jwks",
+                            "aud": AUDIENCE,
+                            "events": [signal_uri(SignalKind::SessionRevoked)]}}),
+            &w.ids,
+        )
+        .unwrap();
+        written(&run(&w, at, d, up, 1).await.unwrap());
+        let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+        let subject = t.insert_subject("active", "kek-1", &[1; 40]).await.unwrap();
+        let other = t.insert_subject("active", "kek-1", &[2; 40]).await.unwrap();
+        let row = t.transmitters().await.unwrap().remove(0);
+        t.commit().await.unwrap();
+        let account = w.ids.encode(SUBJECT_PREFIX, subject).unwrap();
+        let link = |upstream: &str, sub: &str, account: &str| {
+            compile(
+                Op::LinkUpstreamSubject,
+                Some(upstream),
+                &json!({"sub": sub, "account_id": account}),
+                &w.ids,
+            )
+            .unwrap()
+        };
+        assert_eq!(
+            link("google", "", &account).check(&DeclaredTargets::default()),
+            Err(Invalid::UpstreamSubject)
+        );
+        assert_eq!(
+            refused(&w, at, d, link("absent", "up-1", &account), 2).await,
+            Invalid::NoUpstream
+        );
+
+        let k = EcdsaKeyPair::generate(&ECDSA_P256_SHA256_FIXED_SIGNING).unwrap();
+        let receiver = Receiver::new(
+            PgDirectory::new(w.db.router.clone()),
+            Db {
+                app: w.db.app.clone(),
+                reader: w.db.reader.clone(),
+                ids: Arc::new(IdKey::new(Secret::new([4; 32]))),
+            },
+            Keys(jwks(&k)),
+            KekSealer(OneKek(Arc::new(SoftKek::new("realm-kek-1", [9; 32])))),
+            SystemClock,
+        );
+        let before = epoch(&w, at, subject).await;
+        receiver
+            .take(at.0, at.1, &row, &set(&k, "up-1", "j1"))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(epoch(&w, at, subject).await, before, "unlinked: ignored");
+
+        let linked = run(&w, at, d, link("google", "up-1", &account), 3)
+            .await
+            .unwrap();
+        assert!(written(&linked) > 0);
+        receiver
+            .take(at.0, at.1, &row, &set(&k, "up-1", "j2"))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(epoch(&w, at, subject).await, before + 1);
+
+        let elsewhere = w.ids.encode(SUBJECT_PREFIX, other).unwrap();
+        assert_eq!(
+            refused(&w, at, d, link("google", "up-1", &elsewhere), 4).await,
+            Invalid::UpstreamSubjectLinked
+        );
+    }
+}

@@ -361,6 +361,20 @@
       "description": "An upstream registration outside its fields' shapes; its secret is a secret:// reference, never the secret (OP-150 m.11 (j))."
     },
     {
+      "code": "invalid-upstream-subject",
+      "type": "urn:suiss:access:problem:invalid-upstream-subject",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "An upstream subject that is empty, longer than 255 bytes or has control characters."
+    },
+    {
+      "code": "upstream-subject-linked",
+      "type": "urn:suiss:access:problem:upstream-subject-linked",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The upstream subject is linked to another account; a link is never moved (TN-42)."
+    },
+    {
       "code": "invalid-signin-policy",
       "type": "urn:suiss:access:problem:invalid-signin-policy",
       "status": 400,

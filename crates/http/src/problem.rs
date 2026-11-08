@@ -402,6 +402,8 @@ pub const CODES: &[Code] = &[
     codes::realm::INVALID_MEMBERSHIP_ISSUER,
     codes::realm::INVALID_MEMBERS,
     codes::realm::INVALID_UPSTREAM,
+    codes::realm::INVALID_UPSTREAM_SUBJECT,
+    codes::realm::UPSTREAM_SUBJECT_LINKED,
     codes::realm::INVALID_SIGNIN_POLICY,
     codes::realm::INVALID_SESSION_POLICY,
     codes::realm::RESOURCE_EXISTS,

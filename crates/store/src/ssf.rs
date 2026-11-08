@@ -466,6 +466,48 @@ impl TenantTx {
         Ok(())
     }
 
+    /// Links the upstream subject digest H(iss, sub) to `subject` under the `idp.upstream.link`
+    /// decision `bound` (EI-25, OP-152 m.7 (d) E6): `Some(true)` when linked now, `Some(false)`
+    /// when it is linked to `subject` already, `None` when another account holds it.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn link_upstream_subject_decided(
+        &mut self,
+        bound: &Bound,
+        digest: &[u8; 32],
+        subject: [u8; 16],
+    ) -> Result<Option<bool>, StoreError> {
+        let (tenant, realm) = scope(self)?;
+        let n = sqlx::query!(
+            "INSERT INTO access.upstream_subject
+               (tenant_id, realm_id, subject_digest, subject_id, domain_id, decision_pos)
+             VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
+            tenant,
+            realm,
+            digest.as_slice(),
+            uuid(&subject),
+            bound.domain().as_bytes().as_slice(),
+            i64::try_from(bound.position()).map_err(|_| StoreError::Range)?,
+        )
+        .execute(&mut *self.tx)
+        .await?
+        .rows_affected();
+        if n == 1 {
+            return Ok(Some(true));
+        }
+        let held = sqlx::query_scalar!(
+            "SELECT subject_id FROM access.upstream_subject
+              WHERE tenant_id = $1 AND realm_id = $2 AND subject_digest = $3",
+            tenant,
+            realm,
+            digest.as_slice(),
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?;
+        Ok(held.filter(|s| *s.as_bytes() == subject).map(|_| false))
+    }
+
     /// The realm subject linked to the upstream subject digest.
     ///
     /// # Errors

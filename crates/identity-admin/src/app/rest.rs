@@ -23,8 +23,8 @@ use crate::domain::{
     Attribute, AuthMethod, Branding, Change, CimdPolicy, ClaimName, Client, ClientId, Color,
     Disclosure, ExtensionPolicy, Group, HOOK_PREFIX, HookChange, HookPoint, HookSpec, Invalid,
     JoseAlg, Members, MembershipIssuer, Name, OnNoAnswer, ProtectionMode, RedirectUri, RpId,
-    SessionPolicy, SigninMethod, SigninPolicy, Signing, Subject, Upstream, WEBHOOK_PREFIX,
-    WebhookChange, WebhookSpec,
+    SessionPolicy, SigninMethod, SigninPolicy, Signing, Subject, Upstream, UpstreamLink,
+    WEBHOOK_PREFIX, WebhookChange, WebhookSpec,
 };
 use crate::ports::{Decider, Governance, Instances, RealmKeys};
 use access_identity_events::domain::webhook::event_names;
@@ -66,6 +66,8 @@ pub enum Op {
     PutUpstream,
     /// `retireUpstreamIdp`.
     RetireUpstream,
+    /// `linkUpstreamSubject` (OP-152 m.7 (d) E6).
+    LinkUpstreamSubject,
     /// `putSigninPolicy`.
     PutSigninPolicy,
     /// `putSessionPolicy`.
@@ -123,6 +125,7 @@ impl Op {
             "reactivateAccount" => Self::ReactivateAccount,
             "putUpstreamIdp" | "patchUpstreamIdp" => Self::PutUpstream,
             "retireUpstreamIdp" => Self::RetireUpstream,
+            "linkUpstreamSubject" => Self::LinkUpstreamSubject,
             "putSigninPolicy" | "patchSigninPolicy" => Self::PutSigninPolicy,
             "putSessionPolicy" | "patchSessionPolicy" => Self::PutSessionPolicy,
             "putBranding" | "patchBranding" => Self::PutBranding,
@@ -449,6 +452,14 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         Op::RetireUpstream => {
             only(m, &[])?;
             Change::UpstreamRetire(Name::parse(key_of(key)?)?)
+        }
+        Op::LinkUpstreamSubject => {
+            only(m, &["sub", "account_id"])?;
+            Change::UpstreamLink(UpstreamLink {
+                upstream: Name::parse(key_of(key)?)?,
+                sub: String::from(text(m, "sub")?),
+                account: subject(ids, text(m, "account_id")?)?,
+            })
         }
         Op::PutSigninPolicy => {
             only(

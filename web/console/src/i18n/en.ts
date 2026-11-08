@@ -315,6 +315,12 @@ export const en = {
     "Each related origin must be on a registrable domain from the public suffix list, and at most 5 distinct labels are allowed.",
   settingsClients: "Apps",
   settingsUpstreams: "Upstream providers",
+  upstreamLinkTitle: "Link a provider's user to an account",
+  upstreamLinkIntro:
+    "Security signals the provider sends about this user then reach the account. They can only end sessions or restrict it, never grant anything.",
+  upstreamLinkProvider: "Provider name",
+  upstreamLinkSubject: "User id at the provider",
+  upstreamLinkSave: "Link",
   settingsKeys: "Signing keys",
   keyPending: "No key published yet",
   keyPublished: "Published, not signing yet",

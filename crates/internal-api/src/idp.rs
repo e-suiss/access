@@ -113,11 +113,14 @@ pub enum IdpAction {
     WebhookUpdate,
     /// Retires a webhook; narrowing, CT1.
     WebhookRetire,
+    /// Links an upstream subject to an account, so the upstream's inbound signals about it
+    /// reach the account (§9.16.2 k.4, TN-42, OP-152 m.7 (d) E6): CT2.
+    UpstreamLink,
 }
 
 impl IdpAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 37] = [
+    pub const ALL: [Self; 38] = [
         Self::ClientRegister,
         Self::ClientUpdate,
         Self::ClientRetire,
@@ -155,6 +158,7 @@ impl IdpAction {
         Self::WebhookRegister,
         Self::WebhookUpdate,
         Self::WebhookRetire,
+        Self::UpstreamLink,
     ];
 
     /// Its namespace.
@@ -190,7 +194,8 @@ impl IdpAction {
             Self::UpstreamRegister
             | Self::UpstreamMapping
             | Self::UpstreamUpdate
-            | Self::UpstreamRetire => "idp.upstream",
+            | Self::UpstreamRetire
+            | Self::UpstreamLink => "idp.upstream",
             Self::AccountDelete
             | Self::AccountSuspend
             | Self::AccountReactivate
@@ -238,6 +243,7 @@ impl IdpAction {
             Self::RealmProtectionMode => "protection_mode",
             Self::RealmProtectionModeLoosen => "protection_mode_loosen",
             Self::AccountCanary => "canary",
+            Self::UpstreamLink => "link",
         }
     }
 

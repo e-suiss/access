@@ -100,6 +100,12 @@ fn each_operation_compiles_into_its_one_change() {
             "idp.upstream.retire",
         ),
         (
+            Op::LinkUpstreamSubject,
+            Some("google"),
+            json!({"sub": "1180", "account_id": account}),
+            "idp.upstream.link",
+        ),
+        (
             Op::PutSigninPolicy,
             None,
             json!({"methods": ["email", "passkey", "social:google"], "mfa_required": true,

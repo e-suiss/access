@@ -142,6 +142,20 @@ pub const INVALID_UPSTREAM: Code = code(
     "Bad Request",
     "An upstream registration outside its fields' shapes; its secret is a secret:// reference, never the secret (OP-150 m.11 (j)).",
 );
+/// An upstream subject that is empty, longer than 255 bytes or has control characters.
+pub const INVALID_UPSTREAM_SUBJECT: Code = code(
+    "invalid-upstream-subject",
+    400,
+    "Bad Request",
+    "An upstream subject that is empty, longer than 255 bytes or has control characters.",
+);
+/// The upstream subject is linked to another account; a link is never moved (TN-42).
+pub const UPSTREAM_SUBJECT_LINKED: Code = code(
+    "upstream-subject-linked",
+    409,
+    "Conflict",
+    "The upstream subject is linked to another account; a link is never moved (TN-42).",
+);
 /// Sign-in requirements outside their shapes (TN-132).
 pub const INVALID_SIGNIN_POLICY: Code = code(
     "invalid-signin-policy",

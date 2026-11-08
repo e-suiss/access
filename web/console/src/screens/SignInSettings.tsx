@@ -8,6 +8,7 @@ import { t } from "../i18n/index.js";
 import { adminGet, change, type WriteResult } from "../lib/admin.js";
 import { Problem } from "../lib/api.js";
 import { type Ctx, at, Field, Panel, Show, useLoad, useRun } from "./parts.js";
+import { UpstreamLink } from "./UpstreamLink.js";
 
 interface Settings {
   readonly rp_id?: string | null;
@@ -326,6 +327,7 @@ export function SignInSettings({ ctx }: { readonly ctx: Ctx }): ReactElement {
       </Show>
       <Listing ctx={ctx} path="/clients" title={t("settingsClients")} id="clients" />
       <Listing ctx={ctx} path="/upstream-idps" title={t("settingsUpstreams")} id="upstreams" />
+      <UpstreamLink ctx={ctx} />
       <AnalyticsPanel ctx={ctx} />
     </>
   );

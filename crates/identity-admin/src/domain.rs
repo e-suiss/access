@@ -29,7 +29,7 @@ pub mod realm;
 
 pub use realm::{
     Binding, Group, Members, MembershipIssuer, Name, SessionPolicy, SigninMethod, SigninPolicy,
-    Upstream,
+    Upstream, UpstreamLink,
 };
 
 /// Context label of a change digest.
@@ -318,6 +318,12 @@ pub enum Invalid {
     /// The webhook does not exist or is retired.
     #[error("no such webhook")]
     NoWebhook,
+    /// An upstream subject that is empty, too long or has control characters.
+    #[error("bad upstream subject")]
+    UpstreamSubject,
+    /// The upstream subject is linked to another account already.
+    #[error("upstream subject linked")]
+    UpstreamSubjectLinked,
 }
 
 impl Invalid {
@@ -374,6 +380,8 @@ impl Invalid {
             Self::HookPointTaken => "hook-point-taken",
             Self::NoHook => "no-such-hook",
             Self::NoWebhook => "no-such-webhook",
+            Self::UpstreamSubject => "invalid-upstream-subject",
+            Self::UpstreamSubjectLinked => "upstream-subject-linked",
         }
     }
 }
@@ -1211,6 +1219,8 @@ pub enum Change {
     Hook(HookChange),
     /// `idp.webhook.register`, `idp.webhook.update` or `idp.webhook.retire` (TN-136).
     Webhook(WebhookChange),
+    /// `idp.upstream.link` (OP-152 m.7 (d) E6).
+    UpstreamLink(UpstreamLink),
 }
 
 fn uint(v: u32) -> Value {
@@ -1253,6 +1263,7 @@ impl Change {
             Self::ExtensionPolicy(_) => IdpAction::RealmExtensionPolicy,
             Self::Hook(h) => h.action().idp(),
             Self::Webhook(w) => w.action().idp(),
+            Self::UpstreamLink(_) => IdpAction::UpstreamLink,
         }
     }
 
@@ -1278,6 +1289,7 @@ impl Change {
             Self::SigninPolicy(p) => p.check(),
             Self::SessionPolicy(p) => p.check(),
             Self::ExtensionPolicy(p) => p.check().map_err(|_| Invalid::ExtensionPolicy),
+            Self::UpstreamLink(l) => l.check(),
             Self::Hook(_)
             | Self::Webhook(_)
             | Self::ClientRetire(_)
@@ -1356,6 +1368,7 @@ impl Change {
             Self::ExtensionPolicy(p) => p.to_value(),
             Self::Hook(h) => h.body(),
             Self::Webhook(w) => w.body(),
+            Self::UpstreamLink(l) => l.to_value(),
         }
     }
 
@@ -1395,7 +1408,8 @@ impl Change {
             }
             Self::UpstreamRegister(Upstream { name, .. })
             | Self::UpstreamUpdate(Upstream { name, .. })
-            | Self::UpstreamRetire(name) => {
+            | Self::UpstreamRetire(name)
+            | Self::UpstreamLink(UpstreamLink { upstream: name, .. }) => {
                 path.extend([String::from("upstream"), String::from(name.as_str())]);
             }
             Self::MapperSet { claim, .. } => {

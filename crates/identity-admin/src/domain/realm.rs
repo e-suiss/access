@@ -226,6 +226,42 @@ pub fn ssf_json(c: &TransmitterConfig) -> serde_json::Value {
     v
 }
 
+/// An upstream subject linked to an account (§9.16.2 k.4, TN-42, OP-152 m.7 (d) E6): the
+/// upstream's inbound signals naming `sub` then reach the account, and only narrow it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UpstreamLink {
+    /// The upstream provider.
+    pub upstream: Name,
+    /// The subject the provider names, as its signals carry it.
+    pub sub: String,
+    /// The account's internal id.
+    pub account: [u8; 16],
+}
+
+impl UpstreamLink {
+    /// Checks `sub`: 1 to 255 bytes without control characters.
+    ///
+    /// # Errors
+    /// [`Invalid::UpstreamSubject`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        if (1..=255).contains(&self.sub.len()) && !self.sub.chars().any(char::is_control) {
+            Ok(())
+        } else {
+            Err(Invalid::UpstreamSubject)
+        }
+    }
+
+    /// The deterministic CBOR the change carries.
+    #[must_use]
+    pub fn to_value(&self) -> Value {
+        Value::Map(vec![
+            (Value::text("upstream"), Value::text(self.upstream.as_str())),
+            (Value::text("sub"), Value::text(&self.sub)),
+            (Value::text("account"), Value::Bytes(self.account.to_vec())),
+        ])
+    }
+}
+
 impl Upstream {
     /// Checks the URLs, the client id and the secret reference.
     ///
