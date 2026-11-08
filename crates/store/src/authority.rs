@@ -1070,6 +1070,27 @@ pub async fn read_outbox(
         .collect()
 }
 
+/// The issuer cutoff a decided drop of the realm key `kid` recorded for the realm whose issuer
+/// is `issuer` (§13.7.7, SEC9); `None` when no such key was dropped. Read across tenants through
+/// the one database function that exposes only this number.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn realm_key_cutoff(
+    pool: &PgPool,
+    issuer: &str,
+    kid: &[u8; 32],
+) -> Result<Option<u64>, StoreError> {
+    let cutoff = sqlx::query_scalar!(
+        r#"SELECT access.realm_key_cutoff($1, $2) AS "cutoff""#,
+        issuer,
+        kid.as_slice(),
+    )
+    .fetch_one(pool)
+    .await?;
+    cutoff.map(unsigned).transpose()
+}
+
 /// The canonical server's clock in Unix milliseconds, one of the trusted time sources
 /// (OP-129 m.1 (b)).
 ///

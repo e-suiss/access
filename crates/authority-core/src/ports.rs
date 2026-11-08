@@ -156,6 +156,17 @@ pub trait Reader {
         let _ = namespace;
         std::future::ready(Err(CoreError::Unavailable("publications")))
     }
+    /// The issuer cutoff a decided drop of the realm key `kid` recorded for the realm whose
+    /// issuer is `iss` (§13.7.7, SEC9); `None` when no such key was dropped. Unavailable by
+    /// default.
+    fn key_cutoff(
+        &self,
+        iss: &str,
+        kid: &[u8; 32],
+    ) -> impl Future<Output = Result<Option<u64>, CoreError>> + Send {
+        let _ = (iss, kid);
+        std::future::ready(Err(CoreError::Unavailable("key-cutoff")))
+    }
 }
 
 /// A projection contract still open at some time (§5.4).

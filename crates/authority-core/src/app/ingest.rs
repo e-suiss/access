@@ -62,6 +62,8 @@ struct Verified {
     instance: Option<Id>,
     body: Option<(Vec<u8>, Option<Body>)>,
     external: bool,
+    /// Signed by a dropped realm key after its issuer cutoff: held (§13.7.7, SEC9).
+    cut_off: bool,
 }
 
 type Checked = Result<Verified, Refusal>;
@@ -127,7 +129,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 .pos
                 .checked_add(1)
                 .ok_or(CoreError::Protocol("position"))?;
-            let (disposition, draw, quota) = self.dispose(&mut snap, &v.statement, now).await?;
+            let (disposition, draw, quota) = self.dispose(&mut snap, &v, now).await?;
             let resolved = Resolved {
                 claims: vec![NewClaim {
                     bytes: sub.claim.clone(),
@@ -224,9 +226,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     async fn dispose(
         &self,
         snap: &mut Snapshot,
-        s: &Statement,
+        v: &Verified,
         now: u64,
     ) -> Result<(Disposition, Option<(Vec<u8>, u64)>, Option<(u64, u64)>), CoreError> {
+        // SEC9: past its key's cutoff a Claim is held and draws no quota
+        if v.cut_off {
+            return Ok((Disposition::SourceNotAccepted, None, None));
+        }
+        let s = &v.statement;
         let gates = self.gates(snap, &s.issuer).await?;
         let mut disposition = claim::disposition(s, &gates, now);
         // P21: Acceptance and designation together
@@ -296,6 +303,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             return Ok(Err(r));
         }
         Ok(Ok(Verified {
+            cut_off: false,
             statement,
             instance,
             body: body.map(|b| (b.to_vec(), decoded)),
@@ -344,11 +352,17 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             if !self.bound(snap, &subject, &m.subject, now).await? {
                 return Ok(Err(Refusal::SUBJECT));
             }
+            // §13.7.7, SEC9
+            let cutoff = match carrier::peek_kid(&sub.claim) {
+                Some(kid) => self.reader.key_cutoff(&iss, &kid).await?,
+                None => None,
+            };
             let decoded = match body::check(&m.statement, m.body.as_deref()) {
                 Ok(d) => d,
                 Err(e) => return Ok(Err(Refusal(e.code()))),
             };
             return Ok(Ok(Verified {
+                cut_off: carrier::past_cutoff(m.statement.issued_at, cutoff),
                 statement: m.statement,
                 instance: None,
                 body: m.body.map(|b| (b, decoded)),

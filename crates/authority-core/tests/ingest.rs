@@ -1114,3 +1114,191 @@ async fn an_authority_state_ack_is_recorded_and_widens_nothing() {
     );
     assert_eq!(act(&mut core, d, ALICE_KEY, 31, NOW).await, before);
 }
+
+/// An upstream ID token of `sub` issued at `iat` seconds, signed by the key `seed`.
+fn id_token_at(sub: &str, iat: u64, seed: u8) -> Vec<u8> {
+    let kid = b64url_encode(&thumbprint(&public(seed)));
+    let header = format!(r#"{{"alg":"Ed25519","kid":"{kid}","typ":"JWT"}}"#);
+    let payload = format!(
+        r#"{{"iss":"{ISS}","aud":"access","sub":"{sub}","iat":{iat},"exp":900,"amr":["pwd"]}}"#
+    );
+    let input = format!(
+        "{}.{}",
+        b64url_encode(header.as_bytes()),
+        b64url_encode(payload.as_bytes())
+    );
+    let sig = signing(seed).sign(input.as_bytes());
+    format!("{input}.{}", b64url_encode(&sig.to_bytes())).into_bytes()
+}
+
+/// A realm whose issuer is [`ISS`], with a decided drop of `kid` declaring `cutoff_at`, in a
+/// tenant and governing domain of its own (OP-150 m.11 (c)).
+async fn dropped_realm_key(db: &TestDb, kid: [u8; 32], cutoff_at: u64) {
+    use access_store::authority::{
+        CommitBatch, HeadRow, LogRecord, NonceRow, acquire_lease, commit_batch, create_domain,
+    };
+    use access_store::identity::TenantTx;
+    use access_store::idp::{Decision, KeyChange, bind, create_settings, record_key_change};
+    use access_store::tenancy::{create_realm, create_tenant, set_issuer};
+    let tenant = create_tenant(&db.app, "pool-default").await.unwrap();
+    let domain = DomainId::from_bytes([0x77; 32]);
+    let genesis = LogRecord {
+        pos: 0,
+        kind: "genesis",
+        recorded_at: 1,
+        leaf_hash: [0x77; 32],
+        envelope: vec![0xa0],
+    };
+    create_domain(&db.sequencer, &domain, *tenant.as_bytes(), &genesis, &[])
+        .await
+        .unwrap();
+    let (lease, head) = acquire_lease(&db.sequencer, &domain, "t", TTL)
+        .await
+        .unwrap();
+    let pos = head.pos.checked_add(1).unwrap();
+    let next = HeadRow {
+        pos,
+        epoch: lease.epoch,
+        leaf_hash: [0x78; 32],
+        recorded_at: 2,
+        frontier: vec![[0x78; 32]],
+    };
+    let batch = CommitBatch {
+        epoch: lease.epoch,
+        after: head.pos,
+        records: vec![LogRecord {
+            pos,
+            kind: "decision",
+            recorded_at: 2,
+            leaf_hash: [0x78; 32],
+            envelope: vec![0xa1, 1],
+        }],
+        head: next,
+        nonces: vec![NonceRow {
+            nonce: vec![0x78; 16],
+            actor: vec![1],
+            intent_digest: [9; 32],
+            decision_pos: pos,
+            outcome: String::from("allow"),
+            render_digest: None,
+            tier: None,
+        }],
+        outbox: vec![],
+        proofs: vec![],
+        reads: vec![],
+        writes: vec![],
+        draws: vec![],
+        single_use: vec![],
+        effects: vec![],
+    };
+    commit_batch(&db.sequencer, &domain, *tenant.as_bytes(), &batch)
+        .await
+        .unwrap();
+    let mut t = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
+    let realm = create_realm(&mut t, &domain, "idp", "pool-default")
+        .await
+        .unwrap();
+    t.enter_realm(realm).await.unwrap();
+    assert!(set_issuer(&mut t, ISS).await.unwrap());
+    create_settings(&mut t).await.unwrap();
+    let bound = bind(
+        &mut t,
+        &Decision {
+            domain: &domain,
+            position: pos,
+            nonce: &[0x78; 16],
+            intent: [9; 32],
+            change: [5; 32],
+            action: "idp.realm.key_drop",
+        },
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    record_key_change(
+        &mut t,
+        &bound,
+        &KeyChange {
+            action: String::from("idp.realm.key_drop"),
+            kid: Some(kid),
+            policy: None,
+            compromised_at: None,
+            declared_at: cutoff_at,
+            cutoff_at: Some(cutoff_at),
+        },
+    )
+    .await
+    .unwrap();
+    t.commit().await.unwrap();
+}
+
+// §13.7.7, SEC9, OP-150 m.11 (c), (j): once a realm key is dropped, an ID token it signed and
+// dated after the drop's issuer cutoff is held at ingest, not admitted; one dated before the
+// cutoff is still admitted, and a key nobody dropped is untouched
+#[tokio::test]
+async fn a_dropped_realm_key_signs_nothing_admitted_after_its_cutoff() {
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(
+        &db,
+        vec![
+            acceptance(IDP, "actor-binding", &["authentication"], vec![pinned()]),
+            acceptance(ALICE, "actor-binding", &["identity_binding_person"], vec![]),
+        ],
+    )
+    .await;
+    let bind = statement(
+        d,
+        ALICE,
+        ROOT,
+        "identity_binding_person",
+        binding_value(&subject_digest(ISS, "u-1")).unwrap(),
+    );
+    let v = core.ingest(&signed(&bind, ALICE_KEY), NOW).await.unwrap();
+    assert!(matches!(v.verdict, ClaimVerdict::Admitted { .. }), "{v:?}");
+    let ctx = Some(context_bytes(&ROOT));
+    let v = core
+        .ingest(
+            &submit(
+                d,
+                Carrier::Oidc,
+                id_token_at("u-1", 8, IDP_KEY),
+                ctx.clone(),
+            ),
+            NOW,
+        )
+        .await
+        .unwrap();
+    assert!(matches!(v.verdict, ClaimVerdict::Admitted { .. }), "{v:?}");
+
+    dropped_realm_key(&db, thumbprint(&public(IDP_KEY)), 6_000).await;
+    let v = core
+        .ingest(
+            &submit(
+                d,
+                Carrier::Oidc,
+                id_token_at("u-1", 7, IDP_KEY),
+                ctx.clone(),
+            ),
+            NOW,
+        )
+        .await
+        .unwrap();
+    assert!(
+        matches!(
+            v.verdict,
+            ClaimVerdict::Quarantined {
+                reason: Quarantine::SourceNotAccepted,
+                ..
+            }
+        ),
+        "{v:?}"
+    );
+    let v = core
+        .ingest(
+            &submit(d, Carrier::Oidc, id_token_at("u-1", 5, IDP_KEY), ctx),
+            NOW,
+        )
+        .await
+        .unwrap();
+    assert!(matches!(v.verdict, ClaimVerdict::Admitted { .. }), "{v:?}");
+}

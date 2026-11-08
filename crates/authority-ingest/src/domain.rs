@@ -235,6 +235,26 @@ pub fn peek_iss(token: &[u8]) -> Result<String, Refusal> {
         .ok_or(Refusal::CARRIER)
 }
 
+/// The key id a compact JWS names in its protected header, when it is a 32-byte key id, read
+/// without verifying it: the signing key a realm key drop cuts off (§13.7.7, SEC9).
+#[must_use]
+pub fn peek_kid(token: &[u8]) -> Option<[u8; 32]> {
+    let text = core::str::from_utf8(token).ok()?;
+    let header = text.split('.').next()?;
+    let bytes = json::b64url_decode(header).ok()?;
+    let header = json::parse(&bytes, jws::MAX_PAYLOAD).ok()?;
+    let kid = json::b64url_decode(header.get("kid")?.as_str()?).ok()?;
+    <[u8; 32]>::try_from(kid.as_slice()).ok()
+}
+
+/// Whether a carrier dated `issued_at` and signed by a key whose issuer cutoff is `cutoff` is
+/// held: a dropped key signs nothing trusted after its cutoff (§13.7.7, SEC9: cutoff, then
+/// ingest quarantine).
+#[must_use]
+pub fn past_cutoff(issued_at: u64, cutoff: Option<u64>) -> bool {
+    cutoff.is_some_and(|c| issued_at > c)
+}
+
 /// A carrier mapped to a Claim.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Mapped {

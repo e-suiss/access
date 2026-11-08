@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT access.realm_key_cutoff($1, $2) AS \"cutoff\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cutoff",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8604e6c4383f2f88557dd7cdae95bf016622e18c7770de635581535ef3c8c3e4"
+}

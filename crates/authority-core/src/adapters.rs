@@ -264,6 +264,10 @@ impl Reader for PgReader {
         )
     }
 
+    async fn key_cutoff(&self, iss: &str, kid: &[u8; 32]) -> Result<Option<u64>, CoreError> {
+        Ok(access_store::authority::realm_key_cutoff(&self.pool, iss, kid).await?)
+    }
+
     async fn opening(&self, intent: &Digest) -> Result<Option<crate::ports::Opening>, CoreError> {
         let Some(row) =
             access_store::authority::find_opening(&self.pool, &self.domain, &intent.0).await?
