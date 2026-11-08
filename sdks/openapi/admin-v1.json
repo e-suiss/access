@@ -5703,6 +5703,82 @@
         "x-access-visibility": "hidden"
       }
     },
+    "/admin/v1/realms/{slug}/audit/events/{event_id}/proof": {
+      "get": {
+        "operationId": "getAuditEventProof",
+        "summary": "The event's inclusion proof in the realm's own audit tree, checkpointed by the cell key under the realm's origin; it shows nothing of other realms. Each read is itself audited.",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "realm.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExerciseRef"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": "realm.read",
+        "x-access-visibility": "hidden"
+      }
+    },
     "/admin/v1/platform/intents": {
       "post": {
         "operationId": "draftPlatformIntent",

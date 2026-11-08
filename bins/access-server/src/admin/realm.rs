@@ -9,9 +9,9 @@ use std::sync::Arc;
 use access_http::api::domain::SurfaceScope;
 use access_http::api::domain::caller::WriteCaller;
 use access_http::api::ports::{
-    AuditFormat, AuditQuery, Draft, Drafted, Item, JobItem, JobView, Jobs, Listing, NewJob,
-    Pending, RealmResources, ResourceKind, ResourceQuery, ResourceWrite, Surfaces, Unavailable,
-    Written,
+    AuditFormat, AuditProofQuery, AuditQuery, Draft, Drafted, Item, JobItem, JobView, Jobs,
+    Listing, NewJob, Pending, RealmResources, ResourceKind, ResourceQuery, ResourceWrite, Surfaces,
+    Unavailable, Written,
 };
 use access_http::api::realm::problem_of;
 use access_http::problem::codes;
@@ -499,6 +499,10 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> RealmR
     fn audit(&self, query: AuditQuery) -> Pending<'_, Option<Listing>> {
         Box::pin(self.audit_inner(query))
     }
+
+    fn audit_proof(&self, query: AuditProofQuery) -> Pending<'_, Option<Value>> {
+        Box::pin(self.audit_proof_inner(query))
+    }
 }
 
 /// The `audit.read` event of a channel B read (OP-44, U53).
@@ -595,6 +599,94 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             .map(|body| Item { body, version: 0 })
             .collect();
         Ok(Some(Listing { items, last }))
+    }
+
+    /// The inclusion proof of audit event `q.event` in its realm's own tree, at the realm's
+    /// latest signed checkpoint (OP-152 m.7 (d), Ek B 2527); the read is written to the
+    /// operational audit stream first (OP-44). `None` for an unknown realm or event, or one no
+    /// realm checkpoint covers yet.
+    async fn audit_proof_inner(&self, q: AuditProofQuery) -> Result<Option<Value>, Unavailable> {
+        use access_identity_audit::domain::{leaf, realm};
+        let Ok(event) = q.event.parse::<i64>() else {
+            return Ok(None);
+        };
+        let Some((tenant, realm_id)) = self.locate(&q.slug).await? else {
+            return Ok(None);
+        };
+        let Some(domain) = self.domain(&q.slug).await? else {
+            return Ok(None);
+        };
+        let now = u64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| Unavailable)?
+                .as_millis(),
+        )
+        .map_err(|_| Unavailable)?;
+        let reader = access_authority_core::adapters::audit_text(&q.reader);
+        access_store::operational::record_operational(
+            &self.app,
+            &access_store::operational::OperationalEvent {
+                occurred_at_ms: now,
+                tenant: Some(*tenant.as_bytes()),
+                domain: Some(domain.0),
+                event_type: AUDIT_READ,
+                actor: &reader,
+                target: &access_authority_core::adapters::audit_text(&format!(
+                    "audit:{}:proof",
+                    q.slug
+                )),
+                reason: "",
+                correlation: &access_authority_core::adapters::audit_text(&format!(
+                    "{}:{event}",
+                    q.slug
+                )),
+            },
+        )
+        .await
+        .map_err(|_| Unavailable)?;
+        let Some(checkpoint) = access_store::audit_realm::last_realm_checkpoint(
+            &self.checkpointer,
+            *tenant.as_bytes(),
+            *realm_id.as_bytes(),
+        )
+        .await
+        .map_err(|_| Unavailable)?
+        else {
+            return Ok(None);
+        };
+        let mut t = TenantTx::begin(&self.reads, tenant, realm_id)
+            .await
+            .map_err(|_| Unavailable)?;
+        let rows = t
+            .realm_audit_leaves(checkpoint.size)
+            .await
+            .map_err(|_| Unavailable)?;
+        t.commit().await.map_err(|_| Unavailable)?;
+        let leaves = rows
+            .iter()
+            .map(leaf)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| Unavailable)?;
+        if u64::try_from(leaves.len()).ok() != Some(checkpoint.size)
+            || realm::tree_hash(&leaves) != checkpoint.root
+        {
+            return Err(Unavailable);
+        }
+        let Some(index) = rows.iter().position(|r| r.id == event) else {
+            return Ok(None);
+        };
+        let path = realm::inclusion_path(&leaves, index).ok_or(Unavailable)?;
+        let b64 = access_kernel::json::b64url_encode;
+        Ok(Some(serde_json::json!({
+            "event_id": event.to_string(),
+            "origin": checkpoint.note.lines().next().unwrap_or_default(),
+            "index": index,
+            "size": checkpoint.size,
+            "leaf": b64(leaves.get(index).ok_or(Unavailable)?),
+            "path": path.iter().map(|h| b64(h)).collect::<Vec<_>>(),
+            "checkpoint": checkpoint.note,
+        })))
     }
 }
 

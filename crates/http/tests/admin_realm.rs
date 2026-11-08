@@ -324,3 +324,28 @@ async fn the_audit_stream_is_read_in_its_renderings() {
     let (r, _) = send(&router, feed(path, &token)).await;
     assert_eq!(r.status(), StatusCode::BAD_REQUEST);
 }
+
+// OP-152 m.7 (d), OP-44, Ek B 2527
+#[tokio::test]
+async fn an_audit_event_proves_its_inclusion_in_the_realm_tree() {
+    let h = Harness::new();
+    let router = h.router();
+    let token = h.token("audit", "access-admin:realm:acme", &["realm.read"], 600_000);
+    let get = |event: &str| {
+        let path = format!("/admin/v1/realms/acme/audit/events/{event}/proof");
+        Request::get(&path)
+            .header("authorization", format!("DPoP {token}"))
+            .header("dpop", proof("GET", &path))
+            .body(Body::empty())
+            .unwrap()
+    };
+    let (r, body) = send(&router, get("7")).await;
+    assert_eq!(r.status(), StatusCode::OK, "{body}");
+    assert_eq!(body["event_id"], "7");
+    assert_eq!(body["reader"], "sub");
+    let (r, body) = send(&router, get("8")).await;
+    assert_eq!(r.status(), StatusCode::NOT_FOUND, "{body}");
+    let path = "/admin/v1/realms/acme/audit/events/7/proof";
+    let (r, _) = send(&router, Request::get(path).body(Body::empty()).unwrap()).await;
+    assert_ne!(r.status(), StatusCode::OK);
+}

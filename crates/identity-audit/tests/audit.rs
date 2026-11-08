@@ -369,3 +369,115 @@ async fn op_44_the_operational_stream_is_a_separate_chain() {
     assert!(verify(&access_crypto::AwsLcBackend, &checkpoint, &identity, &vkey).is_err());
     assert!(last_checkpoint(&db.checkpointer).await.unwrap().is_none());
 }
+
+mod realm_trees {
+    use access_identity_audit::app::identity_step;
+    use access_identity_audit::domain::realm::{
+        RealmProof, inclusion_path, verify as verify_realm,
+    };
+    use access_identity_signer::cell::realm_origin;
+    use access_store::audit_realm::last_realm_checkpoint;
+
+    use super::*;
+
+    const OTHER: RealmId = RealmId::from_bytes([3; 16]);
+
+    async fn audit_in(db: &TestDb, realm: RealmId, n: usize) {
+        let (target, corr) = event(n);
+        let mut t = TenantTx::begin(&db.app, T, realm).await.unwrap();
+        t.audit(&AuditEvent {
+            event_type: "session.revoked",
+            actor: "adm_1",
+            target: &target,
+            correlation: &corr,
+        })
+        .await
+        .unwrap();
+        t.commit().await.unwrap();
+    }
+
+    async fn proofs(db: &TestDb, realm: RealmId, size: u64) -> Vec<(u64, [u8; 32], Vec<[u8; 32]>)> {
+        let mut t = TenantTx::begin(&db.app, T, realm).await.unwrap();
+        let rows = t.realm_audit_leaves(size).await.unwrap();
+        t.commit().await.unwrap();
+        let leaves: Vec<[u8; 32]> = rows.iter().map(|r| leaf(r).unwrap()).collect();
+        assert!(rows.iter().all(|r| r.realm == *realm.as_bytes()));
+        leaves
+            .iter()
+            .enumerate()
+            .map(|(i, l)| (i as u64, *l, inclusion_path(&leaves, i).unwrap()))
+            .collect()
+    }
+
+    // OP-152 m.7 (d), OP-38, OP-44
+    #[tokio::test]
+    async fn each_realm_proves_its_events_in_its_own_tree() {
+        let db = fresh().await.unwrap();
+        for n in 0..3 {
+            audit_in(&db, R, n).await;
+        }
+        for n in 3..8 {
+            audit_in(&db, OTHER, n).await;
+        }
+        let log = PgAudit(db.checkpointer.clone());
+        let deadline = Instant::now() + Duration::from_secs(20);
+        loop {
+            identity_step(&log, &*CELL, NOW).await.unwrap();
+            let size = last_checkpoint(&db.checkpointer)
+                .await
+                .unwrap()
+                .map_or(0, |c| c.size);
+            if size >= 8 {
+                break;
+            }
+            assert!(Instant::now() < deadline, "{size} of 8 rows after 20 s");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        let (identity, vkey) = CELL.key().await.unwrap();
+        let mut notes = Vec::new();
+        for (realm, count) in [(R, 3_u64), (OTHER, 5)] {
+            let cp = last_realm_checkpoint(&db.checkpointer, *T.as_bytes(), *realm.as_bytes())
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(cp.size, count);
+            assert_eq!(cp.note.lines().nth(1), Some(count.to_string().as_str()));
+            assert!(
+                !cp.note.lines().any(|l| l == "8"),
+                "the cell tree's size is never in a realm checkpoint"
+            );
+            let origin = realm_origin(&identity, realm.as_bytes());
+            for (index, leaf, path) in proofs(&db, realm, cp.size).await {
+                let proof = RealmProof {
+                    leaf,
+                    index,
+                    path,
+                    note: cp.note.clone(),
+                };
+                assert_eq!(
+                    verify_realm(&access_crypto::AwsLcBackend, &proof, &origin, &vkey).unwrap(),
+                    (count, cp.root)
+                );
+                let forged = RealmProof {
+                    leaf: [0xee; 32],
+                    ..proof.clone()
+                };
+                assert!(matches!(
+                    verify_realm(&access_crypto::AwsLcBackend, &forged, &origin, &vkey),
+                    Err(AuditError::Proof)
+                ));
+            }
+            notes.push((origin, cp.note));
+        }
+        let (first, other) = (&notes[0], &notes[1]);
+        let (index, leaf, path) = proofs(&db, R, 3).await.remove(0);
+        let crossed = RealmProof {
+            leaf,
+            index,
+            path,
+            note: other.1.clone(),
+        };
+        assert!(verify_realm(&access_crypto::AwsLcBackend, &crossed, &first.0, &vkey).is_err());
+        assert!(verify_realm(&access_crypto::AwsLcBackend, &crossed, &other.0, &vkey).is_err());
+    }
+}

@@ -23,10 +23,10 @@ use access_http::api::domain::SurfaceScope;
 use access_http::api::domain::caller::WriteCaller;
 use access_http::api::manifest::{PLATFORM_ROOT, REALM_ROOT, Route};
 use access_http::api::ports::{
-    AuditQuery, Clock, CursorSeal, Draft, Drafted, Entropy, Env, Item, JobItem, JobView, Jobs,
-    Listing, NewJob, Pending, PlatformKind, PlatformQuery, PlatformResources, PlatformWrite,
-    Presented, RateLimiter, ReadToken, ReadTokens, RealmResources, ResourceKind, ResourceQuery,
-    ResourceWrite, Surfaces, Unavailable, Written,
+    AuditProofQuery, AuditQuery, Clock, CursorSeal, Draft, Drafted, Entropy, Env, Item, JobItem,
+    JobView, Jobs, Listing, NewJob, Pending, PlatformKind, PlatformQuery, PlatformResources,
+    PlatformWrite, Presented, RateLimiter, ReadToken, ReadTokens, RealmResources, ResourceKind,
+    ResourceQuery, ResourceWrite, Surfaces, Unavailable, Written,
 };
 use access_kernel::ais::{CONTENT_TYPE, Statement};
 use access_kernel::codec::Canonical;
@@ -254,6 +254,12 @@ impl RealmResources for Shared {
             last: None,
         });
         Box::pin(async move { Ok(listing) })
+    }
+
+    fn audit_proof(&self, q: AuditProofQuery) -> Pending<'_, Option<serde_json::Value>> {
+        let proof = (q.slug == REALM && q.event != "8")
+            .then(|| json!({ "event_id": q.event, "reader": q.reader, "size": 3 }));
+        Box::pin(async move { Ok(proof) })
     }
 
     fn commit(&self, w: ResourceWrite, caller: WriteCaller) -> Pending<'_, Written> {

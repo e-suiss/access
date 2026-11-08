@@ -38,6 +38,35 @@ pub fn operational_origin(identity_origin: &str) -> Option<String> {
         .map(|cell| format!("{cell}{OPERATIONAL_CHAIN}"))
 }
 
+/// The path segment between the identity log's origin and a realm's id in that realm's own
+/// audit tree origin.
+pub const REALM_CHAIN: &str = "realm";
+
+/// The origin of realm `realm`'s own audit tree under the identity log `identity_origin`
+/// (OP-152 m.7 (d), Ek B 2527): the realm's rows in the cell's integration order, signed by the
+/// same cell key, so a realm proves inclusion of its events without the cell tree's size.
+#[must_use]
+pub fn realm_origin(identity_origin: &str, realm: &[u8; 16]) -> String {
+    use core::fmt::Write as _;
+    let mut hex = String::with_capacity(32);
+    for b in realm {
+        let _ = write!(hex, "{b:02x}");
+    }
+    format!("{identity_origin}/{REALM_CHAIN}/{hex}")
+}
+
+/// Whether `origin` is a realm audit tree origin under `identity_origin`.
+fn is_realm_origin(identity_origin: &str, origin: &str) -> bool {
+    origin
+        .strip_prefix(identity_origin)
+        .and_then(|rest| rest.strip_prefix('/'))
+        .and_then(|rest| rest.strip_prefix(REALM_CHAIN))
+        .and_then(|rest| rest.strip_prefix('/'))
+        .is_some_and(|hex| {
+            hex.len() == 32 && hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        })
+}
+
 /// Why the cell key cannot be opened.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
@@ -152,8 +181,8 @@ impl CellKey {
         self.verifier.to_vkey()
     }
 
-    /// The note signature line over a checkpoint body of this cell's audit log or of its
-    /// operational chain (L2-CKP-3, OP-44).
+    /// The note signature line over a checkpoint body of this cell's audit log, of its
+    /// operational chain or of one realm's audit tree (L2-CKP-3, OP-44, OP-152 m.7 (d)).
     ///
     /// # Errors
     /// [`SignerError::Note`] for a body that is not a canonical checkpoint of one of these
@@ -161,7 +190,8 @@ impl CellKey {
     pub fn sign(&self, body: &str) -> Result<String, SignerError> {
         let cp = Checkpoint::parse(body).map_err(|_| SignerError::Note)?;
         let known = cp.origin == self.origin
-            || operational_origin(&self.origin).as_deref() == Some(cp.origin.as_str());
+            || operational_origin(&self.origin).as_deref() == Some(cp.origin.as_str())
+            || is_realm_origin(&self.origin, &cp.origin);
         if !known || cp.to_body().ok().as_deref() != Some(body) {
             return Err(SignerError::Note);
         }

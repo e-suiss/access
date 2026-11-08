@@ -66,3 +66,39 @@ fn the_cell_key_signs_its_two_chains_only() {
     assert_eq!(operational_origin("cell-a/other"), None);
     assert_eq!(operational_origin("identity-audit"), None);
 }
+
+// OP-152 m.7 (d)
+#[test]
+fn the_cell_key_signs_realm_trees_under_its_own_log_only() {
+    let mut f = factory();
+    let key = CellKey::generate("cell-a", &mut f).unwrap();
+    let realm = realm_origin(key.origin(), &[0xab; 16]);
+    assert_eq!(
+        realm,
+        "cell-a/identity-audit/realm/abababababababababababababababab"
+    );
+    let body = |origin: &str| {
+        Checkpoint {
+            origin: origin.to_owned(),
+            size: 1,
+            root: [7; 32],
+            extensions: vec![String::from("issued_at 1")],
+        }
+        .to_body()
+        .unwrap()
+    };
+    assert!(key.sign(&body(&realm)).is_ok());
+    for other in [
+        String::from("cell-b/identity-audit/realm/abababababababababababababababab"),
+        format!("{}/realm/ABABABABABABABABABABABABABABABAB", key.origin()),
+        format!("{}/realm/abab", key.origin()),
+        format!("{}/realms/abababababababababababababababab", key.origin()),
+        format!("{}/realm/abababababababababababababababab/x", key.origin()),
+    ] {
+        assert_eq!(
+            key.sign(&body(&other)).err(),
+            Some(SignerError::Note),
+            "{other}"
+        );
+    }
+}

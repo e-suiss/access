@@ -1,5 +1,6 @@
 //! Audit leaves and the tree step (OP-37): pure.
 
+pub mod realm;
 pub mod record;
 pub mod taxonomy;
 

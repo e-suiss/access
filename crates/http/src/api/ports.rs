@@ -320,6 +320,25 @@ pub trait RealmResources: Send + Sync {
         let _ = query;
         Box::pin(async { Err(Unavailable) })
     }
+
+    /// The inclusion proof of one audit event in the realm's own audit tree, after the read
+    /// itself was audited (OP-152 m.7 (d), OP-44); `None` when there is no such realm or the
+    /// event is not in a signed realm checkpoint yet. None by default.
+    fn audit_proof(&self, query: AuditProofQuery) -> Pending<'_, Option<serde_json::Value>> {
+        let _ = query;
+        Box::pin(async { Err(Unavailable) })
+    }
+}
+
+/// A read of one audit event's realm inclusion proof (OP-152 m.7 (d)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuditProofQuery {
+    /// The realm's slug.
+    pub slug: String,
+    /// The event, as the audit stream names it.
+    pub event: String,
+    /// The reader, the read token's pseudonymous subject.
+    pub reader: String,
 }
 
 /// A rendering of the full-taxonomy audit stream, channel B (OP-41, §17.6.8): a copy, not the

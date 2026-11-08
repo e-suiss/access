@@ -16,8 +16,8 @@ use crate::api::domain::SurfaceScope;
 use crate::api::domain::caller::AIS_FIELD;
 use crate::api::domain::conditional::etag;
 use crate::api::ports::{
-    AuditFormat, AuditQuery, Clock, Drafted, Env, Item, RealmResources, ResourceKind,
-    ResourceQuery, ResourceWrite, Written,
+    AuditFormat, AuditProofQuery, AuditQuery, Clock, Drafted, Env, Item, RealmResources,
+    ResourceKind, ResourceQuery, ResourceWrite, Written,
 };
 use crate::problem::{Code, codes};
 
@@ -112,6 +112,7 @@ pub async fn serve<E: Env>(
         },
         Shape::Write { .. } => commit(&ctx, kind, shape, key, &headers, &body).await,
         Shape::Audit => audit(&ctx, &uri).await,
+        Shape::AuditProof => audit_proof(&ctx, key).await,
     };
     answer.unwrap_or_else(problem)
 }
@@ -195,6 +196,31 @@ async fn audit<E: Env>(ctx: &Ctx<E>, uri: &Uri) -> Result<Response, &'static Cod
         response.headers_mut().insert(name, value);
     }
     Ok(response)
+}
+
+/// One event's inclusion proof in the realm's own audit tree (OP-152 m.7 (d)): only for a read
+/// token; the reader is the `audit.read` event's actor (OP-44).
+async fn audit_proof<E: Env>(
+    ctx: &Ctx<E>,
+    event: Option<String>,
+) -> Result<Response, &'static Code> {
+    let Caller::Read(reader) = &ctx.caller else {
+        return Err(&codes::NOT_FOUND);
+    };
+    let event = event.ok_or(&codes::NOT_FOUND)?;
+    let proof = ctx
+        .api
+        .env()
+        .realm()
+        .audit_proof(AuditProofQuery {
+            slug: slug(ctx),
+            event,
+            reader: reader.token.subject.clone(),
+        })
+        .await
+        .map_err(|_| &codes::UNAVAILABLE)?
+        .ok_or(&codes::NOT_FOUND)?;
+    Ok((StatusCode::OK, axum::Json(proof)).into_response())
 }
 
 async fn get<E: Env>(

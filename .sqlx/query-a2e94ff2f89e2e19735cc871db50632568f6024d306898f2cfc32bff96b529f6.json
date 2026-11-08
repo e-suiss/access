@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access_ops.audit_realm_checkpoint\n           (tenant_id, realm_id, size, root, frontier, xid, id, cell_size, note)\n         VALUES ($1, $2, $3, $4, $5, $6::bigint::text::xid8, $7, $8, $9)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Bytea",
+        "ByteaArray",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a2e94ff2f89e2e19735cc871db50632568f6024d306898f2cfc32bff96b529f6"
+}

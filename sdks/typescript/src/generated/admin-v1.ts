@@ -837,6 +837,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/realms/{slug}/audit/events/{event_id}/proof": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The event's inclusion proof in the realm's own audit tree, checkpointed by the cell key under the realm's origin; it shows nothing of other realms. Each read is itself audited. */
+        get: operations["getAuditEventProof"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/platform/intents": {
         parameters: {
             query?: never;
@@ -1293,6 +1310,11 @@ export interface components {
             placement?: string;
             root: components["schemas"]["FoundingRoot"];
             ct3_delay_s?: number;
+            /**
+             * @description Declare causal-bound allowances: an upstream ExerciseID backs at most one downstream Exercise, and chained decisions answer `causal_binding: enforced` (§7.9.7.4, E17).
+             * @default false
+             */
+            causal_binding: boolean;
             /** @default false */
             acknowledge_no_recovery: boolean;
             /** @description Open the governing domain from the sandbox template, a separate AuthorityDomain with its fixed budget (OP-151 m.3 (m)); always true on `sandbox-domains`. */
@@ -4248,6 +4270,41 @@ export interface operations {
                     "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
                     RateLimit: components["headers"]["RateLimit"];
                     Link: components["headers"]["Link"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExerciseRef"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getAuditEventProof: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
                     [name: string]: unknown;
                 };
                 content: {

@@ -440,6 +440,11 @@ pub const ROWS: &[Route] = &[
             "The realm's full-taxonomy audit stream, oldest first, as OCSF, CEF or SET claims; a copy, not the record. Each read is itself audited.",
         )
     },
+    read(
+        "/admin/v1/realms/{slug}/audit/events/{event_id}/proof",
+        "getAuditEventProof",
+        "The event's inclusion proof in the realm's own audit tree, checkpointed by the cell key under the realm's origin; it shows nothing of other realms. Each read is itself audited.",
+    ),
 ];
 
 /// How a row is served.
@@ -470,6 +475,8 @@ pub enum Shape {
     JobItems,
     /// A page of the audit stream, channel B (OP-41).
     Audit,
+    /// One audit event's inclusion proof in the realm's own tree (OP-152 m.7 (d)).
+    AuditProof,
 }
 
 const CLIENT_PATCH: &[&str] = &[
@@ -627,6 +634,7 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "getAnalytics" => (Analytics, Shape::Get),
         // OP-41
         "listAuditEvents" => (Analytics, Shape::Audit),
+        "getAuditEventProof" => (Analytics, Shape::AuditProof),
         _ => return None,
     })
 }

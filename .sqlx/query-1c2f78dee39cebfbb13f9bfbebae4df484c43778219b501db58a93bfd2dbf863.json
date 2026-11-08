@@ -1,0 +1,96 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT size, root, frontier, xid::text::bigint AS \"xid!\", id, cell_size, note\n             FROM access_ops.audit_realm_checkpoint\n            WHERE tenant_id = $1 AND realm_id = $2 ORDER BY size DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_realm_checkpoint",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "root",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_realm_checkpoint",
+            "name": "root"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "frontier",
+        "type_info": "ByteaArray",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_realm_checkpoint",
+            "name": "frontier"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "xid!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_realm_checkpoint",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "cell_size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_realm_checkpoint",
+            "name": "cell_size"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_realm_checkpoint",
+            "name": "note"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1c2f78dee39cebfbb13f9bfbebae4df484c43778219b501db58a93bfd2dbf863"
+}

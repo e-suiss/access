@@ -14,7 +14,7 @@ use access_authority_sequencer::checkpoint::{CheckpointError, checkpoint};
 use access_authority_sequencer::ports::{Clock as _, Heads, NoteSigner as DomainSigner};
 use access_identity_audit::AuditError;
 use access_identity_audit::adapters::{Held, PgAudit, PgOperational, SignerNotes};
-use access_identity_audit::app::step;
+use access_identity_audit::app::{identity_step, step};
 use access_identity_audit::ports::{AuditLog, NoteSigner};
 use access_kernel::codec::Canonical as _;
 use access_kernel::digest::Digest;
@@ -62,6 +62,29 @@ async fn drain<L: AuditLog + Sync, S: NoteSigner + Sync>(
     Ok(n)
 }
 
+/// [`drain`] on the identity audit log, each step followed by the tree checkpoints of the realms
+/// it touched (OP-152 m.7 (d)).
+async fn drain_identity<S: NoteSigner + Sync>(
+    log: &Held<PgAudit>,
+    signer: &S,
+    now: u64,
+) -> Result<u32, AuditError> {
+    let mut n = 0_u32;
+    while n < STEPS {
+        let Some(done) = identity_step(log, signer, now).await? else {
+            break;
+        };
+        if done.realms_failed > 0 {
+            tracing::warn!(
+                failed = done.realms_failed,
+                "realm audit checkpoints not appended; they catch up later"
+            );
+        }
+        n = n.saturating_add(1);
+    }
+    Ok(n)
+}
+
 /// Integrates and signs what ended on both audit chains since their last checkpoints, at `now`,
 /// on each chain whose lease `holder` takes or renews; another replica's live lease leaves that
 /// chain to it (OP-152 m.5 (k)).
@@ -78,7 +101,7 @@ pub(crate) async fn audit_tick<S: NoteSigner + Sync>(
                 log: PgAudit(checkpointer.clone()),
                 holder: holder.to_owned(),
             };
-            match drain(&log, signer, now).await {
+            match drain_identity(&log, signer, now).await {
                 Ok(n) => out.identity = n,
                 Err(error) => {
                     out.failed = out.failed.saturating_add(1);

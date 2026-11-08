@@ -28,4 +28,7 @@ pub enum AuditError {
     /// The note does not verify under the cell key or does not state the checkpoint.
     #[error("note: {0}")]
     Note(#[from] suiss_crypto::note::NoteError),
+    /// An inclusion path does not show its leaf under the checkpoint's root.
+    #[error("inclusion proof")]
+    Proof,
 }
