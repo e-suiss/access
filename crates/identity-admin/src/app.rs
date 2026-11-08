@@ -348,6 +348,29 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     ) -> Result<(), AdminError> {
         change.check(declared)?;
         match change {
+            // TN-18, OP-153 m.3 (u)
+            Change::RelatedOrigins(r) => {
+                let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
+                let issuer_host = g
+                    .issuer
+                    .as_deref()
+                    .and_then(|i| Issuer::parse(i).ok())
+                    .map(|i| String::from(host_of(i.authority())));
+                let rp = s.rp_id.or(issuer_host);
+                if r.labels(rp.as_deref()).len() > crate::domain::MAX_RELATED_LABELS {
+                    return Err(Invalid::RelatedOrigins.into());
+                }
+                let verified = idp::verified_domains(t).await?;
+                let under = |h: &str| {
+                    verified.iter().any(|d| {
+                        h == d || h.strip_suffix(d.as_str()).is_some_and(|p| p.ends_with('.'))
+                    })
+                };
+                if !r.hosts().into_iter().all(under) {
+                    return Err(Invalid::RelatedOrigins.into());
+                }
+            }
+            Change::LocaleOverrides(_) => {}
             Change::RpId(rp) => {
                 let issuer = g
                     .issuer
@@ -1336,6 +1359,17 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 let bytes = dcbor::encode(&b.to_value(), Limits::CEILING)
                     .map_err(|_| AdminError::Encode)?;
                 idp::set_branding(t, bound, &bytes).await?;
+                true
+            }
+            Change::RelatedOrigins(r) => {
+                let origins: Vec<String> = r.origins.iter().cloned().collect();
+                idp::set_related_origins(t, bound, &origins).await?;
+                true
+            }
+            Change::LocaleOverrides(o) => {
+                let bytes = dcbor::encode(&o.to_value(), Limits::CEILING)
+                    .map_err(|_| AdminError::Encode)?;
+                idp::set_locale_overrides(t, bound, &bytes).await?;
                 true
             }
             Change::KeyPolicy(_) | Change::KeyRotate { .. } | Change::KeyDrop { .. } => {

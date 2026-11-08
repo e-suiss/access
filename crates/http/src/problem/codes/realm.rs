@@ -107,6 +107,23 @@ pub const INVALID_BRANDING: Code = code(
     "Bad Request",
     "Branding outside its fields' shapes, or a logo outside its CSP origins (TN-106).",
 );
+/// N5: a Related Origins list that is not `https` origins, names more than five registrable
+/// labels with the RP ID, or an origin outside the realm's verified domains (TN-18,
+/// OP-153 m.3 (u)).
+pub const INVALID_RELATED_ORIGINS: Code = code(
+    "invalid-related-origins",
+    400,
+    "Bad Request",
+    "A Related Origins list that is not https origins, names more than five registrable labels with the RP ID, or an origin outside the realm's verified domains (TN-18, OP-153 m.3 (u)).",
+);
+/// N5: message overrides naming a protected or unknown key, or text that is not plain (X35,
+/// XI-25, OP-153 m.3 (s)).
+pub const INVALID_LOCALE_OVERRIDES: Code = code(
+    "invalid-locale-overrides",
+    400,
+    "Bad Request",
+    "Message overrides naming a protected or unknown key, or text that is not plain (X35, XI-25, OP-153 m.3 (s)).",
+);
 /// A key rotation policy the realm may not take (CR-26, TN-118).
 pub const INVALID_KEY_POLICY: Code = code(
     "invalid-key-policy",

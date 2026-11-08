@@ -785,6 +785,8 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::PublicKey | Invalid::ClientKey => &r::INVALID_PUBLIC_KEY,
             Invalid::EventReceiver => &r::INVALID_EVENT_RECEIVER,
             Invalid::Branding => &r::INVALID_BRANDING,
+            Invalid::RelatedOrigins => &r::INVALID_RELATED_ORIGINS,
+            Invalid::LocaleOverrides => &r::INVALID_LOCALE_OVERRIDES,
             Invalid::KeyPolicy => &r::INVALID_KEY_POLICY,
             Invalid::Name => &r::INVALID_NAME,
             Invalid::MembershipIssuer => &r::INVALID_MEMBERSHIP_ISSUER,

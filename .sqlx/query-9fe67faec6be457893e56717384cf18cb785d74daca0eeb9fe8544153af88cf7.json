@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT origins FROM access.idp_realm_related_origins\n          WHERE tenant_id = $1 AND realm_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "origins",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.idp_realm_related_origins",
+            "name": "origins"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9fe67faec6be457893e56717384cf18cb785d74daca0eeb9fe8544153af88cf7"
+}

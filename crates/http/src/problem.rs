@@ -405,6 +405,8 @@ pub const CODES: &[Code] = &[
     codes::realm::INVALID_PUBLIC_KEY,
     codes::realm::INVALID_EVENT_RECEIVER,
     codes::realm::INVALID_BRANDING,
+    codes::realm::INVALID_RELATED_ORIGINS,
+    codes::realm::INVALID_LOCALE_OVERRIDES,
     codes::realm::INVALID_KEY_POLICY,
     codes::realm::INVALID_NAME,
     codes::realm::INVALID_MEMBERSHIP_ISSUER,

@@ -413,6 +413,15 @@ pub enum Invalid {
     /// The organization's invitations are mostly ignored: invitations wait (TN-89 (11)).
     #[error("invitation reputation")]
     InviteReputation,
+    /// N5: a Related Origins list that is not `https` origins, names more than five
+    /// registrable labels with the RP ID, or an origin outside the realm's verified domains
+    /// (TN-18, OP-153 m.3 (u)).
+    #[error("bad related origins")]
+    RelatedOrigins,
+    /// N5: message overrides naming a protected or unknown key, or text that is not plain
+    /// (X35, XI-25, OP-153 m.3 (s)).
+    #[error("bad locale overrides")]
+    LocaleOverrides,
 }
 
 impl Invalid {
@@ -458,6 +467,8 @@ impl Invalid {
             Self::ClientKey => "client-key-not-p256",
             Self::EventReceiver => "invalid-event-receiver",
             Self::Branding => "invalid-branding",
+            Self::RelatedOrigins => "invalid-related-origins",
+            Self::LocaleOverrides => "invalid-locale-overrides",
             Self::KeyPolicy => "invalid-key-policy",
             Self::NoKey => "no-such-key",
             Self::Name => "invalid-name",
@@ -1236,6 +1247,171 @@ impl Branding {
     }
 }
 
+/// N5: most registrable labels a Related Origins list names, the RP ID's included (TN-18,
+/// IDP-5); browsers cut a longer list.
+pub const MAX_RELATED_LABELS: usize = 5;
+
+/// N5: most related origins.
+const MAX_RELATED_ORIGINS: usize = 16;
+
+/// N5: the registrable label of a host, the label before its last (OP-153 m.3 (u)):
+/// `shop.acme.example` is `acme`.
+#[must_use]
+pub fn registrable_label(host: &str) -> Option<&str> {
+    host.rsplit('.').nth(1)
+}
+
+/// N5: a realm's Related Origins (`idp.realm.related_origins`, TN-18, IDP-5, OP-153 m.3 (u)):
+/// `https` origins of the tenant's own brands, at most [`MAX_RELATED_LABELS`] registrable
+/// labels with the RP ID's; each must sit under one of the realm's verified domains, which the
+/// commit path checks.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RelatedOrigins {
+    /// `https://host` origins, no path, no port.
+    pub origins: BTreeSet<String>,
+}
+
+impl RelatedOrigins {
+    /// The hosts of the origins.
+    #[must_use]
+    pub fn hosts(&self) -> Vec<&str> {
+        self.origins
+            .iter()
+            .filter_map(|o| o.strip_prefix("https://"))
+            .collect()
+    }
+
+    /// The distinct registrable labels of the origins and of `rp_id`.
+    #[must_use]
+    pub fn labels<'a>(&'a self, rp_id: Option<&'a str>) -> BTreeSet<&'a str> {
+        rp_id
+            .into_iter()
+            .chain(self.hosts())
+            .filter_map(registrable_label)
+            .collect()
+    }
+
+    /// Checks the shape and the label count.
+    ///
+    /// # Errors
+    /// [`Invalid::RelatedOrigins`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        let shaped = self.origins.len() <= MAX_RELATED_ORIGINS
+            && self
+                .origins
+                .iter()
+                .all(|o| o.strip_prefix("https://").is_some_and(host));
+        if shaped && self.labels(None).len() <= MAX_RELATED_LABELS {
+            Ok(())
+        } else {
+            Err(Invalid::RelatedOrigins)
+        }
+    }
+
+    /// The list as the change carries it.
+    #[must_use]
+    pub fn to_value(&self) -> Value {
+        Value::Array(self.origins.iter().map(|o| Value::text(o)).collect())
+    }
+}
+
+/// N5: the protected message keys (X35, XI-25): no realm override replaces them.
+const PROTECTED_MESSAGES: &str =
+    include_str!("../../../conformance/catalog/protected-messages.toml");
+
+/// N5: the English catalogs, whose keys are every key a realm may override.
+const EN_CATALOGS: [&str; 4] = [
+    include_str!("../../../locales/en/login.ftl"),
+    include_str!("../../../locales/en/account.ftl"),
+    include_str!("../../../locales/en/hub.ftl"),
+    include_str!("../../../locales/en/mail.ftl"),
+];
+
+/// N5: most override texts.
+const MAX_OVERRIDES: usize = 512;
+
+/// N5: longest override text.
+const MAX_OVERRIDE_TEXT: usize = 1024;
+
+fn protected_message(key: &str) -> bool {
+    PROTECTED_MESSAGES
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix('"'))
+        .filter_map(|l| l.split_once('"').map(|(k, _)| k))
+        .any(|k| k == key)
+}
+
+fn known_message(key: &str) -> bool {
+    EN_CATALOGS.iter().any(|c| {
+        c.lines()
+            .filter_map(|l| l.split_once(" = ").map(|(k, _)| k))
+            .any(|k| k == key)
+    })
+}
+
+fn locale_tag(tag: &str) -> bool {
+    (2..=35).contains(&tag.len())
+        && tag.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-')
+        && tag.bytes().next().is_some_and(|c| c.is_ascii_alphabetic())
+}
+
+/// N5: a realm's message overrides (`idp.realm.locale_overrides`, OP-153 m.3 (s), X35, XI-25):
+/// texts by locale and Fluent key, plain text only. A protected key, an unknown key, a
+/// placeholder or markup is refused.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LocaleOverrides {
+    /// Locale → key → text.
+    pub texts: BTreeMap<String, BTreeMap<String, String>>,
+}
+
+impl LocaleOverrides {
+    /// Checks every entry.
+    ///
+    /// # Errors
+    /// [`Invalid::LocaleOverrides`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        let count: usize = self.texts.values().map(BTreeMap::len).sum();
+        let ok = count <= MAX_OVERRIDES
+            && self.texts.iter().all(|(locale, texts)| {
+                locale_tag(locale)
+                    && texts.iter().all(|(k, v)| {
+                        known_message(k)
+                            && !protected_message(k)
+                            && (1..=MAX_OVERRIDE_TEXT).contains(&v.chars().count())
+                            && !v
+                                .chars()
+                                .any(|c| c.is_control() || matches!(c, '{' | '}' | '<' | '>'))
+                    })
+            });
+        if ok {
+            Ok(())
+        } else {
+            Err(Invalid::LocaleOverrides)
+        }
+    }
+
+    /// The overrides as the change and their stored form carry them: deterministic CBOR.
+    #[must_use]
+    pub fn to_value(&self) -> Value {
+        Value::Map(
+            self.texts
+                .iter()
+                .map(|(locale, texts)| {
+                    (
+                        Value::text(locale),
+                        Value::Map(
+                            texts
+                                .iter()
+                                .map(|(k, v)| (Value::text(k), Value::text(v)))
+                                .collect(),
+                        ),
+                    )
+                })
+                .collect(),
+        )
+    }
+}
+
 /// A rotation policy as the change and its digest carry it.
 #[must_use]
 pub fn policy_value(p: &Policy) -> Value {
@@ -1284,6 +1460,10 @@ pub enum Change {
     RpId(RpId),
     /// `idp.realm.branding`.
     Branding(Branding),
+    /// N5: `idp.realm.related_origins` (TN-18, OP-153 m.3 (u)).
+    RelatedOrigins(RelatedOrigins),
+    /// N5: `idp.realm.locale_overrides` (OP-153 m.3 (s), X35).
+    LocaleOverrides(LocaleOverrides),
     /// `idp.realm.key_policy`.
     KeyPolicy(Policy),
     /// `idp.realm.key_rotate`: rotates out the active key `retire`.
@@ -1641,6 +1821,8 @@ impl Change {
             Self::Argon2(_) => IdpAction::RealmArgon2,
             Self::RpId(_) => IdpAction::RealmRpId,
             Self::Branding(_) => IdpAction::RealmBranding,
+            Self::RelatedOrigins(_) => IdpAction::RealmRelatedOrigins,
+            Self::LocaleOverrides(_) => IdpAction::RealmLocaleOverrides,
             Self::KeyPolicy(_) => IdpAction::RealmKeyPolicy,
             Self::KeyRotate { .. } => IdpAction::RealmKeyRotate,
             Self::KeyDrop { .. } => IdpAction::RealmKeyDrop,
@@ -1696,6 +1878,8 @@ impl Change {
                 .map(drop)
                 .map_err(|_| Invalid::Argon2),
             Self::Branding(b) => b.check(),
+            Self::RelatedOrigins(r) => r.check(),
+            Self::LocaleOverrides(o) => o.check(),
             Self::KeyPolicy(p) => {
                 access_identity_signer::domain::check(p).map_err(|_| Invalid::KeyPolicy)
             }
@@ -1777,6 +1961,8 @@ impl Change {
             ]),
             Self::RpId(r) => Value::Map(vec![(Value::text("rp_id"), Value::text(r.as_str()))]),
             Self::Branding(b) => b.to_value(),
+            Self::RelatedOrigins(r) => r.to_value(),
+            Self::LocaleOverrides(o) => o.to_value(),
             Self::KeyPolicy(p) => policy_value(p),
             Self::KeyRotate { retire } => {
                 Value::Map(vec![(Value::text("retire"), Value::Bytes(retire.to_vec()))])
@@ -1896,6 +2082,8 @@ impl Change {
             | Self::Argon2(_)
             | Self::RpId(_)
             | Self::Branding(_)
+            | Self::RelatedOrigins(_)
+            | Self::LocaleOverrides(_)
             | Self::SigninPolicy(_)
             | Self::SessionPolicy(_)
             | Self::ProtectionMode { .. }

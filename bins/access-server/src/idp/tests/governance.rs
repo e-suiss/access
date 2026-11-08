@@ -334,3 +334,131 @@ async fn a_rotation_and_a_policy_are_decided() {
         .collect();
     assert_eq!(actions, ["idp.realm.key_rotate", "idp.realm.key_policy"]);
 }
+
+// TN-18, IDP-5, OP-153 m.3 (u)
+#[tokio::test]
+async fn related_origins_hold_five_labels_under_verified_domains() {
+    use access_identity_admin::domain::RelatedOrigins;
+    let w = World::new().await;
+    let (tenant, realm, d) = w.realm("related").await;
+    onboard(&w.plane, d, ROOT, ROOT_KEY).await;
+    let list = |hosts: &[&str]| RelatedOrigins {
+        origins: hosts.iter().map(|h| format!("https://{h}")).collect(),
+    };
+    let six = list(&[
+        "a.one.example",
+        "b.two.example",
+        "c.three.example",
+        "d.four.example",
+        "e.five.example",
+        "f.six.example",
+    ]);
+    let p = proposal(
+        (tenant, realm),
+        Change::RelatedOrigins(six),
+        1,
+        idp_anchor(d),
+        1,
+    );
+    assert!(matches!(
+        w.admin().prepare(&p).await,
+        Err(AdminError::Invalid(Invalid::RelatedOrigins))
+    ));
+    let unverified = proposal(
+        (tenant, realm),
+        Change::RelatedOrigins(list(&["shop.acme-brand.example"])),
+        2,
+        idp_anchor(d),
+        1,
+    );
+    assert!(matches!(
+        w.admin().prepare(&unverified).await,
+        Err(AdminError::Invalid(Invalid::RelatedOrigins))
+    ));
+    let malformed = proposal(
+        (tenant, realm),
+        Change::RelatedOrigins(RelatedOrigins {
+            origins: BTreeSet::from([String::from("http://shop.acme.example/path")]),
+        }),
+        3,
+        idp_anchor(d),
+        1,
+    );
+    assert!(matches!(
+        w.admin().prepare(&malformed).await,
+        Err(AdminError::Invalid(Invalid::RelatedOrigins))
+    ));
+    let none = proposal(
+        (tenant, realm),
+        Change::RelatedOrigins(RelatedOrigins::default()),
+        4,
+        idp_anchor(d),
+        1,
+    );
+    written(&exercise(&w, &none, ROOT_KEY).await.unwrap());
+    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    assert_eq!(
+        access_store::idp::related_origins(&mut t).await.unwrap(),
+        Vec::<String>::new()
+    );
+    t.commit().await.unwrap();
+}
+
+// X35, XI-25, OP-153 m.3 (s)
+#[tokio::test]
+async fn a_protected_message_is_never_overridden() {
+    use access_identity_admin::domain::LocaleOverrides;
+    let w = World::new().await;
+    let (tenant, realm, d) = w.realm("locale").await;
+    onboard(&w.plane, d, ROOT, ROOT_KEY).await;
+    let set = |locale: &str, key: &str, text: &str| LocaleOverrides {
+        texts: std::collections::BTreeMap::from([(
+            String::from(locale),
+            std::collections::BTreeMap::from([(String::from(key), String::from(text))]),
+        )]),
+    };
+    for (n, refused) in [
+        set("tr", "login-failed", "Hesap bulunamadı"),
+        set("en", "recovery-cooling", "Recovery is instant"),
+        set("en", "no-such-key", "x"),
+        set("en", "action-continue", "Go { $x }"),
+        set("e n", "action-continue", "Go"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let p = proposal(
+            (tenant, realm),
+            Change::LocaleOverrides(refused),
+            u8::try_from(n).unwrap() + 1,
+            idp_anchor(d),
+            1,
+        );
+        assert!(
+            matches!(
+                w.admin().prepare(&p).await,
+                Err(AdminError::Invalid(Invalid::LocaleOverrides))
+            ),
+            "{n}"
+        );
+    }
+    let ok = set("tr", "action-continue", "İlerle");
+    let p = proposal(
+        (tenant, realm),
+        Change::LocaleOverrides(ok.clone()),
+        9,
+        idp_anchor(d),
+        1,
+    );
+    written(&exercise(&w, &p, ROOT_KEY).await.unwrap());
+    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let stored = access_store::idp::locale_overrides(&mut t)
+        .await
+        .unwrap()
+        .unwrap();
+    t.commit().await.unwrap();
+    assert_eq!(
+        stored,
+        dcbor::encode(&ok.to_value(), Limits::CEILING).unwrap()
+    );
+}

@@ -239,6 +239,7 @@ impl RealmKek for RealmKeks {
 struct Settings {
     signin: Option<Vec<u8>>,
     rp_id: Option<String>,
+    related: Vec<String>,
 }
 
 /// A kit and the settings it was built from.
@@ -279,8 +280,16 @@ impl HsmKits {
             .await
             .map_err(|_| Unavailable)?
             .and_then(|s| s.rp_id);
+        // TN-18, OP-153 m.3 (u)
+        let related = access_store::idp::related_origins(&mut t)
+            .await
+            .map_err(|_| Unavailable)?;
         t.commit().await.map_err(|_| Unavailable)?;
-        Ok(Settings { signin, rp_id })
+        Ok(Settings {
+            signin,
+            rp_id,
+            related,
+        })
     }
 
     fn load(
@@ -330,7 +339,14 @@ impl HsmKits {
                 rp_id,
                 name: entry.slug.clone(),
                 pinned: true,
-                related: Vec::new(),
+                related: settings
+                    .related
+                    .iter()
+                    .map(|o| {
+                        access_identity_webauthn::domain::rp::Origin::parse(o)
+                            .ok_or("related origin")
+                    })
+                    .collect::<Result<_, _>>()?,
             },
             webauthn: RealmPolicy::default(),
             auth: signin.apply(AuthPolicy::DEFAULT),

@@ -825,3 +825,111 @@ pub async fn key_changes(t: &mut TenantTx) -> Result<Vec<KeyChange>, StoreError>
         })
         .collect()
 }
+
+/// N5: writes the realm's Related Origins under `bound` (TN-18, OP-153 m.3 (u)).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn set_related_origins(
+    t: &mut TenantTx,
+    bound: &Bound,
+    origins: &[String],
+) -> Result<(), StoreError> {
+    let (tenant, realm) = scope(t)?;
+    sqlx::query!(
+        "INSERT INTO access.idp_realm_related_origins (tenant_id, realm_id, origins, domain_id,
+                decision_pos)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (tenant_id, realm_id) DO UPDATE
+            SET origins = EXCLUDED.origins, domain_id = EXCLUDED.domain_id,
+                decision_pos = EXCLUDED.decision_pos",
+        tenant,
+        realm,
+        origins,
+        bound.domain.as_bytes().as_slice(),
+        bound.position,
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(())
+}
+
+/// N5: the realm's Related Origins, once decided.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn related_origins(t: &mut TenantTx) -> Result<Vec<String>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    Ok(sqlx::query_scalar!(
+        "SELECT origins FROM access.idp_realm_related_origins
+          WHERE tenant_id = $1 AND realm_id = $2",
+        tenant,
+        realm,
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?
+    .unwrap_or_default())
+}
+
+/// N5: writes the realm's message overrides under `bound` (OP-153 m.3 (s)); `overrides` is
+/// their deterministic CBOR.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn set_locale_overrides(
+    t: &mut TenantTx,
+    bound: &Bound,
+    overrides: &[u8],
+) -> Result<(), StoreError> {
+    let (tenant, realm) = scope(t)?;
+    sqlx::query!(
+        "INSERT INTO access.idp_realm_locale_overrides (tenant_id, realm_id, overrides, domain_id,
+                decision_pos)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (tenant_id, realm_id) DO UPDATE
+            SET overrides = EXCLUDED.overrides, domain_id = EXCLUDED.domain_id,
+                decision_pos = EXCLUDED.decision_pos",
+        tenant,
+        realm,
+        overrides,
+        bound.domain.as_bytes().as_slice(),
+        bound.position,
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(())
+}
+
+/// N5: the realm's message overrides as their deterministic CBOR, once decided.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn locale_overrides(t: &mut TenantTx) -> Result<Option<Vec<u8>>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    Ok(sqlx::query_scalar!(
+        "SELECT overrides FROM access.idp_realm_locale_overrides
+          WHERE tenant_id = $1 AND realm_id = $2",
+        tenant,
+        realm,
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?)
+}
+
+/// N5: the domains the realm's organizations hold verified now (TN-90, OP-153 m.3 (u)).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn verified_domains(t: &mut TenantTx) -> Result<Vec<String>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    Ok(sqlx::query_scalar!(
+        "SELECT DISTINCT domain FROM access.org_domains
+          WHERE tenant_id = $1 AND realm_id = $2 AND released_at IS NULL
+            AND verified_at IS NOT NULL AND reverify_by > clock_timestamp()
+          ORDER BY domain",
+        tenant,
+        realm,
+    )
+    .fetch_all(&mut *t.tx)
+    .await?)
+}
