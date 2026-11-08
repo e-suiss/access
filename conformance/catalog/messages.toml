@@ -2367,3 +2367,341 @@ surface = "account"
 class = "action"
 owner = "identity_plane"
 protected = false
+
+# N5 login pages
+
+[[message]]
+key = "page-sign_in"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-signing_in"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-loading"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-options"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-providers"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-recover"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-create_account"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-email_waiting"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-email_wait_stopped"
+surface = "login"
+class = "remediation"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-consent_title"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-consent_stop"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-access_denied"
+surface = "login"
+class = "oauth_error"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-not_continued_title"
+surface = "login"
+class = "oauth_error"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-error_title"
+surface = "login"
+class = "oauth_error"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-link_title"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-link_other_device"
+surface = "login"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-link_confirm"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-link_done_here"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-link_done_elsewhere"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-link_invalid"
+surface = "login"
+class = "remediation"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-invitation_mismatch"
+surface = "login"
+class = "invitation"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-invitation_already_member"
+surface = "login"
+class = "invitation"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-invitation_inviter_gone"
+surface = "login"
+class = "invitation"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-invitation_sign_in"
+surface = "login"
+class = "invitation"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-invitation_unconfirmed_domain"
+surface = "login"
+class = "invitation"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-invitation_join_anyway"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-invitation_joined"
+surface = "login"
+class = "invitation"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-recovery_refused"
+surface = "login"
+class = "recovery"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-recovery_method"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-recovery_registered_code"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-recovery_sent_code"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-recovery_until"
+surface = "login"
+class = "recovery"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-recovery_sensitive_after"
+surface = "login"
+class = "recovery"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-recovery_send_code"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-recovery_extend"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-recovery_continue"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-recovery_refresh"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "page-recovery_replacement_code"
+surface = "login"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "claim-email"
+surface = "login"
+class = "claim"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "claim-email_verified"
+surface = "login"
+class = "claim"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "claim-name"
+surface = "login"
+class = "claim"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "claim-given_name"
+surface = "login"
+class = "claim"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "claim-family_name"
+surface = "login"
+class = "claim"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "claim-preferred_username"
+surface = "login"
+class = "claim"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "claim-picture"
+surface = "login"
+class = "claim"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "claim-locale"
+surface = "login"
+class = "claim"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "claim-phone_number"
+surface = "login"
+class = "claim"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "claim-phone_number_verified"
+surface = "login"
+class = "claim"
+owner = "identity_plane"
+protected = false
