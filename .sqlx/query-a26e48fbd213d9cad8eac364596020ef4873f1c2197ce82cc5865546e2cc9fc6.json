@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.recovery_evidence SET consumed_at = to_timestamp($4::float8)\n              WHERE tenant_id = $1 AND realm_id = $2 AND evidence_id = $3 AND consumed_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a26e48fbd213d9cad8eac364596020ef4873f1c2197ce82cc5865546e2cc9fc6"
+}

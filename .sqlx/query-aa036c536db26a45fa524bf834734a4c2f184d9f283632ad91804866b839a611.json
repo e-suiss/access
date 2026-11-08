@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.recovery_evidence SET tries_left = tries_left - 1\n              WHERE tenant_id = $1 AND realm_id = $2 AND evidence_id = $3 AND consumed_at IS NULL\n                AND tries_left > 0",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aa036c536db26a45fa524bf834734a4c2f184d9f283632ad91804866b839a611"
+}

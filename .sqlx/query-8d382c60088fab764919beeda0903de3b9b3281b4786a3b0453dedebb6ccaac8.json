@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.notification_addresses\n               (tenant_id, realm_id, subject_id, kind, identifier_id, nonce, ciphertext,\n                recovery_target, recovery_contact)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n             RETURNING address_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "address_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.notification_addresses",
+            "name": "address_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8d382c60088fab764919beeda0903de3b9b3281b4786a3b0453dedebb6ccaac8"
+}

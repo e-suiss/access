@@ -1,0 +1,93 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT attempt_id, subject_id, path, required_aal::text AS \"required!\", cooling,\n                      high_value, (extract(epoch FROM opened_at) * 1000)::bigint AS \"opened!\"\n                 FROM access.recovery_attempts\n                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3\n                  AND opened_at >= to_timestamp($4::float8)\n                ORDER BY attempt_id DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "attempt_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.recovery_attempts",
+            "name": "attempt_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.recovery_attempts",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "path",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.recovery_attempts",
+            "name": "path"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "required!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "cooling",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.recovery_attempts",
+            "name": "cooling"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "high_value",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.recovery_attempts",
+            "name": "high_value"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "opened!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      null,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "a30595a5f742007da14bf2e495e18e0046d581a0d884bdd39d80458e0a4bd950"
+}

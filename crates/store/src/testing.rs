@@ -451,3 +451,49 @@ pub async fn age_deletion(
     )
     .await
 }
+
+/// Moves the end of every throttle, cooling or grace period of the attempt one second into the
+/// past, as time would (TN-55): the transitions only grow, so the owner lifts their trigger for
+/// the change.
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn age_recovery(db: &TestDb, attempt: [u8; 16]) -> Result<(), TestDbError> {
+    let mut c = db.owner.acquire().await.at("acquire owner")?;
+    exec(
+        &mut c,
+        String::from("ALTER TABLE access.recovery_transitions DISABLE TRIGGER append_only_row"),
+        "lift trigger",
+    )
+    .await?;
+    sqlx::query(
+        "UPDATE access.recovery_transitions SET until = clock_timestamp() - interval '1 second', \
+         at = LEAST(at, clock_timestamp() - interval '2 seconds') \
+         WHERE attempt_id = $1 AND until IS NOT NULL",
+    )
+    .bind(sqlx::types::Uuid::from_bytes(attempt))
+    .execute(&mut *c)
+    .await
+    .at("age recovery")?;
+    exec(
+        &mut c,
+        String::from("ALTER TABLE access.recovery_transitions ENABLE TRIGGER append_only_row"),
+        "restore trigger",
+    )
+    .await
+}
+
+/// Tries to rewrite every recovery step as the schema owner, triggers in force: the record only
+/// grows, so this fails (OP-73, TN-54).
+///
+/// # Errors
+/// [`TestDbError`] carrying the database's refusal.
+pub async fn rewrite_recovery_steps(db: &TestDb) -> Result<(), TestDbError> {
+    let mut c = db.owner.acquire().await.at("acquire owner")?;
+    exec(
+        &mut c,
+        String::from("UPDATE access.recovery_transitions SET reason = 'rewritten'"),
+        "rewrite recovery steps",
+    )
+    .await
+}

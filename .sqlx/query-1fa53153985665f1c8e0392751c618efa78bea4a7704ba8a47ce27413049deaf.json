@@ -1,0 +1,99 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT token_id, subject_id, kind, attempt_id, one_time, uses,\n                      (extract(epoch FROM expires_at) * 1000)::bigint AS \"expires!\"\n                 FROM access.recovery_tokens\n                WHERE tenant_id = $1 AND realm_id = $2 AND token_hash = $3\n                  AND kind = ANY($4) AND used_at IS NULL AND revoked_at IS NULL\n                  AND expires_at > to_timestamp($5::float8)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "token_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.recovery_tokens",
+            "name": "token_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.recovery_tokens",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.recovery_tokens",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "attempt_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.recovery_tokens",
+            "name": "attempt_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "one_time",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.recovery_tokens",
+            "name": "one_time"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "uses",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.recovery_tokens",
+            "name": "uses"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "expires!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "TextArray",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "1fa53153985665f1c8e0392751c618efa78bea4a7704ba8a47ce27413049deaf"
+}

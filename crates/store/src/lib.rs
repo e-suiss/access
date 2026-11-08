@@ -41,6 +41,7 @@ pub mod privacy;
 pub mod projections;
 pub mod publications;
 pub mod realm_binding;
+pub mod recovery;
 pub mod relay;
 pub mod risk;
 pub mod sandbox;

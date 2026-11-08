@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.recovery_realm_policies\n               (tenant_id, realm_id, policy, domain_id, decision_pos)\n             VALUES ($1, $2, $3, $4, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e4f4ecd58fb8ae0b70ccdaa10e43b236326d1c553c5250a06584a03dc77a3125"
+}

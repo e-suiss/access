@@ -129,3 +129,12 @@ basis = "legitimate_interest"
 portable = "derived"
 export = false
 note = "Keyed blind index of the invitee's folded identifier (TN-89); the address itself is never stored."
+
+[[field]]
+column = "access.notification_addresses.ciphertext"
+vault = "contact"
+retention = "profile"
+basis = "contract"
+portable = "observed"
+export = true
+note = "Notice, recovery and recovery-contact addresses (TN-52, TN-57), sealed under the subject's contact key."

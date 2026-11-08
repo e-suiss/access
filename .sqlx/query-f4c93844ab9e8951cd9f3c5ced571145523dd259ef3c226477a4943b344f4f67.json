@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.recovery_methods SET retired_at = clock_timestamp()\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND method_id = $4\n                AND retired_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f4c93844ab9e8951cd9f3c5ced571145523dd259ef3c226477a4943b344f4f67"
+}

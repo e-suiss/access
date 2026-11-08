@@ -1,0 +1,49 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT assisted_recovery, high_value,\n                      (extract(epoch FROM permanent_loss_acknowledged_at) * 1000)::bigint AS ack\n                 FROM access.account_recovery_policies\n                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3\n                ORDER BY change_id DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "assisted_recovery",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.account_recovery_policies",
+            "name": "assisted_recovery"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "high_value",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.account_recovery_policies",
+            "name": "high_value"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "ack",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "7335b160a6e99da158709cac196df7afb6f45bd2c991482dbd4e837c97489aa3"
+}

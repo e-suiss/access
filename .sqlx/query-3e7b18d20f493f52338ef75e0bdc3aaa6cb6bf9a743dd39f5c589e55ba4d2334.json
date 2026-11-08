@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.recovery_evidence\n               (tenant_id, realm_id, attempt_id, class, code_hash, address_id, tries_left,\n                expires_at)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8::float8))\n             RETURNING evidence_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "evidence_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.recovery_evidence",
+            "name": "evidence_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Uuid",
+        "Int2",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3e7b18d20f493f52338ef75e0bdc3aaa6cb6bf9a743dd39f5c589e55ba4d2334"
+}

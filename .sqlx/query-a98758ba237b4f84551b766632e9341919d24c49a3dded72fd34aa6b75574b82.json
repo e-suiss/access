@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.recovery_tokens\n                SET uses = uses + 1,\n                    used_at = CASE WHEN one_time THEN to_timestamp($4::float8) ELSE NULL END\n              WHERE tenant_id = $1 AND realm_id = $2 AND token_id = $3 AND used_at IS NULL\n                AND revoked_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a98758ba237b4f84551b766632e9341919d24c49a3dded72fd34aa6b75574b82"
+}

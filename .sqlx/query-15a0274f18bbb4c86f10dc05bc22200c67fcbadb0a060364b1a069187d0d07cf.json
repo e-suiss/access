@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.account_recovery_policies\n               (tenant_id, realm_id, subject_id, assisted_recovery, permanent_loss_acknowledged_at,\n                high_value)\n             VALUES ($1, $2, $3, $4,\n                     CASE WHEN $5::float8 IS NULL THEN NULL ELSE to_timestamp($5::float8) END, $6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bool",
+        "Float8",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "15a0274f18bbb4c86f10dc05bc22200c67fcbadb0a060364b1a069187d0d07cf"
+}
