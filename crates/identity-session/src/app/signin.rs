@@ -377,7 +377,7 @@ where
         if l.state.first_done() && matches!(l.state.purpose, Purpose::Login) {
             return Ok(refuse(STEP_NOT_ALLOWED));
         }
-        // TN-132: a sign-in method the realm did not enable is never accepted
+        // TN-132
         if !self.policy.password {
             return Ok(refuse(STEP_NOT_ALLOWED));
         }
@@ -411,7 +411,7 @@ where
                 return Ok(Step::Throttled { retry_after_s });
             }
         };
-        // IDP-39, OP-151 m.3 (o): checked outside any transaction; failure is unavailable
+        // IDP-39, OP-151 m.3 (o)
         let breach = match Password::presented(step.password) {
             Some(p) => self.risk.services.breach.check(&p).await,
             None => Breach::Unavailable,
@@ -454,7 +454,7 @@ where
             None => None,
         };
         let authenticated = l.state.first_done();
-        // TN-132: passkeys open a sign-in only where the realm enabled them
+        // TN-132
         if !authenticated && matches!(l.state.purpose, Purpose::Login) && !self.policy.passkey {
             return Ok(Err(refuse(STEP_NOT_ALLOWED)));
         }
@@ -469,7 +469,7 @@ where
                     user,
                 }
             }
-            // IDP-8: after the first factor the subject is proven; the passkey is its second
+            // IDP-8
             (None, Some(_)) if authenticated => Identified::Identifier {
                 normalized: "",
                 user,
@@ -503,7 +503,7 @@ where
             Err(e) => return Ok(gone(e)),
         };
         let authenticated = l.state.first_done();
-        // TN-132: passkeys open a sign-in only where the realm enabled them
+        // TN-132
         if !authenticated && matches!(l.state.purpose, Purpose::Login) && !self.policy.passkey {
             return Ok(refuse(STEP_NOT_ALLOWED));
         }
