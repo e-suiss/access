@@ -1,0 +1,122 @@
+# Personal data inventory, technical half (OP-153 m.1 (c), m.3 (aa), OP-40, OP-74, Ek C).
+#
+# One entry per column that holds personal data. `vault` is the PII vault class whose subject DEK
+# seals the column (OP-153 m.3 (aa)): `profile`, `contact`, `credential`, `security_history`, or
+# `none` for a column that is not sealed (a pseudonym, a keyed index, a coarse code). `retention`
+# is the Ek C C.0 class `suiss_retention::Class` names. `basis` is the legal basis label.
+# `portable` says whether the value is observed (in the person export) or derived (left out and
+# flagged, OP-43). `export = false` keeps a column out of the person export (TN-79: secrets,
+# indexes). The `personal-data` xtask rule matches every `-- pii:<vault>` column tag in the
+# migrations to this file; an untagged personal column in a new migration stops the merge.
+# ROPA/VERBIS records and the DPIA are legal work outside this file (OP-153 m.3 (ii)).
+
+[[field]]
+column = "access.identity_identifiers.value"
+vault = "none"
+retention = "profile"
+basis = "contract"
+portable = "observed"
+export = true
+note = "Rows written before the vault only; the retention job seals each one and clears it."
+
+[[field]]
+column = "access.identity_identifiers.ciphertext"
+vault = "contact"
+retention = "profile"
+basis = "contract"
+portable = "observed"
+export = true
+note = "E-mail, phone and user name; user names are sealed under the profile key."
+
+[[field]]
+column = "access.identity_identifiers.value_index"
+vault = "none"
+retention = "suppression"
+basis = "legitimate_interest"
+portable = "derived"
+export = false
+note = "Keyed blind index; outlives the DEK as the peppered tombstone (TN-76 m.5)."
+
+[[field]]
+column = "access.identity_profile_fields.ciphertext"
+vault = "profile"
+retention = "profile"
+basis = "contract"
+portable = "observed"
+export = true
+
+[[field]]
+column = "access.identity_credentials.ciphertext"
+vault = "credential"
+retention = "profile"
+basis = "contract"
+portable = "observed"
+export = false
+note = "Password hashes, TOTP seeds and recovery codes never leave (TN-79)."
+
+[[field]]
+column = "access.risk_subject.ip_prefix"
+vault = "none"
+retention = "traffic"
+basis = "legal_obligation"
+portable = "observed"
+export = true
+note = "Only the /24 or /48 of the last sign-in is kept (OP-151 m.1 (b))."
+
+[[field]]
+column = "access.risk_subject.ip_pseudonym"
+vault = "none"
+retention = "traffic"
+basis = "legitimate_interest"
+portable = "derived"
+export = false
+
+[[field]]
+column = "access.risk_subject.country"
+vault = "none"
+retention = "traffic"
+basis = "legitimate_interest"
+portable = "observed"
+export = true
+
+[[field]]
+column = "access.risk_subject.level"
+vault = "none"
+retention = "audit"
+basis = "legitimate_interest"
+portable = "derived"
+export = false
+note = "A risk level is never shown to the person (OP-43)."
+
+[[field]]
+column = "access.identity_preferences.granted"
+vault = "none"
+retention = "consent"
+basis = "consent"
+portable = "observed"
+export = true
+
+[[field]]
+column = "access.identity_document_acceptances.document_digest"
+vault = "none"
+retention = "consent"
+basis = "consent"
+portable = "observed"
+export = true
+
+[[field]]
+column = "access.identity_deletion_facts.subject_id"
+vault = "none"
+retention = "erasure_log"
+basis = "legal_obligation"
+portable = "observed"
+export = false
+note = "The deletion fact outlives the account by design (OP-42)."
+
+[[field]]
+column = "access.identity_data_requests.subject_id"
+vault = "none"
+retention = "dsr_log"
+basis = "legal_obligation"
+portable = "observed"
+export = true

@@ -17,6 +17,8 @@ pub(crate) mod lex;
 mod limits;
 #[path = "rules_manifest.rs"]
 mod manifest;
+#[path = "rules_personal.rs"]
+mod personal;
 #[path = "rules_profile.rs"]
 mod profile;
 #[path = "rules_restriction.rs"]
@@ -62,6 +64,10 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "no-physical-delete",
             run: source::check_delete,
+        },
+        Check {
+            name: "personal-data",
+            run: personal::check,
         },
         Check {
             name: "migration-hygiene",
