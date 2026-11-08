@@ -24,8 +24,8 @@ use crate::domain::{
     Attribute, AuthMethod, Branding, Change, CimdPolicy, ClaimName, Client, ClientId, Color,
     Disclosure, ExtensionPolicy, Group, HOOK_PREFIX, HookChange, HookPoint, HookSpec, Invalid,
     JoseAlg, Members, MembershipIssuer, Name, OnNoAnswer, OrgCreate, OrgInvite, OrgMember,
-    ProtectionMode, RedirectUri, RpId, SessionPolicy, SigninMethod, SigninPolicy, Signing, Subject,
-    Upstream, UpstreamLink, WEBHOOK_PREFIX, WebhookChange, WebhookSpec,
+    OrgUpdate, ProtectionMode, RedirectUri, RpId, SessionPolicy, SigninMethod, SigninPolicy,
+    Signing, Subject, Upstream, UpstreamLink, WEBHOOK_PREFIX, WebhookChange, WebhookSpec,
 };
 use crate::ports::{Decider, Governance, Instances, RealmKeys};
 use access_identity_events::domain::webhook::event_names;
@@ -119,6 +119,8 @@ pub enum Op {
     CreateInvitation,
     /// `revokeInvitation`: `idp.org.invite_revoke` (OP-153 m.3 (o)).
     RevokeInvitation,
+    /// `patchOrganization`: `idp.org.update` (TN-98).
+    PatchOrganization,
 }
 
 impl Op {
@@ -164,6 +166,7 @@ impl Op {
             "removeOrganizationMember" => Self::RemoveOrganizationMember,
             "createInvitation" => Self::CreateInvitation,
             "revokeInvitation" => Self::RevokeInvitation,
+            "patchOrganization" => Self::PatchOrganization,
             _ => return None,
         })
     }
@@ -432,6 +435,18 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                 inviter_name: String::from(text(m, "inviter_name")?),
                 role: (Name::parse(text(m, "role")?)?, version),
                 days,
+            })
+        }
+        Op::PatchOrganization => {
+            only(m, &["display_name", "hrd"])?;
+            Change::OrgUpdate(OrgUpdate {
+                org: party_of(key_of(key)?, Invalid::NoOrg)?,
+                display_name: opt_text(m, "display_name")?.map(String::from),
+                hrd: match m.get("hrd") {
+                    None | Some(Json::Null) => None,
+                    Some(Json::Bool(b)) => Some(*b),
+                    Some(_) => return Err(Invalid::Body),
+                },
             })
         }
         Op::RevokeInvitation => {

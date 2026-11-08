@@ -382,3 +382,10 @@ pub const INVALID_INVITATION: Code = code(
     "Bad Request",
     "An invitee address, inviter name, role or lifetime outside the rules (TN-89, OP-153 m.3 (o)).",
 );
+/// Home realm discovery goes on only with a verified domain no other organization claims (TN-98).
+pub const HRD_NEEDS_VERIFIED_DOMAIN: Code = code(
+    "hrd-needs-verified-domain",
+    409,
+    "Conflict",
+    "Home realm discovery goes on only with a verified domain no other organization claims (TN-98).",
+);

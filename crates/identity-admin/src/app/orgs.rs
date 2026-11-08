@@ -184,6 +184,39 @@ pub(crate) async fn invite(
     Ok(id)
 }
 
+/// TN-98, §10.2.6: the organization lives; home realm discovery goes on only with a verified
+/// domain of it that no other organization claims.
+pub(crate) async fn update_current(
+    t: &mut TenantTx,
+    u: &crate::domain::OrgUpdate,
+) -> Result<(), AdminError> {
+    let org = live_org(t, u.org).await?;
+    if u.hrd == Some(true) && t.hrd_domains(org.id).await?.is_empty() {
+        return Err(crate::domain::Invalid::HrdUnverified.into());
+    }
+    Ok(())
+}
+
+/// Writes a committed `idp.org.update` and queues `organization.updated` (OP-149 m.4).
+pub(crate) async fn update(
+    t: &mut TenantTx,
+    ids: &IdKey,
+    u: &crate::domain::OrgUpdate,
+    app: &access_store::Pool,
+) -> Result<bool, AdminError> {
+    let org = live_org(t, u.org).await?;
+    let mut done = true;
+    if let Some(n) = &u.display_name {
+        done &= t.set_org_name(org.id, n).await?;
+    }
+    if let Some(h) = u.hrd {
+        done &= t.set_org_hrd(org.id, h).await?;
+    }
+    let at = access_store::authority::server_time(app).await?;
+    organization_event(t, ids, IdentityKind::OrganizationUpdated, org.id, at).await?;
+    Ok(done)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -394,3 +394,80 @@ async fn an_invitation_is_committed_mailed_limited_and_revoked() {
         Invalid::InviteLimit
     );
 }
+
+// TN-98, §10.2.6, TN-90, OP-149 m.4, Ek B 3436, 3454, 3611
+#[tokio::test]
+async fn home_realm_discovery_needs_a_verified_uncontested_domain() {
+    let (w, at, d, founder) = ready("org-hrd").await;
+    let org = create_org(&w, at, d, founder).await;
+    let patch = |body: serde_json::Value| {
+        compile(
+            Op::PatchOrganization,
+            Some(&b64url_encode(&ORG)),
+            &body,
+            &w.ids,
+        )
+        .unwrap()
+    };
+    assert_eq!(
+        refused(
+            &w,
+            &as_founder(at, d, patch(json!({ "hrd": true })), 1, founder)
+        )
+        .await,
+        Invalid::HrdUnverified
+    );
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let claim = t
+        .insert_domain_claim(org, "acme.example", "dns_txt", &[1; 32])
+        .await
+        .unwrap();
+    assert!(
+        t.verify_domain(claim, 86_400, &[2; 32], &[3; 32])
+            .await
+            .unwrap()
+    );
+    t.commit().await.unwrap();
+    written(
+        &exercise(
+            &w,
+            &as_founder(
+                at,
+                d,
+                patch(json!({ "hrd": true, "display_name": "Acme Inc" })),
+                2,
+                founder,
+            ),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let row = t.org(org).await.unwrap().unwrap();
+    assert!(row.hrd);
+    assert_eq!(row.display_name, "Acme Inc");
+    assert_eq!(
+        t.hrd_domains(org).await.unwrap(),
+        vec![String::from("acme.example")]
+    );
+    // TN-90: a second organization's claim of the domain locks it
+    let other = t
+        .insert_org([0x0d; 16], "Not Acme", &[4; 32])
+        .await
+        .unwrap();
+    t.insert_domain_claim(other, "acme.example", "dns_txt", &[5; 32])
+        .await
+        .unwrap();
+    assert!(t.hrd_domains(org).await.unwrap().is_empty());
+    t.commit().await.unwrap();
+    realm_events(&w, at.1, "event.organization.updated", 1).await;
+    assert_eq!(
+        refused(
+            &w,
+            &as_founder(at, d, patch(json!({ "hrd": true })), 3, founder)
+        )
+        .await,
+        Invalid::HrdUnverified
+    );
+}

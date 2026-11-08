@@ -378,6 +378,13 @@ pub const ROUTES: &[Route] = &[
     ),
     live(
         Owner::N3,
+        Verb::Get,
+        "/v1/organizations/{organization}/sign-in",
+        "getOrganizationSignIn",
+        "Home realm discovery by organization id (TN-3, TN-98): the target to confirm, only when the organization turned it on and holds a verified domain; the realm's sign-in policy still decides.",
+    ),
+    live(
+        Owner::N3,
         Verb::Post,
         "/v1/organizations/{organization}/access-requests",
         "requestAccess",

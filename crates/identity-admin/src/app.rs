@@ -365,6 +365,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             Change::OrgMemberRemove(m) => org_member_current(t, *m).await?,
             Change::OrgInvite(i) => orgs::invite_current(t, i).await?,
+            Change::OrgUpdate(u) => orgs::update_current(t, u).await?,
             Change::OrgInviteRevoke { org, invitation } => {
                 let org = orgs::live_org(t, *org).await?;
                 if t.invitation_org(*invitation).await? != Some((org.id, true)) {
@@ -1286,6 +1287,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::AccountResetIntent { .. }
             | Change::AccountTapIssue(_) => true,
             Change::OrgInviteRevoke { invitation, .. } => t.revoke_invitation(*invitation).await?,
+            Change::OrgUpdate(u) => orgs::update(t, self.ids, u, self.app).await?,
             Change::OrgMemberRemove(m) => {
                 let org = t
                     .org_by_party(m.org)

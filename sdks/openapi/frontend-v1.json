@@ -1095,6 +1095,37 @@
         "x-suiss-status": "planned"
       }
     },
+    "/v1/organizations/{organization}/sign-in": {
+      "get": {
+        "operationId": "getOrganizationSignIn",
+        "summary": "Home realm discovery by organization id (TN-3, TN-98): the target to confirm, only when the organization turned it on and holds a verified domain; the realm's sign-in policy still decides.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "organization",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
     "/v1/organizations/{organization}/access-requests": {
       "post": {
         "operationId": "requestAccess",

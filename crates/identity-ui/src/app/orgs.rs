@@ -318,6 +318,54 @@ where
         Reply::json(200, json!({ "items": items }))
     }
 
+    /// `GET /v1/organizations/{organization}/sign-in` (TN-3, TN-98, §10.2.6): home realm
+    /// discovery routes by organization id only, never by an e-mail domain. It answers the
+    /// target for the person to confirm ("You're signing in to Acme (acme.example)") only when
+    /// the organization turned it on and holds a verified domain no other organization claims;
+    /// otherwise there is no such route. A hint never changes the realm's sign-in policy.
+    pub async fn organization_sign_in(&self, entry: &RealmEntry, org: &str) -> Reply {
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        let Some(party) = b64url_decode(org)
+            .ok()
+            .and_then(|v| <[u8; 16]>::try_from(v.as_slice()).ok())
+        else {
+            return Reply::problem(NO_ORGANIZATION);
+        };
+        let mut t = match self.org_tx(&kit).await {
+            Ok(t) => t,
+            Err(r) => return r,
+        };
+        let org = match t.org_by_party(party).await {
+            Ok(Some(o)) if !o.ended && o.hrd => o,
+            Ok(_) => return Reply::problem(NO_ORGANIZATION),
+            Err(e) => return store_failed(&e),
+        };
+        let domains = match t.hrd_domains(org.id).await {
+            Ok(d) => d,
+            Err(e) => return store_failed(&e),
+        };
+        if let Err(e) = t.commit().await {
+            return store_failed(&e);
+        }
+        if domains.is_empty() {
+            return Reply::problem(NO_ORGANIZATION);
+        }
+        Reply::json(
+            200,
+            json!({
+                "organization": {
+                    "id": b64url_encode(&org.party),
+                    "display_name": org.display_name,
+                },
+                "domains": domains,
+                "confirm": true,
+            }),
+        )
+    }
+
     /// `POST /v1/organizations/{organization}/access-requests` (TN-90): asks the
     /// organization's administrators for access; they decide it once.
     pub async fn request_access(&self, entry: &RealmEntry, b: &Browser<'_>, org: &str) -> Reply {

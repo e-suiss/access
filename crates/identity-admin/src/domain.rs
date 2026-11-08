@@ -368,6 +368,10 @@ pub enum Invalid {
     /// The invitation does not exist, was accepted or revoked, or expired.
     #[error("no such invitation")]
     NoInvitation,
+    /// Home realm discovery needs a verified domain no other organization claims (§10.2.6,
+    /// TN-98).
+    #[error("home realm discovery needs a verified domain")]
+    HrdUnverified,
 }
 
 impl Invalid {
@@ -385,6 +389,7 @@ impl Invalid {
             Self::InviteLimit => "invitation-limit",
             Self::Invitation => "invalid-invitation",
             Self::NoInvitation => "no-such-invitation",
+            Self::HrdUnverified => "hrd-needs-verified-domain",
             Self::DisplayName => "invalid-display-name",
             Self::RedirectUri | Self::RedirectUris => "invalid-redirect-uri",
             Self::JwksUri => "invalid-jwks-uri",
@@ -1305,6 +1310,8 @@ pub enum Change {
     OrgMemberRemove(OrgMember),
     /// `idp.org.invite` (TN-89, OP-153 m.3 (o)).
     OrgInvite(OrgInvite),
+    /// `idp.org.update`: the organization's name or home realm discovery (TN-98).
+    OrgUpdate(OrgUpdate),
     /// `idp.org.invite_revoke` (OP-153 m.3 (o)).
     OrgInviteRevoke {
         /// The organization's Party.
@@ -1312,6 +1319,45 @@ pub enum Change {
         /// The invitation.
         invitation: [u8; 16],
     },
+}
+
+/// A change to an organization's profile (TN-98): its name, and whether home realm discovery
+/// routes to it, off by default.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgUpdate {
+    /// The organization's Party.
+    pub org: [u8; 16],
+    /// A new display name, attacker-controlled text (OP-153 m.3 (o)).
+    pub display_name: Option<String>,
+    /// Home realm discovery on or off.
+    pub hrd: Option<bool>,
+}
+
+impl OrgUpdate {
+    fn check(&self) -> Result<(), Invalid> {
+        if self.display_name.is_none() && self.hrd.is_none() {
+            return Err(Invalid::Body);
+        }
+        if let Some(n) = &self.display_name {
+            OrgCreate {
+                party: self.org,
+                display_name: n.clone(),
+            }
+            .check()?;
+        }
+        Ok(())
+    }
+
+    fn to_value(&self) -> Value {
+        let mut m = vec![(Value::text("org"), Value::Bytes(self.org.to_vec()))];
+        if let Some(n) = &self.display_name {
+            m.push((Value::text("display_name"), Value::text(n)));
+        }
+        if let Some(h) = self.hrd {
+            m.push((Value::text("hrd"), Value::Bool(h)));
+        }
+        Value::Map(m)
+    }
 }
 
 /// Days an invitation lives by default (OP-153 m.3 (o), PD).
@@ -1533,6 +1579,7 @@ impl Change {
             Self::OrgCreate(_) => IdpAction::OrgCreate,
             Self::OrgMemberRemove(_) => IdpAction::OrgMemberRemove,
             Self::OrgInvite(_) => IdpAction::OrgInvite,
+            Self::OrgUpdate(_) => IdpAction::OrgUpdate,
             Self::OrgInviteRevoke { .. } => IdpAction::OrgInviteRevoke,
         }
     }
@@ -1576,6 +1623,7 @@ impl Change {
             }
             Self::OrgCreate(o) => o.check(),
             Self::OrgInvite(i) => i.check(),
+            Self::OrgUpdate(u) => u.check(),
             Self::OrgInviteRevoke { .. }
             | Self::OrgMemberRemove(_)
             | Self::Hook(_)
@@ -1673,6 +1721,7 @@ impl Change {
                 Value::Bytes(policy.to_bytes().unwrap_or_default()),
             )]),
             Self::OrgInvite(i) => i.to_value(),
+            Self::OrgUpdate(u) => u.to_value(),
             Self::OrgInviteRevoke { org, invitation } => Value::Map(vec![
                 (Value::text("org"), Value::Bytes(org.to_vec())),
                 (Value::text("invitation"), Value::Bytes(invitation.to_vec())),
@@ -1752,6 +1801,7 @@ impl Change {
             Self::OrgCreate(OrgCreate { party: org, .. })
             | Self::OrgMemberRemove(OrgMember { org, .. })
             | Self::OrgInvite(OrgInvite { org, .. })
+            | Self::OrgUpdate(OrgUpdate { org, .. })
             | Self::OrgInviteRevoke { org, .. } => {
                 path.extend([String::from("org"), b64url_encode(org)]);
             }

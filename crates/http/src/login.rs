@@ -203,6 +203,10 @@ where
             .route(
                 &format!("{prefix}/v1/account/organizations"),
                 get(web::organizations::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/organizations/{{organization}}/sign-in"),
+                get(web::organization_sign_in::<D, K, KI, C, M>),
             );
     }
     // OP-153 m.4

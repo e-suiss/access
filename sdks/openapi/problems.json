@@ -641,6 +641,13 @@
       "description": "An invitee address, inviter name, role or lifetime outside the rules (TN-89, OP-153 m.3 (o))."
     },
     {
+      "code": "hrd-needs-verified-domain",
+      "type": "urn:suiss:access:problem:hrd-needs-verified-domain",
+      "status": 409,
+      "title": "Conflict",
+      "description": "Home realm discovery goes on only with a verified domain no other organization claims (TN-98)."
+    },
+    {
       "code": "invalid-audit-format",
       "type": "urn:suiss:access:problem:invalid-audit-format",
       "status": 400,

@@ -239,6 +239,12 @@ pub const ROWS: &[Route] = &[
         "Removes a member from an organization; its last active owner is kept (TN-91).",
     ),
     write(
+        Verb::Patch,
+        "/admin/v1/realms/{slug}/organizations/{organization}",
+        "patchOrganization",
+        "Renames an organization or turns home realm discovery to it on or off; on needs a verified domain no other organization claims (TN-98).",
+    ),
+    write(
         Verb::Post,
         "/admin/v1/realms/{slug}/organizations/{organization}/invitations",
         "createInvitation",
@@ -637,7 +643,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "removeOrganizationMember"
         | "createTemporaryAccessPass"
         | "createInvitation"
-        | "revokeInvitation" => (Accounts, w(false)),
+        | "revokeInvitation"
+        | "patchOrganization" => (Accounts, w(false)),
         "listUpstreamIdps" => (UpstreamIdps, Shape::List(&["name", "issuer", "status"])),
         "getUpstreamIdp" => (UpstreamIdps, Shape::Get),
         "putUpstreamIdp" => (UpstreamIdps, w(true)),
@@ -754,6 +761,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::NotOrganization => &r::NOT_AN_ORGANIZATION,
             Invalid::OrgLimit | Invalid::InviteLimit => &codes::RATE_LIMITED,
             Invalid::Invitation => &r::INVALID_INVITATION,
+            Invalid::HrdUnverified => &r::HRD_NEEDS_VERIFIED_DOMAIN,
             Invalid::NoClient
             | Invalid::NoKey
             | Invalid::NoGroup

@@ -278,6 +278,50 @@ impl TenantTx {
         }
     }
 
+    /// Renames the organization.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn set_org_name(&mut self, id: [u8; 16], name: &str) -> Result<bool, StoreError> {
+        let (tenant, realm) = self.org_scope()?;
+        let done = sqlx::query!(
+            r#"UPDATE access.organizations SET display_name = $4
+                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3 AND ended_at IS NULL"#,
+            tenant,
+            realm,
+            uuid(id),
+            name,
+        )
+        .execute(&mut *self.tx)
+        .await?;
+        Ok(done.rows_affected() == 1)
+    }
+
+    /// The organization's domains home realm discovery may name (§10.2.6, TN-90): verified now
+    /// and claimed by no other organization of the realm.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn hrd_domains(&mut self, org: [u8; 16]) -> Result<Vec<String>, StoreError> {
+        let (tenant, realm) = self.org_scope()?;
+        Ok(sqlx::query_scalar!(
+            r#"SELECT d.domain FROM access.org_domains d
+                WHERE d.tenant_id = $1 AND d.realm_id = $2 AND d.org_id = $3
+                  AND d.released_at IS NULL AND d.verified_at IS NOT NULL
+                  AND d.reverify_by > clock_timestamp()
+                  AND NOT EXISTS (
+                    SELECT 1 FROM access.org_domains o
+                     WHERE o.tenant_id = d.tenant_id AND o.realm_id = d.realm_id
+                       AND o.domain = d.domain AND o.org_id <> d.org_id AND o.released_at IS NULL)
+                ORDER BY d.domain"#,
+            tenant,
+            realm,
+            uuid(org),
+        )
+        .fetch_all(&mut *self.tx)
+        .await?)
+    }
+
     /// Turns home realm discovery to the organization on or off (TN-98: off by default).
     ///
     /// # Errors

@@ -449,6 +449,7 @@ pub const CODES: &[Code] = &[
     codes::realm::SELF_ISSUE_REFUSED,
     codes::realm::NOT_AN_ORGANIZATION,
     codes::realm::INVALID_INVITATION,
+    codes::realm::HRD_NEEDS_VERIFIED_DOMAIN,
     codes::realm::INVALID_AUDIT_FORMAT,
 ];
 

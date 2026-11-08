@@ -275,6 +275,7 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "removeOrganizationMember" => IdpAction::OrgMemberRemove,
         "createInvitation" => IdpAction::OrgInvite,
         "revokeInvitation" => IdpAction::OrgInviteRevoke,
+        "patchOrganization" => IdpAction::OrgUpdate,
         "putSigninPolicy" | "patchSigninPolicy" => IdpAction::RealmSigninPolicy,
         "putSessionPolicy" | "patchSessionPolicy" => IdpAction::RealmSessionPolicy,
         "putBranding" | "patchBranding" => IdpAction::RealmBranding,

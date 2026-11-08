@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.organizations SET display_name = $4\n                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3 AND ended_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f3b470eb09f104c1a47865f72cbe91273366de8f17c3a5acf152e8815eeef737"
+}

@@ -784,3 +784,11 @@ where
     );
     r
 }
+
+handler! {
+    /// `GET /v1/organizations/{organization}/sign-in` (TN-3, TN-98).
+    organization_sign_in(s, entry, b, p, bytes, headers) false {
+        let _ = (&b, &bytes);
+        Ok(s.hosted.organization_sign_in(&entry, param(&p, "organization")).await)
+    }
+}
