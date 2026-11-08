@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use access_internal_api::idp::{IdpAction, RESOURCE_NAMESPACE};
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::Mode;
+use access_kernel::digest::Digest;
 use access_kernel::intent::{ContextRefs, IntentEnvelope, ParamValue};
 use access_kernel::json::b64url_encode;
 use access_kernel::meta::{self, core_action};
@@ -84,6 +85,31 @@ impl DraftError {
     }
 }
 
+/// The Anchor an eligibility probe of a drafted `check` names as its basis: the root that
+/// covers the action's family (OP-151 m.20 (d), IA-5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProbeRoot {
+    /// The domain's meta-anchor: core meta-actions, the audit read and the export.
+    Meta,
+    /// The realm's identity plane Anchor: `idp.*` actions.
+    Idp,
+}
+
+impl ProbeRoot {
+    /// The Anchor's id in `domain`.
+    #[must_use]
+    pub fn anchor(self, domain: &Digest) -> access_kernel::model::Id {
+        match self {
+            Self::Meta => meta::meta_anchor(domain),
+            Self::Idp => meta::object_id(
+                domain,
+                meta::kind::ANCHOR,
+                access_authority_core::genesis::IDP_ANCHOR,
+            ),
+        }
+    }
+}
+
 /// A drafted intent: the envelope and its ADP wire JSON (L1-ADP-8).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Drafted {
@@ -91,13 +117,28 @@ pub struct Drafted {
     pub envelope: IntentEnvelope,
     /// Its canonical bytes.
     pub bytes: Vec<u8>,
+    /// For a `check`, the root an eligibility probe of it names.
+    pub probe: Option<ProbeRoot>,
 }
 
 impl Drafted {
-    /// The answer: `{intent, envelope}`.
+    /// The answer: `{intent, envelope}`, and for a `check` the eligibility `set` members besides
+    /// the intent, `probe: {domain, basis, capacity}`, in the session's `domain`.
     #[must_use]
-    pub fn answer(&self) -> Value {
-        json!({ "intent": wire(&self.envelope), "envelope": b64url_encode(&self.bytes) })
+    pub fn answer(&self, domain: &Digest) -> Value {
+        let mut out =
+            json!({ "intent": wire(&self.envelope), "envelope": b64url_encode(&self.bytes) });
+        if let (Some(root), Value::Object(o)) = (self.probe, &mut out) {
+            o.insert(
+                String::from("probe"),
+                json!({
+                    "domain": b64url_encode(&domain.0),
+                    "basis": { "anchor": b64url_encode(&root.anchor(domain).0) },
+                    "capacity": "own",
+                }),
+            );
+        }
+        out
     }
 }
 
@@ -282,8 +323,17 @@ pub fn draft(body: &[u8], realm: &str, now_ms: u64) -> Result<Drafted, DraftErro
     };
     let bytes = envelope.to_bytes().map_err(|_| DraftError::Malformed)?;
     // PI-7: what is drafted is what the Kernel reads back, or nothing is drafted
+    let probe = (mode == Mode::Check).then_some(if family == Family::Idp {
+        ProbeRoot::Idp
+    } else {
+        ProbeRoot::Meta
+    });
     match IntentEnvelope::from_bytes(&bytes) {
-        Ok(back) if back == envelope => Ok(Drafted { envelope, bytes }),
+        Ok(back) if back == envelope => Ok(Drafted {
+            envelope,
+            bytes,
+            probe,
+        }),
         _ => Err(DraftError::Action),
     }
 }

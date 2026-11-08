@@ -842,3 +842,89 @@ async fn a_console_commit_goes_to_adp_only_with_the_browsers_ais() {
     assert_eq!(r.headers()[header::CONTENT_TYPE], "application/cbor-seq");
     assert_ne!(package, Vec::<u8>::new());
 }
+
+// OP-151 m.20 (d), m.19 (a), IA-5, OP-149 m.10, TN-128: the console's section probes work on a
+// real server: the BFF drafts each probe's `check` with the eligibility `set` it belongs to, the
+// browser sends `{subject, set}` as drafted, and the real decision point answers the founder's
+// payload-less meta-action, `idp.*` and audit probes by coverage; another Party is refused at
+// the BFF, and nothing is recorded
+#[tokio::test]
+async fn the_consoles_section_probes_are_answered_by_the_real_decision_point() {
+    let Console {
+        management,
+        browser,
+        domain,
+        root,
+        w,
+        ..
+    } = console("mgmt-probes", true).await;
+    let basis = ExerciseBasis::Anchor(meta::object_id(&domain, kind::ANCHOR, IDP_ANCHOR));
+    let before = w.domains.head(domain).await.unwrap().0;
+    let probe = |namespace: &str, name: &str, resource: &str| {
+        let ask = serde_json::json!({
+            "action": { "namespace": namespace, "name": name, "major": 1 },
+            "resources": [{ "namespace": resource, "path": ["acme"] }],
+            "mode": "check",
+        })
+        .to_string();
+        let proof = browser.ais(
+            domain,
+            &access_crypto::random::bytes::<16>().unwrap(),
+            read_intent(&Method::POST, "/console/api/intents"),
+            Mode::Check,
+            basis,
+        );
+        browser
+            .request(&Method::POST, "/console/api/intents", "x")
+            .header("x-access-ais", proof)
+            .body(Body::from(ask))
+            .unwrap()
+    };
+    let eligibility = |subject: &[u8], draft: &serde_json::Value| {
+        let mut set = draft["probe"].clone();
+        set["intent"] = draft["intent"].clone();
+        let body = serde_json::json!({ "subject": b64url_encode(subject), "set": set });
+        browser
+            .request(
+                &Method::POST,
+                "/console/api/proxy/adp/eligibility:check",
+                "x",
+            )
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    };
+    for (namespace, name, resource) in [
+        ("access", "authority_set_define", "access.domain"),
+        ("access", "grant_amend", "access.domain"),
+        ("access", "policy_set", "access.domain"),
+        ("access", "anchor_amend", "access.domain"),
+        ("access", "read", "access.audit"),
+        ("idp.account", "suspend", "idp"),
+    ] {
+        let (r, body) = send(&management, probe(namespace, name, resource)).await;
+        assert_eq!(
+            r.status(),
+            StatusCode::OK,
+            "{name}: {}",
+            String::from_utf8_lossy(&body)
+        );
+        let draft: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(draft["probe"]["domain"], b64url_encode(&domain.0));
+        let (r, body) = send(&management, eligibility(&root.0, &draft)).await;
+        assert_eq!(
+            r.status(),
+            StatusCode::OK,
+            "{name}: {}",
+            String::from_utf8_lossy(&body)
+        );
+        let answer: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(answer["eligible"], true, "{name}: {answer}");
+        let (r, _) = send(&management, eligibility(&[0x5a; 16], &draft)).await;
+        assert_eq!(
+            r.status(),
+            StatusCode::FORBIDDEN,
+            "{name}: not the session's Party"
+        );
+    }
+    assert_eq!(w.domains.head(domain).await.unwrap().0, before);
+}

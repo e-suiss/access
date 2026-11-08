@@ -24,11 +24,14 @@ export interface Drafted {
   readonly intent: unknown;
   readonly envelope: Uint8Array;
   readonly decoded: DecodedIntent;
+  /** For a `check`, the eligibility `set` members besides the intent (OP-151 m.20 (d)). */
+  readonly probe?: Readonly<Record<string, unknown>>;
 }
 
 interface Draft {
   readonly intent: unknown;
   readonly envelope: string;
+  readonly probe?: Readonly<Record<string, unknown>>;
 }
 
 /** Whether the Kernel's decoding names exactly the action and resources of `w`. */
@@ -70,5 +73,7 @@ export async function draft(
   const envelope = fromB64url(d.envelope);
   const decoded = decodedIntent(k, envelope);
   if (!matches(w, decoded)) throw new NotSigned("mismatch");
-  return { intent: d.intent, envelope, decoded };
+  return d.probe === undefined
+    ? { intent: d.intent, envelope, decoded }
+    : { intent: d.intent, envelope, decoded, probe: d.probe };
 }

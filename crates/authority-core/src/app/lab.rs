@@ -248,7 +248,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if req.mode == Mode::Check || record == 0 || record > self.head() {
             return Err(CoreError::Protocol("replay-record"));
         }
-        Self::check_payload(req)?;
+        Self::check_payload(req, false)?;
         let digest = intent_digest(&req.intent).map_err(|_| CoreError::Protocol("intent"))?;
         let actor = self.actor(inc, &digest, now).await?;
         if !self.limiter.admit(Class::Explain, who(inc, actor), now) {

@@ -212,9 +212,10 @@ export interface Exported {
  */
 export async function check(instance: Instance, subject: string, w: Wanted): Promise<boolean> {
   const d = await draft(instance, w, "check");
+  if (d.probe === undefined) throw new Problem(502, "malformed", undefined);
   const r = await call("/proxy/adp/eligibility:check", {
     method: "POST",
-    body: { subject, set: { intent: d.intent } },
+    body: { subject, set: { ...d.probe, intent: d.intent } },
   });
   if (!r.ok) throw new Problem(r.status, "unavailable", undefined);
   const v = (await r.json()) as { eligible?: unknown };

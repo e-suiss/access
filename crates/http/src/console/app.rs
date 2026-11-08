@@ -1002,7 +1002,7 @@ async fn intents<E: ConsoleEnv>(
         Err(ProofError::Rejected) => return problems::proof_rejected().into_response(),
     }
     match super::drafts::draft(&body, &live.session.who.realm, now) {
-        Ok(d) => json_reply(StatusCode::OK, &d.answer()),
+        Ok(d) => json_reply(StatusCode::OK, &d.answer(&live.session.who.domain)),
         Err(e) => problems::draft(e).into_response(),
     }
 }

@@ -93,9 +93,11 @@ async function eligible(instance: Instance, realm: string, probe: Probe): Promis
   if (subject === undefined) return false;
   try {
     const d = await draft(instance, probeIntent(realm, probe), "check");
+    // OP-151 m.20 (d): the set is the drafted probe, its domain, root basis and capacity
+    if (d.probe === undefined) return false;
     const r = await call("/proxy/adp/eligibility:check", {
       method: "POST",
-      body: { subject, set: { intent: d.intent } },
+      body: { subject, set: { ...d.probe, intent: d.intent } },
     });
     if (!r.ok) return false;
     const v = (await r.json()) as { eligible?: unknown };

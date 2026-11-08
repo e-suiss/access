@@ -360,9 +360,16 @@ export class ConsoleMock {
       const w = body() as unknown as Wanted;
       const asked = this.tamper ? { ...w, action: { ...w.action, name: "grant_issue" } } : w;
       const d = envelopeOf(asked);
+      const mode = (body() as { mode?: unknown }).mode;
+      // OP-151 m.20 (d): a check draft carries the eligibility set it belongs to
+      const probe =
+        mode === "check"
+          ? { domain: DOMAIN, basis: { anchor: "AAAAAAAAAAAAAAAAAAAAAA" }, capacity: "own" }
+          : undefined;
       return reply(200, {
         intent: d.intent,
         envelope: Buffer.from(d.envelope).toString("base64url"),
+        ...(probe === undefined ? {} : { probe }),
       });
     }
     if (path.startsWith("/proxy/admin/")) {
@@ -445,7 +452,13 @@ export class ConsoleMock {
       });
     }
     if (path === "/proxy/adp/eligibility:check") {
-      const intent = (body()["set"] as { intent?: Wanted } | undefined)?.intent;
+      const set = body()["set"] as
+        { intent?: Wanted; domain?: unknown; basis?: unknown; capacity?: unknown } | undefined;
+      // OP-149 m.10: like ADP, a set without its domain, basis and capacity is not decoded
+      if (set?.domain !== DOMAIN || set.basis === undefined || set.capacity !== "own") {
+        return problem(400, "set");
+      }
+      const intent = set.intent;
       const act = intent === undefined ? "" : `${intent.action.namespace}/${intent.action.name}`;
       const yes =
         s.kid !== undefined &&

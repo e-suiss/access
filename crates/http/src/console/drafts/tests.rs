@@ -32,19 +32,51 @@ fn a_catalogued_action_is_drafted_as_adp_reads_it() {
     assert_eq!(d.envelope.validity.from, NOW - VALID_BEFORE_MS);
     assert_eq!(d.envelope.validity.until, NOW + VALID_FOR_MS);
     assert_eq!(IntentEnvelope::from_bytes(&d.bytes).unwrap(), d.envelope);
-    let answer = d.answer();
+    let answer = d.answer(&Digest([3; 32]));
     assert_eq!(answer["envelope"], b64url_encode(&d.bytes));
-    let body = json!({
-        "subject": b64url_encode(&[1; 16]),
-        "set": {
-            "domain": b64url_encode(&[3; 32]),
-            "intent": answer["intent"],
-            "basis": { "public": b64url_encode(&[1; 16]) },
-            "capacity": "own",
-        },
-    });
+    let mut set = answer["probe"].clone();
+    set["intent"] = answer["intent"].clone();
+    let body = json!({ "subject": b64url_encode(&[1; 16]), "set": set });
     let (decoded, _) = decode_eligibility(body.to_string().as_bytes(), 1 << 16).unwrap();
     assert_eq!(decoded.request.intent, d.envelope);
+    assert_eq!(decoded.request.domain, Digest([3; 32]));
+    assert_eq!(
+        decoded.request.basis,
+        access_kernel::meta::ExerciseBasis::Anchor(ProbeRoot::Idp.anchor(&Digest([3; 32])))
+    );
+}
+
+// OP-151 m.20 (d), IA-5: a check draft names the eligibility set it belongs to, the root of its
+// family as basis (the meta-anchor for core meta-actions and the audit read); a commit draft
+// names none
+#[test]
+fn a_check_draft_carries_its_probe_set() {
+    let d = ask(&wanted(
+        "access",
+        "grant_amend",
+        "access.domain",
+        &["acme"],
+        "check",
+    ))
+    .unwrap();
+    assert_eq!(d.probe, Some(ProbeRoot::Meta));
+    let a = d.answer(&Digest([3; 32]));
+    assert_eq!(
+        a["probe"]["basis"]["anchor"],
+        b64url_encode(&access_kernel::meta::meta_anchor(&Digest([3; 32])).0)
+    );
+    assert_eq!(a["probe"]["capacity"], "own");
+    let mut w = wanted(
+        "access",
+        "audit_export",
+        "access.audit",
+        &["acme"],
+        "commit",
+    );
+    w["params"] = json!({ "from": 1 });
+    let c = ask(&w).unwrap();
+    assert_eq!(c.probe, None);
+    assert!(c.answer(&Digest([3; 32])).get("probe").is_none());
 }
 
 // OP-151 m.8 (b), m.19 (a), (d): the export is `access`/`audit_export` on the realm's audit
@@ -66,7 +98,10 @@ fn the_export_is_drafted_with_its_typed_parameters() {
         d.envelope.params["disclosure"],
         ParamValue::Enum("redacted".to_owned())
     );
-    assert_eq!(d.answer()["intent"]["params"]["to"], json!({ "count": 9 }));
+    assert_eq!(
+        d.answer(&Digest([3; 32]))["intent"]["params"]["to"],
+        json!({ "count": 9 })
+    );
     w["params"] = json!({ "disclosure": "everything" });
     assert_eq!(ask(&w), Err(DraftError::Params));
     w["params"] = json!({ "from": -1 });

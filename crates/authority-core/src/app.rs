@@ -420,7 +420,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if req.mode == Mode::Check || record == 0 || record > self.head() {
             return Err(CoreError::Protocol("explain-record"));
         }
-        Self::check_payload(req)?;
+        Self::check_payload(req, false)?;
         let digest = intent_digest(&req.intent).map_err(|_| CoreError::Protocol("intent"))?;
         let actor = self.actor(inc, &digest, now).await?;
         if !self.limiter.admit(Class::Explain, who(inc, actor), now) {
@@ -768,7 +768,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         }
     }
 
-    fn check_payload(req: &Request) -> Result<(), CoreError> {
+    /// The payload rules of a request; a `probe` is an eligibility check, which may name a core
+    /// meta-action without its payload and is then answered by coverage only (OP-152 m.5, OP-151
+    /// m.20 (d)).
+    fn check_payload(req: &Request, probe: bool) -> Result<(), CoreError> {
         let is_meta = meta::is_meta(&req.intent.action.namespace, &req.intent.action.name);
         match &req.payload {
             Some(p) => {
@@ -797,6 +800,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     }
                 }
             }
+            // OP-151 m.20 (d): no effect is evaluated, so only the basis's coverage answers
+            None if is_meta && probe && req.mode == Mode::Check => {}
             None if is_meta => return Err(CoreError::Protocol("payload")),
             // OP-141 m.39 (a), OP-151 m.19 (d)
             None if req.intent.action.namespace == meta::NAMESPACE
@@ -1317,7 +1322,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if req.domain != self.domain {
             return Err(CoreError::Protocol("domain"));
         }
-        Self::check_payload(req)?;
+        Self::check_payload(req, subject.is_some())?;
         let digest = intent_digest(&req.intent).map_err(|_| CoreError::Protocol("intent"))?;
         let (actor, bucket) = self.requester(inc, &digest, now, subject).await?;
         self.admit(inc, bucket, actor, now)?;

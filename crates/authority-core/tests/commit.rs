@@ -4770,6 +4770,70 @@ async fn an_eligibility_check_records_nothing() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
+// OP-151 m.20 (d), OP-152 m.5, IA-5: an eligibility check may name a core meta-action without
+// its payload and is answered by the basis's coverage alone: the meta-anchor's root is eligible,
+// another Party, or a basis that does not cover the domain, is not; nothing is recorded, and the
+// same payload-less meta-action is still refused as a check with an AIS or as a commit
+#[tokio::test]
+async fn a_payload_less_meta_action_probe_is_answered_by_coverage() {
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    let a = process(&db, "a", vec![d]);
+    onboard_both(&a, d, ActorKind::Human).await;
+    let id = DomainId::from_bytes(d.0);
+    let head = access_store::authority::read_head(&db.sequencer, &id)
+        .await
+        .unwrap();
+    let probe = |name: &str, basis: ExerciseBasis| Incoming {
+        request: Request {
+            domain: d,
+            mode: Mode::Check,
+            nonce: vec![61; 16],
+            intent: intent(action("access", name), ("access.domain", "acme"), None),
+            payload: None,
+            basis,
+            capacity: Capacity::Own,
+            proofs: Vec::new(),
+            exercise: None,
+            consistency: None,
+        },
+        ais: None,
+        pep: PEP.to_owned(),
+        requester: None,
+        explain: false,
+        status: None,
+    };
+    let root = ExerciseBasis::Anchor(meta::meta_anchor(&d));
+    for name in [
+        "authority_set_define",
+        "grant_amend",
+        "policy_set",
+        "anchor_amend",
+    ] {
+        allowed(&a.eligible(&probe(name, root), ROOT).await.unwrap());
+        let other = a.eligible(&probe(name, root), ALICE).await.unwrap();
+        assert_ne!(other.decision.outcome, Outcome::Allow, "{name}");
+    }
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let narrow = a.eligible(&probe("policy_set", shop), ROOT).await.unwrap();
+    assert_ne!(narrow.decision.outcome, Outcome::Allow);
+    assert_eq!(
+        access_store::authority::read_head(&db.sequencer, &id)
+            .await
+            .unwrap(),
+        head
+    );
+    let signed = incoming(probe("grant_amend", root).request, ROOT_KEY);
+    assert_eq!(a.exercise(&signed).await.unwrap_err().code(), "protocol");
+    let mut commit = probe("grant_amend", root);
+    commit.request.mode = Mode::Commit;
+    let commit = incoming(commit.request, ROOT_KEY);
+    assert_eq!(a.exercise(&commit).await.unwrap_err().code(), "protocol");
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
 // OP-149 m.5, OP-149 m.8, CR-24, CMP-9, SEC12: keys are read from the derived index at a ledger
 // position with their Party's actor kind and the `party_compromise` overlay as declared by then;
 // nothing is recorded
