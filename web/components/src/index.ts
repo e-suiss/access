@@ -16,3 +16,4 @@ export {
   parseProtected,
   tag,
 } from "./fluent.js";
+export * as delegation from "./delegation/index.js";
