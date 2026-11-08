@@ -2000,6 +2000,7 @@ mod proofs;
 pub mod publishing;
 mod regime;
 pub mod roles;
+pub mod sources;
 
 pub use ingest::Ingested;
 pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};

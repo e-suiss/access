@@ -810,3 +810,35 @@ async fn a_delegated_admin_signs_a_meta_write_on_its_own_holding() {
     assert_eq!(w.status, StatusCode::OK, "{}", w.body);
     assert_eq!(w.body["decision"], true, "{}", w.body);
 }
+
+// §8.17.9.3, INV-15, X20, §5.13, Ek B 3818, 3819, 3372
+#[tokio::test]
+async fn the_sources_read_lists_each_acceptance_by_use_with_its_blast_radius() {
+    let c = console("mgmt-sources", true).await;
+    let _grant = c.issue_to_founder().await;
+    assert!(c.w.domains.derive().await.is_empty());
+    let report = c.search("sources", serde_json::json!({})).await;
+    let report = &report["results"][0];
+    assert_eq!(report["type"], "sources", "{report}");
+    assert_eq!(report["advisory"], true);
+    let sources = report["sources"].as_array().unwrap();
+    let account = sources
+        .iter()
+        .find(|s| s["use"] == "schema-definition" && s["namespace"] == "idp.account")
+        .unwrap_or_else(|| panic!("{report}"));
+    assert_eq!(account["protected"], true);
+    assert!(account["dependents"].as_u64().unwrap() >= 1, "{account}");
+    let realm = sources
+        .iter()
+        .filter(|s| s["use"] == "actor-binding" || s["use"] == "predicate-input")
+        .collect::<Vec<_>>();
+    assert!(!realm.is_empty(), "{report}");
+    assert!(realm.iter().all(|s| s["protected"] == false));
+    // INV-15
+    assert!(
+        realm
+            .iter()
+            .all(|s| s["issuer"]["party"].is_string() && s["use"] != "subject-selection")
+    );
+    assert_eq!(report["partners"], serde_json::json!([]));
+}

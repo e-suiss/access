@@ -26,6 +26,7 @@ export type SearchKind =
   | "holdings"
   | "changes"
   | "bulk-impact"
+  | "sources"
   | "schema-publications"
   | "change-impact"
   | "revocation-impact"

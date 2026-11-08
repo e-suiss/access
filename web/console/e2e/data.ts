@@ -248,6 +248,53 @@ export function seed(bff: ConsoleMock): void {
     page: { next_token: "" },
     context: { advisory: true },
   });
+  bff.searches.set("sources", {
+    results: [
+      {
+        type: "sources",
+        sources: [
+          {
+            acceptance: id(31),
+            use: "actor-binding",
+            issuer: { party: id(32) },
+            classes: ["authentication"],
+            namespace: null,
+            since: "3",
+            protected: false,
+            dependents: 0,
+          },
+          {
+            acceptance: id(33),
+            use: "subject-selection",
+            issuer: { party: id(34) },
+            classes: ["employee"],
+            namespace: null,
+            since: "5",
+            protected: true,
+            dependents: 12,
+          },
+        ],
+        partners: [
+          {
+            domain: digest(7),
+            acceptances: [id(35)],
+            ceilings: [
+              {
+                grant: id(36),
+                class: "buyer",
+                actions: [{ namespace: "commerce", name: "refund", major: 1, schema: digest(6) }],
+                resource: { namespace: "commerce", prefix: [] },
+                until: 9_999_999_999_999,
+              },
+            ],
+          },
+        ],
+        advisory: true,
+      },
+    ],
+    page: { next_token: "" },
+    context: { advisory: true },
+  });
   bff.searches.set("holdings", {
     results: [
       {

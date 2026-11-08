@@ -616,6 +616,7 @@ pub fn decode_search(
             grant: id(q.req("grant", "query")?).map_err(within("query"))?,
         },
         "holdings" => Query::Holdings,
+        "sources" => Query::Sources,
         "changes" => Query::Changes {
             before: q.opt("before").map(|v| uint(v, "query")).transpose()?,
         },

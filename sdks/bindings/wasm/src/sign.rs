@@ -371,6 +371,10 @@ pub fn ais_statement(
 /// # Errors
 /// `input`.
 #[wasm_bindgen(js_name = exerciseBasis)]
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "wasm-bindgen passes an optional byte array owned"
+)]
 pub fn exercise_basis_cbor(
     kind: &str,
     id: &[u8],

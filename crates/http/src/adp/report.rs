@@ -9,6 +9,7 @@ use access_authority_core::app::impact::{
 use access_authority_core::app::management::{BulkImpact, Change, Changed, Holding};
 use access_authority_core::app::publishing::{Offer, ParamClass, Standing};
 use access_authority_core::app::roles::{AdminGrant, MetaLine, RoleVersion, tier_word};
+use access_authority_core::app::sources::{Issuer, Sources};
 use access_authority_core::query::Report;
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
@@ -49,6 +50,7 @@ pub fn encode(report: &Report) -> Out {
         Report::Holding(h) => holding(h),
         Report::Change(c) => change(c),
         Report::Bulk(b) => bulk(b),
+        Report::Sources(s) => sources(s),
     }
 }
 
@@ -104,6 +106,47 @@ fn admin_grant(g: &AdminGrant) -> Out {
         "reserved": g.reserved.iter().map(meta_line).collect::<Vec<_>>(),
         "advisory": true,
     })
+}
+
+fn sources(s: &Sources) -> Out {
+    let list: Vec<Out> = s
+        .sources
+        .iter()
+        .map(|x| {
+            let issuer = match &x.issuer {
+                Issuer::Party(p) => json!({ "party": id(p) }),
+                Issuer::Foreign(d) => json!({ "foreign": digest(d) }),
+            };
+            json!({
+                "acceptance": id(&x.acceptance),
+                "use": x.use_,
+                "issuer": issuer,
+                "classes": x.classes,
+                "namespace": x.namespace,
+                "since": x.since.to_string(),
+                "protected": x.protected,
+                "dependents": x.dependents,
+            })
+        })
+        .collect();
+    let partners: Vec<Out> = s
+        .partners
+        .iter()
+        .map(|p| {
+            json!({
+                "domain": digest(&p.domain),
+                "acceptances": ids(&p.acceptances),
+                "ceilings": p.ceilings.iter().map(|c| json!({
+                    "grant": id(&c.grant),
+                    "class": c.class,
+                    "actions": c.actions.iter().map(|a| json_of(&a.to_value())).collect::<Vec<_>>(),
+                    "resource": json_of(&c.resource.to_value()),
+                    "until": c.until,
+                })).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    json!({ "type": "sources", "sources": list, "partners": partners, "advisory": true })
 }
 
 fn holding(h: &Holding) -> Out {

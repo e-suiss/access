@@ -278,6 +278,29 @@ test("ending an agent's running copies shows the aftermath, never 'stopped'", as
   await expect(after).not.toContainText(/stopped/i);
 });
 
+// §8.17.9.3, INV-15, Ek B 3818: each source by its use, with its blast radius
+test("sources list each acceptance by use with its blast radius", async ({ page, bff }) => {
+  await open(page, bff, "/console/admin/sources");
+  const membership = page.locator('[data-use="subject-selection"]');
+  await expect(membership).toContainText("Membership source");
+  await expect(membership).toContainText("Protected change");
+  await expect(membership.getByTestId("blast")).toHaveText(
+    "Blast radius: 12 delegations depend on it.",
+  );
+  await expect(page.locator('[data-use="actor-binding"]')).toContainText(
+    "This doesn't make it a Membership source.",
+  );
+  expect(bff.queries.some((q) => q.kind === "sources" && q.ais)).toBe(true);
+});
+
+// §5.13, Ek B 3372: a partner's authority up to its bridging Grants' ceilings
+test("the domain page shows partner authority up to its ceiling", async ({ page, bff }) => {
+  await open(page, bff, "/console/admin/domain");
+  await expect(page.getByTestId("partners")).toContainText(
+    "Partner authority (up to commerce.refund)",
+  );
+});
+
 // §8.17.10.2, X21, Ek B 3104, 3105, 3107, 3330: pending acceptance, no accept button
 for (const path of ["/console/admin/sources", "/console/developer/schemas"]) {
   test(`a pending schema shows its fingerprint and diff, and nothing accepts it (${path})`, async ({

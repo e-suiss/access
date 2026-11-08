@@ -373,7 +373,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** One advisory search page (L1-ADP-16). Graph kinds `subject`, `resource`, `action`; management kinds `roles` and `role` (a role version with its computed "Not included" block, §8.17.9.2, E11), `admin-grant` (an admin Grant's meta-actions one by one, reserved ones apart), `holdings` (the viewer's own holdings, each a usable ADP `holding` basis, IA-5) and `changes` (information only, IA-2: an auditor sees every change, anyone else only those about them); `bulk-impact` (each Grant revoke of a bulk job and their sum, E17); developer kinds `schema-publications` (a namespace's published versions and where each stands here: there is no accept, a domain accepts only by its own `acceptance.amend` with the exact fingerprint, X21), `change-impact` (a role move or a `policy.set` candidate: abilities gained and lost per holder count, expansion requirements, orphan rows; X20, TN-121, §5.8; the SMT relation is `unknown` until proved), `revocation-impact` (subtree, staleness exposure, index lag, orphan tuples; §5.4) and `compromise-impact` (Exercises, Grants, contributions, projections and Claims in a window; SEC15). Developer kinds answer only the domain's auditors, and `revocation-impact` of a Grant also whoever stands above it in its lineage: the root of its Anchor or a holder of a Grant it derives from (XI-5); anyone else gets an empty page. `changes` also lists Grants whose agency names the reader and ingested regime key-events about the reader (`kind: key_event` with `class` and `issuer`; SI-21, SI-13, U26). Hub kinds `inventory` (holdings in the groups acting for you, shared from you and your authority, with the Anchors the reader roots) and `activity` (allowed uses by or for the reader; a DENY is not a use) answer only the reading Party about itself (XI-9, XI-22). Nothing is recorded. */
+        /** One advisory search page (L1-ADP-16). Graph kinds `subject`, `resource`, `action`; management kinds `roles` and `role` (a role version with its computed "Not included" block, §8.17.9.2, E11), `admin-grant` (an admin Grant's meta-actions one by one, reserved ones apart), `holdings` (the viewer's own holdings, each a usable ADP `holding` basis, IA-5) and `changes` (information only, IA-2: an auditor sees every change, anyone else only those about them); `bulk-impact` (each Grant revoke of a bulk job and their sum, E17); `sources` (each live Acceptance by use with its blast radius, and the partners whose authority bridging Grants recognize up to their ceilings; §8.17.9.3, §5.13); developer kinds `schema-publications` (a namespace's published versions and where each stands here: there is no accept, a domain accepts only by its own `acceptance.amend` with the exact fingerprint, X21), `change-impact` (a role move or a `policy.set` candidate: abilities gained and lost per holder count, expansion requirements, orphan rows; X20, TN-121, §5.8; the SMT relation is `unknown` until proved), `revocation-impact` (subtree, staleness exposure, index lag, orphan tuples; §5.4) and `compromise-impact` (Exercises, Grants, contributions, projections and Claims in a window; SEC15). Developer kinds answer only the domain's auditors, and `revocation-impact` of a Grant also whoever stands above it in its lineage: the root of its Anchor or a holder of a Grant it derives from (XI-5); anyone else gets an empty page. `changes` also lists Grants whose agency names the reader and ingested regime key-events about the reader (`kind: key_event` with `class` and `issuer`; SI-21, SI-13, U26). Hub kinds `inventory` (holdings in the groups acting for you, shared from you and your authority, with the Anchors the reader roots) and `activity` (allowed uses by or for the reader; a DENY is not a use) answer only the reading Party about itself (XI-9, XI-22). Nothing is recorded. */
         post: operations["search"];
         delete?: never;
         options?: never;
@@ -1172,6 +1172,16 @@ export interface components {
             ended: boolean;
             /** @description The viewer's own Instance made it. */
             own: boolean;
+            /** @constant */
+            advisory: true;
+        };
+        Sources: {
+            /** @constant */
+            type: "sources";
+            /** @description `{acceptance, use, issuer: {party}|{foreign}, classes, namespace, since, protected, dependents}`: each live Acceptance by its canonical use; `dependents` is its blast radius, the live Grants that depend on it (§8.17.9.3, INV-15). */
+            sources: Record<string, never>[];
+            /** @description `{domain, acceptances, ceilings: [{grant, class, actions, resource, until}]}`: each partner domain and the ceilings of the bridging Grants that recognize its authority (§5.13). */
+            partners: Record<string, never>[];
             /** @constant */
             advisory: true;
         };
@@ -3339,7 +3349,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                kind: "subject" | "resource" | "action" | "roles" | "role" | "admin-grant" | "holdings" | "changes" | "bulk-impact" | "schema-publications" | "change-impact" | "revocation-impact" | "compromise-impact" | "inventory" | "activity";
+                kind: "subject" | "resource" | "action" | "roles" | "role" | "admin-grant" | "holdings" | "changes" | "bulk-impact" | "sources" | "schema-publications" | "change-impact" | "revocation-impact" | "compromise-impact" | "inventory" | "activity";
             };
             cookie?: never;
         };
@@ -3357,7 +3367,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         /** @description One page. */
-                        results: (Record<string, never> | components["schemas"]["SchemaPublication"] | components["schemas"]["ChangeImpact"] | components["schemas"]["RevocationImpact"] | components["schemas"]["CompromiseImpact"] | components["schemas"]["Roles"] | components["schemas"]["RoleVersion"] | components["schemas"]["AdminGrant"] | components["schemas"]["Holding"] | components["schemas"]["Change"] | components["schemas"]["BulkImpact"] | components["schemas"]["HubHolding"] | components["schemas"]["HubRoot"] | components["schemas"]["HubUse"])[];
+                        results: (Record<string, never> | components["schemas"]["SchemaPublication"] | components["schemas"]["ChangeImpact"] | components["schemas"]["RevocationImpact"] | components["schemas"]["CompromiseImpact"] | components["schemas"]["Roles"] | components["schemas"]["RoleVersion"] | components["schemas"]["AdminGrant"] | components["schemas"]["Holding"] | components["schemas"]["Change"] | components["schemas"]["BulkImpact"] | components["schemas"]["Sources"] | components["schemas"]["HubHolding"] | components["schemas"]["HubRoot"] | components["schemas"]["HubUse"])[];
                         page: Record<string, never>;
                         context: Record<string, never>;
                     };

@@ -39,7 +39,7 @@ pub const PUBLISH: &str = "publish";
 pub const SEARCH_NAMESPACE: &str = "access.search";
 
 /// The search kinds a draft may name (L1-ADP-16, OP-151 m.13 (d)).
-pub const SEARCH_KINDS: [&str; 13] = [
+pub const SEARCH_KINDS: [&str; 14] = [
     "subject",
     "resource",
     "action",
@@ -49,6 +49,7 @@ pub const SEARCH_KINDS: [&str; 13] = [
     "holdings",
     "changes",
     "bulk-impact",
+    "sources",
     "schema-publications",
     "change-impact",
     "revocation-impact",

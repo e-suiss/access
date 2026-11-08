@@ -18,6 +18,7 @@ use crate::app::impact::{
 use crate::app::management::{BulkImpact, Change as Changed, Holding};
 use crate::app::publishing::Offer;
 use crate::app::roles::{AdminGrant, RoleVersion};
+use crate::app::sources::Sources;
 use crate::app::{Authority, Incoming};
 use crate::domain::{Snapshot, accepted_catalog, lineage_hops, read};
 use crate::ports::{Binding, Reader, Salts};
@@ -96,6 +97,9 @@ pub enum Query {
         /// Only changes recorded before it; the newest when absent.
         before: Option<u64>,
     },
+    /// The domain's live Acceptances by use with their blast radius, and its partners
+    /// (§8.17.9.3, §5.13).
+    Sources,
     /// The preview of a bulk revoke (E17).
     BulkImpact {
         /// The Grants the job revokes.
@@ -159,6 +163,8 @@ pub enum Report {
     Change(Changed),
     /// A bulk revoke preview.
     Bulk(BulkImpact),
+    /// The Sources report.
+    Sources(Sources),
 }
 
 impl Query {
@@ -179,6 +185,7 @@ impl Query {
             Self::Holdings => "holdings",
             Self::Changes { .. } => "changes",
             Self::BulkImpact { .. } => "bulk-impact",
+            Self::Sources => "sources",
             Self::Inventory { .. } => "inventory",
             Self::Activity { .. } => "activity",
         }
@@ -199,6 +206,7 @@ impl Query {
                 | Self::Holdings
                 | Self::Changes { .. }
                 | Self::BulkImpact { .. }
+                | Self::Sources
         )
     }
 }
@@ -579,6 +587,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             Query::BulkImpact { revoke } => {
                 vec![Report::Bulk(self.bulk_impact(revoke, now).await?)]
             }
+            Query::Sources => vec![Report::Sources(self.sources(now).await?)],
             _ => Vec::new(),
         };
         Ok(Found {

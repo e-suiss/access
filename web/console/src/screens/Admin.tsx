@@ -558,10 +558,73 @@ const USES = [
   ["useSchema", "useSchemaText"],
 ] as const;
 
-/** §8.17.9.3, §8.17.10.2, X21: sources by use, and the definitions waiting for this domain. */
+/** §8.17.9.3: the UI label of each canonical use. */
+const USE_LABEL: Readonly<Record<string, Key>> = {
+  "actor-binding": "useSignIn",
+  "predicate-input": "useFact",
+  "subject-selection": "useMembership",
+  "foreign-authority": "usePartner",
+  "schema-definition": "useSchema",
+};
+
+/** One live Acceptance as the `sources` search answers it. */
+interface AcceptedSource {
+  readonly acceptance: string;
+  readonly use: string;
+  readonly issuer: { readonly party?: string; readonly foreign?: string };
+  readonly classes: readonly string[];
+  readonly namespace: string | null;
+  readonly protected: boolean;
+  readonly dependents: number;
+}
+
+/** One partner and the ceilings its bridging Grants set (§5.13). */
+interface PartnerView {
+  readonly domain: string;
+  readonly ceilings: readonly { readonly grant: string; readonly actions: readonly ActionRef[] }[];
+}
+
+interface SourcesReport {
+  readonly sources: readonly AcceptedSource[];
+  readonly partners: readonly PartnerView[];
+}
+
+function sourcesReport(ctx: Ctx): Promise<SourcesReport | undefined> {
+  return search<SourcesReport>(ctx.instance, "sources", {}).then((a) => a.results[0]);
+}
+
+/** §5.13, 3372: what a partner may do here at most, as "Partner authority (up to …)". */
+function ceilingText(p: PartnerView): string {
+  const names = p.ceilings.flatMap((c) => c.actions.map((a) => `${a.namespace}.${a.name}`));
+  return [...new Set(names)].join(", ");
+}
+
+function SourceView({ s }: { readonly s: AcceptedSource }): ReactElement {
+  const label = USE_LABEL[s.use];
+  const use = label === undefined ? s.use : t(label);
+  // INV-15: an acceptance for one use is not one for another
+  const other = s.use === "actor-binding" ? t("useMembership") : t("useSignIn");
+  return (
+    <li data-testid="source" data-use={s.use}>
+      <strong>{use}</strong>
+      {s.protected && <> — {t("acceptedProtected")}</>}
+      <dl className="facts">
+        <dt>{s.issuer.foreign === undefined ? t("acceptedIssuer") : t("acceptedPartner")}</dt>
+        <dd className="mono">{s.issuer.party ?? s.issuer.foreign ?? ""}</dd>
+      </dl>
+      <p>{t("acceptedFor", { use })}</p>
+      <p>{t("acceptedNotOther", { other })}</p>
+      {s.namespace !== null && <p>{t("acceptedNamespace", { namespace: s.namespace })}</p>}
+      <p data-testid="blast">{t("acceptedDependents", { n: String(s.dependents) })}</p>
+    </li>
+  );
+}
+
+/** §8.17.9.3, §8.17.10.2, X21, INV-15: sources by use with their blast radius, and the definitions waiting for this domain. */
 export function Sources({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const [namespace, setNamespace] = useState("");
   const [l, run] = useRun<SearchAnswer<Publication>>();
+  const accepted = useLoad(() => sourcesReport(ctx));
   return (
     <>
       <p>{t("sourcesIntro")}</p>
@@ -574,6 +637,21 @@ export function Sources({ ctx }: { readonly ctx: Ctx }): ReactElement {
         ))}
       </dl>
       <p>{t("useOnlyThis")}</p>
+      <Panel id="accepted" title={t("acceptedTitle")}>
+        <Show l={accepted}>
+          {(r) =>
+            r === undefined || r.sources.length === 0 ? (
+              <p>{t("acceptedNone")}</p>
+            ) : (
+              <ul data-testid="sources">
+                {r.sources.map((s) => (
+                  <SourceView key={s.acceptance} s={s} />
+                ))}
+              </ul>
+            )
+          }
+        </Show>
+      </Panel>
       <Panel id="pending" title={t("pendingTitle")}>
         <p className="hint">{t("pendingIntro")}</p>
         <form
@@ -631,7 +709,6 @@ export function Protected(): ReactElement {
 interface Surface {
   readonly domain?: string;
   readonly sandbox?: boolean;
-  readonly partners?: readonly { readonly name: string; readonly ceiling: string }[];
 }
 
 /** §8.17.9.7, INV-29, §5.13: the domain page; the host holds no authority. */
@@ -639,6 +716,7 @@ export function Domain({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const l = useLoad(() =>
     adminGet<Surface>(ctx.instance, `realms/${encodeURIComponent(ctx.session.realm)}`),
   );
+  const partners = useLoad(() => sourcesReport(ctx).then((r) => r?.partners ?? []));
   return (
     <>
       <p>{t("domainIntro")}</p>
@@ -658,20 +736,29 @@ export function Domain({ ctx }: { readonly ctx: Ctx }): ReactElement {
                 <strong>{t("domainSandbox")}</strong> — {t("domainSandboxText")}
               </p>
             )}
-            {(s.partners ?? []).length > 0 && (
-              <Panel id="partners" title={t("partnerTitle")}>
-                <p className="hint">{t("partnerIntro")}</p>
-                <ul>
-                  {(s.partners ?? []).map((p) => (
-                    <li key={p.name}>
-                      {p.name}: {t("partnerText", { ceiling: p.ceiling })}
-                    </li>
-                  ))}
-                </ul>
-              </Panel>
-            )}
           </>
         )}
+      </Show>
+      <Show l={partners}>
+        {(list) =>
+          list.length > 0 ? (
+            <Panel id="partners" title={t("partnerTitle")}>
+              <p className="hint">{t("partnerIntro")}</p>
+              <ul data-testid="partners">
+                {list.map((p) => (
+                  <li key={p.domain}>
+                    <span className="mono">{p.domain}</span>:{" "}
+                    {p.ceilings.length === 0
+                      ? t("partnerNoCeiling")
+                      : t("partnerText", { ceiling: ceilingText(p) })}
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          ) : (
+            <></>
+          )
+        }
       </Show>
     </>
   );

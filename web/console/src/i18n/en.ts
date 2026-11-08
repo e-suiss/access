@@ -229,6 +229,15 @@ export const en = {
   usePartnerText: "Its authority is recognized up to the ceilings this domain accepted. Protected.",
   useSchemaText: "Accepts an action definition by its exact fingerprint. Protected.",
   useOnlyThis: "Accepted for one use only: a sign-in source is not a membership source.",
+  acceptedTitle: "Accepted sources",
+  acceptedFor: "Accepted for: {use}",
+  acceptedNotOther: "This doesn't make it a {other}.",
+  acceptedIssuer: "Issuer",
+  acceptedPartner: "Partner domain",
+  acceptedDependents: "Blast radius: {n} delegations depend on it.",
+  acceptedNamespace: "Defines the actions of {namespace}.",
+  acceptedProtected: "Protected change",
+  acceptedNone: "No accepted sources to show.",
   pendingTitle: "Action definitions waiting for this domain",
   pendingIntro:
     "Published versions of a namespace and where each stands here. Accepting one is a protected change by this domain's admins, pinned to the exact fingerprint shown.",
@@ -288,6 +297,7 @@ export const en = {
     "A separate domain with its own roots. Authority never moves between it and production.",
   partnerTitle: "Partner authority",
   partnerText: "Partner authority (up to {ceiling})",
+  partnerNoCeiling: "No delegation recognizes this partner's authority yet.",
   partnerIntro:
     "A partner's authority is recognized here only up to the ceilings this domain accepted.",
   changesIntro:

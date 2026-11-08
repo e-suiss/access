@@ -235,6 +235,15 @@ export const tr: Record<Key, string> = {
   usePartnerText: "Yetkisi, bu domain'in kabul ettiği tavanlara kadar tanınır. Korunur.",
   useSchemaText: "Bir eylem tanımını tam parmak iziyle kabul eder. Korunur.",
   useOnlyThis: "Yalnız bir kullanım için kabul edilir: giriş kaynağı üyelik kaynağı değildir.",
+  acceptedTitle: "Kabul edilen kaynaklar",
+  acceptedFor: "Kabul edildiği kullanım: {use}",
+  acceptedNotOther: "Bu onu {other} yapmaz.",
+  acceptedIssuer: "Yayımlayan",
+  acceptedPartner: "Ortak domain",
+  acceptedDependents: "Etki alanı: {n} yetki verisi buna dayanıyor.",
+  acceptedNamespace: "{namespace} eylemlerini tanımlar.",
+  acceptedProtected: "Korunan değişiklik",
+  acceptedNone: "Gösterilecek kabul edilmiş kaynak yok.",
   pendingTitle: "Bu domain'i bekleyen eylem tanımları",
   pendingIntro:
     "Bir ad alanının yayımlanmış sürümleri ve her birinin burada durumu. Birini kabul etmek, bu domain'in yöneticilerinin gösterilen tam parmak izine sabitlenmiş korunan değişikliğidir.",
@@ -295,6 +304,7 @@ export const tr: Record<Key, string> = {
     "Kendi kökleri olan ayrı bir domain. Onunla üretim arasında hiçbir yetki geçmez.",
   partnerTitle: "Ortak yetkisi",
   partnerText: "Ortak yetkisi ({ceiling} tavanına kadar)",
+  partnerNoCeiling: "Henüz hiçbir yetki verisi bu ortağın yetkisini tanımıyor.",
   partnerIntro:
     "Bir ortağın yetkisi burada yalnız bu domain'in kabul ettiği tavanlara kadar tanınır.",
   changesIntro:
