@@ -2,6 +2,7 @@
 
 export const contractVersion = 1;
 export const flowsPath = "/v1/login/flows";
+export const stepUpPath = "/v1/login/step-up";
 
 export type Step = "identifier" | "authenticate" | "second_factor" | "complete";
 export type FieldName =

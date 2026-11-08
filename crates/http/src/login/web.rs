@@ -335,6 +335,15 @@ struct LinkBody {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct StepUpBody {
+    #[serde(default)]
+    max_age: Option<u64>,
+    #[serde(default)]
+    acr: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct TotpBody {
     #[serde(default)]
     label: Option<String>,
@@ -369,6 +378,20 @@ handler! {
     create(s, entry, b, p, bytes, headers) true {
         let _ = (&p, &bytes);
         Ok(s.hosted.create(&entry, &b).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/login/step-up` (TN-44, RFC 9470): `max_age` seconds, `0` when absent.
+    step_up(s, entry, b, p, bytes, headers) true {
+        let _ = &p;
+        let req: StepUpBody = if bytes.is_empty() {
+            StepUpBody { max_age: None, acr: None }
+        } else {
+            body(&bytes)?
+        };
+        let acr = req.acr.as_deref().map(|a| bounded(a, MAX_TEXT)).transpose()?;
+        Ok(s.hosted.step_up(&entry, &b, req.max_age.unwrap_or(0), acr).await)
     }
 }
 

@@ -217,7 +217,8 @@ where
     }
 
     /// Starts a step-up for a live session (TN-44): `max_age` is mandatory; the flow must
-    /// reach `min_aal` with fresh steps; completion restamps the session, never a new one.
+    /// reach `min_aal` with fresh steps; completion restamps the session, never a new one. The
+    /// flow is bound to the browser's flow cookie `device`, a fresh one when it has none.
     /// `Err` carries the status of a session that is not live.
     ///
     /// # Errors
@@ -225,6 +226,7 @@ where
     pub async fn step_up(
         &self,
         cookie: &str,
+        device: Option<&str>,
         max_age_ms: u64,
         min_aal: Aal,
     ) -> Result<Result<Started, SessionStatus>, SessionError> {
@@ -275,7 +277,10 @@ where
             expires_at_s: start.state.expires_at,
         });
         let handle = self.random32()?;
-        let device = decode32(cookie).ok_or(SessionError::Invalid)?;
+        let (device, fresh) = match device.and_then(decode32) {
+            Some(d) => (d, false),
+            None => (self.random32()?, true),
+        };
         let encoded = state.encode().map_err(|_| SessionError::Corrupt)?;
         tx.insert_flow(&NewFlow {
             day: partition(now)?,
@@ -287,10 +292,17 @@ where
         })
         .await?;
         tx.commit().await?;
+        let device = encode(&device);
         Ok(Ok(Started {
             handle: encode(&handle),
-            set_cookie: None,
-            device: cookie.to_owned(),
+            set_cookie: fresh.then(|| {
+                crate::domain::session::set_cookie(
+                    crate::domain::session::FLOW_COOKIE,
+                    &device,
+                    None,
+                )
+            }),
+            device,
             options: StepOptions {
                 passkey: start.options,
                 password: true,

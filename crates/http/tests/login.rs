@@ -2712,3 +2712,54 @@ async fn an_approval_runs_on_the_hosted_surface() {
     assert_eq!(gone.status, StatusCode::CONFLICT);
     assert_eq!(gone.json()["code"], "approval-request-changed");
 }
+
+// TN-44, RFC 9470, §8.17.5.4, X-L3, Ek B 2290/2293/2295: `/login?reason=step_up&acr=…` drives a
+// step-up of the live session: fresh passkey steps restamp the same session at the asked AAL;
+// without a session there is nothing to step up
+#[tokio::test]
+async fn a_live_session_steps_up_in_place() {
+    let e = env(47, "lg-su", AuthPolicy::DEFAULT).await;
+    e.account("sue@example.com").await;
+    let mut anon = e.browser("anon");
+    let refused = anon
+        .post("/v1/login/step-up", Some(json!({ "max_age": 0 })))
+        .await;
+    assert_eq!(refused.status, StatusCode::UNAUTHORIZED);
+    let mut b = e.browser("b");
+    assert_eq!(b.sign_in("sue@example.com").await.step(), "complete");
+    let (mut key, id, user) = register_passkey(&mut b, "sue@example.com").await;
+    let before = b.get("/v1/sessions/current").await.json();
+    assert_eq!(before["assurance"]["aal"], json!("Aal1"));
+    let session = b.jar.get("__Host-access-session").cloned();
+    let up = b
+        .post(
+            "/v1/login/step-up",
+            Some(json!({
+                "max_age": 0,
+                "acr": "http://idmanagement.gov/ns/assurance/aal/2",
+            })),
+        )
+        .await;
+    assert_eq!(
+        up.status,
+        StatusCode::CREATED,
+        "{}",
+        String::from_utf8_lossy(&up.body)
+    );
+    let options = passkey_node(&up);
+    let challenge = b64url_decode(options["challenge"].as_str().unwrap()).unwrap();
+    let assertion = assertion_json(&mut key, &id, &user, &challenge).to_string();
+    let done = b
+        .submit(&up, "passkey", json!({ "passkey_credential": assertion }))
+        .await;
+    assert_eq!(
+        done.step(),
+        "complete",
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+    assert_eq!(b.jar.get("__Host-access-session").cloned(), session);
+    let after = b.get("/v1/sessions/current").await.json();
+    assert_eq!(after["id"], before["id"]);
+    assert_ne!(after["assurance"]["aal"], json!("Aal1"));
+}

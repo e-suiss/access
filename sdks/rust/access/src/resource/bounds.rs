@@ -91,13 +91,89 @@ pub fn contract(validity: &Json, satisfied: &[RequirementTerm]) -> Result<(), De
     if validity.get("must_understand").is_some() {
         return Err(Denied::Unevaluable("must_understand"));
     }
-    if local_requirements(validity)?
-        .iter()
-        .all(|t| satisfied.contains(t))
-    {
-        Ok(())
-    } else {
-        Err(Denied::LocalRequirement)
+    let unmet: Vec<RequirementTerm> = local_requirements(validity)?
+        .into_iter()
+        .filter(|t| !satisfied.contains(t))
+        .collect();
+    if unmet.is_empty() {
+        return Ok(());
+    }
+    Err(StepUp::of(&unmet).map_or(Denied::LocalRequirement, Denied::StepUp))
+}
+
+/// The RFC 9470 error code.
+pub const INSUFFICIENT_USER_AUTHENTICATION: &str = "insufficient_user_authentication";
+
+/// What an RFC 9470 challenge asks the client to obtain (§3): authentication at most
+/// `max_age_s` old, and the AAL in `acr_values` when a term's floors name one above 1. The
+/// challenge is not authority; a term bound to the intent digest never travels this way, it is
+/// met by `REQUIRE_ACTION` and an approval (TN-44, X29, X-L4).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StepUp {
+    /// Seconds since the user authenticated, at most.
+    pub max_age_s: u64,
+    /// The AAL asked for, 2 or 3; `None` asks freshness only.
+    pub aal: Option<u8>,
+}
+
+fn aal_of(term: &RequirementTerm) -> u8 {
+    let floor = |dim: &str| term.assurance.get(dim).copied().unwrap_or(0);
+    let hardware = floor("hardware_bound") >= 1 || floor("non_custodial") >= 1;
+    let uv = floor("uv") >= 1;
+    let implied = match (hardware, uv) {
+        (true, true) => 3,
+        (_, true) => 2,
+        _ => 1,
+    };
+    let named = match floor("aal") {
+        3 => 3,
+        2 => 2,
+        _ => 1,
+    };
+    named.max(implied)
+}
+
+impl StepUp {
+    /// The challenge for `unmet`: `Some` only when every unmet term is an `authentication`
+    /// Claim term not bound to the intent and with a freshness ceiling; the tightest freshness
+    /// and the highest AAL win. Any other unmet term has no RFC 9470 answer (§12.2.3, TN-44).
+    #[must_use]
+    pub fn of(unmet: &[RequirementTerm]) -> Option<Self> {
+        use access_kernel::model::{Binding, ProofKind};
+        let mut out: Option<Self> = None;
+        for term in unmet {
+            if term.proof_kind != ProofKind::Claim
+                || term.class != "authentication"
+                || !matches!(term.binding, Binding::None | Binding::ActorInstance)
+            {
+                return None;
+            }
+            let max_age_s = term.freshness_ms?.div_ceil(1_000).max(1);
+            let aal = Some(aal_of(term)).filter(|a| *a > 1);
+            out = Some(match out {
+                None => Self { max_age_s, aal },
+                Some(o) => Self {
+                    max_age_s: o.max_age_s.min(max_age_s),
+                    aal: o.aal.max(aal),
+                },
+            });
+        }
+        out
+    }
+
+    /// The `WWW-Authenticate` value (RFC 9470 §3, RFC 6750 §3).
+    #[must_use]
+    pub fn www_authenticate(&self) -> alloc::string::String {
+        let mut out = alloc::format!(
+            "Bearer error=\"{INSUFFICIENT_USER_AUTHENTICATION}\", error_description=\"A fresher or stronger user authentication is required\", max_age={}",
+            self.max_age_s
+        );
+        if let Some(a) = self.aal {
+            out.push_str(&alloc::format!(
+                ", acr_values=\"http://idmanagement.gov/ns/assurance/aal/{a}\""
+            ));
+        }
+        out
     }
 }
 

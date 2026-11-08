@@ -1069,7 +1069,7 @@ async fn a_passkey_signs_in_phishing_resistant_and_steps_up() {
     assert!(matches!(replayed, Step::Rejected(Refusal { problem, .. }) if problem == REJECTED));
 
     let up = e
-        .with(async |a| a.step_up(&cookie, 300_000, Aal::Aal2).await)
+        .with(async |a| a.step_up(&cookie, Some(&cookie), 300_000, Aal::Aal2).await)
         .await
         .unwrap()
         .unwrap();

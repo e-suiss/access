@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { createFlow, getFlow, submit, type Answer } from "./api.js";
+import { createFlow, getFlow, stepUp, submit, type Answer } from "./api.js";
 import type { LoginUi, Message, Submission } from "./contract.js";
 import { StepView } from "./StepView.js";
 
@@ -75,8 +75,16 @@ export function App() {
   );
 
   useEffect(() => {
-    const flow = new URL(window.location.href).searchParams.get("flow");
-    const start = flow === null ? createFlow() : getFlow(flow);
+    const params = new URL(window.location.href).searchParams;
+    const flow = params.get("flow");
+    const reason = params.get("reason");
+    // TN-44, X-L3: only the authorization request's own reason asks for a step-up
+    const start =
+      flow !== null
+        ? getFlow(flow)
+        : reason === "step_up" || reason === "reauthenticate"
+          ? stepUp(params.get("acr")).then((a) => (a.kind === "ui" ? a : createFlow()))
+          : createFlow();
     void start.then(settle);
   }, [settle]);
 

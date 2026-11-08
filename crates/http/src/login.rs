@@ -64,6 +64,10 @@ where
                 post(web::submit::<D, K, KI, C, M>),
             )
             .route(
+                &format!("{prefix}/v1/login/step-up"),
+                post(web::step_up::<D, K, KI, C, M>),
+            )
+            .route(
                 &format!("{prefix}/v1/login/link/preview"),
                 post(web::preview_link::<D, K, KI, C, M>),
             )

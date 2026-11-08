@@ -360,6 +360,58 @@ where
             .unwrap_or_else(|r| r)
     }
 
+    /// `POST /v1/login/step-up`: re-authenticates the live session in place when the
+    /// authorization request's `max_age` or `acr_values` asks for it (`reason` `reauthenticate`
+    /// or `step_up` on `/login`): fresh steps reaching the asked AAL, never below the realm's,
+    /// restamp the session (TN-44, RFC 9470, §8.17.5.4, X-L3). The step is a passkey; a realm
+    /// without passkey sign-in, or a browser without a live session, answers with a problem
+    /// and the page signs in afresh.
+    pub async fn step_up(
+        &self,
+        entry: &RealmEntry,
+        b: &Browser<'_>,
+        max_age_s: u64,
+        acr: Option<&str>,
+    ) -> Reply {
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        if !kit.auth.passkey {
+            return Reply::problem(NOT_ALLOWED);
+        }
+        let Some(session) = b.session else {
+            return Reply::problem(SESSION_REQUIRED);
+        };
+        signin!(self, kit, auth, Some(b.ip));
+        let asked = acr
+            .and_then(access_identity_oauth::domain::tokens::aal_of)
+            .unwrap_or(Aal::Aal1);
+        let started = match auth
+            .step_up(
+                session,
+                b.flow,
+                max_age_s.saturating_mul(1000),
+                asked.max(kit.auth.min_aal),
+            )
+            .await
+        {
+            Ok(Ok(s)) => s,
+            Ok(Err(_)) => return Reply::problem(SESSION_REQUIRED),
+            Err(e) => return failed(&e),
+        };
+        let ui = flow_id(&started.handle).and_then(|flow| {
+            Ok(
+                Ui::identifier(flow, options(started.options.passkey)?, &policy(&kit))
+                    .with_first_steps(false, true),
+            )
+        });
+        match ui {
+            Ok(ui) => Reply::ui(201, ui).cookie(started.set_cookie),
+            Err(r) => r,
+        }
+    }
+
     async fn start<N: Notifier + Sync>(
         &self,
         auth: &Signin<'_, C, N>,

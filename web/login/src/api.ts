@@ -1,4 +1,4 @@
-import { flowsPath, parseUi, type LoginUi, type Submission } from "./contract.js";
+import { flowsPath, parseUi, stepUpPath, type LoginUi, type Submission } from "./contract.js";
 
 export type Answer =
   | { readonly kind: "ui"; readonly ui: LoginUi }
@@ -34,6 +34,15 @@ function headers(): HeadersInit {
 
 export function createFlow(): Promise<Answer> {
   return call(flowsPath, { method: "POST", headers: headers() });
+}
+
+// TN-44, RFC 9470: re-authenticates the live session in place; `acr` is advisory
+export function stepUp(acr: string | null): Promise<Answer> {
+  return call(stepUpPath, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify(acr === null ? { max_age: 0 } : { max_age: 0, acr }),
+  });
 }
 
 export function getFlow(flow: string): Promise<Answer> {

@@ -50,6 +50,7 @@ export class LoginMock {
 
   async install(page: Page): Promise<void> {
     await page.route(/\/v1\/login\/flows(\/|$)/, (route) => this.handle(route));
+    await page.route(/\/v1\/login\/step-up$/, (route) => this.stepUp(route));
     await page.route(/\/callback(\?|$)/, (route) =>
       route.fulfill({
         status: 200,
@@ -57,6 +58,23 @@ export class LoginMock {
         body: "<!doctype html><html lang=en><title>Signed in</title><h1>Signed in</h1></html>",
       }),
     );
+  }
+
+  /** Whether the browser holds a live session the step-up route can restamp. */
+  session = false;
+  readonly stepUps: unknown[] = [];
+
+  private async stepUp(route: Route): Promise<void> {
+    const request = route.request();
+    this.requests.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    this.stepUps.push(request.postDataJSON());
+    if (!this.session)
+      return route.fulfill({
+        status: 401,
+        contentType: "application/problem+json",
+        body: JSON.stringify({ type: "about:blank", title: "Sign in first", status: 401 }),
+      });
+    return this.reply(route, { status: 201, ui: example("identifier") });
   }
 
   private async handle(route: Route): Promise<void> {

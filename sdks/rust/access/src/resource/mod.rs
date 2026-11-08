@@ -240,6 +240,8 @@ pub struct Presented<'a> {
     pub satisfied: &'a [RequirementTerm],
 }
 
+pub use bounds::StepUp;
+
 /// Why a token is not accepted. A value applied as DENY, never an error that could pass.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
@@ -307,6 +309,11 @@ pub enum Denied {
     /// A local requirement of the contract this server did not satisfy.
     #[error("local-requirement")]
     LocalRequirement,
+    /// The only unmet local requirements are the user's authentication strength or freshness:
+    /// the resource server answers RFC 9470 `insufficient_user_authentication`
+    /// ([`Denied::www_authenticate`]) and the client steps up (TN-44, §12.2.3).
+    #[error("insufficient-user-authentication")]
+    StepUp(StepUp),
     /// This server is not in the contract's audience.
     #[error("contract-audience")]
     ContractAudience,
@@ -385,6 +392,15 @@ pub enum Denied {
 }
 
 impl Denied {
+    /// The `WWW-Authenticate` value of a 401 answer, for [`Denied::StepUp`] only (RFC 9470 §3).
+    #[must_use]
+    pub fn www_authenticate(&self) -> Option<alloc::string::String> {
+        match self {
+            Self::StepUp(s) => Some(s.www_authenticate()),
+            _ => None,
+        }
+    }
+
     /// Whether Access, not a fault, stopped the effect: an explicit refusal a PEP reports as
     /// `deny` rather than as an unknown state.
     #[must_use]
@@ -406,6 +422,7 @@ impl Denied {
                 | Self::Intent
                 | Self::Bounds
                 | Self::LocalRequirement
+                | Self::StepUp(_)
                 | Self::ContractAudience
                 | Self::ContractHorizon
                 | Self::IntrospectionAudience

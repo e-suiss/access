@@ -931,6 +931,64 @@ fn bounds_details_must_repeat_readable_contract_bounds() {
     );
 }
 
+// TN-44, RFC 9470, §12.2.3, Ek B 2293: a local requirement that is only the user's
+// authentication strength or freshness answers `insufficient_user_authentication` with
+// `max_age` and `acr_values`; one bound to the intent has no RFC 9470 answer
+#[test]
+fn an_unmet_authentication_term_is_an_rfc_9470_challenge() {
+    let s = server(Profile::Fast);
+    let m = support::Memory::healthy();
+    let fresh = RequirementTerm {
+        proof_kind: ProofKind::Claim,
+        class: "authentication".to_owned(),
+        count: 1,
+        binding: RequirementBinding::ActorInstance,
+        freshness_ms: Some(299_500),
+        independence: Independence::None,
+        consumption: Consumption::Reusable,
+        source: None,
+        assurance: BTreeMap::from([("aal".to_owned(), 2)]),
+    };
+    let mut spec = TokenSpec::bounds_token();
+    spec.local_requirements_json = Some(format!("[{}]", support::value_json(&fresh.to_value())));
+    let token = spec.signed();
+    let denied = verify_for(&s, &token, "su-1", &intent(), &[], &m).unwrap_err();
+    assert_eq!(
+        denied,
+        Denied::StepUp(access_sdk::resource::StepUp {
+            max_age_s: 300,
+            aal: Some(2)
+        })
+    );
+    assert!(denied.is_decision());
+    assert_eq!(
+        denied.www_authenticate().unwrap(),
+        "Bearer error=\"insufficient_user_authentication\", error_description=\"A fresher or stronger user authentication is required\", max_age=300, acr_values=\"http://idmanagement.gov/ns/assurance/aal/2\""
+    );
+    assert!(
+        verify_for(
+            &s,
+            &token,
+            "su-2",
+            &intent(),
+            std::slice::from_ref(&fresh),
+            &m
+        )
+        .is_ok()
+    );
+    let bound = RequirementTerm {
+        binding: RequirementBinding::IntentDigest,
+        ..fresh
+    };
+    let mut spec = TokenSpec::bounds_token();
+    spec.local_requirements_json = Some(format!("[{}]", support::value_json(&bound.to_value())));
+    spec.extra = String::from(r#","note":"bound""#);
+    let token = spec.signed();
+    let denied = verify_for(&s, &token, "su-3", &intent(), &[], &m).unwrap_err();
+    assert_eq!(denied, Denied::LocalRequirement);
+    assert!(denied.www_authenticate().is_none());
+}
+
 // OP-150 m.8 (b), §9.12, MD-8: a contract's local requirement, such as an approval, must be one
 // this server satisfied; an extension the SDK must understand is refused
 #[test]
