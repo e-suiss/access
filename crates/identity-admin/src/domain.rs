@@ -324,6 +324,10 @@ pub enum Invalid {
     /// The upstream subject is linked to another account already.
     #[error("upstream subject linked")]
     UpstreamSubjectLinked,
+    /// The realm's governing domain does not accept the catalog that declares the action yet
+    /// (OP-153 m.3 (a)).
+    #[error("catalog upgrade required")]
+    CatalogUpgradeRequired,
 }
 
 impl Invalid {
@@ -382,6 +386,7 @@ impl Invalid {
             Self::NoWebhook => "no-such-webhook",
             Self::UpstreamSubject => "invalid-upstream-subject",
             Self::UpstreamSubjectLinked => "upstream-subject-linked",
+            Self::CatalogUpgradeRequired => access_internal_api::idp::CATALOG_UPGRADE_REQUIRED,
         }
     }
 }

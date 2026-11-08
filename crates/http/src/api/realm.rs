@@ -701,6 +701,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::WebhookEvents => &r::INVALID_WEBHOOK_EVENTS,
             Invalid::ExtensionPolicy => &r::INVALID_EXTENSION_POLICY,
             Invalid::HookPointTaken => &r::HOOK_POINT_TAKEN,
+            Invalid::CatalogUpgradeRequired => &r::CATALOG_UPGRADE_REQUIRED,
             Invalid::NoClient
             | Invalid::NoKey
             | Invalid::NoGroup

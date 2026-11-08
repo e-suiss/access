@@ -128,6 +128,16 @@ pub fn schemas(namespace: &str, founder: Id) -> Value {
     published(&spp(namespace, founder), founder)
 }
 
+/// The `schema-definition` Acceptance of one `idp.*` namespace as catalog `version` declared
+/// it: what a realm opened with that catalog was born with (OP-153 m.3 (a)).
+#[must_use]
+pub fn schemas_at(namespace: &str, founder: Id, version: u64) -> Value {
+    published(
+        &access_internal_api::idp::spp_at(namespace, founder, version),
+        founder,
+    )
+}
+
 /// OP-141 m.35 (c): the `schema-definition` Acceptance by `founder` of the catalog `package`.
 fn published(package: &Spp, founder: Id) -> Value {
     Value::Map(vec![

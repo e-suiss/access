@@ -630,6 +630,12 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             .map_err(|e| AdminError::Unavailable(e.0))?;
         let committed = match verdict {
             Verdict::Committed(c) => c,
+            // OP-153 m.3 (a)
+            Verdict::NotAllowed { decision, .. }
+                if access_internal_api::idp::catalog_upgrade_required(&decision) =>
+            {
+                return Err(Invalid::CatalogUpgradeRequired.into());
+            }
             Verdict::NotAllowed { decision, position } => {
                 return Ok(Applied::NotAllowed { decision, position });
             }

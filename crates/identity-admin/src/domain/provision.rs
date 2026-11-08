@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use access_identity_oauth::domain::issuer::{IssuerStyle, check_slug};
-use access_internal_api::idp::{CATALOG_VERSION, RESOURCE_NAMESPACE};
+use access_internal_api::idp::RESOURCE_NAMESPACE;
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
 use access_kernel::intent::{ContextRefs, IntentEnvelope};
@@ -21,6 +21,9 @@ use super::{CHANGE_CONTEXT, CHANGE_PARAM};
 
 /// The namespace of the platform actions; only the platform realm's Genesis publishes it.
 pub const NAMESPACE: &str = "idp.platform";
+
+/// Version of the platform catalog; the `idp.*` catalogs are versioned apart (OP-153 m.3 (a)).
+pub const CATALOG_VERSION: u64 = 1;
 
 /// The placement new tenants and realms take unless the caller names one (OP-40).
 pub const DEFAULT_PLACEMENT: &str = "pool-default";

@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use access_kernel::combinator::{Capacity, Decision};
+use access_kernel::combinator::{BlockerClass, Capacity, Decision, Outcome};
 use access_kernel::digest::Digest;
 use access_kernel::intent::IntentEnvelope;
 use access_kernel::meta::{ExerciseBasis, Root};
@@ -14,20 +14,39 @@ use access_kernel::schema::{ActionSchema, EffectClass, Spp, action_digest};
 /// The resource namespace every `idp.*` action addresses: `[slug, kind, …]` paths.
 pub const RESOURCE_NAMESPACE: &str = "idp";
 
-/// Version of every `idp.*` catalog.
-pub const CATALOG_VERSION: u64 = 1;
+/// Version of every `idp.*` catalog (OP-153 m.3 (a)).
+pub const CATALOG_VERSION: u64 = 2;
 
-/// The `idp.*` action namespaces, one SPP each (OP-141 m.35).
-pub const NAMESPACES: [&str; 8] = [
+/// The `idp.*` action namespaces, one SPP each (OP-141 m.35, OP-153 m.3 (a)).
+pub const NAMESPACES: [&str; 10] = [
     "idp.account",
     "idp.client",
     "idp.group",
     "idp.hook",
     "idp.mapper",
+    "idp.org",
     "idp.realm",
+    "idp.social",
     "idp.upstream",
     "idp.webhook",
 ];
+
+/// Stable code of an `idp.*` write the realm's governing domain refuses because it does not yet
+/// accept the catalog that declares the action (OP-153 m.3 (a)): the realm's catalog upgrade
+/// must commit first.
+pub const CATALOG_UPGRADE_REQUIRED: &str = "catalog-upgrade-required";
+
+/// Whether `decision` is a DENY of an action no live `schema-definition` Acceptance of the
+/// domain declares: for an [`IdpAction`] this means only that the realm's catalog upgrade has
+/// not committed yet (OP-153 m.3 (a), OP-141 m.35 (e)).
+#[must_use]
+pub fn catalog_upgrade_required(decision: &Decision) -> bool {
+    decision.outcome == Outcome::Deny
+        && decision.blockers.iter().any(|b| {
+            b.class == BlockerClass::SchemaNotAccepted
+                && b.subcode.as_deref() == Some("unknown-action")
+        })
+}
 
 /// One `idp.*` domain action. Its Consequence Tier follows from its Action Schema (OP-141
 /// m.34 (a), m.35 (g)): reserved is CT3, irreversible at least CT2, reversible CT1.
@@ -116,11 +135,66 @@ pub enum IdpAction {
     /// Links an upstream subject to an account, so the upstream's inbound signals about it
     /// reach the account (§9.16.2 k.4, TN-42, OP-152 m.7 (d) E6): CT2.
     UpstreamLink,
+    /// Issues a reset-intent token to the account's registered notification address (TN-61,
+    /// OP-153 m.3 (f)): CT2.
+    AccountResetIntent,
+    /// Issues a temporary access pass (TN-62, OP-153 m.3 (f)): CT2.
+    AccountTapIssue,
+    /// Narrows the account's recovery policy (TN-52, OP-153 m.3 (d)): CT1.
+    AccountRecoveryPolicy,
+    /// Loosens the recovery or cooling table, forward only (TN-55, OP-153 m.3 (e)): reserved,
+    /// CT3.
+    AccountRecoveryPolicyLoosen,
+    /// Exports the person's own data under their self-anchor (TN-79, OP-153 m.3 (cc)): CT1.
+    AccountExport,
+    /// Exports the realm's accounts for migration, encrypted to a realm-bound key (TN-86,
+    /// OP-153 m.3 (n)): reserved, CT3.
+    AccountMigrationExport,
+    /// Creates an organization bound to its registered Party (TN-5, OP-153 m.3 (b)): CT2.
+    OrgCreate,
+    /// Changes an organization's name and profile: CT2.
+    OrgUpdate,
+    /// Claims a domain for an organization, pending verification (TN-90, OP-153 m.3 (o)): CT2.
+    OrgDomainClaim,
+    /// Invites a person into an organization (TN-89, OP-153 m.3 (o)): CT2.
+    OrgInvite,
+    /// Issues an organization's setup link (OP-153 m.3 (o)): CT2.
+    OrgSetupLink,
+    /// Releases a claimed domain: CT1.
+    OrgDomainRelease,
+    /// Revokes a pending invitation: CT1.
+    OrgInviteRevoke,
+    /// Removes a member from an organization; the last owner is kept (OP-153 m.3 (p)): CT1.
+    OrgMemberRemove,
+    /// Drafts an enterprise connection; enacting it is `idp.upstream.register` (OP-153 m.3
+    /// (p)): CT1.
+    OrgSsoDraft,
+    /// Enables a social sign-in preset (IDP-31, OP-153 m.3 (l)): CT2.
+    SocialEnable,
+    /// Changes an enabled social preset's client: CT2.
+    SocialUpdate,
+    /// Disables a social preset: CT1.
+    SocialDisable,
+    /// Sets the realm's WebAuthn related origins, verified domains only (OP-153 m.3 (u)): CT2.
+    RealmRelatedOrigins,
+    /// Overrides the realm's unprotected message keys (TN-108, X35, OP-153 m.3 (s)): CT2.
+    RealmLocaleOverrides,
+    /// Publishes the realm's consent documents (IDP-37, OP-153 m.3 (ee)): CT2.
+    RealmConsentDocuments,
+    /// Sets the realm's preference topics (IDP-37, OP-153 m.3 (ee)): CT2.
+    RealmPreferenceTopics,
+    /// Sets the realm's inactivity policy (TN-51, OP-153 m.3 (dd)): CT2.
+    RealmInactivityPolicy,
+    /// Extends a retention period (T39, OP-153 m.3 (ff)): CT2.
+    RealmRetentionExtend,
+    /// Moves the realm's hosted surfaces, issuer and RP ID to a verified customer domain
+    /// (OP-153 m.3 (u)): reserved, irreversible, CT3.
+    RealmCustomDomain,
 }
 
 impl IdpAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 38] = [
+    pub const ALL: [Self; 63] = [
         Self::ClientRegister,
         Self::ClientUpdate,
         Self::ClientRetire,
@@ -159,7 +233,65 @@ impl IdpAction {
         Self::WebhookUpdate,
         Self::WebhookRetire,
         Self::UpstreamLink,
+        Self::AccountResetIntent,
+        Self::AccountTapIssue,
+        Self::AccountRecoveryPolicy,
+        Self::AccountRecoveryPolicyLoosen,
+        Self::AccountExport,
+        Self::AccountMigrationExport,
+        Self::OrgCreate,
+        Self::OrgUpdate,
+        Self::OrgDomainClaim,
+        Self::OrgInvite,
+        Self::OrgSetupLink,
+        Self::OrgDomainRelease,
+        Self::OrgInviteRevoke,
+        Self::OrgMemberRemove,
+        Self::OrgSsoDraft,
+        Self::SocialEnable,
+        Self::SocialUpdate,
+        Self::SocialDisable,
+        Self::RealmRelatedOrigins,
+        Self::RealmLocaleOverrides,
+        Self::RealmConsentDocuments,
+        Self::RealmPreferenceTopics,
+        Self::RealmInactivityPolicy,
+        Self::RealmRetentionExtend,
+        Self::RealmCustomDomain,
     ];
+
+    /// The catalog version that first declared it (OP-153 m.3 (a)).
+    #[must_use]
+    pub const fn since(self) -> u64 {
+        match self {
+            Self::AccountResetIntent
+            | Self::AccountTapIssue
+            | Self::AccountRecoveryPolicy
+            | Self::AccountRecoveryPolicyLoosen
+            | Self::AccountExport
+            | Self::AccountMigrationExport
+            | Self::OrgCreate
+            | Self::OrgUpdate
+            | Self::OrgDomainClaim
+            | Self::OrgInvite
+            | Self::OrgSetupLink
+            | Self::OrgDomainRelease
+            | Self::OrgInviteRevoke
+            | Self::OrgMemberRemove
+            | Self::OrgSsoDraft
+            | Self::SocialEnable
+            | Self::SocialUpdate
+            | Self::SocialDisable
+            | Self::RealmRelatedOrigins
+            | Self::RealmLocaleOverrides
+            | Self::RealmConsentDocuments
+            | Self::RealmPreferenceTopics
+            | Self::RealmInactivityPolicy
+            | Self::RealmRetentionExtend
+            | Self::RealmCustomDomain => 2,
+            _ => 1,
+        }
+    }
 
     /// Its namespace.
     #[must_use]
@@ -188,7 +320,24 @@ impl IdpAction {
             | Self::RealmSessionPolicy
             | Self::RealmProtectionMode
             | Self::RealmProtectionModeLoosen
-            | Self::RealmExtensionPolicy => "idp.realm",
+            | Self::RealmExtensionPolicy
+            | Self::RealmRelatedOrigins
+            | Self::RealmLocaleOverrides
+            | Self::RealmConsentDocuments
+            | Self::RealmPreferenceTopics
+            | Self::RealmInactivityPolicy
+            | Self::RealmRetentionExtend
+            | Self::RealmCustomDomain => "idp.realm",
+            Self::OrgCreate
+            | Self::OrgUpdate
+            | Self::OrgDomainClaim
+            | Self::OrgInvite
+            | Self::OrgSetupLink
+            | Self::OrgDomainRelease
+            | Self::OrgInviteRevoke
+            | Self::OrgMemberRemove
+            | Self::OrgSsoDraft => "idp.org",
+            Self::SocialEnable | Self::SocialUpdate | Self::SocialDisable => "idp.social",
             Self::HookRegister | Self::HookRetire => "idp.hook",
             Self::WebhookRegister | Self::WebhookUpdate | Self::WebhookRetire => "idp.webhook",
             Self::UpstreamRegister
@@ -199,7 +348,13 @@ impl IdpAction {
             Self::AccountDelete
             | Self::AccountSuspend
             | Self::AccountReactivate
-            | Self::AccountCanary => "idp.account",
+            | Self::AccountCanary
+            | Self::AccountResetIntent
+            | Self::AccountTapIssue
+            | Self::AccountRecoveryPolicy
+            | Self::AccountRecoveryPolicyLoosen
+            | Self::AccountExport
+            | Self::AccountMigrationExport => "idp.account",
         }
     }
 
@@ -211,9 +366,12 @@ impl IdpAction {
             | Self::UpstreamRegister
             | Self::HookRegister
             | Self::WebhookRegister => "register",
-            Self::ClientUpdate | Self::GroupUpdate | Self::UpstreamUpdate | Self::WebhookUpdate => {
-                "update"
-            }
+            Self::ClientUpdate
+            | Self::GroupUpdate
+            | Self::UpstreamUpdate
+            | Self::WebhookUpdate
+            | Self::OrgUpdate
+            | Self::SocialUpdate => "update",
             Self::ClientRetire
             | Self::GroupRetire
             | Self::UpstreamRetire
@@ -221,7 +379,7 @@ impl IdpAction {
             | Self::WebhookRetire => "retire",
             Self::RealmExtensionPolicy => "extension_policy",
             Self::ClientSecretRotate => "secret_rotate",
-            Self::GroupCreate => "create",
+            Self::GroupCreate | Self::OrgCreate => "create",
             Self::GroupMembersAdd => "members_add",
             Self::GroupMembersRemove => "members_remove",
             Self::AccountSuspend => "suspend",
@@ -244,6 +402,28 @@ impl IdpAction {
             Self::RealmProtectionModeLoosen => "protection_mode_loosen",
             Self::AccountCanary => "canary",
             Self::UpstreamLink => "link",
+            Self::AccountResetIntent => "reset_intent",
+            Self::AccountTapIssue => "tap_issue",
+            Self::AccountRecoveryPolicy => "recovery_policy",
+            Self::AccountRecoveryPolicyLoosen => "recovery_policy_loosen",
+            Self::AccountExport => "export",
+            Self::AccountMigrationExport => "migration_export",
+            Self::OrgDomainClaim => "domain_claim",
+            Self::OrgInvite => "invite",
+            Self::OrgSetupLink => "setup_link",
+            Self::OrgDomainRelease => "domain_release",
+            Self::OrgInviteRevoke => "invite_revoke",
+            Self::OrgMemberRemove => "member_remove",
+            Self::OrgSsoDraft => "sso_draft",
+            Self::SocialEnable => "enable",
+            Self::SocialDisable => "disable",
+            Self::RealmRelatedOrigins => "related_origins",
+            Self::RealmLocaleOverrides => "locale_overrides",
+            Self::RealmConsentDocuments => "consent_documents",
+            Self::RealmPreferenceTopics => "preference_topics",
+            Self::RealmInactivityPolicy => "inactivity_policy",
+            Self::RealmRetentionExtend => "retention_extend",
+            Self::RealmCustomDomain => "custom_domain",
         }
     }
 
@@ -272,7 +452,14 @@ impl IdpAction {
             | Self::UpstreamRetire
             | Self::RealmProtectionMode
             | Self::HookRetire
-            | Self::WebhookRetire => EffectClass::Reversible,
+            | Self::WebhookRetire
+            | Self::AccountRecoveryPolicy
+            | Self::AccountExport
+            | Self::OrgDomainRelease
+            | Self::OrgInviteRevoke
+            | Self::OrgMemberRemove
+            | Self::OrgSsoDraft
+            | Self::SocialDisable => EffectClass::Reversible,
             _ => EffectClass::Irreversible,
         }
     }
@@ -290,6 +477,9 @@ impl IdpAction {
                 | Self::RealmKeyPolicy
                 | Self::RealmKeyRotate
                 | Self::AccountDelete
+                | Self::AccountRecoveryPolicyLoosen
+                | Self::AccountMigrationExport
+                | Self::RealmCustomDomain
         )
     }
 
@@ -320,16 +510,24 @@ impl IdpAction {
     }
 }
 
-/// The SPP of one `idp.*` namespace, published by `publisher` (OP-141 m.35 (a)).
+/// The SPP of one `idp.*` namespace in the current catalog, published by `publisher` (OP-141
+/// m.35 (a)).
 #[must_use]
 pub fn spp(namespace: &str, publisher: Id) -> Spp {
+    spp_at(namespace, publisher, CATALOG_VERSION)
+}
+
+/// The SPP of one `idp.*` namespace as catalog `version` declared it: what a realm opened with
+/// that catalog accepts (OP-153 m.3 (a)).
+#[must_use]
+pub fn spp_at(namespace: &str, publisher: Id, version: u64) -> Spp {
     Spp {
         publisher,
         namespace: String::from(namespace),
-        catalog_version: CATALOG_VERSION,
+        catalog_version: version,
         actions: IdpAction::ALL
             .into_iter()
-            .filter(|a| a.namespace() == namespace)
+            .filter(|a| a.namespace() == namespace && a.since() <= version)
             .map(IdpAction::schema)
             .collect(),
         retirements: BTreeSet::new(),

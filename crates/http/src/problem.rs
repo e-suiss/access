@@ -434,6 +434,7 @@ pub const CODES: &[Code] = &[
     codes::realm::INVALID_WEBHOOK_EVENTS,
     codes::realm::INVALID_EXTENSION_POLICY,
     codes::realm::HOOK_POINT_TAKEN,
+    codes::realm::CATALOG_UPGRADE_REQUIRED,
     codes::realm::INVALID_AUDIT_FORMAT,
 ];
 

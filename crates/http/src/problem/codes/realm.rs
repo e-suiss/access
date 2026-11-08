@@ -324,6 +324,14 @@ pub const HOOK_POINT_TAKEN: Code = code(
     "Conflict",
     "The call point has a live hook already; retire it first (OP-151 m.10 (d)).",
 );
+/// The realm's governing domain does not accept the catalog that declares the action yet; the
+/// realm's catalog upgrade must commit first (OP-153 m.3 (a)).
+pub const CATALOG_UPGRADE_REQUIRED: Code = code(
+    "catalog-upgrade-required",
+    409,
+    "Conflict",
+    "The realm does not accept this action's catalog yet; its catalog upgrade must commit first (OP-153 m.3 (a)).",
+);
 /// An audit stream rendering other than `ocsf`, `cef` or `set` (OP-41).
 pub const INVALID_AUDIT_FORMAT: Code = code(
     "invalid-audit-format",

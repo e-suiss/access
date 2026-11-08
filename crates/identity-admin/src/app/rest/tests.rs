@@ -382,6 +382,12 @@ fn an_administrator_never_sets_a_users_credential() {
             IdpAction::AccountSuspend,
             IdpAction::AccountReactivate,
             IdpAction::AccountCanary,
+            IdpAction::AccountResetIntent,
+            IdpAction::AccountTapIssue,
+            IdpAction::AccountRecoveryPolicy,
+            IdpAction::AccountRecoveryPolicyLoosen,
+            IdpAction::AccountExport,
+            IdpAction::AccountMigrationExport,
         ]
     );
     for a in IdpAction::ALL {
