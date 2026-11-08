@@ -827,6 +827,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         match &req.payload {
             Some(p) => {
                 let body = p.digest().map_err(|_| CoreError::Protocol("payload"))?;
+                // OP-153 m.17 (h), OP-141 m.13
+                if Payload::from_value(&p.to_value()).as_ref() != Ok(p) {
+                    return Err(CoreError::Protocol("payload"));
+                }
                 if !is_meta
                     || p.action() != req.intent.action.name
                     || req.intent.opaque.get("payload") != Some(&body)

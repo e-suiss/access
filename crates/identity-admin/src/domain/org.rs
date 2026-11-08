@@ -206,8 +206,9 @@ impl SsoDraft {
 /// Days the enterprise connection manager template Grant lives (TN-120, PD).
 pub const SSO_MANAGER_DAYS: u64 = 7;
 
-/// The Named `AuthoritySet` of the enterprise connection manager template (TN-120).
-pub const SSO_MANAGER_ROLE: &str = "enterprise-connection-manager";
+/// The Named `AuthoritySet` of the enterprise connection manager template (TN-120): a Kernel
+/// identifier, so the Grant that pins it reads back (OP-153 m.17 (h)).
+pub const SSO_MANAGER_ROLE: &str = "enterprise_connection_manager";
 
 /// The enterprise connection manager's Named `AuthoritySet` in realm `slug` for organization
 /// Party `org` (TN-120): `idp.org.sso_draft` on that organization only.

@@ -930,7 +930,7 @@ async fn membership_claims_wait_for_the_autojoin_cooling() {
     assert!(!issued.iter().any(|o| o.subject == bob));
 }
 
-// TN-120, OP-153 m.3 (p), (gg), Ek B 3625
+// TN-120, OP-153 m.3 (p), (gg), OP-153 m.17 (h), Ek B 3625
 #[tokio::test]
 async fn the_connection_manager_template_only_drafts_for_seven_days_and_never_delegates() {
     use access_identity_admin::domain::org::{
@@ -999,14 +999,15 @@ async fn the_connection_manager_template_only_drafts_for_seven_days_and_never_de
         &w.ids,
     )
     .unwrap();
-    let mut p = as_founder(at, d, draft, 0x72, founder);
-    p.subject = Some(founder);
-    written(&exercise(&w, &p, ROOT_KEY).await.unwrap());
+    // OP-153 m.17 (h): the holder drafts through its own holding
+    let mut p = proposal(at, draft, 0x72, holding, 1);
+    p.subject = Some(bob);
+    written(&exercise(&w, &p, ALICE_KEY).await.unwrap());
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     let drafts = t.sso_drafts(org).await.unwrap();
     assert_eq!(drafts.len(), 1);
     assert_eq!(drafts[0].issuer, "https://login.acme.example");
-    assert_eq!(drafts[0].drafted_by, ROOT.0);
+    assert_eq!(drafts[0].drafted_by, ALICE.0);
     t.commit().await.unwrap();
 
     // TN-120
@@ -1019,10 +1020,13 @@ async fn the_connection_manager_template_only_drafts_for_seven_days_and_never_de
     .unwrap();
     let mut p = proposal(at, rename, 0x73, holding, 1);
     p.subject = Some(bob);
-    assert!(matches!(
-        exercise(&w, &p, ALICE_KEY).await.unwrap(),
-        Applied::NotAllowed { .. }
-    ));
+    let Applied::NotAllowed { decision, .. } = exercise(&w, &p, ALICE_KEY).await.unwrap() else {
+        panic!("renamed");
+    };
+    assert_eq!(
+        decision.blockers[0].resolver,
+        access_kernel::combinator::Resolver::GrantorOfHop(0)
+    );
     let mut onward = content;
     onward.basis = access_kernel::meta::GrantBasis::Holding(access_kernel::meta::HoldingRef {
         grant: meta::object_id(&meta::exercise_id(&d, &[0x71; 16]).unwrap(), kind::GRANT, 0),
@@ -1030,15 +1034,32 @@ async fn the_connection_manager_template_only_drafts_for_seven_days_and_never_de
         since: position,
     });
     onward.holder = access_kernel::model::SubjectSelector::Party(Id([0x0e; 16]));
+    let onward = w
+        .admin()
+        .meta(
+            at,
+            meta_write(d, 0x74, Payload::GrantIssue(onward), holding, ALICE_KEY),
+        )
+        .await
+        .unwrap();
+    // OP-153 m.17 (h): the template's scope refuses, not an unresolved holding
+    let Applied::NotAllowed { decision, .. } = onward else {
+        panic!("{onward:?}");
+    };
+    assert_eq!(
+        decision.blockers[0].subcode.as_deref(),
+        Some("meta-not-within")
+    );
+    let bad = Payload::AuthoritySetDefine {
+        name: String::from("enterprise-connection-manager"),
+        authority: sso_manager_set("org-sso", ORG),
+    };
+    // OP-153 m.17 (h): a payload the wire decoder refuses is refused in process too
     assert!(matches!(
         w.admin()
-            .meta(
-                at,
-                meta_write(d, 0x74, Payload::GrantIssue(onward), holding, ALICE_KEY)
-            )
-            .await
-            .unwrap(),
-        Applied::NotAllowed { .. }
+            .meta(at, meta_write(d, 0x75, bad, meta_anchor, ROOT_KEY))
+            .await,
+        Err(AdminError::Refused(code)) if code == "payload"
     ));
 }
 

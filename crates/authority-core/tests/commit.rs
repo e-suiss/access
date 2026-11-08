@@ -6960,18 +6960,23 @@ async fn the_issuance_policy_admits_only_what_the_ceilings_and_profile_allow() {
     let Payload::ProjectionIssue { bounds, .. } = bounded(hour, Some(60_000)) else {
         panic!("projection payload");
     };
-    policy_denied(
-        &issue(Payload::ProjectionIssue {
-            bounds,
-            audience: BTreeSet::from([ROBOT.to_owned()]),
-            class: ProfileClass::Offline,
-            variant: V::BoundedStaleness,
-            max_staleness_ms: Some(60_000),
-            offline_slice: None,
-        })
+    // OP-153 m.17 (h): a class the variant does not belong to never decodes, in process either
+    let mismatched = Payload::ProjectionIssue {
+        bounds,
+        audience: BTreeSet::from([ROBOT.to_owned()]),
+        class: ProfileClass::Offline,
+        variant: V::BoundedStaleness,
+        max_staleness_ms: Some(60_000),
+        offline_slice: None,
+    };
+    assert!(matches!(
+        a.exercise(&incoming(
+            meta_request(d, 0xfe, holding, mismatched),
+            ALICE_KEY
+        ))
         .await,
-        policy::PROFILE,
-    );
+        Err(access_authority_core::CoreError::Protocol("payload"))
+    ));
     // §13.7.2
     policy_denied(
         &issue(projection(
