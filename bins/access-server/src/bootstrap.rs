@@ -7,9 +7,12 @@
 //! then grants a sample subject one action by a `grant_issue` Exercise, so a product can run a
 //! real eligibility check (OP-149 m.10). A sample realm can also get a test user with a
 //! password and a public client to sign in with, and a Party whose unsigned `party_compromise`
-//! Claims the realm accepts, for a product's end-to-end tests (OP-149 m.26 (b), (c)). Every
-//! step looks for its result first, so a second run changes nothing.
+//! Claims the realm accepts, for a product's end-to-end tests (OP-149 m.26 (b), (c)). A realm
+//! whose domain was opened with an older `idp.*` catalog gets the current one by a root-signed,
+//! time-locked `acceptance_establish` (OP-151 m.18 (g)). Every step looks for its result first,
+//! so a second run changes nothing.
 
+mod catalog;
 pub(crate) mod local;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -803,6 +806,9 @@ pub(crate) struct RealmOut {
     pub(crate) platform: bool,
     /// Whether this run created it.
     pub(crate) created: bool,
+    /// The `idp.*` catalogs this run upgraded or left pending (OP-151 m.18 (g)).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) catalog: Vec<catalog::CatalogOut>,
 }
 
 /// A platform client the bootstrap made sure of.
@@ -962,6 +968,13 @@ pub(crate) trait MetaExercises: Send + Sync {
     /// Leads `domain` in this process before a commit (OP-149 m.28 (a)): a `serve` process
     /// holding its lease is asked to hand it over, and this waits for the release.
     fn lead(&self, domain: Digest) -> impl Future<Output = Result<(), Unavailable>> + Send;
+
+    /// Whether `domain` now accepts `action` with its pinned schema digest (OP-141 m.35 (e)).
+    fn accepts(
+        &self,
+        domain: Digest,
+        action: ActionRef,
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
 }
 
 /// The ports and stores the bootstrap runs over.
@@ -1091,6 +1104,7 @@ fn realm_out(
         domain: b64url_encode(&domain.0),
         platform,
         created,
+        catalog: Vec::new(),
     })
 }
 
@@ -1226,6 +1240,8 @@ where
                 )
                 .await?;
             self.onboard(tenant, realm, domain, &root, party).await?;
+            // OP-151 m.18 (g)
+            let upgraded = self.upgrade_catalog(domain, &root, party).await?;
             // OP-151 m.12 (b)
             if let Some(origin) = self.console {
                 self.console_client(&admin, (tenant, realm), domain, &root, origin)
@@ -1258,13 +1274,15 @@ where
                         .await?,
                 );
             }
-            realms.push(realm_out(
+            let mut out = realm_out(
                 &ids,
                 (tenant, realm, domain),
                 slug,
                 route.issuer,
                 (is_platform, created),
-            )?);
+            )?;
+            out.catalog = upgraded;
+            realms.push(out);
         }
         let clients = self.clients(plan, &ids, &root, platform).await?;
         Ok(Summary {
@@ -1442,6 +1460,29 @@ where
     ) -> Result<u64, BootstrapError> {
         self.lead(domain).await?;
         let w = Moment::at(server_time(self.app).await?);
+        match self
+            .meta_verdict(domain, root, nonce, payload, party, &w)
+            .await?
+        {
+            Verdict::Committed(c) => Ok(c.position),
+            Verdict::Refused { code, .. } => Err(BootstrapError::Refused(code)),
+            Verdict::NotAllowed { decision, .. } => {
+                Err(BootstrapError::Refused(format!("{:?}", decision.outcome)))
+            }
+        }
+    }
+
+    /// The authority plane's verdict on the meta-action `payload` about `party` on the
+    /// meta-anchor, signed by the root at `w`, on a domain this process leads.
+    async fn meta_verdict(
+        &self,
+        domain: Digest,
+        root: &HsmSigner,
+        nonce: &[u8],
+        payload: Payload,
+        party: Id,
+        w: &Moment,
+    ) -> Result<Verdict, BootstrapError> {
         let intent =
             self_signed_intent(&payload, party, w.validity).ok_or(BootstrapError::Encode)?;
         let digest = intent_digest(&intent).map_err(|_| BootstrapError::Encode)?;
@@ -1459,16 +1500,9 @@ where
             exercise: None,
             consistency: None,
         };
-        match MetaExercises::meta(self.plane, request, ais, String::from(IDENTITY_PEP))
+        MetaExercises::meta(self.plane, request, ais, String::from(IDENTITY_PEP))
             .await
-            .map_err(|e| BootstrapError::Unavailable(e.0))?
-        {
-            Verdict::Committed(c) => Ok(c.position),
-            Verdict::Refused { code, .. } => Err(BootstrapError::Refused(code)),
-            Verdict::NotAllowed { decision, .. } => {
-                Err(BootstrapError::Refused(format!("{:?}", decision.outcome)))
-            }
-        }
+            .map_err(|e| BootstrapError::Unavailable(e.0))
     }
 
     /// Leads `domain` in this process before a commit (OP-149 m.28 (a)); a `serve` process

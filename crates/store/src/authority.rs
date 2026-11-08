@@ -921,6 +921,44 @@ pub async fn find_nonce(
     .transpose()
 }
 
+/// The latest outcome of each nonce of `domain` that starts with `prefix`, at most 16: the
+/// attempts of one deterministic, time-locked meta-Exercise (OP-151 m.18 (g)).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn nonces_with_prefix(
+    pool: &PgPool,
+    domain: &DomainId,
+    prefix: &[u8],
+) -> Result<Vec<NonceRow>, StoreError> {
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let rows = sqlx::query!(
+        "SELECT DISTINCT ON (nonce) nonce, actor, intent_digest, decision_pos, outcome,
+                render_digest, tier
+           FROM access.authority_nonce
+          WHERE domain_id = $1 AND substring(nonce FROM 1 FOR octet_length($2::bytea)) = $2
+          ORDER BY nonce, decision_pos DESC LIMIT 16",
+        domain.as_bytes().as_slice(),
+        prefix,
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    rows.into_iter()
+        .map(|r| {
+            Ok(NonceRow {
+                nonce: r.nonce,
+                actor: r.actor,
+                intent_digest: hash(r.intent_digest)?,
+                decision_pos: unsigned(r.decision_pos)?,
+                outcome: r.outcome,
+                render_digest: r.render_digest.map(hash).transpose()?,
+                tier: r.tier.map(tier_of).transpose()?,
+            })
+        })
+        .collect()
+}
+
 fn tier_of(t: i16) -> Result<u8, StoreError> {
     u8::try_from(t)
         .ok()

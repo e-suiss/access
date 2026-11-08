@@ -30,7 +30,7 @@ use access_internal_api::instances::{
 };
 use access_kernel::combinator::Capacity;
 use access_kernel::meta::Payload;
-use access_kernel::model::Id;
+use access_kernel::model::{ActionRef, Id};
 use access_kernel::verify::cose::PublicKey;
 use access_kernel::verify::key_scope::thumbprint;
 use access_store::identity::RealmId;
@@ -461,6 +461,15 @@ where
             .take_over(domain)
             .await
             .map_err(|e| unavailable(&e))
+    }
+
+    async fn accepts(&self, domain: Digest, action: ActionRef) -> Result<bool, Unavailable> {
+        let found = self
+            .domains
+            .accepted_action(domain, &action.namespace, &action.name, action.major)
+            .await
+            .map_err(|e| unavailable(&e))?;
+        Ok(found.is_some_and(|a| a == action))
     }
 }
 

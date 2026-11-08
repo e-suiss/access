@@ -120,8 +120,11 @@ fn bootstrap() -> Value {
     ])
 }
 
-/// OP-141 m.35 (c): the `schema-definition` Acceptance of one `idp.*` namespace.
-fn schemas(namespace: &str, founder: Id) -> Value {
+/// OP-141 m.35 (c): the `schema-definition` Acceptance of one `idp.*` namespace in its current
+/// catalog: what a Genesis is born with, and what a root-signed `acceptance_establish` adds to a
+/// domain opened with an older catalog (OP-151 m.18 (g)).
+#[must_use]
+pub fn schemas(namespace: &str, founder: Id) -> Value {
     published(&spp(namespace, founder), founder)
 }
 
