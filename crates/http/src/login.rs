@@ -8,7 +8,7 @@
 pub mod assets;
 mod idempotency;
 mod me;
-mod web;
+pub(crate) mod web;
 
 use std::sync::Arc;
 

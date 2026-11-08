@@ -39,7 +39,7 @@ const MAX_REQUEST_ID: usize = 64;
 const MAX_TEXT: usize = 64;
 
 /// The cookies of a request, by name; the first of a repeated name wins.
-pub(super) fn cookies(headers: &HeaderMap) -> impl Iterator<Item = (&str, &str)> {
+pub(crate) fn cookies(headers: &HeaderMap) -> impl Iterator<Item = (&str, &str)> {
     headers
         .get_all(header::COOKIE)
         .into_iter()
@@ -51,7 +51,7 @@ pub(super) fn cookies(headers: &HeaderMap) -> impl Iterator<Item = (&str, &str)>
         })
 }
 
-pub(super) struct Jar {
+pub(crate) struct Jar {
     flow: Option<String>,
     session: Option<String>,
     marker: Option<String>,
@@ -61,7 +61,7 @@ pub(super) struct Jar {
 }
 
 impl Jar {
-    pub(super) fn of(headers: &HeaderMap, peer: Option<Extension<Peer>>) -> Self {
+    pub(crate) fn of(headers: &HeaderMap, peer: Option<Extension<Peer>>) -> Self {
         let mut jar = Self {
             flow: None,
             session: None,
@@ -90,7 +90,7 @@ impl Jar {
         jar
     }
 
-    pub(super) fn browser(&self) -> Browser<'_> {
+    pub(crate) fn browser(&self) -> Browser<'_> {
         Browser {
             flow: self.flow.as_deref(),
             session: self.session.as_deref(),
@@ -143,7 +143,7 @@ fn json_response(code: StatusCode, body: Vec<u8>) -> Response {
 }
 
 /// The reply on the wire, after its adaptive delay (TN-82).
-pub(super) async fn send(reply: Reply, headers: &HeaderMap) -> Response {
+pub(crate) async fn send(reply: Reply, headers: &HeaderMap) -> Response {
     if reply.pad_ms > 0 {
         tokio::time::sleep(Duration::from_millis(reply.pad_ms)).await;
     }
@@ -182,7 +182,7 @@ fn not_found() -> Response {
     problem(StatusCode::NOT_FOUND, "not-found", "Not Found")
 }
 
-fn authority<'a>(uri: &'a Uri, headers: &'a HeaderMap) -> &'a str {
+pub(crate) fn authority<'a>(uri: &'a Uri, headers: &'a HeaderMap) -> &'a str {
     headers
         .get(header::HOST)
         .and_then(|h| h.to_str().ok())

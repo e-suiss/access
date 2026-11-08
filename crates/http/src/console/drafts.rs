@@ -39,7 +39,7 @@ pub const PUBLISH: &str = "publish";
 pub const SEARCH_NAMESPACE: &str = "access.search";
 
 /// The search kinds a draft may name (L1-ADP-16, OP-151 m.13 (d)).
-pub const SEARCH_KINDS: [&str; 14] = [
+pub const SEARCH_KINDS: [&str; 16] = [
     "subject",
     "resource",
     "action",
@@ -54,6 +54,8 @@ pub const SEARCH_KINDS: [&str; 14] = [
     "change-impact",
     "revocation-impact",
     "compromise-impact",
+    "inventory",
+    "activity",
 ];
 
 /// How far before now a drafted intent is valid, as the write path drafts (OP-151 m.11 (a)).

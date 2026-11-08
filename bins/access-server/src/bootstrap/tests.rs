@@ -2371,6 +2371,7 @@ mod provision {
     }
 }
 
+mod account;
 mod catalog;
 mod experience;
 mod management;

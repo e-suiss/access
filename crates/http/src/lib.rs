@@ -2,6 +2,7 @@
 
 #![recursion_limit = "256"]
 
+pub mod account;
 pub mod adp;
 pub mod api;
 pub mod audit;

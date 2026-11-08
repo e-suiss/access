@@ -251,6 +251,14 @@ fields = []
 ocsf = "api_activity"
 
 [[event]]
+name = "account.adp.refused"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = []
+ocsf = "api_activity"
+
+[[event]]
 name = "console.session.refused"
 plane = "identity"
 severity = "info"

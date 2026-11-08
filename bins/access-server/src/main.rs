@@ -114,6 +114,7 @@ struct Prepared {
     identity_keys: Arc<KeyStore>,
     assets: Option<Assets>,
     console_assets: Option<Assets>,
+    account_assets: Option<Assets>,
     outbound: Outbound,
     /// OP-148: whether the TLS certificate covers the configured origins, read before the
     /// lockdown.
@@ -534,6 +535,14 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
         .map(Assets::load)
         .transpose()
         .map_err(|e| e.to_string())?;
+    // OP-153 m.3 (w)
+    let account_assets = config
+        .account
+        .dist_dir
+        .as_deref()
+        .map(Assets::load)
+        .transpose()
+        .map_err(|e| e.to_string())?;
     Ok(Prepared {
         tls,
         root_cert,
@@ -549,6 +558,7 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
         identity_keys,
         assets,
         console_assets,
+        account_assets,
         outbound: outbound(config)?,
         tls_names: tls_names(config),
     })
@@ -812,6 +822,47 @@ where
         RequestIds::new(Arc::new(admin::OsEntropy)),
         request_id,
     )))
+}
+
+/// The account pages (OP-153 m.3 (w)) on the realm's public listener: the hosted login's
+/// session, device Instances through the authority plane and ADP in this process, which sees
+/// the pages as their own PEP.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the composition root hands each part over"
+)]
+fn account<I, Q>(
+    router: Pool,
+    hosted: HostedLogin,
+    signer: SignerKeys,
+    plane: I,
+    claims: Q,
+    adp: axum::Router,
+    assets: Option<Assets>,
+    limits: Limits,
+) -> axum::Router
+where
+    I: DeviceInstances + access_identity_ui::ports::Approvals + Clone + 'static,
+    Q: access_identity_ui::ports::ApprovalClaims + 'static,
+{
+    access_http::account::router(
+        PgDirectory::new(router),
+        hosted,
+        Devices {
+            signer,
+            instances: plane.clone(),
+            approvals: plane,
+            claims,
+            pep: String::from(IDENTITY_PEP),
+        },
+        adp,
+        assets,
+        limits,
+    )
+    .layer(axum::middleware::from_fn_with_state(
+        RequestIds::new(Arc::new(admin::OsEntropy)),
+        request_id,
+    ))
 }
 
 /// The hosted login (OP-146 m.12): the request's `Host` selects the realm as for discovery;
@@ -1219,6 +1270,18 @@ async fn serve(
     )?;
     let authorize = authorize.merge(ssf);
     // OP-149 m.6, m.8, m.9
+    // OP-153 m.3 (w)
+    let courier = Arc::new(courier);
+    let account_pages = account(
+        tenants_pool.clone(),
+        hosted.clone(),
+        signer(),
+        idp_plane.clone(),
+        courier.clone(),
+        adp.clone(),
+        prepared.account_assets,
+        limits,
+    );
     let me = frontend(config, tenants_pool.clone(), hosted, idp_plane, courier)?;
     let products = product::routes(
         config,
@@ -1234,6 +1297,7 @@ async fn serve(
             .merge(platform)
             .merge(realms)
             .merge(sign_in.merge(me))
+            .merge(account_pages)
             .merge(authorize)
             .merge(declared(&Declarations::of(config.provider))),
     );
