@@ -18,6 +18,7 @@ fn req(prompt: Prompt, max_age_s: Option<u64>, acr: &[&str]) -> AuthRequest {
         dpop_jkt: None,
         authority: None,
         resource: None,
+        claims: None,
     }
 }
 
@@ -118,7 +119,7 @@ fn identity_assertions_have_their_profile() {
         now_ms: NOW,
         rev: 3,
     };
-    let id = claims(&id_token_claims(&f, Some("n")));
+    let id = claims(&id_token_claims(&f, Some("n"), &serde_json::Map::new()));
     assert_eq!(id["aud"], "cli_x");
     assert_eq!(
         id["exp"].as_u64().unwrap() - id["iat"].as_u64().unwrap(),
@@ -151,6 +152,7 @@ fn identity_assertions_have_their_profile() {
         family: None,
         projection: None,
         resource: None,
+        claims: None,
     };
     assert_eq!(details.audience(&issuer), issuer.as_str());
     let named = GrantDetails {

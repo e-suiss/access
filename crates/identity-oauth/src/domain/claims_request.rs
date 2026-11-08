@@ -39,6 +39,43 @@ pub struct Requested {
     pub userinfo: BTreeSet<&'static str>,
 }
 
+/// The `claims` request as a grant keeps it: the supported claim names per target.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ClaimsAsk {
+    /// For the ID token.
+    #[serde(default)]
+    pub id_token: Vec<String>,
+    /// For user-info.
+    #[serde(default)]
+    pub userinfo: Vec<String>,
+}
+
+impl From<&Requested> for ClaimsAsk {
+    fn from(r: &Requested) -> Self {
+        Self {
+            id_token: r.id_token.iter().map(|c| String::from(*c)).collect(),
+            userinfo: r.userinfo.iter().map(|c| String::from(*c)).collect(),
+        }
+    }
+}
+
+impl ClaimsAsk {
+    /// The request again; names outside [`SUPPORTED`] are left out.
+    #[must_use]
+    pub fn requested(&self) -> Requested {
+        let pick = |names: &[String]| {
+            names
+                .iter()
+                .filter_map(|n| SUPPORTED.iter().find(|s| **s == n.as_str()).copied())
+                .collect()
+        };
+        Requested {
+            id_token: pick(&self.id_token),
+            userinfo: pick(&self.userinfo),
+        }
+    }
+}
+
 /// The `claims` parameter is not a JSON object of the §5.5 shape.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("invalid claims parameter")]

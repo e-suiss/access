@@ -224,10 +224,22 @@ impl<E: Env> OAuth<E> {
         let mut tx = self.begin(realm).await?;
         let live = self.live_grant(&mut tx, &sid, now).await?;
         tx.commit().await?;
-        if live.is_none() {
+        let Some(grant) = live else {
             return Ok(unauthorized("invalid_token"));
-        }
-        Ok(Reply::json(200, &json!({ "sub": at.sub })).with_nonce(Some(nonce)))
+        };
+        let details: GrantDetails =
+            serde_json::from_slice(&grant.details).map_err(|_| Unavailable)?;
+        // §10.4.6, OIDC Core §5.3.2
+        let mut body = self
+            .released(
+                realm,
+                &details,
+                grant.subject,
+                crate::domain::claims_request::Target::Userinfo,
+            )
+            .await?;
+        body.insert(String::from("sub"), Value::from(at.sub));
+        Ok(Reply::json(200, &Value::Object(body)).with_nonce(Some(nonce)))
     }
 
     /// The token `token` names when it is not a refresh token: an access token of this realm,

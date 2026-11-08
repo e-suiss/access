@@ -986,6 +986,7 @@ fn authorization<P>(
     projections: P,
     tenant_ids: Arc<ids::CellIds>,
     hooks: Arc<dyn access_identity_hooks::ports::HookCaller + Sync>,
+    claims: Arc<dyn access_identity_oauth::ports::oauth::ClaimSource + Sync>,
 ) -> Result<axum::Router, String>
 where
     P: access_internal_api::projections::Projections + admin::realm::LiveKeys + Clone + 'static,
@@ -1009,6 +1010,7 @@ where
         tenant_ids,
         hooks,
         management,
+        claims,
     };
     Ok(oauth_router(OAuth::new(env)))
 }
@@ -1202,6 +1204,7 @@ async fn serve(
     let signer = || SignerKeys::new(identity_section.signer.clone());
     let (platform_outbound, platform_keks) = (prepared.outbound.clone(), keks.clone());
     let admin_keks = keks.clone();
+    let claim_keks = keks.clone();
     let platform_pools = event_pools(&all, &cell_ids, &prepared.outbound);
     // TN-135, OP-151 m.3 (j)
     let hooks = oauth::hooks(all.app.clone(), prepared.outbound.clone(), keks.clone());
@@ -1287,12 +1290,17 @@ async fn serve(
         issuer.clone(),
     );
     // OP-150 m.2
+    let claims = Arc::new(oauth::VaultClaims {
+        app: oauth_inputs.0.clone(),
+        keks: claim_keks,
+    });
     let authorize = authorization(
         config,
         oauth_inputs,
         idp_plane.clone(),
         cell_ids.clone(),
         hooks,
+        claims,
     )?;
     // OP-151 m.3 (m)
     let adp = adp_router(

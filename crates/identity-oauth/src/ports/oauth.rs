@@ -369,6 +369,33 @@ pub trait ManagementHolders: Send + Sync {
     fn platform(&self, realm: &crate::ports::RealmEntry) -> Held<'_, bool>;
 }
 
+/// What an account holds to release as identity claims (§10.4.6, OP-153 m.3 (l)): its proven
+/// address and profile fields, read under the realm's PII vault.
+pub trait ClaimSource: Send + Sync {
+    /// What `subject` of `realm` holds.
+    fn held(
+        &self,
+        tenant: access_store::identity::TenantId,
+        realm: access_store::identity::RealmId,
+        subject: [u8; 16],
+    ) -> Held<'_, crate::domain::claims_request::Held>;
+}
+
+/// Nothing to release: only `sub` and the protocol claims reach a client.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoClaims;
+
+impl ClaimSource for NoClaims {
+    fn held(
+        &self,
+        _: access_store::identity::TenantId,
+        _: access_store::identity::RealmId,
+        _: [u8; 16],
+    ) -> Held<'_, crate::domain::claims_request::Held> {
+        Box::pin(async { Ok(crate::domain::claims_request::Held::default()) })
+    }
+}
+
 /// No management holder: no key is live and no realm is the platform's; every exchange is
 /// refused (MD-8).
 #[derive(Clone, Copy, Debug, Default)]

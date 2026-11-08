@@ -359,6 +359,28 @@ pub async fn set_profile(
     Ok(())
 }
 
+/// What `subject` holds to release as identity claims (§10.4.6, OP-153 m.3 (l)): its oldest
+/// proven address and its readable profile fields. An address it never proved is not held.
+///
+/// # Errors
+/// [`AccountError`].
+pub async fn held_claims(
+    t: &mut TenantTx,
+    vault: &Vault,
+    subject: [u8; 16],
+) -> Result<(Option<String>, Vec<(String, String)>), AccountError> {
+    let proven = t.proven_emails(subject).await?;
+    let mut email = None;
+    if let Some(first) = proven.first() {
+        let ids = t.identifiers(subject).await?;
+        if let Some(row) = ids.iter().find(|i| i.id == *first && i.live) {
+            email = reveal(t, vault, subject, &row.stored).await?;
+        }
+    }
+    let fields = profile(t, vault, subject).await?;
+    Ok((email, fields))
+}
+
 /// The subject's readable profile fields; empty once its `profile` key is shredded (U58).
 ///
 /// # Errors

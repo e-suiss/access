@@ -13,7 +13,7 @@ use access_identity_oauth::adapters::oauth::{HostedPages, OsRandom, PgOAuth};
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
 use access_identity_oauth::app::oauth::Env;
 use access_identity_oauth::domain::dpop::DpopProfile;
-use access_identity_oauth::ports::oauth::ManagementHolders;
+use access_identity_oauth::ports::oauth::{ClaimSource, Held, ManagementHolders};
 use access_internal_api::projections::Projections;
 use access_store::Pool;
 use access_store::identity::{RealmId, TenantId};
@@ -84,6 +84,8 @@ pub(crate) struct ServerEnv<P> {
     pub(crate) hooks: Arc<dyn HookCaller + Sync>,
     /// The authority plane's live Instance keys, for management read tokens (TN-130).
     pub(crate) management: Arc<dyn ManagementHolders + Sync>,
+    /// What accounts hold to release as identity claims, under the realms' PII vaults.
+    pub(crate) claims: Arc<dyn ClaimSource + Sync>,
 }
 
 impl<P: Projections + 'static> Env for ServerEnv<P> {
@@ -150,6 +152,52 @@ impl<P: Projections + 'static> Env for ServerEnv<P> {
     }
     fn management(&self) -> &(dyn ManagementHolders + Sync) {
         &*self.management
+    }
+    fn claims(&self) -> &(dyn ClaimSource + Sync) {
+        &*self.claims
+    }
+}
+
+/// The identity claims accounts hold (§10.4.6, OP-153 m.3 (l)), read under each realm's PII
+/// vault; a realm whose vault keys are unavailable releases nothing and the token waits (TI-9).
+pub(crate) struct VaultClaims {
+    pub(crate) app: Pool,
+    pub(crate) keks: crate::login::RealmKeks,
+}
+
+impl ClaimSource for VaultClaims {
+    fn held(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        subject: [u8; 16],
+    ) -> Held<'_, access_identity_oauth::domain::claims_request::Held> {
+        Box::pin(async move {
+            use access_identity_oauth::domain::claims_request::{Held as Claims, SUPPORTED};
+            use access_identity_oauth::ports::Unavailable;
+            let vault = self.keks.vault(realm).ok_or(Unavailable)?;
+            let mut t = access_store::identity::TenantTx::begin(&self.app, tenant, realm)
+                .await
+                .map_err(|_| Unavailable)?;
+            let (email, fields) =
+                access_identity_account::app::vault::held_claims(&mut t, &vault, subject)
+                    .await
+                    .map_err(|_| Unavailable)?;
+            t.commit().await.map_err(|_| Unavailable)?;
+            let profile = fields
+                .into_iter()
+                .filter_map(|(name, value)| {
+                    SUPPORTED
+                        .iter()
+                        .find(|s| **s == name.as_str())
+                        .map(|s| (*s, value))
+                })
+                .collect();
+            Ok(Claims {
+                proven_email: email,
+                profile,
+            })
+        })
     }
 }
 

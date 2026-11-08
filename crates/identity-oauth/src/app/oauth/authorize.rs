@@ -208,6 +208,7 @@ impl<E: Env> OAuth<E> {
                 family: None,
                 projection: None,
                 resource: req.resource.clone(),
+                claims: req.claims.clone(),
             },
         };
         let encoded = serde_json::to_vec(&details).map_err(|_| Unavailable)?;

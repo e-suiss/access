@@ -121,6 +121,59 @@ struct TestEnv {
     rs_ring: Arc<NonceRing>,
     profile: DpopProfile,
     ids: IdKey,
+    claims: VaultSource,
+}
+
+/// The accounts' identity claims under an in-memory realm vault (§10.4.6).
+struct VaultSource {
+    pool: Pool,
+    vault: access_identity_account::app::vault::Vault,
+}
+
+fn test_vault() -> access_identity_account::app::vault::Vault {
+    access_identity_account::app::vault::Vault {
+        kek: Arc::new(access_crypto::envelope::SoftKek::new(
+            "realm-kek:1",
+            [7; 32],
+        )),
+        index: Arc::new(access_crypto::realm_index::RealmIndexKey::new(Secret::new(
+            [8; 32],
+        ))),
+    }
+}
+
+impl access_identity_oauth::ports::oauth::ClaimSource for VaultSource {
+    fn held(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        subject: [u8; 16],
+    ) -> access_identity_oauth::ports::oauth::Held<
+        '_,
+        access_identity_oauth::domain::claims_request::Held,
+    > {
+        Box::pin(async move {
+            let mut t = TenantTx::begin(&self.pool, tenant, realm).await.unwrap();
+            let (email, fields) =
+                access_identity_account::app::vault::held_claims(&mut t, &self.vault, subject)
+                    .await
+                    .unwrap();
+            t.commit().await.unwrap();
+            let profile = fields
+                .into_iter()
+                .filter_map(|(n, v)| {
+                    access_identity_oauth::domain::claims_request::SUPPORTED
+                        .iter()
+                        .find(|s| **s == n.as_str())
+                        .map(|s| (*s, v))
+                })
+                .collect();
+            Ok(access_identity_oauth::domain::claims_request::Held {
+                proven_email: email,
+                profile,
+            })
+        })
+    }
 }
 
 impl Env for TestEnv {
@@ -173,6 +226,9 @@ impl Env for TestEnv {
     }
     fn tenant_ids(&self) -> &IdKey {
         &self.ids
+    }
+    fn claims(&self) -> &(dyn access_identity_oauth::ports::oauth::ClaimSource + Sync) {
+        &self.claims
     }
 }
 
@@ -427,6 +483,10 @@ async fn world() -> World {
         rs_ring: ring(Role::ResourceServer, 2),
         profile: DpopProfile::default(),
         ids: IdKey::new(Secret::new([0x1d; 32])),
+        claims: VaultSource {
+            pool: db.app.clone(),
+            vault: test_vault(),
+        },
     };
     let oauth = OAuth::new(env);
     let realm = oauth.realm(HOST, None).await.unwrap().unwrap();
@@ -1476,6 +1536,7 @@ async fn par_required_per_client_and_expiry() {
         dpop_jkt: None,
         authority: None,
         resource: None,
+        claims: None,
     };
     let params = serde_json::to_vec(&request).unwrap();
     let at = now();
@@ -2109,4 +2170,107 @@ async fn a_tenant_api_client_gets_a_service_token_for_a_product() {
         w.userinfo(token).await,
         Reply::Json { status: 401, .. }
     ));
+}
+
+impl World {
+    /// Gives the subject the e-mail identifier `email`, proven when `proven`, and a name.
+    async fn identity(&self, email: &str, proven: bool) {
+        use access_identity_account::app::vault;
+        use access_identity_account::domain::identifier::IdentifierKind;
+        let v = test_vault();
+        let mut tx = TenantTx::begin(&self.db.app, self.realm.tenant, self.realm.realm)
+            .await
+            .unwrap();
+        let sealed =
+            vault::seal_identifier(&mut tx, &v, self.subject, IdentifierKind::Email, email)
+                .await
+                .unwrap();
+        assert!(
+            tx.add_identifier(self.subject, "email", &sealed)
+                .await
+                .unwrap()
+        );
+        if proven {
+            let id = tx
+                .identifiers(self.subject)
+                .await
+                .unwrap()
+                .last()
+                .unwrap()
+                .id;
+            tx.insert_mailbox(id, self.subject, 1).await.unwrap();
+        }
+        vault::set_profile(&mut tx, &v, self.subject, "name", "Ada Lovelace")
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+    }
+
+    async fn tokens_with(&self, pairs: &[(&str, &str)]) -> Value {
+        let mut all = vec![("dpop_jkt", self.jkt())];
+        all.extend(pairs.iter().map(|(k, v)| (*k, (*v).to_owned())));
+        let borrowed: Vec<(&str, &str)> = all.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let r = self.authorize(&borrowed, Some(&self.cookie)).await;
+        let code = query(&location(&r), "code");
+        body(&self.exchange(&code).await, 200)
+    }
+}
+
+// OP-148, §10.4.6, OIDC Core §5.5, IDP-31 (3), OP-153 m.3 (l)
+#[tokio::test]
+async fn the_claims_parameter_releases_only_what_the_account_holds_honestly() {
+    let w = world().await;
+    w.identity("ada@example.com", true).await;
+
+    let plain = w.tokens_with(&[]).await;
+    let id = claims(plain["id_token"].as_str().unwrap());
+    assert!(id.get("email").is_none() && id.get("name").is_none());
+
+    let asked = w
+        .tokens_with(&[(
+            "claims",
+            r#"{"id_token":{"email":{"essential":true}},"userinfo":{"name":null}}"#,
+        )])
+        .await;
+    let id = claims(asked["id_token"].as_str().unwrap());
+    assert_eq!(id["email"], "ada@example.com");
+    assert_eq!(id["email_verified"], true);
+    assert!(id.get("name").is_none(), "asked for user-info only");
+    let info = body(
+        &w.userinfo(asked["access_token"].as_str().unwrap()).await,
+        200,
+    );
+    assert_eq!(info["name"], "Ada Lovelace");
+    assert!(info.get("email").is_none());
+    assert_eq!(info["sub"], id["sub"]);
+
+    let scoped = w.tokens_with(&[("scope", "openid email profile")]).await;
+    let id = claims(scoped["id_token"].as_str().unwrap());
+    assert_eq!(
+        (&id["email"], &id["name"]),
+        (
+            &serde_json::json!("ada@example.com"),
+            &serde_json::json!("Ada Lovelace")
+        )
+    );
+
+    let r = w
+        .authorize(
+            &[("claims", r#"{"id_token":{"email":7}}"#)],
+            Some(&w.cookie),
+        )
+        .await;
+    assert_eq!(query(&location(&r), "error"), "invalid_request");
+}
+
+// IDP-31 (3), TN-66
+#[tokio::test]
+async fn an_address_the_account_never_proved_is_not_released() {
+    let w = world().await;
+    w.identity("bob@example.com", false).await;
+    let t = w.tokens_with(&[("scope", "openid email")]).await;
+    let id = claims(t["id_token"].as_str().unwrap());
+    assert!(id.get("email").is_none() && id.get("email_verified").is_none());
+    let info = body(&w.userinfo(t["access_token"].as_str().unwrap()).await, 200);
+    assert!(info.get("email").is_none());
 }

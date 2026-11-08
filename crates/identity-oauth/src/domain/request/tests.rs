@@ -149,7 +149,7 @@ fn a_resource_scope_is_not_a_protocol_scope() {
     let resource = run(&[("scope", "openid orders:write")]).unwrap_err();
     assert_eq!(resource.error, "invalid_scope");
     assert_eq!(resource.description, crate::domain::scope::RESOURCE_SCOPE);
-    let unserved = run(&[("scope", "openid profile")]).unwrap_err();
+    let unserved = run(&[("scope", "openid offline_access")]).unwrap_err();
     assert_eq!(unserved.error, "invalid_scope");
     assert_ne!(unserved.description, crate::domain::scope::RESOURCE_SCOPE);
 }

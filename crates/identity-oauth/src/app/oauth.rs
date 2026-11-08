@@ -40,8 +40,8 @@ use crate::domain::tokens::{
 };
 use crate::ports::dpop::{Clock, ReplayCache};
 use crate::ports::oauth::{
-    ClientKeys, LoginPages, ManagementHolders, NoManagement, OAuthDb, OAuthTx, Random, TenantIds,
-    TokenSigner,
+    ClaimSource, ClientKeys, LoginPages, ManagementHolders, NoClaims, NoManagement, OAuthDb,
+    OAuthTx, Random, TenantIds, TokenSigner,
 };
 use crate::ports::{Directory, RealmEntry, Unavailable};
 use access_identity_hooks::domain::{Call, Outcome, TokenIssuance, with_claims};
@@ -114,6 +114,11 @@ pub trait Env: Send + Sync + 'static {
     /// wires them.
     fn management(&self) -> &(dyn ManagementHolders + Sync) {
         &NoManagement
+    }
+    /// What accounts hold to release as identity claims (§10.4.6); nothing unless the server
+    /// wires the realms' PII vaults.
+    fn claims(&self) -> &(dyn ClaimSource + Sync) {
+        &NoClaims
     }
 }
 
@@ -497,7 +502,9 @@ impl<E: Env> OAuth<E> {
             "scope": details.scope,
         });
         if details.openid {
-            let claims = self.id_claims(realm, &facts, &details.scope, nonce).await?;
+            let claims = self
+                .id_claims(realm, &facts, details, grant.subject, nonce)
+                .await?;
             let id = self
                 .env
                 .signer()
@@ -538,11 +545,45 @@ impl<E: Env> OAuth<E> {
             rev: grant.session_epoch,
         };
         let alg = tx.jose_alg().await?;
-        let claims = self.id_claims(realm, &facts, &details.scope, nonce).await?;
+        let claims = self
+            .id_claims(realm, &facts, details, grant.subject, nonce)
+            .await?;
         self.env
             .signer()
             .sign(realm.realm, alg, ID_TYP, &claims, now)
             .await
+    }
+
+    /// The identity claims released to `target` for a grant (§10.4.6, OP-153 m.3 (l)): the
+    /// scopes and the `claims` request it was given with, over what the account holds.
+    pub(crate) async fn released(
+        &self,
+        realm: &Realm,
+        details: &GrantDetails,
+        subject: [u8; 16],
+        target: crate::domain::claims_request::Target,
+    ) -> Result<serde_json::Map<String, Value>, Unavailable> {
+        let scopes: Vec<&str> = details.scope.split(' ').filter(|s| !s.is_empty()).collect();
+        let requested = details
+            .claims
+            .as_ref()
+            .map(crate::domain::claims_request::ClaimsAsk::requested)
+            .unwrap_or_default();
+        let asked = match target {
+            crate::domain::claims_request::Target::IdToken => &requested.id_token,
+            crate::domain::claims_request::Target::Userinfo => &requested.userinfo,
+        };
+        if asked.is_empty() && !scopes.iter().any(|s| matches!(*s, "email" | "profile")) {
+            return Ok(serde_json::Map::new());
+        }
+        let held = self
+            .env
+            .claims()
+            .held(realm.tenant, realm.realm, subject)
+            .await?;
+        Ok(crate::domain::claims_request::release(
+            &scopes, &requested, target, &held,
+        ))
     }
 
     /// The ID token claims with what the realm's `token_issuance` hook adds (TN-135, OP-151
@@ -552,10 +593,20 @@ impl<E: Env> OAuth<E> {
         &self,
         realm: &Realm,
         facts: &TokenFacts<'_>,
-        scope: &str,
+        details: &GrantDetails,
+        subject: [u8; 16],
         nonce: Option<&str>,
     ) -> Result<Vec<u8>, Unavailable> {
-        let base = id_token_claims(facts, nonce);
+        let scope = details.scope.as_str();
+        let released = self
+            .released(
+                realm,
+                details,
+                subject,
+                crate::domain::claims_request::Target::IdToken,
+            )
+            .await?;
+        let base = id_token_claims(facts, nonce, &released);
         let call = Call::TokenIssuance(TokenIssuance {
             client_id: String::from(facts.client_id),
             subject: String::from(facts.sub),

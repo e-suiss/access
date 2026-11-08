@@ -14,9 +14,9 @@ use crate::domain::scope;
 /// `openid`: an ID token is issued (OIDC Core §3.1.2.1).
 pub const OPENID: &str = "openid";
 
-/// The protocol scopes Stage 5 serves (OP-146 m.5 (c)): `openid` only; claim release beyond
-/// `sub` comes with the consent surface.
-pub const SCOPES: [&str; 1] = [OPENID];
+/// The protocol scopes served (OP-146 m.5 (c)): `openid`, and `email` and `profile`, which
+/// release only what the account holds honestly (§10.4.6, OP-153 m.3 (l)).
+pub const SCOPES: [&str; 3] = [OPENID, "email", "profile"];
 
 /// Longest `state` kept (PD).
 pub const MAX_STATE: usize = 1024;
@@ -76,6 +76,9 @@ pub struct AuthRequest {
     /// registered platform product client (OP-149 m.26 (a)); the realm itself when absent.
     #[serde(default)]
     pub resource: Option<String>,
+    /// The OIDC `claims` request (OIDC Core §5.5, §10.4.6).
+    #[serde(default)]
+    pub claims: Option<crate::domain::claims_request::ClaimsAsk>,
 }
 
 /// The authority an authorization request asks for: the one resource server and the RFC 9396
@@ -359,6 +362,15 @@ pub fn stage_two(
         .map_err(|_| AuthError::invalid_request("dpop_jkt is malformed"))?
         .map(|j| j.0);
     let (authority, resource) = authority_ask(params, issuer, product)?;
+    // §10.4.6, OP-148
+    let claims = params
+        .get("claims")
+        .map(|raw| {
+            crate::domain::claims_request::parse(raw)
+                .map(|r| crate::domain::claims_request::ClaimsAsk::from(&r))
+                .map_err(|_| AuthError::invalid_request("claims is malformed"))
+        })
+        .transpose()?;
     let state = params.get("state").map(String::from);
     let nonce = params.get("nonce").map(String::from);
     if state.as_ref().is_some_and(|s| s.len() > MAX_STATE)
@@ -379,6 +391,7 @@ pub fn stage_two(
         dpop_jkt,
         authority,
         resource,
+        claims,
     })
 }
 

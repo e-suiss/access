@@ -119,7 +119,7 @@ fn the_served_core_is_declared() {
         "https://acme.id.example/end-session"
     );
     assert_eq!(m["backchannel_logout_supported"], true);
-    assert_eq!(m["scopes_supported"], serde_json::json!(["openid"]));
+    assert_eq!(m["scopes_supported"], serde_json::json!(["openid", "email", "profile"]));
     assert_eq!(
         m["claims_supported"],
         serde_json::json!([
@@ -131,9 +131,18 @@ fn the_served_core_is_declared() {
             "auth_time",
             "nonce",
             "acr",
-            "sid"
+            "sid",
+            "email",
+            "email_verified",
+            "name",
+            "given_name",
+            "family_name",
+            "locale",
+            "zoneinfo"
         ])
     );
+    // OP-148
+    assert_eq!(m["claims_parameter_supported"], true);
     assert_eq!(
         m["grant_types_supported"],
         serde_json::json!(["authorization_code", "refresh_token", "client_credentials"])

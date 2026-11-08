@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT i.identifier_id FROM access.identity_identifiers i\n               JOIN access.identity_mailboxes m\n                 ON m.tenant_id = i.tenant_id AND m.realm_id = i.realm_id\n                AND m.identifier_id = i.identifier_id AND m.subject_id = i.subject_id\n              WHERE i.tenant_id = $1 AND i.realm_id = $2 AND i.subject_id = $3\n                AND i.status = 'active' AND i.kind = 'email'\n              ORDER BY i.identifier_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "identifier_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "identifier_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f1ee12a29bfc83d68146077f187e270709cdac501bcb45a570611dc4ee561c12"
+}

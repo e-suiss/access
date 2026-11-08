@@ -102,8 +102,8 @@ pub const SERVED: Served = Served {
 };
 
 /// The protocol scopes the metadata declares (OP-146 m.5 (c)).
-const SCOPES: [&str; 1] = ["openid"];
-const CLAIMS: [&str; 9] = [
+const SCOPES: [&str; 3] = ["openid", "email", "profile"];
+const CLAIMS: [&str; 16] = [
     "sub",
     "iss",
     "aud",
@@ -113,6 +113,13 @@ const CLAIMS: [&str; 9] = [
     "nonce",
     "acr",
     "sid",
+    "email",
+    "email_verified",
+    "name",
+    "given_name",
+    "family_name",
+    "locale",
+    "zoneinfo",
 ];
 
 /// The JWKS path under the issuer (§11.4.5).
@@ -185,6 +192,8 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
         m.insert("subject_types_supported".into(), subjects);
         m.insert("scopes_supported".into(), json!(SCOPES));
         m.insert("claims_supported".into(), json!(CLAIMS));
+        // §10.4.6, OP-148
+        m.insert("claims_parameter_supported".into(), Value::Bool(true));
         m.insert(
             "prompt_values_supported".into(),
             json!(["none", "login", "create"]),

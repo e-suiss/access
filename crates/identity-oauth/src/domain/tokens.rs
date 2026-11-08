@@ -156,10 +156,15 @@ fn secs(ms: u64) -> u64 {
     ms / 1000
 }
 
-/// The ID token claims (OIDC Core §2): one audience, `typ` JWT, ≤ 5 minutes.
+/// The ID token claims (OIDC Core §2): one audience, `typ` JWT, ≤ 5 minutes, with the identity
+/// claims `released` for it (§10.4.6).
 #[must_use]
-pub fn id_token_claims(f: &TokenFacts<'_>, nonce: Option<&str>) -> Vec<u8> {
-    let mut m = Map::new();
+pub fn id_token_claims(
+    f: &TokenFacts<'_>,
+    nonce: Option<&str>,
+    released: &Map<String, Value>,
+) -> Vec<u8> {
+    let mut m = released.clone();
     m.insert("iss".into(), f.issuer.as_str().into());
     m.insert("sub".into(), f.sub.into());
     m.insert("aud".into(), f.client_id.into());
@@ -296,6 +301,9 @@ pub struct GrantDetails {
     /// to, when the request named it as its RFC 8707 resource (OP-149 m.26 (a)).
     #[serde(default)]
     pub resource: Option<String>,
+    /// The OIDC `claims` request the grant was given with (§10.4.6).
+    #[serde(default)]
+    pub claims: Option<crate::domain::claims_request::ClaimsAsk>,
 }
 
 impl GrantDetails {

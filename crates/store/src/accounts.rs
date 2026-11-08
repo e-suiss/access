@@ -438,6 +438,29 @@ impl TenantTx {
             .collect()
     }
 
+    /// The live e-mail identifiers of `subject` whose mailbox it proved (TN-66), oldest first.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn proven_emails(&mut self, subject: [u8; 16]) -> Result<Vec<[u8; 16]>, StoreError> {
+        let (tenant, realm) = self.scope()?;
+        let rows = sqlx::query_scalar!(
+            "SELECT i.identifier_id FROM access.identity_identifiers i
+               JOIN access.identity_mailboxes m
+                 ON m.tenant_id = i.tenant_id AND m.realm_id = i.realm_id
+                AND m.identifier_id = i.identifier_id AND m.subject_id = i.subject_id
+              WHERE i.tenant_id = $1 AND i.realm_id = $2 AND i.subject_id = $3
+                AND i.status = 'active' AND i.kind = 'email'
+              ORDER BY i.identifier_id",
+            tenant,
+            realm,
+            uuid(subject),
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        Ok(rows.into_iter().map(|u| *u.as_bytes()).collect())
+    }
+
     /// Up to `limit` identifiers of this realm still written in plaintext, for the retention
     /// job to seal (OP-153 m.3 (aa)): `(identifier, subject, kind, value)`.
     ///
