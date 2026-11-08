@@ -54,8 +54,7 @@ fn push(realm: RealmId, id: u8, owner: Option<&str>) -> SubscriptionRow {
     }
 }
 
-// OP-149 m.17 (e), TN-1, OP-131: the reader lists the live platform subscriptions of every
-// tenant, never a tenant's own stream, and cannot read the rest of a row
+// OP-149 m.17 (e), TN-1, OP-131
 #[tokio::test]
 async fn the_reader_sees_only_platform_subscriptions() {
     let db = fresh().await.unwrap();

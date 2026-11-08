@@ -23,7 +23,7 @@ async fn first_use(db: &TestDb, tenant: TenantId, realm: RealmId, day: u32, key:
     fresh
 }
 
-// TN-30, IDP-11 step 9: a key is accepted once per realm; a replay is caught atomically
+// TN-30, IDP-11 step 9
 #[tokio::test]
 async fn a_replayed_key_is_reported_once_seen() {
     let db = fresh().await.unwrap();
@@ -35,7 +35,7 @@ async fn a_replayed_key_is_reported_once_seen() {
     assert!(first_use(&db, TenantId::from_bytes([4; 16]), R, DAY, [7; 32]).await);
 }
 
-// TN-30, IDP-11 step 9: concurrent presentations of one proof, exactly one wins
+// TN-30, IDP-11 step 9
 #[tokio::test]
 async fn concurrent_replays_have_one_winner() {
     let db = fresh().await.unwrap();
@@ -58,7 +58,7 @@ async fn concurrent_replays_have_one_winner() {
     assert_eq!(winners, 1);
 }
 
-// TN-30, MD-8: a day without a partition is a cache failure, never an acceptance
+// TN-30, MD-8
 #[tokio::test]
 async fn an_unopened_day_fails_closed() {
     let db = fresh().await.unwrap();
@@ -68,7 +68,7 @@ async fn an_unopened_day_fails_closed() {
     assert!(t.dpop_first_use(DAY, &[1; 32]).await.is_err());
 }
 
-// OP-73, OP-146 m.5 (f): the cache is append-only; rows are never updated or deleted
+// OP-73, OP-146 m.5 (f)
 #[tokio::test]
 async fn rows_are_append_only_and_opening_is_idempotent() {
     let db = fresh().await.unwrap();

@@ -17,7 +17,7 @@ const T: TenantId = TenantId::from_bytes([1; 16]);
 const R: RealmId = RealmId::from_bytes([2; 16]);
 const TP: &str = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
 
-// OP-67 m.1, §17.8.2: the consumer reads the trace and the row's age
+// OP-67 m.1, §17.8.2
 #[tokio::test]
 async fn the_outbox_carries_the_trace() {
     let db = fresh().await.unwrap();
@@ -48,7 +48,7 @@ async fn the_outbox_carries_the_trace() {
     assert!(rows.iter().all(|e| e.age_ms < 60_000));
 }
 
-// OP-67 m.1: a malformed traceparent is refused by the schema
+// OP-67 m.1
 #[tokio::test]
 async fn a_malformed_trace_is_refused() {
     let db = fresh().await.unwrap();

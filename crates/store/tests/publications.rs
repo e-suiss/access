@@ -24,8 +24,7 @@ fn row(fingerprint: u8, version: u64) -> PublicationRow {
     }
 }
 
-// E10: a published version is immutable; the same package is kept once, another under the
-// same version is refused
+// E10
 #[tokio::test]
 async fn a_published_version_is_kept_once_and_never_replaced() {
     let db = fresh().await.unwrap();
@@ -43,12 +42,12 @@ async fn a_published_version_is_kept_once_and_never_replaced() {
     );
     assert_eq!(listed[1].package, vec![1]);
     assert_eq!(of_namespace(&db.app, &D, "other").await.unwrap(), []);
-    // TN-20: another domain sees none of it, and may keep the same package for itself
+    // TN-20
     assert_eq!(of_namespace(&db.app, &OTHER, "commerce").await.unwrap(), []);
     assert_eq!(keep(&db.app, &OTHER, &row(2, 2)).await.unwrap(), Kept::New);
 }
 
-// OP-73, E10: neither the app role nor anyone else changes or removes a published row
+// OP-73, E10
 #[tokio::test]
 async fn a_published_row_is_never_updated_or_deleted() {
     let db = fresh().await.unwrap();

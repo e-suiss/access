@@ -44,8 +44,7 @@ fn pending(c: u8, until: u64) -> Pending {
     }
 }
 
-// TN-128, TN-129, OP-73: a session is found by its cookie digest only, touched while live,
-// ended once and softly; an ended session stays ended
+// TN-128, TN-129, OP-73
 #[tokio::test]
 async fn sessions_open_find_and_end_softly() {
     let db = fresh().await.unwrap();
@@ -85,8 +84,7 @@ async fn sessions_open_find_and_end_softly() {
     assert!(deleted.is_err(), "OP-73: no physical delete");
 }
 
-// INV-13, OP-149 m.6: one pending challenge, taken once and only before it lapses; the device
-// Instance is attached once
+// INV-13, OP-149 m.6
 #[tokio::test]
 async fn a_challenge_is_taken_once_and_the_instance_attached_once() {
     let db = fresh().await.unwrap();

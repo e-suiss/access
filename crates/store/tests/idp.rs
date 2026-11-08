@@ -136,8 +136,7 @@ fn client_row(seed: u8) -> ClientRow {
     }
 }
 
-// EI-25, MD-14, TN-15: a client is written only with an ALLOW bound in its transaction; the
-// same decision binds once, and a retry finds it already bound
+// EI-25, MD-14, TN-15
 #[tokio::test]
 async fn a_client_is_written_against_its_committed_allow() {
     // TN-110, IDP-7, OP-73
@@ -197,8 +196,8 @@ async fn refused(db: &TestDb, t: TenantId, r: RealmId, d: &Decision<'_>) {
     assert!(bind(&mut tx, d).await.is_err());
 }
 
-// EI-25: a DENY, an unknown position, another intent, or a decision of a domain that only
-// consumes the realm does not bind (§12.1.1 2a: its idp.* commit has no authority here)
+// EI-25
+// §12.1.1
 #[tokio::test]
 async fn only_an_allow_of_the_governing_domain_binds() {
     // MD-5a, TN-1, INV-37, MD-14
@@ -222,8 +221,7 @@ async fn only_an_allow_of_the_governing_domain_binds() {
     .await;
 }
 
-// EI-25, TN-110: no write path around the binding: a direct insert, an ALLOW bound in an
-// earlier transaction, or an ALLOW of another action is refused by the database
+// EI-25, TN-110
 #[tokio::test]
 async fn the_database_refuses_unbound_configuration() {
     // MD-14, INV-2
@@ -301,8 +299,7 @@ fn defaults() -> SettingsRow {
     }
 }
 
-// OP-146 m.4 (f), OP-33, m.8 (e), IDP-5: a realm starts on the Genesis defaults; its settings
-// change only under a decision, and Argon2 parameters only rise
+// OP-146 m.4 (f), OP-33, m.8 (e), IDP-5
 #[tokio::test]
 async fn realm_settings_start_on_defaults_and_argon2_only_rises() {
     // TN-111, IDP-5, IDI-4, CR-36
@@ -339,8 +336,7 @@ async fn realm_settings_start_on_defaults_and_argon2_only_rises() {
     );
 }
 
-// must-never #18, §9.9.4 k.1, §9.9.6, TN-117: a tenant cannot define a reserved protocol claim
-// or an authority claim, and a mapper takes its value only from a standard profile attribute
+// MUST-NEVER-18, §9.9.4 k.1, §9.9.6, TN-117
 #[tokio::test]
 async fn reserved_claims_cannot_be_mapped() {
     // P55, E39, F23, PI-8, S-1, INV-33
@@ -381,7 +377,7 @@ async fn reserved_claims_cannot_be_mapped() {
     }
 }
 
-// TN-20, OP-137: a client_id is global and never reused, also across tenants
+// TN-20, OP-137
 #[tokio::test]
 async fn a_client_id_is_global() {
     // TN-15, INV-32
@@ -431,10 +427,7 @@ fn transmitter() -> access_store::ssf::TransmitterRow {
     }
 }
 
-// EI-25, MD-14, TN-110, OP-151 m.3 (l): an inbound transmitter is declared only under the
-// idp.upstream.register ALLOW bound in its transaction and ended only under idp.upstream.retire;
-// a direct insert, an ALLOW of another action or a direct end is refused by the database, while
-// its reception time moves freely
+// EI-25, MD-14, TN-110, OP-151 m.3 (l)
 #[tokio::test]
 async fn an_inbound_transmitter_is_bound_to_its_decisions() {
     let db = fresh().await.unwrap();

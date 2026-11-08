@@ -14,7 +14,7 @@ use access_store::testing::fresh;
 const LEASE: u64 = 30_000;
 const DAY: u64 = 86_400_000;
 
-// TN-126: first run, 409 while running, replay of the kept answer, 422 for another request
+// TN-126
 #[tokio::test]
 async fn a_key_runs_once_and_replays_its_answer() {
     let db = fresh().await.unwrap();
@@ -35,7 +35,7 @@ async fn a_key_runs_once_and_replays_its_answer() {
     ));
 }
 
-// TN-126: a released key (validation failure, 5xx) runs again, also with another request
+// TN-126
 #[tokio::test]
 async fn a_released_key_runs_again() {
     let db = fresh().await.unwrap();
@@ -51,8 +51,7 @@ async fn a_released_key_runs_again() {
     );
 }
 
-// TN-126, OP-151 m.3 (c), OP-73: kept 24 h, then the scope is reused in place, never deleted;
-// a lapsed runner's lease is taken over only by the same request
+// TN-126, OP-151 m.3 (c), OP-73
 #[tokio::test]
 async fn keys_expire_softly_and_leases_lapse() {
     let db = fresh().await.unwrap();
@@ -75,8 +74,7 @@ async fn keys_expire_softly_and_leases_lapse() {
     assert!(deleted.is_err());
 }
 
-// D-4, TN-126, OP-151 m.3 (c), OP-73: an answer past its 24 hours is cleared and its key released
-// in place, in bounded batches; a live answer and a running key are kept; no row is deleted
+// D-4, TN-126, OP-151 m.3 (c), OP-73
 #[tokio::test]
 async fn expired_answers_are_released_in_place() {
     let db = fresh().await.unwrap();

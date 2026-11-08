@@ -105,8 +105,7 @@ async fn as_owner(db: &TestDb, domain: &DomainId, sql: &str) -> Option<String> {
         .map(|e| e.to_string())
 }
 
-// OP-146 m.5 (f), CMP-8: a submission digest is recorded once per day; a day nobody opened
-// refuses it
+// OP-146 m.5 (f), CMP-8
 #[tokio::test]
 async fn submission_digests_live_in_day_partitions() {
     let db = fresh().await.unwrap();
@@ -136,8 +135,7 @@ async fn submission_digests_live_in_day_partitions() {
     assert!(err.is_some(), "OP-73");
 }
 
-// L2-CLM-3, G44, §16.7, OP-73: quarantine rows are kept as written; an issuer's quota notice
-// is sent once
+// L2-CLM-3, G44, §16.7, OP-73
 #[tokio::test]
 async fn quarantine_and_quota_notices() {
     let db = fresh().await.unwrap();
@@ -187,8 +185,7 @@ async fn quarantine_and_quota_notices() {
     assert!(!quota_notified(&db.app, &d, &[5; 16], 0).await.unwrap());
 }
 
-// TN-4: a realm has one live governing domain and any number of consuming ones, each through an
-// Acceptance; a retired binding stays
+// TN-4
 #[tokio::test]
 async fn realms_bind_to_many_domains() {
     let db = fresh().await.unwrap();
@@ -226,7 +223,7 @@ async fn realms_bind_to_many_domains() {
     tx.commit().await.unwrap();
 }
 
-// §9.12.1, §9.12.2, L2-RPT-2: reports keep their chain and profiles are found by digest
+// §9.12.1, §9.12.2, L2-RPT-2
 #[tokio::test]
 async fn reports_and_profiles_are_recorded() {
     let db = fresh().await.unwrap();
@@ -283,7 +280,7 @@ async fn reports_and_profiles_are_recorded() {
         Some(vec![0xa1, 0x01, 0x02])
     );
     assert_eq!(profile(&db.app, &d, &[7; 32]).await.unwrap(), None);
-    // §9.12.1: the audience's newest profile, while its Claim is valid
+    // §9.12.1
     assert_eq!(
         profile_for(&db.app, &d, "verifier.example", 4_000)
             .await
@@ -299,8 +296,7 @@ async fn reports_and_profiles_are_recorded() {
     assert_eq!(reports(&db.app, &d, &[8; 32]).await.unwrap().len(), 2);
 }
 
-// §9.12, §13.7.4, SEC14, OP-73: a projection's contract is kept once; the issuance limits and
-// the report deadline are read from it; a reconciliation is appended and never changed
+// §9.12, §13.7.4, SEC14, OP-73
 #[tokio::test]
 async fn contracts_and_reconciliations_are_appended() {
     let db = fresh().await.unwrap();
@@ -405,8 +401,7 @@ async fn contracts_and_reconciliations_are_appended() {
     );
 }
 
-// OP-150 m.3 (a), T24, §9.9.3 k.6: status lists are published with the position they reflect;
-// a family is revoked once and stays
+// OP-150 m.3 (a), T24, §9.9.3 k.6
 #[tokio::test]
 async fn status_lists_and_families() {
     let db = fresh().await.unwrap();

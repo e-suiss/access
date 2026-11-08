@@ -9,7 +9,7 @@
 use access_store::analytics::{COUNTERS, KEY};
 use access_store::testing::fresh;
 
-// IDP-36, TI-18: an allowlist of column names and types; a new column of any other kind fails
+// IDP-36, TI-18
 #[tokio::test]
 async fn analytics_columns_cannot_carry_identifiers() {
     let db = fresh().await.unwrap();

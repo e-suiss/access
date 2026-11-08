@@ -11,7 +11,7 @@ use access_store::connect::{Durability, Target, check_server, fits, migrate, opt
 use access_store::testing::{fresh, unmigrated};
 use sqlx::postgres::PgSslMode;
 
-// OP-130 m.10: the client always verifies the full chain against the given root
+// OP-130 m.10
 #[test]
 fn options_verify_the_server_fully() {
     let t = Target {
@@ -33,7 +33,7 @@ fn version_and_pool_limits() {
     assert!(fits(70, 100) && !fits(71, 100));
 }
 
-// OP-52: a plain connection fails the TLS check; the local and CI servers meet the rest
+// OP-52
 #[tokio::test]
 async fn the_server_check_refuses_an_unencrypted_connection() {
     let db = fresh().await.unwrap();
@@ -43,13 +43,12 @@ async fn the_server_check_refuses_an_unencrypted_connection() {
     assert!(matches!(tls, Err(StoreError::Unsafe(m)) if m.contains("TLS")));
     let pools = check_server(&db.app, 100_000, false, single).await;
     assert!(matches!(pools, Err(StoreError::Unsafe(m)) if m.contains("max_connections")));
-    // U51: the test servers have no synchronous standby, so a replicated deployment is refused
+    // U51
     let replicated = check_server(&db.app, 8, false, Durability::Replicated).await;
     assert!(matches!(replicated, Err(StoreError::Unsafe(m)) if m.contains("synchronous_commit")));
 }
 
-// OP-55, OP-12, OP-130 m.2: the migration job runs as the migration role on a database the
-// administrator prepared; a second run applies nothing and the tables belong to that role
+// OP-55, OP-12, OP-130 m.2
 #[tokio::test]
 async fn the_migration_job_runs_as_the_migrator_and_is_idempotent() {
     let db = unmigrated().await.unwrap();
@@ -73,12 +72,11 @@ async fn the_migration_job_runs_as_the_migrator_and_is_idempotent() {
     .await
     .unwrap();
     assert_eq!(foreign, 0);
-    // OP-12: the application role cannot migrate
+    // OP-12
     assert!(migrate(&db.app).await.is_err());
 }
 
-// OP-55, OP-138: the migration job reports what it applied, oldest first; a second run applies
-// nothing and reports nothing
+// OP-55, OP-138
 #[tokio::test]
 async fn the_migration_job_lists_what_it_applied() {
     let db = unmigrated().await.unwrap();

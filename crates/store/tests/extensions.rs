@@ -144,8 +144,7 @@ fn key(seed: u8) -> WebhookKeyRow {
     }
 }
 
-// TN-135, EI-25, MD-14: a hook is written only against idp.hook.register, one live hook per call
-// point, retired against idp.hook.retire, and a registration never changes
+// TN-135, EI-25, MD-14
 #[tokio::test]
 async fn tn_135_hooks_are_bound_realm_configuration() {
     let db = fresh().await.unwrap();
@@ -228,8 +227,7 @@ async fn tn_135_hooks_are_bound_realm_configuration() {
     assert_eq!(live_hook(&mut tx, "post_login").await.unwrap(), None);
 }
 
-// TN-136, EI-25: a webhook is registered, updated with a key rotation that keeps the old key for
-// its overlap, and retired, each against its own idp.webhook.* ALLOW
+// TN-136, EI-25
 #[tokio::test]
 async fn tn_136_webhooks_are_bound_and_rotate_with_overlap() {
     let db = fresh().await.unwrap();
@@ -305,8 +303,7 @@ async fn tn_136_webhooks_are_bound_and_rotate_with_overlap() {
     assert_eq!(live_webhooks(&mut tx).await.unwrap(), Vec::new());
 }
 
-// TN-136, OP-73, OP-17: a delivery is queued once per event, each attempt is logged with status
-// and latency and no body, the log is never rewritten and nothing is deleted
+// TN-136, OP-73, OP-17
 #[tokio::test]
 async fn tn_136_deliveries_and_their_log_are_kept() {
     let db = fresh().await.unwrap();
@@ -409,8 +406,7 @@ async fn tn_136_deliveries_and_their_log_are_kept() {
     }
 }
 
-// TN-136, OP-151 m.19 (e): the delivery log reads newest first in pages after a cursor, with
-// the last answer of each delivery and never its body; another realm's webhook has no log here
+// TN-136, OP-151 m.19 (e)
 #[tokio::test]
 async fn tn_136_the_delivery_log_pages_without_bodies() {
     let db = fresh().await.unwrap();

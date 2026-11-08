@@ -78,8 +78,7 @@ SELECT n.nspname::text || '.' || c.relname::text || ' ' || r.rolname::text || ' 
                  OR EXISTS (SELECT FROM unnest(pol.polroles) pr WHERE pg_has_role(r.oid, pr, 'MEMBER'))))
  ORDER BY 1";
 
-// TNI-3, OP-131: each role's grant on a table meets a RESTRICTIVE policy for that
-// role and command, in the tenant schema and in the operations schema
+// TNI-3, OP-131
 #[tokio::test]
 async fn every_granted_role_meets_a_restrictive_policy_for_its_command() {
     let mut c = admin().await;
@@ -202,8 +201,7 @@ async fn append_only_tables_grant_no_change_and_carry_both_triggers() {
     }
 }
 
-// TN-20: a unique index that does not start with a scope column is on one of the four global
-// identifiers, so uniqueness never becomes a cross-tenant channel
+// TN-20
 #[tokio::test]
 async fn only_the_four_global_identifiers_are_unique_across_tenants() {
     let mut c = admin().await;
@@ -235,8 +233,7 @@ async fn only_the_four_global_identifiers_are_unique_across_tenants() {
     assert!(bad.is_empty(), "{bad:?}");
 }
 
-// §9.7.1, §9.16.3, C30: explain traces and Cedar diagnostics are operator telemetry, never the
-// record: no table of the Authority Record or its proofs has a trace, span or diagnostics column
+// §9.7.1, §9.16.3, C30
 #[tokio::test]
 async fn record_tables_carry_no_trace_columns() {
     let mut c = admin().await;

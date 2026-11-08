@@ -66,7 +66,7 @@ async fn visible(db: &TestDb, t: TenantId, r: Option<RealmId>, table: &str) -> V
 
 const TENANT_TABLES: [&str; 3] = ["tenants", "realms", "realm_hostnames"];
 
-// §12.1.3 test 2: identical data in two tenants; neither sees the other's rows
+// §12.1.3 test 2
 #[tokio::test]
 async fn twin_tenants_see_only_themselves() {
     let db = fresh().await.unwrap();
@@ -81,7 +81,7 @@ async fn twin_tenants_see_only_themselves() {
     }
 }
 
-// §12.1.3 test 6, U59: without a scope, no rows
+// §12.1.3 test 6, U59
 #[tokio::test]
 async fn no_scope_no_rows() {
     let db = fresh().await.unwrap();
@@ -98,7 +98,7 @@ async fn no_scope_no_rows() {
     }
 }
 
-// OP-12: realm-level rows need the realm in scope too
+// OP-12
 #[tokio::test]
 async fn hostnames_need_the_realm_in_scope() {
     let db = fresh().await.unwrap();
@@ -107,7 +107,7 @@ async fn hostnames_need_the_realm_in_scope() {
     assert_eq!(visible(&db, t, None, "realms").await.len(), 1);
 }
 
-// §12.1.3 test 5, TNI-10: a taken slug or hostname fails without telling whose it is
+// §12.1.3 test 5, TNI-10
 #[tokio::test]
 async fn global_identifiers_leak_nothing_and_are_never_reused() {
     let db = fresh().await.unwrap();
@@ -125,7 +125,7 @@ async fn global_identifiers_leak_nothing_and_are_never_reused() {
         !err.contains("acme-e") || err.contains("realms_slug"),
         "{err}"
     );
-    // INV-32: a deleted realm keeps its slug
+    // INV-32
     let mut tx = TenantTx::begin_tenant(&db.app, a).await.unwrap();
     assert!(delete_realm(&mut tx, ra).await.unwrap());
     tx.commit().await.unwrap();
@@ -136,7 +136,6 @@ async fn global_identifiers_leak_nothing_and_are_never_reused() {
             .is_err()
     );
     tx.rollback().await.unwrap();
-    // a hostname is a lease: once removed, another realm may take it
     let mut tx = TenantTx::begin_tenant(&db.app, b).await.unwrap();
     let rb = create_realm(&mut tx, &db_b, "acme-f", "pool-default")
         .await
@@ -159,7 +158,7 @@ async fn global_identifiers_leak_nothing_and_are_never_reused() {
     tx.commit().await.unwrap();
 }
 
-// MD-5a: a realm is governed by a domain of its own tenant
+// MD-5a
 #[tokio::test]
 async fn a_realm_cannot_be_governed_by_another_tenants_domain() {
     let db = fresh().await.unwrap();
@@ -174,7 +173,7 @@ async fn a_realm_cannot_be_governed_by_another_tenants_domain() {
     );
 }
 
-// OP-132 m.3: the router resolves live hostnames and reads nothing else
+// OP-132 m.3
 #[tokio::test]
 async fn the_router_sees_the_mapping_only() {
     let db = fresh().await.unwrap();
@@ -223,7 +222,7 @@ async fn with_issuer(db: &TestDb, t: TenantId, r: RealmId, issuer: &str) -> bool
     set
 }
 
-// TN-10, TN-16, §17.9.6: the issuer is stored on the realm row once; it and the slug never change
+// TN-10, TN-16, §17.9.6
 #[tokio::test]
 async fn the_issuer_is_set_once_and_never_changes() {
     let db = fresh().await.unwrap();
@@ -246,8 +245,7 @@ async fn the_issuer_is_set_once_and_never_changes() {
     assert_eq!(got.issuer, "https://acme-i.id.test");
 }
 
-// OP-132 m.3, TN-10: the router reads a live realm's slug and issuer by hostname or slug, and
-// its tenant by realm; a realm without an issuer, or a deleted one, is not routed
+// OP-132 m.3, TN-10
 #[tokio::test]
 async fn the_router_routes_live_realms_with_an_issuer() {
     let db = fresh().await.unwrap();
@@ -278,7 +276,7 @@ async fn the_router_routes_live_realms_with_an_issuer() {
         .map(|r| r.slug)
         .collect();
     assert_eq!(all, ["acme-j", "acme-k"]);
-    // OP-149 m.4: a tenant snapshot's realms
+    // OP-149 m.4
     let of_k: Vec<String> = tenant_routes(&db.router, &[t2])
         .await
         .unwrap()
@@ -303,7 +301,7 @@ async fn the_router_routes_live_realms_with_an_issuer() {
     assert!(route_by_slug(&db.router, "acme-j").await.unwrap().is_none());
 }
 
-// OP-149 m.4: the router reads every tenant's status in id order, and nothing else of it
+// OP-149 m.4
 #[tokio::test]
 async fn the_router_pages_through_tenants() {
     let db = fresh().await.unwrap();

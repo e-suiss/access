@@ -27,8 +27,7 @@ fn row(grant: u8, kind: &'static str, holder: Option<u8>, ended: bool) -> GrantR
     }
 }
 
-// OP-141 m.22 (g): the cursor moves only from where it is; candidates come by namespace or
-// holder, live ones only
+// OP-141 m.22 (g)
 #[tokio::test]
 async fn the_index_follows_its_cursor() {
     let db = fresh().await.unwrap();
@@ -74,7 +73,6 @@ async fn the_index_follows_its_cursor() {
         grants_for(&db.app, &d, &[9; 16], None, 10).await.unwrap(),
         [[1; 16], [2; 16]]
     );
-    // a change of the same Grant replaces its row
     advance(&db.deriver, &d, 5, 7, &[row(1, "party", Some(9), true)])
         .await
         .unwrap();
@@ -98,7 +96,7 @@ fn key(kid: u8, since: u64, ended: Option<u64>) -> KeyRow {
     }
 }
 
-// OP-149 m.5, INV-33: the key index keeps a key's first time across later puts and ends it once
+// OP-149 m.5, INV-33
 #[tokio::test]
 async fn the_key_index_keeps_each_keys_history() {
     let db = fresh().await.unwrap();

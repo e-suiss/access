@@ -55,7 +55,7 @@ async fn drain_n(reader: &PgPool, consumer: &str, n: usize) -> Vec<Vec<u8>> {
     out
 }
 
-// OQ-MD3 scenario 1: reverse commit order (the gap trap)
+// OQ-MD3
 #[tokio::test]
 async fn an_earlier_transaction_that_commits_later_is_not_skipped() {
     let db = fresh().await.unwrap();
@@ -67,7 +67,6 @@ async fn an_earlier_transaction_that_commits_later_is_not_skipped() {
         drain(&db.reader, "a").await.is_empty(),
         "nothing is delivered past a running transaction"
     );
-    // a naive `id > last` cursor would read `late` now and then pass over `early`'s lower id
     let visible: Vec<i64> = sqlx::query("SELECT id FROM access.identity_outbox ORDER BY id")
         .fetch_all(&db.reader)
         .await
@@ -84,7 +83,7 @@ async fn an_earlier_transaction_that_commits_later_is_not_skipped() {
     );
 }
 
-// OQ-MD3 scenario 2: a long transaction holds delivery back; an aborted one never appears
+// OQ-MD3
 #[tokio::test]
 async fn long_and_aborted_transactions() {
     let db = fresh().await.unwrap();
@@ -104,13 +103,13 @@ async fn long_and_aborted_transactions() {
     assert!(!got.contains(&b"aborted".to_vec()));
 }
 
-// OQ-MD3 scenario 2: a rolled-back savepoint drops only its own event
+// OQ-MD3
 #[tokio::test]
 async fn savepoints_keep_the_top_level_transaction_id() {
     let db = fresh().await.unwrap();
     let mut c = db.app.acquire().await.unwrap();
     c.execute("BEGIN").await.unwrap();
-    // OP-132 m.5: the outbox is realm-level
+    // OP-132 m.5
     c.execute("SELECT set_config('app.tenant_id', '01010101-0101-0101-0101-010101010101', true), set_config('app.realm_id', '02020202-0202-0202-0202-020202020202', true)")
         .await
         .unwrap();
@@ -136,8 +135,8 @@ async fn savepoints_keep_the_top_level_transaction_id() {
     assert_eq!(drain_n(&db.reader, "a", 2).await, [vec![1], vec![3]]);
 }
 
-// OQ-MD3 scenario 3: a consumer away for longer than any retention still gets everything,
-// because outbox rows are never deleted (OP-73)
+// OQ-MD3
+// OP-73
 #[tokio::test]
 async fn a_long_outage_loses_nothing() {
     let db = fresh().await.unwrap();
@@ -156,7 +155,7 @@ async fn a_long_outage_loses_nothing() {
     assert_eq!(got.last().unwrap(), &vec![19, 49]);
 }
 
-// OQ-MD3 scenario 4: a restart resumes from the stored cursor; delivery is at least once
+// OQ-MD3
 #[tokio::test]
 async fn restart_resumes_from_the_last_ack() {
     let db = fresh().await.unwrap();
@@ -166,7 +165,6 @@ async fn restart_resumes_from_the_last_ack() {
     assert_eq!(drain_n(&db.reader, "probe", 10).await.len(), 10);
     let first = poll(&db.reader, Cursor::default(), 4).await.unwrap();
     ack(&db.reader, "a", first[2].cursor()).await.unwrap();
-    // crash after handling 4 events but acknowledging only 3
     db.reader.close().await;
     let reader = PgPool::connect_with(
         db.admin
@@ -178,12 +176,11 @@ async fn restart_resumes_from_the_last_ack() {
     .unwrap();
     let rest = drain(&reader, "a").await;
     assert_eq!(rest, (3..10_u8).map(|i| vec![i]).collect::<Vec<_>>());
-    // an ack never moves the cursor back
     ack(&reader, "a", first[0].cursor()).await.unwrap();
     assert_eq!(drain(&reader, "a").await, Vec::<Vec<u8>>::new());
 }
 
-// OQ-MD3 scenario 6: consumers keep independent cursors
+// OQ-MD3
 #[tokio::test]
 async fn consumers_are_independent() {
     let db = fresh().await.unwrap();
@@ -201,7 +198,7 @@ async fn consumers_are_independent() {
     assert_eq!(drain_n(&db.reader, "ssf", 1).await, [b"more".to_vec()]);
 }
 
-// OP-12, OP-131 m.3: the application sees only its tenant; the reader cannot write
+// OP-12, OP-131 m.3
 #[tokio::test]
 async fn scope_and_roles() {
     let db = fresh().await.unwrap();

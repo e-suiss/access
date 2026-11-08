@@ -24,7 +24,7 @@ fn row(size: u64) -> CheckpointRow {
     }
 }
 
-// OP-152 m.5 (k): only the replica holding a chain's lease appends its checkpoints
+// OP-152 m.5 (k)
 #[tokio::test]
 async fn only_the_lease_holder_appends_a_chain_checkpoint() {
     let db = fresh().await.unwrap();
@@ -71,7 +71,7 @@ async fn only_the_lease_holder_appends_a_chain_checkpoint() {
     );
 }
 
-// OP-152 m.5 (k): an expired lease passes to another replica and fences the old holder out
+// OP-152 m.5 (k)
 #[tokio::test]
 async fn an_expired_lease_moves_and_fences_the_old_holder() {
     let db = fresh().await.unwrap();

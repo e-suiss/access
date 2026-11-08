@@ -172,7 +172,7 @@ pub async fn check_server(
     if require_tls && !row.tls {
         return Err(fail(ConnectError::NoTls));
     }
-    // U51, OP-24: `on` waits for the standbys named; `local` or `off` acknowledge early
+    // U51, OP-24
     let standbys_ok = durability == Durability::SingleNode || !row.standbys.trim().is_empty();
     if !matches!(row.commit.as_str(), "on" | "remote_apply") || !standbys_ok {
         return Err(fail(ConnectError::Durability {

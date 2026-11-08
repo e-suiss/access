@@ -43,9 +43,7 @@ async fn count(tx: TenantTx) -> i64 {
     rows[0].get::<i64, _>("n")
 }
 
-// D-3, OP-132 m.5: an outbox row of one realm is invisible to another realm of the same tenant,
-// to a realm-less scope and to the tenant-wide read scope, and cannot be written from another
-// realm's scope
+// D-3, OP-132 m.5
 #[tokio::test]
 async fn a_cross_realm_read_in_the_same_tenant_returns_nothing() {
     let db = fresh().await.unwrap();
@@ -101,8 +99,7 @@ fn uuid(b: &[u8; 16]) -> String {
     )
 }
 
-// D-3, OP-132 m.5: every realm-keyed table the application role reads is scoped to the realm
-// for it, except the tenant-level ones that list realms and their bindings
+// D-3, OP-132 m.5
 #[tokio::test]
 async fn every_realm_keyed_table_has_a_realm_policy() {
     let db = fresh().await.unwrap();

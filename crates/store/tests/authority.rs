@@ -117,7 +117,7 @@ async fn genesis_lease_and_commit() {
     release_lease(&db.sequencer, &d, "a", lease).await.unwrap();
 }
 
-// OP-141 m.20 (b): a prefix scan returns the live keys under the prefix only
+// OP-141 m.20 (b)
 #[tokio::test]
 async fn a_prefix_scan_returns_live_keys_under_it() {
     let db = fresh().await.unwrap();
@@ -163,7 +163,7 @@ async fn new_leader_fences_the_old_one() {
     release_lease(&db.sequencer, &d, "a", old).await.unwrap();
     let (new, _) = acquire_lease(&db.sequencer, &d, "b", TTL).await.unwrap();
     assert!(new.epoch > old.epoch);
-    // TI-2: the old leader's write fails even though its in-memory head is current
+    // TI-2
     let stale = commit_batch(&db.sequencer, &d, TENANT, &batch(old.epoch, &head, 4)).await;
     assert!(matches!(stale, Err(StoreError::HeadMoved)));
     assert!(matches!(
@@ -176,9 +176,7 @@ async fn new_leader_fences_the_old_one() {
         .unwrap();
 }
 
-// OP-149 m.28 (a), OP-31: a live lease is never taken; the asking holder is told to the leader
-// at its renewal, and once the leader releases, the asker has the first claim for one lease
-// length while a third holder still waits; the next acquisition clears the request
+// OP-149 m.28 (a), OP-31
 #[tokio::test]
 async fn a_lease_is_handed_over_on_request() {
     let db = fresh().await.unwrap();
@@ -295,8 +293,7 @@ async fn a_nonce_is_consumed_once() {
     );
 }
 
-// OP-141 m.9, L2-REC-5: require_action leaves a nonce open for the same intent and actor;
-// allow and deny close it
+// OP-141 m.9, L2-REC-5
 #[tokio::test]
 async fn a_nonce_stays_open_only_after_require_action() {
     let db = fresh().await.unwrap();
@@ -362,7 +359,7 @@ async fn append_only_tables_reject_change_at_every_layer() {
         "authority_outbox",
         "proof_store",
     ] {
-        // OP-17 layer 1: the roles hold no UPDATE, DELETE or TRUNCATE
+        // OP-17
         for pool in [&db.app, &db.sequencer] {
             for stmt in [
                 format!("UPDATE access.{table} SET domain_id = domain_id"),
@@ -383,7 +380,7 @@ async fn append_only_tables_reject_change_at_every_layer() {
                 );
             }
         }
-        // OP-17 layers 2 and 3: even the owner is stopped by the triggers
+        // OP-17
         for stmt in [
             format!("UPDATE access.{table} SET domain_id = domain_id"),
             format!("DELETE FROM access.{table}"),
@@ -425,7 +422,7 @@ async fn unscoped_and_cross_domain_reads_see_nothing() {
     let db = fresh().await.unwrap();
     let a = domain(&db, 18).await;
     let b = domain(&db, 20).await;
-    // §12.1.3 test 6: no scope, no rows
+    // §12.1.3 test 6
     for table in [
         "authority_domain",
         "authority_log",
@@ -468,7 +465,7 @@ fn hex(b: &[u8]) -> String {
     })
 }
 
-// TI-4, §17.1.1 step 9: a key read before the batch must still have that version
+// TI-4, §17.1.1 step 9
 #[tokio::test]
 async fn a_changed_read_refuses_the_batch_and_writes_nothing() {
     let db = fresh().await.unwrap();
@@ -492,7 +489,6 @@ async fn a_changed_read_refuses_the_batch_and_writes_nothing() {
         commit_batch(&db.sequencer, &d, TENANT, &stale).await,
         Err(StoreError::Stale)
     ));
-    // a negative read of a collection key is caught the same way
     let mut negative = batch(lease.epoch, &head, 33);
     negative.reads = vec![(b"absent".to_vec(), 0), (b"grants@p1".to_vec(), 1)];
     negative.writes = vec![(b"absent".to_vec(), 2)];
@@ -510,7 +506,7 @@ async fn a_changed_read_refuses_the_batch_and_writes_nothing() {
     assert!(find_nonce(&db.app, &d, &[34; 16]).await.unwrap().is_none());
 }
 
-// §17.1.1 step 9: a draw never takes a counter past the limit the evaluation saw
+// §17.1.1 step 9
 #[tokio::test]
 async fn draws_stop_at_the_limit() {
     let db = fresh().await.unwrap();
@@ -544,7 +540,7 @@ async fn draws_stop_at_the_limit() {
     ));
 }
 
-// G56: a draw that would overflow the counter or does not fit the column commits nothing
+// G56
 #[tokio::test]
 async fn an_overflowing_draw_commits_nothing() {
     let db = fresh().await.unwrap();
@@ -578,7 +574,7 @@ async fn an_overflowing_draw_commits_nothing() {
     assert_eq!(counter(&db.app, &d, b"budget@big").await.unwrap(), 10);
 }
 
-// INV-20: a single-use flag is set once
+// INV-20
 #[tokio::test]
 async fn single_use_flags_are_set_once() {
     let db = fresh().await.unwrap();
@@ -596,7 +592,7 @@ async fn single_use_flags_are_set_once() {
     ));
 }
 
-// OP-73, OP-135: even the owner can only rewrap or shred a body, and shred it once
+// OP-73, OP-135
 #[tokio::test]
 async fn body_rows_allow_only_rewrap_and_one_shred() {
     use access_store::bodies::{put, shred};

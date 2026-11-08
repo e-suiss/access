@@ -47,8 +47,7 @@ fn item(index: u32, status: &str) -> ItemRow {
     }
 }
 
-// TN-125, TN-113, OP-73: one record per item, one end per job, counts on the envelope, hidden
-// after its 7 days and in every other realm, never deleted
+// TN-125, TN-113, OP-73
 #[tokio::test]
 async fn job_results_are_recorded_once_and_expire_softly() {
     let db = fresh().await.unwrap();

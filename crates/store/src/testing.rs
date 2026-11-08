@@ -61,7 +61,6 @@ impl<T> Context<T> for Result<T, sqlx::Error> {
 }
 
 async fn exec(c: &mut PgConnection, sql: String, what: &'static str) -> Result<(), TestDbError> {
-    // The names in `sql` are generated here, never taken from input.
     c.execute(AssertSqlSafe(sql)).await.at(what).map(drop)
 }
 
@@ -369,7 +368,7 @@ mod tests {
 
     const MINUTE: u128 = 60_000_000_000;
 
-    // OP-66, SA-59: a clone someone is connected to is never swept, however old
+    // OP-66, SA-59
     #[test]
     fn only_idle_clones_are_swept() {
         let now = 1_000 * MINUTE;
@@ -380,7 +379,7 @@ mod tests {
         assert!(!sweepable_clone("access_t_x; DROP", now, false));
     }
 
-    // OP-66: idle templates of other migration sets are swept after a day, never the current one
+    // OP-66
     #[test]
     fn stale_templates_are_swept() {
         let day = 86_400.0;

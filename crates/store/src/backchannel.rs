@@ -174,7 +174,7 @@ mod tests {
 
     use super::*;
 
-    // §10.4.6: a notice names its grants and reads back exactly
+    // §10.4.6
     #[test]
     fn payload_round_trips() {
         let grants = [[1_u8; 16], [0xab; 16]];

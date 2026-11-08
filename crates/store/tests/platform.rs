@@ -48,8 +48,7 @@ fn row(challenge: u8, until: u64) -> PairingRow {
     }
 }
 
-// OP-149 m.4, m.16 (a), OP-73: the current pairing is the one that opened an Instance, else the
-// newest valid challenge; an Instance is recorded once, a Party bound once, and nothing deleted
+// OP-149 m.4, m.16 (a), OP-73
 #[tokio::test]
 async fn a_pairing_is_recorded_once_and_kept() {
     // L0-META-7, TN-1
