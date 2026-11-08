@@ -283,7 +283,7 @@ mod tests {
 
     use super::*;
 
-    /// A fresh token in the `SoftHSM` store `just test` prepares (`SOFTHSM2_CONF`, OP-69). Its
+    /// A fresh token in this test process's own `SoftHSM` store (`SOFTHSM2_CONF`, OP-69). Its
     /// handle is never dropped: unloading `SoftHSM` after it used OpenSSL leaves OpenSSL's exit
     /// handler behind in some hosts' loaders, and the test process then crashes at exit.
     fn token() -> &'static KeyStore {

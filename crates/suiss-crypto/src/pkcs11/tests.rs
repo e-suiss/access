@@ -29,7 +29,7 @@ fn token() -> String {
     format!("suiss-test-{}", std::process::id())
 }
 
-/// One token per test process, in the `SoftHSM` store `just test` prepares (`SOFTHSM2_CONF`).
+/// One token per test process, in its own `SoftHSM` store (`SOFTHSM2_CONF`, OP-69).
 fn store() -> &'static KeyStore {
     static STORE: OnceLock<KeyStore> = OnceLock::new();
     STORE.get_or_init(|| {
@@ -180,4 +180,19 @@ fn wrong_token_or_pin_is_refused() {
         KeyStore::open(&module(), &token(), &Secret::new(String::from("wrong"))),
         Err(HsmError::Session(_))
     ));
+}
+
+// OP-69, SA-59: each test process gets a SoftHSM store of its own, so token initialisation in
+// one process never races key writes in another
+#[test]
+fn each_test_process_has_its_own_token_store() {
+    let conf = PathBuf::from(std::env::var_os("SOFTHSM2_CONF").unwrap());
+    let dir = conf.parent().unwrap();
+    assert_eq!(
+        dir.parent().and_then(|p| p.file_name()),
+        Some(std::ffi::OsStr::new("process")),
+        "run the PKCS#11 tests through nextest's softhsm-store wrapper (OP-69)"
+    );
+    let tokens = std::fs::read_to_string(&conf).unwrap();
+    assert!(tokens.contains(&dir.join("tokens").display().to_string()));
 }

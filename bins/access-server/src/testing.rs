@@ -2,7 +2,7 @@
 
 #![allow(clippy::unwrap_used, reason = "test code")]
 
-/// A fresh token in the `SoftHSM` store `just test` prepares (`SOFTHSM2_CONF`, OP-69).
+/// A fresh token in this test process's own `SoftHSM` store (`SOFTHSM2_CONF`, OP-69).
 pub(crate) fn hsm(name: &str) -> (std::path::PathBuf, String) {
     assert!(
         std::env::var_os("SOFTHSM2_CONF").is_some(),

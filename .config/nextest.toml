@@ -1,13 +1,14 @@
 # SA-59
 
-# OP-69: the PKCS#11 tests initialise tokens with softhsm2-util in one shared store, and
-# concurrent initialisations race; they run one at a time
-[test-groups]
-softhsm = { max-threads = 1 }
+experimental = ["wrapper-scripts"]
 
-[[profile.default.overrides]]
-filter = 'package(esuiss-crypto) and test(pkcs11::)'
-test-group = 'softhsm'
+# OP-69: every test process that loads SoftHSM gets a token store of its own
+[scripts.wrapper.softhsm-store]
+command = { command-line = "scripts/softhsm-process.sh", relative-to = "workspace-root" }
+
+[[profile.default.scripts]]
+filter = 'package(esuiss-crypto) | package(access-server) | package(access-signer) | package(access-identity-signer-bin)'
+run-wrapper = 'softhsm-store'
 
 [profile.default]
 # SA-59
