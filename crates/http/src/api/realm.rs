@@ -807,8 +807,8 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             | Invalid::NoWebhook
             | Invalid::NoOrg
             | Invalid::NoMember
-            | Invalid::NoInvitation => &codes::NOT_FOUND,
-            Invalid::NoSocial => &codes::NOT_FOUND,
+            | Invalid::NoInvitation
+            | Invalid::NoSocial => &codes::NOT_FOUND,
         },
         AdminError::Issuer(_) | AdminError::NoRealm => &codes::NOT_FOUND,
         AdminError::Refused(_) => &codes::EXERCISE_REFUSED,
