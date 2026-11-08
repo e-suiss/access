@@ -135,7 +135,7 @@ async fn a_group_keeps_its_one_membership_issuer() {
     assert!(transmitters[0].disabled);
 }
 
-// §12.3.1, TN-49
+// §12.3.1, TN-49, TNI-8
 #[tokio::test]
 async fn an_account_is_suspended_and_reactivated_through_commit() {
     let (w, at, d) = ready("suspend").await;
@@ -158,7 +158,35 @@ async fn an_account_is_suspended_and_reactivated_through_commit() {
     t.commit().await.unwrap();
     let account = w.ids.encode(SUBJECT_PREFIX, subject).unwrap();
     let suspend = compile(Op::SuspendAccount, Some(&account), &json!({}), &w.ids).unwrap();
+    let domain = access_store::scope::DomainId::from_bytes(d.0);
+    let before = access_store::authority::read_head(&w.db.sequencer, &domain)
+        .await
+        .unwrap()
+        .pos;
     written(&run(&w, at, d, suspend.clone(), 1).await.unwrap());
+    // TNI-8, E5
+    let after = access_store::authority::read_head(&w.db.sequencer, &domain)
+        .await
+        .unwrap()
+        .pos;
+    let kinds: Vec<&str> =
+        access_store::authority::read_log(&w.db.sequencer, &domain, before + 1, after)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|r| r.kind)
+            .collect();
+    assert_eq!(
+        kinds.iter().filter(|k| **k == "decision").count(),
+        1,
+        "{kinds:?}"
+    );
+    assert!(
+        kinds
+            .iter()
+            .all(|k| matches!(*k, "opening" | "decision" | "claim")),
+        "authority moved only by the Exercise and Claims: {kinds:?}"
+    );
     let view = w
         .admin()
         .read(at.0, at.1, Kind::Accounts, Some(&account), None, 1)
