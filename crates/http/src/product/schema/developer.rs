@@ -126,7 +126,7 @@ fn management() -> Value {
         "Change": object(
             &json!({
                 "type": { "const": "change" },
-                "position": uint("The decision record's position."),
+                "position": r("Position"),
                 "at": uint("Its trusted time, Unix ms."),
                 "kind": { "type": "string", "enum": ["grant", "anchor", "party", "instance", "mandate", "acceptance", "policy", "authority_set"] },
                 "id": text("The object: an id in base64url, or a role's name."),

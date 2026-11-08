@@ -5,5 +5,6 @@ pub mod app;
 pub mod domain;
 pub mod payload;
 pub mod ports;
+pub mod publication;
 pub mod report;
 pub mod sandbox;

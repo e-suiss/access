@@ -4439,9 +4439,7 @@
             "const": "change"
           },
           "position": {
-            "type": "integer",
-            "minimum": 0,
-            "description": "The decision record's position."
+            "$ref": "#/components/schemas/Position"
           },
           "at": {
             "type": "integer",

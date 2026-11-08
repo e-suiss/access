@@ -29,14 +29,26 @@ pub const AUDIT_EXPORT: &str = "audit_export";
 /// The resource namespace of the audit read and the audit export.
 pub const AUDIT_NAMESPACE: &str = "access.audit";
 
+/// The resource namespace of a publish or a publication status (L1-ADP-18).
+pub const PUBLICATION_NAMESPACE: &str = "access.publication";
+
+/// The publish action (L1-ADP-18).
+pub const PUBLISH: &str = "publish";
+
 /// The resource namespace of a search (L1-ADP-16).
 pub const SEARCH_NAMESPACE: &str = "access.search";
 
 /// The search kinds a draft may name (L1-ADP-16, OP-151 m.13 (d)).
-pub const SEARCH_KINDS: [&str; 7] = [
+pub const SEARCH_KINDS: [&str; 13] = [
     "subject",
     "resource",
     "action",
+    "roles",
+    "role",
+    "admin-grant",
+    "holdings",
+    "changes",
+    "bulk-impact",
     "schema-publications",
     "change-impact",
     "revocation-impact",
@@ -177,6 +189,7 @@ enum Family {
     Export,
     Meta,
     Tenant,
+    Publish,
 }
 
 fn catalogued(namespace: &str, name: &str, major: u64) -> Option<(ActionRef, Family)> {
@@ -187,6 +200,7 @@ fn catalogued(namespace: &str, name: &str, major: u64) -> Option<(ActionRef, Fam
         let family = match name {
             READ => Family::Read,
             AUDIT_EXPORT => Family::Export,
+            PUBLISH => Family::Publish,
             _ if meta::is_meta(namespace, name) => Family::Meta,
             _ => return None,
         };
@@ -251,7 +265,10 @@ fn allowed(family: Family, r: &[ResourceRef], realm: &str) -> bool {
                 || (one.namespace == SEARCH_NAMESPACE
                     && one.path.len() == 1
                     && first.is_some_and(|k| SEARCH_KINDS.contains(&k)))
+                || (one.namespace == PUBLICATION_NAMESPACE && one.path.len() == 1)
         }
+        // L1-ADP-18
+        Family::Publish => one.namespace == PUBLICATION_NAMESPACE && one.path.len() == 1,
         Family::Meta => one.namespace.starts_with("access.") && one.namespace.len() <= MAX_SEGMENT,
         // OP-151 m.20 (a)
         Family::Tenant => tenant_resource(&one.namespace, realm),
@@ -364,6 +381,35 @@ fn payload_and_resources(
     Ok((payload, resources))
 }
 
+/// The intent's `opaque`: a meta payload's digest, or a publish request's package digest
+/// (L1-ADP-17, L1-ADP-18).
+fn opaque_of(
+    family: Family,
+    mode: Mode,
+    o: &Map<String, Value>,
+    payload: Option<&Payload>,
+) -> Result<BTreeMap<String, Digest>, DraftError> {
+    // L1-ADP-18
+    let package = match (family, o.get("package")) {
+        (Family::Publish, Some(p)) if mode == Mode::Check => {
+            crate::adp::publication::draft_of(p).map_err(|_| DraftError::Payload)?;
+            Some(crate::adp::publication::package_digest(p))
+        }
+        (Family::Publish, Some(_)) => return Err(DraftError::Mode),
+        (Family::Publish, None) => return Err(DraftError::Malformed),
+        (_, Some(_)) => return Err(DraftError::Payload),
+        (_, None) => None,
+    };
+    Ok(match (payload, package) {
+        (Some(p), _) => BTreeMap::from([(
+            String::from(meta::PAYLOAD_PARAM),
+            p.digest().map_err(|_| DraftError::Payload)?,
+        )]),
+        (None, Some(d)) => BTreeMap::from([(String::from("package"), d)]),
+        (None, None) => BTreeMap::new(),
+    })
+}
+
 /// [`draft`], and when the action is not this build's, the domain's accepted tenant action
 /// `tenant` with its pinned schema digest, for a `check` on a resource of its namespace only
 /// (OP-151 m.20 (a): the decision lab drafts the domain's accepted tenant actions).
@@ -381,7 +427,7 @@ pub fn draft_with(
     if o.keys().any(|k| {
         !matches!(
             k.as_str(),
-            "action" | "resources" | "params" | "mode" | "payload"
+            "action" | "resources" | "params" | "mode" | "payload" | "package"
         )
     }) {
         return Err(DraftError::Malformed);
@@ -430,13 +476,7 @@ pub fn draft_with(
         .as_ref()
         .map(|p| p.to_bytes().map_err(|_| DraftError::Payload))
         .transpose()?;
-    let opaque = match &payload {
-        Some(p) => BTreeMap::from([(
-            String::from(meta::PAYLOAD_PARAM),
-            p.digest().map_err(|_| DraftError::Payload)?,
-        )]),
-        None => BTreeMap::new(),
-    };
+    let opaque = opaque_of(family, mode, o, payload.as_ref())?;
     let envelope = IntentEnvelope {
         action,
         resources,
@@ -452,11 +492,13 @@ pub fn draft_with(
     };
     let bytes = envelope.to_bytes().map_err(|_| DraftError::Malformed)?;
     // PI-7
-    let probe = (mode == Mode::Check && payload.is_none()).then_some(if family == Family::Idp {
-        ProbeRoot::Idp
-    } else {
-        ProbeRoot::Meta
-    });
+    let probe = (mode == Mode::Check && payload.is_none() && family != Family::Publish).then_some(
+        if family == Family::Idp {
+            ProbeRoot::Idp
+        } else {
+            ProbeRoot::Meta
+        },
+    );
     match IntentEnvelope::from_bytes(&bytes) {
         Ok(back) if back == envelope => Ok(Drafted {
             envelope,

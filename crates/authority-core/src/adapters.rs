@@ -676,6 +676,100 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         Ok(new)
     }
 
+    /// Publishes `draft` as the actor of `inc` and offers it to `domains` (L1-ADP-18,
+    /// §8.17.10.2, E10–E12): the publisher is the Party of the request's `check` AIS on its own
+    /// domain, the previous version is its latest one offered to any of `domains`, and the kept
+    /// package changes none of them (X21). `Ok(Err(_))` is a package refused before it was kept.
+    ///
+    /// # Errors
+    /// [`CoreError::Protocol`] `anonymous` for a request without an AIS; as
+    /// [`Authority::publisher`] and [`Domains::keep_publication`].
+    pub async fn publish(
+        &self,
+        inc: &Incoming,
+        draft: crate::app::publishing::Draft,
+        package: &Digest,
+        domains: &[Digest],
+    ) -> Result<
+        Result<(crate::app::publishing::Published, bool), crate::app::publishing::PublishError>,
+        CoreError,
+    > {
+        let publisher = {
+            let (guard, now) = self.led_now(inc.request.domain).await?;
+            let led = guard.as_ref().ok_or(CoreError::Unavailable("leader"))?;
+            let p = led
+                .core
+                .publisher(inc, &draft.namespace, Some(package), now)
+                .await?;
+            p.map(|p| (p, now))
+        };
+        let Some((publisher, now)) = publisher else {
+            return Err(CoreError::Protocol("anonymous"));
+        };
+        let mut previous: Option<crate::app::publishing::Publication> = None;
+        for d in domains {
+            if let Some(p) = self
+                .latest_publication(*d, publisher, &draft.namespace)
+                .await?
+                && previous
+                    .as_ref()
+                    .is_none_or(|q| q.spp.catalog_version < p.spp.catalog_version)
+            {
+                previous = Some(p);
+            }
+        }
+        let package_kept =
+            match crate::app::publishing::publish(publisher, draft, previous.as_ref(), now) {
+                Ok(p) => p,
+                Err(e) => return Ok(Err(e)),
+            };
+        let new = self.keep_publication(&package_kept, domains).await?;
+        Ok(Ok((package_kept, new)))
+    }
+
+    /// Where the publication `fingerprint` of `namespace` stands in `domains`, for its
+    /// publisher only (L1-ADP-18, X21); `None` when the actor of `inc` published no such package
+    /// to any of them.
+    ///
+    /// # Errors
+    /// [`CoreError::Protocol`] `anonymous` for a request without an AIS; as
+    /// [`Authority::publisher`] and [`Domains::publication_status`].
+    pub async fn own_publication_status(
+        &self,
+        inc: &Incoming,
+        namespace: &str,
+        fingerprint: &Digest,
+        domains: &[Digest],
+    ) -> Result<Option<crate::app::publishing::Status>, CoreError> {
+        let publisher = {
+            let (guard, now) = self.led_now(inc.request.domain).await?;
+            let led = guard.as_ref().ok_or(CoreError::Unavailable("leader"))?;
+            led.core.publisher(inc, namespace, None, now).await?
+        };
+        let Some(publisher) = publisher else {
+            return Err(CoreError::Protocol("anonymous"));
+        };
+        let mut found = None;
+        for d in domains {
+            found = access_store::publications::of_namespace(
+                &self.setup.app,
+                &DomainId::from_bytes(d.0),
+                namespace,
+            )
+            .await?
+            .into_iter()
+            .find(|r| r.fingerprint == fingerprint.0 && r.publisher == publisher.0)
+            .and_then(|r| crate::app::publishing::Publication::from_bytes(&r.package).ok());
+            if found.is_some() {
+                break;
+            }
+        }
+        match found {
+            Some(p) => Ok(Some(self.publication_status(&p, domains).await?)),
+            None => Ok(None),
+        }
+    }
+
     /// The latest package `publisher` offered to `domain` for `namespace`.
     ///
     /// # Errors

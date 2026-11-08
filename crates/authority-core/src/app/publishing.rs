@@ -16,7 +16,7 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 use access_authority_sequencer::ports::DomainLog;
 
 use crate::CoreError;
-use crate::app::Authority;
+use crate::app::{Authority, Incoming};
 use crate::domain::{Snapshot, read};
 use crate::ports::{Binding, Reader, Salts};
 
@@ -742,7 +742,65 @@ pub fn offers(view: &Snapshot, publications: &[Publication], now: u64) -> Vec<Of
         .collect()
 }
 
+/// Digest context of a publish request's package (L1-ADP-18).
+pub const PACKAGE_CONTEXT: &str = "access/schema-package/v1";
+
+/// The core action a publish request's intent names (L1-ADP-18).
+pub const PUBLISH_ACTION: &str = "publish";
+
+/// The core action a status request's intent names (L1-ADP-18).
+pub const STATUS_ACTION: &str = "read";
+
+/// The resource namespace of a publish or status intent; its path is `[namespace]`.
+pub const PUBLICATION_NAMESPACE: &str = "access.publication";
+
+/// The intent member of a publish request that carries the package digest.
+pub const PACKAGE_PARAM: &str = "package";
+
 impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
+    /// The publisher of a publish (`package` given) or status request (L1-ADP-18, §8.17.10.2):
+    /// the Party of the actor of its `check` AIS over `access`/`publish` (or `access`/`read`)
+    /// on `access.publication:[namespace]`, whose `opaque.package` is the package digest of a
+    /// publish and absent from a status. `None` for an anonymous request.
+    ///
+    /// # Errors
+    /// [`CoreError::Protocol`] `publication` for any other intent; [`CoreError::Ais`].
+    pub async fn publisher(
+        &self,
+        inc: &Incoming,
+        namespace: &str,
+        package: Option<&Digest>,
+        now: u64,
+    ) -> Result<Option<Id>, CoreError> {
+        let req = &inc.request;
+        let action = if package.is_some() {
+            PUBLISH_ACTION
+        } else {
+            STATUS_ACTION
+        };
+        let opaque_ok = match package {
+            Some(d) => {
+                req.intent.opaque.len() == 1 && req.intent.opaque.get(PACKAGE_PARAM) == Some(d)
+            }
+            None => req.intent.opaque.is_empty(),
+        };
+        let resource_ok = matches!(
+            req.intent.resources.as_slice(),
+            [r] if r.namespace == PUBLICATION_NAMESPACE && r.path == [namespace]
+        );
+        if req.mode != access_kernel::combinator::Mode::Check
+            || req.payload.is_some()
+            || req.intent.action != access_kernel::meta::core_action(action)
+            || !resource_ok
+            || !opaque_ok
+        {
+            return Err(CoreError::Protocol("publication"));
+        }
+        let digest = access_kernel::intent::intent_digest(&req.intent)
+            .map_err(|_| CoreError::Protocol("intent"))?;
+        Ok(self.actor(inc, &digest, now).await?.map(|a| a.party))
+    }
+
     /// The published versions of `namespace` as this domain sees them (§8.17.10.2), newest
     /// first. A package that does not decode is left out.
     ///

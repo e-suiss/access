@@ -6,8 +6,9 @@ use access_authority_core::app::impact::{
     AbilityChange, CompromiseImpact, Compromised, PolicyChange, RevocationImpact, Revoked,
     RoleChange,
 };
+use access_authority_core::app::management::{BulkImpact, Change, Changed, Holding};
 use access_authority_core::app::publishing::{Offer, ParamClass, Standing};
-use access_authority_core::app::roles::tier_word;
+use access_authority_core::app::roles::{AdminGrant, MetaLine, RoleVersion, tier_word};
 use access_authority_core::query::Report;
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
@@ -38,7 +39,119 @@ pub fn encode(report: &Report) -> Out {
         Report::PolicyChange(c) => policy_change(c),
         Report::Revocation(r) => revocation(r),
         Report::Compromise(c) => compromise(c),
+        Report::Roles(r) => json!({
+            "type": "roles",
+            "roles": r.iter().map(|(name, latest)| json!({ "name": name, "latest": latest })).collect::<Vec<_>>(),
+            "advisory": true,
+        }),
+        Report::Role(r) => role(r),
+        Report::AdminGrant(g) => admin_grant(g),
+        Report::Holding(h) => holding(h),
+        Report::Change(c) => change(c),
+        Report::Bulk(b) => bulk(b),
     }
+}
+
+fn kernel_json(v: Result<Out, crate::adp::payload::PayloadError>) -> Out {
+    v.unwrap_or(Out::Null)
+}
+
+fn role(r: &RoleVersion) -> Out {
+    let catalogs: Vec<Out> = r
+        .not_included
+        .catalogs
+        .iter()
+        .map(|c| {
+            json!({
+                "namespace": c.namespace,
+                "catalog": digest(&c.catalog),
+                "catalog_version": c.catalog_version,
+                "newer": c.newer.iter().map(|a| json_of(&a.to_value())).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    json!({
+        "type": "role",
+        "name": r.name,
+        "version": r.version,
+        "latest": r.latest,
+        "digest": digest(&r.digest),
+        "since": r.since,
+        "authority": kernel_json(crate::adp::payload::authority_set_to_json(&r.authority)),
+        "not_included": {
+            "reserved": r.not_included.reserved.iter().map(|a| json_of(&a.to_value())).collect::<Vec<_>>(),
+            "catalogs": catalogs,
+        },
+        "advisory": true,
+    })
+}
+
+fn meta_line(l: &MetaLine) -> Out {
+    json!({
+        "action": l.action,
+        "tier_when_widening": tier_word(l.tier_when_widening),
+        "grant_quorum": l.grant_quorum,
+        "joint_root_quorum": l.joint_root_quorum,
+    })
+}
+
+fn admin_grant(g: &AdminGrant) -> Out {
+    json!({
+        "type": "admin_grant",
+        "grant": id(&g.grant),
+        "role": g.role.as_ref().map(|(name, version)| json!({ "name": name, "version": version })),
+        "actions": g.actions.iter().map(meta_line).collect::<Vec<_>>(),
+        "reserved": g.reserved.iter().map(meta_line).collect::<Vec<_>>(),
+        "advisory": true,
+    })
+}
+
+fn holding(h: &Holding) -> Out {
+    json!({
+        "type": "holding",
+        "grant": id(&h.grant),
+        "holder": id(&h.holder),
+        "since": h.since,
+        "actions": h.actions.iter().map(|a| json_of(&a.to_value())).collect::<Vec<_>>(),
+        "resource": json_of(&h.resource.to_value()),
+        "advisory": true,
+    })
+}
+
+fn change(c: &Change) -> Out {
+    let (object, version) = match &c.changed {
+        Changed::Object(i) => (id(i), None),
+        Changed::Role { name, version } => (Out::from(name.as_str()), Some(*version)),
+    };
+    json!({
+        "type": "change",
+        "position": c.position.to_string(),
+        "at": c.at,
+        "kind": c.kind.word(),
+        "id": object,
+        "version": version,
+        "ended": c.ended,
+        "own": c.own,
+        "advisory": true,
+    })
+}
+
+fn bulk(b: &BulkImpact) -> Out {
+    json!({
+        "type": "bulk_impact",
+        "revoke": ids(&b.revoke),
+        "items": b.items.iter().map(revocation).collect::<Vec<_>>(),
+        "subtree": ids(&b.subtree),
+        "aftermath": {
+            "grants_ending": b.aftermath.grants_ending,
+            "projections_open": b.aftermath.projections_open,
+            "honoured_until_ms": b.aftermath.honoured_until_ms,
+            "running_copies": b.aftermath.running_copies,
+            "confirmed_applied": b.aftermath.confirmed_applied,
+        },
+        "max_exposure_ms": b.max_exposure_ms,
+        "advisory": true,
+    })
 }
 
 fn publication(o: &Offer) -> Out {

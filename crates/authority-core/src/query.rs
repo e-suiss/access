@@ -15,7 +15,9 @@ use crate::CoreError;
 use crate::app::impact::{
     CompromiseImpact, Compromised, PolicyChange, RevocationImpact, Revoked, RoleChange,
 };
+use crate::app::management::{BulkImpact, Change as Changed, Holding};
 use crate::app::publishing::Offer;
+use crate::app::roles::{AdminGrant, RoleVersion};
 use crate::app::{Authority, Incoming};
 use crate::domain::{Snapshot, accepted_catalog, lineage_hops, read};
 use crate::ports::{Binding, Reader, Salts};
@@ -73,6 +75,32 @@ pub enum Query {
         /// The window.
         window: Window,
     },
+    /// The domain's Named `AuthoritySet`s (C28).
+    Roles,
+    /// One role version with its "Not included" block (§8.17.9.2, E11).
+    Role {
+        /// Name.
+        name: String,
+        /// Version; the latest when absent.
+        version: Option<u64>,
+    },
+    /// An admin Grant's meta-actions one by one (§8.17.9.2).
+    AdminGrant {
+        /// The Grant.
+        grant: Id,
+    },
+    /// The reader's own holdings, each a usable basis (IA-5).
+    Holdings,
+    /// The Changes feed before a position (IA-2).
+    Changes {
+        /// Only changes recorded before it; the newest when absent.
+        before: Option<u64>,
+    },
+    /// The preview of a bulk revoke (E17).
+    BulkImpact {
+        /// The Grants the job revokes.
+        revoke: Vec<Id>,
+    },
 }
 
 /// The change a `change-impact` search previews.
@@ -109,6 +137,18 @@ pub enum Report {
     Revocation(RevocationImpact),
     /// A compromise impact.
     Compromise(CompromiseImpact),
+    /// The domain's roles and their latest versions.
+    Roles(Vec<(String, u64)>),
+    /// One role version.
+    Role(RoleVersion),
+    /// An admin Grant's meta-actions.
+    AdminGrant(AdminGrant),
+    /// One of the reader's holdings.
+    Holding(Holding),
+    /// One row of the Changes feed.
+    Change(Changed),
+    /// A bulk revoke preview.
+    Bulk(BulkImpact),
 }
 
 impl Query {
@@ -123,6 +163,12 @@ impl Query {
             Self::ChangeImpact(_) => "change-impact",
             Self::RevocationImpact { .. } => "revocation-impact",
             Self::CompromiseImpact { .. } => "compromise-impact",
+            Self::Roles => "roles",
+            Self::Role { .. } => "role",
+            Self::AdminGrant { .. } => "admin-grant",
+            Self::Holdings => "holdings",
+            Self::Changes { .. } => "changes",
+            Self::BulkImpact { .. } => "bulk-impact",
         }
     }
 
@@ -135,6 +181,12 @@ impl Query {
                 | Self::ChangeImpact(_)
                 | Self::RevocationImpact { .. }
                 | Self::CompromiseImpact { .. }
+                | Self::Roles
+                | Self::Role { .. }
+                | Self::AdminGrant { .. }
+                | Self::Holdings
+                | Self::Changes { .. }
+                | Self::BulkImpact { .. }
         )
     }
 }
@@ -269,6 +321,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             return Ok(Found::default());
         };
         if query.is_report() {
+            if let (Query::Changes { .. }, Some(a)) = (query, after) {
+                let before = u64::try_from(u128::from_be_bytes(a.0))
+                    .map_err(|_| CoreError::Protocol("page"))?;
+                let paged = Query::Changes {
+                    before: Some(before),
+                };
+                return self.report(&actor, &paged, now).await;
+            }
             return self.report(&actor, query, now).await;
         }
         let candidates = match query {
@@ -364,12 +424,74 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         }
     }
 
+    /// The management reads answered below the auditor line (IA-5, IA-2, OP-152 m.7 (b)): the
+    /// reader's own holdings, the Changes feed at the reader's depth and an admin Grant for its
+    /// holder; `None` for every other kind.
+    async fn viewer_report(
+        &self,
+        actor: &Actor,
+        query: &Query,
+        auditor: bool,
+        now: u64,
+    ) -> Result<Option<Found>, CoreError> {
+        match query {
+            Query::Holdings => {
+                let hits = self
+                    .holdings(actor, now)
+                    .await?
+                    .into_iter()
+                    .map(|h| Hit::Report(Box::new(Report::Holding(h))))
+                    .collect();
+                Ok(Some(Found {
+                    hits,
+                    next: None,
+                    audited: None,
+                }))
+            }
+            Query::Changes { before } => {
+                let (rows, next) = self.changes(actor, auditor, *before).await?;
+                Ok(Some(Found {
+                    hits: rows
+                        .into_iter()
+                        .map(|c| Hit::Report(Box::new(Report::Change(c))))
+                        .collect(),
+                    next: next.map(|p| Id(u128::from(p).to_be_bytes())),
+                    audited: auditor.then_some(actor.instance),
+                }))
+            }
+            Query::AdminGrant { grant } => {
+                let view = self.admin_grant(grant, now).await?;
+                let holder = self
+                    .settled(|snap| {
+                        read::<GrantState>(snap, kind::GRANT, grant).is_some_and(|g| {
+                            g.content.holder == SubjectSelector::Party(actor.party)
+                        })
+                    })
+                    .await?;
+                Ok(Some(Found {
+                    hits: view
+                        .filter(|_| auditor || holder)
+                        .map(|v| Hit::Report(Box::new(Report::AdminGrant(v))))
+                        .into_iter()
+                        .collect(),
+                    next: None,
+                    audited: auditor.then_some(actor.instance),
+                }))
+            }
+            _ => Ok(None),
+        }
+    }
+
     /// A developer-surface report for `actor` (§8.17.10, §5.4, §16.5.1, SEC15): only the
     /// domain's auditors (its meta-anchor root, or a holder of a live Grant naming
     /// `access:audit_export`) get one; anyone else gets nothing, as for a search they may not
     /// see. One page, never recorded as a decision; the stream records each one served.
     async fn report(&self, actor: &Actor, query: &Query, now: u64) -> Result<Found, CoreError> {
-        if !self.audits(&actor.party, now).await? {
+        let auditor = self.audits(&actor.party, now).await?;
+        if let Some(found) = self.viewer_report(actor, query, auditor, now).await? {
+            return Ok(found);
+        }
+        if !auditor {
             return Ok(Found::default());
         }
         let reports: Vec<Report> = match query {
@@ -403,6 +525,16 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             } => vec![Report::Compromise(
                 self.compromise_impact(*compromised, *window).await?,
             )],
+            Query::Roles => vec![Report::Roles(self.roles().await?)],
+            Query::Role { name, version } => self
+                .role(name, *version, now)
+                .await?
+                .map(Report::Role)
+                .into_iter()
+                .collect(),
+            Query::BulkImpact { revoke } => {
+                vec![Report::Bulk(self.bulk_impact(revoke, now).await?)]
+            }
             _ => Vec::new(),
         };
         Ok(Found {

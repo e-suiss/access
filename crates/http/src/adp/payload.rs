@@ -675,6 +675,36 @@ pub fn canonical_authority_to_json(a: &CanonicalAuthority) -> Result<Json, Paylo
     to_json(&CANONICAL, &a.to_value()).ok_or_else(|| fail(""))
 }
 
+/// The `action-schema` `j` names.
+///
+/// # Errors
+/// [`PayloadError`].
+pub fn action_schema_from_json(
+    j: &Json,
+) -> Result<access_kernel::schema::ActionSchema, PayloadError> {
+    access_kernel::schema::ActionSchema::from_bytes(&canonical_bytes(&ACTION_SCHEMA, j)?)
+        .map_err(|_| fail(""))
+}
+
+/// The `action-ref` `j` names.
+///
+/// # Errors
+/// [`PayloadError`].
+pub fn action_ref_from_json(j: &Json) -> Result<access_kernel::model::ActionRef, PayloadError> {
+    access_kernel::model::ActionRef::from_bytes(&canonical_bytes(&ACTION_REF, j)?)
+        .map_err(|_| fail(""))
+}
+
+/// The JSON form of an `action-schema`.
+///
+/// # Errors
+/// [`PayloadError`] when it does not map.
+pub fn action_schema_to_json(
+    a: &access_kernel::schema::ActionSchema,
+) -> Result<Json, PayloadError> {
+    to_json(&ACTION_SCHEMA, &a.to_value()).ok_or_else(|| fail(""))
+}
+
 /// The rules the contract names, as `OpenAPI` component names.
 static RULE_NAMES: [(&T, &str); 17] = [
     (&META_PAYLOAD, "MetaPayload"),

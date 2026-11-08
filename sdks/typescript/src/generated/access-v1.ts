@@ -1149,8 +1149,7 @@ export interface components {
         Change: {
             /** @constant */
             type: "change";
-            /** @description The decision record's position. */
-            position: number;
+            position: components["schemas"]["Position"];
             /** @description Its trusted time, Unix ms. */
             at: number;
             /** @enum {string} */

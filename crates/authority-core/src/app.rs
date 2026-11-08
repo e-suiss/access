@@ -1993,6 +1993,7 @@ pub mod export;
 pub mod impact;
 mod ingest;
 pub mod lab;
+pub mod management;
 pub mod projection;
 mod proofs;
 pub mod publishing;

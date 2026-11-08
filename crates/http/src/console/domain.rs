@@ -115,7 +115,7 @@ pub const RETURNED: [&str; 9] = [
 /// No evaluation is forwarded, so nothing through the BFF is ever recorded or committed.
 #[must_use]
 pub fn adp_read(rest: &str) -> bool {
-    if rest == "explain" || rest == "eligibility:check" {
+    if rest == "explain" || rest == "eligibility:check" || publication(rest) {
         return true;
     }
     rest.strip_prefix("search/").is_some_and(|kind| {
@@ -125,6 +125,13 @@ pub fn adp_read(rest: &str) -> bool {
                 .bytes()
                 .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
     })
+}
+
+/// The schema publication routes (L1-ADP-18): forwarded with the browser's `check` AIS like a
+/// read; a publish changes no domain (X21).
+#[must_use]
+pub fn publication(rest: &str) -> bool {
+    rest == "publications" || rest == "publications:status"
 }
 
 /// Why a forwarded ADP read is refused (TN-128, OP-151 m.12 (e)).
@@ -160,6 +167,10 @@ pub fn adp_read_scope(
     } else if rest == "explain" {
         let (d, _) =
             decode_explain(body, max_len).map_err(|e| ReadRefusal::Malformed(e, Body::Context))?;
+        (d, None)
+    } else if publication(rest) {
+        let d = crate::adp::domain::decode_context(body, max_len)
+            .map_err(|e| ReadRefusal::Malformed(e, Body::Context))?;
         (d, None)
     } else if let Some(kind) = rest.strip_prefix("search/") {
         let (d, _, _) = decode_search(body, max_len, kind)

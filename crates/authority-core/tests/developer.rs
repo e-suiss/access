@@ -17,6 +17,7 @@ use access_authority_core::CoreError;
 use access_authority_core::adapters::PgReader;
 use access_authority_core::app::impact::{Compromised, Revoked};
 use access_authority_core::app::lab::{ADVISORY, Sample};
+use access_authority_core::app::management::Changed;
 use access_authority_core::app::publishing::{self, Draft, Publication, Standing};
 use access_authority_core::app::roles::SetRelation;
 use access_authority_core::app::{Authority, Incoming, Response};
@@ -775,6 +776,84 @@ async fn developer_reports_are_for_the_domains_auditors_only() {
         .await;
     assert!(matches!(wrong_kind, Err(CoreError::Protocol("search"))));
     assert_eq!(core.head(), head);
+}
+
+// IA-2, IA-5, §8.17.9.2, OP-152 m.7 (b), TN-20
+#[tokio::test]
+async fn management_reads_disclose_only_what_the_viewer_may_see() {
+    let db = fresh().await.unwrap();
+    let (mut core, d) = ready(&db).await;
+    define(&mut core, d, 10, &role_set(&["read"], &[])).await;
+    let (grant, holding) = clerk_grant(&mut core, d, 12).await;
+    access_authority_core::adapters::derive(&db.deriver, d)
+        .await
+        .unwrap();
+    let head = core.head();
+    let ask = |seed: u8, nonce: u8, kind: &str| incoming(search_request(d, nonce, kind), seed);
+    let rows = |found: &access_authority_core::query::Found| -> Vec<Changed> {
+        found
+            .hits
+            .iter()
+            .filter_map(|h| match h {
+                Hit::Report(r) => match &**r {
+                    Report::Change(c) => Some(c.changed.clone()),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect()
+    };
+    let changes = Query::Changes { before: None };
+    let root = core
+        .search(&ask(ROOT_KEY, 40, "changes"), &changes, None, NOW)
+        .await
+        .unwrap();
+    let all = rows(&root);
+    assert!(all.contains(&Changed::Role {
+        name: "clerk".to_owned(),
+        version: 1
+    }));
+    assert!(all.contains(&Changed::Object(grant)));
+    let alice = core
+        .search(&ask(ALICE_KEY, 41, "changes"), &changes, None, NOW)
+        .await
+        .unwrap();
+    let mine = rows(&alice);
+    assert!(mine.contains(&Changed::Object(grant)));
+    assert!(mine.contains(&Changed::Object(ALICE)));
+    assert!(!mine.iter().any(|c| matches!(c, Changed::Role { .. })));
+    assert!(!mine.contains(&Changed::Object(ROOT)));
+
+    let holdings = core
+        .search(&ask(ALICE_KEY, 42, "holdings"), &Query::Holdings, None, NOW)
+        .await
+        .unwrap();
+    assert!(holdings.hits.iter().any(|h| matches!(
+        h,
+        Hit::Report(r) if matches!(&**r, Report::Holding(x)
+            if ExerciseBasis::Holding(HoldingRef { grant: x.grant, holder: x.holder, since: x.since }) == holding)
+    )));
+
+    let own = Query::AdminGrant { grant };
+    let own_view = core
+        .search(&ask(ALICE_KEY, 43, "admin-grant"), &own, None, NOW)
+        .await
+        .unwrap();
+    assert_eq!(own_view.hits.len(), 1);
+    let other = Query::AdminGrant {
+        grant: meta::object_id(&d, kind::GRANT, 0),
+    };
+    let not_hers = core
+        .search(&ask(ALICE_KEY, 44, "admin-grant"), &other, None, NOW)
+        .await
+        .unwrap();
+    assert!(not_hers.hits.is_empty());
+    let roles = core
+        .search(&ask(ALICE_KEY, 45, "roles"), &Query::Roles, None, NOW)
+        .await
+        .unwrap();
+    assert!(roles.hits.is_empty());
+    assert_eq!(core.head(), head, "a read writes nothing");
 }
 
 // §9.7, X21

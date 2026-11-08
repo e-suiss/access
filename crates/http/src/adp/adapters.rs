@@ -78,6 +78,11 @@ pub fn router<P: Pdp + 'static>(service: Service<P>, discovery: Discovery) -> Ro
         .route("/access/v1/search/{kind}", post(search::<P>))
         .route("/access/v1/eligibility:check", post(eligibility::<P>))
         .route(crate::audit::EXPORT_PATH, post(audit_export::<P>))
+        .route(crate::adp::publication::PUBLISH_PATH, post(publish::<P>))
+        .route(
+            crate::adp::publication::STATUS_PATH,
+            post(publication_status::<P>),
+        )
         .route(
             "/.well-known/authzen-configuration",
             get(configuration::<P>),
@@ -163,6 +168,26 @@ async fn audit_export<P: Pdp>(
     let result =
         crate::audit::export(&shared.service, &body, pep.map(|axum::Extension(Pep(p))| p)).await;
     crate::audit::respond(result, &headers)
+}
+
+async fn publish<P: Pdp>(
+    State(shared): State<Arc<Shared<P>>>,
+    pep: Option<axum::Extension<Pep>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let pep = pep.map(|axum::Extension(Pep(p))| p);
+    crate::adp::publication::publish(&shared.service, &body, pep, &headers).await
+}
+
+async fn publication_status<P: Pdp>(
+    State(shared): State<Arc<Shared<P>>>,
+    pep: Option<axum::Extension<Pep>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let pep = pep.map(|axum::Extension(Pep(p))| p);
+    crate::adp::publication::status(&shared.service, &body, pep, &headers).await
 }
 
 pub(crate) fn respond(reply: Reply, headers: &HeaderMap) -> Response {
@@ -384,5 +409,25 @@ where
         record: u64,
     ) -> Result<access_authority_core::app::lab::Replay, CoreError> {
         Domains::lab_replay(self, &inc, record).await
+    }
+
+    async fn publish(
+        &self,
+        inc: Incoming,
+        draft: access_authority_core::app::publishing::Draft,
+        package: Digest,
+        domains: Vec<Digest>,
+    ) -> Result<crate::adp::ports::PublishAnswer, CoreError> {
+        Domains::publish(self, &inc, draft, &package, &domains).await
+    }
+
+    async fn publication_status(
+        &self,
+        inc: Incoming,
+        namespace: String,
+        fingerprint: Digest,
+        domains: Vec<Digest>,
+    ) -> Result<Option<access_authority_core::app::publishing::Status>, CoreError> {
+        Domains::own_publication_status(self, &inc, &namespace, &fingerprint, &domains).await
     }
 }

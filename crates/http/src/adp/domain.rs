@@ -490,6 +490,20 @@ fn decode_value(root: &Json) -> R<Decoded> {
     Ok(decoded)
 }
 
+/// Decodes the `context` member of a body that has no `AuthZEN` carriers, such as a
+/// publication request (L1-ADP-18).
+///
+/// # Errors
+/// [`AdpError`] names the protocol error.
+pub fn decode_context(body: &[u8], max_len: usize) -> R<Decoded> {
+    let root = access_kernel::json::parse(body, max_len).map_err(|_| AdpError("json"))?;
+    let mut ctx = Obj::of(root.get("context").ok_or(AdpError("context"))?, "context")?;
+    let intent = intent(ctx.req("intent", "intent")?)?;
+    let decoded = context(&mut ctx, intent)?;
+    ctx.done()?;
+    Ok(decoded)
+}
+
 /// What an eligibility body's `set` may not carry: it is always an anonymous `check`.
 const NOT_IN_SET: [&str; 7] = [
     "mode",
@@ -593,6 +607,35 @@ pub fn decode_search(
             namespace: text(q.req("namespace", "query")?, "query")?,
         },
         "change-impact" => change(&mut q)?,
+        "roles" => Query::Roles,
+        "role" => Query::Role {
+            name: text(q.req("name", "query")?, "query")?,
+            version: q.opt("version").map(|v| uint(v, "query")).transpose()?,
+        },
+        "admin-grant" => Query::AdminGrant {
+            grant: id(q.req("grant", "query")?).map_err(within("query"))?,
+        },
+        "holdings" => Query::Holdings,
+        "changes" => Query::Changes {
+            before: q.opt("before").map(|v| uint(v, "query")).transpose()?,
+        },
+        "bulk-impact" => {
+            let Json::Array(items) = q.req("revoke", "query")? else {
+                return Err(AdpError("query"));
+            };
+            if items.is_empty() || items.len() > access_authority_core::app::management::MAX_BULK {
+                return Err(AdpError("query"));
+            }
+            let revoke = items
+                .iter()
+                .map(|g| id(g).map_err(within("query")))
+                .collect::<R<Vec<_>>>()?;
+            let unique: std::collections::BTreeSet<_> = revoke.iter().collect();
+            if unique.len() != revoke.len() {
+                return Err(AdpError("query"));
+            }
+            Query::BulkImpact { revoke }
+        }
         "revocation-impact" => {
             let revoked = match (q.opt("grant"), q.opt("instance")) {
                 (Some(g), None) => Revoked::Grant(id(g).map_err(within("query"))?),

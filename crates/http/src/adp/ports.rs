@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use access_authority_core::CoreError;
 use access_authority_core::app::lab::{Explanation, Replay};
+use access_authority_core::app::publishing::{Draft, PublishError, Published, Status};
 use access_authority_core::app::{Incoming, Response, Scope};
 use access_authority_core::query::{Hit, Query};
 use access_kernel::digest::Digest;
@@ -83,7 +84,35 @@ pub trait Pdp: Send + Sync {
         let _ = (inc, record);
         std::future::ready(Err(CoreError::Protocol("lab")))
     }
+
+    /// Publishes `draft` as the actor of the `check` `inc` and offers it to `domains`
+    /// (L1-ADP-18, X21); none by default.
+    fn publish(
+        &self,
+        inc: Incoming,
+        draft: Draft,
+        package: Digest,
+        domains: Vec<Digest>,
+    ) -> impl Future<Output = Result<PublishAnswer, CoreError>> + Send {
+        let _ = (inc, draft, package, domains);
+        std::future::ready(Err(CoreError::Protocol("publication")))
+    }
+
+    /// Where the caller's own publication stands in `domains` (L1-ADP-18); none by default.
+    fn publication_status(
+        &self,
+        inc: Incoming,
+        namespace: String,
+        fingerprint: Digest,
+        domains: Vec<Digest>,
+    ) -> impl Future<Output = Result<Option<Status>, CoreError>> + Send {
+        let _ = (inc, namespace, fingerprint, domains);
+        std::future::ready(Err(CoreError::Protocol("publication")))
+    }
 }
+
+/// A publish answer: kept (and whether newly), or refused before anything was kept.
+pub type PublishAnswer = Result<(Published, bool), PublishError>;
 
 /// Results and the next page token.
 pub type Page = (Vec<Hit>, Option<String>);
@@ -140,5 +169,25 @@ impl<P: Pdp> Pdp for Arc<P> {
         record: u64,
     ) -> impl Future<Output = Result<Replay, CoreError>> + Send {
         (**self).lab_replay(inc, record)
+    }
+
+    fn publish(
+        &self,
+        inc: Incoming,
+        draft: Draft,
+        package: Digest,
+        domains: Vec<Digest>,
+    ) -> impl Future<Output = Result<PublishAnswer, CoreError>> + Send {
+        (**self).publish(inc, draft, package, domains)
+    }
+
+    fn publication_status(
+        &self,
+        inc: Incoming,
+        namespace: String,
+        fingerprint: Digest,
+        domains: Vec<Digest>,
+    ) -> impl Future<Output = Result<Option<Status>, CoreError>> + Send {
+        (**self).publication_status(inc, namespace, fingerprint, domains)
     }
 }

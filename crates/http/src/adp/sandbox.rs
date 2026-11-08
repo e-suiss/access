@@ -151,6 +151,28 @@ impl<P: Pdp, R: Regimes> Pdp for SandboxLine<P, R> {
     ) -> Result<access_authority_core::app::lab::Replay, CoreError> {
         self.inner.lab_replay(inc, record).await
     }
+
+    async fn publish(
+        &self,
+        inc: Incoming,
+        draft: access_authority_core::app::publishing::Draft,
+        package: Digest,
+        domains: Vec<Digest>,
+    ) -> Result<crate::adp::ports::PublishAnswer, CoreError> {
+        self.inner.publish(inc, draft, package, domains).await
+    }
+
+    async fn publication_status(
+        &self,
+        inc: Incoming,
+        namespace: String,
+        fingerprint: Digest,
+        domains: Vec<Digest>,
+    ) -> Result<Option<access_authority_core::app::publishing::Status>, CoreError> {
+        self.inner
+            .publication_status(inc, namespace, fingerprint, domains)
+            .await
+    }
 }
 
 #[cfg(test)]
