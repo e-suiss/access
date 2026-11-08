@@ -571,8 +571,52 @@ async fn a_recovered_successor_is_bound_by_its_recovery_result() {
         vec![String::from("recovery-too-weak")],
         "{still:?}"
     );
-    let later = bind(&c, &successor, party, succ, BTreeSet::new()).await;
+    // INV-40, OP-153 m.16 (d)
+    let mut authority = access_authority_core::genesis::bootstrap_authority();
+    authority
+        .authority
+        .actions
+        .exact
+        .insert(access_kernel::meta::core_action("mandate_rebind"));
+    let envelope = |requirements: BTreeSet<RequirementTerm>| MandateEnvelope {
+        authority: authority.authority.clone(),
+        constraints: authority.constraints.clone(),
+        requirements,
+        pin: None,
+    };
+    let later = commit(
+        &c,
+        &successor,
+        party,
+        Payload::MandateBind {
+            instance: succ,
+            envelope: envelope(BTreeSet::new()),
+        },
+    )
+    .await;
     assert_eq!(subcodes(&later).0, Some(Outcome::Allow), "{later:?}");
+    let Verdict::Committed(bound) = &later else {
+        panic!("{later:?}");
+    };
+    let mandate = access_kernel::meta::object_id(&bound.exercise, kind::MANDATE, 0);
+    let weak_rebind = commit(
+        &c,
+        &successor,
+        party,
+        Payload::MandateRebind {
+            mandate,
+            envelope: envelope(BTreeSet::from([phishing_resistant()])),
+        },
+    )
+    .await;
+    assert_eq!(
+        subcodes(&weak_rebind),
+        (
+            Some(Outcome::RequireAction),
+            vec![String::from("recovery-too-weak")]
+        ),
+        "{weak_rebind:?}"
+    );
 }
 
 const DAY_MS: u64 = 86_400_000;
