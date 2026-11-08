@@ -35,7 +35,7 @@ fn fixture() -> (Vec<u8>, Vec<u8>, Vec<u8>, RegistrationState) {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(512))]
 
-    // CR-10 m.4: mutated registrations are rejected or accepted, never a panic
+    // CR-10 m.4
     #[test]
     fn mutated_attestation_objects_never_panic(
         edits in proptest::collection::vec((any::<usize>(), any::<u8>()), 1..8),

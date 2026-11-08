@@ -33,10 +33,7 @@ fn response(a: &access_identity_webauthn::domain::software::Assertion) -> Assert
     }
 }
 
-// §10.2.4, §13.7.3, OP-149 m.26 (e): the software passkey registers with none attestation as a
-// device-bound EdDSA credential under the fixed AAGUID, asserts with UP and UV over the given
-// challenge with no counter, and a signature by another key or over another challenge is
-// refused like any authenticator's
+// §10.2.4, §13.7.3, OP-149 m.26 (e)
 #[test]
 fn the_software_passkey_passes_the_real_ceremonies() {
     let pair = key();
@@ -95,14 +92,13 @@ fn the_software_passkey_passes_the_real_ceremonies() {
     assert!(verified.assurance.user_verified);
     assert_eq!(verified.assurance.binding, Binding::DeviceBound);
     assert_eq!(verified.sign_count, 0);
-    // a second assertion with no counter is still accepted (both zero, §10.2.4)
+    // §10.2.4
     let again = passkey
         .assertion(RP_ID, ORIGIN, &statement, |m| {
             Ok::<_, ()>(pair.sign(m).as_ref().to_vec())
         })
         .unwrap();
     verify_assertion(&rp(), &policy, &auth, &response(&again), &record, NOW).unwrap();
-    // another key's signature, or the right key over another challenge, is refused
     let other = key();
     let forged = passkey
         .assertion(RP_ID, ORIGIN, &statement, |m| {

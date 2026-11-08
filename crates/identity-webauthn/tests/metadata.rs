@@ -89,7 +89,7 @@ fn key_with(attestation: Attestation) -> Authenticator {
     a
 }
 
-// OP-146 m.4 (d), §10.2.4 attestation row: MDS 3.x blob verified with webpki + RS256
+// OP-146 m.4 (d), §10.2.4
 #[test]
 fn metadata_blob_verification() {
     let signer = MdsSigner::new();
@@ -145,7 +145,7 @@ fn metadata_blob_verification() {
     );
 }
 
-// OP-146 m.4 (d): the fetch job keeps the newest blob; rollback is refused; stale fails closed
+// OP-146 m.4 (d)
 #[tokio::test]
 async fn refresh_job_with_file_source() {
     let dir = std::env::temp_dir().join(format!("access-mds-{}", std::process::id()));
@@ -184,7 +184,7 @@ async fn refresh_job_with_file_source() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-// §10.2.4 attestation row: consumer realms request none and never trust attestation
+// §10.2.4
 #[test]
 fn none_policy_never_trusts_attestation() {
     let policy = RealmPolicy::default();
@@ -200,7 +200,7 @@ fn none_policy_never_trusts_attestation() {
     );
 }
 
-// §10.2.4, OP-146 m.4 (d): direct + MDS + AAGUID allowlist; stale metadata fails closed
+// §10.2.4, OP-146 m.4 (d)
 #[test]
 fn direct_policy_requires_verified_packed_attestation() {
     let attester = Attester::new(KEY_MODEL, "Authenticator Attestation");
@@ -248,7 +248,7 @@ fn direct_policy_requires_verified_packed_attestation() {
     );
 }
 
-// §10.2.4: a revoked or compromised model is refused
+// §10.2.4
 #[test]
 fn compromised_models_are_refused() {
     let attester = Attester::new(KEY_MODEL, "Authenticator Attestation");
@@ -260,7 +260,7 @@ fn compromised_models_are_refused() {
     );
 }
 
-// WebAuthn L3 §8.2.1 certificate requirements: OU and the AAGUID extension
+// L3 §8.2.1
 #[test]
 fn attestation_certificate_requirements() {
     let wrong_ou = Attester::new(KEY_MODEL, "Something Else");

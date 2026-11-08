@@ -161,7 +161,7 @@ async fn es256_device_bound_passkey_registers_and_authenticates_at_aal3() {
     assert_eq!(stored.last_used_at, Some(NOW));
 }
 
-// IDP-8, §10.2.4 algorithms, CR-5, CR-9
+// IDP-8, §10.2.4, CR-5, CR-9
 #[tokio::test]
 async fn every_accepted_algorithm_round_trips() {
     for key in [
@@ -189,7 +189,7 @@ async fn every_accepted_algorithm_round_trips() {
     }
 }
 
-// §10.2.4: RS256 only where the realm allows legacy authenticators
+// §10.2.4
 #[tokio::test]
 async fn rs256_can_be_refused_by_policy() {
     let s = service();
@@ -271,7 +271,7 @@ async fn registration_waits_for_a_pinned_rp_id() {
     assert_eq!(out, RegistrationOutcome::Rejected(Rejection::RpIdNotPinned));
 }
 
-// TN-18, §10.2.4: subdomains and declared related origins only
+// TN-18, §10.2.4
 #[tokio::test]
 async fn origins_are_bound_to_the_rp() {
     let policy = RealmPolicy::default();
@@ -302,7 +302,7 @@ async fn origins_are_bound_to_the_rp() {
     }
 }
 
-// §10.2.4: challenge, ceremony type, cross-origin and RP ID hash
+// §10.2.4
 #[tokio::test]
 async fn client_data_and_rp_id_hash_are_checked() {
     let s = service();
@@ -366,7 +366,7 @@ async fn client_data_and_rp_id_hash_are_checked() {
     );
 }
 
-// §10.2.4 UV row: CT2+/AAL2+ need UV = 1; MD-11
+// §10.2.4 UV, MD-11
 #[tokio::test]
 async fn user_verification_policy() {
     let s = service();
@@ -430,7 +430,7 @@ async fn user_verification_policy() {
     assert_eq!((assurance.aal, assurance.ct), (Aal::Aal1, CtCeiling::Ct1));
 }
 
-// §10.2.4 conditional create: UP may be 0 only there
+// §10.2.4
 #[tokio::test]
 async fn user_presence_is_required_outside_conditional_create() {
     let s = service();
@@ -474,7 +474,7 @@ async fn user_presence_is_required_outside_conditional_create() {
     );
 }
 
-// IDI-5: BE never changes, BE = 0 with BS = 1 is invalid, BS changes are signals; TN-63
+// IDI-5, TN-63
 #[tokio::test]
 async fn backup_flags() {
     let policy = RealmPolicy::default();
@@ -539,7 +539,7 @@ async fn backup_flags() {
     );
 }
 
-// §10.2.4 sign count row, K14 sign-count signal
+// §10.2.4, K14
 #[tokio::test]
 async fn sign_count_policy() {
     assert!(sign_count_regressed(false, 5, 5));
@@ -603,7 +603,7 @@ async fn sign_count_policy() {
     ));
 }
 
-// §10.2.4: the ceremony state expires; a credential is registered once
+// §10.2.4
 #[tokio::test]
 async fn expiry_and_duplicates() {
     let s = service();
@@ -643,7 +643,7 @@ async fn expiry_and_duplicates() {
     assert_eq!(rejected(&out), Some(Rejection::Expired));
 }
 
-// TN-96, TN-97, §12.4.1: empty allowCredentials on the passkey path, deterministic decoys
+// TN-96, TN-97, §12.4.1
 #[tokio::test]
 async fn passkey_enumeration_protection() {
     let s = service();
@@ -709,7 +709,7 @@ async fn passkey_enumeration_protection() {
     );
 }
 
-// TN-96: the discoverable path needs the user handle; it must match the credential's account
+// TN-96
 #[tokio::test]
 async fn user_handle_rules() {
     let s = service();
@@ -745,7 +745,7 @@ async fn user_handle_rules() {
     }
 }
 
-// OP-73: a soft-deleted credential no longer authenticates and stays in the registry
+// OP-73
 #[tokio::test]
 async fn soft_deleted_credentials_are_unknown() {
     let s = service();
@@ -770,7 +770,7 @@ async fn soft_deleted_credentials_are_unknown() {
     assert_eq!(s.registry.list(REALM, &ALICE).await.unwrap(), []);
 }
 
-// §10.2.4 PRF row: salts and prf.enabled only, output never stored; credProps.rk
+// §10.2.4 PRF
 #[tokio::test]
 async fn prf_and_cred_props() {
     let ext = ClientExtensionResults::from_json(
@@ -800,7 +800,7 @@ async fn prf_and_cred_props() {
     assert!(ClientExtensionResults::from_json(&[b'['; 64]).is_err());
 }
 
-// TN-63, MKT-D7 independence groups; §10.2.5 hardware keys
+// TN-63, §10.2.5
 #[tokio::test]
 async fn independence_groups_and_hardware_keys() {
     let s = service();
