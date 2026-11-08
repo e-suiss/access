@@ -211,7 +211,7 @@ fn sliced(prefix: &[&str], class: crate::validity::ProfileClass) -> Payload {
     }
 }
 
-// C11, C15, INV-3, OP-141 m.3: the root grants, a holder delegates only within its holding
+// C11, C15, INV-3, OP-141 m.3
 #[test]
 fn root_grants_and_holders_delegate_within() {
     let mut r = Run::new();
@@ -242,7 +242,6 @@ fn root_grants_and_holders_delegate_within() {
         .unwrap();
     let g2 = object_id(&ex2, kind::GRANT, 0);
     assert_eq!(r.grant(&g2).content.holder, SubjectSelector::Party(BOB));
-    // wider than the parent, or not further delegable
     assert_eq!(
         r.act(
             ALICE,
@@ -266,7 +265,6 @@ fn root_grants_and_holders_delegate_within() {
         ),
         Err(MetaError::NotWithin)
     );
-    // someone else's holding, or a root that is not the actor
     assert_eq!(
         r.act(
             BOB,
@@ -287,7 +285,7 @@ fn root_grants_and_holders_delegate_within() {
     );
 }
 
-// C17, CI-4, OP-141 m.3: upstream holders and the root revoke; the holder renounces; nobody else
+// C17, CI-4, OP-141 m.3
 #[test]
 fn revoke_and_renounce_powers() {
     let mut r = Run::new();
@@ -324,11 +322,10 @@ fn revoke_and_renounce_powers() {
         r.act(BOB, BOB, basis, &Payload::GrantRevoke { grant: g1 }),
         Err(MetaError::NotAuthorized)
     );
-    // Alice holds the Grant above g2
     r.act(ALICE, ALICE, basis, &Payload::GrantRevoke { grant: g2 })
         .unwrap();
     assert_eq!(r.grant(&g2).ended.map(|e| e.how), Some(EndedHow::Revoked));
-    // terminal: no second revoke, no renounce (INV-5)
+    // INV-5
     assert_eq!(
         r.act(ROOT, ROOT, basis, &Payload::GrantRevoke { grant: g2 }),
         Err(MetaError::Ended)
@@ -338,7 +335,7 @@ fn revoke_and_renounce_powers() {
     assert_eq!(r.grant(&g1).ended.map(|e| e.how), Some(EndedHow::Renounced));
 }
 
-// C16: an amend keeps the GrantID, counts revisions and says whether it widens
+// C16
 #[test]
 fn amend_narrows_or_widens_within_the_parent() {
     let mut r = Run::new();
@@ -369,7 +366,7 @@ fn amend_narrows_or_widens_within_the_parent() {
     assert_eq!(r.grant(&g1).revision, 2);
 }
 
-// INV-4: a Grant can carry only OWN and FOR(principal)
+// INV-4
 #[test]
 fn agency_is_continuous() {
     let mut r = Run::new();
@@ -395,7 +392,7 @@ fn p256_key(seed: u8) -> PublicKey {
     )
 }
 
-// OP-149 m.8: the actor kind is recorded at registration and decides actor_is_agent
+// OP-149 m.8
 #[test]
 fn the_actor_kind_is_recorded_and_decides_agency() {
     let public = ExerciseBasis::Public(Id([9; 16]));
@@ -423,7 +420,7 @@ fn the_actor_kind_is_recorded_and_decides_agency() {
     assert_eq!(ActorKind::parse("robot"), None);
 }
 
-// OP-149 m.8: a registration without an actor kind, or with an unknown one, is malformed
+// OP-149 m.8
 #[test]
 fn a_registration_names_a_known_actor_kind() {
     let register = Payload::PartyRegister {
@@ -450,7 +447,7 @@ fn a_registration_names_a_known_actor_kind() {
     assert!(Payload::from_value(&Value::Map(outer)).is_err());
 }
 
-// OP-149 m.6, L0-SIG-4: an Instance key is Ed25519 or P-256; an ML-DSA key is not one
+// OP-149 m.6, L0-SIG-4, P-256
 #[test]
 fn instance_keys_are_ed25519_or_p256() {
     let create = |key: PublicKey| Payload::InstanceCreate {
@@ -475,8 +472,7 @@ fn instance_keys_are_ed25519_or_p256() {
     assert!(Payload::from_value(&create(off).to_value()).is_err());
 }
 
-// E6, §7.9.2.3, OP-141 m.2, m.4: a Party registers itself with its self-anchor, then creates its
-// own Instance; neither can be done for someone else
+// E6, §7.9.2.3, OP-141 m.2, m.4
 #[test]
 fn register_then_create_own_instance() {
     let mut r = Run::new();
@@ -522,7 +518,6 @@ fn register_then_create_own_instance() {
     let i: InstanceState = read(&r.state, kind::INSTANCE, &instance_now).unwrap();
     assert_eq!((i.party, i.key), (ALICE, key));
 
-    // only the Party's own Instance terminates it without a further power
     let term = Payload::InstanceTerminate {
         instance: instance_now,
     };
@@ -535,7 +530,7 @@ fn register_then_create_own_instance() {
     assert_eq!(i.ended.map(|e| e.how), Some(EndedHow::Terminated));
 }
 
-// C10: transfer and retire must dispose of exactly the live dependent Grants
+// C10
 #[test]
 fn anchor_changes_need_a_complete_disposition() {
     let mut r = Run::new();
@@ -591,7 +586,7 @@ fn anchor_changes_need_a_complete_disposition() {
     );
 }
 
-// C9, C26: a joint root acts with k−1 further contributions; root terms are added
+// C9, C26
 #[test]
 fn joint_roots_require_contributions() {
     // INV-10
@@ -619,7 +614,7 @@ fn joint_roots_require_contributions() {
         .unwrap();
     let term = out.requirements.iter().next().unwrap();
     assert_eq!((term.class.as_str(), term.count), ("co_root", 1));
-    // §13.7.3, OP-141 m.43: a CT3 meta-action asks two of the other principals
+    // §13.7.3, OP-141 m.43
     let nested = Payload::AnchorCreate {
         scope: AnchorScope::Resource(shop(&["eu", "fr"])),
         root: Root::Sole(BOB),
@@ -628,7 +623,6 @@ fn joint_roots_require_contributions() {
     let (_, out) = r.act(BOB, BOB, ExerciseBasis::Anchor(eu), &nested).unwrap();
     let term = out.requirements.iter().next().unwrap();
     assert_eq!((term.class.as_str(), term.count), ("co_root", 2));
-    // a nested Anchor stays inside its covering scope
     let outside = Payload::AnchorCreate {
         scope: AnchorScope::Resource(shop(&[])),
         root: Root::Sole(ALICE),
@@ -640,7 +634,7 @@ fn joint_roots_require_contributions() {
     );
 }
 
-// OP-141 m.6, m.13: identifiers and the payload digest are deterministic and payloads round-trip
+// OP-141 m.6, m.13
 #[test]
 fn identifiers_and_payload_round_trip() {
     let p = issue(ALICE, GrantBasis::Anchor(shop_anchor()), &["eu"], 1);
@@ -659,7 +653,7 @@ fn identifiers_and_payload_round_trip() {
     assert!(Payload::from_value(&tagged("grant_explode", map([]))).is_err());
 }
 
-// L0-META-30: a contribution records who contributed to which intent, under its ExerciseID
+// L0-META-30
 #[test]
 fn a_contribution_is_recorded_under_its_exercise() {
     let mut r = Run::new();
@@ -785,8 +779,7 @@ fn release_of(exercise: Digest, grounds: &[u8]) -> Payload {
     }
 }
 
-// OP-141 m.28: a lower actual amount returns the rest of an amount draw, a non-execution the
-// rest of every draw; a ground is used once and Σrelease never exceeds the draw
+// OP-141 m.28
 #[test]
 fn a_release_returns_at_most_the_draw() {
     // TI-RT8, G3, MUST-NEVER-5
@@ -856,8 +849,7 @@ fn pinned_issue(prefix: &[&str], pin: NamedPin) -> Payload {
     )
 }
 
-// OP-141 m.32: a named AuthoritySet is versioned; a Grant pins a version by digest and stays
-// within it; a new version changes no Grant until it is re-pinned
+// OP-141 m.32
 #[test]
 fn a_grant_pins_a_named_authority_set_version() {
     let mut r = Run::new();
@@ -915,7 +907,7 @@ fn a_grant_pins_a_named_authority_set_version() {
     assert_eq!(r.grant(&g).content.named, Some(v2));
 }
 
-// OP-141 m.34 (d): Genesis may set the CT3 time-lock; any other policy field is malformed
+// OP-141 m.34 (d)
 #[test]
 fn genesis_sets_the_ct3_time_lock() {
     let mut fields = BTreeMap::new();
@@ -936,7 +928,7 @@ fn genesis_sets_the_ct3_time_lock() {
     assert!(genesis_effects(&DOMAIN, &fields).is_err());
 }
 
-// L0-META-5, L0-META-27: Acceptances are indexed by issuer; a domain Claim names its issuer
+// L0-META-5, L0-META-27
 #[test]
 fn acceptances_are_indexed_by_issuer() {
     let mut r = Run::new();
@@ -988,7 +980,7 @@ fn acceptances_are_indexed_by_issuer() {
     assert_eq!((c.statement.issuer, c.statement.subject), (ROOT, ALICE));
 }
 
-// OP-141 m.20 (e), CI-11, EI-1: a group has one membership issuer
+// OP-141 m.20 (e), CI-11, EI-1
 #[test]
 fn a_group_has_one_membership_issuer() {
     let mut r = Run::new();
@@ -1021,7 +1013,7 @@ fn a_group_has_one_membership_issuer() {
     r.act(ROOT, ROOT, meta, &selection(BOB, "guests")).unwrap();
 }
 
-// OP-143 m.7, L0-META-35: a projection records itself, is CT1 and ends within a day
+// OP-143 m.7, L0-META-35
 #[test]
 fn projection_records_and_caps_the_horizon() {
     let mut r = Run::new();
@@ -1188,7 +1180,6 @@ impl Recorder {
     }
 }
 
-// L0-META-*: the scripted run, byte for byte
 #[test]
 #[allow(
     clippy::too_many_lines,
@@ -1557,8 +1548,7 @@ fn meta_vectors_match() {
             class: String::from("approve"),
         },
     );
-    // L0-META-27, L0-META-28, L0-META-29, L0-META-31: the domain objects, their indexes and
-    // reasons, so that F0 cross-checks them
+    // L0-META-27, L0-META-28, L0-META-29, L0-META-31
     let meta = ExerciseBasis::Anchor(meta_anchor(&DOMAIN));
     let acceptance = |issuer: Id, use_: &str, classes: &[&str], until: u64| {
         map([
@@ -1625,8 +1615,7 @@ fn meta_vectors_match() {
             content: acceptance(CAROL, "predicate-input", &["staff"], 50),
         },
     );
-    // OP-143 m.13 (a): a foreign-authority Acceptance names a foreign domain and its pinned
-    // binding keys, joins that domain's index and keeps its pins; no other pairing decodes
+    // OP-143 m.13 (a)
     let pinned = |seed: u8| {
         let key = crate::verify::cose::PublicKey::Ed25519(
             ed25519_dalek::SigningKey::from_bytes(&[seed; 32])
@@ -1731,7 +1720,7 @@ fn meta_vectors_match() {
             "foreign-authority",
         )),
     );
-    // OP-141 m.35: a schema-definition Acceptance carries its SPP and joins its namespace's index
+    // OP-141 m.35
     let with_spp = |namespace: &str| {
         let spp = crate::schema::Spp {
             publisher: CAROL,
@@ -1848,7 +1837,7 @@ fn meta_vectors_match() {
             acceptance: Id([9; 16]),
         },
     );
-    // L0-META-5, L0-META-27: a policy joins its target's index and moves with it
+    // L0-META-5, L0-META-27
     let policy = |target: Value, schema: &str| {
         map([
             ("schema", Some(Value::text(schema))),
@@ -1891,7 +1880,7 @@ fn meta_vectors_match() {
             content: policy(Value::text("domain"), "cedar"),
         },
     );
-    // L0-META-22, L0-META-23: rekey, recover and departure
+    // L0-META-22, L0-META-23
     let key_of = |seed: u8| {
         PublicKey::Ed25519(
             ed25519_dalek::SigningKey::from_bytes(&[seed; 32])
@@ -1935,7 +1924,7 @@ fn meta_vectors_match() {
             key: key_of(8),
         },
     );
-    // OP-141 m.32: named AuthoritySets
+    // OP-141 m.32
     let eu = authority(&["eu"], 0, 1_000).authority;
     r.step(
         "authority-set-define",
@@ -2012,7 +2001,7 @@ fn meta_vectors_match() {
             authority_set_digest(&all),
         ))),
     );
-    // OP-141 m.28: releases
+    // OP-141 m.28
     let (ex, _) = r
         .run
         .act(
@@ -2059,7 +2048,7 @@ fn meta_vectors_match() {
         meta,
         &release_of(spending, &[22]),
     );
-    // OP-143 m.7: projections
+    // OP-143 m.7
     r.run.now = 1_000;
     let held = |r: &mut Recorder, holder: Id, depth: u64, until: u64| {
         let (ex, _) = r
@@ -2407,7 +2396,7 @@ fn projection_of(bounds: CanonicalAuthority) -> Payload {
     }
 }
 
-// OP-141 m.6, m.13: every meta-action of the closed list round-trips through its CBOR form
+// OP-141 m.6, m.13
 #[test]
 #[allow(
     clippy::too_many_lines,
@@ -2535,7 +2524,7 @@ fn every_payload_round_trips() {
     assert_eq!(names.len(), NAMES.len());
 }
 
-// C10, E6: a dependent Grant is either kept or revoked; no other disposition exists
+// C10, E6
 #[test]
 fn a_disposition_is_keep_or_revoke() {
     let pair =
@@ -2553,7 +2542,7 @@ fn a_disposition_is_keep_or_revoke() {
     }
 }
 
-// OP-143 m.12: an offline slice asks for a non-zero count, non-zero amounts, or both
+// OP-143 m.12
 #[test]
 fn an_offline_slice_asks_for_something() {
     let slice = |count: Option<u64>, amounts: &[(&str, u64)]| SliceRequest {
@@ -2585,7 +2574,7 @@ fn an_offline_slice_asks_for_something() {
     }
 }
 
-// C9: a joint root names at least two Parties and a quorum k with 1 ≤ k ≤ n
+// C9
 #[test]
 fn a_joint_root_has_a_reachable_quorum() {
     let joint = |parties: &[Id], k: u64| Root::Joint {
@@ -2610,7 +2599,7 @@ fn a_joint_root_has_a_reachable_quorum() {
     }
 }
 
-// L0-META-10: a member of a joint root of k acts with k − 1 co-root contributions; others are no root
+// L0-META-10
 #[test]
 fn joint_root_requirements_count_the_other_members() {
     let anchor = |parties: &[Id], k: u64| AnchorState {
@@ -2641,7 +2630,7 @@ fn joint_root_requirements_count_the_other_members() {
     assert_eq!(root_requirements(&any, &actor(CAROL)), None);
 }
 
-// §7.9.2.3: a self-anchor covers the `access.party` resources named by the PartyID in hex
+// §7.9.2.3
 #[test]
 fn a_self_anchor_covers_its_party_resources() {
     let party = Id([
@@ -2666,7 +2655,7 @@ fn acceptance(issuer: Id, use_: &str, class: &str) -> Vec<(&'static str, Option<
     ]
 }
 
-// OP-141 m.21 (a): an Acceptance names a known use and a quota of non-zero count and window
+// OP-141 m.21 (a)
 #[test]
 fn an_acceptance_names_a_known_use_and_a_positive_quota() {
     assert!(acceptance_content(&map(acceptance(CAROL, "predicate-input", "kyc"))).is_ok());
@@ -2690,7 +2679,7 @@ fn an_acceptance_names_a_known_use_and_a_positive_quota() {
     assert_eq!(quota(1_000, 0), Err(ModelError::Range));
 }
 
-// OP-141 m.28, L1-ADP-13: an Exercise without draws omits them; an empty draw list is not canonical
+// OP-141 m.28, L1-ADP-13
 #[test]
 fn an_exercise_without_draws_omits_them() {
     let base = || {
@@ -2729,7 +2718,7 @@ fn genesis_fields() -> BTreeMap<String, Value> {
     fields
 }
 
-// C4, OP-141 m.6: a Genesis Grant derives from one of the Genesis Anchors, named by index
+// C4, OP-141 m.6
 #[test]
 fn genesis_grants_derive_from_a_genesis_anchor() {
     let grant_on = |index: u64| {
@@ -2761,8 +2750,7 @@ fn genesis_grants_derive_from_a_genesis_anchor() {
     );
 }
 
-// L0-META-5, OP-141 m.20 (e): Genesis indexes subject-selection Acceptances by class; one issuer
-// per class
+// L0-META-5, OP-141 m.20 (e)
 #[test]
 fn genesis_selection_acceptances_have_one_issuer_per_class() {
     let with = |list: Vec<Value>| {
@@ -2800,8 +2788,7 @@ fn genesis_selection_acceptances_have_one_issuer_per_class() {
     );
 }
 
-// C10, OP-141 m.3: the root transfers or amends the Anchor it acts on; KEEP leaves a dependent
-// Grant live on transfer; an amend that drops root terms or changes the root widens
+// C10, OP-141 m.3
 #[test]
 fn anchor_transfer_and_amend_act_on_the_named_anchor() {
     let mut r = Run::new();
@@ -2844,7 +2831,7 @@ fn anchor_transfer_and_amend_act_on_the_named_anchor() {
     assert_eq!(anchor.root, Root::Sole(CAROL));
 }
 
-// C14: a Mandate's pin names the current holding episode of the actor's Party
+// C14
 #[test]
 fn a_mandate_pin_names_the_actors_current_holding() {
     let mut r = Run::new();
@@ -2882,7 +2869,7 @@ fn a_mandate_pin_names_the_actors_current_holding() {
     let stored: MandateState = read(&r.state, kind::MANDATE, &mandate).unwrap();
     assert_eq!(stored.envelope.pin, Some(mine));
 
-    // C14: a rebind widens unless the new envelope is within the old one
+    // C14
     let rebind = |prefix: &[&str]| Payload::MandateRebind {
         mandate,
         envelope: envelope(prefix, BTreeSet::new(), None),
@@ -2895,8 +2882,7 @@ fn a_mandate_pin_names_the_actors_current_holding() {
     assert!(out.expansion);
 }
 
-// C15, INV-3: a holder delegates only from its current holding episode, and an amend of a
-// delegated Grant stays within its parent
+// C15, INV-3
 #[test]
 fn delegation_and_amend_stay_within_the_current_holding() {
     let mut r = Run::new();
@@ -2942,8 +2928,7 @@ fn delegation_and_amend_stay_within_the_current_holding() {
     );
 }
 
-// OP-143 m.7, L0-META-35: a projection from a holding needs a live lineage, an allowed capacity
-// and the parent's requirements
+// OP-143 m.7, L0-META-35
 #[test]
 fn a_holding_projection_stays_within_its_lineage() {
     let mut r = Run::new();
@@ -3006,7 +2991,7 @@ fn a_holding_projection_stays_within_its_lineage() {
         .unwrap();
 }
 
-// OP-143 m.7: a root projects only within its Anchor's scope
+// OP-143 m.7
 #[test]
 fn a_root_projection_stays_within_the_anchor_scope() {
     let mut r = Run::new();
@@ -3026,7 +3011,7 @@ fn a_root_projection_stays_within_the_anchor_scope() {
     );
 }
 
-// OP-143 m.7: a projection stays within the actor Instance's Mandate, requirements included
+// OP-143 m.7
 #[test]
 fn a_projection_stays_within_the_mandate() {
     let mut r = Run::new();
@@ -3046,7 +3031,7 @@ fn a_projection_stays_within_the_mandate() {
         .unwrap();
 }
 
-// OP-143 m.7: a projection's horizon may be now but not in the past
+// OP-143 m.7
 #[test]
 fn a_projection_horizon_may_be_now() {
     let mut r = Run::new();
@@ -3062,7 +3047,7 @@ fn a_projection_horizon_may_be_now() {
     );
 }
 
-// OP-141 m.28 (d): grounds that state the actual amount must agree
+// OP-141 m.28 (d)
 #[test]
 fn actual_amount_grounds_agree() {
     let mut r = Run::new();
@@ -3098,7 +3083,7 @@ fn actual_amount_grounds_agree() {
     assert_eq!(out.releases, alloc::vec![(budget(&g, 1), 70)]);
 }
 
-// OP-141 m.28 (g): only a budget counter key names a Grant; its released counter does not
+// OP-141 m.28 (g)
 #[test]
 fn only_budget_keys_name_a_grant() {
     let g = Id([10; 16]);
@@ -3106,7 +3091,7 @@ fn only_budget_keys_name_a_grant() {
     assert_eq!(budget_grant(&released_key(&budget(&g, 0))), None);
 }
 
-// OP-141 m.27 (c): the restriction policies of a target are indexed together
+// OP-141 m.27 (c)
 #[test]
 fn policies_of_a_target_are_indexed_together() {
     let mut r = Run::new();
