@@ -565,8 +565,9 @@ impl TenantTx {
     ) -> Result<[u8; 16], StoreError> {
         let (tenant, realm) = self.privacy_scope()?;
         let id = sqlx::query_scalar!(
-            r#"INSERT INTO access.identity_data_requests (tenant_id, realm_id, subject_id, kind, due_at)
-               VALUES ($1, $2, $3, $4, clock_timestamp() + make_interval(days => $5))
+            r#"INSERT INTO access.identity_data_requests (tenant_id, realm_id, subject_id, kind, received_at, due_at)
+               SELECT $1, $2, $3, $4, now.at, now.at + make_interval(days => $5)
+               FROM (SELECT clock_timestamp() AS at) AS now
                RETURNING request_id AS "id!""#,
             tenant,
             realm,
