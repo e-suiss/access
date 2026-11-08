@@ -76,6 +76,34 @@ fn base64url_is_strict() {
     assert_eq!(b64url_decode("Zm9v YmFy"), Err(Base64Error));
 }
 
+// OP-110 m.2
+#[test]
+fn decodes_every_short_escape() {
+    assert_eq!(
+        p(r#""\"\\\/\b\f\n\r\t""#),
+        Ok(Json::Str("\"\\/\u{8}\u{c}\n\r\t".to_string()))
+    );
+    assert_eq!(p(r#""\a""#), Err(JsonError::Syntax));
+}
+
+// OP-110 m.2
+#[test]
+fn joins_surrogate_pairs_only_when_complete() {
+    assert_eq!(p(r#""😀""#), Ok(Json::Str("\u{1f600}".to_string())));
+    assert_eq!(p(r#""\ud83d\nde00""#), Err(JsonError::Syntax));
+    assert_eq!(p(r#""\ud83dxude00""#), Err(JsonError::Syntax));
+    assert_eq!(p(r#""\ud83d\ud83d""#), Err(JsonError::Syntax));
+}
+
+// OP-110 m.2
+#[test]
+fn accepts_input_of_exactly_max_len() {
+    assert_eq!(
+        parse(b"[1,2,3]", 7),
+        Ok(Json::Array(vec![Json::Int(1), Json::Int(2), Json::Int(3)]))
+    );
+}
+
 mod properties {
     use super::*;
     use proptest::prelude::*;

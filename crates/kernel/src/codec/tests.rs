@@ -362,3 +362,84 @@ fn stored_values_with_unknown_parts_are_not_understood() {
         Err(ModelError::Cbor(_))
     ));
 }
+
+// OP-106 m.1, m.4: every variant decodes back to itself
+#[test]
+fn remaining_variants_round_trip() {
+    for p in [PurposeRef::Aim(d(7)), PurposeRef::Work(d(8))] {
+        assert_eq!(PurposeRef::from_value(&p.to_value()), Ok(p));
+    }
+    let bytes = EqValue::Bytes(vec![1, 2, 3]);
+    assert_eq!(EqValue::from_value(&bytes.to_value()), Ok(bytes));
+    let held = WhileCondition::ClaimHeld {
+        class: "employee".to_string(),
+        subject: SubjectSelector::Party(Id([2; 16])),
+        acceptance: d(3),
+    };
+    assert_eq!(WhileCondition::from_value(&held.to_value()), Ok(held));
+    let term = BudgetTerm {
+        dimension: BudgetDimension::Count,
+        capacity: 5,
+        window: BudgetWindow::Total,
+    };
+    assert_eq!(BudgetTerm::from_value(&term.to_value()), Ok(term));
+}
+
+// OP-108 m.4: a word from another field is not a budget dimension or window
+#[test]
+fn budget_words_are_field_specific() {
+    let term = BudgetTerm {
+        dimension: BudgetDimension::Count,
+        capacity: 5,
+        window: BudgetWindow::Total,
+    }
+    .to_value();
+    assert_eq!(
+        BudgetTerm::from_value(&with(&term, "dimension", Value::text("total"))),
+        Err(ModelError::Shape)
+    );
+    assert_eq!(
+        BudgetTerm::from_value(&with(&term, "window", Value::text("count"))),
+        Err(ModelError::Shape)
+    );
+}
+
+// OP-109 m.4: the default independence written out is rejected; other words are malformed
+#[test]
+fn written_default_independence_is_rejected() {
+    let a = sample();
+    let mut term = a.requirements.iter().next().unwrap().clone();
+    term.count = 2;
+    term.independence = Independence::DistinctParty;
+    let v = term.to_value();
+    assert_eq!(RequirementTerm::from_value(&v), Ok(term));
+    assert_eq!(
+        RequirementTerm::from_value(&with(&v, "independence", Value::text("none"))),
+        Err(ModelError::Range)
+    );
+    assert_eq!(
+        RequirementTerm::from_value(&with(&v, "independence", Value::text("party"))),
+        Err(ModelError::Shape)
+    );
+}
+
+// L0-ENC-13
+#[test]
+fn selector_condition_limit_is_inclusive() {
+    let selector = |n: usize| {
+        ResourceSelector::Structural(Structural {
+            namespace: "shop".to_string(),
+            prefix: vec![],
+            kind: None,
+            attrs: (0..n)
+                .map(|i| (alloc::format!("a{i:02}"), EqValue::Int(1)))
+                .collect(),
+        })
+    };
+    let max = selector(MAX_SELECTOR_CONDITIONS);
+    assert_eq!(ResourceSelector::from_value(&max.to_value()), Ok(max));
+    assert_eq!(
+        ResourceSelector::from_value(&selector(MAX_SELECTOR_CONDITIONS + 1).to_value()),
+        Err(ModelError::Range)
+    );
+}
