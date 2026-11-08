@@ -101,7 +101,7 @@ fn check(proof: &str, edit: &dyn Fn(&mut ProofRules<'_>)) -> Result<Proof, DpopE
 
 fn same(_: &mut ProofRules<'_>) {}
 
-// IDP-11, TN-28, MD-3: both allowed algorithms verify; the thumbprint is RFC 7638's
+// IDP-11, TN-28, MD-3
 #[test]
 fn valid_proofs_verify_with_both_algorithms() {
     let ed = check(&proof(r#","nonce":"n-1""#), &same).unwrap();
@@ -117,7 +117,7 @@ fn valid_proofs_verify_with_both_algorithms() {
     assert_eq!(es.nonce, None);
 }
 
-// IDP-11, TN-31: cnf.jkt and dpop_jkt text form
+// IDP-11, TN-31
 #[test]
 fn jkt_text_round_trips() {
     let jkt = [0x5a; 32];
@@ -126,7 +126,7 @@ fn jkt_text_round_trips() {
     assert_eq!(parse_jkt("not base64!"), Err(DpopError::Jkt));
 }
 
-// IDP-11 step 1, TN-28: shape and required claims
+// IDP-11 step 1, TN-28
 #[test]
 fn step_1_shape_and_required_claims() {
     let p = proof("");
@@ -175,7 +175,7 @@ fn step_1_shape_and_required_claims() {
     );
 }
 
-// IDP-11 step 2, TN-28: typ is exactly dpop+jwt
+// IDP-11 step 2, TN-28
 #[test]
 fn step_2_typ() {
     for typ in ["at+jwt", "JWT", "DPOP+JWT", "application/dpop+jwt"] {
@@ -185,7 +185,7 @@ fn step_2_typ() {
     }
 }
 
-// IDP-11 step 3, MD-3, AG-38: EdDSA, symmetric, none and algorithms outside the allowlist fail
+// IDP-11 step 3, MD-3, AG-38
 #[test]
 fn step_3_algorithm_allowlist_rejects_eddsa() {
     for alg in ["EdDSA", "HS256", "none", "RS256", "ES384", "ML-DSA-65"] {
@@ -218,7 +218,7 @@ fn step_3_algorithm_allowlist_rejects_eddsa() {
     assert!(allowed.contains(&Algorithm::Ed25519));
 }
 
-// IDP-11 step 4, TN-28: jwk is a public key of a supported type
+// IDP-11 step 4, TN-28
 #[test]
 fn step_4_jwk_must_be_public() {
     let x = b64url_encode(&ed_key().verifying_key().to_bytes());
@@ -253,7 +253,7 @@ fn step_4_jwk_must_be_public() {
     assert!(check(&compact(&header, &payload(""), &sign_ed), &same).is_ok());
 }
 
-// IDP-11 step 5, TN-28: the signature is checked with the header jwk
+// IDP-11 step 5, TN-28
 #[test]
 fn step_5_signature() {
     let other = |m: &[u8]| {
@@ -274,7 +274,7 @@ fn step_5_signature() {
     assert_eq!(check(&tampered, &same).unwrap_err().step(), Step::Signature);
 }
 
-// IDP-11 step 6, TN-28: htm is compared exactly
+// IDP-11 step 6, TN-28
 #[test]
 fn step_6_method() {
     for method in ["GET", "post", "PUT"] {
@@ -284,7 +284,7 @@ fn step_6_method() {
     }
 }
 
-// IDP-11 step 7, TN-28: htu is compared after RFC 3986 normalisation, without query and fragment
+// IDP-11 step 7, TN-28
 #[test]
 fn step_7_uri_after_normalisation() {
     for request in [
@@ -322,7 +322,7 @@ fn step_7_uri_after_normalisation() {
     );
 }
 
-// TN-28: RFC 3986 §6.2.2 and §6.2.3 normalisation cases
+// TN-28, §6.2.2, §6.2.3
 #[test]
 fn htu_normalisation_cases() {
     let cases = [
@@ -366,7 +366,7 @@ fn htu_normalisation_cases() {
     }
 }
 
-// IDP-11 step 8, TN-30: iat window is lifetime plus skew in the past and skew in the future
+// IDP-11 step 8, TN-30
 #[test]
 fn step_8_iat_window() {
     let at = |seconds: u64| {
@@ -393,7 +393,7 @@ fn step_8_iat_window() {
     );
 }
 
-// IDP-11 step 11, §10.4.3 m.5: at the resource server ath is the token hash
+// IDP-11 step 11, §10.4.3 m.5
 #[test]
 fn step_11_ath() {
     let good = format!(r#","ath":"{}""#, ath(TOKEN));
@@ -410,7 +410,7 @@ fn step_11_ath() {
     );
 }
 
-// IDP-11 step 12, TN-31: the key is the bound cnf.jkt or dpop_jkt
+// IDP-11 step 12, TN-31
 #[test]
 fn step_12_bound_key() {
     let jkt = thumbprint(&PublicKey::Ed25519(ed_key().verifying_key().to_bytes()));
@@ -432,7 +432,7 @@ fn step_12_bound_key() {
     assert_eq!(err.step(), Step::Jkt);
 }
 
-// IDP-11: every stateless failure names one of the 12 steps and a stable code
+// IDP-11
 #[test]
 fn codes_are_distinct() {
     let all = [
@@ -457,7 +457,7 @@ fn codes_are_distinct() {
     assert_eq!(codes.len(), all.len());
 }
 
-// IDP-11 step 1: a proof of exactly the size limit is verified; the limit is checked first
+// IDP-11 step 1
 #[test]
 fn proof_size_limit_is_inclusive() {
     let sig_len = b64url_encode(&[0; 64]).len();
@@ -477,7 +477,7 @@ fn proof_size_limit_is_inclusive() {
     assert_eq!(check(&p, &same).map(|v| v.iat), Ok(NOW));
 }
 
-// TN-28: an htu is ASCII, at most MAX_URI long, and its port has at most five digits
+// TN-28
 #[test]
 fn htu_bounds() {
     let at = format!("https://example.com/{}", "a".repeat(MAX_URI - 20));

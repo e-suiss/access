@@ -102,7 +102,6 @@ pub fn same_line(of: &Statement, successor: &Statement) -> bool {
 #[must_use]
 pub fn member_prefix(class: &str, subject: &Id) -> Vec<u8> {
     let mut key = member_key(class, subject, &Id([0; 16]));
-    // the ClaimID is the last item: a 16-byte string, header 0x50 and 16 bytes
     key.truncate(key.len().saturating_sub(17));
     key
 }

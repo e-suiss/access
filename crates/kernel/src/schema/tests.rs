@@ -26,8 +26,7 @@ fn spp(actions: Vec<ActionSchema>) -> Spp {
     }
 }
 
-// OP-141 m.35 (b), (c): a schema's digest is its ActionRef's schema; a new action makes a new
-// catalog digest
+// OP-141 m.35 (b), (c)
 #[test]
 fn digests_pin_schemas_and_catalogs() {
     let one = spp(alloc::vec![refund()]);

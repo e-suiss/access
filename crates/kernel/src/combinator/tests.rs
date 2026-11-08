@@ -763,7 +763,7 @@ fn ordering_scenarios() -> Vec<(&'static str, World)> {
     out
 }
 
-// OP-124 m.4: a `public` recipient or subject bound is no restriction
+// OP-124 m.4
 fn public_scenarios() -> Vec<(&'static str, World)> {
     let recipient = |with: bool| {
         let mut w = World::new();
@@ -1107,7 +1107,7 @@ fn ordering_and_merging_rules() {
     }
 }
 
-// CR-49, OP-111 m.1, U13: the CBOR bridge for the F0 reference evaluator
+// CR-49, OP-111 m.1, U13
 #[test]
 fn decision_vectors_match() {
     extern crate std;
@@ -1693,7 +1693,7 @@ fn random_world(r: &mut Rng) -> World {
     w
 }
 
-// OP-112 m.4: random inputs for the nightly Kernel ↔ F0 differential run
+// OP-112 m.4
 #[test]
 #[ignore = "nightly: set ACCESS_RANDOM_VECTORS to an output directory"]
 fn random_inputs_for_f0() {
@@ -1750,7 +1750,7 @@ fn hex_of(b: &[u8]) -> String {
     })
 }
 
-// OP-128, C14: the R8 adversarial corpus; no attack succeeds and F.6 is marked as relaxed
+// OP-128, C14
 #[test]
 fn r8_adversarial_vectors_match() {
     // G2, MUST-NEVER-4, TNI-7, SI-19, U17
@@ -1822,7 +1822,7 @@ fn r8_adversarial_vectors_match() {
     );
 }
 
-// OP-114 m.11: a rolling budget without a reset time is input only when the demand exceeds it
+// OP-114 m.11
 #[test]
 fn a_rolling_budget_that_covers_the_demand_needs_no_reset() {
     let mut w = World::new();
@@ -1837,7 +1837,7 @@ fn a_rolling_budget_that_covers_the_demand_needs_no_reset() {
     assert_eq!(w.run(), Err(Rejection::Input));
 }
 
-// OP-114 m.11: a hop's budget list is absent or non-empty, never an empty list
+// OP-114 m.11
 #[test]
 fn a_hop_never_carries_an_empty_budget_list() {
     use crate::codec::{Canonical, ModelError};

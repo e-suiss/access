@@ -383,7 +383,7 @@ fn allowed(r: &Result<Decision, Rejection>) -> bool {
 proptest! {
     #![proptest_config(ProptestConfig { cases: 1000, ..ProptestConfig::default() })]
 
-    // INV-27, CR-49 m.3 determinism, G17
+    // INV-27, CR-49, G17
     #[test]
     fn evaluation_is_deterministic(w in world()) {
         let first = w.run();
@@ -399,7 +399,7 @@ proptest! {
         prop_assert_eq!(&shuffled.run(), &first);
     }
 
-    // CR-49 m.3 monotonicity (−), MUST-NEVER-2: a restriction DENY always denies (INV-6)
+    // CR-49 m.3, MUST-NEVER-2, INV-6
     #[test]
     fn a_restriction_deny_never_allows(w in world(), undisclosed in any::<bool>()) {
         let before = w.run();
@@ -411,7 +411,7 @@ proptest! {
         }
     }
 
-    // CR-49 m.3 monotonicity (−): revoking a hop or dropping a proof never adds an ALLOW
+    // CR-49 m.3
     #[test]
     fn narrowing_never_adds_an_allow(
         w in world(),
@@ -441,7 +441,7 @@ proptest! {
         }
     }
 
-    // CR-49 m.3 monotonicity (+): another candidate or another proof never removes an ALLOW
+    // CR-49 m.3
     #[test]
     fn widening_never_removes_an_allow(w in world_with(true), extra in basis(), time in 0_u8..3) {
         let before = w.run();
@@ -462,7 +462,7 @@ proptest! {
         prop_assert!(allowed(&more.run()));
     }
 
-    // CR-49 m.3 batch = single: `check` is the first ALLOW of single checks
+    // CR-49 m.3
     #[test]
     fn check_is_the_first_allow_of_single_checks(w in world_with(true)) {
         let batch = w.run();
@@ -503,7 +503,7 @@ proptest! {
         }
     }
 
-    // CR-49 m.3 termination, OP-108 m.11, SI-20: bounded fuel; too little is a rejection, never a decision
+    // CR-49 m.3, OP-108 m.11, SI-20
     #[test]
     fn evaluation_terminates_within_fuel(w in world(), cut in any::<prop::sample::Index>()) {
         let (full, used) = w.run_with(FUEL);
@@ -563,7 +563,7 @@ fn record(domain: Digest, pos: u64) -> impl Strategy<Value = RecordEnvelope> {
 proptest! {
     #![proptest_config(ProptestConfig { cases: 500, ..ProptestConfig::default() })]
 
-    // CR-49 m.3 domain isolation: a record, its leaf and its link belong to one domain only
+    // CR-49 m.3
     #[test]
     fn records_are_bound_to_their_domain(
         r in record(d(1), 7),
@@ -590,7 +590,7 @@ proptest! {
         prop_assert!(check_link(&previous, &next, &Digest(other)).is_err());
     }
 
-    // OP-106 m.22: one value never has the same digest under two contexts
+    // OP-106 m.22
     #[test]
     fn digest_contexts_are_separated(bytes in prop::collection::vec(any::<u8>(), 0..64)) {
         prop_assert_ne!(digest::digest(Context::Intent, &bytes), digest::digest(Context::Genesis, &bytes));

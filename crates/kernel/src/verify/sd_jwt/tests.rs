@@ -198,7 +198,7 @@ fn disclosure_rules() {
     );
 }
 
-// CR-55 m.7: holder-bound artefacts need a key binding JWT
+// CR-55 m.7
 #[test]
 fn key_binding_rules() {
     let b = build(true);
@@ -279,7 +279,6 @@ struct Rfc9901Case {
     value: String,
 }
 
-// RFC 9901 interop: digests and disclosure parsing match every example of the RFC
 #[test]
 fn rfc9901_disclosure_examples() {
     let v: Rfc9901 = serde_json::from_str(include_str!(
@@ -315,7 +314,7 @@ fn rfc9901_disclosure_examples() {
     );
 }
 
-// OP-122 m.4: the issuer JWT needs `iss` and `exp`; `exp`, `nbf`, `iat` follow the JWT rule
+// OP-122 m.4
 #[test]
 fn issuer_jwt_claims() {
     let check = |payload: &str| run(&format!("{}~", issuer_jwt(payload))).map(|_| ());
@@ -462,7 +461,7 @@ fn sd_rules(id: &str) -> &'static [&'static str] {
     }
 }
 
-// OP-122 m.4, m.5, m.7: names shared by the Kernel, F0 and the bindings
+// OP-122 m.4, m.5, m.7
 #[test]
 fn sd_jwt_vectors_match() {
     extern crate std;
@@ -565,7 +564,7 @@ fn p_kb_jwt(prefix: &str) -> String {
     format!("{input}.{}", b64url_encode(&s.normalize_s().to_bytes()))
 }
 
-// CR-55 m.7, RFC 9901 §4.1.2: a P-256 confirmation key binds the holder like an Ed25519 one
+// CR-55 m.7, RFC 9901 §4.1.2, P-256
 #[test]
 fn p256_confirmation_key_binds_the_holder() {
     let mut ks = keys();
@@ -605,7 +604,7 @@ fn padded(i: usize, len: usize) -> String {
     disclosure(&format!(r#"["s","c{i:03}","{}"]"#, "v".repeat(len)))
 }
 
-// OP-117 m.6: a presentation of exactly the size and disclosure limits is verified
+// OP-117 m.6
 #[test]
 fn presentation_limits_are_inclusive() {
     let jwt_for = |ds: &[String]| {

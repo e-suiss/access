@@ -172,8 +172,7 @@ fn result(bytes: &[u8]) -> Result<Summary, &'static str> {
         .map_err(ReportError::code)
 }
 
-// L2-RPT-2, L2-RPT-3, §9.12.2: the chain detects a hidden or reordered entry, only allowed
-// uses draw, and entries lie in the period
+// L2-RPT-2, L2-RPT-3, §9.12.2
 #[test]
 fn reports_verify_or_name_their_failure() {
     let got: Vec<(&str, Result<Summary, &str>)> =
@@ -202,7 +201,7 @@ fn reports_verify_or_name_their_failure() {
     );
 }
 
-// L2-RPT-2: a report continues the chain only from the last head at the next sequence number
+// L2-RPT-2
 #[test]
 fn a_report_continues_only_the_last_head() {
     let s = verify(&first()).unwrap();
@@ -219,7 +218,7 @@ fn a_report_continues_only_the_last_head() {
     assert!(!continues(&s, &forked));
 }
 
-// L2-RPT-3: the period is closed; entries at either end lie in it, one before it does not
+// L2-RPT-3
 #[test]
 fn entries_at_the_period_ends_lie_in_the_period() {
     let at = |times: &[u64]| {

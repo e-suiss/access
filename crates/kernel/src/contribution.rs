@@ -55,8 +55,7 @@ pub fn contribute_intent(target: Digest, class: &str, validity: Window) -> Optio
 mod tests {
     use super::*;
 
-    // L0-META-30, §9.14.1: the contribute intent is a function of the target, the class and the
-    // validity, so the approver's device and the identity plane sign and check the same digest
+    // L0-META-30, §9.14.1
     #[test]
     fn the_contribute_intent_is_deterministic() {
         let w = Window { from: 1, until: 2 };

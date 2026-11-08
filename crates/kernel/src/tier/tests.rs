@@ -36,7 +36,7 @@ fn intent(amount: Option<(i64, &str)>) -> IntentEnvelope {
     }
 }
 
-// §13.7.1, OP-141 m.34: amounts by the EUR thresholds, other units CT2, no amount CT1
+// §13.7.1, OP-141 m.34
 #[test]
 fn a_domain_action_is_tiered_by_its_amount() {
     assert_eq!(of(&intent(None), None, false, None), Tier::Ct1);
@@ -55,8 +55,7 @@ fn a_domain_action_is_tiered_by_its_amount() {
     assert_eq!(of(&intent(Some((1, "try"))), None, false, None), Tier::Ct2);
 }
 
-// §13.7.1, SI-4, OP-141 m.34: narrowing meta-actions are CT1, expansion-class ones CT3,
-// other widening ones CT2
+// §13.7.1, SI-4, OP-141 m.34
 #[test]
 fn a_meta_action_is_tiered_by_its_class() {
     let i = intent(None);
@@ -74,7 +73,7 @@ fn a_meta_action_is_tiered_by_its_class() {
     assert_eq!(validity_ceiling(Tier::Ct1), 86_400_000);
 }
 
-// §13.7.1, OP-141 m.34: the thresholds are inclusive, so exactly 100,000 EUR is still CT2
+// §13.7.1, OP-141 m.34
 #[test]
 fn an_amount_at_the_ct2_threshold_stays_ct2() {
     assert_eq!(
@@ -83,7 +82,7 @@ fn an_amount_at_the_ct2_threshold_stays_ct2() {
     );
 }
 
-// OP-143 m.7: contributing and issuing a projection are CT1 even when they widen authority
+// OP-143 m.7
 #[test]
 fn contribute_and_projection_issue_are_ct1_when_widening() {
     let i = intent(None);
@@ -95,7 +94,7 @@ fn contribute_and_projection_issue_are_ct1_when_widening() {
     assert_eq!(meta_tier(&contribute, true), Tier::Ct1);
 }
 
-// OP-141 m.35 (g): a reversible action without amounts keeps the CT1 default
+// OP-141 m.35 (g)
 #[test]
 fn a_reversible_action_is_ct1() {
     let mut s = crate::schema::tests::refund();
@@ -103,8 +102,7 @@ fn a_reversible_action_is_ct1() {
     assert_eq!(of(&intent(None), None, false, Some(&s)), Tier::Ct1);
 }
 
-// OP-141 m.35 (g): a reserved action is CT3, an irreversible one at least CT2, one without
-// effect CT0
+// OP-141 m.35 (g)
 #[test]
 fn the_action_schema_raises_the_tier() {
     let mut s = crate::schema::tests::refund();
@@ -119,7 +117,7 @@ fn the_action_schema_raises_the_tier() {
     assert_eq!(of(&intent(None), None, false, Some(&s)), Tier::Ct3);
 }
 
-// §9.13.7, OP-141 m.39 (a): reading is CT0, an audit export CT1
+// §9.13.7, OP-141 m.39 (a)
 #[test]
 fn read_actions_are_tiered_by_name() {
     let mut i = intent(Some((CT2_MAX + 1, "eur")));

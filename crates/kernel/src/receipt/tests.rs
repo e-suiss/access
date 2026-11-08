@@ -233,7 +233,7 @@ fn cases() -> Vec<(&'static str, Case)> {
     out
 }
 
-// OP-149 m.11: the agency chain keeps its order, from the principal to the agent
+// OP-149 m.11
 #[test]
 fn the_agency_chain_round_trips_in_order() {
     let r = delegated();
@@ -247,7 +247,7 @@ fn the_agency_chain_round_trips_in_order() {
     assert!(!plain.iter().any(|(k, _)| *k == Value::text("agency")));
 }
 
-// L2-RCP-3: each check rejects its case; the valid receipts verify
+// L2-RCP-3
 #[test]
 fn receipts_verify_or_name_their_failure() {
     let got: Vec<(&str, Result<Receipt, &str>)> = cases()
@@ -287,7 +287,7 @@ fn receipts_verify_or_name_their_failure() {
     );
 }
 
-// L2-RCP-3: a receipt names the PEP it is for; an empty audience names none
+// L2-RCP-3
 #[test]
 fn a_receipt_without_audience_is_malformed() {
     let r = Receipt {
@@ -297,7 +297,7 @@ fn a_receipt_without_audience_is_malformed() {
     assert_eq!(Receipt::from_value(&r.to_value()), Err(ModelError::Shape));
 }
 
-// L2-RCP-3: a receipt signed exactly at now plus the AIS skew is still on time
+// L2-RCP-3
 #[test]
 fn a_receipt_at_the_skew_edge_verifies() {
     let mut c = Case::of(&receipt());
@@ -307,8 +307,7 @@ fn a_receipt_at_the_skew_edge_verifies() {
     assert_eq!(c.run(), Err(ReceiptError::Future));
 }
 
-// §9.8, CR-58 m.5: a provider key in scope for the receipt's domain does not let another
-// domain's metadata verify it
+// §9.8, CR-58 m.5
 #[test]
 fn the_metadata_must_be_the_expected_domains() {
     let mut m = metadata();

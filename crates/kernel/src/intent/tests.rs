@@ -105,7 +105,7 @@ fn digest_is_over_canonical_bytes_with_context() {
     assert_ne!(intent_digest(&opaque).unwrap(), intent_digest(&e).unwrap());
 }
 
-// OP-108 m.12: there is no nonce field
+// OP-108 m.12
 #[test]
 fn nonce_is_not_part_of_the_envelope() {
     let Value::Map(mut entries) = intent().to_value() else {

@@ -38,7 +38,7 @@ fn passkey(uv: bool, device_bound: bool) -> BTreeMap<String, u64> {
     ])
 }
 
-// §13.7.3 "Authenticator class", CT0 footnote; N-45, SEC10, SEC26, IDP-8
+// §13.7.3, N-45, IDP-8
 #[test]
 fn password_otp_and_push_alone_satisfy_no_tier() {
     for weak in [password(), totp(), push()] {
@@ -49,8 +49,8 @@ fn password_otp_and_push_alone_satisfy_no_tier() {
     }
 }
 
-// §13.7.3 "Authenticator class": CT1 phishing-resistant, CT2 + UV, CT3 + hardware-bound
-// non-custodial; MD-11
+// §13.7.3
+// MD-11
 #[test]
 fn passkeys_climb_the_tiers_by_uv_and_binding() {
     assert_eq!(ceiling(&passkey(false, false)), Some(Tier::Ct1));
@@ -61,7 +61,7 @@ fn passkeys_climb_the_tiers_by_uv_and_binding() {
     assert_eq!(floors(Tier::Ct0), floors(Tier::Ct1));
 }
 
-// §13.7.3 "Human presence": an approval needs a present human at every tier; SI-5
+// §13.7.3, SI-5
 #[test]
 fn approval_adds_human_presence_to_every_tier() {
     for tier in [Tier::Ct0, Tier::Ct1, Tier::Ct2, Tier::Ct3] {
@@ -74,7 +74,7 @@ fn approval_adds_human_presence_to_every_tier() {
     }
 }
 
-// §13.7.3 "Step-up freshness", "AAS expires_at": CT1 ≤ 15 min, CT2/CT3 ≤ 5 min
+// §13.7.3
 #[test]
 fn freshness_and_aas_ceilings_follow_the_table() {
     assert_eq!(freshness_ceiling(Tier::Ct0), 15 * 60 * 1_000);
@@ -96,8 +96,8 @@ fn freshness_and_aas_ceilings_follow_the_table() {
     assert!(!aas_within_ceiling(Tier::Ct3, now + 1, now));
 }
 
-// §13.7.3: CT1 binds the actor Instance, CT2 and CT3 bind the intent digest through H(AAS);
-// §8.5, §8.17.5.4, TN-O3, X29: the term carries assurance, freshness and binding
+// §13.7.3
+// §8.5, §8.17.5.4, TN-O3, X29
 #[test]
 fn the_authentication_term_binds_by_tier() {
     let t1 = authentication_term(Tier::Ct1, false);
@@ -120,8 +120,7 @@ fn the_authentication_term_binds_by_tier() {
     }
 }
 
-// §13.7.3, OP-111 m.4: the term resolves against an `authentication` Claim through the
-// requirement resolver as any other term; a stale or weaker Claim is unmet
+// §13.7.3, OP-111 m.4
 #[test]
 fn the_term_is_met_by_a_fresh_bound_claim_of_the_class() {
     let now = 1_700_000_000_000;
@@ -178,8 +177,7 @@ fn the_term_is_met_by_a_fresh_bound_claim_of_the_class() {
     ));
 }
 
-// SEC18, §13.7.7 "Cooling", §8.13: a binding younger than 24 h meets no CT2+ requirement and
-// the refusal names when it will
+// SEC18, §13.7.7, §8.13
 #[test]
 fn a_new_binding_cools_for_a_day_before_ct2() {
     let bound = 1_700_000_000_000;

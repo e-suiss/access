@@ -444,7 +444,7 @@ fn cases() -> Vec<(&'static str, Case)> {
     out
 }
 
-// L2-PAP-3: each step rejects its case, in order; the valid uses verify
+// L2-PAP-3
 #[test]
 fn paps_verify_or_name_their_failure() {
     let got: Vec<(&str, Result<Pap, &str>)> = cases()
@@ -503,7 +503,7 @@ fn digests_use_their_contexts() {
     assert_eq!(Pap::from_bytes(&pap().to_bytes().unwrap()), Ok(pap()));
 }
 
-// L2-PAP-3: a negative amount has no demand and does not fit a slice
+// L2-PAP-3
 #[test]
 fn negative_amount_does_not_fit_a_slice() {
     let mut c = Case::of(&pap());
@@ -512,7 +512,7 @@ fn negative_amount_does_not_fit_a_slice() {
     assert_eq!(c.run().map_err(PapError::code), Err("pap-slice"));
 }
 
-// L2-PAP-3 step 5: a use that takes exactly what is kept of the slice fits
+// L2-PAP-3 step 5
 #[test]
 fn a_use_that_takes_the_whole_kept_slice_fits() {
     let mut c = Case::of(&pap());
@@ -522,7 +522,7 @@ fn a_use_that_takes_the_whole_kept_slice_fits() {
     assert_eq!(c.run().map_err(PapError::code), Err("pap-slice"));
 }
 
-// L2-PAP-3 step 4: the intent is inside both the PAP's bounds and the contract's bounds
+// L2-PAP-3 step 4
 #[test]
 fn both_bounds_must_cover_the_intent() {
     let narrow = || {
@@ -550,7 +550,7 @@ fn both_bounds_must_cover_the_intent() {
     }
 }
 
-// L2-PAP-3 step 2: a PAP of another domain is refused even where a provider binding scopes its key
+// L2-PAP-3 step 2
 #[test]
 fn a_pap_of_another_domain_is_refused_under_a_provider_binding() {
     let mut m = metadata();
@@ -577,7 +577,7 @@ fn a_pap_of_another_domain_is_refused_under_a_provider_binding() {
     assert_eq!(c.run_under(&m).map_err(PapError::code), Err("pap-domain"));
 }
 
-// L2-PAP-2: a presentation names an audience of 1 to 255 bytes
+// L2-PAP-2
 #[test]
 fn a_presentation_audience_is_bounded() {
     let with_audience = |len: usize| Presentation {

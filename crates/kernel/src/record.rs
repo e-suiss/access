@@ -188,8 +188,7 @@ impl RecordEnvelope {
     /// # Errors
     /// [`RecordError::Model`] without fields; [`RecordError::Encode`].
     pub fn commitments(&self) -> Result<BTreeMap<String, Hash>, RecordError> {
-        // L0-ENC-28: a record has at least one field, so an envelope that would not decode is
-        // never sealed
+        // L0-ENC-28
         if self.fields.is_empty() {
             return Err(RecordError::Model(ModelError::Missing));
         }

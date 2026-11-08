@@ -56,8 +56,7 @@ fn intent() -> IntentEnvelope {
     }
 }
 
-// §9.13.3 render, §9.14.5 WYSIWYS, XI-8: the render is a function of the accepted schema and
-// the intent alone, so both sides compute the same digest
+// §9.13.3, §9.14.5, XI-8
 #[test]
 fn the_render_is_deterministic_and_names_every_field() {
     let s = schema(
@@ -82,8 +81,7 @@ fn the_render_is_deterministic_and_names_every_field() {
     assert_eq!(a.schema, d(9));
 }
 
-// §9.14.2, XI-7: "The request changed…": any change of the intent, the schema's render
-// definition or the locale changes the render digest
+// §9.14.2, XI-7
 #[test]
 fn a_changed_request_has_another_render_digest() {
     let s = schema(EffectClass::Irreversible, Some("Refund {amount}"));
@@ -117,8 +115,7 @@ fn a_changed_request_has_another_render_digest() {
     );
 }
 
-// §9.13.3 effect_class, §9.14.5 material_fields: parameters are material unless the action has
-// no effect; the resource, action and recipient always are, the validity never is
+// §9.13.3, §9.14.5
 #[test]
 fn material_fields_follow_the_effect_class() {
     let irreversible = of(
@@ -142,7 +139,7 @@ fn material_fields_follow_the_effect_class() {
     assert!(unknown.template.is_none());
 }
 
-// §9.13.3: parameter values render as canonical text, closed types only
+// §9.13.3
 #[test]
 fn parameter_values_render_canonically() {
     assert_eq!(param_text(&ParamValue::Count(42)), "42");
@@ -181,8 +178,7 @@ fn parameter_values_render_canonically() {
     );
 }
 
-// §9.14.5 WYSIWYS: the render round-trips through its bytes, so the surface shows exactly what
-// the decision point rendered
+// §9.14.5
 #[test]
 fn a_render_round_trips_through_its_bytes() {
     let s = schema(EffectClass::Irreversible, Some("Refund {amount}"));

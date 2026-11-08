@@ -29,8 +29,7 @@ fn reference(idx: u64) -> StatusRef {
     }
 }
 
-// L2-STL-1, L2-STL-2: the reference and the list token round-trip; the list holds one bit per
-// entry
+// L2-STL-1, L2-STL-2
 #[test]
 fn reference_and_token_round_trip() {
     let r = reference(12);
@@ -57,7 +56,7 @@ fn uri_of(len: usize) -> String {
     "u".repeat(len)
 }
 
-// L2-STL-1: a reference names a list by a non-empty URI of at most 2048 bytes
+// L2-STL-1
 #[test]
 fn a_reference_uri_is_non_empty_and_bounded() {
     let at = |uri: String| StatusRef::from_value(&StatusRef { idx: 1, uri }.to_value());
@@ -83,7 +82,7 @@ fn token_with(uri: String) -> Result<ListToken, StatusError> {
     ListToken::from_bytes(&dcbor::encode(&v, Limits::CEILING).unwrap())
 }
 
-// L2-STL-2: the list token's subject is a non-empty URI of at most 2048 bytes
+// L2-STL-2
 #[test]
 fn a_list_token_subject_is_non_empty_and_bounded() {
     assert_eq!(token_with(String::new()), Err(StatusError::Malformed));
@@ -95,7 +94,7 @@ fn a_list_token_subject_is_non_empty_and_bounded() {
     assert_eq!(token_with(uri_of(MAX_URI + 1)), Err(StatusError::Malformed));
 }
 
-// L2-STL-2: a text claim other than `as_of` is not part of a list token
+// L2-STL-2
 #[test]
 fn a_list_token_rejects_an_unknown_text_claim() {
     let mut v = token().to_value();
@@ -106,7 +105,7 @@ fn a_list_token_rejects_an_unknown_text_claim() {
     assert_eq!(ListToken::from_bytes(&bytes), Err(StatusError::Malformed));
 }
 
-// L2-STL-3: an unset bit reads as valid even when every lower bit of its byte is set
+// L2-STL-3
 #[test]
 fn an_unset_bit_above_set_bits_is_valid() {
     assert_eq!(is_set(&[0b0000_0111], 3), Ok(false));
@@ -184,8 +183,7 @@ fn run(token: &[u8], list: &[u8], r: &StatusRef) -> Result<bool, StatusError> {
     lookup(&ListToken::from_bytes(token)?, list, r)
 }
 
-// L2-STL-2, L2-STL-3: the bit at idx mod 8 of byte idx div 8 is read, least significant first,
-// only from the referenced list
+// L2-STL-2, L2-STL-3
 #[test]
 fn lookups_read_the_referenced_bit() {
     let got: Vec<Result<bool, &str>> = cases()

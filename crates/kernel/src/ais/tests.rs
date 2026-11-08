@@ -96,7 +96,7 @@ fn sign_with(s: &Statement, key: &PublicKey, alg: i64, sig: impl Fn(&[u8]) -> Ve
     [vec![0xd2], body].concat()
 }
 
-// OP-149 m.6, L2-AIS-2: a P-256 Instance signs its statement with ESP256, low S only
+// OP-149 m.6, L2-AIS-2, P-256
 #[test]
 fn a_p256_instance_signs_with_esp256() {
     let s = statement();
@@ -133,7 +133,7 @@ fn expected(s: &Statement) -> Expected<'_> {
     }
 }
 
-// PI-7, SI-1, OP-141 m.7: the actor's key signs exactly the request
+// PI-7, SI-1, OP-141 m.7
 #[test]
 fn a_statement_binds_the_request() {
     let s = statement();
@@ -160,7 +160,7 @@ fn a_statement_binds_the_request() {
     );
 }
 
-// SI-1, E17: only the actor Instance's current key makes the statement its own
+// SI-1, E17
 #[test]
 fn another_key_is_refused() {
     let s = statement();
@@ -171,7 +171,7 @@ fn another_key_is_refused() {
     ));
 }
 
-// CR-55 m.9: a statement from the future beyond the skew is refused
+// CR-55 m.9
 #[test]
 fn future_statements_are_refused() {
     let mut s = statement();
@@ -184,7 +184,7 @@ fn future_statements_are_refused() {
     assert!(verify(&signed, &key(), &expected(&s), 40_000).is_ok());
 }
 
-// OP-141 m.7: the payload round-trips and short nonces are refused
+// OP-141 m.7
 #[test]
 fn payload_shape() {
     let s = statement();
@@ -197,7 +197,7 @@ fn payload_shape() {
     );
 }
 
-// OP-141 m.7: the PEP name is 1 to 255 bytes
+// OP-141 m.7
 #[test]
 fn the_pep_name_is_bounded() {
     let with_pep = |len: usize| Statement {
@@ -226,7 +226,6 @@ type Case = (
     Option<PublicKey>,
 );
 
-// L2-AIS-*: statement vectors, byte for byte
 #[test]
 #[allow(clippy::too_many_lines, reason = "the vector cases are listed in full")]
 fn ais_vectors_match() {

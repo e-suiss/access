@@ -201,7 +201,7 @@ fn run(sign1: &[u8], now: u64) -> Result<Digest, AasError> {
     verify(sign1, &key(9), &expected(now)).map(|(_, h)| h)
 }
 
-// L2-AAS-1 to L2-AAS-4: each check rejects its case; H(AAS) is the digest of the statement
+// L2-AAS-1 to L2-AAS-4
 #[test]
 fn statements_verify_or_name_their_failure() {
     let got: Vec<Result<Digest, &str>> = cases()
@@ -237,8 +237,7 @@ fn statements_verify_or_name_their_failure() {
     );
 }
 
-// L2-AAS-1, E32: the statement round-trips and an act names its class exactly when it is a
-// contribution
+// L2-AAS-1, E32
 #[test]
 fn statements_round_trip() {
     let a = statement();
@@ -288,7 +287,7 @@ fn aas_vectors_match() {
     );
 }
 
-// L2-AAS-1: the Exercise nonce is 16 to 64 bytes and the surface profile 1 to 255 bytes
+// L2-AAS-1
 #[test]
 fn nonce_and_surface_profile_are_bounded() {
     let decode = |a: &ApprovalAct| ApprovalAct::from_value(&a.to_value());
@@ -322,7 +321,7 @@ fn nonce_and_surface_profile_are_bounded() {
     }
 }
 
-// L2-AAS-4: `expires_at` may equal `issued_at` but never precede it, even while `now` is before both
+// L2-AAS-4
 #[test]
 fn expiry_is_never_before_issue() {
     let at = |issued_at: u64, expires_at: u64| ApprovalAct {

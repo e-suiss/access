@@ -122,7 +122,7 @@ fn a_bound_token_of_one_kind_verifies() {
     assert!(run(&at(&aud, &cnf, &detail("bounds")), &mtls).is_ok());
 }
 
-// §9.9.3 rule 1, RFC 8707: one audience only
+// §9.9.3 rule 1, RFC 8707
 #[test]
 fn an_audience_array_is_rejected() {
     let aud = format!("[\"{RS}\"]");
@@ -136,7 +136,7 @@ fn an_audience_array_is_rejected() {
     );
 }
 
-// §9.9.3 rule 2, PI-11: no bearer token, and only the presented key
+// §9.9.3 rule 2, PI-11
 #[test]
 fn confirmation_is_required_and_matched() {
     let aud = format!("\"{RS}\"");
@@ -174,7 +174,7 @@ fn confirmation_is_required_and_matched() {
     );
 }
 
-// §9.9.3 rule 3, §9.13.5: authority only in RAR, one kind, one intent, this domain
+// §9.9.3 rule 3, §9.13.5
 #[test]
 fn authority_details_are_checked() {
     let aud = format!("\"{RS}\"");
@@ -205,7 +205,7 @@ fn authority_details_are_checked() {
     }
 }
 
-// RFC 9068 §2.2: sub, iat, jti and client_id are required
+// RFC 9068 §2.2
 #[test]
 fn required_claims_are_checked() {
     let full = at_payload(&format!("\"{RS}\""), &jkt_json(), &detail("intent"));
@@ -224,7 +224,7 @@ fn required_claims_are_checked() {
     );
 }
 
-// CR-56 row 16: another artefact's typ is not an access token
+// CR-56 row 16
 #[test]
 fn another_typ_is_rejected() {
     let payload = at_payload(&format!("\"{RS}\""), &jkt_json(), &detail("intent"));

@@ -69,7 +69,7 @@ const NON_CANONICAL: [&[u8]; 4] = [
     &[0xfb, 0x3f, 0xf0, 0, 0, 0, 0, 0, 0],
 ];
 
-// TI-11, §17.6.1 rule 2: the payload is returned as signed, never decoded and re-encoded
+// TI-11, §17.6.1 rule 2
 #[test]
 fn cose_payload_is_returned_verbatim() {
     let prot = protected();
@@ -113,7 +113,7 @@ fn keys_value() -> Value {
     ])
 }
 
-// TI-11: a signature over a re-encoded form of the payload does not verify the received bytes
+// TI-11
 #[test]
 fn cose_signature_covers_the_received_bytes_only() {
     let prot = protected();
@@ -144,7 +144,7 @@ fn header() -> String {
     )
 }
 
-// TI-11, OP-106 m.21: a JWS covers the JSON bytes exactly as received
+// TI-11, OP-106 m.21
 #[test]
 fn jws_payload_is_returned_verbatim() {
     let payload = "{ \"b\" : 1,\n  \"a\":\"\\u0041\" }";
@@ -160,7 +160,7 @@ fn jws_payload_is_returned_verbatim() {
     ));
 }
 
-// TI-11: SD-JWT disclosure digests are computed by the verifier over the disclosure as presented
+// TI-11
 #[test]
 fn sd_jwt_digests_are_recomputed_from_the_presented_disclosure() {
     let disclosure = b64url_encode(br#"["c2FsdA","email","a@example.com"]"#);
@@ -226,7 +226,7 @@ fn envelope() -> IntentEnvelope {
     }
 }
 
-// TI-11, OP-106 m.21, m.22: the intent digest is computed from canonical CBOR only
+// TI-11, OP-106 m.21, m.22
 #[test]
 fn intent_digest_is_computed_from_canonical_cbor() {
     let e = envelope();

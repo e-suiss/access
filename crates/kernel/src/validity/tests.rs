@@ -74,7 +74,7 @@ fn ctx(
     }
 }
 
-// OP-117 m.12, m.13: the horizon is closed and the verifier's class skew caps the artefact's
+// OP-117 m.12, m.13
 #[test]
 fn horizon_is_closed_and_skew_is_the_smaller_one() {
     let vc = contract(ProfileVariant::OnlineStrict);
@@ -130,7 +130,7 @@ fn round_trips_and_class_must_match_variant() {
     );
 }
 
-// §9.12: the audience is a required field; a contract without one is valid for no verifier
+// §9.12
 #[test]
 fn a_contract_without_audience_is_missing_a_field() {
     let vc = contract(ProfileVariant::OnlineStrict);
@@ -239,7 +239,7 @@ fn cap_check(iat: u64, cap: u64, now: u64) -> Result<(), ValidityError> {
     check(&contract(ProfileVariant::OnlineStrict), &c)
 }
 
-// OP-118 m.4, T20, U25, OP-117 m.13: acceptance ends at min(horizon, iat + cap), plus skew; iat at most now + skew
+// OP-118 m.4, T20, U25, OP-117 m.13
 #[test]
 fn acceptance_end_is_capped_by_the_effective_ceiling() {
     let all: BTreeMap<&str, Result<(), ValidityError>> = cap_scenarios()
@@ -365,7 +365,7 @@ fn profile_check(c: &ProfileCase) -> Result<(), ValidityError> {
     check(&contract(c.variant), &ctx)
 }
 
-// OP-122 m.6: `online` means the verifier obtains an online decision for this use
+// OP-122 m.6
 #[test]
 fn offline_use_follows_the_variant() {
     let all: BTreeMap<&str, Result<(), ValidityError>> = profile_scenarios()

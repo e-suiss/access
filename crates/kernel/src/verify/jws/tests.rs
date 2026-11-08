@@ -100,7 +100,7 @@ fn cases() -> Vec<(Case, &'static [Algorithm])> {
     out
 }
 
-// CR-56 rows 2-4, CR-7, §10.4.5, G46
+// CR-56, CR-7, §10.4.5, G46
 fn downgrade_cases() -> Vec<(Case, &'static [Algorithm])> {
     let es_header = h(r#"{"alg":"ES256","kid":"KID2","typ":"TYP"}"#);
     let mut out = vec![
@@ -863,8 +863,7 @@ fn jwt_claim_vectors_match() {
     );
 }
 
-// CR-56 rows 2-3, OP-117 m.14: the fully-specified ML-DSA names are recognised, then refused
-// while not enabled
+// CR-56 rows, OP-117 m.14
 #[test]
 fn ml_dsa_names_are_known_but_not_enabled() {
     for (name, alg) in [
@@ -889,7 +888,7 @@ fn ml_dsa_names_are_known_but_not_enabled() {
     assert_eq!(algorithm("ML-DSA"), None);
 }
 
-// CR-56 row 3, RFC 9901 §4.3: the key binding JWT's algorithm must be in the allowlist
+// CR-56 row 3, RFC 9901 §4.3
 #[test]
 fn key_binding_jws_needs_an_allowed_algorithm() {
     let token = token_with(r#"{"alg":"Ed25519","typ":"kb+jwt"}"#, PAYLOAD, &ed_sign);
@@ -906,7 +905,7 @@ fn key_binding_jws_needs_an_allowed_algorithm() {
     );
 }
 
-// §14.6: a token of exactly the size limit is decoded; one byte more is refused unread
+// §14.6
 #[test]
 fn token_size_limit_is_inclusive() {
     let head = b64url_encode(ed_header().as_bytes());
@@ -933,7 +932,7 @@ fn token_size_limit_is_inclusive() {
     );
 }
 
-// OP-122 m.3a: a NumericDate of zero is the epoch, only negative ones are refused
+// OP-122 m.3a
 #[test]
 fn numeric_date_zero_is_valid() {
     assert_eq!(millis(0), Ok(0));
@@ -941,7 +940,7 @@ fn numeric_date_zero_is_valid() {
     assert_eq!(millis(-1), Err(ClaimError::Time));
 }
 
-// CR-56 row 17: an audience array must name this verifier
+// CR-56 row 17
 #[test]
 fn audience_array_must_name_the_verifier() {
     let rules = ClaimRules {

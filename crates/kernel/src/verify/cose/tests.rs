@@ -246,7 +246,7 @@ fn p256_bytes(key: &PublicKey) -> Vec<u8> {
     }
 }
 
-// CR-55 m.1, Ek B: AKP is modelled from day one and off by default
+// CR-55 m.1
 #[test]
 fn ml_dsa_is_modelled_but_off() {
     let mut ks = keys();
@@ -361,7 +361,7 @@ fn cose_cases() -> Vec<(&'static str, Vec<u8>)> {
     .collect()
 }
 
-// OP-117 m.14: the first failing step wins
+// OP-117 m.14
 fn two_fault_cases() -> Vec<(&'static str, Vec<u8>)> {
     let base = || {
         vec![
@@ -454,7 +454,7 @@ fn cose_rules(id: &str) -> &'static [&'static str] {
     }
 }
 
-// CR-55 m.6, OP-106 m.24, §17.6.1: COSE golden vectors, byte for byte
+// CR-55 m.6, OP-106 m.24, §17.6.1
 #[test]
 fn cose_vectors_match() {
     extern crate std;

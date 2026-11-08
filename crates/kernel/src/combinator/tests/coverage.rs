@@ -516,7 +516,7 @@ fn count_scenarios(reusable: RequirementTerm) -> Vec<(&'static str, World)> {
         "require-count-two-same-party",
         proved(two, vec![proof(3, 1, 1), proof(4, 2, 1)]),
     ));
-    // OP-141 m.29: the actor's own contribution never meets an independent term
+    // OP-141 m.29
     let mut own = approval(false);
     own.proof_kind = ProofKind::Contribution;
     own.independence = Independence::DistinctParty;
@@ -578,8 +578,7 @@ fn fuel_scenarios() -> Vec<(&'static str, World)> {
     out
 }
 
-// INV-35 (b), E14, §7.9.10.4: a reincarnated resource is a new resource; the Grant over the old
-// incarnation does not carry over
+// INV-35 (b), E14, §7.9.10.4
 #[test]
 fn a_grant_over_one_incarnation_never_covers_another() {
     let resource = |incarnation: u64| {

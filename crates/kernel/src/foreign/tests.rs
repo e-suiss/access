@@ -274,7 +274,7 @@ impl Case {
     }
 }
 
-// OP-143 m.13 (d): the order of the checks, each refusal by its code
+// OP-143 m.13 (d)
 #[test]
 fn a_foreign_pap_is_verified_under_the_pins() {
     assert_eq!(Case::new().run().map(|p| p.domain), Ok(d(1)));
@@ -358,7 +358,7 @@ fn a_foreign_pap_is_verified_under_the_pins() {
     }
 }
 
-// OP-143 m.13 (a), (d): a class is an action namespace
+// OP-143 m.13 (a), (d)
 #[test]
 fn a_class_contains_its_namespace() {
     assert!(within_class("pay", &bounds("pay")));
@@ -370,7 +370,7 @@ fn a_class_contains_its_namespace() {
     assert!(!within_class("pay", &prefixed));
 }
 
-// OP-143 m.13 (a): the gate of a foreign-authority Acceptance
+// OP-143 m.13 (a)
 #[test]
 fn a_foreign_gate_opens_for_its_domain_and_classes() {
     let g = gate(&[1]);
@@ -400,7 +400,7 @@ fn a_foreign_gate_opens_for_its_domain_and_classes() {
     );
 }
 
-// OP-143 m.13 (d): the freshness and issuance cutoffs are inclusive
+// OP-143 m.13 (d)
 #[test]
 fn freshness_and_cutoff_bounds_are_inclusive() {
     let edge = [
@@ -421,7 +421,7 @@ fn freshness_and_cutoff_bounds_are_inclusive() {
     }
 }
 
-// OP-143 m.13 (d): a binding key counts only with the key and algorithm that are pinned
+// OP-143 m.13 (d)
 #[test]
 fn a_binding_pinned_under_another_algorithm_is_dropped() {
     let both = Case {
@@ -441,7 +441,7 @@ fn a_binding_pinned_under_another_algorithm_is_dropped() {
     assert_eq!(case.run().map(|_| ()), Err("pap-key"));
 }
 
-// OP-143 m.13 (a), (d): both the PAP bounds and its validity bounds stay inside the class
+// OP-143 m.13 (a), (d)
 #[test]
 fn validity_bounds_outside_the_class_are_refused() {
     let mut p = pap("pay");
@@ -453,7 +453,7 @@ fn validity_bounds_outside_the_class_are_refused() {
     assert_eq!(case.run().map(|_| ()), Err("foreign-class"));
 }
 
-// OP-143 m.13 (d): the gate is picked by the domain the PAP payload claims
+// OP-143 m.13 (d)
 #[test]
 fn the_claimed_domain_is_read_from_the_payload() {
     let signed = sign1(2, CONTENT_TYPE, &pap("pay").to_bytes().unwrap());

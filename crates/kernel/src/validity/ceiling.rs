@@ -139,8 +139,7 @@ pub const fn report_deadline(horizon: u64) -> u64 {
 mod tests {
     use super::*;
 
-    // §13.7.2: CT3 has no projection on any variant; CT2 only online-strict and
-    // checkpoint-continuation by default
+    // §13.7.2
     #[test]
     fn the_table_closes_ct3_and_most_of_ct2() {
         for v in [
@@ -164,7 +163,7 @@ mod tests {
         );
     }
 
-    // §13.7.2, OP-150 m.7 (c): the CT2 offline extension is min(declared, 4 h) with hardware
+    // §13.7.2, OP-150 m.7 (c)
     #[test]
     fn the_ct2_offline_extension_is_capped() {
         assert_eq!(ct2_offline_extension(HOUR_MS).horizon_ms, HOUR_MS);
@@ -176,7 +175,7 @@ mod tests {
         assert_eq!(report_deadline(10), 10 + REPORT_GRACE_MS);
     }
 
-    // §13.7.2, OP-150 m.7 (c): a declared horizon of exactly 4 h is kept, one below it too
+    // §13.7.2, OP-150 m.7 (c)
     #[test]
     fn the_ct2_offline_extension_keeps_a_declared_horizon_up_to_four_hours() {
         assert_eq!(ct2_offline_extension(14_400_000).horizon_ms, 14_400_000);
@@ -184,7 +183,7 @@ mod tests {
         assert_eq!(ct2_offline_extension(14_400_001).horizon_ms, 14_400_000);
     }
 
-    // §13.7.2, TI-RT5, SEC14, EP-7: the default durations in milliseconds
+    // §13.7.2, TI-RT5, SEC14, EP-7
     #[test]
     fn the_default_durations_are_the_policy_values() {
         assert_eq!(MINUTE_MS, 60_000);
@@ -206,7 +205,7 @@ mod tests {
         }
     }
 
-    // §13.7.2, T20, U25, CR-K1: every open cell of the connectivity table, in milliseconds
+    // §13.7.2, T20, U25, CR-K1
     #[test]
     fn every_open_cell_matches_the_connectivity_table() {
         const M: u64 = 60_000;
@@ -281,7 +280,7 @@ mod tests {
         }
     }
 
-    // §13.7.2, C33: the claim clock skew is 2 min at CT0 and CT1, 1 min at CT2 and CT3
+    // §13.7.2, C33
     #[test]
     fn the_skew_tolerance_narrows_with_the_tier() {
         assert_eq!(skew_ms(Tier::Ct0), 120_000);
@@ -290,7 +289,7 @@ mod tests {
         assert_eq!(skew_ms(Tier::Ct3), 60_000);
     }
 
-    // §13.7.2, T20: `cap_horizon` and Domain Metadata ceilings key each tier by its number
+    // §13.7.2, T20
     #[test]
     fn each_tier_has_its_own_ceiling_key() {
         assert_eq!(

@@ -105,7 +105,7 @@ fn a_claim_verifies_under_its_issuers_instance() {
     assert_eq!(claim_id(&bytes).0[..], claim_digest(&bytes).0[..16]);
 }
 
-// L2-CLM-1, L2-CLM-2: another key, another issuer, another domain or content type is refused
+// L2-CLM-1, L2-CLM-2
 #[test]
 fn a_claim_that_is_not_the_issuers_is_refused() {
     let bytes = signed(&statement());
@@ -196,7 +196,7 @@ fn acceptance_content() -> Value {
     ])
 }
 
-// L2-CLM-3: the gate reads an acceptance-content
+// L2-CLM-3
 #[test]
 fn a_gate_reads_acceptance_content() {
     let content = acceptance_content();
@@ -220,9 +220,7 @@ fn claim_state_round_trips() {
 
 type VectorCase<'a> = (&'a str, &'a [&'a str], Vec<u8>, Id, Vec<Value>, u64);
 
-// L2-CLM-1 to L2-CLM-3: Claim vectors, byte for byte. A case gives the COSE_Sign1, the issuer
-// the signing Instance belongs to, the Acceptance contents that are live and the trusted time;
-// the result is the disposition or the rejection.
+// L2-CLM-1 to L2-CLM-3
 #[test]
 #[allow(clippy::too_many_lines, reason = "the vector cases are listed in full")]
 fn claim_vectors_match() {
@@ -459,7 +457,7 @@ fn quota_and_signing_cutoff() {
     );
 }
 
-// OP-141 m.21 (d): an amend that only narrows is not expansion
+// OP-141 m.21 (d)
 #[test]
 fn narrowing_an_acceptance() {
     // SI-18
@@ -528,8 +526,7 @@ fn narrowing_an_acceptance() {
     assert!(!narrows(&capped, &old));
 }
 
-// L2-CLM-3, E18, INV-15, OP-150: an actor-binding Acceptance admits a Claim, which is then
-// neither a proof nor a membership
+// L2-CLM-3, E18, INV-15, OP-150
 #[test]
 fn an_actor_binding_acceptance_admits_for_its_use_only() {
     let s = statement();
@@ -562,8 +559,7 @@ fn pinned_content(keys: Vec<Value>) -> Value {
     c
 }
 
-// OP-150, §9.13 issuer identification: a pinned key set travels in the Acceptance; dropping
-// keys narrows, adding one widens
+// OP-150, §9.13
 #[test]
 fn a_pinned_key_set_is_read_and_only_shrinks_by_narrowing() {
     let k1 = key(9).to_value();
@@ -586,13 +582,13 @@ fn a_pinned_key_set_is_read_and_only_shrinks_by_narrowing() {
     assert!(Gate::of(&pinned_content(vec![])).is_err());
 }
 
-// SEC12, §13.7.7: an unknown occurredAt reaches 72 hours back from the declaration
+// SEC12, §13.7.7
 #[test]
 fn compromise_lookback_is_72_hours() {
     assert_eq!(COMPROMISE_LOOKBACK_MS, 259_200_000);
 }
 
-// TI-RT7, OP-141 m.30 (c): a successor shares issuer, subject and class, nothing else matters
+// TI-RT7, OP-141 m.30 (c)
 #[test]
 fn a_successor_is_on_the_same_line_only_with_the_same_issuer_subject_and_class() {
     let of = statement();
@@ -627,7 +623,7 @@ fn pinned_value(iss: &str, aud: &str, keys: Vec<Value>) -> Value {
     ])
 }
 
-// OP-150, §9.13 issuer identification: a pinned key set names its issuer, audience and keys
+// OP-150, §9.13
 #[test]
 fn a_pinned_key_set_needs_issuer_audience_and_keys() {
     let k = key(9).to_value();
@@ -654,7 +650,7 @@ fn a_pinned_key_set_needs_issuer_audience_and_keys() {
     assert!(check_pinned(&Value::text("pinned")).is_err());
 }
 
-// L2-CLM-3: a predicate-input gate admits a matching Claim, also for one named subject
+// L2-CLM-3
 #[test]
 fn a_gate_admits_its_subject_as_a_predicate_input() {
     let s = statement();
@@ -667,7 +663,7 @@ fn a_gate_admits_its_subject_as_a_predicate_input() {
     assert_eq!(disposition(&s, &[named], 2_000), Disposition::Admit);
 }
 
-// L2-CLM-3, OP-141 m.19 (c): a Claim signed exactly the allowed skew ahead is not future
+// L2-CLM-3, OP-141 m.19 (c)
 #[test]
 fn a_claim_at_the_skew_limit_is_not_future() {
     let at_limit = Statement {
@@ -699,7 +695,7 @@ fn with_quota(count: u64, window_s: u64) -> Value {
     c
 }
 
-// OP-141 m.21 (a): a declared quota is read as count per window; neither may be zero
+// OP-141 m.21 (a)
 #[test]
 fn a_declared_quota_is_read_and_must_be_positive() {
     assert_eq!(Gate::of(&with_quota(5, 60)).unwrap().quota, Some((5, 60)));
@@ -707,7 +703,7 @@ fn a_declared_quota_is_read_and_must_be_positive() {
     assert_eq!(Gate::of(&with_quota(5, 0)), Err(ModelError::Range));
 }
 
-// OP-141 m.21 (d): an earlier cutoff or a tighter quota narrows, a later or looser one widens
+// OP-141 m.21 (d)
 #[test]
 fn cutoffs_and_quotas_narrow_only_when_tighter() {
     let old = Gate {
@@ -748,7 +744,7 @@ fn cutoffs_and_quotas_narrow_only_when_tighter() {
     }
 }
 
-// L2-CLM-1: an Instance-signed Claim keeps its signing time in the record
+// L2-CLM-1
 #[test]
 fn claim_state_keeps_the_signing_time() {
     let st = ClaimState {

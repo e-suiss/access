@@ -29,7 +29,7 @@ fn v(core: u64, meta: u64, profiles: &[(&str, u64)]) -> SpecVersions {
     }
 }
 
-// §9.17 compat k.5
+// §9.17
 #[test]
 fn newer_verifier_accepts_older_versions_never_the_reverse() {
     let old = v(1, 1, &[("authzen", 1)]);
@@ -53,7 +53,7 @@ fn newer_verifier_accepts_older_versions_never_the_reverse() {
     );
 }
 
-// §9.17 compat k.2
+// §9.17
 #[test]
 fn unadopted_version_has_no_effect() {
     let supported = v(2, 2, &[("authzen", 2), ("ssf", 1)]);
@@ -85,7 +85,7 @@ fn unadopted_version_has_no_effect() {
     );
 }
 
-// §9.17 compat k.4, PI-21
+// §9.17, PI-21
 #[test]
 fn below_the_domain_minimum_is_a_downgrade() {
     let supported = v(3, 3, &[("authzen", 3)]);
@@ -113,7 +113,7 @@ fn below_the_domain_minimum_is_a_downgrade() {
     );
 }
 
-// §9.17 compat k.6: a standard's new version moves only its own profile track
+// §9.17 k.6
 #[test]
 fn profile_tracks_are_independent_of_core() {
     let supported = v(1, 1, &[("authzen", 2), ("oauth_rar", 1)]);

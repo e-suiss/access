@@ -187,7 +187,7 @@ fn unknown_fields_and_written_defaults_are_rejected() {
     );
 }
 
-// OP-109 m.10: sets are sorted by encoded bytes, without repeats
+// OP-109 m.10
 #[test]
 fn sets_must_be_canonical() {
     let b = Value::Map(vec![(
@@ -336,7 +336,7 @@ fn golden_vectors_match() {
     );
 }
 
-// OP-108 m.4: stored values with unknown parts are read as not understood
+// OP-108 m.4
 #[test]
 fn stored_values_with_unknown_parts_are_not_understood() {
     let a = sample();
@@ -363,7 +363,7 @@ fn stored_values_with_unknown_parts_are_not_understood() {
     ));
 }
 
-// OP-106 m.1, m.4: every variant decodes back to itself
+// OP-106 m.1, m.4
 #[test]
 fn remaining_variants_round_trip() {
     for p in [PurposeRef::Aim(d(7)), PurposeRef::Work(d(8))] {
@@ -385,7 +385,7 @@ fn remaining_variants_round_trip() {
     assert_eq!(BudgetTerm::from_value(&term.to_value()), Ok(term));
 }
 
-// OP-108 m.4: a word from another field is not a budget dimension or window
+// OP-108 m.4
 #[test]
 fn budget_words_are_field_specific() {
     let term = BudgetTerm {
@@ -404,7 +404,7 @@ fn budget_words_are_field_specific() {
     );
 }
 
-// OP-109 m.4: the default independence written out is rejected; other words are malformed
+// OP-109 m.4
 #[test]
 fn written_default_independence_is_rejected() {
     let a = sample();

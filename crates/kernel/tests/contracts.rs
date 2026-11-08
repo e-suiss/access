@@ -143,31 +143,25 @@ fn value_sorted(v: &Value) -> Value {
     dcbor::decode(&dcbor::encode(v, LIMITS).unwrap(), LIMITS).unwrap()
 }
 
-// OP-149 m.9, XI-7, E44: the typed authority request examples meet its CDDL and JSON Schema,
-// and each JSON form is the same value as its CBOR form
+// OP-149 m.9, XI-7, E44
 #[test]
 fn authority_request_examples_meet_both_schemas() {
     check_examples("authority-request.json");
 }
 
-// OP-149 m.9, E32: the Approval Act Statement examples meet kernel.cddl; an act names its class
-// exactly when it is a contribution
+// OP-149 m.9, E32
 #[test]
 fn approval_act_statement_examples_meet_the_cddl() {
     check_examples("approval-act-statement.json");
 }
 
-// §9.9, OP-150 m.2: the holder's projection.issue Exercise at the token endpoint meets its CDDL;
-// an Exercise without its AIS, with a short nonce or an unknown member does not
+// §9.9, OP-150 m.2
 #[test]
 fn token_exercise_examples_meet_the_cddl() {
     check_examples("token-exercise.json");
 }
 
-// L0-META-30, §9.14.1 A step 4, OP-149 m.9, m.29 (b), m.33 (b): the contribute intent an
-// approver's device pre-signs is an intent-envelope of kernel.cddl, and the committed example is
-// byte for byte what the Kernel's contribute_intent builds for its target and class, with the
-// intent digest the AIS names; an envelope without the payload digest is no contribution
+// L0-META-30, §9.14.1 step 4, OP-149 m.9, m.29 (b), m.33 (b)
 #[test]
 fn contribute_intent_example_is_the_kernels() {
     use access_kernel::codec::Canonical;
@@ -232,35 +226,31 @@ fn contribute_intent_example_is_the_kernels() {
     }
 }
 
-// OP-149 m.3, CR-58 m.3: the discovery endpoint map is deterministic CBOR of https URLs
+// OP-149 m.3, CR-58 m.3
 #[test]
 fn suiss_discovery_examples_meet_the_cddl() {
     check_examples("suiss-discovery.json");
 }
 
-// OP-149 m.8: the auth_context examples meet their CDDL; the session id never stands in for
-// session_ref, and the AIS digest is required
+// OP-149 m.8
 #[test]
 fn auth_context_examples_meet_the_cddl() {
     check_examples("auth-context.json");
 }
 
-// OP-149 m.5, OP-149 m.8, CR-24: the key lookup examples meet their CDDL; every key names its
-// Party's actor kind, and a kind outside the closed set is not an answer
+// OP-149 m.5, OP-149 m.8, CR-24
 #[test]
 fn key_lookup_examples_meet_the_cddl() {
     check_examples("key-lookup.json");
 }
 
-// OP-149 m.28 (c), m.8: the Party status lookup examples meet their CDDL; a Party is named by a
-// full id with a kind from the closed set and the record that admitted it
+// OP-149 m.28 (c), m.8
 #[test]
 fn party_lookup_examples_meet_the_cddl() {
     check_examples("party-lookup.json");
 }
 
-// E43, TI-20, OP-141 m.38: the decision explanation examples meet explanation.cddl and its JSON
-// Schema in every reader's view; no_objection is not an outcome and an empty list is not a list
+// E43, TI-20, OP-141 m.38
 #[test]
 fn explanation_examples_meet_both_schemas() {
     check_examples("explanation.json");
@@ -291,9 +281,7 @@ fn assurance_explanation(dim: &str, level: u64) -> (Value, Json) {
     (value, json)
 }
 
-// OP-149 m.28 (e), OP-118 m.3: the assurance ranges of explanation.cddl and the JSON Schema are
-// the Kernel's, dimension by dimension and one past each bound, and the Kernel decodes exactly
-// what both contracts accept; a dimension the Kernel does not know is refused by all three
+// OP-149 m.28 (e), OP-118 m.3
 #[test]
 fn assurance_ranges_are_the_kernels_in_both_contracts() {
     use access_kernel::requirement::{ASSURANCE_DIMENSIONS, check_assurance};
@@ -332,11 +320,7 @@ fn assurance_ranges_are_the_kernels_in_both_contracts() {
     assert!(!schema.errors(&empty).is_empty(), "an empty assurance map");
 }
 
-// E43, OP-114 m.2, OP-114 m.3, OP-141 m.38, OP-149 m.25 (a), m.33 (a): the Kernel's Decision is
-// the explanation format; every valid example, in whichever scope, decodes into an Explanation
-// and encodes back byte for byte; the audit scope is the Kernel decision and round-trips through
-// it, the viewer's keeps every position and is one too, the requester's view of a blocker
-// outside the lineage is no Kernel decision; an invalid example is not decoded
+// E43, OP-114 m.2, OP-114 m.3, OP-141 m.38, OP-149 m.25 (a), m.33 (a)
 #[test]
 fn explanation_examples_round_trip_through_the_kernel_decision() {
     let doc: Json = serde_json::from_str(&read("cddl/examples/explanation.json")).unwrap();
@@ -367,8 +351,6 @@ fn explanation_examples_round_trip_through_the_kernel_decision() {
                 assert_eq!(decoded.unwrap_err(), ModelError::Missing, "{id}");
                 scoped += 1;
             }
-            // the filter dropped a subcode, so the blockers are no longer in the order of
-            // their own encodings: a Kernel decision in content, not in bytes
             "deny-viewer" => {
                 let d = e.decision().unwrap_or_else(|| panic!("{id}"));
                 assert_eq!(Explanation::from(d), e, "{id}");
@@ -393,8 +375,7 @@ fn explanation_examples_round_trip_through_the_kernel_decision() {
     assert_eq!(scoped, 2);
 }
 
-// E43, OP-111 m.1, OP-149 m.33 (a): every decision in the Kernel's vectors decodes into a
-// Decision and into an Explanation, encodes back byte for byte from each and is an explanation
+// E43, OP-111 m.1, OP-149 m.33 (a)
 #[test]
 fn decision_vectors_are_explanations() {
     let k = kernel();
@@ -427,7 +408,7 @@ fn decision_vectors_are_explanations() {
     assert!(seen >= 100);
 }
 
-// OP-149 m.8: the CDDL actor kinds are the Kernel's
+// OP-149 m.8
 #[test]
 fn actor_kinds_match_the_cddl() {
     let k = kernel();
@@ -451,7 +432,7 @@ fn decoded(h: &str) -> Value {
     dcbor::decode(&unhex(h), LIMITS).unwrap()
 }
 
-// L2-RCP-1, OP-149 m.11: every receipt the Kernel accepts is a CDDL receipt
+// L2-RCP-1, OP-149 m.11
 #[test]
 fn receipt_vectors_meet_the_cddl() {
     let k = kernel();
@@ -466,8 +447,7 @@ fn receipt_vectors_meet_the_cddl() {
     assert!(seen >= 3);
 }
 
-// OP-149 m.6, m.8, L0-META-1: every payload the Kernel decodes is a CDDL meta-payload, and the
-// Party and Instance states it writes are the CDDL's
+// OP-149 m.6, m.8, L0-META-1
 #[test]
 fn meta_vectors_meet_the_cddl() {
     let k = kernel();
@@ -529,8 +509,7 @@ fn body_rule(class: &str) -> &'static str {
     }
 }
 
-// L2-CLB-1, L2-CLB-3, OP-150 m.2: every body the Kernel accepts is the CDDL body of its class,
-// and a body it refuses for its shape is not
+// L2-CLB-1, L2-CLB-3, OP-150 m.2
 #[test]
 fn claim_body_vectors_meet_the_cddl() {
     let k = kernel();
@@ -563,7 +542,7 @@ fn claim_body_vectors_meet_the_cddl() {
     assert!(accepted >= 11 && refused >= 3);
 }
 
-// L2-RPT-1: every report the Kernel decodes is a CDDL report
+// L2-RPT-1
 #[test]
 fn report_vectors_meet_the_cddl() {
     let k = kernel();
@@ -583,7 +562,7 @@ fn report_vectors_meet_the_cddl() {
     assert!(seen >= 9);
 }
 
-// L2-AAS-1: every statement the Kernel accepts is a CDDL approval-act-statement
+// L2-AAS-1
 #[test]
 fn aas_vectors_meet_the_cddl() {
     let k = kernel();
@@ -602,7 +581,7 @@ fn aas_vectors_meet_the_cddl() {
     assert!(seen >= 3);
 }
 
-// L2-STL-1, L2-STL-2: references and list tokens meet the CDDL
+// L2-STL-1, L2-STL-2
 #[test]
 fn status_list_vectors_meet_the_cddl() {
     let k = kernel();
@@ -621,7 +600,7 @@ fn status_list_vectors_meet_the_cddl() {
     }
 }
 
-// L2-CLM-5: the unsigned Claims the Kernel reads are CDDL unsigned-claims
+// L2-CLM-5
 #[test]
 fn unsigned_claim_vectors_meet_the_cddl() {
     let k = kernel();
@@ -641,7 +620,7 @@ fn unsigned_claim_vectors_meet_the_cddl() {
     assert!(seen >= 2);
 }
 
-// L2-STL-1, OP-150 m.3 (a): a contract that names its status entry is a CDDL contract
+// L2-STL-1, OP-150 m.3 (a)
 #[test]
 fn validity_vectors_meet_the_cddl() {
     let k = kernel();

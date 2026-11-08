@@ -97,7 +97,7 @@ fn catalog() -> Catalog {
     c
 }
 
-// OP-109 m.9: range
+// OP-109 m.9
 #[test]
 fn range_rules() {
     let cat = Catalog::default();
@@ -151,7 +151,7 @@ fn range_rules() {
     );
 }
 
-// OP-109 m.9: enum, eq, flag, count, interval; different types never compare
+// OP-109 m.9
 #[test]
 fn simple_type_rules() {
     let cat = Catalog::default();
@@ -189,7 +189,7 @@ fn simple_type_rules() {
     );
 }
 
-// OP-109 m.9: resource selectors
+// OP-109 m.9
 #[test]
 fn resource_rules() {
     let order = ResourceSelector::Exact(rref("shop", &["orders", "o1"]));
@@ -249,7 +249,7 @@ fn resource_rules() {
     );
 }
 
-// OP-109 m.9: subject selectors
+// OP-109 m.9
 #[test]
 fn subject_rules() {
     let alice = SubjectSelector::Party(Id([1; 16]));
@@ -283,7 +283,7 @@ fn subject_rules() {
     );
 }
 
-// OP-107 m.15, OP-109 m.9: purposes
+// OP-107 m.15, OP-109 m.9
 #[test]
 fn purpose_rules() {
     let cat = catalog();
@@ -315,7 +315,7 @@ fn purpose_rules() {
     assert_eq!(cyclic.check(), Err(InputError::PurposeCycle));
 }
 
-// OP-107 m.2, m.3, INV-9: prefixes resolve in the pinned catalog and never cover reserved actions
+// OP-107 m.2, m.3, INV-9
 #[test]
 fn action_prefix_rules() {
     let cat = catalog();
@@ -335,7 +335,7 @@ fn action_prefix_rules() {
     assert_eq!(normalize(&set(&[]), &cat), Ok(None));
 }
 
-// OP-109 m.10, INV-8: parameters, recipient, purpose
+// OP-109 m.10, INV-8
 #[test]
 fn authority_set_rules() {
     let cat = catalog();
@@ -453,7 +453,7 @@ fn child_within_parent_rules() {
     ));
 }
 
-// OP-109 m.11: validity and requirements
+// OP-109 m.11
 #[test]
 fn child_within_parent_validity_and_requirements() {
     let cat = catalog();
@@ -491,7 +491,7 @@ fn child_within_parent_validity_and_requirements() {
     ));
 }
 
-// OP-109 m.9: a foreign class is below only the same class of the same foreign domain
+// OP-109 m.9
 #[test]
 fn foreign_subject_rules() {
     let foreign = |n: u8, class: &str| SubjectSelector::Foreign {
@@ -504,7 +504,7 @@ fn foreign_subject_rules() {
     assert!(!subject_le(&foreign(1, "auditor"), &foreign(2, "clerk")));
 }
 
-// OP-109 m.9: eq bounds compare and meet only when equal
+// OP-109 m.9
 #[test]
 fn eq_bound_rules() {
     let cat = Catalog::default();
@@ -515,7 +515,7 @@ fn eq_bound_rules() {
     assert_eq!(bound_meet(&eq(1), &eq(2), &cat), None);
 }
 
-// OP-107 m.15, OP-109 m.9: purpose and predicate bounds are never empty
+// OP-107 m.15, OP-109 m.9
 #[test]
 fn empty_purpose_and_predicate_bounds_are_refused() {
     let cat = catalog();
@@ -532,8 +532,7 @@ fn empty_purpose_and_predicate_bounds_are_refused() {
     );
 }
 
-// OP-109 m.10: a set of prefixes only is not empty, an empty purpose set is refused, and only a
-// Public recipient is written as absent
+// OP-109 m.10
 #[test]
 fn authority_set_normal_form() {
     let cat = catalog();

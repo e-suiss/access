@@ -364,7 +364,7 @@ fn each_step_rejects_its_case() {
     }
 }
 
-// CR-58 m.5: the resolved key verifies the artefact, and only for its own kid
+// CR-58 m.5
 #[test]
 fn resolved_key_verifies_the_artefact() {
     let case = Case::new();
@@ -413,7 +413,7 @@ fn resolved_key_verifies_the_artefact() {
     );
 }
 
-// CR-24: RFC 7638 §3.1 example key, as Ed25519 from RFC 8037 §A.3
+// CR-24, §3.1
 #[test]
 fn thumbprint_matches_rfc_8037() {
     let x = crate::json::b64url_decode("11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo").unwrap();
@@ -424,7 +424,7 @@ fn thumbprint_matches_rfc_8037() {
     );
 }
 
-// CR-58 m.3, m.6, SAI-40, SI-11: a superseded binding is refused on its own say-so
+// CR-58 m.3, m.6, SAI-40, SI-11
 #[test]
 fn metadata_round_trips_and_is_signed_by_a_trusted_binding() {
     let case = Case::new();
@@ -679,8 +679,8 @@ fn jwk_members(key: &PublicKey) -> String {
     }
 }
 
-// CR-24, OP-149 m.6, L0-SIG-14: the kid of an Instance key is its RFC 7638 thumbprint; the
-// Ed25519 case is the RFC 8037 §A.3 key and the P-256 case the RFC 7515 §A.3 key
+// CR-24, OP-149 m.6, L0-SIG-14
+// P-256
 #[test]
 fn thumbprint_vectors_match() {
     use crate::json::{b64url_decode, b64url_encode};
@@ -736,7 +736,7 @@ fn thumbprint_vectors_match() {
     );
 }
 
-// CR-58 m.3: metadata is refused when its own algorithm list leaves out the signing binding's
+// CR-58 m.3
 #[test]
 fn metadata_signed_with_an_algorithm_it_does_not_list_is_refused() {
     let case = Case::new();
@@ -758,7 +758,7 @@ fn metadata_signed_with_an_algorithm_it_does_not_list_is_refused() {
     );
 }
 
-// CR-24: an AKP thumbprint names the ML-DSA parameter set, so one public value gives three kids
+// CR-24
 #[test]
 fn ml_dsa_thumbprints_name_the_parameter_set() {
     let public = vec![0x11; 32];
@@ -779,7 +779,7 @@ fn ml_dsa_thumbprints_name_the_parameter_set() {
     assert_eq!(kids, expected);
 }
 
-// OP-108 m.4: a known variant of the wrong shape is malformed, an unknown one is not understood
+// OP-108 m.4
 #[test]
 fn key_and_scope_variants_are_strict() {
     assert_eq!(

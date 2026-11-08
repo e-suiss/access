@@ -307,7 +307,7 @@ fn enc(v: &Value) -> Vec<u8> {
     dcbor::encode(v, Limits::CEILING).unwrap()
 }
 
-// L2-CLB-1, L2-CLB-3: every body round-trips and its digest binds the class
+// L2-CLB-1, L2-CLB-3
 #[test]
 fn bodies_round_trip_and_bind_their_class() {
     for (id, class, body) in bodies() {
@@ -327,7 +327,7 @@ fn bodies_round_trip_and_bind_their_class() {
     assert_eq!(Class::parse("kyc"), None);
 }
 
-// §9.12.1, PI-12, U25: a profile covers a contract only within its declared ceilings
+// §9.12.1, PI-12, U25
 #[test]
 fn a_profile_covers_only_what_it_declares() {
     let p = profile();
@@ -529,8 +529,7 @@ fn run(c: &Case) -> Result<Option<Body>, BodyError> {
     check(&statement(&c.class, c.value.clone()), c.body.as_deref())
 }
 
-// L2-CLB-2, L2-CLB-3, E26: a body is checked against the digest in the value; scalar classes
-// carry their field in the value; a withheld body is accepted as a digest
+// L2-CLB-2, L2-CLB-3, E26
 #[test]
 fn values_and_bodies_are_checked() {
     let got: BTreeMap<String, Result<bool, &str>> = cases()
@@ -643,8 +642,7 @@ fn unsigned_cases() -> Vec<(&'static str, Vec<u8>, Channel)> {
     ]
 }
 
-// L2-CLM-5, §5.10, P37: an unsigned Claim is read only from the channel it names, for this
-// domain; its ClaimID is taken over the bytes as received
+// L2-CLM-5, §5.10, P37
 #[test]
 fn unsigned_claims_name_their_channel() {
     let got: Vec<Result<Unsigned, &str>> = unsigned_cases()
@@ -690,7 +688,7 @@ fn unsigned_claim_vectors_match() {
     );
 }
 
-// L2-CLB-1, §10.1.5: an upstream `amr` is absent or non-empty, never an empty list
+// L2-CLB-1, §10.1.5
 #[test]
 fn an_upstream_amr_is_never_an_empty_list() {
     fn member<'a>(v: &'a mut Value, key: &str) -> &'a mut Value {
@@ -708,7 +706,7 @@ fn an_upstream_amr_is_never_an_empty_list() {
     assert_eq!(Authentication::from_value(&v), Err(ModelError::Range));
 }
 
-// L2-CLB-1, §9.12.3, §9.16: an acknowledgement may name a semantic event instead of an Exercise
+// L2-CLB-1, §9.12.3, §9.16
 #[test]
 fn an_ack_for_a_semantic_event_round_trips() {
     let a = AuthorityStateAck {

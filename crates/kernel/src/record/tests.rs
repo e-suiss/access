@@ -112,7 +112,7 @@ fn envelopes_match_vectors() {
     assert_eq!(checked, 4);
 }
 
-// OP-106 m.13: commitments are ordered by UTF-8 name bytes, not by CBOR map order
+// OP-106 m.13, UTF-8
 #[test]
 fn field_root_orders_names_by_utf8_bytes() {
     let v = vectors();
@@ -201,7 +201,7 @@ fn rejections_match_vectors() {
     assert_eq!(checked, 20);
 }
 
-// OP-108 m.4: an unknown kind in a stored record is not understood, not an error
+// OP-108 m.4
 #[test]
 fn unknown_kind_in_stored_record_is_not_understood() {
     let v = vectors();
@@ -233,7 +233,7 @@ fn withholding_or_redacting_keeps_the_leaf() {
     }
 }
 
-// §17.6.1 rule 1: an opened field is recomputed, so a changed value or salt changes the leaf
+// §17.6.1 rule 1
 #[test]
 fn tampered_disclosure_does_not_verify() {
     let v = vectors();
@@ -277,7 +277,7 @@ fn tampered_disclosure_does_not_verify() {
     );
 }
 
-// §17.6.1 rule 1: a withheld field's name only orders its commitment; it is not authenticated
+// §17.6.1 rule 1
 #[test]
 fn withheld_names_are_only_ordering_hints() {
     let v = vectors();
@@ -353,7 +353,7 @@ fn hex(b: &[u8]) -> String {
     })
 }
 
-// L0-ENC-28: an envelope without fields would not decode, so it is never sealed
+// L0-ENC-28
 #[test]
 fn an_envelope_without_fields_is_not_sealed() {
     let header = |domain: Option<Digest>, pos: u64, kind: RecordKind| Header {

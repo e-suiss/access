@@ -75,7 +75,7 @@ fn fold_matches_vectors() {
     }
 }
 
-// L2-REC-3, TI-16: applying records one by one gives the fold of every prefix
+// L2-REC-3, TI-16
 #[test]
 fn apply_is_the_incremental_fold() {
     for c in vectors().cases.iter().filter(|c| c.state.is_some()) {
@@ -88,7 +88,7 @@ fn apply_is_the_incremental_fold() {
     }
 }
 
-// L2-REC-2: a rejected record leaves the state as it was
+// L2-REC-2
 #[test]
 fn a_rejected_record_changes_nothing() {
     let v = vectors();
@@ -105,7 +105,7 @@ fn a_rejected_record_changes_nothing() {
     assert_eq!(state, before);
 }
 
-// C4, OP-141 m.6: Genesis creates the meta-anchor and the objects it lists, at version 0
+// C4, OP-141 m.6
 #[test]
 fn genesis_creates_its_objects() {
     use crate::record::{Header, Opened, RecordKind};
@@ -145,7 +145,7 @@ fn genesis_creates_its_objects() {
     odd.fields
         .insert(String::from("roots"), opened(Value::text("r")));
     assert_eq!(genesis(&odd), Err(FoldError::Genesis));
-    // C4: only a Genesis record at position 0 creates the state
+    // C4
     let mut later = env.clone();
     later.header.pos = 1;
     assert_eq!(genesis(&later), Err(FoldError::Genesis));
@@ -154,7 +154,7 @@ fn genesis_creates_its_objects() {
     assert_eq!(genesis(&other_kind), Err(FoldError::Genesis));
 }
 
-// L2-REC-2: a decision's outcome is its `outcome` member; a map without one carries no effects
+// L2-REC-2
 #[test]
 fn a_decision_without_an_outcome_member_is_rejected() {
     use crate::record::{Header, Opened, RecordKind};
