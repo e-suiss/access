@@ -1,7 +1,11 @@
 //! The day-partition opener of the ephemeral protocol tables (OP-146 m.5 (f), m.7 (d)), run
 //! through the jobs table (OP-129 m.2) so that one node of the cell does it per day: each
 //! node schedules today's job, one claims it and opens today and the days ahead as the
-//! archive role. Closing old days is not done here (OP-73).
+//! archive role, and this month's and next month's identity audit partitions (OP-13b, OP-134
+//! m.2). Closing old days is not done here (OP-73).
+//!
+//! The same tick releases the management API's `Idempotency-Key` answers past their 24 hours
+//! (TN-126, OP-151 m.3 (c)): the answer is cleared and the key released in place, never deleted.
 //!
 //! The daily tenant analytics (IDP-36, OP-151 m.3 (n)) run the same way: one node aggregates
 //! yesterday for every live realm, in a transaction scoped to that realm, and sets the
@@ -15,6 +19,7 @@ use access_identity_events::domain::catalog::IdentityEvent;
 use access_identity_risk::app::analytics::aggregate;
 use access_store::Pool;
 use access_store::StoreError;
+use access_store::audit::open_month;
 use access_store::ephemeral::open_days;
 use access_store::identity::TenantTx;
 use access_store::jobs::{claim_kind, complete, schedule};
@@ -47,6 +52,42 @@ pub(crate) struct Tick {
     pub(crate) completed: u32,
     /// Partition openings that failed.
     pub(crate) failed: u32,
+}
+
+/// The calendar month of Unix day `day` and the month after it, as (year, month).
+fn months(day: i32) -> Option<[(i32, u32); 2]> {
+    let at = time::OffsetDateTime::from_unix_timestamp(i64::from(day).checked_mul(86_400)?).ok()?;
+    let (year, month) = (at.year(), u32::from(u8::from(at.month())));
+    let next = if month == 12 {
+        (year.checked_add(1)?, 1)
+    } else {
+        (year, month.checked_add(1)?)
+    };
+    Some([(year, month), next])
+}
+
+/// Opens the identity audit partitions of `day`'s month and the next one (OP-13b). Rows of a
+/// month written before its partition existed sit in the default partition, which then refuses
+/// that month's partition; such a month is only tried and stays in the default, so the job
+/// still completes once the next month is open.
+async fn open_audit_months(archive: &Pool, day: i32) -> (bool, u32) {
+    let Some([this, next]) = months(day) else {
+        return (false, 1);
+    };
+    let mut failed = 0_u32;
+    if let Err(error) = open_month(archive, this.0, this.1).await {
+        failed = failed.saturating_add(1);
+        tracing::warn!(%error, year = this.0, month = this.1, "audit month not opened; its rows stay in the default partition");
+    }
+    let done = match open_month(archive, next.0, next.1).await {
+        Ok(_) => true,
+        Err(error) => {
+            failed = failed.saturating_add(1);
+            tracing::warn!(%error, year = next.0, month = next.1, "next audit month not opened");
+            false
+        }
+    };
+    (done, failed)
 }
 
 /// Schedules today's job and runs the ones this node claims. A job completes once every day
@@ -84,6 +125,10 @@ pub(crate) async fn tick(
                 done &= o.day == day;
             }
         }
+        // OP-13b, OP-134 m.2
+        let (months_open, failed) = open_audit_months(archive, day).await;
+        out.failed = out.failed.saturating_add(failed);
+        done &= months_open;
         if done && complete(app, job.id, worker).await? {
             out.completed = out.completed.saturating_add(1);
         }
@@ -213,16 +258,37 @@ fn wall_ms() -> Option<u64> {
         .and_then(|d| u64::try_from(d.as_millis()).ok())
 }
 
+/// Most idempotency answers released per tick (PD).
+const RELEASE_BATCH: u32 = 1_000;
+
+/// Releases the `Idempotency-Key` answers past their retention (TN-126, OP-73): each such key's
+/// answer is cleared and its state set to released, in batches until none is left.
+pub(crate) async fn release_answers(app: &Pool, now_ms: u64) -> Result<u64, StoreError> {
+    let mut total = 0_u64;
+    loop {
+        let n = access_store::api_idempotency::release_expired(app, now_ms, RELEASE_BATCH).await?;
+        total = total.saturating_add(n);
+        if n < u64::from(RELEASE_BATCH) {
+            return Ok(total);
+        }
+    }
+}
+
 /// Ticks every [`INTERVAL`] until the task is aborted.
 pub(crate) async fn run(app: Pool, archive: Pool, router: Pool, worker: String) {
     let mut every = tokio::time::interval(INTERVAL);
     loop {
         every.tick().await;
         open_now(&app, &archive, &worker).await;
-        if let Some(now) = wall_ms()
-            && let Err(error) = analytics_tick(&app, &router, &worker, now).await
-        {
+        let Some(now) = wall_ms() else {
+            continue;
+        };
+        if let Err(error) = analytics_tick(&app, &router, &worker, now).await {
             tracing::warn!(%error, "analytics job failed");
+        }
+        // TN-126, OP-151 m.3 (c)
+        if let Err(error) = release_answers(&app, now).await {
+            tracing::warn!(%error, "idempotency answers not released");
         }
     }
 }
@@ -317,5 +383,82 @@ mod tests {
         for name in ["login_throttle_20241004", "login_throttle_20241007"] {
             assert!(throttle.iter().any(|t| t == name), "{throttle:?}");
         }
+        // D-1, OP-13b, OP-134 m.2: this month's and next month's identity audit partitions
+        let audit = partitions(&db.owner, "identity_audit").await.unwrap();
+        for name in ["identity_audit_202410", "identity_audit_202411"] {
+            assert!(audit.iter().any(|t| t == name), "{audit:?}");
+        }
+    }
+
+    // D-1, OP-13b: the months turn over a year's end
+    #[test]
+    fn the_months_of_a_day() {
+        assert_eq!(months(20_000), Some([(2024, 10), (2024, 11)]));
+        assert_eq!(months(20_088), Some([(2024, 12), (2025, 1)]));
+    }
+
+    // D-1, OP-13b, OP-73: a month whose rows already sit in the default partition cannot get its
+    // own partition; it stays in the default, the next month is opened ahead, and the job still
+    // completes
+    #[tokio::test]
+    async fn a_month_already_in_the_default_partition_opens_the_next() {
+        use access_store::audit::AuditEvent;
+        use access_store::identity::RealmId;
+        let db = fresh().await.unwrap();
+        let mut t = TenantTx::begin(
+            &db.app,
+            access_store::identity::TenantId::from_bytes([0x41; 16]),
+            RealmId::from_bytes([0x42; 16]),
+        )
+        .await
+        .unwrap();
+        t.audit(&AuditEvent {
+            event_type: "session.revoked",
+            actor: "adm_1",
+            target: "usr_1",
+            correlation: "req_1",
+        })
+        .await
+        .unwrap();
+        t.commit().await.unwrap();
+        let now = wall_ms().unwrap();
+        let day = i32::try_from(now / DAY_MS).unwrap();
+        let [this, next] = months(day).unwrap();
+        let first = tick(&db.app, &db.archive, "node-a", now).await.unwrap();
+        assert_eq!(first.completed, 1);
+        assert_eq!(first.failed, 1);
+        let audit = partitions(&db.owner, "identity_audit").await.unwrap();
+        let name = |(y, m): (i32, u32)| format!("identity_audit_{y:04}{m:02}");
+        assert!(!audit.contains(&name(this)), "{audit:?}");
+        assert!(audit.contains(&name(next)), "{audit:?}");
+    }
+
+    // D-4, TN-126, OP-151 m.3 (c), OP-73: an answer past its retention is cleared and its key
+    // released in place; a live answer is kept and nothing is deleted
+    #[tokio::test]
+    async fn expired_idempotency_answers_are_released() {
+        use access_store::api_idempotency::{Begun, begin, finish};
+        let db = fresh().await.unwrap();
+        let (old, live, req) = ([1; 32], [2; 32], [9; 32]);
+        assert_eq!(
+            begin(&db.app, &old, &req, 1_000, 10, 100).await.unwrap(),
+            Begun::Run
+        );
+        finish(&db.app, &old, &req, Some(b"old")).await.unwrap();
+        assert_eq!(
+            begin(&db.app, &live, &req, 1_000, 10, 10_000)
+                .await
+                .unwrap(),
+            Begun::Run
+        );
+        finish(&db.app, &live, &req, Some(b"live")).await.unwrap();
+        assert_eq!(release_answers(&db.app, 5_000).await.unwrap(), 1);
+        assert_eq!(release_answers(&db.app, 5_000).await.unwrap(), 0);
+        assert_eq!(
+            begin(&db.app, &live, &req, 5_000, 10, 10_000)
+                .await
+                .unwrap(),
+            Begun::Replay(b"live".to_vec())
+        );
     }
 }

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access_ops.api_idempotency SET state = 'released', answer = NULL\n          WHERE scope IN (SELECT scope FROM access_ops.api_idempotency\n                           WHERE state = 'done' AND expires_ms <= $1\n                           LIMIT $2 FOR UPDATE SKIP LOCKED)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "261a1b6d0afe2b8d1668b101f65885e42106ad50e573da97396ff335122e2c9a"
+}

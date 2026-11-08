@@ -79,6 +79,27 @@ pub async fn begin(
     }
 }
 
+/// Releases up to `limit` keys whose answers are past their retention at `now_ms`: the answer
+/// is cleared and the key released in place, so nothing is replayed after it and the row is
+/// never deleted (TN-126, OP-73). Returns how many were released.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn release_expired(app: &PgPool, now_ms: u64, limit: u32) -> Result<u64, StoreError> {
+    let n = sqlx::query!(
+        "UPDATE access_ops.api_idempotency SET state = 'released', answer = NULL
+          WHERE scope IN (SELECT scope FROM access_ops.api_idempotency
+                           WHERE state = 'done' AND expires_ms <= $1
+                           LIMIT $2 FOR UPDATE SKIP LOCKED)",
+        ms(now_ms)?,
+        i64::from(limit),
+    )
+    .execute(app)
+    .await?
+    .rows_affected();
+    Ok(n)
+}
+
 /// Ends the run of `request` under `scope`: keeps `answer` for replay, or releases the key so
 /// the next request runs again (a validation failure or a server error, TN-126).
 ///

@@ -8,7 +8,7 @@
 )]
 
 use access_store::StoreError;
-use access_store::api_idempotency::{Begun, begin, finish};
+use access_store::api_idempotency::{Begun, begin, finish, release_expired};
 use access_store::testing::fresh;
 
 const LEASE: u64 = 30_000;
@@ -73,4 +73,49 @@ async fn keys_expire_softly_and_leases_lapse() {
         .execute(&db.app)
         .await;
     assert!(deleted.is_err());
+}
+
+// D-4, TN-126, OP-151 m.3 (c), OP-73: an answer past its 24 hours is cleared and its key released
+// in place, in bounded batches; a live answer and a running key are kept; no row is deleted
+#[tokio::test]
+async fn expired_answers_are_released_in_place() {
+    let db = fresh().await.unwrap();
+    let req = [9; 32];
+    for (scope, retention) in [([1; 32], 100), ([2; 32], 200), ([3; 32], DAY)] {
+        assert_eq!(
+            begin(&db.app, &scope, &req, 1_000, LEASE, retention)
+                .await
+                .unwrap(),
+            Begun::Run
+        );
+        finish(&db.app, &scope, &req, Some(b"answer"))
+            .await
+            .unwrap();
+    }
+    assert_eq!(
+        begin(&db.app, &[4; 32], &req, 1_000, LEASE, 100)
+            .await
+            .unwrap(),
+        Begun::Run
+    );
+    assert_eq!(release_expired(&db.app, 5_000, 1).await.unwrap(), 1);
+    assert_eq!(release_expired(&db.app, 5_000, 10).await.unwrap(), 1);
+    assert_eq!(release_expired(&db.app, 5_000, 10).await.unwrap(), 0);
+    let rows: Vec<(Vec<u8>, String, Option<Vec<u8>>)> = sqlx::query_as(
+        "SELECT scope, state, answer FROM access_ops.api_idempotency ORDER BY scope",
+    )
+    .fetch_all(&db.app)
+    .await
+    .unwrap();
+    let state = |s: &str, a: Option<&[u8]>| (s.to_owned(), a.map(<[u8]>::to_vec));
+    let got: Vec<_> = rows.into_iter().map(|(_, s, a)| (s, a)).collect();
+    assert_eq!(
+        got,
+        vec![
+            state("released", None),
+            state("released", None),
+            state("done", Some(b"answer")),
+            state("running", None),
+        ]
+    );
 }
