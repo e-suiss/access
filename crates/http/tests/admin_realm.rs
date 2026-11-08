@@ -60,6 +60,7 @@ async fn every_realm_write_without_its_actor_proof_changes_nothing() {
     let platform = h.instance(platform_domain());
     let mut n = 0_u8;
     for row in realm_writes() {
+        h.pass(4_000);
         let op = row.operation_id;
         n += 1;
         let nonce = [n; 16];

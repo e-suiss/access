@@ -557,6 +557,12 @@ impl Harness {
         self.fake.now.load(Ordering::SeqCst)
     }
 
+    /// Moves the clock on by `ms`, so a test that walks every row stays inside the surface's
+    /// write rate (TN-127).
+    pub fn pass(&self, ms: u64) {
+        self.fake.now.fetch_add(ms, Ordering::SeqCst);
+    }
+
     /// Issues a read token: `audience`, `scopes`, living `life_ms`.
     pub fn token(&self, name: &str, audience: &str, scopes: &[&str], life_ms: u64) -> String {
         let now = self.now();

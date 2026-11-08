@@ -71,6 +71,7 @@ async fn code_of(router: &axum::Router, request: Request<Body>) -> (StatusCode, 
 // TN-113, TN-119, TN-130, OP-151 m.3 (c)
 async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
     for row in rows {
+        h.pass(4_000);
         let path = concrete(row, REALM);
         let op = row.operation_id;
         let before = h.position();

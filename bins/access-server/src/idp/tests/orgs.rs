@@ -1103,9 +1103,8 @@ async fn a_guardianship_ends_at_majority_and_a_parent_consent_is_never_silence()
         .guardianship(at, (parent, child), GuardianshipBasis::Parent, "TR")
         .await
         .unwrap();
-    let issued = identity_events(&w.db, "claim.", 2).await;
-    assert!(issued.iter().any(|e| e.kind == "claim.guardianship"));
-    assert!(issued.iter().any(|e| e.kind == "claim.age_range"));
+    identity_events(&w.db, "claim.guardianship", 1).await;
+    identity_events(&w.db, "claim.age_range", 1).await;
     let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
     let row = t.guardianship(g).await.unwrap().unwrap();
     assert!(row.majority_ms > i64::try_from(now + 7 * year_ms).unwrap());

@@ -429,10 +429,10 @@ pub const KINDS: [&str; 20] = [
     "relay.message.deletion_completed.v1",
     "relay.message.inactivity_notice.v1",
     "relay.message.signup_existing.v1",
+    "relay.message.ownership_handover.v1",
     "relay.message.reset_intent.v1",
     "relay.message.export_ready.v1",
     "relay.message.invitation.v1",
-    "relay.message.ownership_handover.v1",
 ];
 
 impl Body {
@@ -447,7 +447,7 @@ impl Body {
             Self::AccountStatus { .. } => KINDS[4],
             Self::Notice { notice, .. } => notice.kind(),
             Self::Link { purpose, .. } => purpose.kind(),
-            Self::Invitation { .. } => KINDS[18],
+            Self::Invitation { .. } => KINDS[19],
         }
     }
 
