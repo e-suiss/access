@@ -86,7 +86,7 @@
         "additionalProperties": false,
         "properties": {
           "about": {
-            "description": "The Grant, Instance, Acceptance or Claim.",
+            "description": "The object's id, a role's name, or the key-event Claim.",
             "type": "string"
           },
           "at": {
@@ -101,16 +101,24 @@
             "description": "DomainID.",
             "type": "string"
           },
+          "ended": {
+            "description": "The change ended the object.",
+            "type": "boolean"
+          },
           "key_event": {
             "description": "`{class, issuer}` (U26, SI-13).",
             "type": "object"
           },
           "kind": {
             "enum": [
-              "grant_to_you",
-              "grant_for_you",
-              "instance_added",
+              "grant",
+              "anchor",
+              "party",
+              "instance",
+              "mandate",
               "acceptance",
+              "policy",
+              "authority_set",
               "key_event"
             ],
             "type": "string"
@@ -118,6 +126,10 @@
           "label": {
             "description": "The reader's label of the domain; present only with more than one domain (IA-6).",
             "type": "string"
+          },
+          "own": {
+            "description": "The reader's own Instance made it.",
+            "type": "boolean"
           },
           "owner": {
             "description": "Whose record the row is (XI-1).",
@@ -136,7 +148,7 @@
             "type": "integer"
           },
           "text": {
-            "description": "The text key; none asks for an action (IA-2).",
+            "description": "The text key, `change.<kind>` or `change.<kind>_ended`; none asks for an action (IA-2).",
             "type": "string"
           }
         },
@@ -147,6 +159,8 @@
           "kind",
           "text",
           "about",
+          "ended",
+          "own",
           "derived"
         ],
         "type": "object"

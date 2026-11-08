@@ -36,8 +36,12 @@ pub const ACTIVITY_FOR_YOU: &str = "activity.for_you";
 
 /// The change text of a change kind (IA-2): information only.
 #[must_use]
-pub fn change(kind: &str) -> String {
-    format!("change.{kind}")
+pub fn change(kind: &str, ended: bool) -> String {
+    if ended {
+        format!("change.{kind}_ended")
+    } else {
+        format!("change.{kind}")
+    }
 }
 
 /// "Submitted" (XI-3): sent, not yet recorded.
@@ -86,7 +90,7 @@ pub const ALL: [&str; 27] = [
     OUTCOME_COULDNT_REACH,
     OUTCOME_BUSY,
     OUTCOME_TIME,
-    "change.grant_to_you",
-    "change.grant_for_you",
+    "change.grant",
+    "change.instance",
     "change.key_event",
 ];

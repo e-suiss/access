@@ -281,7 +281,9 @@ async fn the_hub_is_read_with_the_browsers_ais_through_the_public_search() {
     );
     // IA-2, SI-21
     assert!(
-        seen.changes.iter().any(|ch| ch.kind == "instance_added"),
+        seen.changes
+            .iter()
+            .any(|ch| ch.kind == "instance" && ch.own),
         "{:?}",
         seen.changes
     );

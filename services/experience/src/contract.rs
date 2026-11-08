@@ -359,12 +359,17 @@ pub struct ChangeRow {
     /// Its time, Unix ms.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at: Option<u64>,
-    /// `grant_to_you`, `grant_for_you`, `instance_added`, `acceptance` or `key_event`.
+    /// What changed, as the domain's Changes feed names it: `grant`, `anchor`, `party`,
+    /// `instance`, `mandate`, `acceptance`, `policy`, `authority_set` or `key_event`.
     pub kind: String,
     /// The text key.
     pub text: String,
-    /// What it is about: the Grant, Instance, Acceptance or Claim.
+    /// What it is about: the object's id, a role's name, or the key-event Claim.
     pub about: String,
+    /// The change ended the object.
+    pub ended: bool,
+    /// The reader's own Instance made it.
+    pub own: bool,
     /// For a key event: the Claim class and who signed it (U26, SI-13).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key_event: Option<Value>,
@@ -623,13 +628,15 @@ fn rows() -> Map<String, Value> {
                 "owner": owner(),
                 "pos": uint("The record."),
                 "at": uint("Unix ms."),
-                "kind": { "type": "string", "enum": ["grant_to_you", "grant_for_you", "instance_added", "acceptance", "key_event"] },
-                "text": text("The text key; none asks for an action (IA-2)."),
-                "about": text("The Grant, Instance, Acceptance or Claim."),
+                "kind": { "type": "string", "enum": ["grant", "anchor", "party", "instance", "mandate", "acceptance", "policy", "authority_set", "key_event"] },
+                "text": text("The text key, `change.<kind>` or `change.<kind>_ended`; none asks for an action (IA-2)."),
+                "about": text("The object's id, a role's name, or the key-event Claim."),
+                "ended": { "type": "boolean", "description": "The change ended the object." },
+                "own": { "type": "boolean", "description": "The reader's own Instance made it." },
                 "key_event": { "type": "object", "description": "`{class, issuer}` (U26, SI-13)." },
                 "derived": { "const": true },
             }),
-            &["domain", "owner", "pos", "kind", "text", "about", "derived"],
+            &["domain", "owner", "pos", "kind", "text", "about", "ended", "own", "derived"],
         ),
     );
     m.insert(

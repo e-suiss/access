@@ -266,29 +266,41 @@ fn activity(
     })
 }
 
+/// The object kinds of the domain's Changes feed (IA-2).
+const CHANGE_KINDS: [&str; 9] = [
+    "grant",
+    "anchor",
+    "party",
+    "instance",
+    "mandate",
+    "acceptance",
+    "policy",
+    "authority_set",
+    "key_event",
+];
+
 fn change(v: &Value, (domain, label): (&str, Option<&String>)) -> Option<ChangeRow> {
     if v["type"] != "change" {
         return None;
     }
     let kind = text(&v["kind"])?;
-    let about = match kind.as_str() {
-        "grant_to_you" | "grant_for_you" => text(&v["grant"])?,
-        "instance_added" => text(&v["instance"])?,
-        "acceptance" => text(&v["acceptance"])?,
-        "key_event" => text(&v["claim"])?,
-        _ => return None,
-    };
+    if !CHANGE_KINDS.contains(&kind.as_str()) {
+        return None;
+    }
+    let ended = v["ended"].as_bool().unwrap_or(false);
     Some(ChangeRow {
         domain: String::from(domain),
         label: label.cloned(),
         owner: Owner::Access,
-        pos: v["pos"].as_u64()?,
+        pos: v["position"].as_str()?.parse().ok()?,
         at: v["at"].as_u64(),
-        text: texts::change(&kind),
+        text: texts::change(&kind, ended),
         key_event: (kind == "key_event")
             .then(|| json!({ "class": v["class"], "issuer": v["issuer"] })),
+        about: text(&v["id"])?,
+        ended,
+        own: v["own"].as_bool().unwrap_or(false),
         kind,
-        about,
         derived: true,
     })
 }

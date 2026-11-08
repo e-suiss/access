@@ -49,6 +49,19 @@ fn b64(bytes: &[u8]) -> Value {
     Value::from(b64url_encode(bytes))
 }
 
+/// The search query of `kind`: the hub kinds name the reader; the domain's Changes feed is
+/// always the reader's own (IA-2).
+fn query(kind: Kind, viewer: Id) -> Value {
+    query_text(kind, &b64url_encode(&viewer.0))
+}
+
+fn query_text(kind: Kind, viewer: &str) -> Value {
+    match kind {
+        Kind::Changes => json!({}),
+        Kind::Inventory | Kind::Activity => json!({ "party": viewer }),
+    }
+}
+
 /// The read of `kind` in `domain` for `viewer` with `nonce`.
 ///
 /// # Errors
@@ -81,7 +94,7 @@ pub fn read(
             },
             "basis": basis,
             "capacity": "own",
-            "query": { "party": b64(&viewer.0) },
+            "query": query(kind, viewer),
         }
     });
     Ok(PlannedRead {
@@ -102,7 +115,7 @@ pub fn is_read(body: &Value, domain: &str, kind: Kind, viewer: &str) -> bool {
     body.as_object().is_some_and(|o| o.len() == 1)
         && c["domain"] == domain
         && c["mode"] == "check"
-        && c["query"] == json!({ "party": viewer })
+        && c.get("query") == Some(&query_text(kind, viewer))
         && c.pointer("/intent/resources")
             == Some(&json!([{ "namespace": SEARCH_NAMESPACE, "path": [kind.search()] }]))
         && c.pointer("/intent/action/name") == Some(&json!("read"))

@@ -224,10 +224,10 @@ fn nothing_about_others_or_from_elsewhere_is_surfaced() {
 #[test]
 fn changes_are_information_only() {
     let key = json!({
-        "type": "change", "pos": 5, "at": 50, "kind": "key_event",
-        "class": "party_key_state", "issuer": "Y3VzdG9kaWFu", "claim": "Y2xhaW0",
+        "type": "change", "position": "5", "at": 50, "kind": "key_event", "id": "Y2xhaW0",
+        "class": "party_key_state", "issuer": "Y3VzdG9kaWFu", "ended": false, "own": false,
     });
-    let grant = json!({ "type": "change", "pos": 6, "at": 60, "kind": "grant_for_you", "grant": "Zw", "holder": ALICE });
+    let grant = json!({ "type": "change", "position": "6", "at": 60, "kind": "grant", "id": "Zw", "ended": true, "own": false });
     let hub = assemble(
         ME,
         Depth::Default,
@@ -239,7 +239,8 @@ fn changes_are_information_only() {
         )],
     );
     assert_eq!(hub.changes.len(), 2);
-    assert_eq!(hub.changes[0].kind, "grant_for_you", "newest first");
+    assert_eq!(hub.changes[0].kind, "grant", "newest first");
+    assert_eq!(hub.changes[0].text, "change.grant_ended");
     let k = &hub.changes[1];
     assert_eq!(k.key_event.as_ref().unwrap()["class"], "party_key_state");
     assert!(hub.changes.iter().all(|c| c.derived));

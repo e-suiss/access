@@ -88,7 +88,7 @@ export interface components {
             text: "capacity.own_use" | "capacity.on_behalf_of" | "capacity.as_yourself";
         };
         ChangeRow: {
-            /** @description The Grant, Instance, Acceptance or Claim. */
+            /** @description The object's id, a role's name, or the key-event Claim. */
             about: string;
             /** @description Unix ms. */
             at?: number;
@@ -96,12 +96,16 @@ export interface components {
             derived: true;
             /** @description DomainID. */
             domain: string;
+            /** @description The change ended the object. */
+            ended: boolean;
             /** @description `{class, issuer}` (U26, SI-13). */
             key_event?: Record<string, never>;
             /** @enum {string} */
-            kind: "grant_to_you" | "grant_for_you" | "instance_added" | "acceptance" | "key_event";
+            kind: "grant" | "anchor" | "party" | "instance" | "mandate" | "acceptance" | "policy" | "authority_set" | "key_event";
             /** @description The reader's label of the domain; present only with more than one domain (IA-6). */
             label?: string;
+            /** @description The reader's own Instance made it. */
+            own: boolean;
             /**
              * @description Whose record the row is (XI-1).
              * @enum {string}
@@ -109,7 +113,7 @@ export interface components {
             owner: "access" | "executor" | "verifier" | "relay" | "pay";
             /** @description The record. */
             pos: number;
-            /** @description The text key; none asks for an action (IA-2). */
+            /** @description The text key, `change.<kind>` or `change.<kind>_ended`; none asks for an action (IA-2). */
             text: string;
         };
         DomainRef: {
