@@ -482,7 +482,7 @@ mod tests {
         assert!(v[0].contains("action-share"));
     }
 
-    // SEC2, X35
+    // SEC2, XI-12, X35
     #[test]
     fn a_guarantee_names_exactly_one_class_and_is_protected() {
         let mut c = catalog();
