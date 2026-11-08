@@ -99,7 +99,7 @@ pub fn render(record: &AuditRecord) -> Result<String, TaxonomyError> {
 mod tests {
     use super::*;
 
-    // OP-41: CEF escaping keeps a value from forging a field or a header
+    // OP-41
     #[test]
     fn values_cannot_forge_fields() {
         assert_eq!(header("a|b\\c\nd"), "a\\|b\\\\c d");

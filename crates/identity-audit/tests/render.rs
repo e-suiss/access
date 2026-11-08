@@ -59,7 +59,7 @@ fn vectors() -> Value {
     serde_json::from_str(VECTORS).unwrap()
 }
 
-// OP-41, CMP-27: every vector renders to the same OCSF event, CEF line and SET claims
+// OP-41, CMP-27
 #[test]
 fn op_41_cmp_27_renderings_match_the_vectors() {
     let v = vectors();
@@ -79,8 +79,7 @@ fn op_41_cmp_27_renderings_match_the_vectors() {
     }
 }
 
-// CMP-27, OP-41: the same record renders to OCSF, CEF and SET with the same `txn`, the same
-// event id and the same three timestamps
+// CMP-27, OP-41
 #[test]
 fn cmp_27_the_three_renderings_agree() {
     let v = vectors();
@@ -115,7 +114,7 @@ fn cmp_27_the_three_renderings_agree() {
     }
 }
 
-// OP-41: an event outside the taxonomy is rendered by none of the adapters
+// OP-41
 #[test]
 fn an_unknown_event_renders_nowhere() {
     let v = vectors();

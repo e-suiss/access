@@ -70,7 +70,7 @@ fn written() -> BTreeSet<String> {
     out
 }
 
-// OP-41, OP-47, §17.8.1: the compiled-in taxonomy parses and keeps its own rules
+// OP-41, OP-47, §17.8.1
 #[test]
 fn the_taxonomy_is_compiled_in_and_well_formed() {
     let t = taxonomy().unwrap();
@@ -84,8 +84,7 @@ fn the_taxonomy_is_compiled_in_and_well_formed() {
     assert_eq!(entry("nothing.like.this"), Err(TaxonomyError::Unknown));
 }
 
-// OP-41: every event the code writes to an audit log is in the taxonomy, so channel B never
-// meets an event it cannot render; and the taxonomy names nothing the code never writes
+// OP-41
 #[test]
 fn op_41_every_written_audit_event_is_in_the_taxonomy() {
     let t = taxonomy().unwrap();
@@ -102,7 +101,7 @@ fn op_41_every_written_audit_event_is_in_the_taxonomy() {
     assert!(unused.is_empty(), "never written: {unused:?}");
 }
 
-// OP-41: channel A carries only the eight CAEP types; each counterpart is one of them
+// OP-41
 #[test]
 fn op_41_caep_counterparts_are_the_eight_types() {
     let t = taxonomy().unwrap();
@@ -116,7 +115,7 @@ fn op_41_caep_counterparts_are_the_eight_types() {
     );
 }
 
-// OP-41: a duplicate or malformed name, or an unknown member, is refused
+// OP-41
 #[test]
 fn a_malformed_taxonomy_is_refused() {
     let dup = format!(
@@ -131,8 +130,7 @@ fn a_malformed_taxonomy_is_refused() {
     assert!(!valid_name("Session.created") && !valid_name("") && valid_name("a.b_c"));
 }
 
-// IDP-36, IDP-37, OP-151 m.3 (i): the raw event feed names identity events only, each one
-// webhook-deliverable
+// IDP-36, IDP-37, OP-151 m.3 (i)
 #[test]
 fn the_webhook_feed_carries_identity_events_only() {
     let t = taxonomy().unwrap();

@@ -103,7 +103,7 @@ async fn integrate(db: &TestDb, n: u64) -> u64 {
     }
 }
 
-// OPI-6: the audit row commits or rolls back with the change it records
+// OPI-6
 #[tokio::test]
 async fn the_row_shares_the_business_transaction() {
     let db = fresh().await.unwrap();
@@ -128,7 +128,7 @@ async fn the_row_shares_the_business_transaction() {
     );
 }
 
-// OP-37, OP-38: checkpoints extend one tree; steps in pieces give the same root as one step
+// OP-37, OP-38
 #[tokio::test]
 async fn checkpoints_extend_one_tree() {
     let db = fresh().await.unwrap();
@@ -157,7 +157,7 @@ async fn checkpoints_extend_one_tree() {
             id: rows[11].id
         }
     );
-    // OP-38: nothing new, no checkpoint
+    // OP-38
     assert!(
         step(&PgAudit(db.checkpointer.clone()), &*CELL, NOW)
             .await
@@ -166,7 +166,7 @@ async fn checkpoints_extend_one_tree() {
     );
 }
 
-// OQ-MD3 scenario 1 for the audit log: a running transaction is waited for, not skipped
+// OQ-MD3
 #[tokio::test]
 async fn a_running_transaction_is_not_skipped() {
     let db = fresh().await.unwrap();
@@ -193,7 +193,7 @@ async fn a_running_transaction_is_not_skipped() {
     assert_eq!(rows[0].target, "usr_0");
 }
 
-// OP-17, OP-38, U70: checkpoints are append-only and one size is written once
+// OP-17, OP-38, U70
 #[tokio::test]
 async fn checkpoints_cannot_fork_or_change() {
     let db = fresh().await.unwrap();
@@ -204,7 +204,7 @@ async fn checkpoints_cannot_fork_or_change() {
     assert!(append_checkpoint(&db.checkpointer, &c).await.is_err());
 }
 
-// OP-12: tenants and realms see only their own rows; the checkpointer reads all of them
+// OP-12
 #[tokio::test]
 async fn audit_rows_are_scoped() {
     let db = fresh().await.unwrap();
@@ -227,7 +227,7 @@ async fn audit_rows_are_scoped() {
     assert_eq!(tx.list_audit(10).await.unwrap().len(), 0);
 }
 
-// OP-13b: the archive role opens monthly partitions; rows land in them
+// OP-13b
 #[tokio::test]
 async fn monthly_partitions() {
     let db = fresh().await.unwrap();
@@ -236,7 +236,6 @@ async fn monthly_partitions() {
         .unwrap()
         .as_secs();
     let days = i64::try_from(now / 86_400).unwrap();
-    // civil date of today (Howard Hinnant's algorithm), to open the current month
     let z = days + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z - era * 146_097;
@@ -270,8 +269,7 @@ async fn monthly_partitions() {
     );
 }
 
-// OP-150, OP-134, OP-143 m.10, L2-CKP-3: each checkpoint is stored with a signed note of the
-// cell key that states its size and root; a changed root no longer verifies
+// OP-150, OP-134, OP-143 m.10, L2-CKP-3
 #[tokio::test]
 async fn checkpoints_are_signed_by_the_cell_key() {
     let db = fresh().await.unwrap();
@@ -293,8 +291,7 @@ async fn checkpoints_are_signed_by_the_cell_key() {
     assert!(verify(&access_crypto::AwsLcBackend, &c, &origin, &stranger).is_err());
 }
 
-// OP-150, CR-23, G42, OP-134 m.4: without the signer no checkpoint is written; the next step
-// with the signer integrates the same rows
+// OP-150, CR-23, G42, OP-134 m.4
 #[tokio::test]
 async fn no_signer_no_checkpoint() {
     let db = fresh().await.unwrap();
@@ -332,9 +329,7 @@ async fn operational(db: &TestDb, n: usize) {
     .unwrap();
 }
 
-// OP-44, U53, PI-4: the operational stream is its own chain: its checkpoints carry their own
-// origin under the same cell key, its tree never mixes with the identity log's, and a step
-// over it leaves the identity log untouched
+// OP-44, U53, PI-4
 #[tokio::test]
 async fn op_44_the_operational_stream_is_a_separate_chain() {
     use access_identity_audit::adapters::PgOperational;
@@ -371,7 +366,6 @@ async fn op_44_the_operational_stream_is_a_separate_chain() {
         verify(&access_crypto::AwsLcBackend, &checkpoint, &origin, &vkey).unwrap(),
         NOW
     );
-    // the identity log's origin does not verify it: two chains, never one
     assert!(verify(&access_crypto::AwsLcBackend, &checkpoint, &identity, &vkey).is_err());
     assert!(last_checkpoint(&db.checkpointer).await.unwrap().is_none());
 }

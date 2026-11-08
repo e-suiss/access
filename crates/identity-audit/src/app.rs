@@ -33,7 +33,7 @@ pub async fn step<L: AuditLog, S: NoteSigner>(
         return Ok(None);
     };
     let (identity, vkey) = signer.key().await?;
-    // OP-44: a separate chain carries its own origin under the same cell key
+    // OP-44
     let origin = match log.chain() {
         None => identity,
         Some(OPERATIONAL_CHAIN) => {
