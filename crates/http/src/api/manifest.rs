@@ -88,7 +88,7 @@ pub enum Access {
 /// What a caller whose token lacks the scope sees (TN-113 resource hiding).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Visibility {
-    /// `404 not_found`, as for a resource that does not exist: the default.
+    /// `404 not-found`, as for a resource that does not exist: the default.
     Hidden,
     /// `403 insufficient-scope`: only where the route's existence is no secret.
     Forbidden,

@@ -11,7 +11,7 @@ pub const TYPE_PREFIX: &str = "urn:suiss:access:problem:";
 
 /// Codes whose response means no more than its HTTP status; their `type` stays
 /// `about:blank` (OP-149 m.12).
-pub const BARE: [&str; 3] = ["not_found", "internal", "unavailable"];
+pub const BARE: [&str; 3] = ["not-found", "internal", "unavailable"];
 
 /// One part of a request a problem is about (RFC 9457 §3): the stable code of what is wrong
 /// and, when the body names it, where.
@@ -132,7 +132,7 @@ pub mod codes {
 
     /// No such resource, or one the caller may not see (TN-113).
     pub const NOT_FOUND: Code = code(
-        "not_found",
+        "not-found",
         404,
         "Not Found",
         "No such resource, or one the caller may not see (TN-113).",

@@ -148,7 +148,7 @@ async fn reads_see_only_the_realms_own_resources() {
         let (r, body) = send(&router, read(&path, &token)).await;
         assert_eq!(
             (r.status(), body["code"].as_str()),
-            (StatusCode::NOT_FOUND, Some("not_found")),
+            (StatusCode::NOT_FOUND, Some("not-found")),
             "{collection}"
         );
         let (r, body) = send(

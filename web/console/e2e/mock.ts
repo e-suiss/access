@@ -307,7 +307,7 @@ export class ConsoleMock {
           return reply(204);
         }
       }
-      return problem(404, "not_found");
+      return problem(404, "not-found");
     }
     if (path === "/sign-out") {
       s.ended = true;
@@ -418,7 +418,7 @@ export class ConsoleMock {
         });
       }
       const answer = this.admin.get(rest);
-      if (answer === undefined) return problem(404, "not_found");
+      if (answer === undefined) return problem(404, "not-found");
       return reply(200, answer);
     }
     // OP-151 m.19: a commit goes on only with the session's own commit AIS
@@ -486,6 +486,6 @@ export class ConsoleMock {
         this.explains.get(scope) ?? { decision: false, context: { advisory: true } },
       );
     }
-    return problem(404, "not_found");
+    return problem(404, "not-found");
   }
 }

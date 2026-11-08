@@ -179,7 +179,7 @@ pub(super) fn problem(code: StatusCode, name: &'static str, title: &'static str)
 }
 
 fn not_found() -> Response {
-    problem(StatusCode::NOT_FOUND, "not_found", "Not Found")
+    problem(StatusCode::NOT_FOUND, "not-found", "Not Found")
 }
 
 fn authority<'a>(uri: &'a Uri, headers: &'a HeaderMap) -> &'a str {

@@ -117,7 +117,7 @@ async fn a_sequential_job_commits_items_one_by_one_and_stops_at_a_failure() {
     assert!(items[0]["exercise_id"].is_string());
     assert_eq!(
         (&items[1]["status"], &items[1]["problem"]),
-        (&json!("rejected"), &json!("not_found"))
+        (&json!("rejected"), &json!("not-found"))
     );
     assert_eq!(
         (&items[2]["status"], &items[2]["http_status"]),

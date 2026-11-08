@@ -107,5 +107,5 @@ async fn not_found() -> Problem {
 }
 
 fn not_found_problem() -> Problem {
-    Problem::new(StatusCode::NOT_FOUND, "not_found", "Not Found")
+    Problem::new(StatusCode::NOT_FOUND, "not-found", "Not Found")
 }

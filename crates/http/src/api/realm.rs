@@ -618,7 +618,7 @@ pub fn register<G: Guard, E: super::ports::Env>(
 }
 
 /// The problem an identity plane refusal answers with (OP-64: a refused write is a problem; a
-/// missing resource is `not_found` like a hidden one, TN-113).
+/// missing resource is `not-found` like a hidden one, TN-113).
 #[must_use]
 pub fn problem_of(e: &AdminError) -> &'static Code {
     use codes::realm as r;

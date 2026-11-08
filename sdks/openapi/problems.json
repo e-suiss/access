@@ -4,7 +4,7 @@
   "type_prefix": "urn:suiss:access:problem:",
   "codes": [
     {
-      "code": "not_found",
+      "code": "not-found",
       "type": "about:blank",
       "status": 404,
       "title": "Not Found",

@@ -121,7 +121,7 @@ async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
                     600_000,
                 );
                 let expected = match row.visibility {
-                    Visibility::Hidden => (StatusCode::NOT_FOUND, "not_found".to_owned()),
+                    Visibility::Hidden => (StatusCode::NOT_FOUND, "not-found".to_owned()),
                     Visibility::Forbidden => {
                         (StatusCode::FORBIDDEN, "insufficient-scope".to_owned())
                     }
@@ -147,7 +147,7 @@ async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
                     let missing = concrete(row, MISSING);
                     assert_eq!(
                         code_of(router, read_as(row, &missing, &ghost)).await,
-                        (StatusCode::NOT_FOUND, "not_found".into()),
+                        (StatusCode::NOT_FOUND, "not-found".into()),
                         "{op}: a missing realm is 404"
                     );
                     assert_eq!(
@@ -277,7 +277,7 @@ async fn the_router_serves_only_manifest_rows() {
     ] {
         let (r, body) = send(&router, Request::get(path).body(Body::empty()).unwrap()).await;
         assert_eq!(r.status(), StatusCode::NOT_FOUND, "{path}");
-        assert_eq!(body["code"], "not_found");
+        assert_eq!(body["code"], "not-found");
     }
     let (r, body) = send(
         &router,

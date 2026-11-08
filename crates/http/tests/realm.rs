@@ -219,7 +219,7 @@ async fn an_unknown_host_gets_a_plain_404() {
         assert!(!body.contains("acme") && !body.contains("beta"), "{body}");
         assert_eq!(
             body,
-            r#"{"type":"about:blank","title":"Not Found","status":404,"code":"not_found"}"#
+            r#"{"type":"about:blank","title":"Not Found","status":404,"code":"not-found"}"#
         );
     }
 }

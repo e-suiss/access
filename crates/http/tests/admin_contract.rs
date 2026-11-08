@@ -48,7 +48,7 @@ fn committed_admin_openapi_matches_the_code() {
     check_file("admin-v1.json", &pretty(&openapi()));
 }
 
-// OP-65, OP-149 m.12: the problem code catalogue is the registry
+// OP-65, OP-149 m.12, OP-152 m.5 (g): the problem code catalogue is the registry, codes kebab-case
 #[test]
 fn committed_problem_catalogue_matches_the_registry() {
     check_file("problems.json", &pretty(&catalogue()));
@@ -56,9 +56,7 @@ fn committed_problem_catalogue_matches_the_registry() {
     for c in CODES {
         assert!(seen.insert(c.code), "{} listed twice", c.code);
         assert!(
-            c.code
-                .bytes()
-                .all(|b| b.is_ascii_lowercase() || b == b'-' || b == b'_'),
+            c.code.bytes().all(|b| b.is_ascii_lowercase() || b == b'-'),
             "{}",
             c.code
         );

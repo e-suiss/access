@@ -137,7 +137,7 @@ impl ProvisionInvalid {
             Self::Root => "invalid-root",
             Self::RecoveryNotAcknowledged => "recovery-not-acknowledged",
             Self::TimeLock => "invalid-time-lock",
-            Self::NoTenant => "not_found",
+            Self::NoTenant => "not-found",
             Self::SlugTaken => "slug-taken",
         }
     }
