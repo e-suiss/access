@@ -122,6 +122,24 @@ impl NoteSigner for SocketSigner {
             Err(_) => Err(String::from("signer-unreachable")),
         }
     }
+
+    async fn metadata(&self, domain: Digest) -> Result<Vec<u8>, String> {
+        let request = Request::Metadata(domain);
+        let mut answer = call(&self.path, &request).await;
+        if matches!(&answer, Ok(Response::Error(code)) if code == "signer-unknown-domain") {
+            let open = Request::Open(Box::new(default_template(domain)));
+            if !matches!(call(&self.path, &open).await, Ok(Response::Opened)) {
+                return Err(String::from("signer-unknown-domain"));
+            }
+            answer = call(&self.path, &request).await;
+        }
+        match answer {
+            Ok(Response::Metadata(bytes)) => Ok(bytes),
+            Ok(Response::Error(code)) => Err(code),
+            Ok(_) => Err(String::from("signer-frame")),
+            Err(_) => Err(String::from("signer-unreachable")),
+        }
+    }
 }
 
 /// Writes the Genesis record at position 0 and returns the new domain's id, the digest of

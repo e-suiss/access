@@ -6644,7 +6644,12 @@ fn witnessed(
     let (log_key, witness_key) = (signing(40), signing(41));
     let log = Verifier::ed25519(LOG, log_key.verifying_key().to_bytes()).unwrap();
     let witness = Verifier::cosigner(WITNESS, witness_key.verifying_key().to_bytes()).unwrap();
-    let body = format!("{LOG}\n7\n{}\n", note::base64_encode(&[7; 32]));
+    let signed = b"signed domain metadata";
+    let body = format!(
+        "{LOG}\n7\n{}\nmetadata sha-256:{}\n",
+        note::base64_encode(&[7; 32]),
+        access_kernel::json::b64url_encode(&access_verifier::metadata::metadata_digest(signed)),
+    );
     let mut sig = log.id().to_be_bytes().to_vec();
     sig.extend(log_key.sign(body.as_bytes()).to_bytes());
     let mut checkpoint = format!("{body}\n\u{2014} {LOG} {}\n", note::base64_encode(&sig));
@@ -6660,7 +6665,7 @@ fn witnessed(
         "{checkpoint}\u{2014} {WITNESS} {}\n",
         note::base64_encode(&sig)
     );
-    let mut view = access_verifier::metadata::MetadataView::new(metadata);
+    let mut view = access_verifier::metadata::MetadataView::new(metadata, signed);
     view.witness(&checkpoint, LOG, &log, &[witness]).unwrap();
     view
 }

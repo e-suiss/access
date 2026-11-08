@@ -296,7 +296,19 @@ fn metadata_freshness_comes_from_a_witness() {
     let view = v.metadata_mut();
     assert!(view.fresh(NOW, None));
     assert!(!view.fresh(NOW + 2 * HOUR_MS, None));
-    let mut fresh = access_verifier::metadata::MetadataView::new(metadata());
+    let mut fresh =
+        access_verifier::metadata::MetadataView::new(metadata(), support::SIGNED_METADATA);
+    assert!(!fresh.fresh(NOW, None));
+    // OP-152 m.5 (h): a cosigned checkpoint of other metadata, or of none, refreshes nothing
+    for other in [
+        support::checkpoint_of(b"older metadata", Some(NOW / 1_000 - 60)),
+        support::checkpoint(Some(NOW / 1_000 - 60)).replacen("metadata sha-256:", "x-other ", 1),
+    ] {
+        assert_eq!(
+            fresh.witness(&other, LOG, &log_verifier(), &[witness_verifier()]),
+            Err(access_verifier::metadata::WitnessError::OtherMetadata)
+        );
+    }
     assert!(!fresh.fresh(NOW, None));
     assert_eq!(
         fresh.witness(

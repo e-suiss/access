@@ -495,6 +495,10 @@ impl NoteSigner for NoteKey {
             excerpt: vec![],
         })
     }
+
+    async fn metadata(&self, _: Digest) -> Result<Vec<u8>, String> {
+        Ok(b"metadata".to_vec())
+    }
 }
 
 // CMP-6, L2-CKP-1, T20: the checkpoint names the committed size and the RFC 9162 root of the log

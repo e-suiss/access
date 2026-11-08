@@ -22,8 +22,12 @@ pub use access_authority_signer::domain::origin;
 /// Digest context of the `SpecVersions` a checkpoint names (§16.4.4 m.17, L0-ENC-22a).
 pub const VERSIONS_CONTEXT: &str = "access/versions/v1";
 
+/// Digest context of the signed Domain Metadata a checkpoint names (OP-152 m.5 (h)).
+pub const METADATA_CONTEXT: &str = "access/domain-metadata/v1";
+
 const RECORDED_AT: &str = "recorded_at ";
 const VERSIONS: &str = "versions ";
+const METADATA: &str = "metadata ";
 const ISSUED_AT: &str = "issued_at ";
 
 /// Why a checkpoint was not produced or not accepted.
@@ -67,8 +71,17 @@ pub struct Extensions {
     pub recorded_at: u64,
     /// Digest of the domain's adopted `SpecVersions`.
     pub versions: Digest,
+    /// Digest of the signed Domain Metadata current at this head; `None` in a checkpoint
+    /// written before the line existed (OP-152 m.5 (h)).
+    pub metadata: Option<Digest>,
     /// Signing time; the checkpoint key is resolved at it.
     pub issued_at: u64,
+}
+
+/// The digest of the signed Domain Metadata bytes under [`METADATA_CONTEXT`] (OP-152 m.5 (h)).
+#[must_use]
+pub fn metadata_digest(signed: &[u8]) -> Digest {
+    suiss_crypto::digest::context_digest(METADATA_CONTEXT, signed)
 }
 
 /// The digest of `versions` under [`VERSIONS_CONTEXT`].
@@ -89,7 +102,8 @@ fn digest_text(d: &Digest) -> String {
     format!("sha-256:{}", access_kernel::json::b64url_encode(&d.0))
 }
 
-/// The checkpoint of `domain`'s log at `head`, issued at `issued_at` (L2-CKP-1).
+/// The checkpoint of `domain`'s log at `head`, issued at `issued_at`, naming the digest of the
+/// signed Domain Metadata current there (L2-CKP-1, L2-CKP-5).
 ///
 /// # Errors
 /// [`CheckpointError`] when the head and its frontier disagree.
@@ -97,11 +111,13 @@ pub fn body(
     domain: &Digest,
     head: &Head,
     versions: &SpecVersions,
+    metadata: &Digest,
     issued_at: u64,
 ) -> Result<Checkpoint, CheckpointError> {
     let extensions = vec![
         format!("{RECORDED_AT}{}", head.recorded_at),
         format!("{VERSIONS}{}", digest_text(&versions_digest(versions)?)),
+        format!("{METADATA}{}", digest_text(metadata)),
         format!("{ISSUED_AT}{issued_at}"),
     ];
     Ok(suiss_ledger::checkpoint::of_head(
@@ -127,21 +143,26 @@ fn number(line: Option<&String>, prefix: &str) -> Result<u64, CheckpointError> {
 /// # Errors
 /// [`CheckpointError::Extension`].
 pub fn extensions(cp: &Checkpoint) -> Result<Extensions, CheckpointError> {
-    let [recorded_at, versions, issued_at] = cp.extensions.as_slice() else {
-        return Err(CheckpointError::Extension);
+    let (recorded_at, versions, metadata, issued_at) = match cp.extensions.as_slice() {
+        [r, v, i] => (r, v, None, i),
+        [r, v, m, i] => (r, v, Some(digest_line(m, METADATA)?), i),
+        _ => return Err(CheckpointError::Extension),
     };
-    let versions = versions
-        .strip_prefix(VERSIONS)
+    Ok(Extensions {
+        recorded_at: number(Some(recorded_at), RECORDED_AT)?,
+        versions: digest_line(versions, VERSIONS)?,
+        metadata,
+        issued_at: number(Some(issued_at), ISSUED_AT)?,
+    })
+}
+
+fn digest_line(line: &str, prefix: &str) -> Result<Digest, CheckpointError> {
+    line.strip_prefix(prefix)
         .and_then(|v| v.strip_prefix("sha-256:"))
         .and_then(|v| access_kernel::json::b64url_decode(v).ok())
         .and_then(|b| <[u8; 32]>::try_from(b).ok())
         .map(Digest)
-        .ok_or(CheckpointError::Extension)?;
-    Ok(Extensions {
-        recorded_at: number(Some(recorded_at), RECORDED_AT)?,
-        versions,
-        issued_at: number(Some(issued_at), ISSUED_AT)?,
-    })
+        .ok_or(CheckpointError::Extension)
 }
 
 /// Checkpoints the committed head of `domain` at trusted time `now` and has the signer sign it.
@@ -157,7 +178,18 @@ pub async fn checkpoint<H: Heads, S: NoteSigner>(
     now: u64,
 ) -> Result<SignedCheckpoint, CheckpointError> {
     let row = heads.committed(&domain).await?;
-    let cp = body(&domain, &head_of(&row)?, versions, now)?;
+    // OP-152 m.5 (h)
+    let metadata = signer
+        .metadata(domain)
+        .await
+        .map_err(CheckpointError::Unsigned)?;
+    let cp = body(
+        &domain,
+        &head_of(&row)?,
+        versions,
+        &metadata_digest(&metadata),
+        now,
+    )?;
     let text = cp.to_body()?;
     let noted = signer
         .sign_note(domain, text.clone(), now)

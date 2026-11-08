@@ -94,6 +94,22 @@ impl NoteSigner for InProcess {
             _ => Err(String::from("signer-frame")),
         }
     }
+
+    async fn metadata(&self, domain: Digest) -> Result<Vec<u8>, String> {
+        if self.down {
+            return Err(String::from("signer-unreachable"));
+        }
+        match self
+            .service
+            .lock()
+            .unwrap()
+            .handle(Request::Metadata(domain), 0)
+        {
+            Response::Metadata(bytes) => Ok(bytes),
+            Response::Error(code) => Err(code),
+            _ => Err(String::from("signer-frame")),
+        }
+    }
 }
 
 /// A committed head over [`LEAVES`], or a store that fails.
@@ -173,11 +189,14 @@ async fn a_checkpoint_of_the_committed_head_verifies() {
     assert_eq!((cp.size, cp.root), (3, root(&LEAVES)));
     assert_eq!(cp, made.checkpoint);
     assert_eq!(cp.origin, origin(&DOMAIN));
+    // OP-152 m.5 (h): the checkpoint names the signed Domain Metadata current at its head
+    let held = NoteSigner::metadata(&signer, DOMAIN).await.unwrap();
     assert_eq!(
         ext,
         Extensions {
             recorded_at: 1_000,
             versions: versions_digest(&versions()).unwrap(),
+            metadata: Some(metadata_digest(&held)),
             issued_at: now,
         }
     );
@@ -196,6 +215,27 @@ async fn a_checkpoint_of_the_committed_head_verifies() {
         verify(&PureBackend, &forged, &metadata, &made.excerpt, &DOMAIN),
         Err(CheckpointError::Note(_))
     ));
+}
+
+// OP-152 m.5 (h), L2-CKP-5: a checkpoint written before the metadata line still reads, without
+// a metadata digest; a malformed metadata line is refused
+#[test]
+fn the_metadata_line_is_optional_but_well_formed() {
+    let mut cp = body(
+        &DOMAIN,
+        &head_of(&committed().0.unwrap()).unwrap(),
+        &versions(),
+        &Digest([7; 32]),
+        5,
+    )
+    .unwrap();
+    assert_eq!(extensions(&cp).unwrap().metadata, Some(Digest([7; 32])));
+    assert!(cp.extensions[2].starts_with("metadata sha-256:"));
+    let line = cp.extensions.remove(2);
+    assert_eq!(extensions(&cp).unwrap().metadata, None);
+    cp.extensions
+        .insert(2, line.replacen("metadata ", "metadata sha-512:", 1));
+    assert!(matches!(extensions(&cp), Err(CheckpointError::Extension)));
 }
 
 // CR-23, G42: an unreachable signer, or one without a key that may sign, delays the checkpoint;

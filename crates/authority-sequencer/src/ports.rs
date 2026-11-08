@@ -51,6 +51,13 @@ pub trait NoteSigner {
         body: String,
         at: u64,
     ) -> impl Future<Output = Result<access_authority_signer::app::Noted, String>> + Send;
+
+    /// The domain's current binding-signed Domain Metadata, whose digest the checkpoint names
+    /// (OP-152 m.5 (h)); a refusal or an unreachable signer is the stable code.
+    fn metadata(
+        &self,
+        domain: access_kernel::digest::Digest,
+    ) -> impl Future<Output = Result<Vec<u8>, String>> + Send;
 }
 
 /// Trusted time (OP-63, OP-129 m.1): never read from the system clock directly.

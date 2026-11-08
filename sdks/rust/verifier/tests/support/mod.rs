@@ -391,9 +391,21 @@ pub(crate) fn witness_verifier() -> Verifier {
     Verifier::cosigner(WITNESS, witness_key().verifying_key().to_bytes()).unwrap()
 }
 
+/// The signed bytes the test metadata stands for; checkpoints name their digest (L2-CKP-5).
+pub(crate) const SIGNED_METADATA: &[u8] = b"signed domain metadata";
+
 /// A checkpoint of the domain log signed by the log and, at `cosigned_s` seconds, the witness.
 pub(crate) fn checkpoint(cosigned_s: Option<u64>) -> String {
-    let body = format!("{LOG}\n7\n{}\n", note::base64_encode(&[7; 32]));
+    checkpoint_of(SIGNED_METADATA, cosigned_s)
+}
+
+/// A checkpoint naming the metadata `signed`, cosigned at `cosigned_s` seconds.
+pub(crate) fn checkpoint_of(signed: &[u8], cosigned_s: Option<u64>) -> String {
+    let body = format!(
+        "{LOG}\n7\n{}\nmetadata sha-256:{}\n",
+        note::base64_encode(&[7; 32]),
+        access_kernel::json::b64url_encode(&access_verifier::metadata::metadata_digest(signed)),
+    );
     let log = log_verifier();
     let mut sig = log.id().to_be_bytes().to_vec();
     sig.extend(log_key().sign(body.as_bytes()).to_bytes());
@@ -432,7 +444,7 @@ pub(crate) fn device(pap: &Pap) -> Device {
 }
 
 pub(crate) fn device_with(metadata: DomainMetadata, pap: &Pap) -> Device {
-    let mut view = MetadataView::new(metadata);
+    let mut view = MetadataView::new(metadata, SIGNED_METADATA);
     view.witness(
         &checkpoint(Some(NOW / 1_000 - 60)),
         LOG,
