@@ -145,6 +145,22 @@ fields = ["reason"]
 ocsf = "authentication"
 
 [[event]]
+name = "login.legacy_idp.unavailable"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = ["outcome"]
+ocsf = "authentication"
+
+[[event]]
+name = "accounts.imported"
+plane = "ops"
+severity = "info"
+since = "unreleased"
+fields = ["created", "legacy", "skipped"]
+ocsf = "application_lifecycle"
+
+[[event]]
 name = "login.succeeded"
 plane = "identity"
 severity = "info"

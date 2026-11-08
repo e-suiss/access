@@ -3124,7 +3124,7 @@ async fn a_legacy_bcrypt_user_signs_in_and_is_stored_as_argon2id_after_one_login
     };
     assert!(legacy);
     assert_eq!(e.password_algorithm(subject).await, vec!["legacy-bcrypt"]);
-    // 3569, 3894
+    // TN-85, CR-37
     assert_eq!(e.legacy_count().await, 1);
     assert_eq!(
         e.import(json!({ "email": "ann@example.com", "password_hash": hash }))
