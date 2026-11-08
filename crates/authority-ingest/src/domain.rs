@@ -322,7 +322,7 @@ fn statement(f: &Frame<'_>, class: &str, value: EqValue, issued_at: u64, until: 
             from: issued_at,
             until,
         },
-        // §10.1.2 rule 2: without a mapping in the Acceptance, the lowest class
+        // §10.1.2 rule 2
         assurance: BTreeMap::new(),
         bound_intent: None,
         bound_instance: None,

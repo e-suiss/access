@@ -71,8 +71,7 @@ fn submission(carrier: Carrier, body: Option<Vec<u8>>) -> ClaimSubmission {
     }
 }
 
-// CMP-8, §9.13 rule 3, OP-150 m.6 (f): a submission is recorded and answered; the day's table
-// marks a resubmission, and nothing is dropped silently
+// CMP-8, §9.13 rule 3, OP-150 m.6 (f)
 #[test]
 fn a_submission_reaches_the_ledger_once_marked() {
     let ingest = Ingest::new(Recorded::default(), Seen::default(), Fixed(86_400_000));
@@ -91,8 +90,7 @@ fn a_submission_reaches_the_ledger_once_marked() {
     );
 }
 
-// §9.13 rule 3, §10.1.2: an oversized Claim or a mapped carrier without its context is refused
-// with a reason and never recorded
+// §9.13 rule 3, §10.1.2
 #[test]
 fn malformed_submissions_are_refused_before_the_ledger() {
     let ingest = Ingest::new(Recorded::default(), Seen::default(), Fixed(1));

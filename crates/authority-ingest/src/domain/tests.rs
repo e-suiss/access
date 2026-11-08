@@ -57,9 +57,7 @@ fn id_token(extra: &str) -> String {
     )
 }
 
-// §10.1.2 OIDC row, OP-150 m.3 (i), E26, INV-12, G45, IDI-9: an upstream ID token becomes an
-// authentication Claim with the verified iss, acr and amr, the subject pair digested and nothing
-// else
+// §10.1.2 OIDC row, OP-150 m.3 (i), E26, INV-12, G45, IDI-9
 #[test]
 fn an_id_token_maps_to_an_authentication_claim() {
     let p = pinned(3);
@@ -86,8 +84,7 @@ fn an_id_token_maps_to_an_authentication_claim() {
     assert!(!text.contains("a@example.com"));
 }
 
-// §9.13 issuer identification (pinned key set), MD-3: only the pinned keys verify, and the
-// token must name the pinned iss and aud
+// §9.13, MD-3
 #[test]
 fn an_id_token_verifies_only_under_the_pinned_key_set() {
     let p = pinned(3);
@@ -115,7 +112,7 @@ fn set(event: &str, subject: &str) -> String {
     )
 }
 
-// §10.1.2 SET row: RISC account events become account_status Claims; others are refused
+// §10.1.2 SET
 #[test]
 fn a_set_maps_to_an_account_status_claim() {
     let p = pinned(3);
@@ -137,7 +134,7 @@ fn a_set_maps_to_an_account_status_claim() {
     assert_eq!(map_set(&token, &frame(&p)), Err(Refusal::CARRIER));
 }
 
-// G44, §13.7.4: narrowing classes are never quarantined for quota
+// G44, §13.7.4
 #[test]
 fn narrowing_claims_are_recognised() {
     let p = pinned(3);
@@ -152,7 +149,7 @@ fn narrowing_claims_are_recognised() {
     assert!(!narrowing(&kyc));
 }
 
-// TN-42, CI-2: an inbound SSF event's risk signal narrows and is never refused for quota
+// TN-42, CI-2
 #[test]
 fn inbound_risk_signals_are_never_quota_refused() {
     let p = pinned(3);
@@ -167,8 +164,7 @@ fn inbound_risk_signals_are_never_quota_refused() {
     assert!(narrowing(&risk));
 }
 
-// CI-2, TN-46: an SL2 `risk_*` Claim narrows like a risk signal; a risk Claim with assurance
-// levels or a bound intent or resource is refused, whatever its value
+// CI-2, TN-46
 #[test]
 fn risk_claims_never_qualify() {
     let p = pinned(3);
@@ -195,7 +191,7 @@ fn risk_claims_never_qualify() {
     assert!(!risk_class("riskless"));
 }
 
-// §10.1.2 WebAuthn rows: only a webauthn authentication or a passkey binding with its body
+// §10.1.2
 #[test]
 fn a_webauthn_carrier_needs_its_body() {
     let auth = Body::Authentication(Authentication {
@@ -225,8 +221,7 @@ fn a_webauthn_carrier_needs_its_body() {
     );
 }
 
-// §10.1.1, MD-5: the binding Claim's value for an upstream subject is fixed by its digest, and
-// the carrier context names only a Party
+// §10.1.1, MD-5
 #[test]
 fn binding_value_and_context_round_trip() {
     let d = subject_digest(ISS, "u-1");
@@ -242,8 +237,7 @@ fn binding_value_and_context_round_trip() {
     assert_eq!(day_of(86_400_000 * 3 + 5), 3);
 }
 
-// TN-4, §12.1.1, MD-5: a realm's Claims go to its governing domain and to each consuming domain
-// only while that domain's Acceptance is live
+// TN-4, §12.1.1, MD-5
 #[test]
 fn realm_claims_go_to_governing_and_accepting_domains() {
     let gov = Digest([1; 32]);
