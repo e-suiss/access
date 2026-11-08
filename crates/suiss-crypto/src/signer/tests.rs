@@ -13,7 +13,7 @@ fn keys(kid: [u8; 32], signer: &dyn Signer) -> KeySet {
     ks
 }
 
-// OP-140 m.4, L2-SIG-1: what the signer produces verifies on both backends
+// OP-140 m.4, L2-SIG-1
 #[test]
 fn signed_cose_verifies() {
     for (signer, _) in [
@@ -28,7 +28,7 @@ fn signed_cose_verifies() {
     }
 }
 
-// CR-9: the P-256 signer only emits low-S signatures, which own-artefact verification needs
+// CR-9, P-256
 #[test]
 fn p256_signatures_are_low_s() {
     let (signer, _) = SoftSigner::generate_p256().unwrap();
@@ -44,7 +44,7 @@ fn p256_signatures_are_low_s() {
     assert_eq!(high[63], 1);
 }
 
-// OP-140 m.4: a key round-trips through its PKCS#8 document
+// OP-140 m.4
 #[test]
 fn keys_round_trip_through_pkcs8() {
     let (a, doc) = SoftSigner::generate_ed25519().unwrap();
@@ -58,7 +58,7 @@ fn keys_round_trip_through_pkcs8() {
     assert!(SoftSigner::ed25519_from_pkcs8(&doc).is_err());
 }
 
-// L2-CKP-3, L2-CKP-4: log signature and witness cosignature from signers verify
+// L2-CKP-3, L2-CKP-4
 #[test]
 fn signed_and_cosigned_checkpoint_verifies() {
     let (log, _) = SoftSigner::generate_ed25519().unwrap();
@@ -83,7 +83,7 @@ fn signed_and_cosigned_checkpoint_verifies() {
     );
 }
 
-// CR-10: the signer refuses a payload with no Sig_structure instead of signing empty bytes
+// CR-10
 #[test]
 fn oversized_payload_is_not_signed() {
     let (signer, _) = SoftSigner::generate_ed25519().unwrap();

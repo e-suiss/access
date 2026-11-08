@@ -51,7 +51,7 @@ fn keyset(signer: &dyn Signer) -> KeySet {
     ks
 }
 
-// OP-94, OP-140 m.4: keys generated in the token sign COSE that verifies, and come back by label
+// OP-94, OP-140 m.4
 #[test]
 fn token_keys_sign_and_are_found_again() {
     let s = store();
@@ -78,7 +78,7 @@ fn token_keys_sign_and_are_found_again() {
     assert!(matches!(s.signer("missing"), Err(HsmError::Key(_))));
 }
 
-// OP-135 m.4: the token KEK wraps exactly like the in-process RFC 3394 KEK, so either can unwrap
+// OP-135 m.4
 #[test]
 fn token_kek_matches_rfc_3394() {
     let s = store();
@@ -95,8 +95,7 @@ fn token_kek_matches_rfc_3394() {
     assert!(hsm.unwrap(&w).is_err());
 }
 
-// CR-32, OP-74: a class DEK under the token KEK wraps part DEKs in process exactly like the
-// token wraps under the same key
+// CR-32, OP-74
 #[test]
 fn token_and_class_dek_wrap_alike() {
     let s = store();
@@ -109,7 +108,7 @@ fn token_and_class_dek_wrap_alike() {
     assert!(hsm.unwrap(&wrapped).unwrap().secret().ct_eq(part.secret()));
 }
 
-// OP-73: destroying a KEK crypto-shreds what it wrapped; only KEKs are destroyed this way
+// OP-73
 #[test]
 fn a_destroyed_kek_unwraps_nothing() {
     let s = store();
@@ -168,7 +167,7 @@ fn token_aead_seals_and_opens() {
     assert_eq!(again.open(b"aad", &sealed).unwrap(), b"position 17");
 }
 
-// OP-94: a wrong PIN or token is refused
+// OP-94
 #[test]
 fn wrong_token_or_pin_is_refused() {
     let _ = store();
@@ -182,8 +181,7 @@ fn wrong_token_or_pin_is_refused() {
     ));
 }
 
-// OP-69, SA-59: each test process gets a SoftHSM store of its own, so token initialisation in
-// one process never races key writes in another
+// OP-69, SA-59
 #[test]
 fn each_test_process_has_its_own_token_store() {
     let conf = PathBuf::from(std::env::var_os("SOFTHSM2_CONF").unwrap());

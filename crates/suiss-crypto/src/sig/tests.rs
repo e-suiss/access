@@ -201,7 +201,7 @@ fn padded(hex: &str) -> Vec<u8> {
     [alloc::vec![0; 32_usize.checked_sub(b.len()).unwrap()], b].concat()
 }
 
-// CR-51 V8/V9: NIST ACVP SigVer for the two algorithms the Kernel verifies
+// CR-51 V8/V9
 #[test]
 fn acvp_sigver() {
     let e: Acvp<EcdsaCase> = serde_json::from_str(include_str!(

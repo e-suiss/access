@@ -80,9 +80,7 @@ fn key<'a>(keys: &'a [Key], kid: &[u8; 32]) -> &'a Key {
     keys.iter().find(|k| k.kid == *kid).unwrap()
 }
 
-// CR-25, CR-27, CR-59, SAI-46: from the first minute some key signs every minute; a key signs
-// only once it has been published for the lead, unless it is the founding key, inside its
-// window, and one key at a time
+// CR-25, CR-27, CR-59, SAI-46
 #[test]
 fn keys_rotate_without_a_gap() {
     let p = Policy::AUTHORITY;
@@ -101,9 +99,7 @@ fn keys_rotate_without_a_gap() {
     assert!(keys.iter().any(|k| k.state == State::Dropped));
 }
 
-// CR-59, CR-25, SAI-46: the founding key signs the minute it is published; the set's second
-// key signs no earlier than its full lead; once the founding key has rotated out no key ever
-// signs before its lead, and exactly one key of the set is founding
+// CR-59, CR-25, SAI-46
 #[test]
 fn the_founding_key_signs_at_once_and_only_it() {
     let p = Policy::AUTHORITY;
@@ -143,7 +139,7 @@ fn the_founding_key_signs_at_once_and_only_it() {
     }
 }
 
-// CR-19, CR-23: rotation follows the lifetime within the jitter
+// CR-19, CR-23
 #[test]
 fn rotation_follows_the_lifetime_within_the_jitter() {
     let p = Policy::AUTHORITY;
@@ -163,8 +159,7 @@ fn rotation_follows_the_lifetime_within_the_jitter() {
     assert!(jitters.iter().any(|j| *j != jitters[0]));
 }
 
-// CR-23: when keys cannot be generated, the active key signs to the end of its window and then
-// nothing is signed
+// CR-23
 #[test]
 fn an_outage_signs_to_the_end_of_the_window_then_nothing() {
     let p = Policy::AUTHORITY;
@@ -181,8 +176,7 @@ fn an_outage_signs_to_the_end_of_the_window_then_nothing() {
     }
 }
 
-// CR-23, OP-150: a round that keeps the schedule leaves no rotation overdue; a key-generation
-// outage leaves the active key past its rotation time, which the delay alarm reports
+// CR-23, OP-150
 #[test]
 fn an_outage_makes_rotation_overdue() {
     let p = Policy::AUTHORITY;
@@ -194,9 +188,7 @@ fn an_outage_makes_rotation_overdue() {
     assert_eq!(overdue(&[], &p, 10 * HOUR), None);
 }
 
-// CR-21, CR-23, CR-59: a key that reaches its signature limit stops signing; the next signs
-// once its lead has passed, and in between nothing is signed, the founding key's successor
-// included
+// CR-21, CR-23, CR-59
 #[test]
 fn the_signature_limit_rotates() {
     let p = Policy {
@@ -213,7 +205,7 @@ fn the_signature_limit_rotates() {
     assert!(signing[lead].is_some());
 }
 
-// CR-23: jitter is uniform over ±jitter_permille
+// CR-23
 #[test]
 fn jitter_stays_in_range() {
     let p = Policy::AUTHORITY;

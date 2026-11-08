@@ -170,7 +170,7 @@ fn tagged_digest_round_trips_and_labels_differ() {
     assert_eq!(d.0, direct);
 }
 
-// OP-140 m.2: a proof longer than any u64-sized tree needs is refused before hashing
+// OP-140 m.2
 #[test]
 fn overlong_proofs_are_refused() {
     let long = alloc::vec![[0_u8; 32]; MAX_PROOF + 1];
@@ -198,7 +198,7 @@ struct ShaCase {
     md: String,
 }
 
-// CR-51 m.3: SHA-256 known answers (NIST ACVP SHA2-256 AFT)
+// CR-51 m.3, SHA-256
 #[test]
 fn sha256_acvp_known_answers() {
     let v: Sha = serde_json::from_str(include_str!(

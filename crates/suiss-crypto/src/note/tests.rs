@@ -35,7 +35,7 @@ fn checkpoint() -> Checkpoint {
     }
 }
 
-// OP-140 m.2: the example from C2SP signed-note verifies with its key
+// OP-140 m.2
 #[test]
 fn c2sp_signed_note_example_verifies() {
     let v =
@@ -56,7 +56,7 @@ fn c2sp_signed_note_example_verifies() {
     ));
 }
 
-// C2SP tlog-cosignature: the signed message is the literal lines of the specification example
+// C2SP
 #[test]
 fn cosignature_message_matches_the_specification() {
     let body =
@@ -70,7 +70,7 @@ fn cosignature_message_matches_the_specification() {
     assert_eq!(cp.to_body().unwrap(), body);
 }
 
-// OP-86, OP-140 m.2: a checkpoint signed by its log and cosigned by a witness
+// OP-86, OP-140 m.2
 #[test]
 fn signed_and_cosigned_checkpoint_verifies() {
     let (lk, wk) = (key(1), key(2));
@@ -126,7 +126,7 @@ fn signed_and_cosigned_checkpoint_verifies() {
     ));
 }
 
-// C2SP signed-note: unknown keys are ignored, a failing known key rejects, one must verify
+// C2SP
 #[test]
 fn known_and_unknown_keys() {
     let (lk, other) = (key(1), key(3));
@@ -163,7 +163,6 @@ fn known_and_unknown_keys() {
     assert_eq!(parse_note(&twice), Err(NoteError::Duplicate));
 }
 
-// C2SP signed-note and tlog-checkpoint syntax
 #[test]
 fn malformed_notes_and_checkpoints_are_rejected() {
     let lk = key(1);
@@ -195,7 +194,7 @@ fn malformed_notes_and_checkpoints_are_rejected() {
     );
 }
 
-// RFC 4648 §3.5: only canonical base64 is accepted
+// RFC 4648 §3.5
 #[test]
 fn base64_is_canonical() {
     for (raw, text) in [
@@ -214,7 +213,7 @@ fn base64_is_canonical() {
     }
 }
 
-// C2SP signed-note: verifier keys carry an ID the key must derive
+// C2SP
 #[test]
 fn verifier_keys_are_checked() {
     let k = key(4).verifying_key().to_bytes();
@@ -231,7 +230,7 @@ fn verifier_keys_are_checked() {
     assert_eq!(Verifier::ed25519(&long, k), Err(NoteError::Name));
 }
 
-// C2SP signed-note: names hold no '+', so a '+' of the base64 key belongs to the key
+// C2SP
 #[test]
 fn verifier_keys_with_plus_in_the_key_parse() {
     let k: [u8; 32] = [
@@ -262,7 +261,7 @@ fn verifier_keys_with_plus_in_the_key_parse() {
     }
 }
 
-// C2SP signed-note: a bounded number of signatures
+// C2SP
 #[test]
 fn signature_count_is_bounded() {
     let lk = key(1);
@@ -365,7 +364,7 @@ fn json_string(s: &str) -> String {
     out
 }
 
-// OP-86, OP-140 m.3: checkpoint golden vectors, byte for byte
+// OP-86, OP-140 m.3
 #[test]
 fn checkpoint_vectors_match() {
     extern crate std;

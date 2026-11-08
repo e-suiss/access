@@ -93,7 +93,7 @@ fn high(low: &[u8]) -> Vec<u8> {
     [r, out.as_slice()].concat()
 }
 
-// OP-140 m.2: the view keeps the received bytes; a detached payload is `nil`
+// OP-140 m.2
 #[test]
 fn parse_keeps_bytes_and_detached_payload() {
     let prot = header(Algorithm::Ed25519, [1; 32]);
@@ -116,7 +116,7 @@ fn parse_keeps_bytes_and_detached_payload() {
     ));
 }
 
-// OP-140 m.2, RFC 9052 §2: a detached payload verifies only when given separately
+// OP-140 m.2, RFC 9052 §2
 #[test]
 fn detached_payload_verifies_only_when_given() {
     let ks = keys();
@@ -136,7 +136,7 @@ fn detached_payload_verifies_only_when_given() {
     );
 }
 
-// CR-9, OP-140 m.2: high-S is refused for own artefacts and accepted from external signers
+// CR-9, OP-140 m.2
 #[test]
 fn high_s_depends_on_who_signed() {
     let ks = keys();
@@ -149,7 +149,7 @@ fn high_s_depends_on_who_signed() {
     assert!(verify_sign1_with(&PureBackend, &msg, None, &ks, CT, false).is_ok());
 }
 
-// CR-7: the algorithm comes from the caller's policy, never from the header
+// CR-7
 #[test]
 fn algorithms_come_from_the_policy() {
     let mut ks = keys();
@@ -163,7 +163,7 @@ fn algorithms_come_from_the_policy() {
     );
 }
 
-// OP-140 m.2: reason codes are stable strings
+// OP-140 m.2
 #[test]
 fn codes_are_stable() {
     assert_eq!(CoseError::UnknownKid.code(), "cose-unknown-kid");
@@ -225,7 +225,7 @@ struct Case {
     error: Option<String>,
 }
 
-// CR-55 m.6, OP-140 m.3: the shared COSE vectors
+// CR-55 m.6, OP-140 m.3
 #[test]
 fn cose_vectors_match() {
     let v: Vectors = serde_json::from_str(include_str!("../../vectors/core/1/cose.json")).unwrap();
@@ -252,8 +252,7 @@ fn cose_vectors_match() {
     }
 }
 
-// CR-10, G60: a part above the profile limits has no Sig_structure; a signature over the empty
-// byte string never verifies a > 64 KiB detached payload
+// CR-10, G60
 #[test]
 fn oversized_detached_payload_is_refused() {
     use ed25519_dalek::Signer as _;

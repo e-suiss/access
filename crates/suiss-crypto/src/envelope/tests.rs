@@ -8,7 +8,7 @@ fn kek(id: &str, b: u8) -> SoftKek {
     SoftKek::new(id, [b; 32])
 }
 
-// T39, CR-32: a body round-trips under its DEK and nothing else
+// T39, CR-32
 #[test]
 fn a_body_opens_only_with_its_key_and_context() {
     let k = kek("domain-kek-1", 1);
@@ -38,7 +38,7 @@ fn a_body_opens_only_with_its_key_and_context() {
     );
 }
 
-// OP-135 m.1: a key wrapped by one KEK does not unwrap under another; rotation rewraps it
+// OP-135 m.1
 #[test]
 fn wrapping_is_bound_to_the_kek_and_rotates() {
     let (old, new) = (kek("v1", 1), kek("v2", 2));
@@ -59,7 +59,7 @@ fn wrapping_is_bound_to_the_kek_and_rotates() {
     assert_eq!(old.unwrap(&bad).err(), Some(EnvelopeError::Wrap));
 }
 
-// V4 (CR-51.2): a long-lived DEK refuses past its message limit and on counter overflow
+// V4 (CR-51.2)
 #[test]
 fn a_long_lived_key_stops_at_its_limit() {
     let mut s = Sealer::with_limit(Dek::generate().unwrap(), 0, 2);
@@ -78,7 +78,6 @@ fn a_long_lived_key_stops_at_its_limit() {
     );
 }
 
-// fresh nonces: two encryptions of one message differ
 #[test]
 fn nonces_are_fresh() {
     let mut s = Sealer::new(Dek::generate().unwrap(), 0);
@@ -87,7 +86,7 @@ fn nonces_are_fresh() {
     assert_ne!(a.ciphertext, b.ciphertext);
 }
 
-// CR-32.2: cached keys expire, the cache is bounded, a shredded key is forgotten at once
+// CR-32.2
 #[test]
 fn the_cache_expires_bounds_and_forgets() {
     let k = kek("v1", 1);
@@ -122,8 +121,8 @@ fn dek(bytes: [u8; 32]) -> Dek {
     Dek::from_secret(Secret::new(bytes))
 }
 
-// OP-135 m.1: RFC 3394 §4.6, 256 bits of key data under a 256-bit KEK, through a DEK as KEK,
-// byte-identical to the in-process KEK; §4.3, 128 bits of key data, is not a DEK
+// OP-135 m.1, §4.6
+// §4.3
 #[test]
 fn a_dek_wraps_like_rfc_3394() {
     let kek_bytes = hex::<32>("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
@@ -147,8 +146,7 @@ fn a_dek_wraps_like_rfc_3394() {
     }
 }
 
-// CR-32, OP-74: a part DEK wrapped under a class DEK that a KEK wraps; the class key alone
-// opens it, and rewrapping the class key keeps the parts
+// CR-32, OP-74
 #[test]
 fn a_class_dek_wraps_part_deks() {
     let (old, new) = (kek("v1", 1), kek("v2", 2));

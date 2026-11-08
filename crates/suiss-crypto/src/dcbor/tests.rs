@@ -24,7 +24,7 @@ fn bad(h: &str, e: DecodeError) {
     assert_eq!(decode(&hex(h), Limits::CEILING), Err(e), "{h}");
 }
 
-// OP-3-G4, OP-56: RFC 8949 Appendix A, items inside the profile.
+// OP-3-G4, OP-56
 #[test]
 fn rfc8949_appendix_a() {
     ok("00", &Value::Unsigned(0));
@@ -105,7 +105,7 @@ fn non_canonical_and_out_of_profile_input_is_rejected() {
     bad("4301", DecodeError::Truncated);
 }
 
-// RFC 8949 §4.2.1: shorter encoded keys sort first, then bytewise.
+// RFC 8949 §4.2.1
 #[test]
 fn map_keys_sort_by_encoded_bytes() {
     let v = Value::Map(vec![
@@ -333,7 +333,7 @@ fn decode_rules(id: &str) -> &'static [&'static str] {
     }
 }
 
-// OP-106 m.5, OP-117 m.3, m.4: canonical decoding and structural limits
+// OP-106 m.5, OP-117 m.3, m.4
 #[test]
 fn decode_vectors_match() {
     extern crate std;

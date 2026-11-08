@@ -19,7 +19,6 @@ use crate::envelope::{Dek, EnvelopeError, Kek};
 use crate::secret::Secret;
 use crate::signer::{SignError, Signer, low_s};
 
-// DER OIDs: id-Ed25519 (RFC 8410) and prime256v1
 const ED25519_PARAMS: &[u8] = &[0x06, 0x03, 0x2b, 0x65, 0x70];
 const P256_PARAMS: &[u8] = &[0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07];
 
