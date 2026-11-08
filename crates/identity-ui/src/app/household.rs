@@ -485,7 +485,7 @@ where
         entry: &RealmEntry,
         b: &Browser<'_>,
         id: &str,
-        d: &ConsentDecision,
+        decision: &ConsentDecision,
     ) -> Reply {
         let (kit, me) = match self.me(entry, b).await {
             Ok(m) => m,
@@ -495,23 +495,23 @@ where
             Ok(t) => t,
             Err(r) => return r,
         };
-        let (c, g) = match Self::consent_of(&mut t, me, id).await {
+        let (consent, guardianship) = match Self::consent_of(&mut t, me, id).await {
             Ok(x) => x,
             Err(r) => return r,
         };
-        if g.guardian != me || g.ended_by.is_some() {
+        if guardianship.guardian != me || guardianship.ended_by.is_some() {
             return Reply::problem(NOT_THE_GUARDIAN);
         }
-        if c.decision.is_some() || c.expired {
+        if consent.decision.is_some() || consent.expired {
             return Reply::problem(CONSENT_CLOSED);
         }
-        match t.decide_consent(c.id, d.approve).await {
+        match t.decide_consent(consent.id, decision.approve).await {
             Ok(true) => {}
             Ok(false) => return Reply::problem(CONSENT_CLOSED),
             Err(e) => return failed(&e),
         }
-        let after = match t.consent(c.id).await {
-            Ok(Some(c)) => c,
+        let after = match t.consent(consent.id).await {
+            Ok(Some(row)) => row,
             Ok(None) => return Reply::problem(UNAVAILABLE),
             Err(e) => return failed(&e),
         };
@@ -532,7 +532,7 @@ where
 mod tests {
     use super::*;
 
-    // E47, E53, Ek B 3633: silence is never consent
+    // E47, E53, Ek B 3633
     #[test]
     fn only_an_approval_allows_and_a_lapse_denies() {
         assert_eq!(consent_outcome(Some("approved"), false), "allow");

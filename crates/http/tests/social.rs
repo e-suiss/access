@@ -1710,7 +1710,7 @@ async fn connecting_an_app_opens_an_s1_draft_of_its_typed_bounds_and_nothing_mor
     assert_eq!(none.code(), "no-such-app");
 }
 
-// TN-90, Ek B 3611: a sign-in the upstream vouched for records the hosted domain it asserted
+// TN-90, Ek B 3611
 #[tokio::test]
 async fn a_vouched_sign_in_records_the_hosted_domain_its_upstream_asserted() {
     let e = env(0x4e, "soc-hd").await;

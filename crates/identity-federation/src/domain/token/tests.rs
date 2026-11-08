@@ -234,8 +234,7 @@ fn the_authorization_request_carries_pkce_state_and_nonce() {
     assert!(format!("{s:?}").contains("redacted"));
 }
 
-// TN-90, Ek B 3611: only a hosted-domain claim that equals the verified address's domain is an
-// assertion of that domain; `tid` names a tenant, never a domain
+// TN-90, Ek B 3611
 #[test]
 fn an_upstream_asserts_only_the_verified_addresss_hosted_domain() {
     let p = Presets::shipped().unwrap();

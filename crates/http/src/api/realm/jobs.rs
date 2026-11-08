@@ -826,7 +826,7 @@ mod tests {
         );
     }
 
-    // TN-91, TN-89 (3): a meta item's key names the record it belongs to, and nothing else
+    // TN-91, TN-89 (3)
     #[test]
     fn a_meta_items_key_names_its_role_or_handover() {
         use crate::api::ports::MetaTarget;

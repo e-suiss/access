@@ -6960,7 +6960,7 @@ async fn the_issuance_policy_admits_only_what_the_ceilings_and_profile_allow() {
     let Payload::ProjectionIssue { bounds, .. } = bounded(hour, Some(60_000)) else {
         panic!("projection payload");
     };
-    // OP-153 m.17 (h): a class the variant does not belong to never decodes, in process either
+    // OP-153 m.17 (h)
     let mismatched = Payload::ProjectionIssue {
         bounds,
         audience: BTreeSet::from([ROBOT.to_owned()]),

@@ -50,7 +50,7 @@ async fn s7_reads_an_organizations_roots_members_and_membership_sources() {
     assert_eq!(members.len(), 2);
     let founder = members.iter().find(|m| m["owner"] == true).unwrap();
     assert_eq!(founder["membership_source"], "founder");
-    // TN-109, §8.17.9.3: how a member joined is its membership source, never a sign-in source
+    // TN-109, §8.17.9.3
     let autojoined = members.iter().find(|m| m["owner"] == false).unwrap();
     assert_eq!(autojoined["membership_source"], "domain_autojoin");
     assert_eq!(autojoined["role"]["version"], 2);

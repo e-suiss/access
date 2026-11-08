@@ -672,15 +672,7 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
             Shape::List(&["client_id", "display_name", "status"]),
         ),
         "getClient" => (Clients, Shape::Get),
-        "createClient" => (
-            Clients,
-            Shape::Write {
-                patch: None,
-                section: None,
-                conditional: false,
-                creates: true,
-            },
-        ),
+        "createClient" => (Clients, CREATE),
         "putClient" => (Clients, w(true)),
         "patchClient" => (Clients, patch(CLIENT_PATCH, None)),
         "retireClient" | "rotateClientSecret" => (Clients, w(false)),

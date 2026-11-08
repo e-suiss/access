@@ -991,7 +991,7 @@ async fn the_connection_manager_template_only_drafts_for_seven_days_and_never_de
         &w.ids,
     )
     .unwrap();
-    // OP-153 m.17 (h): the holder drafts through its own holding
+    // OP-153 m.17 (h)
     let mut p = proposal(at, draft, 0x72, holding, 1);
     p.subject = Some(bob);
     written(&exercise(&w, &p, ALICE_KEY).await.unwrap());
@@ -1034,7 +1034,7 @@ async fn the_connection_manager_template_only_drafts_for_seven_days_and_never_de
         )
         .await
         .unwrap();
-    // OP-153 m.17 (h): the template's scope refuses, not an unresolved holding
+    // OP-153 m.17 (h)
     let Applied::NotAllowed { decision, .. } = onward else {
         panic!("{onward:?}");
     };
@@ -1046,7 +1046,7 @@ async fn the_connection_manager_template_only_drafts_for_seven_days_and_never_de
         name: String::from("enterprise-connection-manager"),
         authority: sso_manager_set("org-sso", ORG),
     };
-    // OP-153 m.17 (h): a payload the wire decoder refuses is refused in process too
+    // OP-153 m.17 (h)
     assert!(matches!(
         w.admin()
             .meta(at, meta_write(d, 0x75, bad, meta_anchor, ROOT_KEY))
@@ -1155,10 +1155,10 @@ async fn a_guardianship_ends_at_majority_and_a_parent_consent_is_never_silence()
 }
 
 fn refusal<T: std::fmt::Debug>(r: Result<T, AdminError>, code: &str) {
-    assert!(
-        matches!(&r, Err(AdminError::Refused(c)) if c == code),
-        "{r:?}"
-    );
+    match r {
+        Err(AdminError::Refused(c)) => assert_eq!(c, code),
+        other => panic!("{other:?}"),
+    }
 }
 
 /// The organization Anchor's `anchor_transfer` to `to`, signed by the key `seed`.
@@ -1197,7 +1197,7 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
     let anchor = t.party_anchor(ORG).await.unwrap().unwrap();
     t.commit().await.unwrap();
 
-    // TN-91: only an owner proposes, with its own client's signature
+    // TN-91
     refusal(
         w.admin()
             .propose_transfer(
@@ -1241,7 +1241,7 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
         )
         .await
         .unwrap();
-    // TN-91, OP-153 m.17 (f): every owner and the recipient are told
+    // TN-91, OP-153 m.17 (f)
     realm_events(&w, at.1, "relay.message.ownership_handover.v1", 2).await;
     refusal(
         Box::pin(w.admin().complete_transfer(
@@ -1263,7 +1263,7 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
         .contribute_transfer(at, ORG, first.transfer, bob)
         .await
         .unwrap();
-    // TN-91: contributed but inside the 24-hour delay
+    // TN-91
     refusal(
         Box::pin(w.admin().complete_transfer(
             at,
@@ -1274,7 +1274,7 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
         .await,
         TRANSFER_WAITING,
     );
-    // TN-91: a handover inside its delay is cancellable, here by its recipient
+    // TN-91
     w.admin()
         .cancel_transfer(at, ORG, first.transfer, bob)
         .await
@@ -1319,7 +1319,7 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
     let members = t.members(org).await.unwrap();
     assert!(members.iter().any(|m| m.subject == bob && m.owner));
     assert!(!members.iter().any(|m| m.subject == founder && m.owner));
-    // TN-92: no DNS ownership recovery without a declaration
+    // TN-92
     assert!(
         t.transfers(org)
             .await
@@ -1330,9 +1330,7 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
     t.commit().await.unwrap();
 }
 
-// OP-142, §8.17.12, C11, OP-153 m.3 (gg), Ek B 4082: "members can delegate to apps in this list
-// only" is the role Grant's downstream holder class; a member's onward delegation to an app on
-// the list is allowed, to any other holder refused by the class, not by the lookup
+// OP-142, §8.17.12, C11, OP-153 m.3 (gg), Ek B 4082
 #[tokio::test]
 async fn members_delegate_only_to_the_apps_their_role_lists() {
     use access_kernel::model::{
@@ -1442,9 +1440,7 @@ async fn members_delegate_only_to_the_apps_their_role_lists() {
     );
 }
 
-// TN-90, §12.3.8, OP-153 m.3 (gg), Ek B 3611: an `idp` claim is verified only by an upstream's
-// domain assertion for one of the organization's owners, recent enough; a member's assertion or
-// another domain's does not count
+// TN-90, §12.3.8, OP-153 m.3 (gg), Ek B 3611
 #[tokio::test]
 async fn an_idp_domain_claim_is_verified_by_an_owners_upstream_assertion() {
     let (w, at, d, founder) = ready("org-idp").await;

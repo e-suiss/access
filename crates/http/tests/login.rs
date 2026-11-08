@@ -3882,7 +3882,7 @@ async fn autojoin_admits_a_verified_domains_people_never_a_consumer_domains_and_
         .unwrap();
     assert!(cooled.cooling_until_ms.unwrap() > now + 23 * 3_600_000);
     t.commit().await.unwrap();
-    // SI-21, TN-109, Ek B 3613: the expansion about the person is told to the person
+    // SI-21, TN-109, Ek B 3613
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
     loop {
         let told = access_store::identity::poll(
@@ -3970,7 +3970,7 @@ async fn a_handovers_recipient_contributes_and_an_owner_or_the_recipient_cancels
 
     let mut eve = e.browser("eve");
     assert_eq!(eve.sign_in("eve@acme.example").await.step(), "complete");
-    // TN-91: someone neither owner nor recipient cannot act on it
+    // TN-91
     assert_eq!(
         eve.post(&format!("{base}/contribution"), None).await.status,
         StatusCode::FORBIDDEN
@@ -3993,7 +3993,7 @@ async fn a_handovers_recipient_contributes_and_an_owner_or_the_recipient_cancels
     let c = b.post(&format!("{base}/contribution"), None).await;
     assert_eq!(c.status, StatusCode::OK, "{:?}", c.json());
     assert_eq!(c.json()["state"], "contributed");
-    // TN-91: the owner cancels inside the delay; the record is kept
+    // TN-91
     let key = o.key();
     let x = o.send("DELETE", &base, Some(json!({})), Some(&key)).await;
     assert_eq!(x.status, StatusCode::OK, "{:?}", x.json());
@@ -4030,7 +4030,6 @@ async fn a_wards_request_waits_on_its_guardian_who_is_told_and_silence_is_never_
 
     let mut p = e.browser("p");
     assert_eq!(p.sign_in("parent@family.example").await.step(), "complete");
-    // E53: only the ward asks
     assert_eq!(
         p.post(
             "/v1/account/guardian-consents",
@@ -4052,7 +4051,6 @@ async fn a_wards_request_waits_on_its_guardian_who_is_told_and_silence_is_never_
     assert_eq!(asked.json()["outcome"], "require_action");
     let consent = asked.json()["consent"].as_str().unwrap().to_owned();
     let path = format!("/v1/account/guardian-consents/{consent}");
-    // E47: the guardian is told through Relay
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
     loop {
         let told = access_store::identity::poll(
@@ -4072,12 +4070,10 @@ async fn a_wards_request_waits_on_its_guardian_who_is_told_and_silence_is_never_
         assert!(std::time::Instant::now() < deadline, "no consent notice");
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
-    // E47: silence is not consent
     assert_eq!(c.get(&path).await.json()["outcome"], "require_action");
     let mut o = e.browser("o");
     assert_eq!(o.sign_in("other@family.example").await.step(), "complete");
     assert_eq!(o.get(&path).await.status, StatusCode::NOT_FOUND);
-    // E53: the ward cannot answer for its guardian
     assert_eq!(
         c.post(&path, Some(json!({ "approve": true }))).await.status,
         StatusCode::FORBIDDEN

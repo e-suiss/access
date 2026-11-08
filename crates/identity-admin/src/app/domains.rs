@@ -123,7 +123,6 @@ impl<P: DomainProbe> DomainWatch<'_, P> {
                 .await
                 .ok()
                 .map(|body| body.is_some_and(|b| answers(&b, &c.challenge_hash))),
-            // Ek B 3611
             Method::Idp => self.idp_asserted(at, c).await.ok(),
         }
     }
