@@ -1175,16 +1175,6 @@ export interface components {
             /** @constant */
             advisory: true;
         };
-        Sources: {
-            /** @constant */
-            type: "sources";
-            /** @description `{acceptance, use, issuer: {party}|{foreign}, classes, namespace, since, protected, dependents}`: each live Acceptance by its canonical use; `dependents` is its blast radius, the live Grants that depend on it (§8.17.9.3, INV-15). */
-            sources: Record<string, never>[];
-            /** @description `{domain, acceptances, ceilings: [{grant, class, actions, resource, until}]}`: each partner domain and the ceilings of the bridging Grants that recognize its authority (§5.13). */
-            partners: Record<string, never>[];
-            /** @constant */
-            advisory: true;
-        };
         BulkImpact: {
             /** @constant */
             type: "bulk_impact";
@@ -1198,6 +1188,16 @@ export interface components {
             aftermath: Record<string, never>;
             /** @description The longest window of any item. */
             max_exposure_ms: number;
+            /** @constant */
+            advisory: true;
+        };
+        Sources: {
+            /** @constant */
+            type: "sources";
+            /** @description `{acceptance, use, issuer: {party}|{foreign}, classes, namespace, since, protected, dependents}`: each live Acceptance by its canonical use; `dependents` is its blast radius, the live Grants that depend on it (§8.17.9.3, INV-15). */
+            sources: Record<string, never>[];
+            /** @description `{domain, acceptances, ceilings: [{grant, class, actions, resource, until}]}`: each partner domain and the ceilings of the bridging Grants that recognize its authority (§5.13). */
+            partners: Record<string, never>[];
             /** @constant */
             advisory: true;
         };

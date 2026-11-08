@@ -332,6 +332,13 @@ pub const CATALOG_UPGRADE_REQUIRED: Code = code(
     "Conflict",
     "The realm does not accept this action's catalog yet; its catalog upgrade must commit first (OP-153 m.3 (a)).",
 );
+/// The change would leave the organization without an active owner (TN-91, OP-153 m.3 (p)).
+pub const LAST_OWNER: Code = code(
+    "last-owner",
+    409,
+    "Conflict",
+    "The organization keeps at least one active owner on every path; add another owner first (TN-91).",
+);
 /// An audit stream rendering other than `ocsf`, `cef` or `set` (OP-41).
 pub const INVALID_AUDIT_FORMAT: Code = code(
     "invalid-audit-format",

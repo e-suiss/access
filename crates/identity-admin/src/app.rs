@@ -349,6 +349,12 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 extension_current(t, change, declared, state).await?;
             }
             _ if !state => {}
+            Change::OrgCreate(o) => {
+                if t.org_by_party(o.party).await?.is_some() {
+                    return Err(Invalid::OrgExists.into());
+                }
+            }
+            Change::OrgMemberRemove(m) => org_member_current(t, *m).await?,
             Change::ClientRegister(c) => {
                 if idp::client(t, c.id.as_str()).await?.is_some() {
                     return Err(Invalid::ClientExists.into());
@@ -742,6 +748,23 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             .await
             .map_err(account)?;
         }
+        if let Change::OrgCreate(o) = &p.change {
+            // TN-5, OP-153 m.3 (b)
+            let founder = p
+                .subject
+                .ok_or_else(|| AdminError::Refused(String::from(ACTOR_BINDING)))?;
+            let org =
+                t.0.insert_org(o.party, &o.display_name, &exercise.0)
+                    .await?;
+            t.0.insert_membership(
+                org,
+                founder,
+                access_store::orgs::Source::Founder,
+                true,
+                None,
+            )
+            .await?;
+        }
         declare_transmitter(&mut t.0, bound, &p.change, exercise).await?;
         self.announce(&mut t.0, p, exercise).await?;
         let at = access_store::authority::server_time(self.app).await?;
@@ -1055,7 +1078,24 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .await?
                     .ok_or(Invalid::UpstreamSubjectLinked)?
             }
-            Change::AccountDelete(_) => true,
+            Change::AccountDelete(_) | Change::OrgCreate(_) => true,
+            Change::OrgMemberRemove(m) => {
+                let org = t
+                    .org_by_party(m.org)
+                    .await?
+                    .filter(|o| !o.ended)
+                    .ok_or(Invalid::NoOrg)?;
+                // TN-91
+                t.end_membership(org.id, m.subject, "remove")
+                    .await
+                    .map_err(|e| {
+                        if access_store::orgs::last_owner(&e) {
+                            AdminError::Invalid(Invalid::LastOwner)
+                        } else {
+                            e.into()
+                        }
+                    })?
+            }
         };
         if done {
             Ok(secret)
@@ -1063,6 +1103,27 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Err(AdminError::Conflict)
         }
     }
+}
+
+/// TN-91, OP-153 m.3 (p): the member exists, and removing it leaves an active owner.
+async fn org_member_current(
+    t: &mut TenantTx,
+    m: crate::domain::OrgMember,
+) -> Result<(), AdminError> {
+    let org = t
+        .org_by_party(m.org)
+        .await?
+        .filter(|o| !o.ended)
+        .ok_or(Invalid::NoOrg)?;
+    let members = t.memberships(org.id).await?;
+    let member = members
+        .iter()
+        .find(|x| x.subject == m.subject)
+        .ok_or(Invalid::NoMember)?;
+    if member.owner && members.iter().filter(|x| x.owner).count() == 1 {
+        return Err(Invalid::LastOwner.into());
+    }
+    Ok(())
 }
 
 /// Who a decided account status move is in the account audit log (OP-10); the correlation is

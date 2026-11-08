@@ -2305,6 +2305,194 @@
         }
       }
     },
+    "/admin/v1/realms/{slug}/organizations": {
+      "post": {
+        "operationId": "createOrganization",
+        "summary": "Creates an organization bound to the Party its founder's client registered; the founder becomes its first owner (TN-5).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/realms/{slug}/organizations/{organization}/members/remove": {
+      "post": {
+        "operationId": "removeOrganizationMember",
+        "summary": "Removes a member from an organization; its last active owner is kept (TN-91).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "name": "organization",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/v1/realms/{slug}/upstream-idps/{name}/links": {
       "post": {
         "operationId": "linkUpstreamSubject",

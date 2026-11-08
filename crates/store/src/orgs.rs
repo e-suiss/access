@@ -40,6 +40,8 @@ pub struct OrgRow {
 /// How a membership began (§12.3.8).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Source {
+    /// The founder who created the organization (OP-153 m.3 (b)).
+    Founder,
     /// An accepted invitation.
     Invite,
     /// SCIM provisioning.
@@ -55,6 +57,7 @@ impl Source {
     #[must_use]
     pub const fn word(self) -> &'static str {
         match self {
+            Self::Founder => "founder",
             Self::Invite => "invite",
             Self::Scim => "scim",
             Self::Jit => "jit",
@@ -64,6 +67,7 @@ impl Source {
 
     fn of(w: &str) -> Result<Self, StoreError> {
         match w {
+            "founder" => Ok(Self::Founder),
             "invite" => Ok(Self::Invite),
             "scim" => Ok(Self::Scim),
             "jit" => Ok(Self::Jit),
@@ -209,6 +213,27 @@ impl TenantTx {
             })
         })
         .transpose()
+    }
+
+    /// The organization bound to `party`.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn org_by_party(&mut self, party: [u8; 16]) -> Result<Option<OrgRow>, StoreError> {
+        let (tenant, realm) = self.org_scope()?;
+        let id = sqlx::query_scalar!(
+            r#"SELECT org_id FROM access.organizations
+                WHERE tenant_id = $1 AND realm_id = $2 AND party = $3"#,
+            tenant,
+            realm,
+            party.as_slice(),
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?;
+        match id {
+            Some(id) => self.org(*id.as_bytes()).await,
+            None => Ok(None),
+        }
     }
 
     /// Turns home realm discovery to the organization on or off (TN-98: off by default).

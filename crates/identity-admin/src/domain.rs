@@ -328,6 +328,18 @@ pub enum Invalid {
     /// (OP-153 m.3 (a)).
     #[error("catalog upgrade required")]
     CatalogUpgradeRequired,
+    /// The organization does not exist or ended.
+    #[error("no such organization")]
+    NoOrg,
+    /// An organization is bound to this Party already (TN-5).
+    #[error("organization exists")]
+    OrgExists,
+    /// The account is not an active member of the organization.
+    #[error("no such member")]
+    NoMember,
+    /// The change would leave the organization without an active owner (TN-91).
+    #[error("last owner")]
+    LastOwner,
 }
 
 impl Invalid {
@@ -336,6 +348,10 @@ impl Invalid {
     pub const fn code(self) -> &'static str {
         match self {
             Self::ClientId => "invalid-client-id",
+            Self::NoOrg => "no-such-organization",
+            Self::OrgExists => "organization-exists",
+            Self::NoMember => "no-such-member",
+            Self::LastOwner => "last-owner",
             Self::DisplayName => "invalid-display-name",
             Self::RedirectUri | Self::RedirectUris => "invalid-redirect-uri",
             Self::JwksUri => "invalid-jwks-uri",
@@ -1228,6 +1244,54 @@ pub enum Change {
     Webhook(WebhookChange),
     /// `idp.upstream.link` (OP-152 m.7 (d) E6).
     UpstreamLink(UpstreamLink),
+    /// `idp.org.create` (TN-5, OP-153 m.3 (b)).
+    OrgCreate(OrgCreate),
+    /// `idp.org.member_remove` (OP-153 m.3 (p)).
+    OrgMemberRemove(OrgMember),
+}
+
+/// An organization bound to the Party its founder's client registered (TN-5, OP-153 m.3 (b)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgCreate {
+    /// The organization's Party in the realm's governing domain.
+    pub party: [u8; 16],
+    /// Its display name, attacker-controlled text (OP-153 m.3 (o)).
+    pub display_name: String,
+}
+
+impl OrgCreate {
+    fn check(&self) -> Result<(), Invalid> {
+        let n = self.display_name.chars().count();
+        if n == 0 || n > 128 || self.display_name.chars().any(char::is_control) {
+            return Err(Invalid::DisplayName);
+        }
+        Ok(())
+    }
+
+    fn to_value(&self) -> Value {
+        Value::Map(vec![
+            (Value::text("party"), Value::Bytes(self.party.to_vec())),
+            (Value::text("display_name"), Value::text(&self.display_name)),
+        ])
+    }
+}
+
+/// One member of an organization, by the organization's Party and the member's subject.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OrgMember {
+    /// The organization's Party.
+    pub org: [u8; 16],
+    /// The member's subject.
+    pub subject: [u8; 16],
+}
+
+impl OrgMember {
+    fn to_value(self) -> Value {
+        Value::Map(vec![
+            (Value::text("org"), Value::Bytes(self.org.to_vec())),
+            (Value::text("subject"), Value::Bytes(self.subject.to_vec())),
+        ])
+    }
 }
 
 fn uint(v: u32) -> Value {
@@ -1272,6 +1336,8 @@ impl Change {
             Self::Hook(h) => h.action().idp(),
             Self::Webhook(w) => w.action().idp(),
             Self::UpstreamLink(_) => IdpAction::UpstreamLink,
+            Self::OrgCreate(_) => IdpAction::OrgCreate,
+            Self::OrgMemberRemove(_) => IdpAction::OrgMemberRemove,
         }
     }
 
@@ -1298,7 +1364,9 @@ impl Change {
             Self::SessionPolicy(p) => p.check(),
             Self::ExtensionPolicy(p) => p.check().map_err(|_| Invalid::ExtensionPolicy),
             Self::UpstreamLink(l) => l.check(),
-            Self::Hook(_)
+            Self::OrgCreate(o) => o.check(),
+            Self::OrgMemberRemove(_)
+            | Self::Hook(_)
             | Self::Webhook(_)
             | Self::ClientRetire(_)
             | Self::MapperSet { .. }
@@ -1381,6 +1449,8 @@ impl Change {
             Self::Hook(h) => h.body(),
             Self::Webhook(w) => w.body(),
             Self::UpstreamLink(l) => l.to_value(),
+            Self::OrgCreate(o) => o.to_value(),
+            Self::OrgMemberRemove(m) => m.to_value(),
         }
     }
 
@@ -1449,6 +1519,10 @@ impl Change {
             }
             Self::KeyPolicy(_) | Self::KeyRotate { .. } | Self::KeyDrop { .. } => {
                 path.push(String::from("keys"));
+            }
+            Self::OrgCreate(OrgCreate { party: org, .. })
+            | Self::OrgMemberRemove(OrgMember { org, .. }) => {
+                path.extend([String::from("org"), b64url_encode(org)]);
             }
         }
         ResourceRef {

@@ -26,7 +26,7 @@ CREATE TABLE access.org_memberships (
   membership_id uuid NOT NULL DEFAULT uuidv7(),
   org_id uuid NOT NULL,
   subject_id uuid NOT NULL,
-  source text NOT NULL CHECK (source IN ('invite', 'scim', 'jit', 'domain_autojoin')),
+  source text NOT NULL CHECK (source IN ('founder', 'invite', 'scim', 'jit', 'domain_autojoin')),
   owner boolean NOT NULL DEFAULT false,
   role_name text CHECK (role_name IS NULL OR char_length(role_name) BETWEEN 1 AND 128),
   role_version bigint CHECK (role_version IS NULL OR role_version >= 1),

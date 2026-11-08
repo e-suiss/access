@@ -228,6 +228,18 @@ pub const ROWS: &[Route] = &[
     ),
     write(
         Verb::Post,
+        "/admin/v1/realms/{slug}/organizations",
+        "createOrganization",
+        "Creates an organization bound to the Party its founder's client registered; the founder becomes its first owner (TN-5).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/organizations/{organization}/members/remove",
+        "removeOrganizationMember",
+        "Removes a member from an organization; its last active owner is kept (TN-91).",
+    ),
+    write(
+        Verb::Post,
         "/admin/v1/realms/{slug}/upstream-idps/{name}/links",
         "linkUpstreamSubject",
         "Links a subject of the upstream identity provider to an account; its inbound signals then reach the account.",
@@ -592,8 +604,13 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "retireGroup" | "addGroupMembers" | "removeGroupMembers" => (Groups, w(false)),
         "listAccounts" => (Accounts, Shape::List(&["account_id", "status"])),
         "getAccount" => (Accounts, Shape::Get),
-        "suspendAccount" | "reactivateAccount" | "markCanaryAccount" | "deleteAccount"
-        | "createResetIntent" => (Accounts, w(false)),
+        "suspendAccount"
+        | "reactivateAccount"
+        | "markCanaryAccount"
+        | "deleteAccount"
+        | "createResetIntent"
+        | "createOrganization"
+        | "removeOrganizationMember" => (Accounts, w(false)),
         "listUpstreamIdps" => (UpstreamIdps, Shape::List(&["name", "issuer", "status"])),
         "getUpstreamIdp" => (UpstreamIdps, Shape::Get),
         "putUpstreamIdp" => (UpstreamIdps, w(true)),
@@ -702,13 +719,17 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::ExtensionPolicy => &r::INVALID_EXTENSION_POLICY,
             Invalid::HookPointTaken => &r::HOOK_POINT_TAKEN,
             Invalid::CatalogUpgradeRequired => &r::CATALOG_UPGRADE_REQUIRED,
+            Invalid::OrgExists => &r::RESOURCE_EXISTS,
+            Invalid::LastOwner => &r::LAST_OWNER,
             Invalid::NoClient
             | Invalid::NoKey
             | Invalid::NoGroup
             | Invalid::NoAccount
             | Invalid::NoUpstream
             | Invalid::NoHook
-            | Invalid::NoWebhook => &codes::NOT_FOUND,
+            | Invalid::NoWebhook
+            | Invalid::NoOrg
+            | Invalid::NoMember => &codes::NOT_FOUND,
         },
         AdminError::Issuer(_) | AdminError::NoRealm => &codes::NOT_FOUND,
         AdminError::Refused(_) => &codes::EXERCISE_REFUSED,

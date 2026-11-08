@@ -271,6 +271,8 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "patchUpstreamIdp" => IdpAction::UpstreamUpdate,
         "retireUpstreamIdp" => IdpAction::UpstreamRetire,
         "linkUpstreamSubject" => IdpAction::UpstreamLink,
+        "createOrganization" => IdpAction::OrgCreate,
+        "removeOrganizationMember" => IdpAction::OrgMemberRemove,
         "putSigninPolicy" | "patchSigninPolicy" => IdpAction::RealmSigninPolicy,
         "putSessionPolicy" | "patchSessionPolicy" => IdpAction::RealmSessionPolicy,
         "putBranding" | "patchBranding" => IdpAction::RealmBranding,

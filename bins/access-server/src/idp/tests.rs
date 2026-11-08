@@ -53,6 +53,7 @@ use crate::testing::hsm;
 mod claims;
 mod extensions;
 mod governance;
+mod orgs;
 mod platform;
 mod records;
 mod resources;

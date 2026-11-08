@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT org_id FROM access.organizations\n                WHERE tenant_id = $1 AND realm_id = $2 AND party = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "org_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.organizations",
+            "name": "org_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c4ef4757fd6bd86bee2da9de7fccd76948ab92a424cc944e3247b0dccb1b5e87"
+}

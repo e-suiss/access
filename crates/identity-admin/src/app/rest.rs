@@ -22,9 +22,9 @@ use crate::domain::realm::Binding;
 use crate::domain::{
     Attribute, AuthMethod, Branding, Change, CimdPolicy, ClaimName, Client, ClientId, Color,
     Disclosure, ExtensionPolicy, Group, HOOK_PREFIX, HookChange, HookPoint, HookSpec, Invalid,
-    JoseAlg, Members, MembershipIssuer, Name, OnNoAnswer, ProtectionMode, RedirectUri, RpId,
-    SessionPolicy, SigninMethod, SigninPolicy, Signing, Subject, Upstream, UpstreamLink,
-    WEBHOOK_PREFIX, WebhookChange, WebhookSpec,
+    JoseAlg, Members, MembershipIssuer, Name, OnNoAnswer, OrgCreate, OrgMember, ProtectionMode,
+    RedirectUri, RpId, SessionPolicy, SigninMethod, SigninPolicy, Signing, Subject, Upstream,
+    UpstreamLink, WEBHOOK_PREFIX, WebhookChange, WebhookSpec,
 };
 use crate::ports::{Decider, Governance, Instances, RealmKeys};
 use access_identity_events::domain::webhook::event_names;
@@ -106,6 +106,10 @@ pub enum Op {
     RetireWebhook,
     /// `putExtensionPolicy` (OP-151 m.10 (e)).
     PutExtensionPolicy,
+    /// `createOrganization`: `idp.org.create` (TN-5, OP-153 m.3 (b)).
+    CreateOrganization,
+    /// `removeOrganizationMember`: `idp.org.member_remove` (OP-153 m.3 (p)).
+    RemoveOrganizationMember,
 }
 
 impl Op {
@@ -145,6 +149,8 @@ impl Op {
             "rotateWebhookKey" => Self::RotateWebhookKey,
             "retireWebhook" => Self::RetireWebhook,
             "putExtensionPolicy" | "patchExtensionPolicy" => Self::PutExtensionPolicy,
+            "createOrganization" => Self::CreateOrganization,
+            "removeOrganizationMember" => Self::RemoveOrganizationMember,
             _ => return None,
         })
     }
@@ -320,6 +326,14 @@ fn subject(ids: &IdKey, s: &str) -> Result<[u8; 16], Invalid> {
         .map_err(|_| Invalid::NoAccount)
 }
 
+/// An organization's Party from its external id, the base64url of its 16 bytes (TN-3).
+fn party_of(s: &str, missing: Invalid) -> Result<[u8; 16], Invalid> {
+    b64url_decode(s)
+        .ok()
+        .and_then(|b| <[u8; 16]>::try_from(b.as_slice()).ok())
+        .ok_or(missing)
+}
+
 fn key_of(key: Option<&str>) -> Result<&str, Invalid> {
     key.ok_or(Invalid::Body)
 }
@@ -355,6 +369,20 @@ fn events(m: &Map<String, Json>) -> Result<Vec<String>, Invalid> {
 pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Change, Invalid> {
     let m = obj(body)?;
     Ok(match op {
+        Op::CreateOrganization => {
+            only(m, &["party", "display_name"])?;
+            Change::OrgCreate(OrgCreate {
+                party: party_of(text(m, "party")?, Invalid::Body)?,
+                display_name: String::from(text(m, "display_name")?),
+            })
+        }
+        Op::RemoveOrganizationMember => {
+            only(m, &["account_id"])?;
+            Change::OrgMemberRemove(OrgMember {
+                org: party_of(key_of(key)?, Invalid::NoOrg)?,
+                subject: subject(ids, text(m, "account_id")?)?,
+            })
+        }
         Op::CreateClient => {
             let id = ClientId::parse(text(m, "client_id")?)?;
             Change::ClientRegister(client(id, m)?)

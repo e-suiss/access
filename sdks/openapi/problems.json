@@ -599,6 +599,13 @@
       "description": "The realm does not accept this action's catalog yet; its catalog upgrade must commit first (OP-153 m.3 (a))."
     },
     {
+      "code": "last-owner",
+      "type": "urn:suiss:access:problem:last-owner",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The organization keeps at least one active owner on every path; add another owner first (TN-91)."
+    },
+    {
       "code": "invalid-audit-format",
       "type": "urn:suiss:access:problem:invalid-audit-format",
       "status": 400,

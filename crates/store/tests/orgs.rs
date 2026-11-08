@@ -93,7 +93,7 @@ async fn the_last_owner_cannot_be_removed_on_any_path() {
     assert!(deleted.is_err());
 }
 
-fn invitation<'a>(org: [u8; 16], token: &'a [u8; 32], ttl_s: i64) -> NewInvitation<'a> {
+fn invitation(org: [u8; 16], token: &[u8; 32], ttl_s: i64) -> NewInvitation<'_> {
     NewInvitation {
         org,
         token_hash: token,
@@ -162,7 +162,10 @@ async fn domain_claims_verify_lapse_and_show_contest() {
     assert!(tx.set_autojoin(claim, true).await.unwrap());
     assert!(!tx.watch_domain(claim, &[1; 32], &[2; 32]).await.unwrap());
     assert!(tx.watch_domain(claim, &[9; 32], &[2; 32]).await.unwrap());
-    assert!(tx.lapse_domains(72 * 3_600).await.unwrap().is_empty());
+    assert_eq!(
+        tx.lapse_domains(72 * 3_600).await.unwrap(),
+        Vec::<[u8; 16]>::new()
+    );
     assert_eq!(tx.lapse_domains(0).await.unwrap(), vec![claim]);
     let rows = tx.domain_claims("acme.example").await.unwrap();
     assert!(!rows[0].verified && !rows[0].autojoin);
