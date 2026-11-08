@@ -2535,6 +2535,24 @@ fn every_payload_round_trips() {
     assert_eq!(names.len(), NAMES.len());
 }
 
+// C10, E6: a dependent Grant is either kept or revoked; no other disposition exists
+#[test]
+fn a_disposition_is_keep_or_revoke() {
+    let pair =
+        |word: &str| Value::Array(vec![Value::Array(vec![BOB.to_value(), Value::text(word)])]);
+    assert_eq!(
+        disposition(&pair("keep")),
+        Ok(BTreeMap::from([(BOB, Disposition::Keep)]))
+    );
+    assert_eq!(
+        disposition(&pair("revoke")),
+        Ok(BTreeMap::from([(BOB, Disposition::Revoke)]))
+    );
+    for word in ["suspend", "Keep", ""] {
+        assert_eq!(disposition(&pair(word)), Err(ModelError::Unknown), "{word}");
+    }
+}
+
 // OP-143 m.12: an offline slice asks for a non-zero count, non-zero amounts, or both
 #[test]
 fn an_offline_slice_asks_for_something() {
