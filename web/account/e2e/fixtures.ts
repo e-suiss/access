@@ -2,9 +2,9 @@ import { test as base, expect } from "@playwright/test";
 
 import { AccountMock } from "./mock.js";
 
-// A refused call (401, 403, 409) is an answer the page handles; the browser still logs it.
+// A refused call (400, 401, 403, 409) is an answer the page handles; the browser still logs it.
 const EXPECTED =
-  /^Failed to load resource: (the server responded with a status of (401|403|409|503)|net::ERR_CONNECTION_RESET)/;
+  /^Failed to load resource: (the server responded with a status of (400|401|403|409|503)|net::ERR_CONNECTION_RESET)/;
 
 export const test = base.extend<{ pageErrors: string[]; bff: AccountMock }>({
   pageErrors: [

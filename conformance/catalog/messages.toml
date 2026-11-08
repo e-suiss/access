@@ -1945,3 +1945,425 @@ surface = "hub"
 class = "action"
 owner = "access"
 protected = false
+
+# N5 account pages
+
+[[message]]
+key = "account-failed"
+surface = "account"
+class = "remediation"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "account-sign_in_again"
+surface = "account"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-passkeys"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-passkey_unnamed"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-passkey_synced"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-passkey_this_device"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-added_on"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-passkey_name"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-passkey_failed"
+surface = "account"
+class = "remediation"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-added"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-removed"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-last_method"
+surface = "account"
+class = "remediation"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-password"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-password_set"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-password_none"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-change_password"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-set_password"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-password_saved"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-password_rejected"
+surface = "account"
+class = "remediation"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-authenticator"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-authenticator_none"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-add_authenticator"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-authenticator_key"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-copy_key"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-key_copied"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-authenticator_link"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-authenticator_added"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-code_failed"
+surface = "account"
+class = "remediation"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-recovery_codes_none"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-recovery_codes_set"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-recovery_codes_unsaved"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-recovery_codes_replace"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-new_recovery_codes"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "methods-codes_saved"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-remove"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "linked-none"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "linked-since"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "linked-unavailable"
+surface = "account"
+class = "remediation"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "apps-none"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "apps-claims"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "apps-since"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "apps-stopped"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signins-this_device"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signins-another_device"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signins-on_device"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signins-identity"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signins-until"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signins-kept"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signins-tied"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signins-device_bound"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signins-not_bound"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signins-authority"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signins-no_device_key"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signins-device_key"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signins-ended"
+surface = "account"
+class = "sign_out"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signins-ended_with_key"
+surface = "account"
+class = "sign_out"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signins-ended_key_stays"
+surface = "account"
+class = "sign_out"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signins-signed_out_everywhere"
+surface = "account"
+class = "sign_out"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signins-details"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-sign_out_everywhere"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false

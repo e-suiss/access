@@ -1,13 +1,19 @@
-// OP-153 m.4: the Account section's settings screens (S11 profile, connected apps, linked
-// sign-ins) are lane N5's; this is the shell's slot for them.
+// S11 (§8.5, X32, OP-153 m.3 (w)): the identity plane's own settings, on the session cookie
+// alone and without authority: how this person signs in, the sign-ins linked to the account and
+// the apps it shares details with.
 import type { ReactElement } from "react";
 
 import { t } from "../lib/i18n.js";
+import { ConnectedApps, LinkedSignIns } from "./Linked.js";
+import { SignInMethods } from "./Methods.js";
 
 export function AccountSettings(): ReactElement {
   return (
-    <section aria-label={t("settings.title")} data-testid="account-settings">
-      <h2>{t("settings.title")}</h2>
+    <section aria-labelledby="settings-heading" data-testid="account-settings">
+      <h2 id="settings-heading">{t("settings.title")}</h2>
+      <SignInMethods />
+      <LinkedSignIns />
+      <ConnectedApps />
     </section>
   );
 }

@@ -65,6 +65,54 @@ export class AccountMock {
   /** The nonces of the commits received, in order. */
   readonly nonces: string[] = [];
   preferences: Record<string, boolean> = { "email:newsletter": false, "sms:campaign": false };
+  /** S11: the sign-in methods `GET /v1/account/methods` lists. */
+  methods: S11Methods = {
+    password: { set: true },
+    passkeys: [{ id: "crd_pk1", name: "Laptop", created_at: "2026-10-01T10:00:00Z", synced: true }],
+    totp: [],
+    recovery_codes: { set: false, acknowledged: false },
+  };
+  /** S11: writes that need a fresh confirmation first. */
+  freshNeeded = false;
+  /** S11: the server refuses removing the last way to sign in. */
+  lastMethod = false;
+  /** S11: linked sign-ins. */
+  linked: { link: string; provider: string; linked_at_ms: number; verified_at_ms: number }[] = [
+    { link: "bGluazE", provider: "google", linked_at_ms: 1_790_000_000_000, verified_at_ms: 0 },
+  ];
+  /** S11: connected apps. */
+  apps: { client_id: string; app: string; claims: string[]; since_ms: number }[] = [
+    { client_id: "cli_shop", app: "Shop", claims: ["email", "name"], since_ms: 1_790_000_000_000 },
+  ];
+  /** S10: sign-ins `GET /v1/sessions` lists. */
+  signIns: Record<string, unknown>[] = [
+    {
+      id: "ses_here",
+      authenticated_at: "2026-11-09T08:00:00Z",
+      expires_at: "2026-11-23T08:00:00Z",
+      keep_signed_in: true,
+      assurance: {},
+      current: true,
+      device: null,
+      instance: null,
+      bound: true,
+    },
+    {
+      id: "ses_phone",
+      authenticated_at: "2026-11-08T08:00:00Z",
+      expires_at: "2026-11-22T08:00:00Z",
+      keep_signed_in: false,
+      assurance: {},
+      current: false,
+      device: "Phone",
+      instance: "aW5zdGFuY2Vfb3RoZXI",
+      bound: false,
+    },
+  ];
+  /** S10: why `GET /v1/sessions/current` says the sign-in ended, when signed out. */
+  signedOutReason: string | null = null;
+  /** The device Instance key id the BFF's session names, once this browser set one up. */
+  instanceKid: string | null = null;
 
   async signIn(context: BrowserContext, baseURL: string): Promise<void> {
     this.signedIn = true;
@@ -83,6 +131,11 @@ export class AccountMock {
   async install(context: BrowserContext): Promise<void> {
     await context.route("**/account/api/**", (r) => this.bff(r));
     await context.route("**/v1/account/**", (r) => this.frontend(r));
+    await context.route(
+      /\/v1\/account\/(methods|password|passkeys|totp|recovery-codes|linked|connected-apps)/,
+      (r) => this.s11(r),
+    );
+    await context.route(/\/v1\/(sessions|me)(\/|$)/, (r) => this.s10(r));
   }
 
   private record(r: Route): Seen {
@@ -113,7 +166,7 @@ export class AccountMock {
         account: "usr_ada",
         expires_at: "2099-01-01T00:00:00Z",
         party: PARTY,
-        instance: null,
+        instance: this.instanceKid,
         instance_id: null,
         pep: "access-account",
         api: "/account/api",
@@ -199,6 +252,162 @@ export class AccountMock {
         return reply(404, { code: "not-found" });
     }
   }
+
+  private async s11(r: Route): Promise<void> {
+    const s = this.record(r);
+    const method = r.request().method();
+    const reply = (status: number, body?: unknown) =>
+      r.fulfill({
+        status,
+        contentType: "application/json",
+        body: body === undefined ? "" : JSON.stringify(body),
+      });
+    if (!this.signedIn) return reply(401, { code: "session-required" });
+    const path = s.path.replace(/^.*\/v1\/account/, "");
+    const write = method !== "GET";
+    if (write && s.headers["idempotency-key"] === undefined) {
+      return reply(400, { code: "idempotency-key-required" });
+    }
+    if (write && this.freshNeeded) return reply(401, { code: "step-up-required" });
+    if (path === "/methods") return reply(200, this.methods);
+    const removed = /^\/methods\/(.+)$/.exec(path)?.[1];
+    if (removed !== undefined && method === "DELETE") {
+      if (this.lastMethod) return reply(409, { code: "last-sign-in-method" });
+      this.methods = {
+        ...this.methods,
+        passkeys: this.methods.passkeys.filter((p) => p.id !== removed),
+        totp: this.methods.totp.filter((p) => p.id !== removed),
+      };
+      return reply(204);
+    }
+    if (path === "/password" && method === "PUT") {
+      if (s.body["new_password"] === "password") return reply(400, { code: "password-rejected" });
+      this.methods = { ...this.methods, password: { set: true } };
+      return reply(204);
+    }
+    if (path === "/passkeys") {
+      return reply(200, {
+        registration: "reg_1",
+        options: {
+          challenge: "Y2hhbGxlbmdl",
+          rp: { id: "localhost", name: "acme" },
+          user: { id: "dXNlcg", name: "ada", displayName: "Ada" },
+          pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+        },
+      });
+    }
+    if (path === "/passkeys/reg_1") {
+      this.methods = {
+        ...this.methods,
+        passkeys: [
+          ...this.methods.passkeys,
+          {
+            id: "crd_pk2",
+            name: String(this.seen.find((x) => x.path.endsWith("/passkeys"))?.body["name"]),
+            created_at: "2026-11-09T09:00:00Z",
+            synced: false,
+          },
+        ],
+      };
+      return reply(201, {});
+    }
+    if (path === "/totp") {
+      return reply(200, {
+        enrollment: "enr_1",
+        secret: "JBSWY3DPEHPK3PXP",
+        uri: "otpauth://totp/acme:ada?secret=JBSWY3DPEHPK3PXP&issuer=acme",
+      });
+    }
+    if (path === "/totp/enr_1") {
+      if (s.body["code"] !== "123456") return reply(400, { code: "invalid-code" });
+      this.methods = {
+        ...this.methods,
+        totp: [{ id: "crd_totp", created_at: "2026-11-09T09:00:00Z" }],
+        recovery_codes: { set: true, acknowledged: false },
+      };
+      return reply(200, {
+        recovery_codes: ["AAAA-BBBB-CCCC-DDDD", "EEEE-FFFF-GGGG-HHHH"],
+        acknowledgement_required: true,
+      });
+    }
+    if (path === "/recovery-codes") {
+      this.methods = { ...this.methods, recovery_codes: { set: true, acknowledged: false } };
+      return reply(200, {
+        recovery_codes: ["JJJJ-KKKK-LLLL-MMMM"],
+        acknowledgement_required: true,
+      });
+    }
+    if (path === "/recovery-codes/acknowledgement") {
+      this.methods = { ...this.methods, recovery_codes: { set: true, acknowledged: true } };
+      return reply(200, { acknowledged: true });
+    }
+    if (path === "/linked") return reply(200, { linked: this.linked });
+    const link = /^\/linked\/(.+)$/.exec(path)?.[1];
+    if (link !== undefined && method === "DELETE") {
+      if (this.lastMethod) return reply(409, { code: "last-sign-in-method" });
+      this.linked = this.linked.filter((l) => l.link !== link);
+      return reply(204);
+    }
+    if (path === "/connected-apps") return reply(200, { apps: this.apps });
+    const client = /^\/connected-apps\/(.+)$/.exec(path)?.[1];
+    if (client !== undefined && method === "DELETE") {
+      this.apps = this.apps.filter((a) => a.client_id !== client);
+      return reply(204);
+    }
+    return reply(404, { code: "not-found" });
+  }
+
+  private async s10(r: Route): Promise<void> {
+    const s = this.record(r);
+    const method = r.request().method();
+    const reply = (status: number, body?: unknown) =>
+      r.fulfill({
+        status,
+        contentType: "application/json",
+        body: body === undefined ? "" : JSON.stringify(body),
+      });
+    const path = s.path.replace(/^.*\/v1/, "");
+    if (!this.signedIn) {
+      return reply(
+        401,
+        this.signedOutReason === null
+          ? { code: "session-required" }
+          : { code: "session-required", reason: this.signedOutReason },
+      );
+    }
+    if (path === "/sessions") return reply(200, { sessions: this.signIns });
+    if (path === "/sessions/current") return reply(200, this.signIns[0]);
+    if (path === "/sessions/sign-out-everywhere" && method === "POST") {
+      this.signIns = [];
+      return reply(204);
+    }
+    if (path === "/sessions/current/sign-out" && method === "POST") {
+      this.signedIn = false;
+      return reply(204);
+    }
+    const terminated = /^\/me\/instances\/([^/]+)$/.exec(path)?.[1];
+    if (terminated !== undefined && method === "DELETE") {
+      return typeof s.body["ais"] === "string" && typeof s.body["nonce"] === "string"
+        ? reply(200, { exercise: "ex_term" })
+        : reply(400, { code: "invalid-request" });
+    }
+    const ended = /^\/sessions\/([^/]+)\/end$/.exec(path)?.[1];
+    if (ended !== undefined && method === "POST") {
+      const row = this.signIns.find((x) => x["id"] === ended);
+      if (row === undefined) return reply(404, { code: "not-found" });
+      this.signIns = this.signIns.filter((x) => x["id"] !== ended);
+      return reply(200, { instance: row["instance"] ?? null });
+    }
+    return reply(404, { code: "not-found" });
+  }
+}
+
+/** The S11 method list. */
+export interface S11Methods {
+  password: { set: boolean };
+  passkeys: { id: string; name: string | null; created_at: string; synced: boolean }[];
+  totp: { id: string; created_at: string }[];
+  recovery_codes: { set: boolean; acknowledged: boolean };
 }
 
 /** A holding row as ADP's inventory answers it. */
