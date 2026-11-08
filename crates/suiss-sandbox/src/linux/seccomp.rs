@@ -452,7 +452,7 @@ fn profile_rules(rules: &mut Rules, profile: Profile, phase: Phase) -> Result<()
             #[cfg(target_arch = "x86_64")]
             allow(rules, read_fs_x86);
             allow(rules, socket_io);
-            // OP-143 m.4 (d): the sealed-key vault; Landlock keeps writes inside it
+            // OP-143 m.4 (d)
             allow(rules, write_fs);
             allow(rules, &[libc::SYS_renameat]);
             #[cfg(target_arch = "x86_64")]
