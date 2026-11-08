@@ -984,3 +984,65 @@ fn new_families_have_their_kind() {
         Err("input".to_string())
     );
 }
+
+// OP-116 m.1: every COSE rejection has the family of its stable name
+#[test]
+fn cose_rejections_have_their_kind() {
+    let cases = [
+        (CoseError::Cbor(dcbor::DecodeError::Truncated), Kind::Cbor),
+        (CoseError::Shape, Kind::Shape),
+        (CoseError::Header, Kind::Header),
+        (CoseError::Crit, Kind::Crit),
+        (CoseError::Unprotected, Kind::Unprotected),
+        (CoseError::Algorithm, Kind::Algorithm),
+        (CoseError::UnknownKid, Kind::UnknownKid),
+        (CoseError::KeyType, Kind::KeyType),
+        (CoseError::ContentType, Kind::ContentType),
+        (CoseError::Signature(SignatureError::HighS), Kind::HighS),
+        (
+            CoseError::Signature(SignatureError::Length),
+            Kind::Signature,
+        ),
+        (CoseError::Payload, Kind::Shape),
+    ];
+    for (e, kind) in cases {
+        assert_eq!(Error::Cose(e).kind(), kind, "{e:?}");
+    }
+}
+
+// RFC 9901, RFC 8259 §7, CR-55 m.7: control characters in disclosed claims come back escaped
+#[test]
+fn sd_jwt_claims_escape_control_characters() {
+    let issuer = ed25519_dalek::SigningKey::from_bytes(&[7; 32]);
+    let keys = key_set(
+        [(
+            [1; 32],
+            PublicKey::Ed25519(issuer.verifying_key().to_bytes()),
+        )],
+        &[Algorithm::Ed25519],
+    );
+    let disclosure = b64url_encode(br#"["s1","note","a\u0001b\u001f"]"#);
+    let digest = b64url_encode(&<sha2::Sha256 as sha2::Digest>::digest(
+        disclosure.as_bytes(),
+    ));
+    let header = format!(
+        r#"{{"alg":"Ed25519","kid":"{}","typ":"access-pap+sd-jwt"}}"#,
+        b64url_encode(&[1; 32])
+    );
+    let payload = format!(
+        r#"{{"iss":"https://access.example","exp":2000,"_sd_alg":"sha-256","_sd":["{digest}"]}}"#
+    );
+    let token = jwt(&issuer, &header, &payload);
+    assert_eq!(
+        verify_sd_jwt(
+            &format!("{token}~{disclosure}~"),
+            &keys,
+            "access-pap+sd-jwt",
+            "pep:shop",
+            "n-1",
+            1_000_000,
+            60_000,
+        ),
+        Ok(r#"{"iss":"https://access.example","exp":2000,"note":"a\u0001b\u001f"}"#.to_string())
+    );
+}

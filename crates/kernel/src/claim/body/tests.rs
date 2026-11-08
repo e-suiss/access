@@ -689,3 +689,31 @@ fn unsigned_claim_vectors_match() {
         &json,
     );
 }
+
+// L2-CLB-1, §10.1.5: an upstream `amr` is absent or non-empty, never an empty list
+#[test]
+fn an_upstream_amr_is_never_an_empty_list() {
+    fn member<'a>(v: &'a mut Value, key: &str) -> &'a mut Value {
+        let Value::Map(m) = v else {
+            panic!("not a map")
+        };
+        &mut m
+            .iter_mut()
+            .find(|(k, _)| *k == Value::text(key))
+            .unwrap()
+            .1
+    }
+    let mut v = oidc().to_value();
+    *member(member(&mut v, "upstream"), "amr") = Value::Array(Vec::new());
+    assert_eq!(Authentication::from_value(&v), Err(ModelError::Range));
+}
+
+// L2-CLB-1, §9.12.3, §9.16: an acknowledgement may name a semantic event instead of an Exercise
+#[test]
+fn an_ack_for_a_semantic_event_round_trips() {
+    let a = AuthorityStateAck {
+        event: AckEvent::Event("domain.key_rotated".to_string()),
+        ..ack()
+    };
+    assert_eq!(AuthorityStateAck::from_value(&a.to_value()).unwrap(), a);
+}

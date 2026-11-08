@@ -585,3 +585,182 @@ fn a_pinned_key_set_is_read_and_only_shrinks_by_narrowing() {
     ));
     assert!(Gate::of(&pinned_content(vec![])).is_err());
 }
+
+// SEC12, §13.7.7: an unknown occurredAt reaches 72 hours back from the declaration
+#[test]
+fn compromise_lookback_is_72_hours() {
+    assert_eq!(COMPROMISE_LOOKBACK_MS, 259_200_000);
+}
+
+// TI-RT7, OP-141 m.30 (c): a successor shares issuer, subject and class, nothing else matters
+#[test]
+fn a_successor_is_on_the_same_line_only_with_the_same_issuer_subject_and_class() {
+    let of = statement();
+    let later = Statement {
+        value: Some(EqValue::Bool(false)),
+        issued_at: 9_000,
+        ..statement()
+    };
+    assert!(same_line(&of, &later));
+    let other_issuer = Statement {
+        issuer: Id([7; 16]),
+        ..statement()
+    };
+    let other_subject = Statement {
+        subject: Id([7; 16]),
+        ..statement()
+    };
+    let other_class = Statement {
+        class: String::from("age"),
+        ..statement()
+    };
+    for s in [&other_issuer, &other_subject, &other_class] {
+        assert!(!same_line(&of, s), "{s:?}");
+    }
+}
+
+fn pinned_value(iss: &str, aud: &str, keys: Vec<Value>) -> Value {
+    Value::Map(vec![
+        (Value::text("iss"), Value::text(iss)),
+        (Value::text("aud"), Value::text(aud)),
+        (Value::text("keys"), Value::Array(keys)),
+    ])
+}
+
+// OP-150, §9.13 issuer identification: a pinned key set names its issuer, audience and keys
+#[test]
+fn a_pinned_key_set_needs_issuer_audience_and_keys() {
+    let k = key(9).to_value();
+    assert_eq!(
+        check_pinned(&pinned_value(
+            "https://idp.example",
+            "access",
+            vec![k.clone()]
+        )),
+        Ok(())
+    );
+    assert_eq!(
+        check_pinned(&pinned_value("", "access", vec![k.clone()])),
+        Err(ModelError::Range)
+    );
+    assert_eq!(
+        check_pinned(&pinned_value("https://idp.example", "", vec![k])),
+        Err(ModelError::Range)
+    );
+    assert_eq!(
+        check_pinned(&pinned_value("https://idp.example", "access", vec![])),
+        Err(ModelError::Range)
+    );
+    assert!(check_pinned(&Value::text("pinned")).is_err());
+}
+
+// L2-CLM-3: a predicate-input gate admits a matching Claim, also for one named subject
+#[test]
+fn a_gate_admits_its_subject_as_a_predicate_input() {
+    let s = statement();
+    assert!(gate().admits(&s, 2_000));
+    let named = Gate {
+        subject: SubjectSelector::Party(SUBJECT),
+        ..gate()
+    };
+    assert!(named.admits(&s, 2_000));
+    assert_eq!(disposition(&s, &[named], 2_000), Disposition::Admit);
+}
+
+// L2-CLM-3, OP-141 m.19 (c): a Claim signed exactly the allowed skew ahead is not future
+#[test]
+fn a_claim_at_the_skew_limit_is_not_future() {
+    let at_limit = Statement {
+        issued_at: 10_000 + SKEW_MS,
+        ..statement()
+    };
+    assert_eq!(
+        disposition(&at_limit, &[gate()], 10_000),
+        Disposition::Admit
+    );
+    let beyond = Statement {
+        issued_at: 10_001 + SKEW_MS,
+        ..statement()
+    };
+    assert_eq!(disposition(&beyond, &[gate()], 10_000), Disposition::Future);
+}
+
+fn with_quota(count: u64, window_s: u64) -> Value {
+    let mut c = acceptance_content();
+    if let Value::Map(m) = &mut c {
+        m.push((
+            Value::text("quota"),
+            map([
+                ("count", Some(Value::Unsigned(count))),
+                ("window_s", Some(Value::Unsigned(window_s))),
+            ]),
+        ));
+    }
+    c
+}
+
+// OP-141 m.21 (a): a declared quota is read as count per window; neither may be zero
+#[test]
+fn a_declared_quota_is_read_and_must_be_positive() {
+    assert_eq!(Gate::of(&with_quota(5, 60)).unwrap().quota, Some((5, 60)));
+    assert_eq!(Gate::of(&with_quota(0, 60)), Err(ModelError::Range));
+    assert_eq!(Gate::of(&with_quota(5, 0)), Err(ModelError::Range));
+}
+
+// OP-141 m.21 (d): an earlier cutoff or a tighter quota narrows, a later or looser one widens
+#[test]
+fn cutoffs_and_quotas_narrow_only_when_tighter() {
+    let old = Gate {
+        ingest_until: Some(10),
+        quota: Some((5, 60)),
+        ..gate()
+    };
+    let narrower = [
+        Gate {
+            ingest_until: Some(5),
+            ..old.clone()
+        },
+        Gate {
+            quota: Some((3, 120)),
+            ..old.clone()
+        },
+        old.clone(),
+    ];
+    for n in &narrower {
+        assert!(narrows(&old, n), "{n:?}");
+    }
+    let wider = [
+        Gate {
+            ingest_until: Some(20),
+            ..old.clone()
+        },
+        Gate {
+            quota: Some((6, 60)),
+            ..old.clone()
+        },
+        Gate {
+            quota: Some((5, 30)),
+            ..old.clone()
+        },
+    ];
+    for w in &wider {
+        assert!(!narrows(&old, w), "{w:?}");
+    }
+}
+
+// L2-CLM-1: an Instance-signed Claim keeps its signing time in the record
+#[test]
+fn claim_state_keeps_the_signing_time() {
+    let st = ClaimState {
+        statement: Statement {
+            domain: Digest([0; 32]),
+            ..statement()
+        },
+        instance: Some(Id([9; 16])),
+        since: 7,
+        ended: None,
+    };
+    let back = ClaimState::from_value(&st.to_value()).unwrap();
+    assert_eq!(back.statement.issued_at, 1_000);
+    assert_eq!(back, st);
+}

@@ -491,6 +491,68 @@ fn child_within_parent_validity_and_requirements() {
     ));
 }
 
+// OP-109 m.9: a foreign class is below only the same class of the same foreign domain
+#[test]
+fn foreign_subject_rules() {
+    let foreign = |n: u8, class: &str| SubjectSelector::Foreign {
+        domain: d(n),
+        class: s(class),
+    };
+    assert!(subject_le(&foreign(1, "auditor"), &foreign(1, "auditor")));
+    assert!(!subject_le(&foreign(1, "auditor"), &foreign(2, "auditor")));
+    assert!(!subject_le(&foreign(1, "auditor"), &foreign(1, "clerk")));
+    assert!(!subject_le(&foreign(1, "auditor"), &foreign(2, "clerk")));
+}
+
+// OP-109 m.9: eq bounds compare and meet only when equal
+#[test]
+fn eq_bound_rules() {
+    let cat = Catalog::default();
+    let eq = |v: i64| Bound::Eq(EqValue::Int(v));
+    assert!(bound_le(&eq(1), &eq(1), &cat));
+    assert!(!bound_le(&eq(1), &eq(2), &cat));
+    assert_eq!(bound_meet(&eq(1), &eq(1), &cat), Some(eq(1)));
+    assert_eq!(bound_meet(&eq(1), &eq(2), &cat), None);
+}
+
+// OP-107 m.15, OP-109 m.9: purpose and predicate bounds are never empty
+#[test]
+fn empty_purpose_and_predicate_bounds_are_refused() {
+    let cat = catalog();
+    assert_eq!(
+        bound_normalize(&Bound::Purpose(BTreeSet::new()), &cat),
+        Err(InputError::Empty)
+    );
+    assert_eq!(
+        bound_normalize(
+            &Bound::Subject(SubjectSelector::Pred(BTreeSet::new())),
+            &cat
+        ),
+        Err(InputError::Empty)
+    );
+}
+
+// OP-109 m.10: a set of prefixes only is not empty, an empty purpose set is refused, and only a
+// Public recipient is written as absent
+#[test]
+fn authority_set_normal_form() {
+    let cat = catalog();
+    let refund = set(&[action("pay", "refund")]);
+    assert_eq!(normalize(&refund, &cat), Ok(Some(refund.clone())));
+    let mut prefixed = set(&[]);
+    prefixed.actions.prefix.insert((s("pay"), d(1)));
+    assert_eq!(normalize(&prefixed, &cat), Ok(Some(prefixed.clone())));
+    let mut no_purpose = refund.clone();
+    no_purpose.purpose = Some(BTreeSet::new());
+    assert_eq!(normalize(&no_purpose, &cat), Err(InputError::Empty));
+    let mut to_alice = refund.clone();
+    to_alice.recipient = Some(SubjectSelector::Party(Id([1; 16])));
+    assert_eq!(normalize(&to_alice, &cat), Ok(Some(to_alice.clone())));
+    let mut to_everyone = refund.clone();
+    to_everyone.recipient = Some(SubjectSelector::Public);
+    assert_eq!(normalize(&to_everyone, &cat), Ok(Some(refund)));
+}
+
 mod properties {
     use super::*;
     use proptest::prelude::*;

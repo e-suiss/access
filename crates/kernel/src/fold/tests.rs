@@ -145,4 +145,53 @@ fn genesis_creates_its_objects() {
     odd.fields
         .insert(String::from("roots"), opened(Value::text("r")));
     assert_eq!(genesis(&odd), Err(FoldError::Genesis));
+    // C4: only a Genesis record at position 0 creates the state
+    let mut later = env.clone();
+    later.header.pos = 1;
+    assert_eq!(genesis(&later), Err(FoldError::Genesis));
+    let mut other_kind = env;
+    other_kind.header.kind = RecordKind::Decision;
+    assert_eq!(genesis(&other_kind), Err(FoldError::Genesis));
+}
+
+// L2-REC-2: a decision's outcome is its `outcome` member; a map without one carries no effects
+#[test]
+fn a_decision_without_an_outcome_member_is_rejected() {
+    use crate::record::{Header, Opened, RecordKind};
+    let opened = |value| Opened {
+        value,
+        salt: [1; 32],
+    };
+    let decision = |outcome: Value| RecordEnvelope {
+        header: Header {
+            domain: Some(crate::digest::Digest([1; 32])),
+            pos: 1,
+            kind: RecordKind::Decision,
+            recorded_at: 1,
+            prev: None,
+        },
+        fields: BTreeMap::from([
+            (String::from("outcome"), opened(outcome)),
+            (
+                String::from("effects"),
+                opened(Value::Array(alloc::vec![Value::Array(alloc::vec![
+                    Value::Bytes(alloc::vec![1]),
+                    Value::Unsigned(1),
+                ])])),
+            ),
+        ]),
+    };
+    let allowed = decision(Value::Map(alloc::vec![(
+        Value::text("outcome"),
+        Value::text("allow")
+    )]));
+    assert_eq!(
+        effects(&allowed),
+        Ok(alloc::vec![(alloc::vec![1], Some(Value::Unsigned(1)))])
+    );
+    let unnamed = decision(Value::Map(alloc::vec![(
+        Value::text("unmet"),
+        Value::text("allow")
+    )]));
+    assert_eq!(effects(&unnamed), Err(FoldError::Outcome));
 }

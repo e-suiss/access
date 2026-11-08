@@ -129,6 +129,38 @@ fn matching_rules() {
     assert!(source_rejected(&sourced, &[p]));
 }
 
+// OP-111 m.8: only a proof of the term's kind and class from an issuer outside the source is
+// source-not-accepted
+#[test]
+fn source_rejection_needs_the_terms_kind_and_class() {
+    let mut t = term(1, Independence::None, Consumption::Reusable);
+    t.source = Some(SubjectSelector::Party(id(100)));
+    let p = proof(1, 5, 1);
+    let outsider = Proof {
+        issuer: id(101),
+        ..p.clone()
+    };
+    assert!(!source_rejected(&t, core::slice::from_ref(&p)));
+    assert!(source_rejected(&t, core::slice::from_ref(&outsider)));
+    let other_class = Proof {
+        class: "other".to_string(),
+        ..outsider.clone()
+    };
+    let other_kind = Proof {
+        kind: ProofKind::Authentication,
+        ..outsider.clone()
+    };
+    assert!(!source_rejected(&t, &[other_class]));
+    assert!(!source_rejected(&t, &[other_kind]));
+    assert!(!source_rejected(
+        &RequirementTerm {
+            source: None,
+            ..t.clone()
+        },
+        &[outsider]
+    ));
+}
+
 // T14, OP-111 m.5
 #[test]
 fn earliest_set_is_chosen_with_independence() {

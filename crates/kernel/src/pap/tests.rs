@@ -305,9 +305,13 @@ impl Case {
     }
 
     fn run(&self) -> Result<Pap, PapError> {
+        self.run_under(&metadata())
+    }
+
+    fn run_under(&self, metadata: &DomainMetadata) -> Result<Pap, PapError> {
         verify(
             &PureBackend,
-            &metadata(),
+            metadata,
             &self.pap,
             &self.excerpt,
             &self.presentation,
@@ -506,6 +510,94 @@ fn negative_amount_does_not_fit_a_slice() {
     c.intent = intent("pay", -5);
     c.present(|_| {});
     assert_eq!(c.run().map_err(PapError::code), Err("pap-slice"));
+}
+
+// L2-PAP-3 step 5: a use that takes exactly what is kept of the slice fits
+#[test]
+fn a_use_that_takes_the_whole_kept_slice_fits() {
+    let mut c = Case::of(&pap());
+    c.remaining.insert(d(5), 40);
+    assert_eq!(c.run(), Ok(pap()));
+    c.remaining.insert(d(5), 39);
+    assert_eq!(c.run().map_err(PapError::code), Err("pap-slice"));
+}
+
+// L2-PAP-3 step 4: the intent is inside both the PAP's bounds and the contract's bounds
+#[test]
+fn both_bounds_must_cover_the_intent() {
+    let narrow = || {
+        let mut b = bounds();
+        b.params.insert(
+            "amount".to_string(),
+            Bound::Range {
+                min: None,
+                max: Some(30),
+                unit: "eur".to_string(),
+            },
+        );
+        b
+    };
+    let narrow_pap = Pap {
+        bounds: narrow(),
+        ..pap()
+    };
+    let narrow_contract = with_contract(|v| v.bounds = narrow());
+    for p in [narrow_pap, narrow_contract] {
+        assert_eq!(
+            Case::of(&p).run().map_err(PapError::code),
+            Err("pap-bounds")
+        );
+    }
+}
+
+// L2-PAP-3 step 2: a PAP of another domain is refused even where a provider binding scopes its key
+#[test]
+fn a_pap_of_another_domain_is_refused_under_a_provider_binding() {
+    let mut m = metadata();
+    for b in m.binding.values_mut() {
+        b.scope = BindingScope::Provider(BTreeSet::from([d(1), d(2)]));
+    }
+    let foreign = Pap {
+        domain: d(2),
+        ..pap()
+    };
+    let mut c = Case::of(&foreign);
+    c.excerpt = sign1(
+        1,
+        EXCERPT_CONTENT_TYPE,
+        &KeyExcerpt {
+            domain: d(2),
+            key: op_key(KeyUsage::Pap),
+        }
+        .to_bytes()
+        .unwrap(),
+    );
+    assert_eq!(c.run_under(&m).map_err(PapError::code), Err("pap-domain"));
+    c.domain = d(2);
+    assert_eq!(c.run_under(&m).map_err(PapError::code), Err("pap-domain"));
+}
+
+// L2-PAP-2: a presentation names an audience of 1 to 255 bytes
+#[test]
+fn a_presentation_audience_is_bounded() {
+    let with_audience = |len: usize| Presentation {
+        pap: d(1),
+        intent: d(2),
+        audience: "a".repeat(len),
+        nonce: vec![7; 16],
+        iat: NOW,
+    };
+    for len in [1, 255] {
+        let p = with_audience(len);
+        assert_eq!(Presentation::from_value(&p.to_value()), Ok(p), "{len}");
+    }
+    for len in [0, 256] {
+        assert_eq!(
+            Presentation::from_value(&with_audience(len).to_value()),
+            Err(ModelError::Range),
+            "{len}"
+        );
+    }
 }
 
 fn cbor(v: &Value) -> String {

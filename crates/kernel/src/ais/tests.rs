@@ -197,6 +197,26 @@ fn payload_shape() {
     );
 }
 
+// OP-141 m.7: the PEP name is 1 to 255 bytes
+#[test]
+fn the_pep_name_is_bounded() {
+    let with_pep = |len: usize| Statement {
+        pep: "p".repeat(len),
+        ..statement()
+    };
+    for len in [1, 255] {
+        let s = with_pep(len);
+        assert_eq!(Statement::from_value(&s.to_value()), Ok(s), "{len}");
+    }
+    for len in [0, 256] {
+        assert_eq!(
+            Statement::from_value(&with_pep(len).to_value()),
+            Err(ModelError::Range),
+            "{len}"
+        );
+    }
+}
+
 type Case = (
     &'static str,
     &'static [&'static str],

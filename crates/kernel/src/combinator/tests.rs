@@ -1821,3 +1821,31 @@ fn r8_adversarial_vectors_match() {
         &json,
     );
 }
+
+// OP-114 m.11: a rolling budget without a reset time is input only when the demand exceeds it
+#[test]
+fn a_rolling_budget_that_covers_the_demand_needs_no_reset() {
+    let mut w = World::new();
+    w.hop(0).budgets.push(BudgetState {
+        window: BudgetWindow::RollingSeconds(60),
+        remaining: 1,
+        demand: 1,
+        resets_at: None,
+    });
+    assert_eq!(w.run().map(|d| d.outcome), Ok(Outcome::Allow));
+    w.hop(0).budgets[0].demand = 2;
+    assert_eq!(w.run(), Err(Rejection::Input));
+}
+
+// OP-114 m.11: a hop's budget list is absent or non-empty, never an empty list
+#[test]
+fn a_hop_never_carries_an_empty_budget_list() {
+    use crate::codec::{Canonical, ModelError};
+    use suiss_crypto::dcbor::Value;
+    let mut v = hop().to_value();
+    let Value::Map(m) = &mut v else {
+        panic!("a hop is a map")
+    };
+    m.push((Value::text("budgets"), Value::Array(Vec::new())));
+    assert_eq!(Hop::from_value(&v), Err(ModelError::Range));
+}

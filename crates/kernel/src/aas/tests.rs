@@ -287,3 +287,52 @@ fn aas_vectors_match() {
         &json,
     );
 }
+
+// L2-AAS-1: the Exercise nonce is 16 to 64 bytes and the surface profile 1 to 255 bytes
+#[test]
+fn nonce_and_surface_profile_are_bounded() {
+    let decode = |a: &ApprovalAct| ApprovalAct::from_value(&a.to_value());
+    for len in [16, 64] {
+        let a = ApprovalAct {
+            nonce: vec![7; len],
+            ..statement()
+        };
+        assert_eq!(decode(&a), Ok(a.clone()), "nonce {len}");
+    }
+    for len in [15, 65] {
+        let a = ApprovalAct {
+            nonce: vec![7; len],
+            ..statement()
+        };
+        assert_eq!(decode(&a), Err(ModelError::Shape), "nonce {len}");
+    }
+    for len in [1, 255] {
+        let a = ApprovalAct {
+            surface_profile: "s".repeat(len),
+            ..statement()
+        };
+        assert_eq!(decode(&a), Ok(a.clone()), "profile {len}");
+    }
+    for len in [0, 256] {
+        let a = ApprovalAct {
+            surface_profile: "s".repeat(len),
+            ..statement()
+        };
+        assert_eq!(decode(&a), Err(ModelError::Range), "profile {len}");
+    }
+}
+
+// L2-AAS-4: `expires_at` may equal `issued_at` but never precede it, even while `now` is before both
+#[test]
+fn expiry_is_never_before_issue() {
+    let at = |issued_at: u64, expires_at: u64| ApprovalAct {
+        issued_at,
+        expires_at,
+        ..statement()
+    };
+    assert_eq!(check(&at(NOW, NOW), &expected(NOW)), Ok(()));
+    assert_eq!(
+        check(&at(NOW + 30_000, NOW + 10_000), &expected(NOW)),
+        Err(AasError::Expired)
+    );
+}
