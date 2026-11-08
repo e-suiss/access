@@ -108,7 +108,7 @@ export interface components {
             signal: components["schemas"]["PasskeySignal"];
         };
         /** @enum {string} */
-        FieldName: "identifier" | "password" | "totp_code" | "recovery_code" | "passkey_credential" | "email_code" | "email" | "new_password" | "display_name" | "acknowledged" | "invitation_code" | "link_code";
+        FieldName: "identifier" | "password" | "totp_code" | "recovery_code" | "passkey_credential" | "email_code" | "email" | "new_password" | "display_name" | "acknowledged" | "invitation_code" | "link_code" | "bot_token";
         /** @enum {string} */
         Method: "identifier" | "password" | "passkey" | "totp" | "recovery_code" | "passkey_register" | "skip" | "restart" | "email_code" | "magic_link" | "register" | "recover" | "new_password" | "share" | "dont_share" | "accept_invitation" | "link" | "acknowledge";
         /** @enum {string} */
