@@ -35,7 +35,20 @@
         "relay.message.magic_link.v1",
         "relay.message.password_changed.v1",
         "relay.message.new_sign_in.v1",
-        "relay.message.account_status.v1"
+        "relay.message.account_status.v1",
+        "relay.message.recovery_requested.v1",
+        "relay.message.recovery_cooling.v1",
+        "relay.message.recovery_completed.v1",
+        "relay.message.recovery_codes_regenerated.v1",
+        "relay.message.second_factor_enabled.v1",
+        "relay.message.new_method.v1",
+        "relay.message.email_changed.v1",
+        "relay.message.deletion_scheduled.v1",
+        "relay.message.deletion_completed.v1",
+        "relay.message.inactivity_notice.v1",
+        "relay.message.reset_intent.v1",
+        "relay.message.export_ready.v1",
+        "relay.message.invitation.v1"
       ]
     },
     "subject": {
@@ -141,6 +154,214 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.recovery_requested.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.recovery_requested.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.recovery_cooling.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.recovery_cooling.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.recovery_completed.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.recovery_completed.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.recovery_codes_regenerated.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.recovery_codes_regenerated.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.second_factor_enabled.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.second_factor_enabled.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.new_method.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.new_method.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.email_changed.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.email_changed.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.deletion_scheduled.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.deletion_scheduled.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.deletion_completed.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.deletion_completed.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.inactivity_notice.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.inactivity_notice.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.reset_intent.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.reset_intent.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.export_ready.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.export_ready.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.invitation.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.invitation.v1"
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -189,12 +410,16 @@
           "enum": [
             "sign_in",
             "verify_address",
-            "recovery"
+            "recovery",
+            "sign_up"
           ]
         },
         "expires_at": {
           "type": "string",
           "format": "date-time"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
         }
       }
     },
@@ -222,6 +447,9 @@
         "expires_at": {
           "type": "string",
           "format": "date-time"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
         }
       }
     },
@@ -242,6 +470,9 @@
         "at": {
           "type": "string",
           "format": "date-time"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
         }
       }
     },
@@ -272,6 +503,9 @@
             "magic_link",
             "federated"
           ]
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
         }
       }
     },
@@ -303,6 +537,368 @@
           ]
         },
         "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        }
+      }
+    },
+    "recipient_valid_since": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Since when the recipient has owned the mailbox; Relay sends it as RFC 7293 Require-Recipient-Valid-Since. E-mail recipients only."
+    },
+    "relay.message.recovery_requested.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.recovery_cooling.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "at",
+        "until"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "until": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.recovery_completed.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.recovery_codes_regenerated.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.second_factor_enabled.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.new_method.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.email_changed.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.deletion_scheduled.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "at",
+        "until"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "until": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.deletion_completed.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "at",
+        "until"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "until": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.inactivity_notice.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "at",
+        "until"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "until": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.reset_intent.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "link",
+        "expires_at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the link. Never logged."
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.export_ready.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "link",
+        "expires_at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the link. Never logged."
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.invitation.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "link",
+        "organization",
+        "inviter",
+        "expires_at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the link. Never logged."
+        },
+        "organization": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: rendered as text, never as a link (OP-153 m.3 (o))."
+        },
+        "inviter": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: rendered as text, never as a link (OP-153 m.3 (o))."
+        },
+        "expires_at": {
           "type": "string",
           "format": "date-time"
         }

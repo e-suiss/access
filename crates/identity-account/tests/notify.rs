@@ -7,6 +7,7 @@
     clippy::panic,
     clippy::arithmetic_side_effects,
     clippy::indexing_slicing,
+    clippy::too_many_lines,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
@@ -33,7 +34,7 @@ use access_identity_account::notify::delivery::{
 use access_identity_account::notify::envelope::{EventId, Header, parse, seal};
 use access_identity_account::notify::http::{HttpRelay, HttpRelayConfig, RelayEndpoint};
 use access_identity_account::notify::message::{
-    Address, Body, KINDS, Message, OtpPurpose, SignInMethod,
+    Address, Body, KINDS, LinkPurpose, Message, Notice, OtpPurpose, SignInMethod,
 };
 use access_identity_account::notify::notifier::OutboxNotifier;
 use access_identity_account::notify::pg::PgCourierStore;
@@ -238,6 +239,7 @@ fn otp(subject: [u8; 16], expires_at_ms: u64) -> Message {
         subject,
         to: Address::Email(EMAIL.to_owned()),
         locale: Some("tr-TR".to_owned()),
+        valid_since_ms: None,
         body: Body::Otp {
             code: Secret::new(CODE.to_owned()),
             purpose: OtpPurpose::SignIn,
@@ -251,6 +253,7 @@ fn notice(subject: [u8; 16], at_ms: u64) -> Message {
         subject,
         to: Address::Email(EMAIL.to_owned()),
         locale: None,
+        valid_since_ms: None,
         body: Body::NewSignIn {
             at_ms,
             method: SignInMethod::Passkey,
@@ -628,6 +631,7 @@ async fn secrets_and_addresses_never_show() {
         subject: s,
         to: Address::Phone("+905551112233".to_owned()),
         locale: None,
+        valid_since_ms: None,
         body: Body::MagicLink {
             link: Secret::new("https://id.example/l/abc".to_owned()),
             expires_at_ms: START_MS + 1,
@@ -815,6 +819,7 @@ fn every_kind_matches_the_json_schema() {
             subject: s,
             to: Address::Phone("+905551112233".to_owned()),
             locale: None,
+            valid_since_ms: None,
             body: Body::MagicLink {
                 link: Secret::new("https://id.example/l/abc".to_owned()),
                 expires_at_ms: START_MS + 1,
@@ -824,6 +829,7 @@ fn every_kind_matches_the_json_schema() {
             subject: s,
             to: to(),
             locale: None,
+            valid_since_ms: None,
             body: Body::PasswordChanged { at_ms: START_MS },
         },
         notice(s, START_MS),
@@ -831,12 +837,52 @@ fn every_kind_matches_the_json_schema() {
             subject: s,
             to: to(),
             locale: Some("en".to_owned()),
+            valid_since_ms: None,
             body: Body::AccountStatus {
                 status: AccountStatus::Suspended,
                 at_ms: START_MS,
             },
         },
-    ];
+    ]
+    .into_iter()
+    .chain(Notice::ALL.into_iter().map(|notice| Message {
+        subject: s,
+        to: to(),
+        locale: None,
+        valid_since_ms: Some(START_MS - 86_400_000),
+        body: Body::Notice {
+            notice,
+            at_ms: START_MS,
+            until_ms: notice.has_until().then_some(START_MS + 86_400_000),
+        },
+    }))
+    .chain(
+        [LinkPurpose::ResetIntent, LinkPurpose::ExportReady].map(|purpose| Message {
+            subject: s,
+            to: to(),
+            locale: None,
+            valid_since_ms: None,
+            body: Body::Link {
+                purpose,
+                link: Secret::new("https://id.example/r/abc".to_owned()),
+                expires_at_ms: START_MS + 1,
+            },
+        }),
+    )
+    .chain([Message {
+        subject: s,
+        to: to(),
+        locale: Some("tr".to_owned()),
+        valid_since_ms: None,
+        body: Body::Invitation {
+            link: Secret::new("https://id.example/i/abc".to_owned()),
+            organization: "Acme <a href=x>".to_owned(),
+            inviter: "Ayşe".to_owned(),
+            expires_at_ms: START_MS + 1,
+        },
+    }])
+    .collect::<Vec<_>>();
+    assert_eq!(messages.len(), KINDS.len());
     for (m, kind) in messages.iter().zip(KINDS) {
         assert_eq!(m.body.kind(), kind);
         let header = Header {

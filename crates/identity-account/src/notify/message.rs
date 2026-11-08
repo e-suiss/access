@@ -99,10 +99,17 @@ pub enum OtpPurpose {
     VerifyAddress,
     /// Account recovery.
     Recovery,
+    /// A new account's sign-up code (OP-153 m.3 (g)).
+    SignUp,
 }
 
 impl OtpPurpose {
-    const ALL: [Self; 3] = [Self::SignIn, Self::VerifyAddress, Self::Recovery];
+    const ALL: [Self; 4] = [
+        Self::SignIn,
+        Self::VerifyAddress,
+        Self::Recovery,
+        Self::SignUp,
+    ];
 
     /// Wire name.
     #[must_use]
@@ -111,6 +118,7 @@ impl OtpPurpose {
             Self::SignIn => "sign_in",
             Self::VerifyAddress => "verify_address",
             Self::Recovery => "recovery",
+            Self::SignUp => "sign_up",
         }
     }
 
@@ -160,6 +168,106 @@ impl SignInMethod {
     }
 }
 
+/// A notice about the account, sent to its registered address (§8.15.2, OP-153 m.2 N0).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Notice {
+    /// A recovery was started (OP-153 m.3 (d)).
+    RecoveryRequested,
+    /// A recovery waits out its cooling period; `until` is when it can finish (OP-153 m.3 (e)).
+    RecoveryCooling,
+    /// A recovery finished.
+    RecoveryCompleted,
+    /// New recovery codes were made; the old ones no longer work.
+    RecoveryCodesRegenerated,
+    /// A second step was turned on.
+    SecondFactorEnabled,
+    /// A new sign-in method was added.
+    NewMethod,
+    /// The e-mail address was changed; sent to the old address (OP-153 m.3 (i)).
+    EmailChanged,
+    /// The account is scheduled for deletion; `until` is the date (OP-153 m.3 (bb)).
+    DeletionScheduled,
+    /// The account is deleted; `until` is how long some records are kept (OP-153 m.3 (bb)).
+    DeletionCompleted,
+    /// The account will be turned off for inactivity; `until` is when (OP-153 m.3 (dd)).
+    InactivityNotice,
+}
+
+impl Notice {
+    /// Every notice.
+    pub const ALL: [Self; 10] = [
+        Self::RecoveryRequested,
+        Self::RecoveryCooling,
+        Self::RecoveryCompleted,
+        Self::RecoveryCodesRegenerated,
+        Self::SecondFactorEnabled,
+        Self::NewMethod,
+        Self::EmailChanged,
+        Self::DeletionScheduled,
+        Self::DeletionCompleted,
+        Self::InactivityNotice,
+    ];
+
+    /// Its outbox kind and `CloudEvents` `type`.
+    #[must_use]
+    pub const fn kind(self) -> &'static str {
+        match self {
+            Self::RecoveryRequested => "relay.message.recovery_requested.v1",
+            Self::RecoveryCooling => "relay.message.recovery_cooling.v1",
+            Self::RecoveryCompleted => "relay.message.recovery_completed.v1",
+            Self::RecoveryCodesRegenerated => "relay.message.recovery_codes_regenerated.v1",
+            Self::SecondFactorEnabled => "relay.message.second_factor_enabled.v1",
+            Self::NewMethod => "relay.message.new_method.v1",
+            Self::EmailChanged => "relay.message.email_changed.v1",
+            Self::DeletionScheduled => "relay.message.deletion_scheduled.v1",
+            Self::DeletionCompleted => "relay.message.deletion_completed.v1",
+            Self::InactivityNotice => "relay.message.inactivity_notice.v1",
+        }
+    }
+
+    /// Whether the notice carries `until`, and must.
+    #[must_use]
+    pub const fn has_until(self) -> bool {
+        matches!(
+            self,
+            Self::RecoveryCooling
+                | Self::DeletionScheduled
+                | Self::DeletionCompleted
+                | Self::InactivityNotice
+        )
+    }
+
+    fn of_kind(kind: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|n| n.kind() == kind)
+    }
+}
+
+/// What a link a person opens is for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LinkPurpose {
+    /// A support agent's reset-intent token, sent to another registered address (TN-61).
+    ResetIntent,
+    /// The person's data export download (TN-79, OP-153 m.3 (cc)).
+    ExportReady,
+}
+
+impl LinkPurpose {
+    const ALL: [Self; 2] = [Self::ResetIntent, Self::ExportReady];
+
+    /// Its outbox kind and `CloudEvents` `type`.
+    #[must_use]
+    pub const fn kind(self) -> &'static str {
+        match self {
+            Self::ResetIntent => "relay.message.reset_intent.v1",
+            Self::ExportReady => "relay.message.export_ready.v1",
+        }
+    }
+
+    fn of_kind(kind: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|n| n.kind() == kind)
+    }
+}
+
 /// What the message says.
 pub enum Body {
     /// A one-time code (`relay.message.otp.v1`).
@@ -197,6 +305,36 @@ pub enum Body {
         /// When, Unix ms.
         at_ms: u64,
     },
+    /// A notice about the account (each [`Notice`] its own kind).
+    Notice {
+        /// Which.
+        notice: Notice,
+        /// When, Unix ms.
+        at_ms: u64,
+        /// The date the notice names, Unix ms, exactly when [`Notice::has_until`].
+        until_ms: Option<u64>,
+    },
+    /// A link the person opens (each [`LinkPurpose`] its own kind).
+    Link {
+        /// What for.
+        purpose: LinkPurpose,
+        /// The `https` link, at most 2048 bytes.
+        link: Secret<String>,
+        /// Unix ms after which it is worthless.
+        expires_at_ms: u64,
+    },
+    /// An organization's invitation (`relay.message.invitation.v1`, OP-153 m.3 (o)). The names
+    /// are attacker input: Relay renders them as text, never as a link.
+    Invitation {
+        /// The `https` accept link, at most 2048 bytes.
+        link: Secret<String>,
+        /// The organization's name, at most 200 characters.
+        organization: String,
+        /// The inviter's display name, at most 200 characters.
+        inviter: String,
+        /// Unix ms after which it is worthless.
+        expires_at_ms: u64,
+    },
 }
 
 impl fmt::Debug for Body {
@@ -231,17 +369,57 @@ impl fmt::Debug for Body {
                 .field("status", status)
                 .field("at_ms", at_ms)
                 .finish(),
+            Self::Notice {
+                notice,
+                at_ms,
+                until_ms,
+            } => f
+                .debug_struct("Notice")
+                .field("notice", notice)
+                .field("at_ms", at_ms)
+                .field("until_ms", until_ms)
+                .finish(),
+            Self::Link {
+                purpose,
+                expires_at_ms,
+                ..
+            } => f
+                .debug_struct("Link")
+                .field("purpose", purpose)
+                .field("link", &"[redacted]")
+                .field("expires_at_ms", expires_at_ms)
+                .finish(),
+            Self::Invitation { expires_at_ms, .. } => f
+                .debug_struct("Invitation")
+                .field("link", &"[redacted]")
+                .field("organization", &"[redacted]")
+                .field("inviter", &"[redacted]")
+                .field("expires_at_ms", expires_at_ms)
+                .finish(),
         }
     }
 }
 
 /// Every kind of the contract, as outbox kind and `CloudEvents` `type`.
-pub const KINDS: [&str; 5] = [
+pub const KINDS: [&str; 18] = [
     "relay.message.otp.v1",
     "relay.message.magic_link.v1",
     "relay.message.password_changed.v1",
     "relay.message.new_sign_in.v1",
     "relay.message.account_status.v1",
+    "relay.message.recovery_requested.v1",
+    "relay.message.recovery_cooling.v1",
+    "relay.message.recovery_completed.v1",
+    "relay.message.recovery_codes_regenerated.v1",
+    "relay.message.second_factor_enabled.v1",
+    "relay.message.new_method.v1",
+    "relay.message.email_changed.v1",
+    "relay.message.deletion_scheduled.v1",
+    "relay.message.deletion_completed.v1",
+    "relay.message.inactivity_notice.v1",
+    "relay.message.reset_intent.v1",
+    "relay.message.export_ready.v1",
+    "relay.message.invitation.v1",
 ];
 
 impl Body {
@@ -254,6 +432,9 @@ impl Body {
             Self::PasswordChanged { .. } => KINDS[2],
             Self::NewSignIn { .. } => KINDS[3],
             Self::AccountStatus { .. } => KINDS[4],
+            Self::Notice { notice, .. } => notice.kind(),
+            Self::Link { purpose, .. } => purpose.kind(),
+            Self::Invitation { .. } => KINDS[17],
         }
     }
 
@@ -261,9 +442,10 @@ impl Body {
     #[must_use]
     pub const fn expires_at_ms(&self) -> Option<u64> {
         match self {
-            Self::Otp { expires_at_ms, .. } | Self::MagicLink { expires_at_ms, .. } => {
-                Some(*expires_at_ms)
-            }
+            Self::Otp { expires_at_ms, .. }
+            | Self::MagicLink { expires_at_ms, .. }
+            | Self::Link { expires_at_ms, .. }
+            | Self::Invitation { expires_at_ms, .. } => Some(*expires_at_ms),
             _ => None,
         }
     }
@@ -278,19 +460,47 @@ impl Body {
                     Err(Invalid("code"))
                 }
             }
-            Self::MagicLink { link, .. } => {
-                let l = link.expose();
-                if l.len() <= 2048
-                    && l.strip_prefix("https://").is_some_and(|r| !r.is_empty())
-                    && !l.chars().any(|c| c.is_control() || c.is_whitespace())
-                {
+            Self::MagicLink { link, .. } | Self::Link { link, .. } => https_link(link.expose()),
+            Self::Invitation {
+                link,
+                organization,
+                inviter,
+                ..
+            } => {
+                https_link(link.expose())?;
+                name(organization, "organization")?;
+                name(inviter, "inviter")
+            }
+            Self::Notice {
+                notice, until_ms, ..
+            } => {
+                if notice.has_until() == until_ms.is_some() {
                     Ok(())
                 } else {
-                    Err(Invalid("link"))
+                    Err(Invalid("until"))
                 }
             }
             _ => Ok(()),
         }
+    }
+}
+
+fn https_link(l: &str) -> Result<(), Invalid> {
+    if l.len() <= 2048
+        && l.strip_prefix("https://").is_some_and(|r| !r.is_empty())
+        && !l.chars().any(|c| c.is_control() || c.is_whitespace())
+    {
+        Ok(())
+    } else {
+        Err(Invalid("link"))
+    }
+}
+
+fn name(n: &str, field: &'static str) -> Result<(), Invalid> {
+    if (1..=200).contains(&n.chars().count()) && !n.chars().any(char::is_control) {
+        Ok(())
+    } else {
+        Err(Invalid(field))
     }
 }
 
@@ -303,6 +513,9 @@ pub struct Message {
     pub to: Address,
     /// BCP 47 language tag for Relay's template, when the person has one.
     pub locale: Option<String>,
+    /// Since when the recipient has owned the mailbox (`mailbox_owner_since`), Unix ms: Relay
+    /// sends it as RFC 7293 `Require-Recipient-Valid-Since` (OP-153 m.3 (i)). E-mail only.
+    pub valid_since_ms: Option<u64>,
     /// What it says.
     pub body: Body,
 }
@@ -324,6 +537,9 @@ impl Message {
         if self.locale.as_deref().is_some_and(|l| !valid_locale(l)) {
             return Err(Invalid("locale"));
         }
+        if self.valid_since_ms.is_some() && !matches!(self.to, Address::Email(_)) {
+            return Err(Invalid("valid_since"));
+        }
         self.body.validate()
     }
 
@@ -333,6 +549,9 @@ impl Message {
         m.insert("recipient".into(), self.to.to_json());
         if let Some(l) = &self.locale {
             m.insert("locale".into(), Value::String(l.clone()));
+        }
+        if let Some(v) = self.valid_since_ms {
+            m.insert("valid_since_ms".into(), v.into());
         }
         match &self.body {
             Body::Otp {
@@ -344,9 +563,33 @@ impl Message {
                 m.insert("purpose".into(), purpose.name().into());
                 m.insert("expires_at_ms".into(), (*expires_at_ms).into());
             }
+            Body::Notice {
+                at_ms, until_ms, ..
+            } => {
+                m.insert("at_ms".into(), (*at_ms).into());
+                if let Some(u) = until_ms {
+                    m.insert("until_ms".into(), (*u).into());
+                }
+            }
+            Body::Invitation {
+                link,
+                organization,
+                inviter,
+                expires_at_ms,
+            } => {
+                m.insert("link".into(), Value::String(link.expose().clone()));
+                m.insert("organization".into(), Value::String(organization.clone()));
+                m.insert("inviter".into(), Value::String(inviter.clone()));
+                m.insert("expires_at_ms".into(), (*expires_at_ms).into());
+            }
             Body::MagicLink {
                 link,
                 expires_at_ms,
+            }
+            | Body::Link {
+                link,
+                expires_at_ms,
+                ..
             } => {
                 m.insert("link".into(), Value::String(link.expose().clone()));
                 m.insert("expires_at_ms".into(), (*expires_at_ms).into());
@@ -395,17 +638,47 @@ impl Message {
                 status: AccountStatus::parse(text("status")?).ok_or(Invalid("status"))?,
                 at_ms: int("at_ms")?,
             },
-            _ => return Err(Invalid("kind")),
+            "relay.message.invitation.v1" => Body::Invitation {
+                link: Secret::new(text("link")?.to_owned()),
+                organization: text("organization")?.to_owned(),
+                inviter: text("inviter")?.to_owned(),
+                expires_at_ms: int("expires_at_ms")?,
+            },
+            k => {
+                if let Some(notice) = Notice::of_kind(k) {
+                    Body::Notice {
+                        notice,
+                        at_ms: int("at_ms")?,
+                        until_ms: match v.get("until_ms") {
+                            None => None,
+                            Some(u) => Some(u.as_u64().ok_or(Invalid("until_ms"))?),
+                        },
+                    }
+                } else if let Some(purpose) = LinkPurpose::of_kind(k) {
+                    Body::Link {
+                        purpose,
+                        link: Secret::new(text("link")?.to_owned()),
+                        expires_at_ms: int("expires_at_ms")?,
+                    }
+                } else {
+                    return Err(Invalid("kind"));
+                }
+            }
         };
         let locale = match v.get("locale") {
             None => None,
             Some(Value::String(l)) => Some(l.clone()),
             Some(_) => return Err(Invalid("locale")),
         };
+        let valid_since_ms = match v.get("valid_since_ms") {
+            None => None,
+            Some(t) => Some(t.as_u64().ok_or(Invalid("valid_since_ms"))?),
+        };
         let m = Self {
             subject,
             to: Address::from_json(v.get("recipient").ok_or(Invalid("recipient"))?)?,
             locale,
+            valid_since_ms,
             body,
         };
         m.validate()?;
@@ -419,6 +692,10 @@ impl Message {
         if let Some(l) = &self.locale {
             m.insert("locale".into(), Value::String(l.clone()));
         }
+        // OP-153 m.3 (i), RFC 7293
+        if let Some(v) = self.valid_since_ms {
+            m.insert("recipient_valid_since".into(), rfc3339(v)?.into());
+        }
         match &self.body {
             Body::Otp {
                 code,
@@ -429,9 +706,33 @@ impl Message {
                 m.insert("purpose".into(), purpose.name().into());
                 m.insert("expires_at".into(), rfc3339(*expires_at_ms)?.into());
             }
+            Body::Notice {
+                at_ms, until_ms, ..
+            } => {
+                m.insert("at".into(), rfc3339(*at_ms)?.into());
+                if let Some(u) = until_ms {
+                    m.insert("until".into(), rfc3339(*u)?.into());
+                }
+            }
+            Body::Invitation {
+                link,
+                organization,
+                inviter,
+                expires_at_ms,
+            } => {
+                m.insert("link".into(), Value::String(link.expose().clone()));
+                m.insert("organization".into(), Value::String(organization.clone()));
+                m.insert("inviter".into(), Value::String(inviter.clone()));
+                m.insert("expires_at".into(), rfc3339(*expires_at_ms)?.into());
+            }
             Body::MagicLink {
                 link,
                 expires_at_ms,
+            }
+            | Body::Link {
+                link,
+                expires_at_ms,
+                ..
             } => {
                 m.insert("link".into(), Value::String(link.expose().clone()));
                 m.insert("expires_at".into(), rfc3339(*expires_at_ms)?.into());
