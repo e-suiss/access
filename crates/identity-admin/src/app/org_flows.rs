@@ -192,11 +192,13 @@ where
         if signer.is_none() || signer.map(|s| s.0) != member.inviter {
             return Err(AdminError::Refused(String::from(INVITER_ONLY)));
         }
-        let applied = self.meta((tenant, realm), w).await?;
+        let origin = access_kernel::meta::exercise_id(&w.domain, &w.nonce)
+            .map_err(|_| AdminError::Encode)?;
+        let applied = Box::pin(self.meta((tenant, realm), w)).await?;
         let settled = match &applied {
             super::Applied::Written { exercise, .. }
             | super::Applied::AlreadyWritten { exercise, .. } => Some(Some((
-                access_kernel::meta::object_id(exercise, access_kernel::meta::kind::GRANT, 0).0,
+                access_kernel::meta::object_id(&origin, access_kernel::meta::kind::GRANT, 0).0,
                 exercise.0,
             ))),
             super::Applied::NotAllowed { decision, .. }
