@@ -3,7 +3,7 @@
 //! "undo", and "session" for an Instance; nor "fail open", "test mode", "log in as" or
 //! impersonation (MD-9, TI-9). The string literals and JSX text of `web/*/src` and
 //! `sdks/typescript/src` are scanned, tests excepted, and so are the message values of the
-//! `locales/*/*.ftl` catalogues the hosted pages render (3702). Protocol phrases that must keep a
+//! `locales/*/*.ftl` catalogues the hosted pages render; product claims are `forbidden-claims.toml`'s. Protocol phrases that must keep a
 //! protocol's own words are allowed only through `conformance/catalog/ui-terms.toml`.
 //!
 //! `ui-text-nodes` (TN-131): tenant-controlled strings render as text nodes only, so no web or
@@ -50,11 +50,6 @@ const PHRASES: &[&[&str]] = &[
     &["instance", "session"],
     &["sessions", "instances"],
     &["instance", "sessions"],
-    &["agent", "stopped"],
-    &["revoked", "everywhere"],
-    &["logged", "out", "everywhere"],
-    &["tamper", "proof"],
-    &["verileriniz", "silindi"],
 ];
 
 /// Word prefixes that are never shown (MD-9: no impersonation of any form).
@@ -404,11 +399,6 @@ mod tests {
             ("Impersonate user", "impersonat"),
             ("Enable test mode", "test mode"),
             ("fail open", "fail open"),
-            ("Agent stopped", "agent stopped"),
-            ("Revoked everywhere instantly", "revoked everywhere"),
-            ("Logged out everywhere", "logged out everywhere"),
-            ("Tamper-proof log", "tamper proof"),
-            ("Verileriniz silindi", "verileriniz silindi"),
         ] {
             assert_eq!(forbidden(text, &a).as_deref(), Some(term), "{text}");
         }
@@ -485,10 +475,11 @@ mod tests {
         assert!(!scanned("sdks/typescript/src/generated/access-v1.ts"));
     }
 
-    // 3702, X24
+    // X24
     #[test]
     fn fluent_values_are_scanned_without_ids_or_comments() {
-        let src = "# undo in a comment\nundo-id = Stop access\nbad = Logged out everywhere\n    .title = Verified\n";
+        let src =
+            "# undo in a comment\nundo-id = Stop access\nbad = Undo it\n    .title = Verified\n";
         let v = scan_fluent("locales/en/x.ftl", src, &[]);
         let lines: Vec<String> = v.iter().map(|v| v.path.display().to_string()).collect();
         assert_eq!(lines, ["locales/en/x.ftl:3", "locales/en/x.ftl:4"]);
