@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.oauth_cimd_clients\n                SET document = $4, document_hash = $5, authority_hash = $6, visual_hash = $7,\n                    logo = $8, logo_type = $9, fetched_ms = $10, fresh_until_ms = $11,\n                    visual_changed_ms = CASE WHEN $12 THEN $10 ELSE visual_changed_ms END\n              WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Int8",
+        "Int8",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "20f6bd0623ade5843eba11d6718c2bfa0e2543a52e4b87377625d3ad3f6e54b2"
+}

@@ -15,6 +15,7 @@ pub mod backchannel;
 pub mod bodies;
 pub mod challenges;
 pub mod claims;
+pub mod clients;
 pub mod connect;
 pub mod consents;
 pub mod console;

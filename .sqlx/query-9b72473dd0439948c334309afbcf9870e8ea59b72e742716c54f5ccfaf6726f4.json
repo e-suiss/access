@@ -1,0 +1,162 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT client_uuid, client_id, document, document_hash, authority_hash, visual_hash,\n                    logo, logo_type, first_seen_ms, fetched_ms, fresh_until_ms, visual_changed_ms\n               FROM access.oauth_cimd_clients\n              WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND retired_ms IS NULL\n              FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "client_uuid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_cimd_clients",
+            "name": "client_uuid"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_cimd_clients",
+            "name": "client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "document",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_cimd_clients",
+            "name": "document"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "document_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_cimd_clients",
+            "name": "document_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "authority_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_cimd_clients",
+            "name": "authority_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "visual_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_cimd_clients",
+            "name": "visual_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "logo",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_cimd_clients",
+            "name": "logo"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "logo_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_cimd_clients",
+            "name": "logo_type"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "first_seen_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_cimd_clients",
+            "name": "first_seen_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "fetched_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_cimd_clients",
+            "name": "fetched_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "fresh_until_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_cimd_clients",
+            "name": "fresh_until_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "visual_changed_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_cimd_clients",
+            "name": "visual_changed_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "9b72473dd0439948c334309afbcf9870e8ea59b72e742716c54f5ccfaf6726f4"
+}

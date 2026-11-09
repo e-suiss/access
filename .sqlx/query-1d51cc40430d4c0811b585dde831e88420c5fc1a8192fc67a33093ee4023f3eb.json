@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.oauth_consent_records SET ended_ms = $6, end_reason = 'replaced'\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND client_uuid = $4\n                AND resource = $5 AND ended_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1d51cc40430d4c0811b585dde831e88420c5fc1a8192fc67a33093ee4023f3eb"
+}

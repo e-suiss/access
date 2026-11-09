@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.oauth_cimd_clients (tenant_id, realm_id, client_id, document,\n                    document_hash, authority_hash, visual_hash, logo, logo_type, first_seen_ms,\n                    fetched_ms, fresh_until_ms)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11)\n             RETURNING client_uuid",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "client_uuid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_cimd_clients",
+            "name": "client_uuid"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "cfc10d96b8c614b1834f845ac83ff307e8ea5ef2a2aca792293db2c3c3bee743"
+}
