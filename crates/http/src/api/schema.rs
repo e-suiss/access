@@ -651,7 +651,9 @@ fn body_of(row: &Route) -> &'static str {
             ResourceKind::Webhooks => "Webhook",
             ResourceKind::Signals => "Signals",
             ResourceKind::Analytics => "Analytics",
-            ResourceKind::Deliveries | ResourceKind::AgentSponsors => "Page",
+            ResourceKind::Deliveries
+            | ResourceKind::AgentSponsors
+            | ResourceKind::VaultResources => "Page",
             ResourceKind::SocialProviders => "SocialProvider",
             ResourceKind::Organizations => "Organization",
             ResourceKind::Agents => "Agent",

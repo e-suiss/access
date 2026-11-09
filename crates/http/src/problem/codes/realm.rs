@@ -370,6 +370,13 @@ pub const INVALID_WORKLOAD_CLIENT: Code = code(
     "Bad Request",
     "A workload client names a SPIFFE ID or a whole-segment prefix ending in /*, an https Bundle Endpoint and its agent, and no redirect URI (OP-154 m.3 (r), §11.12.1).",
 );
+/// A vault Resource outside OP-154 m.3 (t), or an upstream the catalog does not have.
+pub const INVALID_VAULT_RESOURCE: Code = code(
+    "invalid-vault-resource",
+    400,
+    "Bad Request",
+    "The vault Resource is malformed: an upstream the catalog does not have or an own upstream outside the catalog format, a client secret that is not a secret:// reference, a scope the upstream does not offer, a mapped action outside the Resource's scopes or in the access or idp namespaces, or an executor that is not a certificate thumbprint (OP-154 m.3 (t)).",
+);
 /// The change would leave the organization without an active owner (TN-91, OP-153 m.3 (p)).
 pub const LAST_OWNER: Code = code(
     "last-owner",

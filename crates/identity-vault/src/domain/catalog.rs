@@ -248,6 +248,14 @@ impl Catalog {
         Self::from_files(SHIPPED.iter().copied())
     }
 
+    /// The shipped catalog, parsed once per process; `None` only if a shipped file were outside
+    /// the format, which a test rules out.
+    #[must_use]
+    pub fn get_shipped() -> Option<&'static Self> {
+        static SHIPPED_ONCE: std::sync::OnceLock<Option<Catalog>> = std::sync::OnceLock::new();
+        SHIPPED_ONCE.get_or_init(|| Self::shipped().ok()).as_ref()
+    }
+
     /// A catalog from `(file, text)` pairs; each file's name is its entry's id.
     ///
     /// # Errors

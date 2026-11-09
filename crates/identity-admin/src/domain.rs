@@ -429,6 +429,13 @@ pub enum Invalid {
     /// otherwise outside OP-154 m.3 (g).
     #[error("invalid agent template")]
     AgentTemplate,
+    /// A vault Resource outside the rules, or an upstream the catalog does not have
+    /// (OP-154 m.3 (t)).
+    #[error("invalid vault resource")]
+    VaultResource,
+    /// No enabled vault Resource by that name.
+    #[error("no such vault resource")]
+    NoVaultResource,
     /// N5: a Related Origins list that is not `https` origins, names more than five
     /// registrable labels with the RP ID, or an origin outside the realm's verified domains
     /// (TN-18, OP-153 m.3 (u)).
@@ -471,6 +478,8 @@ impl Invalid {
             Self::Workload => "invalid-workload-client",
             Self::Agent => "invalid-agent",
             Self::AgentTemplate => "invalid-agent-template",
+            Self::VaultResource => "invalid-vault-resource",
+            Self::NoVaultResource => "no-such-vault-resource",
             Self::DisplayName => "invalid-display-name",
             Self::RedirectUri | Self::RedirectUris => "invalid-redirect-uri",
             Self::JwksUri => "invalid-jwks-uri",
@@ -1605,6 +1614,8 @@ pub enum Change {
     OrgCreate(OrgCreate),
     /// `idp.agent.*` (OP-154 m.3 (a), (c), (e), (g)).
     Agent(agent::AgentChange),
+    /// `idp.vault.*` (OP-154 m.3 (a), (t)).
+    Vault(access_identity_vault::domain::resource::VaultChange),
     /// `idp.org.member_remove` (OP-153 m.3 (p)).
     OrgMemberRemove(OrgMember),
     /// `idp.org.invite` (TN-89, OP-153 m.3 (o)).
@@ -1943,6 +1954,7 @@ impl Change {
             Self::MigrationExport(_) => IdpAction::AccountMigrationExport,
             Self::GuardianshipRecord(_) => IdpAction::AccountGuardianshipRecord,
             Self::Agent(a) => a.action(),
+            Self::Vault(v) => v.action(),
             Self::CspMode { loosens: false, .. } => IdpAction::RealmCspMode,
             Self::CspMode { loosens: true, .. } => IdpAction::RealmCspModeLoosen,
         }
@@ -1997,6 +2009,7 @@ impl Change {
             Self::MigrationExport(e) => e.check(),
             Self::GuardianshipRecord(g) => g.check(),
             Self::Agent(a) => a.check(),
+            Self::Vault(v) => v.check().map_err(|_| Invalid::VaultResource),
             Self::AccountBind(_)
             | Self::CspMode { .. }
             | Self::OrgInviteRevoke { .. }
@@ -2124,6 +2137,7 @@ impl Change {
             Self::MigrationExport(e) => e.to_value(),
             Self::GuardianshipRecord(g) => g.to_value(),
             Self::Agent(a) => a.body(),
+            Self::Vault(v) => v.body(),
             Self::CspMode { mode, .. } => {
                 Value::Map(vec![(Value::text("csp_mode"), Value::text(mode.name()))])
             }
@@ -2223,6 +2237,7 @@ impl Change {
                 path.extend([String::from("social"), String::from(preset.as_str())]);
             }
             Self::Agent(a) => path.extend(a.path()),
+            Self::Vault(v) => path.extend(v.path()),
         }
         ResourceRef {
             namespace: String::from(RESOURCE_NAMESPACE),

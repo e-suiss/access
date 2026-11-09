@@ -210,6 +210,8 @@ fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
         ResourceKind::Deliveries => {
             json!({ "event_id": key, "event": "account.created", "state": "delivered" })
         }
+        ResourceKind::VaultResources => json!({ "resource": key, "upstream": "github",
+                                                "status": "enabled" }),
         ResourceKind::Agents => json!({ "agent": key, "display_name": "Helper",
                                         "agent_kind": "cloud", "status": "active",
                                         "sponsors": [], "instances": [] }),

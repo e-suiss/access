@@ -399,8 +399,8 @@ fn sponsor_json(ids: &IdKey, s: &SponsorRow) -> Result<Json, AdminError> {
 
 /// The registry view of one agent (OP-154 m.3 (e), AG-41, Ek B 4382, 4475): kind, operator,
 /// sponsors, status and the sponsorship changes (SI-21); with `instances`, its live Instances
-/// (the audit and revocation unit, AG-21). Connected accounts are empty until the token vault
-/// serves them; nothing here is a token.
+/// (the audit and revocation unit, AG-21), and the connected accounts a token was released
+/// for to its Exercises (OP-154 m.3 (t)); nothing here is a token.
 ///
 /// # Errors
 /// [`AdminError`].
@@ -411,6 +411,13 @@ pub(crate) async fn view(
     instances: Option<&[Id]>,
 ) -> Result<Json, AdminError> {
     let episodes = t.sponsorships(a.party).await?;
+    // OP-154 m.3 (t), Ek B 4219
+    let connections: Vec<String> = t
+        .vault_connections_released_to(a.party)
+        .await?
+        .iter()
+        .map(|c| b64url_encode(c))
+        .collect();
     let sponsors = episodes
         .iter()
         .filter(|s| s.ended_ms.is_none())
@@ -425,7 +432,7 @@ pub(crate) async fn view(
         "sponsors": sponsors,
         "status": a.status,
         "status_at": rfc3339(a.status_ms),
-        "connections": [],
+        "connections": connections,
         "last_run_at": null,
         "created_at": rfc3339(a.created_ms),
         "registered_exercise": b64url_encode(&a.registered),

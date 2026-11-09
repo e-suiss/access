@@ -14,6 +14,7 @@ pub mod rest;
 mod signals;
 pub mod transfers;
 pub mod workloads;
+pub mod vault;
 
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::adapters::pg::PgTx;
@@ -441,6 +442,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::OrgMemberRemove(m) => org_member_current(t, *m).await?,
             // OP-154 m.3 (c), (e)
             Change::Agent(a) => agents::current(t, a).await?,
+            // OP-154 m.3 (t)
+            Change::Vault(v) => vault::current(t, v).await?,
             Change::OrgInvite(i) => orgs::invite_current(t, i).await?,
             Change::OrgUpdate(u) => orgs::update_current(t, u).await?,
             Change::OrgInviteRevoke { org, invitation } => {
@@ -1559,6 +1562,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::AccountResetIntent { .. }
             | Change::Agent(_)
             | Change::AccountTapIssue(_) => true,
+            // OP-154 m.3 (t)
+            Change::Vault(v) => vault::write(t, bound, v).await?,
             Change::OrgInviteRevoke { invitation, .. } => t.revoke_invitation(*invitation).await?,
             Change::OrgDomainRelease { org, claim } => {
                 org_flows::release_domain(t, *org, *claim).await?

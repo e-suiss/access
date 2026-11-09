@@ -872,7 +872,7 @@ const fn put(section: &'static str) -> Shape {
 pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
     use ResourceKind::{
         Accounts, AgentSponsors, Agents, Analytics, Clients, Deliveries, Groups, Hooks,
-        Organizations, Settings, Signals, SocialProviders, UpstreamIdps, Webhooks,
+        Organizations, Settings, Signals, SocialProviders, UpstreamIdps, VaultResources, Webhooks,
     };
     const CREATE: Shape = Shape::Write {
         patch: None,
@@ -894,7 +894,14 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "listAgentSponsors" => (AgentSponsors, Shape::List(&["account_id"])),
         "defineAgentTemplate" => (Settings, w(false)),
         "revokeAllAgentInstances" => (Agents, Shape::RevokeAll),
-        "listProtectedResources" | "listVaultResources" => (Settings, Shape::Planned("Page")),
+        // OP-154 m.3 (t)
+        "listVaultResources" => (
+            VaultResources,
+            Shape::List(&["resource", "upstream", "status"]),
+        ),
+        "putVaultResource" => (VaultResources, w(true)),
+        "disableVaultResource" | "putVaultReleaseMode" => (VaultResources, w(false)),
+        "listProtectedResources" => (Settings, Shape::Planned("Page")),
         o if declared(o) => (Settings, Shape::Planned("WriteResult")),
         "listClients" => (
             Clients,
@@ -1075,6 +1082,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::Agent => &r::INVALID_AGENT,
             Invalid::AgentTemplate => &r::INVALID_AGENT_TEMPLATE,
             Invalid::Workload => &r::INVALID_WORKLOAD_CLIENT,
+            Invalid::VaultResource => &r::INVALID_VAULT_RESOURCE,
             Invalid::NoClient
             | Invalid::NoAgent
             | Invalid::NoKey
@@ -1087,6 +1095,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             | Invalid::NoMember
             | Invalid::NoInvitation
             | Invalid::NoSocial
+            | Invalid::NoVaultResource
             | Invalid::NoDomain => &codes::NOT_FOUND,
         },
         AdminError::Issuer(_) | AdminError::NoRealm => &codes::NOT_FOUND,

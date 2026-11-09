@@ -189,6 +189,8 @@ pub enum ResourceKind {
     Agents,
     /// One agent's sponsorships, by the agent's Party (AG-41, SI-21).
     AgentSponsors,
+    /// Vault Resources, by name (OP-154 m.3 (t)).
+    VaultResources,
 }
 
 impl ResourceKind {
@@ -210,6 +212,7 @@ impl ResourceKind {
             Self::Organizations => "organizations",
             Self::Agents => "agents",
             Self::AgentSponsors => "agent-sponsors",
+            Self::VaultResources => "vault-resources",
         }
     }
 }

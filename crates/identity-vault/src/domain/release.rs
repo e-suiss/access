@@ -129,8 +129,20 @@ pub enum Refusal {
 impl Refusal {
     /// Its stable code.
     #[must_use]
-    pub fn code(self) -> String {
-        self.to_string()
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Unauthenticated => "release-unauthenticated",
+            Self::NoExercise => "release-without-exercise",
+            Self::ForeignExercise => "release-foreign-exercise",
+            Self::NotExecutor => "release-not-executor",
+            Self::BasisEnded => "release-basis-ended",
+            Self::OutsideValidity => "release-outside-validity",
+            Self::NotConnected => "release-not-connected",
+            Self::NeedsReconnect => "release-needs-reconnect",
+            Self::NotTheHolder => "release-not-the-holder",
+            Self::ActionNotMapped => "release-action-not-mapped",
+            Self::AlreadyUsed => "release-already-used",
+        }
     }
 
     /// Its HTTP status.

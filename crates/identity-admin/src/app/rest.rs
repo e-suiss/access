@@ -159,6 +159,13 @@ pub enum Op {
     RemoveAgentSponsor,
     /// `defineAgentTemplate`: `idp.agent.template_define` (OP-154 m.3 (g)).
     DefineAgentTemplate,
+    /// `putVaultResource`: `idp.vault.resource_enable` for a catalog upstream, else
+    /// `resource_register` (OP-154 m.3 (t)).
+    PutVaultResource,
+    /// `disableVaultResource`: `idp.vault.resource_disable`.
+    DisableVaultResource,
+    /// `putVaultReleaseMode`: `idp.vault.release_mode_open` or `release_mode_close`.
+    PutVaultReleaseMode,
 }
 
 impl Op {
@@ -223,6 +230,9 @@ impl Op {
             "assignAgentSponsor" => Self::AssignAgentSponsor,
             "removeAgentSponsor" => Self::RemoveAgentSponsor,
             "defineAgentTemplate" => Self::DefineAgentTemplate,
+            "putVaultResource" => Self::PutVaultResource,
+            "disableVaultResource" => Self::DisableVaultResource,
+            "putVaultReleaseMode" => Self::PutVaultReleaseMode,
             _ => return None,
         })
     }
@@ -606,6 +616,34 @@ fn key_of(key: Option<&str>) -> Result<&str, Invalid> {
     key.ok_or(Invalid::Body)
 }
 
+/// The `idp.vault.*` change of a vault operation (OP-154 m.3 (t)), `None` for any other.
+fn vault_change(
+    op: Op,
+    key: Option<&str>,
+    body: &Json,
+) -> Result<Option<access_identity_vault::domain::resource::VaultChange>, Invalid> {
+    use access_identity_vault::domain::catalog::Catalog;
+    use access_identity_vault::domain::resource::{Invalid as Bad, VaultChange};
+    let bad = |e: Bad| match e {
+        Bad::Resource | Bad::Upstream => Invalid::VaultResource,
+    };
+    Ok(Some(match op {
+        Op::PutVaultResource => {
+            let catalog = Catalog::get_shipped().ok_or(Invalid::VaultResource)?;
+            VaultChange::put(key_of(key)?, body, catalog).map_err(bad)?
+        }
+        Op::DisableVaultResource => {
+            if obj(body)?.is_empty() {
+                VaultChange::Disable(String::from(key_of(key)?))
+            } else {
+                return Err(Invalid::Body);
+            }
+        }
+        Op::PutVaultReleaseMode => VaultChange::release_mode(body).map_err(bad)?,
+        _ => return Ok(None),
+    }))
+}
+
 /// A hook's or webhook's id from its external id; anything else is `missing`.
 fn extension_id(ids: &IdKey, prefix: &str, s: &str, missing: Invalid) -> Result<[u8; 16], Invalid> {
     ids.decode(prefix, s).map_err(|_| missing)
@@ -638,6 +676,9 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
     let m = obj(body)?;
     if let Some(a) = agent_change(op, key, m, ids)? {
         return Ok(Change::Agent(a));
+    }
+    if let Some(v) = vault_change(op, key, body)? {
+        return Ok(Change::Vault(v));
     }
     Ok(match op {
         Op::CreateOrganization => {
@@ -981,7 +1022,10 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         | Op::RetireAgent
         | Op::AssignAgentSponsor
         | Op::RemoveAgentSponsor
-        | Op::DefineAgentTemplate => return Err(Invalid::Body),
+        | Op::DefineAgentTemplate
+        | Op::PutVaultResource
+        | Op::DisableVaultResource
+        | Op::PutVaultReleaseMode => return Err(Invalid::Body),
         // OP-153 m.18 (e), m.25 (b)
         Op::BindAccount => {
             only(
@@ -1485,6 +1529,8 @@ pub enum Kind {
     Agents,
     /// One agent's sponsorship episodes, by the agent's Party (AG-41, SI-21).
     AgentSponsors,
+    /// The vault Resources by name (OP-154 m.3 (t)): never a client secret.
+    VaultResources,
 }
 
 /// How many days the analytics read covers, today included (PD).
@@ -1819,6 +1865,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                         .collect(),
                 }
             }
+            // OP-154 m.3 (t)
+            (Kind::VaultResources, _) => Read {
+                items: super::vault::list(t, key).await?,
+                last: None,
+            },
             (Kind::Socials, _) => {
                 let rows = t.social_providers().await?;
                 let clients = resources::clients(t, "", 1000).await?;
