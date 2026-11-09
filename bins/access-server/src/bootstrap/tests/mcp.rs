@@ -1008,6 +1008,20 @@ fn raw(
     ))
 }
 
+/// The protected resource metadata as the server answers a `GET` for it on a bootstrapped
+/// realm, and how long that answer took.
+pub(super) async fn metadata_answer(name: &str) -> (Response, std::time::Duration) {
+    let m = Mcp::open(name).await;
+    let tools = Tools::new(vec![tool("approve", &m.action, None)]).unwrap();
+    let server = m.server(&tools, None);
+    let path = m.prm.well_known_path();
+    let started = std::time::Instant::now();
+    let r = raw(&m, &server, ("GET", &path), &[("host", MCP_HOST)], "");
+    let took = started.elapsed();
+    m.w.domains.release().await;
+    (r, took)
+}
+
 // RS-M1, RS-M14, RS-M15, AG-14, §11.5.2, §11.5.6, §11.5.7, Ek B 4289, 4299, 4543, 4544
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn rebinding_and_mismatched_headers_stop_before_any_decision() {

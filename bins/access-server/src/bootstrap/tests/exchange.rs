@@ -626,7 +626,7 @@ impl Realm {
 
     /// P's own bounds token for the MCP server, decided and signed by the authority plane:
     /// the token P's client presents to the MCP server (A2).
-    async fn subject_token(&self, issuer: &str) -> String {
+    pub(super) async fn subject_token(&self, issuer: &str) -> String {
         let (e, payload) = self
             .exercise(&self.p, RS, self.g0, Capacity::Own, 240_000)
             .await;
@@ -720,7 +720,7 @@ impl Realm {
 
     /// `agent`'s token exchange of `subject` (of `subject_type`) for `audience` on `basis` in
     /// `capacity`, with `extra` pairs.
-    async fn exchange(
+    pub(super) async fn exchange(
         &self,
         agent: &Agent,
         (subject, subject_type): (&str, &str),
@@ -778,7 +778,7 @@ impl Realm {
     }
 }
 
-const ACCESS_TOKEN_TYPE: &str = "urn:ietf:params:oauth:token-type:access_token";
+pub(super) const ACCESS_TOKEN_TYPE: &str = "urn:ietf:params:oauth:token-type:access_token";
 const JWT_TYPE: &str = "urn:ietf:params:oauth:token-type:jwt";
 
 // AGI-1, AGI-7, P53, AG-23, AG-25, L22, L24, P48, INV-5, §9.9.3 k.9, §9.9.4, §11.10.2, §12.1.3 k.11,
