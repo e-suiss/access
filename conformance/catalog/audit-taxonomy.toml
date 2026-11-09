@@ -754,3 +754,91 @@ ocsf_class = 3001
 ocsf_activity = 99
 caep = ""
 webhook = false
+
+[[event]]
+event = "vault.connect_started"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "vault.connect_refused"
+plane = "identity"
+class = "account"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "vault.connected"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "vault.disconnected"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "vault.refreshed"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "vault.needs_reconnect"
+plane = "identity"
+class = "account"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "vault.released.executor"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "vault.released.agent"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
