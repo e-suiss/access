@@ -1,0 +1,25 @@
+[package]
+name = "access-parser-worker"
+description = "Access parser worker (OP-155 m.3 (c), MD-18, U43): a supervisor of disposable, keyless, network-less processes that parse untrusted XML and DER."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-edge-core = { workspace = true }
+access-parse = { workspace = true }
+miniz_oxide = { workspace = true }
+quick-xml = { workspace = true }
+suiss-sandbox = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { workspace = true, features = ["std", "net", "process", "time"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "io-util", "time"] }
+
+[lints]
+workspace = true

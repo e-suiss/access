@@ -305,7 +305,7 @@ jobs:
   sandbox:
     name: sandbox
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -326,6 +326,9 @@ jobs:
           just test-sandbox
         env:
           ACCESS_SANDBOX_REQUIRE_MEMFD_SECRET: "1"
+      # OP-155 m.3 (c), U43
+      - name: Parser worker isolation under the Linux lockdown
+        run: just test-parser-worker
       - name: Seccomp kills reported by the kernel
         if: failure()
         run: sudo dmesg | grep -E 'type=1326|seccomp' || true

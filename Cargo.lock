@@ -110,6 +110,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-edge-core"
+version = "0.4.0"
+dependencies = [
+ "access-crypto",
+ "access-http",
+ "access-identity-account",
+ "access-identity-edge",
+ "access-internal-api",
+ "access-store",
+ "axum",
+ "esuiss-crypto",
+ "httparse",
+ "rcgen",
+ "rustix",
+ "rustls",
+ "rustls-pki-types",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-rustls",
+]
+
+[[package]]
 name = "access-executor"
 version = "0.4.0"
 dependencies = [
@@ -162,6 +185,7 @@ dependencies = [
  "access-identity-account",
  "access-identity-admin",
  "access-identity-attest",
+ "access-identity-edge",
  "access-identity-events",
  "access-identity-federation",
  "access-identity-hooks",
@@ -282,6 +306,18 @@ dependencies = [
  "thiserror",
  "tokio",
  "toml 1.1.6+spec-1.1.0",
+]
+
+[[package]]
+name = "access-identity-edge"
+version = "0.4.0"
+dependencies = [
+ "access-identity-account",
+ "access-internal-api",
+ "access-store",
+ "esuiss-access-kernel",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -572,6 +608,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-parser-worker"
+version = "0.4.0"
+dependencies = [
+ "access-edge-core",
+ "access-parse",
+ "esuiss-sandbox",
+ "miniz_oxide",
+ "quick-xml",
+ "rustix",
+ "tokio",
+]
+
+[[package]]
 name = "access-pep-conformance"
 version = "0.4.0"
 dependencies = [
@@ -604,6 +653,7 @@ dependencies = [
  "access-identity-admin",
  "access-identity-attest",
  "access-identity-audit",
+ "access-identity-edge",
  "access-identity-events",
  "access-identity-federation",
  "access-identity-hooks",
@@ -3574,6 +3624,15 @@ checksum = "6f42ea446cab60335f76979ec15e12619a2165b5ae2c12166bef27d283a9fadf"
 dependencies = [
  "idna",
  "psl-types",
+]
+
+[[package]]
+name = "quick-xml"
+version = "0.42.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41b1177fdf999d2321d3fb46ff47159d9c1fb9ad66a4879f8c50a0b504615e9b"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]

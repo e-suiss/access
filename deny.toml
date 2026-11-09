@@ -154,6 +154,13 @@ deny = [
     { crate = "pcre2-sys", reason = "SA-32: backtracking" },
     { crate = "onig", reason = "SA-32: backtracking" },
     { crate = "onig_sys", reason = "SA-32: backtracking" },
+    # OP-155 m.3 (d), (u)
+    { crate = "quick-xml", wrappers = ["access-parser-worker"], reason = "OP-155 m.3 (d): XML is parsed only in the parser worker" },
+    { crate = "samael", reason = "OP-155 m.3 (d): C XML security chain" },
+    { crate = "kryptering", reason = "OP-155 m.3 (d), (u): SAML signatures use identity-signer keys" },
+    { crate = "x509-cert", reason = "OP-155 m.3 (u): rustls-webpki and the in-house bounded DER reader" },
+    { crate = "scim_v2", reason = "OP-155 m.3 (g), (u): own SCIM model" },
+    { crate = "axum-negotiate-layer", reason = "OP-155 m.3 (o), (u)" },
 ]
 
 [[bans.features]]

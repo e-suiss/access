@@ -374,6 +374,21 @@ test-full:
     cargo test --workspace --locked --doc
     just test-sandbox
 
+# OP-155 m.3 (c), U43, MD-18: the parser worker as real processes under its Linux lockdown, as root
+test-parser-worker:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ "$(uname -s)" != Linux ]]; then
+        echo "the parser worker's lockdown is Linux-only" >&2
+        exit 1
+    fi
+    bin="$(cargo test --locked -p access-parser-worker --test worker --no-run --message-format=json | jq -r 'select(.executable != null and .target.name == "worker") | .executable')"
+    if [[ "$(id -u)" != 0 ]]; then
+        sudo "$bin" --ignored --test-threads=1
+    else
+        "$bin" --ignored --test-threads=1
+    fi
+
 # OP-105, F-2
 smt-fetch:
     scripts/cvc5-fetch.sh target/cvc5
