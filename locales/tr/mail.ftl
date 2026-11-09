@@ -27,3 +27,7 @@ mail-agent_sponsor_needed-subject = Bir ajanın sorumluya ihtiyacı var
 mail-agent_connection_needs_reconnect-subject = Bir ajanın bağlı hesabının yeniden bağlanması gerekiyor
 mail-device_code_approval-subject = Bir cihaz hesabına bağlanmak istiyor
 mail-approval_requested-subject = Seni bekleyen bir onay var
+mail-ciba_invite-subject = Bir uygulama bir isteği onaylamanı istiyor
+mail-sso_setup_link-subject = Kuruluşun için girişi kur
+mail-upstream_subject_conflict-subject = Kuruluşunun giriş hesabın değişti
+mail-ldap_credential_changed-subject = Hesabındaki bir uygulama parolası değişti

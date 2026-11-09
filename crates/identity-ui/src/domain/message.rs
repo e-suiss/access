@@ -309,11 +309,101 @@ pub enum TextId {
     /// L1b: the client's name or logo changed since it was first seen (AG-5, OP-154 m.3 (k)).
     #[serde(rename = "consent.visual_changed")]
     ConsentVisualChanged,
+    /// P8: the CIBA approval page's title (OP-155 m.3 (l)); `{ $client }` is the requesting client.
+    #[serde(rename = "ciba.title")]
+    CibaTitle,
+    /// P8: the binding message, at most 32 characters, to compare with the client's screen (OP-155 m.3 (l)).
+    #[serde(rename = "ciba.binding_message")]
+    CibaBindingMessage,
+    /// P8: the CIBA request was approved.
+    #[serde(rename = "ciba.approved")]
+    CibaApproved,
+    /// P8: the CIBA request was not approved; nothing was done.
+    #[serde(rename = "ciba.denied")]
+    CibaDenied,
+    /// P8: the CIBA request expired before an answer.
+    #[serde(rename = "ciba.expired")]
+    CibaExpired,
+    /// P8: the device request when no country is known; no placeholder stands in for it (OP-155 m.3 (l)).
+    #[serde(rename = "device_code.request_prefix")]
+    DeviceRequestNoCountry,
+    /// P4: the upstream identity provider cannot be reached (OP-155 m.3 (h)); nothing falls back.
+    #[serde(rename = "upstream.unreachable")]
+    UpstreamUnreachable,
+    /// P4: the upstream's subject changed; an administrator resolves it with an explicit re-link (OP-155 m.3 (h)).
+    #[serde(rename = "upstream.subject_conflict")]
+    UpstreamSubjectConflict,
+    /// P4: home realm discovery's interstitial title (OP-155 m.3 (h)).
+    #[serde(rename = "hrd.title")]
+    HrdTitle,
+    /// P4: why the organization's own sign-in page follows.
+    #[serde(rename = "hrd.confirm")]
+    HrdConfirm,
+    /// P4: going on to the organization's sign-in.
+    #[serde(rename = "action.continue_to_organization")]
+    HrdContinue,
+    /// P4: staying on the realm's own sign-in.
+    #[serde(rename = "action.use_another_way")]
+    HrdOtherWay,
+    /// P9: certificate, PIV and CAC sign-in (OP-155 m.3 (m)).
+    #[serde(rename = "certificate.title")]
+    CertificateTitle,
+    /// P9: what the browser will ask.
+    #[serde(rename = "certificate.prompt")]
+    CertificatePrompt,
+    /// P9: the certificate cannot sign in here; the same text for every reason.
+    #[serde(rename = "certificate.refused")]
+    CertificateRefused,
+    /// P9: revocation status unknown, unreachable or stale; refused (MD-8).
+    #[serde(rename = "certificate.status_unknown")]
+    CertificateStatusUnknown,
+    /// P9: choosing certificate sign-in.
+    #[serde(rename = "action.use_certificate")]
+    UseCertificate,
+    /// P5: the self-service setup portal's title (OP-155 m.3 (i)).
+    #[serde(rename = "sso_setup.title")]
+    SsoSetupTitle,
+    /// P5: wizard step 1, the identity provider.
+    #[serde(rename = "sso_setup.choose_provider")]
+    SsoSetupChoose,
+    /// P5: wizard step 2, exchanging metadata.
+    #[serde(rename = "sso_setup.configure")]
+    SsoSetupConfigure,
+    /// P5: wizard step 3, a test sign-in.
+    #[serde(rename = "sso_setup.test")]
+    SsoSetupTest,
+    /// P5: the connection works; enacting it is the organization owner's.
+    #[serde(rename = "sso_setup.done")]
+    SsoSetupDone,
+    /// P5: the one-use, 72-hour setup link is spent or expired.
+    #[serde(rename = "sso_setup.link_expired")]
+    SsoSetupExpired,
+    /// P5: what enforcing SSO ends, service accounts included (OP-155 m.3 (i)).
+    #[serde(rename = "sso_setup.enforce_preview")]
+    SsoEnforcePreview,
+    /// P5: the pending invitations' fate is chosen; there is no default.
+    #[serde(rename = "sso_setup.enforce_invites")]
+    SsoEnforceInvites,
+    /// P12: a wallet presentation on the sign-in page (OP-155 m.3 (p)).
+    #[serde(rename = "vc.present_title")]
+    VcPresentTitle,
+    /// P12: what the presentation asks for.
+    #[serde(rename = "vc.present_request")]
+    VcPresentRequest,
+    /// P12: opening the wallet.
+    #[serde(rename = "action.open_wallet")]
+    OpenWallet,
+    /// P12: the wallet's answer could not be used; the same text for every reason.
+    #[serde(rename = "vc.present_failed")]
+    VcPresentFailed,
+    /// P6: a federation trust mark badge; extra information only, it approves nothing (OP-155 m.3 (j)).
+    #[serde(rename = "consent.trust_mark")]
+    ConsentTrustMark,
 }
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 101] = [
+    pub const ALL: [Self; 131] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -415,6 +505,36 @@ impl TextId {
         Self::DeviceApproved,
         Self::DeviceDenied,
         Self::ConsentVisualChanged,
+        Self::CibaTitle,
+        Self::CibaBindingMessage,
+        Self::CibaApproved,
+        Self::CibaDenied,
+        Self::CibaExpired,
+        Self::DeviceRequestNoCountry,
+        Self::UpstreamUnreachable,
+        Self::UpstreamSubjectConflict,
+        Self::HrdTitle,
+        Self::HrdConfirm,
+        Self::HrdContinue,
+        Self::HrdOtherWay,
+        Self::CertificateTitle,
+        Self::CertificatePrompt,
+        Self::CertificateRefused,
+        Self::CertificateStatusUnknown,
+        Self::UseCertificate,
+        Self::SsoSetupTitle,
+        Self::SsoSetupChoose,
+        Self::SsoSetupConfigure,
+        Self::SsoSetupTest,
+        Self::SsoSetupDone,
+        Self::SsoSetupExpired,
+        Self::SsoEnforcePreview,
+        Self::SsoEnforceInvites,
+        Self::VcPresentTitle,
+        Self::VcPresentRequest,
+        Self::OpenWallet,
+        Self::VcPresentFailed,
+        Self::ConsentTrustMark,
     ];
 
     /// The stable id on the wire.
@@ -523,6 +643,36 @@ impl TextId {
             Self::DeviceApproved => "device_code.approved",
             Self::DeviceDenied => "device_code.denied",
             Self::ConsentVisualChanged => "consent.visual_changed",
+            Self::CibaTitle => "ciba.title",
+            Self::CibaBindingMessage => "ciba.binding_message",
+            Self::CibaApproved => "ciba.approved",
+            Self::CibaDenied => "ciba.denied",
+            Self::CibaExpired => "ciba.expired",
+            Self::DeviceRequestNoCountry => "device_code.request_prefix",
+            Self::UpstreamUnreachable => "upstream.unreachable",
+            Self::UpstreamSubjectConflict => "upstream.subject_conflict",
+            Self::HrdTitle => "hrd.title",
+            Self::HrdConfirm => "hrd.confirm",
+            Self::HrdContinue => "action.continue_to_organization",
+            Self::HrdOtherWay => "action.use_another_way",
+            Self::CertificateTitle => "certificate.title",
+            Self::CertificatePrompt => "certificate.prompt",
+            Self::CertificateRefused => "certificate.refused",
+            Self::CertificateStatusUnknown => "certificate.status_unknown",
+            Self::UseCertificate => "action.use_certificate",
+            Self::SsoSetupTitle => "sso_setup.title",
+            Self::SsoSetupChoose => "sso_setup.choose_provider",
+            Self::SsoSetupConfigure => "sso_setup.configure",
+            Self::SsoSetupTest => "sso_setup.test",
+            Self::SsoSetupDone => "sso_setup.done",
+            Self::SsoSetupExpired => "sso_setup.link_expired",
+            Self::SsoEnforcePreview => "sso_setup.enforce_preview",
+            Self::SsoEnforceInvites => "sso_setup.enforce_invites",
+            Self::VcPresentTitle => "vc.present_title",
+            Self::VcPresentRequest => "vc.present_request",
+            Self::OpenWallet => "action.open_wallet",
+            Self::VcPresentFailed => "vc.present_failed",
+            Self::ConsentTrustMark => "consent.trust_mark",
         }
     }
 
@@ -667,6 +817,60 @@ impl TextId {
             Self::ConsentVisualChanged => {
                 "This app changed its name or logo since Access first saw it. Check that it is the app you expect."
             }
+            Self::CibaTitle => "{ $client } asks you to approve a request",
+            Self::CibaBindingMessage => "Approve only if { $client } shows this code: { $code }",
+            Self::CibaApproved => "Approved. You can go back to { $client }.",
+            Self::CibaDenied => "Not approved. Nothing was done.",
+            Self::CibaExpired => "This request has expired.",
+            Self::DeviceRequestNoCountry => {
+                "{ $client } asks for { $scope }. The request came from { $prefix }."
+            }
+            Self::UpstreamUnreachable => {
+                "{ $provider } can't be reached right now. Try again in a few minutes."
+            }
+            Self::UpstreamSubjectConflict => {
+                "Your account at { $provider } has changed. Your administrator has to confirm the change before you can sign in with it."
+            }
+            Self::HrdTitle => "Continue to { $organization }?",
+            Self::HrdConfirm => {
+                "Your email address belongs to { $organization }. You'll sign in on its own page."
+            }
+            Self::HrdContinue => "Continue to { $organization }",
+            Self::HrdOtherWay => "Use another way",
+            Self::CertificateTitle => "Sign in with a certificate",
+            Self::CertificatePrompt => {
+                "Pick your certificate or smart card when your browser asks."
+            }
+            Self::CertificateRefused => "This certificate can't be used to sign in here.",
+            Self::CertificateStatusUnknown => {
+                "We couldn't check this certificate right now. Try again later."
+            }
+            Self::UseCertificate => "Use a certificate",
+            Self::SsoSetupTitle => "Set up sign-in for { $organization }",
+            Self::SsoSetupChoose => "Choose your identity provider",
+            Self::SsoSetupConfigure => {
+                "Copy these values into { $provider }, then paste its details here."
+            }
+            Self::SsoSetupTest => "Sign in once to test the connection.",
+            Self::SsoSetupDone => {
+                "The connection works. An owner of { $organization } can now turn it on."
+            }
+            Self::SsoSetupExpired => {
+                "This setup link has expired or was already used. Ask for a new one."
+            }
+            Self::SsoEnforcePreview => {
+                "Turning this on signs out { $members } members and ends their passwords and API keys. { $service_accounts } service accounts are affected too."
+            }
+            Self::SsoEnforceInvites => {
+                "{ $invites } invitations are pending. Choose whether to cancel them or send them to the new sign-in."
+            }
+            Self::VcPresentTitle => "Share from your wallet",
+            Self::VcPresentRequest => "This asks for: { $claims }",
+            Self::OpenWallet => "Open wallet",
+            Self::VcPresentFailed => "Your wallet's answer couldn't be used. Try again.",
+            Self::ConsentTrustMark => {
+                "{ $mark } says this about the app. Access shows it as extra information; it doesn't replace your answer."
+            }
         }
     }
 
@@ -733,6 +937,20 @@ impl TextId {
                 | Self::DeviceApproved
                 | Self::DeviceDenied
                 | Self::ConsentVisualChanged
+                | Self::CibaTitle
+                | Self::CibaBindingMessage
+                | Self::CibaApproved
+                | Self::CibaDenied
+                | Self::CibaExpired
+                | Self::DeviceRequestNoCountry
+                | Self::SsoSetupTitle
+                | Self::SsoSetupChoose
+                | Self::SsoSetupConfigure
+                | Self::SsoSetupTest
+                | Self::SsoSetupDone
+                | Self::SsoEnforcePreview
+                | Self::SsoEnforceInvites
+                | Self::ConsentTrustMark
         )
     }
 }

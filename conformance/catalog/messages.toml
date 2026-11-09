@@ -3267,3 +3267,404 @@ surface = "account"
 class = "status"
 owner = "identity_plane"
 protected = false
+
+[[message]]
+key = "ciba-title"
+text_id = "ciba.title"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "ciba-binding_message"
+text_id = "ciba.binding_message"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "ciba-approved"
+text_id = "ciba.approved"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "ciba-denied"
+text_id = "ciba.denied"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "ciba-expired"
+text_id = "ciba.expired"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "device_code-request_prefix"
+text_id = "device_code.request_prefix"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "upstream-unreachable"
+text_id = "upstream.unreachable"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "upstream-subject_conflict"
+text_id = "upstream.subject_conflict"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "hrd-title"
+text_id = "hrd.title"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "hrd-confirm"
+text_id = "hrd.confirm"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-continue_to_organization"
+text_id = "action.continue_to_organization"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-use_another_way"
+text_id = "action.use_another_way"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "certificate-title"
+text_id = "certificate.title"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "certificate-prompt"
+text_id = "certificate.prompt"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "certificate-refused"
+text_id = "certificate.refused"
+surface = "login"
+class = "auth_failed"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "certificate-status_unknown"
+text_id = "certificate.status_unknown"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-use_certificate"
+text_id = "action.use_certificate"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "sso_setup-title"
+text_id = "sso_setup.title"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "sso_setup-choose_provider"
+text_id = "sso_setup.choose_provider"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "sso_setup-configure"
+text_id = "sso_setup.configure"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "sso_setup-test"
+text_id = "sso_setup.test"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "sso_setup-done"
+text_id = "sso_setup.done"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "sso_setup-link_expired"
+text_id = "sso_setup.link_expired"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "sso_setup-enforce_preview"
+text_id = "sso_setup.enforce_preview"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "sso_setup-enforce_invites"
+text_id = "sso_setup.enforce_invites"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "vc-present_title"
+text_id = "vc.present_title"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "vc-present_request"
+text_id = "vc.present_request"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-open_wallet"
+text_id = "action.open_wallet"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "vc-present_failed"
+text_id = "vc.present_failed"
+surface = "login"
+class = "auth_failed"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "consent-trust_mark"
+text_id = "consent.trust_mark"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "ldap_credentials-title"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "ldap_credentials-intro"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "ldap_credentials-create"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "ldap_credentials-shown_once"
+surface = "account"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "ldap_credentials-revoke"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "ldap_credentials-last_used"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "ldap_credentials-none"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "credential_offers-title"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "credential_offers-intro"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "credential_offers-add"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "credential_offers-scan"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "credential_offers-expired"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "credential_offers-verified_name"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "credential_offers-age_over_16"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "credential_offers-age_over_18"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "credential_offers-age_over_21"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "credential_offers-email_verified"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "credential_offers-phone_verified"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "credential_offers-household_member"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-ciba_invite-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-sso_setup_link-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-upstream_subject_conflict-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-ldap_credential_changed-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false

@@ -27,3 +27,7 @@ mail-agent_sponsor_needed-subject = An agent needs a sponsor
 mail-agent_connection_needs_reconnect-subject = An agent's connected account needs reconnecting
 mail-device_code_approval-subject = A device asks to connect to your account
 mail-approval_requested-subject = An approval is waiting for you
+mail-ciba_invite-subject = An app asks you to approve a request
+mail-sso_setup_link-subject = Set up sign-in for your organization
+mail-upstream_subject_conflict-subject = Your account at your organization's sign-in changed
+mail-ldap_credential_changed-subject = An app password on your account changed
