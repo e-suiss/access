@@ -2,7 +2,8 @@
 //! never read: "mandate", "pause", "transfer", "verified", "trusted", "full access", "forever",
 //! "undo", and "session" for an Instance; nor "fail open", "test mode", "log in as" or
 //! impersonation (MD-9, TI-9). The string literals and JSX text of `web/*/src` and
-//! `sdks/typescript/src` are scanned, tests excepted. Protocol phrases that must keep a
+//! `sdks/typescript/src` are scanned, tests excepted, and so are the message values of the
+//! `locales/*/*.ftl` catalogues the hosted pages render (3702). Protocol phrases that must keep a
 //! protocol's own words are allowed only through `conformance/catalog/ui-terms.toml`.
 //!
 //! `ui-text-nodes` (TN-131): tenant-controlled strings render as text nodes only, so no web or
@@ -49,6 +50,11 @@ const PHRASES: &[&[&str]] = &[
     &["instance", "session"],
     &["sessions", "instances"],
     &["instance", "sessions"],
+    &["agent", "stopped"],
+    &["revoked", "everywhere"],
+    &["logged", "out", "everywhere"],
+    &["tamper", "proof"],
+    &["verileriniz", "silindi"],
 ];
 
 /// Word prefixes that are never shown (MD-9: no impersonation of any form).
@@ -281,6 +287,48 @@ pub(crate) fn scan(rel_path: &str, src: &str, allowed: &[String]) -> Vec<Violati
     out
 }
 
+/// Message values of a Fluent catalogue, with their lines; comments and ids skipped.
+pub(crate) fn fluent_values(src: &str) -> Vec<(usize, String)> {
+    src.lines()
+        .enumerate()
+        .filter_map(|(n, l)| {
+            let t = l.trim_start();
+            if t.is_empty() || t.starts_with('#') {
+                return None;
+            }
+            let value = if l.starts_with(char::is_whitespace) {
+                t.strip_prefix('.')
+                    .map_or(t, |a| a.split_once('=').map_or(a, |(_, v)| v))
+            } else {
+                l.split_once('=').map_or("", |(_, v)| v)
+            };
+            Some((n.saturating_add(1), value.to_owned()))
+        })
+        .collect()
+}
+
+fn fluent(rel_path: &str) -> bool {
+    rel_path.starts_with("locales/")
+        && rel_path
+            .rsplit_once('.')
+            .is_some_and(|(_, e)| e.eq_ignore_ascii_case("ftl"))
+}
+
+fn scan_fluent(rel_path: &str, src: &str, allowed: &[String]) -> Vec<Violation> {
+    fluent_values(src)
+        .into_iter()
+        .filter_map(|(line, text)| {
+            forbidden(&text, allowed).map(|term| Violation {
+                rule: RULE,
+                path: PathBuf::from(format!("{rel_path}:{line}")),
+                message: format!(
+                    "`{term}` is a forbidden UI term (X24, XI-13); say what happens instead"
+                ),
+            })
+        })
+        .collect()
+}
+
 fn scanned(rel_path: &str) -> bool {
     let ext = rel_path.rsplit_once('.').map_or("", |(_, e)| e);
     let name = rel_path.rsplit('/').next().unwrap_or_default();
@@ -302,6 +350,8 @@ fn run(root: &Path) -> Result<Vec<Violation>, String> {
         let rel_path = rel(root, &path);
         if scanned(&rel_path) {
             out.extend(scan(&rel_path, &read(&path)?, &allowed));
+        } else if fluent(&rel_path) {
+            out.extend(scan_fluent(&rel_path, &read(&path)?, &allowed));
         }
     }
     Ok(out)
@@ -354,6 +404,11 @@ mod tests {
             ("Impersonate user", "impersonat"),
             ("Enable test mode", "test mode"),
             ("fail open", "fail open"),
+            ("Agent stopped", "agent stopped"),
+            ("Revoked everywhere instantly", "revoked everywhere"),
+            ("Logged out everywhere", "logged out everywhere"),
+            ("Tamper-proof log", "tamper proof"),
+            ("Verileriniz silindi", "verileriniz silindi"),
         ] {
             assert_eq!(forbidden(text, &a).as_deref(), Some(term), "{text}");
         }
@@ -428,5 +483,16 @@ mod tests {
         assert!(!scanned("sdks/typescript/src/index.test.ts"));
         assert!(!scanned("sdks/typescript/wasm/x.js"));
         assert!(!scanned("sdks/typescript/src/generated/access-v1.ts"));
+    }
+
+    // 3702, X24
+    #[test]
+    fn fluent_values_are_scanned_without_ids_or_comments() {
+        let src = "# undo in a comment\nundo-id = Stop access\nbad = Logged out everywhere\n    .title = Verified\n";
+        let v = scan_fluent("locales/en/x.ftl", src, &[]);
+        let lines: Vec<String> = v.iter().map(|v| v.path.display().to_string()).collect();
+        assert_eq!(lines, ["locales/en/x.ftl:3", "locales/en/x.ftl:4"]);
+        assert!(fluent("locales/tr/login.ftl"));
+        assert!(!fluent("web/login/src/x.ftl"));
     }
 }
