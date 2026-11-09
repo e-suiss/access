@@ -208,4 +208,70 @@ mod tests {
             ]
         );
     }
+
+    // XI-2, XI-1, EI-10, EI-11
+    #[test]
+    fn no_two_rungs_share_a_label_and_each_rung_reads_only_its_owner() {
+        let bools = [None, Some(false), Some(true)];
+        let reports = [
+            None,
+            Some(Report::Done),
+            Some(Report::NotDone),
+            Some(Report::Differs),
+        ];
+        for needs_approval in [false, true] {
+            for has_gate in [false, true] {
+                for approval in bools {
+                    for gate in bools {
+                        for allowed in bools {
+                            for started in bools {
+                                for reported in reports {
+                                    let f = Facts {
+                                        needs_approval,
+                                        has_gate,
+                                        approval,
+                                        gate,
+                                        allowed,
+                                        started,
+                                        reported,
+                                    };
+                                    let l = ladder(&f);
+                                    for (i, a) in l.iter().enumerate() {
+                                        for b in l.iter().skip(i + 1) {
+                                            assert_ne!(a.text, b.text, "{f:?}");
+                                        }
+                                    }
+                                    let only_runtime = ladder(&Facts {
+                                        started,
+                                        reported,
+                                        ..Facts::default()
+                                    });
+                                    assert_eq!(l[4], only_runtime[4], "{f:?}");
+                                    assert_eq!(l[5], only_runtime[5], "{f:?}");
+                                    let only_decision = ladder(&Facts {
+                                        allowed,
+                                        ..Facts::default()
+                                    });
+                                    assert_eq!(l[3], only_decision[3], "{f:?}");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let unknown = ladder(&Facts::default())[5];
+        let failed = ladder(&Facts {
+            reported: Some(Report::NotDone),
+            ..Facts::default()
+        })[5];
+        let done = ladder(&Facts {
+            reported: Some(Report::Done),
+            ..Facts::default()
+        })[5];
+        assert_ne!(unknown.state, failed.state);
+        assert_ne!(unknown.text, failed.text);
+        assert_ne!(unknown.text, done.text);
+        assert_ne!(failed.text, done.text);
+    }
 }
