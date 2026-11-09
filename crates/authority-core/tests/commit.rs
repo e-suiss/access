@@ -8318,3 +8318,294 @@ async fn an_authority_act_meets_the_actors_own_intent_bound_authentication() {
     allowed(&done);
     fold_check(&db.sequencer, d).await.unwrap();
 }
+
+/// `party`'s `contribute` of `class` to `target` (its render `render`) under the basis `basis`,
+/// with its Approval Act Statement and ALICE's `authentication` Claim bound to it (SI-5).
+fn contribution_of(
+    d: Digest,
+    (party, instance, nonce): (Id, Id, u8),
+    class: &str,
+    basis: ExerciseBasis,
+    (target, render): (Digest, Digest),
+) -> Request {
+    let act = ApprovalAct {
+        act: Act::Contribution(class.to_owned()),
+        instance,
+        party,
+        capacity: Capacity::Own,
+        target,
+        domain: d,
+        nonce: vec![nonce; 16],
+        work_gate: None,
+        surface_profile: "suiss-approval-surface".to_owned(),
+        surface_version: 1,
+        render_digest: render,
+        material_fields: ["action".to_owned(), "resource".to_owned()]
+            .into_iter()
+            .collect(),
+        issued_at: NOW - 1_000,
+        expires_at: NOW + 60_000,
+    };
+    let h = access_kernel::aas::digest(&act).unwrap();
+    let claim = sign_claim(
+        &access_kernel::claim::Statement {
+            domain: d,
+            issuer: ALICE,
+            subject: party,
+            class: "authentication".to_owned(),
+            value: Some(EqValue::Bytes(vec![0xaa; 32])),
+            issued_at: NOW - 5_000,
+            validity: Window {
+                from: NOW - 5_000,
+                until: NOW + 12 * 3_600_000,
+            },
+            assurance: [
+                ("aal", 3),
+                ("phishing_resistant", 1),
+                ("uv", 1),
+                ("human_presence", 1),
+                ("hardware_bound", 1),
+                ("non_custodial", 1),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), *v))
+            .collect(),
+            bound_intent: Some(h),
+            bound_instance: None,
+            bound_resource: None,
+            supersedes: None,
+        },
+        ALICE_KEY,
+    );
+    let payload = Payload::Contribute {
+        target,
+        class: class.to_owned(),
+    };
+    let mut r = meta_request(d, nonce, basis, payload);
+    r.intent.resources = vec![ResourceRef {
+        namespace: "access.contribution".to_owned(),
+        path: vec![class.to_owned()],
+        incarnation: 0,
+    }];
+    with_proofs(
+        r,
+        vec![
+            ProofRef::Aas(act.to_bytes().unwrap()),
+            ProofRef::Claim(claim),
+        ],
+    )
+}
+
+/// ALICE's `authentication` Claim about `subject` bound to `intent`, of the strongest class: what
+/// a CT3 Exercise asks of its actor (§13.7.3).
+fn ct3_claim(d: Digest, subject: Id, intent: Digest, seed: u8) -> ProofRef {
+    ProofRef::Claim(sign_claim(
+        &access_kernel::claim::Statement {
+            domain: d,
+            issuer: ALICE,
+            subject,
+            class: "authentication".to_owned(),
+            value: Some(EqValue::Bytes(vec![seed; 32])),
+            issued_at: NOW - 1_000,
+            validity: Window {
+                from: NOW - 1_000,
+                until: NOW + 3_600_000,
+            },
+            assurance: [
+                ("aal", 3),
+                ("phishing_resistant", 1),
+                ("uv", 1),
+                ("human_presence", 1),
+                ("hardware_bound", 1),
+                ("non_custodial", 1),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), *v))
+            .collect(),
+            bound_intent: Some(intent),
+            bound_instance: None,
+            bound_resource: None,
+            supersedes: None,
+        },
+        ALICE_KEY,
+    ))
+}
+
+/// `r` with ROOT's CT3 `authentication` Claim and `proofs`.
+fn as_root(d: Digest, r: Request, seed: u8, mut proofs: Vec<ProofRef>) -> Request {
+    let digest = access_kernel::intent::intent_digest(&r.intent).unwrap();
+    proofs.push(ct3_claim(d, ROOT, digest, seed));
+    with_proofs(r, proofs)
+}
+
+/// The self-anchor of the Party registered with nonce `n`.
+fn self_anchor(d: Digest, n: u8) -> ExerciseBasis {
+    ExerciseBasis::Anchor(meta::object_id(
+        &meta::exercise_id(&d, &[n; 16]).unwrap(),
+        kind::ANCHOR,
+        0,
+    ))
+}
+
+// L0-META-20, L0-META-30, TN-91, OP-153 m.17 (b), m.25 (a)
+#[tokio::test]
+async fn a_root_change_waits_for_the_new_roots_own_acceptance() {
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup_with(&db, gated(&[])).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    onboard(&mut core, d, BOB, BOB_KEY, (5, 6)).await;
+    let created = send(
+        &mut core,
+        as_root(
+            d,
+            meta_request(
+                d,
+                30,
+                ExerciseBasis::Anchor(meta::meta_anchor(&d)),
+                Payload::AnchorCreate {
+                    scope: meta::AnchorScope::Resource(ResourceSelector::Structural(Structural {
+                        namespace: "shop".to_owned(),
+                        prefix: vec!["handover".to_owned()],
+                        kind: None,
+                        attrs: BTreeMap::new(),
+                    })),
+                    root: Root::Sole(ROOT),
+                    root_terms: BTreeSet::new(),
+                },
+            ),
+            0xd1,
+            Vec::new(),
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&created);
+    let handed = meta::object_id(&created.exercise.unwrap(), kind::ANCHOR, 0);
+    let transfer = meta_request(
+        d,
+        31,
+        ExerciseBasis::Anchor(handed),
+        Payload::AnchorTransfer {
+            anchor: handed,
+            root: Root::Sole(BOB),
+            disposition: BTreeMap::new(),
+        },
+    );
+    let digest = access_kernel::intent::intent_digest(&transfer.intent).unwrap();
+    let render = render_of(&transfer);
+    let asked = send(
+        &mut core,
+        as_root(d, transfer.clone(), 0xd2, Vec::new()),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    assert_eq!(asked.decision.outcome, Outcome::RequireAction, "{asked:?}");
+
+    let bob = meta::object_id(&meta::exercise_id(&d, &[6; 16]).unwrap(), kind::INSTANCE, 0);
+    let alice = alice_instance(d);
+    let approve = send(
+        &mut core,
+        contribution_of(
+            d,
+            (BOB, bob, 40),
+            "approve",
+            self_anchor(d, 5),
+            (digest, render),
+        ),
+        BOB_KEY,
+    )
+    .await
+    .unwrap();
+    assert_ne!(approve.decision.outcome, Outcome::Allow);
+    let elsewhere = send(
+        &mut core,
+        contribution_of(
+            d,
+            (BOB, bob, 41),
+            meta::ACCEPT_ROOT,
+            self_anchor(d, 3),
+            (digest, render),
+        ),
+        BOB_KEY,
+    )
+    .await
+    .unwrap();
+    assert_ne!(elsewhere.decision.outcome, Outcome::Allow);
+    let stranger = send(
+        &mut core,
+        contribution_of(
+            d,
+            (ALICE, alice, 42),
+            meta::ACCEPT_ROOT,
+            self_anchor(d, 3),
+            (digest, render),
+        ),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&stranger);
+    let mut other = transfer.clone();
+    other.nonce = vec![32; 16];
+    let not_bob = send(
+        &mut core,
+        as_root(
+            d,
+            other,
+            0xd2,
+            vec![ProofRef::Contribution(stranger.exercise.unwrap())],
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    // OP-111 m.8
+    assert_eq!(not_bob.decision.outcome, Outcome::Deny);
+    assert!(
+        not_bob
+            .decision
+            .blockers
+            .iter()
+            .any(|b| b.class == BlockerClass::SourceNotAccepted),
+        "{not_bob:?}"
+    );
+
+    let accepted = send(
+        &mut core,
+        contribution_of(
+            d,
+            (BOB, bob, 43),
+            meta::ACCEPT_ROOT,
+            self_anchor(d, 5),
+            (digest, render),
+        ),
+        BOB_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&accepted);
+    let done = send(
+        &mut core,
+        as_root(
+            d,
+            transfer,
+            0xd2,
+            vec![ProofRef::Contribution(accepted.exercise.unwrap())],
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&done);
+    let state = state_of(&db, d, &meta::key(kind::ANCHOR, &handed))
+        .await
+        .map(|b| {
+            meta::AnchorState::from_value(&dcbor::decode(&b, Limits::CEILING).unwrap()).unwrap()
+        })
+        .unwrap();
+    assert_eq!(state.root, Root::Sole(BOB));
+    fold_check(&db.sequencer, d).await.unwrap();
+}

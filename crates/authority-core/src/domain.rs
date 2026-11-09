@@ -1519,15 +1519,44 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             }
         }
     }
-    let (mut bases, mut mandate) =
-        if let Some(payload) = req.payload.as_ref().filter(|_| !contribute) {
-            let Some(actor) = actor else {
+    let (mut bases, mut mandate) = if let Some(payload) =
+        req.payload.as_ref().filter(|_| !contribute)
+    {
+        let Some(actor) = actor else {
+            return Pass::Done(Evaluation {
+                decision: deny(
+                    BlockerClass::NoCoveringAuthority,
+                    "anonymous-meta",
+                    Resolver::Actor,
+                ),
+                effects,
+                draws: Vec::new(),
+                releases: Vec::new(),
+                expansion: false,
+                action: None,
+                foreign: None,
+                agency: Vec::new(),
+            });
+        };
+        let ctx = meta::Context {
+            domain: req.domain,
+            exercise,
+            pos,
+            now,
+            actor,
+            basis: req.basis,
+            capacity: req.capacity,
+            catalog,
+        };
+        let out = meta::apply(&ctx, payload, snapshot);
+        let missing = snapshot.missing();
+        if !missing.is_empty() {
+            return Pass::Need(missing);
+        }
+        match out {
+            Err(e) => {
                 return Pass::Done(Evaluation {
-                    decision: deny(
-                        BlockerClass::NoCoveringAuthority,
-                        "anonymous-meta",
-                        Resolver::Actor,
-                    ),
+                    decision: meta_denial(e),
                     effects,
                     draws: Vec::new(),
                     releases: Vec::new(),
@@ -1536,120 +1565,101 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     foreign: None,
                     agency: Vec::new(),
                 });
-            };
-            let ctx = meta::Context {
-                domain: req.domain,
-                exercise,
-                pos,
-                now,
-                actor,
-                basis: req.basis,
-                capacity: req.capacity,
-                catalog,
-            };
-            let out = meta::apply(&ctx, payload, snapshot);
-            let missing = snapshot.missing();
-            if !missing.is_empty() {
-                return Pass::Need(missing);
             }
-            match out {
-                Err(e) => {
-                    return Pass::Done(Evaluation {
-                        decision: meta_denial(e),
-                        effects,
-                        draws: Vec::new(),
-                        releases: Vec::new(),
-                        expansion: false,
-                        action: None,
-                        foreign: None,
-                        agency: Vec::new(),
-                    });
-                }
-                Ok(out) => {
-                    // OP-153 m.10 (e), OP-152 m.5 (a)
-                    if let ExerciseBasis::Holding(h) = req.basis {
-                        let resolves = read::<GrantState>(snapshot, kind::GRANT, &h.grant)
-                            .is_some_and(|g| {
-                                actor.party == h.holder && holding_matches(&g, &h, held, false)
-                            });
-                        let missing = snapshot.missing();
-                        if !missing.is_empty() {
-                            return Pass::Need(missing);
-                        }
-                        if !resolves {
-                            return Pass::Done(Evaluation {
-                                decision: unresolved_basis(),
-                                effects: Vec::new(),
-                                draws: Vec::new(),
-                                releases: Vec::new(),
-                                expansion: false,
-                                action: None,
-                                foreign: None,
-                                agency: Vec::new(),
-                            });
-                        }
-                    }
-                    effects = out.effects;
-                    releases = out.releases;
-                    expansion = out.expansion;
-                    // L0-META-13
-                    let basis = if let ExerciseBasis::Public(g) = req.basis {
-                        let public = read::<GrantState>(snapshot, kind::GRANT, &g)
-                            .filter(|s| {
-                                s.content.holder == access_kernel::model::SubjectSelector::Public
-                            })
-                            .and_then(|_| lineage_hops(snapshot, &g));
-                        let missing = snapshot.missing();
-                        if !missing.is_empty() {
-                            return Pass::Need(missing);
-                        }
-                        public.map(|(hops, capacities)| Basis {
-                            hops: hops.into_iter().map(Stored::Known).collect(),
-                            capacities,
-                        })
-                    } else {
-                        let mut hop = exact_hop(&req.intent, None, out.requirements);
-                        // OP-143 m.12
-                        if let (
-                            Some(Payload::ProjectionIssue {
-                                offline_slice: Some(slice),
-                                ..
-                            }),
-                            ExerciseBasis::Holding(h),
-                        ) = (&req.payload, req.basis)
-                        {
-                            let Some(d) = slice_budgets(snapshot, &h.grant, slice, now, &mut hop)
-                            else {
-                                return Pass::Need(snapshot.missing());
-                            };
-                            draws = d;
-                            let missing_counters = snapshot.missing_counters();
-                            if !missing_counters.is_empty() {
-                                return Pass::NeedCounters(missing_counters);
-                            }
-                        }
-                        Some(Basis {
-                            hops: vec![Stored::Known(hop)],
-                            capacities: BTreeSet::from([req.capacity]),
-                        })
-                    };
-                    // L0-EVAL-16
-                    let mandate = mandate(snapshot, Some(&actor));
+            Ok(out) => {
+                // OP-153 m.10 (e), OP-152 m.5 (a)
+                if let ExerciseBasis::Holding(h) = req.basis {
+                    let resolves =
+                        read::<GrantState>(snapshot, kind::GRANT, &h.grant).is_some_and(|g| {
+                            actor.party == h.holder && holding_matches(&g, &h, held, false)
+                        });
                     let missing = snapshot.missing();
                     if !missing.is_empty() {
                         return Pass::Need(missing);
                     }
-                    (basis.into_iter().collect::<Vec<_>>(), mandate)
+                    if !resolves {
+                        return Pass::Done(Evaluation {
+                            decision: unresolved_basis(),
+                            effects: Vec::new(),
+                            draws: Vec::new(),
+                            releases: Vec::new(),
+                            expansion: false,
+                            action: None,
+                            foreign: None,
+                            agency: Vec::new(),
+                        });
+                    }
                 }
+                effects = out.effects;
+                releases = out.releases;
+                expansion = out.expansion;
+                // L0-META-13
+                let basis = if let ExerciseBasis::Public(g) = req.basis {
+                    let public = read::<GrantState>(snapshot, kind::GRANT, &g)
+                        .filter(|s| {
+                            s.content.holder == access_kernel::model::SubjectSelector::Public
+                        })
+                        .and_then(|_| lineage_hops(snapshot, &g));
+                    let missing = snapshot.missing();
+                    if !missing.is_empty() {
+                        return Pass::Need(missing);
+                    }
+                    public.map(|(hops, capacities)| Basis {
+                        hops: hops.into_iter().map(Stored::Known).collect(),
+                        capacities,
+                    })
+                } else {
+                    let mut hop = exact_hop(&req.intent, None, out.requirements);
+                    // OP-143 m.12
+                    if let (
+                        Some(Payload::ProjectionIssue {
+                            offline_slice: Some(slice),
+                            ..
+                        }),
+                        ExerciseBasis::Holding(h),
+                    ) = (&req.payload, req.basis)
+                    {
+                        let Some(d) = slice_budgets(snapshot, &h.grant, slice, now, &mut hop)
+                        else {
+                            return Pass::Need(snapshot.missing());
+                        };
+                        draws = d;
+                        let missing_counters = snapshot.missing_counters();
+                        if !missing_counters.is_empty() {
+                            return Pass::NeedCounters(missing_counters);
+                        }
+                    }
+                    Some(Basis {
+                        hops: vec![Stored::Known(hop)],
+                        capacities: BTreeSet::from([req.capacity]),
+                    })
+                };
+                // L0-EVAL-16
+                let mandate = mandate(snapshot, Some(&actor));
+                let missing = snapshot.missing();
+                if !missing.is_empty() {
+                    return Pass::Need(missing);
+                }
+                (basis.into_iter().collect::<Vec<_>>(), mandate)
             }
-        } else {
-            let hops = match req.basis {
+        }
+    } else {
+        let hops = match req.basis {
                 ExerciseBasis::Anchor(a) => read::<AnchorState>(snapshot, kind::ANCHOR, &a)
                     .filter(|s| s.ended.is_none())
                     .and_then(|s| {
-                        let terms = meta::root_requirements(&s, actor.as_ref()?)?;
+                        let a = actor.as_ref()?;
+                        let terms = meta::root_requirements(&s, a)?;
+                        // L0-META-30, TN-91
+                        let own = matches!(&req.payload, Some(Payload::Contribute { class, .. })
+                            if access_kernel::contribution::self_authorized(class, &s.scope, &a.party));
+                        let selector = if own {
+                            None
+                        } else {
+                            anchor_selector(&s.scope)
+                        };
                         Some((
-                            vec![exact_hop(&req.intent, anchor_selector(&s.scope), terms)],
+                            vec![exact_hop(&req.intent, selector, terms)],
                             BTreeSet::from([Capacity::Own]),
                         ))
                     })
@@ -1666,38 +1676,38 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     .and_then(|_| lineage_hops(snapshot, &g))
                     .map(|hops| (hops, Some(g))),
             };
-            // OP-141 m.26
-            // §9
-            let hops = match hops {
-                Some(((mut hops, capacities), Some(g))) => {
-                    match budgets(snapshot, &g, &req.intent, now, &mut hops) {
-                        Some(Ok(d)) => draws.extend(d),
-                        Some(Err(r)) => return Pass::Rejected(r),
-                        None => {}
-                    }
-                    Some((hops, capacities))
+        // OP-141 m.26
+        // §9
+        let hops = match hops {
+            Some(((mut hops, capacities), Some(g))) => {
+                match budgets(snapshot, &g, &req.intent, now, &mut hops) {
+                    Some(Ok(d)) => draws.extend(d),
+                    Some(Err(r)) => return Pass::Rejected(r),
+                    None => {}
                 }
-                Some((h, None)) => Some(h),
-                None => None,
-            };
-            let missing_counters = snapshot.missing_counters();
-            if !missing_counters.is_empty() {
-                return Pass::NeedCounters(missing_counters);
+                Some((hops, capacities))
             }
-            let mandate = mandate(snapshot, actor.as_ref());
-            let missing = snapshot.missing();
-            if !missing.is_empty() {
-                return Pass::Need(missing);
-            }
-            let bases = hops
-                .map(|(hops, capacities)| Basis {
-                    hops: hops.into_iter().map(Stored::Known).collect(),
-                    capacities,
-                })
-                .into_iter()
-                .collect::<Vec<_>>();
-            (bases, mandate)
+            Some((h, None)) => Some(h),
+            None => None,
         };
+        let missing_counters = snapshot.missing_counters();
+        if !missing_counters.is_empty() {
+            return Pass::NeedCounters(missing_counters);
+        }
+        let mandate = mandate(snapshot, actor.as_ref());
+        let missing = snapshot.missing();
+        if !missing.is_empty() {
+            return Pass::Need(missing);
+        }
+        let bases = hops
+            .map(|(hops, capacities)| Basis {
+                hops: hops.into_iter().map(Stored::Known).collect(),
+                capacities,
+            })
+            .into_iter()
+            .collect::<Vec<_>>();
+        (bases, mandate)
+    };
     // L0-EVAL-4, OP-141 m.33
     for hop in bases.iter_mut().flat_map(|b| b.hops.iter_mut()) {
         if let Stored::Known(h) = hop
