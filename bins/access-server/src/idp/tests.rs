@@ -51,6 +51,7 @@ use super::*;
 use crate::testing::hsm;
 
 mod accounts;
+mod agents;
 mod claims;
 mod extensions;
 mod governance;

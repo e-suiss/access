@@ -1028,6 +1028,7 @@ async fn the_audit_stream_is_served_in_three_renderings_and_each_read_is_audited
 }
 
 mod accounts;
+mod agents;
 mod organizations;
 mod settings;
 mod writes;
