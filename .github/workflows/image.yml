@@ -284,10 +284,14 @@ jobs:
         with:
           node-version: 24.21.0
           cache: npm
-          cache-dependency-path: web/account/package-lock.json
+          cache-dependency-path: |
+            web/account/package-lock.json
+            web/console/package-lock.json
+            web/login/package-lock.json
       - name: Start
         run: $COMPOSE up --detach --quiet-pull
       - name: Ready
+        id: ready
         run: |
           for _ in $(seq 1 60); do
             if $COMPOSE exec -T access-server \
@@ -297,6 +301,15 @@ jobs:
             sleep 2
           done
           exit 1
+      # OP-149 m.26 (b): the realm asks the test user for a second factor; the browser tests answer
+      # it with a code of the authenticator app whose seed the bootstrap kept in its volume
+      - name: Test user's authenticator app
+        id: totp
+        run: |
+          seed="$($COMPOSE run --rm --no-deps -T --entrypoint cat bootstrap /var/lib/access/bootstrap/test-user-totp)"
+          echo "::add-mask::$seed"
+          test -n "$seed"
+          echo "ACCESS_LIVE_TEST_TOTP_SEED=$seed" >> "$GITHUB_ENV"
       - name: Account pages (@live)
         run: |
           echo "127.0.0.1 access-server" | sudo tee -a /etc/hosts
@@ -305,9 +318,18 @@ jobs:
           npx playwright install --with-deps chromium
           npm run e2e:live
       - name: Console (@live)
+        if: ${{ !cancelled() && steps.totp.outcome == 'success' }}
         run: |
-          echo "127.0.0.1 access-server.local" | sudo tee -a /etc/hosts
+          echo "127.0.0.1 access-server access-server.local" | sudo tee -a /etc/hosts
           cd web/console
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run e2e:live
+      - name: Hosted login (@live)
+        if: ${{ !cancelled() && steps.ready.outcome == 'success' }}
+        run: |
+          echo "127.0.0.1 access-server" | sudo tee -a /etc/hosts
+          cd web/login
           npm ci
           npx playwright install --with-deps chromium
           npm run e2e:live
@@ -322,6 +344,7 @@ jobs:
           path: |
             web/account/playwright-report
             web/console/playwright-report
+            web/login/playwright-report
           retention-days: 7
       - name: Stop
         if: always()
