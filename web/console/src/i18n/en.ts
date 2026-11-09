@@ -406,7 +406,7 @@ export const en = {
     "Apple moves existing users over to the new client until {until}; after that they can't be moved.",
   upstreamLinkTitle: "Link a provider's user to an account",
   upstreamLinkIntro:
-    "Security signals the provider sends about this user then reach the account. They can only end sessions or restrict it, never grant anything.",
+    "Security signals the provider sends about this user then reach the account. They can only end sign-ins or restrict it, never grant anything.",
   upstreamLinkProvider: "Provider name",
   upstreamLinkSubject: "User id at the provider",
   upstreamLinkSave: "Link",

@@ -4,8 +4,9 @@ import { tr } from "../src/i18n/tr.js";
 import { BASE, open } from "./data.js";
 import { expect, test } from "./fixtures.js";
 
-// X24, XI-13, §8.10, §8.11, OP-151 m.3 (r): words a user of Access never reads. The same list as
-// xtask's `forbidden-ui-terms`, plus the honest-status words of §8.10 and §8.17.7.5.
+// X24, XI-13, X33, §8.10, §8.11, OP-151 m.3 (r), OP-153 m.25 (e): words a user of Access never
+// reads. The same list as xtask's `forbidden-ui-terms`, plus the honest-status words of §8.10 and
+// §8.17.7.5.
 const FORBIDDEN = [
   /\bmandates?\b/i,
   /\bpaus(e|ed|ing)\b/i,
@@ -23,6 +24,7 @@ const FORBIDDEN = [
   /\bbypass/i,
   /\ball permissions\b/i,
   /\bincludes future actions\b/i,
+  /\bsessions?\b/i,
 ];
 
 const FORBIDDEN_TR = [
@@ -34,6 +36,7 @@ const FORBIDDEN_TR = [
   /tam erişim/i,
   /test modu/i,
   /olarak giriş yap/i,
+  /oturum/i,
 ];
 
 function offending(text: string, list: readonly RegExp[]): string[] {

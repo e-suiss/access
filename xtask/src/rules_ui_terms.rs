@@ -4,7 +4,9 @@
 //! impersonation (MD-9, TI-9). The string literals and JSX text of `web/*/src` and
 //! `sdks/typescript/src` are scanned, tests excepted, and so are the message values of the
 //! `locales/*/*.ftl` catalogues the hosted pages render; product claims are `forbidden-claims.toml`'s. Protocol phrases that must keep a
-//! protocol's own words are allowed only through `conformance/catalog/ui-terms.toml`.
+//! protocol's own words are allowed only through `conformance/catalog/ui-terms.toml`. The string
+//! catalogues (Fluent values and `*/i18n/*` files) also never say "session" or "oturum" in any
+//! sense (§8.11, X33, OP-153 m.25 (e)); API paths and code identifiers elsewhere keep the word.
 //!
 //! `ui-text-nodes` (TN-131): tenant-controlled strings render as text nodes only, so no web or
 //! SDK source sets HTML from a string (`dangerouslySetInnerHTML`, `innerHTML`, `outerHTML`,
@@ -54,6 +56,12 @@ const PHRASES: &[&[&str]] = &[
 
 /// Word prefixes that are never shown (MD-9: no impersonation of any form).
 const PREFIXES: &[&str] = &["impersonat"];
+
+/// Whole words a string catalogue never shows: a sign-in is a sign-in (§8.11, X33).
+const CATALOGUE_WORDS: &[&str] = &["session", "sessions"];
+
+/// Word prefixes a string catalogue never shows: Turkish "oturum" and its inflections (X33).
+const CATALOGUE_PREFIXES: &[&str] = &["oturum"];
 
 /// Protocols whose own phrases an allowlist entry may keep.
 const PROTOCOLS: &[&str] = &[
@@ -157,6 +165,32 @@ pub(crate) fn forbidden(text: &str, allowed: &[String]) -> Option<String> {
     None
 }
 
+/// The forbidden term in a string catalogue's `text`: the UI terms and "session"/"oturum" in
+/// any sense (§8.11, X33, OP-153 m.25 (e)).
+pub(crate) fn forbidden_in_catalogue(text: &str, allowed: &[String]) -> Option<String> {
+    if let Some(term) = forbidden(text, allowed) {
+        return Some(term);
+    }
+    let mut lower = text.to_lowercase();
+    for a in allowed {
+        lower = lower.replace(a.as_str(), " ");
+    }
+    words(&lower).into_iter().find_map(|w| {
+        if CATALOGUE_WORDS.contains(&w.as_str()) {
+            return Some(w);
+        }
+        CATALOGUE_PREFIXES
+            .iter()
+            .find(|p| w.starts_with(**p))
+            .map(|p| (*p).to_owned())
+    })
+}
+
+/// Whether a script is a string catalogue: it lies under an `i18n` directory.
+fn catalogue(rel_path: &str) -> bool {
+    rel_path.split('/').any(|part| part == "i18n")
+}
+
 /// String and template literals of a script, with their lines; comments skipped.
 pub(crate) fn literals(src: &str) -> Vec<(usize, String)> {
     let chars: Vec<char> = src.chars().collect();
@@ -245,9 +279,14 @@ pub(crate) fn scan(rel_path: &str, src: &str, allowed: &[String]) -> Vec<Violati
     if ext.eq_ignore_ascii_case("tsx") || ext.eq_ignore_ascii_case("jsx") {
         texts.extend(jsx_text(src));
     }
+    let check = if catalogue(rel_path) {
+        forbidden_in_catalogue
+    } else {
+        forbidden
+    };
     let mut out = Vec::new();
     for (line, text) in texts {
-        if let Some(term) = forbidden(&text, allowed) {
+        if let Some(term) = check(&text, allowed) {
             out.push(Violation {
                 rule: RULE,
                 path: PathBuf::from(format!("{rel_path}:{line}")),
@@ -313,7 +352,7 @@ fn scan_fluent(rel_path: &str, src: &str, allowed: &[String]) -> Vec<Violation> 
     fluent_values(src)
         .into_iter()
         .filter_map(|(line, text)| {
-            forbidden(&text, allowed).map(|term| Violation {
+            forbidden_in_catalogue(&text, allowed).map(|term| Violation {
                 rule: RULE,
                 path: PathBuf::from(format!("{rel_path}:{line}")),
                 message: format!(
@@ -404,7 +443,6 @@ mod tests {
         }
         for ok in [
             "Untrusted input",
-            "Sessions",
             "Your sign-ins",
             "Instances",
             "Stop access",
@@ -412,6 +450,66 @@ mod tests {
         ] {
             assert_eq!(forbidden(ok, &a), None, "{ok}");
         }
+    }
+
+    // X33, §8.11, OP-153 m.25 (e)
+    #[test]
+    fn catalogues_never_say_session_in_any_sense() {
+        let a = allow();
+        for (text, term) in [
+            ("Sessions", "sessions"),
+            ("This session", "session"),
+            ("They can only end sessions", "sessions"),
+            ("Oturum açtığınız yerler", "oturum"),
+            ("Bu oturum", "oturum"),
+            ("Oturumu kapat", "oturum"),
+            ("hesabınızın oturumları sonlandırıldı", "oturum"),
+            ("Bu cihazda oturumumu açık tut", "oturum"),
+            ("Pause access", "pause"),
+        ] {
+            assert_eq!(
+                forbidden_in_catalogue(text, &a).as_deref(),
+                Some(term),
+                "{text}"
+            );
+        }
+        for ok in [
+            "Your sign-ins",
+            "Sign-in on this device",
+            "Girişleriniz",
+            "Bu cihaz üzerinde giriş",
+            "Oturma odası",
+        ] {
+            assert_eq!(forbidden_in_catalogue(ok, &a), None, "{ok}");
+        }
+        assert_eq!(forbidden("Sessions", &a), None);
+    }
+
+    // X33, OP-153 m.25 (e)
+    #[test]
+    fn session_is_refused_in_catalogues_only() {
+        let src = "export const en = {\n  sessionsTitle: \"Your sessions\",\n};\n";
+        let v = scan("web/console/src/i18n/en.ts", src, &[]);
+        let lines: Vec<String> = v.iter().map(|v| v.path.display().to_string()).collect();
+        assert_eq!(lines, ["web/console/src/i18n/en.ts:2"]);
+        assert!(
+            scan(
+                "web/console/src/i18n/en.ts",
+                "const k = { sessionsTitle: \"Your sign-ins\" };\n",
+                &[]
+            )
+            .is_empty()
+        );
+        let code = "const r = await frontend(\"/v1/sessions/current\");\nconst s = \"session\";\n";
+        assert!(scan("web/account/src/signins/index.tsx", code, &[]).is_empty());
+        let v = scan_fluent(
+            "locales/tr/login.ftl",
+            "keep = Bu cihazda oturumumu açık tut\n",
+            &[],
+        );
+        assert_eq!(v.len(), 1);
+        assert!(catalogue("web/login/src/i18n/tr.ts"));
+        assert!(!catalogue("web/console/src/screens/Own.tsx"));
     }
 
     // OP-151 m.3 (r)
