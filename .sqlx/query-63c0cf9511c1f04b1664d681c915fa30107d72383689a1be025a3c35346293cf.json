@@ -1,0 +1,79 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT g.tenant_id, g.realm_id, r.slug, g.kind, g.name\n           FROM access.edge_gateways g\n           JOIN access.realms r ON r.tenant_id = g.tenant_id AND r.realm_id = g.realm_id\n          WHERE g.kind = $1 AND g.name = $2 AND g.cert_sha256 = $3 AND g.state = 'live'\n            AND r.status = 'active'\n            AND g.version = (SELECT MAX(n.version) FROM access.edge_gateways n\n                              WHERE n.tenant_id = g.tenant_id AND n.realm_id = g.realm_id\n                                AND n.kind = g.kind AND n.name = g.name)\n          LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.edge_gateways",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "realm_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.edge_gateways",
+            "name": "realm_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "slug",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.realms",
+            "name": "slug"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.edge_gateways",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.edge_gateways",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "63c0cf9511c1f04b1664d681c915fa30107d72383689a1be025a3c35346293cf"
+}

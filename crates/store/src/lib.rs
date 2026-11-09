@@ -25,6 +25,7 @@ pub mod dcr;
 pub mod derived;
 pub mod device;
 pub mod dpop;
+pub mod edge;
 pub mod ephemeral;
 pub mod events;
 pub mod extensions;

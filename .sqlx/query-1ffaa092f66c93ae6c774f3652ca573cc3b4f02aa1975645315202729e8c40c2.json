@@ -1,0 +1,43 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT state, cert_sha256 FROM access.edge_gateways\n          WHERE tenant_id = $1 AND realm_id = $2 AND kind = $3 AND name = $4\n          ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.edge_gateways",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "cert_sha256",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.edge_gateways",
+            "name": "cert_sha256"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "1ffaa092f66c93ae6c774f3652ca573cc3b4f02aa1975645315202729e8c40c2"
+}
