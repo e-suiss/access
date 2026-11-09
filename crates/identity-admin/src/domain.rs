@@ -24,6 +24,7 @@ use suiss_crypto::digest::context_digest;
 use suiss_crypto::rotation::Policy;
 
 pub mod accounts;
+pub mod agent;
 pub mod dns;
 pub mod org;
 pub mod provision;
@@ -414,6 +415,16 @@ pub enum Invalid {
     /// The organization's invitations are mostly ignored: invitations wait (TN-89 (11)).
     #[error("invitation reputation")]
     InviteReputation,
+    /// No such agent, or the agent is retired (OP-154 m.3 (c)).
+    #[error("no such agent")]
+    NoAgent,
+    /// A malformed agent: kind, operator, name, description or sponsors (OP-154 m.3 (c), (e)).
+    #[error("invalid agent")]
+    Agent,
+    /// An agent Grant template without its mandatory budget, deeper than one delegation hop or
+    /// otherwise outside OP-154 m.3 (g).
+    #[error("invalid agent template")]
+    AgentTemplate,
     /// N5: a Related Origins list that is not `https` origins, names more than five
     /// registrable labels with the RP ID, or an origin outside the realm's verified domains
     /// (TN-18, OP-153 m.3 (u)).
@@ -452,6 +463,9 @@ impl Invalid {
             Self::DomainUnverified => "domain-not-verified",
             Self::SsoDraft => "invalid-connection-draft",
             Self::InviteReputation => "invitation-reputation",
+            Self::NoAgent => "no-such-agent",
+            Self::Agent => "invalid-agent",
+            Self::AgentTemplate => "invalid-agent-template",
             Self::DisplayName => "invalid-display-name",
             Self::RedirectUri | Self::RedirectUris => "invalid-redirect-uri",
             Self::JwksUri => "invalid-jwks-uri",
@@ -1548,6 +1562,8 @@ pub enum Change {
     UpstreamLink(UpstreamLink),
     /// `idp.org.create` (TN-5, OP-153 m.3 (b)).
     OrgCreate(OrgCreate),
+    /// `idp.agent.*` (OP-154 m.3 (a), (c), (e), (g)).
+    Agent(agent::AgentChange),
     /// `idp.org.member_remove` (OP-153 m.3 (p)).
     OrgMemberRemove(OrgMember),
     /// `idp.org.invite` (TN-89, OP-153 m.3 (o)).
@@ -1885,6 +1901,7 @@ impl Change {
             Self::AccountImport(_) => IdpAction::AccountImport,
             Self::MigrationExport(_) => IdpAction::AccountMigrationExport,
             Self::GuardianshipRecord(_) => IdpAction::AccountGuardianshipRecord,
+            Self::Agent(a) => a.action(),
             Self::CspMode { loosens: false, .. } => IdpAction::RealmCspMode,
             Self::CspMode { loosens: true, .. } => IdpAction::RealmCspModeLoosen,
         }
@@ -1938,6 +1955,7 @@ impl Change {
             Self::AccountImport(i) => i.check(),
             Self::MigrationExport(e) => e.check(),
             Self::GuardianshipRecord(g) => g.check(),
+            Self::Agent(a) => a.check(),
             Self::AccountBind(_)
             | Self::CspMode { .. }
             | Self::OrgInviteRevoke { .. }
@@ -1963,6 +1981,10 @@ impl Change {
         }
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one match over the changes, each arm its signed body"
+    )]
     fn body(&self) -> Value {
         match self {
             Self::ClientRegister(c) | Self::ClientUpdate(c) => c.to_value(),
@@ -2060,6 +2082,7 @@ impl Change {
             Self::AccountImport(i) => i.to_value(),
             Self::MigrationExport(e) => e.to_value(),
             Self::GuardianshipRecord(g) => g.to_value(),
+            Self::Agent(a) => a.body(),
             Self::CspMode { mode, .. } => {
                 Value::Map(vec![(Value::text("csp_mode"), Value::text(mode.name()))])
             }
@@ -2158,6 +2181,7 @@ impl Change {
             | Self::SocialDisable(preset) => {
                 path.extend([String::from("social"), String::from(preset.as_str())]);
             }
+            Self::Agent(a) => path.extend(a.path()),
         }
         ResourceRef {
             namespace: String::from(RESOURCE_NAMESPACE),

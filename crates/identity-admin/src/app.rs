@@ -2,6 +2,7 @@
 //! write path (MD-14, EI-25), and the platform product API (OP-149 m.4).
 
 pub mod accounts;
+pub mod agents;
 pub mod domains;
 pub mod household;
 pub mod issuer;
@@ -271,6 +272,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .chain([access_internal_api::idp::org_member_selection(
                         access_kernel::model::Id(claim_issuer),
                     )])
+                    // OP-154 m.3 (c), (e), (g)
+                    .chain([
+                        agents::agent_claims(access_kernel::model::Id(claim_issuer)),
+                        agents::agent_selection(access_kernel::model::Id(claim_issuer)),
+                    ])
                     .collect(),
                 issuer_predicate_input: predicate_input(&r.issuer_predicate_input),
             })
@@ -427,6 +433,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 }
             }
             Change::OrgMemberRemove(m) => org_member_current(t, *m).await?,
+            // OP-154 m.3 (c), (e)
+            Change::Agent(a) => agents::current(t, a).await?,
             Change::OrgInvite(i) => orgs::invite_current(t, i).await?,
             Change::OrgUpdate(u) => orgs::update_current(t, u).await?,
             Change::OrgInviteRevoke { org, invitation } => {
@@ -712,6 +720,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         let g = self.governing(p, state).await?;
         if let Change::OrgCreate(o) = &p.change {
             self.org_creatable(p, Digest(*g.domain.as_bytes()), o.party)
+                .await?;
+        }
+        // OP-154 m.3 (c)
+        if let Change::Agent(crate::domain::agent::AgentChange::Register(r)) = &p.change {
+            self.agent_registrable(Digest(*g.domain.as_bytes()), r)
                 .await?;
         }
         let intent = p
@@ -1049,6 +1062,16 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 at,
             )
             .await?;
+        }
+        // OP-154 m.3 (c), (e), (g)
+        if let Change::Agent(a) = &p.change {
+            let at = access_store::authority::server_time(self.app).await?;
+            agents::committed(&mut t, p.realm, a, exercise, at).await?;
+        }
+        // OP-154 m.3 (e), AG-41, X13
+        if let Change::AccountSuspend(s) | Change::AccountDelete(s) = &p.change {
+            let at = access_store::authority::server_time(self.app).await?;
+            agents::sponsor_left(&mut t, p.realm, *s, at).await?;
         }
         let mut secret = secret;
         if let Change::AccountResetIntent { .. } | Change::AccountTapIssue(_) = &p.change {
@@ -1524,6 +1547,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::OrgDomainClaim(_)
             | Change::OrgSsoDraft(_)
             | Change::AccountResetIntent { .. }
+            | Change::Agent(_)
             | Change::AccountTapIssue(_) => true,
             Change::OrgInviteRevoke { invitation, .. } => t.revoke_invitation(*invitation).await?,
             Change::OrgDomainRelease { org, claim } => {

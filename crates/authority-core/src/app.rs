@@ -2031,6 +2031,7 @@ struct Shape<'a> {
 
 pub use access_kernel::contribution::NAMESPACE as CONTRIBUTION_NAMESPACE;
 
+pub mod agents;
 pub mod approval;
 pub mod audit;
 mod binding;

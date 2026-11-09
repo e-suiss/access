@@ -148,6 +148,58 @@ pub trait Instances: Send + Sync {
         let _ = registration;
         async { Err(Unavailable(String::from("organization-registration"))) }
     }
+
+    /// Commits an agent's `party_register`, signed by the one-time key its operator's client
+    /// made and dropped (OP-154 m.3 (c), L0-META-7).
+    fn register_agent(
+        &self,
+        registration: AgentRegistration,
+    ) -> impl Future<Output = Result<OrgRegistered, Unavailable>> + Send {
+        let _ = registration;
+        async { Err(Unavailable(String::from("agent-registration"))) }
+    }
+
+    /// The live Instances of `party` in `domain` at the head (AG-21, OP-154 m.3 (f)).
+    fn instances(
+        &self,
+        domain: Digest,
+        party: Id,
+    ) -> impl Future<Output = Result<Vec<Id>, Unavailable>> + Send {
+        let _ = (domain, party);
+        async { Err(Unavailable(String::from("instance-lookup"))) }
+    }
+}
+
+/// An agent Party to register (OP-154 m.3 (c)): `party_register` with `actor_kind = agent`
+/// and the operator Party as its sole root, signed by a key no Instance will ever hold.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AgentRegistration {
+    /// The tenant.
+    pub tenant: [u8; 16],
+    /// The realm's governing domain.
+    pub domain: Digest,
+    /// The agent's Party.
+    pub party: Id,
+    /// Its root: the operator Party.
+    pub operator: Id,
+    /// The one-time key that signed the registration.
+    pub key: PublicKey,
+    /// The self-signed `party_register`.
+    pub register: SelfSigned,
+    /// The identity plane as PEP.
+    pub pep: String,
+}
+
+impl AgentRegistration {
+    /// The `party_register` payload.
+    #[must_use]
+    pub const fn payload(&self) -> access_kernel::meta::Payload {
+        access_kernel::meta::Payload::PartyRegister {
+            party: self.party,
+            root: access_kernel::meta::Root::Sole(self.operator),
+            actor_kind: ActorKind::Agent,
+        }
+    }
 }
 
 /// What an organization's registration came to.

@@ -18,7 +18,8 @@ use access_crypto::jose::JwsAlg;
 use access_crypto::webauthn::decoy_label;
 use access_identity_admin::domain::JoseAlg;
 use access_identity_admin::ports::{
-    Decider, Governance, Instances, OrgRegistered, OrgRegistration, PartyKind, RealmKeys,
+    AgentRegistration, Decider, Governance, Instances, OrgRegistered, OrgRegistration, PartyKind,
+    RealmKeys,
 };
 use access_identity_oauth::adapters::SignerKeys;
 use access_identity_ui::ports::{Approvals, DeviceInstances};
@@ -501,6 +502,35 @@ where
                 code: String::from("denied"),
             },
         })
+    }
+
+    async fn register_agent(&self, r: AgentRegistration) -> Result<OrgRegistered, Unavailable> {
+        // OP-154 m.3 (c), L0-META-7
+        let Some(_hold) = self.actors.hold(r.party, &r.key) else {
+            return Ok(OrgRegistered::Refused {
+                code: String::from(BINDING_BUSY),
+            });
+        };
+        let verdict = self
+            .self_signed_in((r.domain, r.party), &r.register, r.payload(), (r.pep, None))
+            .await?;
+        Ok(match verdict {
+            Verdict::Committed(c) => OrgRegistered::Registered {
+                replayed: c.replayed,
+            },
+            Verdict::Refused { code, .. } => OrgRegistered::Refused { code },
+            Verdict::NotAllowed { .. } => OrgRegistered::Refused {
+                code: String::from("denied"),
+            },
+        })
+    }
+
+    async fn instances(&self, domain: Digest, party: Id) -> Result<Vec<Id>, Unavailable> {
+        // AG-21, OP-154 m.3 (f)
+        self.domains
+            .party_instances(domain, party)
+            .await
+            .map_err(|e| unavailable(&e))
     }
 }
 

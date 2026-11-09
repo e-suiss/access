@@ -69,12 +69,12 @@ pub fn urn(name: &str) -> String {
     format!("{URN_PREFIX}{name}")
 }
 
-/// Catalog events nothing produces yet: agent suspension and sponsor assignment arrive with the
-/// agent registry (OP-154 m.3 (e)). A subscription cannot name them until a producer exists
-/// (TN-136, §12.4.2). Preferences and document acceptances are produced by the preference
-/// center (IDP-37), organizations and their memberships by `idp.org.*` and invitation
-/// acceptance (OP-153 m.4).
-pub const UNPRODUCED: [&str; 2] = ["agent.suspended", "agent.sponsor_assigned"];
+/// Catalog events nothing produces yet; a subscription cannot name one until a producer exists
+/// (TN-136, §12.4.2). Every catalog event has one now: preferences and document acceptances
+/// the preference center (IDP-37), organizations and their memberships `idp.org.*` and
+/// invitation acceptance (OP-153 m.4), agent suspension and sponsor assignment the agent
+/// registry's `idp.agent.*` (OP-154 m.3 (e), SI-21).
+pub const UNPRODUCED: [&str; 0] = [];
 
 /// Whether a webhook or stream may subscribe to `name`: a catalog event with a producer.
 #[must_use]

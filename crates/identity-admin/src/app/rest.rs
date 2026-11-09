@@ -147,6 +147,18 @@ pub enum Op {
     BindAccount,
     /// `recordGuardianship`: `idp.account.guardianship_record` (E53, OP-153 m.20 (g)).
     RecordGuardianship,
+    /// `registerAgent`: `idp.agent.register` (OP-154 m.3 (c)).
+    RegisterAgent,
+    /// `patchAgent`: `idp.agent.update`.
+    PatchAgent,
+    /// `retireAgent`: `idp.agent.retire`.
+    RetireAgent,
+    /// `assignAgentSponsor`: `idp.agent.sponsor_assign` (OP-154 m.3 (e)).
+    AssignAgentSponsor,
+    /// `removeAgentSponsor`: `idp.agent.sponsor_remove`, keyed `agent:sponsor`.
+    RemoveAgentSponsor,
+    /// `defineAgentTemplate`: `idp.agent.template_define` (OP-154 m.3 (g)).
+    DefineAgentTemplate,
 }
 
 impl Op {
@@ -205,6 +217,12 @@ impl Op {
             "exportAccounts" => Self::ExportAccounts,
             "bindAccount" => Self::BindAccount,
             "recordGuardianship" => Self::RecordGuardianship,
+            "registerAgent" => Self::RegisterAgent,
+            "patchAgent" => Self::PatchAgent,
+            "retireAgent" => Self::RetireAgent,
+            "assignAgentSponsor" => Self::AssignAgentSponsor,
+            "removeAgentSponsor" => Self::RemoveAgentSponsor,
+            "defineAgentTemplate" => Self::DefineAgentTemplate,
             _ => return None,
         })
     }
@@ -382,6 +400,156 @@ fn subject(ids: &IdKey, s: &str) -> Result<[u8; 16], Invalid> {
         .map_err(|_| Invalid::NoAccount)
 }
 
+/// The `idp.agent.*` change of an agent operation (OP-154 m.3 (c), (e), (g)), `None` for any
+/// other operation.
+fn agent_change(
+    op: Op,
+    key: Option<&str>,
+    m: &Map<String, Json>,
+    ids: &IdKey,
+) -> Result<Option<crate::domain::agent::AgentChange>, Invalid> {
+    use crate::domain::agent::{AgentChange, AgentKind, AgentRegister, AgentUpdate, Sponsor};
+    let agent = |k: Option<&str>| party_of(key_of(k)?, Invalid::NoAgent);
+    Ok(Some(match op {
+        Op::RegisterAgent => {
+            only(
+                m,
+                &[
+                    "agent",
+                    "operator",
+                    "agent_kind",
+                    "display_name",
+                    "description",
+                    "sponsors",
+                ],
+            )?;
+            AgentChange::Register(AgentRegister {
+                party: party_of(text(m, "agent")?, Invalid::Agent)?,
+                operator: party_of(text(m, "operator")?, Invalid::Agent)?,
+                kind: AgentKind::parse(text(m, "agent_kind")?)?,
+                display_name: String::from(text(m, "display_name")?),
+                description: opt_text(m, "description")?.map(String::from),
+                sponsors: texts(m, "sponsors")?
+                    .into_iter()
+                    .map(|s| subject(ids, s))
+                    .collect::<Result<_, _>>()?,
+            })
+        }
+        Op::PatchAgent => {
+            only(m, &["display_name", "description"])?;
+            AgentChange::Update(AgentUpdate {
+                agent: agent(key)?,
+                display_name: String::from(text(m, "display_name")?),
+                description: opt_text(m, "description")?.map(String::from),
+            })
+        }
+        Op::RetireAgent => {
+            only(m, &[])?;
+            AgentChange::Retire(agent(key)?)
+        }
+        Op::AssignAgentSponsor => {
+            only(m, &["account_id"])?;
+            AgentChange::SponsorAssign(Sponsor {
+                agent: agent(key)?,
+                subject: subject(ids, text(m, "account_id")?)?,
+            })
+        }
+        Op::RemoveAgentSponsor => {
+            only(m, &[])?;
+            let (a, s) = key_of(key)?.split_once(':').ok_or(Invalid::Body)?;
+            AgentChange::SponsorRemove(Sponsor {
+                agent: party_of(a, Invalid::NoAgent)?,
+                subject: subject(ids, s)?,
+            })
+        }
+        Op::DefineAgentTemplate => AgentChange::TemplateDefine(template(m)?),
+        _ => return Ok(None),
+    }))
+}
+
+/// An agent Grant template from its body (OP-154 m.3 (g)).
+fn template(m: &Map<String, Json>) -> Result<crate::domain::agent::AgentTemplate, Invalid> {
+    use crate::domain::agent::{AgentTemplate, Spend};
+    only(
+        m,
+        &[
+            "name",
+            "actions",
+            "resource",
+            "consumption",
+            "spend",
+            "count",
+            "delegation_depth",
+            "ttl_s",
+        ],
+    )?;
+    let bad = Invalid::AgentTemplate;
+    let resource = m.get("resource").and_then(Json::as_object).ok_or(bad)?;
+    let count = m.get("count").and_then(Json::as_object).ok_or(bad)?;
+    let spend = match m.get("spend") {
+        None | Some(Json::Null) => None,
+        Some(Json::Object(s)) => Some(Spend {
+            param: String::from(text(s, "param")?),
+            unit: String::from(text(s, "unit")?),
+            per_intent: s.get("per_intent").and_then(Json::as_i64).ok_or(bad)?,
+            daily: s.get("daily").and_then(Json::as_u64).ok_or(bad)?,
+        }),
+        Some(_) => return Err(bad),
+    };
+    let actions = match m.get("actions") {
+        Some(Json::Array(a)) => a
+            .iter()
+            .map(|x| template_action(x).ok_or(bad))
+            .collect::<Result<_, _>>()?,
+        _ => return Err(bad),
+    };
+    Ok(AgentTemplate {
+        name: Name::parse(text(m, "name")?)?,
+        actions,
+        namespace: String::from(text(resource, "namespace")?),
+        prefix: texts(resource, "prefix")?
+            .into_iter()
+            .map(String::from)
+            .collect(),
+        consumption: flag(m, "consumption")?,
+        spend,
+        count: count.get("capacity").and_then(Json::as_u64).ok_or(bad)?,
+        window_s: count.get("window_s").and_then(Json::as_u64).ok_or(bad)?,
+        depth: m
+            .get("delegation_depth")
+            .map_or(Some(0), Json::as_u64)
+            .ok_or(bad)?,
+        ttl_ms: m
+            .get("ttl_s")
+            .and_then(Json::as_u64)
+            .and_then(|s| s.checked_mul(1000))
+            .ok_or(bad)?,
+    })
+}
+
+/// An action of a template: `{namespace, name, major, schema}` with the schema digest in
+/// base64url; an `idp.*` action may leave the digest out, the catalog's is used.
+fn template_action(v: &Json) -> Option<access_kernel::model::ActionRef> {
+    let o = v.as_object()?;
+    let namespace = o.get("namespace")?.as_str()?;
+    let name = o.get("name")?.as_str()?;
+    let major = o.get("major")?.as_u64()?;
+    let schema = if let Some(s) = o.get("schema").and_then(Json::as_str) {
+        access_kernel::digest::Digest(<[u8; 32]>::try_from(b64url_decode(s).ok()?.as_slice()).ok()?)
+    } else {
+        let label = format!("{namespace}.{name}");
+        access_internal_api::idp::IdpAction::from_label(&label)?
+            .action_ref()
+            .schema
+    };
+    Some(access_kernel::model::ActionRef {
+        namespace: String::from(namespace),
+        name: String::from(name),
+        major,
+        schema,
+    })
+}
+
 /// Prefix of an invitation's external id (OP-137).
 pub const INVITATION_PREFIX: &str = "inv";
 
@@ -441,6 +609,9 @@ fn events(m: &Map<String, Json>) -> Result<Vec<String>, Invalid> {
 )]
 pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Change, Invalid> {
     let m = obj(body)?;
+    if let Some(a) = agent_change(op, key, m, ids)? {
+        return Ok(Change::Agent(a));
+    }
     Ok(match op {
         Op::CreateOrganization => {
             only(m, &["party", "display_name"])?;
@@ -778,6 +949,12 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                 country: String::from(text(m, "country")?),
             })
         }
+        Op::RegisterAgent
+        | Op::PatchAgent
+        | Op::RetireAgent
+        | Op::AssignAgentSponsor
+        | Op::RemoveAgentSponsor
+        | Op::DefineAgentTemplate => return Err(Invalid::Body),
         // OP-153 m.18 (e), m.25 (b)
         Op::BindAccount => {
             only(
@@ -1259,6 +1436,10 @@ pub enum Kind {
     /// Organizations by their Party's base64url, each with its members and roots, domain
     /// claims, ownership handovers and connection drafts (§8.5 S7, §12.3.8, OP-153 m.10 (c)).
     Organizations,
+    /// Agents by their Party's base64url: the registry (OP-154 m.3 (e), AG-41).
+    Agents,
+    /// One agent's sponsorship episodes, by the agent's Party (AG-41, SI-21).
+    AgentSponsors,
 }
 
 /// How many days the analytics read covers, today included (PD).
@@ -1606,6 +1787,62 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     last: None,
                 }
             }
+            (Kind::Agents, Some(k)) => {
+                let Some(party) = agent_key(k) else {
+                    return Ok(Read::default());
+                };
+                let Some(a) = t.agent(party).await? else {
+                    return Ok(Read::default());
+                };
+                let g = idp::governance(t).await?.ok_or(AdminError::NoRealm)?;
+                // AG-21, OP-154 m.3 (f)
+                let instances = self
+                    .governance
+                    .instances(
+                        access_kernel::digest::Digest(*g.domain.as_bytes()),
+                        access_kernel::model::Id(a.party),
+                    )
+                    .await
+                    .map_err(|e| AdminError::Unavailable(e.0))?;
+                Read {
+                    items: vec![(
+                        super::agents::view(t, self.ids, &a, Some(&instances)).await?,
+                        0,
+                    )],
+                    last: None,
+                }
+            }
+            (Kind::Agents, None) => {
+                let rows = t.agents(after.and_then(agent_key), limit).await?;
+                let mut items = Vec::with_capacity(rows.len());
+                for a in &rows {
+                    items.push((super::agents::view(t, self.ids, a, None).await?, 0));
+                }
+                Read {
+                    last: full(&rows, limit, |a| b64url_encode(&a.party)),
+                    items,
+                }
+            }
+            (Kind::AgentSponsors, k) => {
+                let Some(a) = k.and_then(agent_key) else {
+                    return Ok(Read::default());
+                };
+                let Some(row) = t.agent(a).await? else {
+                    return Ok(Read::default());
+                };
+                let view = super::agents::view(t, self.ids, &row, None).await?;
+                Read {
+                    items: view
+                        .get("sponsorships")
+                        .and_then(Json::as_array)
+                        .cloned()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|s| (s, 0))
+                        .collect(),
+                    last: None,
+                }
+            }
             (Kind::Organizations, Some(k)) => {
                 let Some(party) = b64url_decode(k)
                     .ok()
@@ -1803,4 +2040,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
         })
     }
+}
+
+fn agent_key(k: &str) -> Option<[u8; 16]> {
+    b64url_decode(k)
+        .ok()
+        .and_then(|b| <[u8; 16]>::try_from(b).ok())
 }

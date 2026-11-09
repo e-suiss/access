@@ -296,6 +296,9 @@ mod tests {
         // IDP-37, OP-153 m.4
         assert!(event_names(&[String::from("preference.changed")]).is_ok());
         assert!(event_names(&[String::from("document.accepted")]).is_ok());
+        // OP-154 m.3 (e), SI-21
+        assert!(event_names(&[String::from("agent.suspended")]).is_ok());
+        assert!(event_names(&[String::from("agent.sponsor_assigned")]).is_ok());
     }
 
     // EI-25

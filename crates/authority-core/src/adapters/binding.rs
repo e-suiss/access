@@ -22,4 +22,16 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         };
         led.core.signer_party(ais).await
     }
+
+    /// The live Instances of `party` in `domain` at the head (AG-21, OP-154 m.3 (f)).
+    ///
+    /// # Errors
+    /// [`CoreError`]; [`CoreError::Unavailable`] without the domain's leader.
+    pub async fn party_instances(&self, domain: Digest, party: Id) -> Result<Vec<Id>, CoreError> {
+        let guard = self.leading(domain).await?;
+        let Some(led) = guard.as_ref() else {
+            return Err(CoreError::Unavailable("leader"));
+        };
+        led.core.live_instances_of(&party).await
+    }
 }
