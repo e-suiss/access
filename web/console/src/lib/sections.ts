@@ -22,6 +22,7 @@ export const SCREENS = {
     "changes",
     "history",
     "organizations",
+    "agents",
     "sign-in",
   ],
   developer: ["schemas", "integrations", "lab", "logs"],
@@ -62,6 +63,8 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
   history: [AUDIT],
   // §8.5 S7, §12.3.8, Ek B 3735, 3808
   organizations: [idp("org", "create"), idp("org", "update"), idp("org", "invite")],
+  // OP-154 m.3 (c), (e), XI-17
+  agents: [idp("agent", "register"), idp("agent", "retire"), idp("agent", "sponsor_assign")],
   "sign-in": [
     idp("realm", "signin_policy"),
     idp("realm", "branding"),

@@ -6,6 +6,7 @@ import type { MouseEvent, ReactElement } from "react";
 import { t, type Key } from "../i18n/index.js";
 import { type Screen, SCREENS, type Section } from "../lib/sections.js";
 import * as A from "./Admin.js";
+import { Agents } from "./Agents.js";
 import * as Au from "./Audit.js";
 import * as D from "./Developer.js";
 import * as O from "./Organizations.js";
@@ -23,6 +24,7 @@ export const SCREEN_TITLE: Readonly<Record<Screen, Key>> = {
   changes: "screenChanges",
   history: "screenHistory",
   organizations: "screenOrganizations",
+  agents: "screenAgents",
   "sign-in": "screenSignIn",
   schemas: "screenSchemas",
   integrations: "screenIntegrations",
@@ -70,6 +72,8 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
       return <A.History ctx={ctx} />;
     case "organizations":
       return <O.Organizations ctx={ctx} />;
+    case "agents":
+      return <Agents ctx={ctx} />;
     case "sign-in":
       return <SignInSettings ctx={ctx} />;
     case "schemas":
