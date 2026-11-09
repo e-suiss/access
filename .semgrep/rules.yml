@@ -11,6 +11,10 @@ rules:
       exclude:
         - "crates/store/**"
         - "xtask/**"
+        # OP-154 m.14 (l)
+        - "services/executor/src/store.rs"
+        - "services/executor/src/testing.rs"
+        - "services/executor/tests/store.rs"
     pattern-either:
       - pattern: sqlx::query(...)
       - pattern: sqlx::query_as(...)
