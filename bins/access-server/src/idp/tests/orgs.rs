@@ -1576,10 +1576,15 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
         panic!("the handover waits for its recipient");
     };
     assert!(
-        decision
-            .unmet
-            .iter()
-            .any(|u| u.term == access_kernel::meta::accept_root(ALICE)),
+        decision.unmet.iter().any(|u| u.term
+            == access_authority_core::requirements::with_ceiling(
+                access_kernel::meta::accept_root(ALICE),
+                &access_authority_core::requirements::ceiling(
+                    access_kernel::tier::Tier::Ct3,
+                    None,
+                    false
+                )
+            )),
         "{decision:?}"
     );
     refusal(

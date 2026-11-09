@@ -780,7 +780,7 @@ impl Realm {
 const ACCESS_TOKEN_TYPE: &str = "urn:ietf:params:oauth:token-type:access_token";
 const JWT_TYPE: &str = "urn:ietf:params:oauth:token-type:jwt";
 
-// AGI-1, P53, AG-23, AG-25, L22, L24, P48, INV-5, §9.9.3 k.9, §9.9.4, §11.10.2, §12.1.3 k.11,
+// AGI-1, AGI-7, P53, AG-23, AG-25, L22, L24, P48, INV-5, §9.9.3 k.9, §9.9.4, §11.10.2, §12.1.3 k.11,
 // OP-154 m.3 (m), Ek B 4150, 4151, 4152, 4153, 4211, 4213, 4215, 4302, 4323, 4395, 4429, 4608
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_exchange_writes_act_from_the_lineage_only() {
@@ -1003,7 +1003,7 @@ async fn an_exchange_writes_act_from_the_lineage_only() {
     assert_eq!(body["error"], "invalid_grant", "{body}");
 }
 
-// EI-6, AG-29, MD-18, L25, E26, §11.11.3, §11.11.4, Ek B 4135, 4189, 4190, 4551, 4563
+// EI-6, AGI-7, AG-29, MD-18, L25, E26, §11.11.3, §11.11.4, Ek B 4135, 4189, 4190, 4551, 4563
 // OP-154 m.3 (n), (q), Ek B 4635, 4652
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_assertion_is_claim_input_used_once_and_never_a_grant() {

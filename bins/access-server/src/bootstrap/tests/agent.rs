@@ -464,6 +464,22 @@ async fn an_agent_on_the_real_server_follows_its_contract() {
         TaskState::Working
     );
 
+    // A-8, E31, Ek B 4352
+    let horizon = now_ms() + 300_000;
+    let mut long =
+        access_sdk::agent::contract::Continuation::new(&allowed, now_ms(), horizon, Vec::new());
+    assert!(long.ask(&ex, nonce(), &a.live, &a.runtime, &Wall).unwrap());
+    assert!(long.may_start(now_ms()));
+    let taken_over = Runtime(SoftSigner::generate_p256().unwrap().0);
+    long.interrupted();
+    assert!(!long.may_start(now_ms()));
+    assert!(!long.ask(&ex, nonce(), &a.live, &taken_over, &Wall).unwrap());
+    assert!(!long.may_start(now_ms()));
+    assert_eq!(
+        long.ask(&ex, nonce(), &a.live, &a.runtime, &Wall),
+        Err(AgentError::Stopped)
+    );
+
     // A-3, C30
     let mut first = a.exercise(a.plan("l-3", budget, Some(Capacity::Own)));
     assert!(matches!(
