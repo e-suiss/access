@@ -32,7 +32,9 @@ five minutes before they expire, under a lease; a refused refresh marks the conn
 
 - an Exercise the authority plane allowed, presented with the intent it was allowed for;
 - the caller authenticated as that Exercise's PEP, and registered as an executor of the Resource;
-- the Exercise's basis still standing (a revoked Grant ends every later release);
+- the Exercise's basis still standing (a revoked Grant ends every later release; when the
+  Exercise was for the person who owns the connection, the connection then goes to
+  `needs_reconnect`, its tokens are shredded and the person is told through Relay);
 - the Exercise acting for the person who owns the connection: holding a token is never a reason;
 - the Exercise's action mapped by the Resource;
 - a single release for each Exercise, and a token used no longer than the decision's horizon.

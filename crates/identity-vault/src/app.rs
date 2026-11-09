@@ -369,7 +369,17 @@ impl<H: ProviderHttp, S: SocialSecrets, X: Exercises, R: Random> Vault<H, S, X, 
                     .is_some_and(|r| r.upstream.revocation_endpoint.is_some()),
             };
             // U66
-            let admitted = admit(&asked, allowed.as_ref(), &held, (read.open, facts), now)?;
+            let admitted = match admit(&asked, allowed.as_ref(), &held, (read.open, facts), now) {
+                Ok(a) => a,
+                // §11.19, MD-13
+                Err(Refusal::BasisEnded)
+                    if allowed.as_ref().and_then(|a| a.principal) == Some(c.party) =>
+                {
+                    self.lapse(db, keys, c, now, "basis-ended").await?;
+                    return Err(Refusal::BasisEnded.into());
+                }
+                Err(r) => return Err(r.into()),
+            };
             let row = read.token.as_ref().ok_or(Refusal::NotConnected)?;
             if !refreshed && row.refreshable && refresh_first(row.access_expires_ms, now) {
                 self.refresh(db, keys, req.connection, now).await?;
@@ -492,10 +502,10 @@ impl<H: ProviderHttp, S: SocialSecrets, X: Exercises, R: Random> Vault<H, S, X, 
         };
         t.commit().await?;
         let (Some(resource), Some(set)) = (resource, set) else {
-            return self.lapse(db, keys, &c, now).await;
+            return self.lapse(db, keys, &c, now, "refresh").await;
         };
         let Some(refresh_token) = set.refresh_token.clone() else {
-            return self.lapse(db, keys, &c, now).await;
+            return self.lapse(db, keys, &c, now, "refresh").await;
         };
         let secret = self
             .secrets
@@ -534,25 +544,29 @@ impl<H: ProviderHttp, S: SocialSecrets, X: Exercises, R: Random> Vault<H, S, X, 
                 t.commit().await?;
                 Ok(())
             }
-            Err(TokenError::Refused | TokenError::Malformed) => self.lapse(db, keys, &c, now).await,
+            Err(TokenError::Refused | TokenError::Malformed) => {
+                self.lapse(db, keys, &c, now, "refresh").await
+            }
         }
     }
 
     /// The connection lapsed: `needs_reconnect`, its tokens shredded, the person told through
-    /// Relay (OP-154 m.3 (t)).
+    /// Relay (OP-154 m.3 (t)). `why` is the audit reason: a refused refresh, or the person's
+    /// Grant behind an allowed Exercise ended (§11.19).
     async fn lapse(
         &self,
         db: &Pool,
         keys: &Keys<'_>,
         c: &ConnectionRow,
         now: u64,
+        why: &str,
     ) -> Result<(), VaultError> {
         let mut t = keys.begin(db).await?;
         if t.set_vault_connection(c.id, "needs_reconnect", None, now)
             .await?
         {
             t.shred_vault_token_sets(c.id, now).await?;
-            audit(&mut t, "vault.needs_reconnect", "vault", &c.id, "refresh").await?;
+            audit(&mut t, "vault.needs_reconnect", "vault", &c.id, why).await?;
             let name = enabled(t.vault_resource(&c.resource).await?)
                 .map_or_else(|| c.resource.clone(), |(_, r)| r.upstream.display_name);
             prompt(&mut t, keys, c.subject, &name, now).await?;
