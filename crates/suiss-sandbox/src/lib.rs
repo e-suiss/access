@@ -29,6 +29,12 @@ pub enum Profile {
     /// Disposable parser worker (XML, ASN.1). No sockets at all; talks over inherited
     /// descriptors only; unlisted syscalls kill the process (isolated process, R-3).
     ParserWorker,
+    /// Supervisor of disposable parser workers (OP-155 m.3 (c)): Unix sockets only, no network;
+    /// it starts its workers, which enter [`Profile::ParserWorker`] themselves, so it may create
+    /// processes, kill them with `SIGKILL` and run the restrict-only calls (Landlock,
+    /// `no_new_privs`, capability drops, seccomp) their own lockdown needs. Unlisted syscalls
+    /// kill the process (isolated process, R-3).
+    ParserSupervisor,
     /// SMT solver worker (OP-115 m.6), entered by a child between fork and exec through
     /// [`Lockdown::confine`]. No sockets, no file writes, no process creation; only the declared
     /// executables run; unlisted syscalls kill the process (isolated process, R-3).
@@ -43,6 +49,7 @@ impl Profile {
             Self::Server => "server",
             Self::Signer => "signer",
             Self::ParserWorker => "parser-worker",
+            Self::ParserSupervisor => "parser-supervisor",
             Self::Solver => "solver",
         }
     }

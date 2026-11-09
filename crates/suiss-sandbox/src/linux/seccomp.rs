@@ -108,7 +108,9 @@ pub(super) const fn mismatch_action(profile: Profile) -> SeccompAction {
         // R-3
         Profile::Server => SeccompAction::Errno(libc::EPERM.unsigned_abs()),
         // R-3
-        Profile::Signer | Profile::ParserWorker | Profile::Solver => SeccompAction::KillProcess,
+        Profile::Signer | Profile::ParserWorker | Profile::ParserSupervisor | Profile::Solver => {
+            SeccompAction::KillProcess
+        }
     }
 }
 
@@ -376,6 +378,7 @@ fn common_rules(rules: &mut Rules, phase: Phase, pid: i32) -> Result<(), Error> 
 }
 
 /// Filesystem and socket syscalls, per profile (OP-2).
+#[expect(clippy::too_many_lines, reason = "one arm per profile")]
 fn profile_rules(rules: &mut Rules, profile: Profile, phase: Phase) -> Result<(), Error> {
     let dword = SeccompCmpArgLen::Dword;
 
@@ -471,6 +474,18 @@ fn profile_rules(rules: &mut Rules, profile: Profile, phase: Phase) -> Result<()
                 #[cfg(target_arch = "x86_64")]
                 allow(rules, read_fs_x86);
             }
+            // OP-155 m.3 (c)
+            set_own_limit(rules, &[libc::RLIMIT_CPU])?;
+        }
+        Profile::ParserSupervisor => {
+            // OP-155 m.3 (c)
+            allow(rules, read_fs);
+            #[cfg(target_arch = "x86_64")]
+            allow(rules, read_fs_x86);
+            allow(rules, socket_io);
+            rules.insert(libc::SYS_socket, any_of(0, &dword, &[af_unix])?);
+            rules.insert(libc::SYS_socketpair, any_of(0, &dword, &[af_unix])?);
+            supervisor_rules(rules)?;
         }
         Profile::Solver => {
             // OP-115 m.6
@@ -482,6 +497,93 @@ fn profile_rules(rules: &mut Rules, profile: Profile, phase: Phase) -> Result<()
         }
     }
     Ok(())
+}
+
+/// Adds to the `prlimit64` rule: the process may set its own `resources`.
+fn set_own_limit(rules: &mut Rules, resources: &[u32]) -> Result<(), Error> {
+    let dword = SeccompCmpArgLen::Dword;
+    let entry = rules.entry(libc::SYS_prlimit64).or_default();
+    for r in resources {
+        entry.push(
+            SeccompRule::new(vec![
+                cond(0, dword.clone(), SeccompCmpOp::Eq, 0)?,
+                cond(1, dword.clone(), SeccompCmpOp::Eq, u64::from(*r))?,
+            ])
+            .map_err(backend)?,
+        );
+    }
+    Ok(())
+}
+
+/// What a [`Profile::ParserSupervisor`] needs beyond its sockets (OP-155 m.3 (c)): starting a
+/// worker (`clone` without a namespace flag, `execve`, the loader's start-up calls), reaping and
+/// killing it with `SIGKILL`, and the restrict-only calls the worker's own lockdown makes before
+/// its filter takes over. Landlock limits `execve` to the declared executables.
+fn supervisor_rules(rules: &mut Rules) -> Result<(), Error> {
+    let dword = SeccompCmpArgLen::Dword;
+    allow(
+        rules,
+        &[
+            libc::SYS_execve,
+            libc::SYS_wait4,
+            libc::SYS_waitid,
+            libc::SYS_set_tid_address,
+            libc::SYS_capset,
+            libc::SYS_landlock_create_ruleset,
+            libc::SYS_landlock_add_rule,
+            libc::SYS_landlock_restrict_self,
+        ],
+    );
+    #[cfg(target_arch = "x86_64")]
+    allow(rules, &[libc::SYS_arch_prctl, libc::SYS_dup2]);
+    rules.insert(
+        libc::SYS_clone,
+        vec![
+            SeccompRule::new(vec![cond(
+                0,
+                SeccompCmpArgLen::Qword,
+                SeccompCmpOp::MaskedEq(clone_namespace_flags()),
+                0,
+            )?])
+            .map_err(backend)?,
+        ],
+    );
+    rules.insert(
+        libc::SYS_kill,
+        vec![
+            SeccompRule::new(vec![cond(
+                1,
+                dword.clone(),
+                SeccompCmpOp::Eq,
+                u64::from(libc::SIGKILL.unsigned_abs()),
+            )?])
+            .map_err(backend)?,
+        ],
+    );
+    rules.insert(
+        libc::SYS_seccomp,
+        any_of(0, &dword, &[u64::from(libc::SECCOMP_SET_MODE_FILTER)])?,
+    );
+    let ops: Vec<u64> = [
+        libc::PR_SET_NAME,
+        libc::PR_GET_NAME,
+        libc::PR_SET_VMA,
+        libc::PR_GET_DUMPABLE,
+        libc::PR_SET_DUMPABLE,
+        libc::PR_GET_NO_NEW_PRIVS,
+        libc::PR_SET_NO_NEW_PRIVS,
+        libc::PR_CAPBSET_READ,
+        libc::PR_CAPBSET_DROP,
+        libc::PR_CAP_AMBIENT,
+    ]
+    .into_iter()
+    .map(|op| u64::from(op.unsigned_abs()))
+    .collect();
+    rules.insert(libc::SYS_prctl, any_of(0, &dword, &ops)?);
+    set_own_limit(
+        rules,
+        &[libc::RLIMIT_CORE, libc::RLIMIT_AS, libc::RLIMIT_CPU],
+    )
 }
 
 /// The [`SOLVER`] syscalls and the solver's `prlimit64` rule (OP-115 m.6).
@@ -509,10 +611,11 @@ fn solver_rules(rules: &mut Rules) -> Result<(), Error> {
 mod tests {
     use super::*;
 
-    const PROFILES: [Profile; 4] = [
+    const PROFILES: [Profile; 5] = [
         Profile::Server,
         Profile::Signer,
         Profile::ParserWorker,
+        Profile::ParserSupervisor,
         Profile::Solver,
     ];
     const PHASES: [Phase; 2] = [Phase::Startup, Phase::Narrowed];
@@ -542,7 +645,10 @@ mod tests {
             for nr in narrowed.keys() {
                 assert!(startup.contains_key(nr), "{profile:?} phase 2 adds {nr}");
             }
-            assert!(!narrowed.contains_key(&libc::SYS_seccomp));
+            // OP-155 m.3 (c)
+            if profile != Profile::ParserSupervisor {
+                assert!(!narrowed.contains_key(&libc::SYS_seccomp));
+            }
         }
     }
 
@@ -581,6 +687,30 @@ mod tests {
             ] {
                 assert!(!rules.contains_key(&nr), "{phase:?} allows {nr}");
             }
+        }
+    }
+
+    #[test]
+    fn parser_worker_sets_only_its_own_cpu_limit() {
+        // OP-155 m.3 (c)
+        let rules = allowlist(Profile::ParserWorker, Phase::Narrowed, 1).unwrap();
+        assert_eq!(rules.get(&libc::SYS_prlimit64).map(Vec::len), Some(2));
+        for nr in [libc::SYS_execve, libc::SYS_kill, libc::SYS_wait4] {
+            assert!(!rules.contains_key(&nr), "{nr}");
+        }
+    }
+
+    #[test]
+    fn parser_supervisor_has_no_network_syscalls() {
+        // OP-2, OP-155 m.3 (c)
+        for phase in PHASES {
+            let rules = allowlist(Profile::ParserSupervisor, phase, 1).unwrap();
+            for nr in [libc::SYS_connect, libc::SYS_bind, libc::SYS_listen] {
+                assert!(!rules.contains_key(&nr), "{phase:?} allows {nr}");
+            }
+            assert_eq!(rules.get(&libc::SYS_socket).map(Vec::len), Some(1));
+            assert_eq!(rules.get(&libc::SYS_kill).map(Vec::len), Some(1));
+            assert!(rules.contains_key(&libc::SYS_execve));
         }
     }
 

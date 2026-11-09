@@ -17,6 +17,7 @@ What it applies, in order:
 | `Server` | Network-facing services | fail with `EPERM` |
 | `Signer` | Signing processes: Unix sockets only, no network | kill the process |
 | `ParserWorker` | Workers that parse untrusted input: no sockets at all | kill the process |
+| `ParserSupervisor` | The process that starts parser workers: Unix sockets only, no network | kill the process |
 | `Solver` | An external solver started through `Lockdown::confine` | kill the process |
 
 ## Use

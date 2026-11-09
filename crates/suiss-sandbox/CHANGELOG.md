@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `Profile::ParserSupervisor`: a supervisor of parser workers. Unix sockets only, no network; it may start its workers, kill them with `SIGKILL` and make the restrict-only calls their own lockdown needs.
+- `Profile::ParserWorker` may set its own CPU time limit, so a long-lived worker can bound each request.
+
 ## 0.4.0
 
 No changes; released with `esuiss-access-kernel` 0.4.0 (intent plan reference, parameter provenance and Mandate origin sets; `disclose`/`declassify` core classes; runtime and effect attestation, executor control and workload binding Claim classes; Approval Act surface class and evidence; action reversibility). The Kernel's public structs gained fields, so the minor version moves.
