@@ -971,3 +971,161 @@ async fn a_stream_carries_no_event_after_its_horizon() {
     assert_eq!(stream.listen.next(wall()), Next::Closed(Closed::Denied));
     m.w.domains.release().await;
 }
+
+/// One request without a token, as the client sent it.
+fn raw(
+    m: &Mcp,
+    server: &McpServer<'_>,
+    (method, path): (&str, &str),
+    headers: &[(&str, &str)],
+    body: &str,
+) -> Response {
+    let ports = Ports {
+        keys: &m.live,
+        replay: &m.replay,
+        nonces: &m.live,
+        status: &m.live,
+        introspection: &m.live,
+        revocations: &m.live,
+    };
+    respond(server.handle(
+        &McpRequest {
+            method,
+            path,
+            uri: MCP,
+            headers: Headers(headers),
+            body: body.as_bytes(),
+            certificate: None,
+        },
+        &Env {
+            clock: &Wall,
+            ports: &ports,
+            decisions: &m.live,
+            random: &Csprng,
+        },
+    ))
+}
+
+// RS-M1, RS-M14, RS-M15, AG-14, §11.5.2, §11.5.6, §11.5.7, Ek B 4289, 4299, 4543, 4544
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn rebinding_and_mismatched_headers_stop_before_any_decision() {
+    let m = Mcp::open("mcp-wire").await;
+    let key = DpopKey::new();
+    let token = m.token(MCP, &key).await;
+    let tools = Tools::new(vec![tool("approve", &m.action, None)]).unwrap();
+    let server = m.server(&tools, None);
+    let r = raw(
+        &m,
+        &server,
+        ("GET", "/.well-known/oauth-protected-resource/mcp"),
+        &[("host", MCP_HOST)],
+        "",
+    );
+    assert_eq!(r.status, 200);
+    let prm = kjson::parse(r.body.as_bytes(), 1 << 16).unwrap();
+    assert_eq!(prm.get("resource").and_then(Json::as_str), Some(MCP));
+    assert_eq!(
+        prm.get("dpop_bound_access_tokens_required"),
+        Some(&Json::Bool(true))
+    );
+    for method in ["GET", "DELETE"] {
+        assert_eq!(
+            raw(&m, &server, (method, "/mcp"), &[("host", MCP_HOST)], "").status,
+            405
+        );
+    }
+
+    let list = rpc(
+        "tools/list",
+        &format!(r#"{{"_meta":{}}}"#, meta(None, None, None)),
+    );
+    let before = m.live.asked.load(Ordering::SeqCst);
+    let h = post(
+        &m,
+        &server,
+        (&token, &key),
+        &[("origin", "https://evil.example")],
+        &list,
+    );
+    assert_eq!(respond(h).status, 403);
+    let rebound = raw(
+        &m,
+        &server,
+        ("POST", "/mcp"),
+        &[("host", "rebound.example")],
+        &list,
+    );
+    assert_eq!(rebound.status, 403);
+    let call = rpc(
+        "tools/call",
+        &format!(
+            r#"{{"name":"approve","arguments":{{"memo":"a"}},"_meta":{}}}"#,
+            meta(None, None, None)
+        ),
+    );
+    for header in [
+        ("mcp-method", "tools/list"),
+        ("mcp-name", "other"),
+        ("mcp-param-memo", "b"),
+        ("mcp-param-memo", "=?base64?Yg==?="),
+    ] {
+        let r = respond(post(&m, &server, (&token, &key), &[header], &call));
+        assert_eq!(r.status, 400, "{header:?}");
+        assert!(r.body.contains("-32020"), "{}", r.body);
+    }
+    let r = respond(post(
+        &m,
+        &server,
+        (&token, &key),
+        &[("x-trace", "a\r\nb")],
+        &call,
+    ));
+    assert_eq!(r.status, 400);
+    assert_eq!(m.live.asked.load(Ordering::SeqCst), before);
+    let h = post(
+        &m,
+        &server,
+        (&token, &key),
+        &[
+            ("mcp-param-memo", "=?base64?YQ==?="),
+            ("origin", "https://agent.example"),
+        ],
+        &call,
+    );
+    assert!(matches!(h, Handled::Call(_)), "{h:?}");
+
+    let discover = rpc(
+        "server/discover",
+        &format!(r#"{{"_meta":{}}}"#, meta(None, None, None)),
+    );
+    let r = raw(
+        &m,
+        &server,
+        ("POST", "/mcp"),
+        &[("host", MCP_HOST)],
+        &discover,
+    );
+    assert_eq!(r.status, 401);
+    let probe = access_sdk::mcp::server::Discoverable {
+        action: m.action.clone(),
+        resource: ledger("discover"),
+        grant: m.public,
+    };
+    let open = McpServer {
+        discover: Some(&probe),
+        ..m.server(&tools, None)
+    };
+    let r = raw(
+        &m,
+        &open,
+        ("POST", "/mcp"),
+        &[("host", MCP_HOST)],
+        &discover,
+    );
+    assert_eq!(r.status, 200, "{}", r.body);
+    assert_eq!(
+        result_of(&r).get("cacheScope").and_then(Json::as_str),
+        Some("public")
+    );
+    m.w.domains.release().await;
+}
