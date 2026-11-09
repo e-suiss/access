@@ -2486,6 +2486,7 @@ mod account;
 mod catalog;
 mod experience;
 mod management;
+mod mcp;
 mod privacy;
 mod recovery;
 mod recovery_authority;

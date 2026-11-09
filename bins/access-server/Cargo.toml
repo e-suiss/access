@@ -46,7 +46,7 @@ zeroize = { workspace = true, features = ["alloc", "std"] }
 
 [dev-dependencies]
 access-experience = { workspace = true }
-access-sdk = { workspace = true }
+access-sdk = { workspace = true, features = ["mcp"] }
 access-authority-signer = { path = "../../crates/authority-signer" }
 access-crypto = { workspace = true, features = ["testing"] }
 access-identity-account = { workspace = true, features = ["testing"] }
