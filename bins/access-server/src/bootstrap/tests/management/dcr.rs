@@ -67,11 +67,11 @@ async fn authorize(c: &Console, client_id: &str) -> Response<Body> {
     .0
 }
 
-// §10.1.2, §11.4.5 #31-35, OP-154 m.3 (j), MD-14, Ek B 4165
+// §10.1.2 §11.4.5 OP-154 m.3 (j) MD-14 Ek B 4165
 #[tokio::test]
 async fn dcr_is_off_until_decided_and_takes_only_its_initial_access_tokens() {
     let c = console("mgmt-dcr", true).await;
-    // §10.1.2: off by default
+    // §10.1.2
     let (status, _) = register(&c, Some(TOKEN), &app("https://app.example/cb")).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     let w = policy(&c, true, &[TOKEN, OTHER]).await;
@@ -82,13 +82,13 @@ async fn dcr_is_off_until_decided_and_takes_only_its_initial_access_tokens() {
     let (status, body) =
         register(&c, Some("not-one-of-them"), &app("https://app.example/cb")).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
-    // §11.4.5 #32
+    // §11.4.5
     let (status, body) = register(&c, Some(TOKEN), &app("https://*.app.example/cb")).await;
     assert_eq!(
         (status, body["error"].as_str()),
         (StatusCode::BAD_REQUEST, Some("invalid_redirect_uri"))
     );
-    // §11.4.5 #34, SEP-837: an explicit error, not a silent refusal
+    // §11.4.5 SEP-837
     let (status, body) = register(&c, Some(TOKEN), &app("http://127.0.0.1:4242/cb")).await;
     assert_eq!(
         (status, body["error"].as_str()),
@@ -107,7 +107,7 @@ async fn dcr_is_off_until_decided_and_takes_only_its_initial_access_tokens() {
         (status, body["error"].as_str()),
         (StatusCode::BAD_REQUEST, Some("invalid_client_metadata"))
     );
-    // §11.4.5 #35: a host outside the policy
+    // §11.4.5
     let (status, _) = register(&c, Some(TOKEN), &app("https://elsewhere.example/cb")).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 
@@ -115,13 +115,13 @@ async fn dcr_is_off_until_decided_and_takes_only_its_initial_access_tokens() {
     assert_eq!(status, StatusCode::CREATED, "{first}");
     let client = first["client_id"].as_str().unwrap().to_owned();
     assert!(client.starts_with("dcr_"));
-    // §11.4.5 #33
+    // §11.4.5
     assert_eq!(first["issuer"], "https://access.test/realms/acme");
     assert!(first.get("client_secret").is_none());
     let (status, second) = register(&c, Some(OTHER), &app("https://app.example/cb")).await;
     assert_eq!(status, StatusCode::CREATED, "{second}");
     let kept = second["client_id"].as_str().unwrap().to_owned();
-    // OP-154 m.8 (h): a client the realm did not register needs a registered resource and the Approval Surface
+    // OP-154 m.8 (h)
     let reply = authorize(&c, &client).await;
     assert_eq!(reply.status(), StatusCode::SEE_OTHER);
     assert!(
@@ -130,7 +130,7 @@ async fn dcr_is_off_until_decided_and_takes_only_its_initial_access_tokens() {
         location(&reply)
     );
 
-    // §11.4.5 #31: ten registrations an hour from one prefix
+    // §11.4.5
     let mut last = StatusCode::CREATED;
     for _ in 0..10 {
         last = register(&c, Some(TOKEN), &app("https://app.example/cb"))
@@ -139,7 +139,7 @@ async fn dcr_is_off_until_decided_and_takes_only_its_initial_access_tokens() {
     }
     assert_eq!(last, StatusCode::TOO_MANY_REQUESTS);
 
-    // §11.4.5 #35: tightening retires what the policy no longer admits
+    // §11.4.5
     let w = policy(&c, true, &[OTHER]).await;
     assert!(w.status.is_success(), "{} {}", w.status, w.body);
     let reply = authorize(&c, &client).await;

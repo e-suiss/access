@@ -96,7 +96,8 @@ $$;
 -- P58: a DCR client's consent record says so
 ALTER TABLE access.oauth_consent_records DROP CONSTRAINT oauth_consent_records_source_check;
 ALTER TABLE access.oauth_consent_records ADD CONSTRAINT oauth_consent_records_source_check
-  CHECK (source IN ('cimd', 'registered', 'dcr'));
+  CHECK (source IN ('cimd', 'registered', 'dcr')) NOT VALID;
+ALTER TABLE access.oauth_consent_records VALIDATE CONSTRAINT oauth_consent_records_source_check;
 
 DO $$
 DECLARE

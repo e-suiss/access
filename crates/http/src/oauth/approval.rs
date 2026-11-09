@@ -70,7 +70,7 @@ pub(super) fn routes<E: Env>() -> Router<Arc<OAuth<E>>> {
 fn framed_never(mut r: Response) -> Response {
     let h = r.headers_mut();
     h.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    // §11.4.5 #28, Ek B 4538
+    // §11.4.5 Ek B 4538
     h.insert(
         header::CONTENT_SECURITY_POLICY,
         HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'"),

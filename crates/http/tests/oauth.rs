@@ -277,7 +277,7 @@ async fn a_browser_sees_the_error_page_with_owner_and_reference() {
     assert_eq!(api.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
-// TN-35, OP-154 m.3 (p), (dd): absent until the realm enables the device authorization grant
+// TN-35 OP-154 m.3 (p) (dd)
 #[tokio::test]
 async fn the_device_authorization_endpoint_is_absent_until_the_realm_enables_it() {
     for (path, host) in [

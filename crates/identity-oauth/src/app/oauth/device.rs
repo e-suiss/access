@@ -13,9 +13,9 @@ use access_store::device::NewDeviceCode;
 use access_store::sessions::SessionRow;
 use serde_json::json;
 
+use super::dcr::ip_prefix;
 use super::{Env, OAuth, Realm, Reply, TokenHttp, bound_live, decode32, session_live};
 use crate::domain::client::TrustLevel;
-use crate::domain::dcr::ip_prefix;
 use crate::domain::device::{
     self, INTERVAL_S, LIFETIME_MS, PERSON_MISSES, PERSON_WAIT_MS, PREFIX_MISSES_PER_HOUR,
     VERIFICATION_PATH,

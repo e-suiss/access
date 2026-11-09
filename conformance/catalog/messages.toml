@@ -2783,6 +2783,14 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "consent-visual_changed"
+text_id = "consent.visual_changed"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "action-approve_access"
 text_id = "action.approve_access"
 surface = "login"

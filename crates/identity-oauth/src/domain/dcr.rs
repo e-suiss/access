@@ -4,10 +4,8 @@
 //! checked as a CIMD document is, with no secret, no fetched URL, no wildcard redirect and an
 //! explicit error for an `application_type` its redirects do not fit.
 
-use std::collections::BTreeSet;
-use std::net::IpAddr;
-
 use serde_json::{Map, Value};
+use std::collections::BTreeSet;
 
 use crate::domain::cimd::{self, ApplicationType, CimdError, Document, is_loopback};
 
@@ -135,7 +133,7 @@ pub fn register(body: &[u8], client_id: &str) -> Result<(Vec<u8>, Document), Ref
     if doc.contains_key("client_id") || FETCHED.iter().any(|f| doc.contains_key(*f)) {
         return Err(Refused::Metadata);
     }
-    // §11.4.5 #34, SEP-837
+    // §11.4.5 SEP-837
     let loopback = matches!(doc.get("redirect_uris"), Some(Value::Array(u))
         if u.iter().filter_map(Value::as_str).any(is_loopback));
     if loopback && doc.get("application_type").and_then(Value::as_str) != Some("native") {
@@ -178,22 +176,6 @@ pub fn register(body: &[u8], client_id: &str) -> Result<(Vec<u8>, Document), Ref
     }
 }
 
-/// The prefix a registration's rate is counted by: the /24 of an IPv4 address, the /56 of an
-/// IPv6 one.
-#[must_use]
-pub fn ip_prefix(ip: IpAddr) -> String {
-    match ip {
-        IpAddr::V4(v) => {
-            let [a, b, c, _] = v.octets();
-            format!("{a}.{b}.{c}.0/24")
-        }
-        IpAddr::V6(v) => {
-            let [first, second, third, fourth, ..] = v.segments();
-            format!("{first:x}:{second:x}:{third:x}:{:x}::/56", fourth & 0xff00)
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,7 +188,7 @@ mod tests {
         }
     }
 
-    // OP-154 m.3 (a), (j): closing or dropping tokens and domains is the CT1 tighten
+    // OP-154 m.3 (a) (j)
     #[test]
     fn only_a_narrower_policy_is_a_tighten() {
         let old = p(true, &["app.example"], &[1, 2]);
@@ -217,17 +199,7 @@ mod tests {
         assert!(!p(true, &["app.example"], &[1]).narrows(&p(false, &[], &[])));
     }
 
-    // §11.4.5 #31
-    #[test]
-    fn registrations_are_counted_by_network_prefix() {
-        assert_eq!(ip_prefix("192.0.2.77".parse().unwrap()), "192.0.2.0/24");
-        assert_eq!(
-            ip_prefix("2001:db8:1:2ff::1".parse().unwrap()),
-            "2001:db8:1:200::/56"
-        );
-    }
-
-    // §11.4.5 #32, #34
+    // §11.4.5
     #[test]
     fn a_registration_is_refused_explicitly() {
         let id = "dcr_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";

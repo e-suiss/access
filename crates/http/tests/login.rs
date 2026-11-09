@@ -1153,7 +1153,7 @@ async fn a_planned_frontend_route_answers_not_yet_served_only_for_a_known_realm(
     assert_eq!(a.status, StatusCode::NOT_FOUND);
 }
 
-// EI-18, §11.4.5 #28, OP-154 m.3 (k), Ek B 4538
+// EI-18 §11.4.5 OP-154 m.3 (k) Ek B 4538
 #[tokio::test]
 async fn only_the_consent_screen_may_compile_the_kernel_and_no_page_is_framed() {
     let e = env(59, "lg-approve", AuthPolicy::DEFAULT).await;

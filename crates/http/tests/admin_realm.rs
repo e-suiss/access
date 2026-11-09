@@ -145,7 +145,7 @@ async fn a_planned_realm_read_answers_not_yet_served_behind_its_permission() {
         .iter()
         .filter(|r| access_http::api::realm::planned(r.operation_id) && r.access != Access::Write)
         .collect();
-    // OP-154 m.4, m.3 (t), (a): every Stage 9 read is served
+    // OP-154 m.4 m.3 (t) (a)
     assert!(planned.is_empty(), "{}", planned.len());
     for row in planned {
         let (r, body) = send(&router, read(&path_of(row), &token)).await;

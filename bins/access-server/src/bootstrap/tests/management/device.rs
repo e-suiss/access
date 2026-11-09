@@ -161,7 +161,7 @@ async fn a_device_code_is_off_until_decided_then_approved_once_into_a_dpop_bound
     let client = w.body["resource"]["client_id"].as_str().unwrap().to_owned();
     let key = SoftSigner::generate_p256().unwrap().0;
 
-    // TN-35, OP-154 m.3 (dd): not offered until the realm decides it
+    // TN-35 OP-154 m.3 (dd)
     let (status, _) = device_code(&c, &client).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     let answer = poll(&c, &client, "AAAA", &key).await;
@@ -193,7 +193,7 @@ async fn a_device_code_is_off_until_decided_then_approved_once_into_a_dpop_bound
         issued["verification_uri"],
         "https://access.test/realms/acme/device"
     );
-    // CR-38: only digests are kept
+    // CR-38
     let raw = b64url_decode(&code).unwrap();
     let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
         .await
@@ -237,7 +237,7 @@ async fn a_device_code_is_off_until_decided_then_approved_once_into_a_dpop_bound
     assert_eq!(view["scopes"], serde_json::json!(["openid"]));
     assert!(view["ip_prefix"].is_string());
     let csrf = view["csrf"].as_str().unwrap().to_owned();
-    // §11.4.5 #28
+    // §11.4.5
     let (status, _) = page(
         &c,
         "/v1/device/approval",
@@ -257,14 +257,14 @@ async fn a_device_code_is_off_until_decided_then_approved_once_into_a_dpop_bound
     .await;
     assert_eq!(status, StatusCode::OK, "{done}");
 
-    // OP-154 m.3 (p), m.10 (j): DPoP-bound, redeemed once
+    // OP-154 m.3 (p) m.10 (j)
     let answer = poll(&c, &client, &code, &key).await;
     assert_eq!(answer["token_type"], "DPoP", "{answer}");
     assert!(answer["access_token"].is_string());
     let again = poll(&c, &client, &code, &key).await;
     assert_eq!(again["error"], "invalid_grant", "{again}");
 
-    // OP-154 m.3 (p), CR-39: five wrong codes, then a wait, the same answer for every wrong code
+    // OP-154 m.3 (p) CR-39
     for _ in 0..5 {
         let (status, body) = page(
             &c,

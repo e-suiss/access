@@ -18,6 +18,22 @@ use crate::domain::dcr::{
 use crate::ports::Unavailable;
 use crate::ports::oauth::{OAuthDb, OAuthTx};
 
+/// The prefix a registration's rate is counted by: the /24 of an IPv4 address, the /56 of an
+/// IPv6 one.
+#[must_use]
+pub fn ip_prefix(ip: IpAddr) -> String {
+    match ip {
+        IpAddr::V4(v) => {
+            let [a, b, c, _] = v.octets();
+            format!("{a}.{b}.{c}.0/24")
+        }
+        IpAddr::V6(v) => {
+            let [first, second, third, fourth, ..] = v.segments();
+            format!("{first:x}:{second:x}:{third:x}:{:x}::/56", fourth & 0xff00)
+        }
+    }
+}
+
 const HOUR_MS: u64 = 3_600_000;
 const DAY_MS: u64 = 86_400_000;
 
@@ -82,7 +98,7 @@ impl<E: Env> OAuth<E> {
         let now = self.now()?;
         let mut tx = self.begin(realm).await?;
         let policy = policy_of(&tx.dcr_policy().await?);
-        // §10.1.2: off by default; a closed profile serves no endpoint
+        // §10.1.2
         if !policy.enabled {
             return Ok(Reply::NotFound);
         }
@@ -102,8 +118,8 @@ impl<E: Env> OAuth<E> {
                 "the initial access token is not accepted",
             ));
         }
-        // §11.4.5 #31
-        let prefix = peer.map_or_else(|| String::from("unknown"), dcr::ip_prefix);
+        // §11.4.5
+        let prefix = peer.map_or_else(|| String::from("unknown"), ip_prefix);
         let (ip, day, live) = tx
             .dcr_counts(
                 &prefix,
@@ -122,7 +138,7 @@ impl<E: Env> OAuth<E> {
             Ok(m) => m,
             Err(e) => return Ok(refused(400, e.code(), e.description())),
         };
-        // §11.4.5 #35
+        // §11.4.5
         if !policy.admits(&digest, &redirect_hosts(&doc.redirect_uris)) {
             return Ok(refused(
                 400,
@@ -152,7 +168,7 @@ impl<E: Env> OAuth<E> {
                 "token_endpoint_auth_method": "none",
                 "grant_types": ["authorization_code", "refresh_token"],
                 "response_types": ["code"],
-                // §11.4.5 #33
+                // §11.4.5
                 "issuer": realm.issuer.as_str(),
             })
             .to_string(),
@@ -176,7 +192,7 @@ impl<E: Env> OAuth<E> {
             return Ok(None);
         };
         let policy = policy_of(&tx.dcr_policy().await?);
-        // §11.4.5 #31, #35
+        // §11.4.5
         let reason = if !policy.admits(&row.token, &redirect_hosts(&client.redirect_uris)) {
             Some("policy")
         } else if row.last_used_ms.saturating_add(UNUSED_MS) < now {
@@ -190,5 +206,20 @@ impl<E: Env> OAuth<E> {
         }
         tx.touch_dcr_client(row.client_uuid, now).await?;
         Ok(Some(client))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // §11.4.5
+    #[test]
+    fn registrations_are_counted_by_network_prefix() {
+        assert_eq!(ip_prefix("192.0.2.77".parse().unwrap()), "192.0.2.0/24");
+        assert_eq!(
+            ip_prefix("2001:db8:1:2ff::1".parse().unwrap()),
+            "2001:db8:1:200::/56"
+        );
     }
 }

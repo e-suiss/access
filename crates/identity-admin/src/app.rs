@@ -1593,7 +1593,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     },
                 )
                 .await?;
-                // §11.4.5 #35
+                // §11.4.5
                 let now = t.db_now_ms().await?;
                 for c in t.dcr_clients().await? {
                     let hosts = access_identity_oauth::app::oauth::dcr::of_dcr(&c)

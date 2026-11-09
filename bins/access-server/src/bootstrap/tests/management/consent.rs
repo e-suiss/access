@@ -181,8 +181,7 @@ fn query_of(url: &str, name: &str) -> Option<String> {
         .map(String::from)
 }
 
-// EI-18, §11.6 rules 1–5, P58, AS-M14, AG-6, Ek B 4246, 4247, 4248, 4249, 4251, 4538, 4539, 4540,
-// 4541, 4542
+// EI-18 §11.6 rule 1–5 P58 AS-M14 AG-6 Ek B 4246 4247 4248 4249 4251 4538 4539 4540 4541 4542
 #[tokio::test]
 async fn a_cimd_client_is_approved_only_by_the_persons_own_grant_issue() {
     let c = console("mgmt-consent", true).await;
@@ -285,7 +284,7 @@ async fn a_cimd_client_is_approved_only_by_the_persons_own_grant_issue() {
     )
     .await;
     assert_eq!(r.status(), StatusCode::OK, "{view}");
-    // §11.4.5 #28, Ek B 4538
+    // §11.4.5 Ek B 4538
     assert_eq!(r.headers()[header::X_FRAME_OPTIONS], "DENY");
     assert!(
         r.headers()[header::CONTENT_SECURITY_POLICY]
@@ -308,7 +307,7 @@ async fn a_cimd_client_is_approved_only_by_the_persons_own_grant_issue() {
         b64url_encode(&kmeta::object_id(&parent, kind::GRANT, 0).0)
     );
 
-    // §11.4.5 #28
+    // §11.4.5
     let (r, _) = page(
         &c,
         "/v1/login/approval",
@@ -318,7 +317,7 @@ async fn a_cimd_client_is_approved_only_by_the_persons_own_grant_issue() {
     )
     .await;
     assert_eq!(r.status(), StatusCode::FORBIDDEN);
-    // EI-18: an allowed grant.issue held by someone else records nothing
+    // EI-18
     let elsewhere = root_commit(
         &c,
         Payload::GrantIssue(GrantContent {
@@ -342,7 +341,7 @@ async fn a_cimd_client_is_approved_only_by_the_persons_own_grant_issue() {
     assert_eq!(r.status(), StatusCode::FORBIDDEN, "{refused}");
     assert_eq!(refused["code"], "consent-grant-required");
 
-    // EI-18: the person's device Instance signs the drafted grant.issue
+    // EI-18
     let envelope = draft["envelope"].as_str().unwrap();
     let basis = ExerciseBasis::Holding(kmeta::HoldingRef {
         grant: Id(<[u8; 16]>::try_from(
@@ -423,7 +422,7 @@ async fn a_cimd_client_is_approved_only_by_the_persons_own_grant_issue() {
         "the stored request is used once"
     );
 
-    // §11.6 rule 1, P58: the consent stands while its Grant does
+    // §11.6 rule 1 P58
     let (r, _) = authorize(&c, &query, &cookie).await;
     assert!(location(&r).starts_with(CB), "{}", location(&r));
     root_commit(
