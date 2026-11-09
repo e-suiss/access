@@ -1,14 +1,16 @@
 // S2, S4, S5, S6, Changes (§8.5, §8.17.7, OP-153 m.3 (w), m.8 (e)): the Authority hub, read with
 // this browser's device key. Every row says whose record it is and when it was read; Revoke is
 // at most two steps away and is shown done only once Access recorded it (XI-3, XI-5); a lost
-// answer is "Not confirmed — checking", retried with the same signed request (G39, HL-5).
-import { honesty, WhyPanel, type Explanation } from "@suiss/access-react";
+// answer is "Not confirmed — checking", retried with the same signed request (G39, HL-5). An
+// agent is shown as an agent (XI-17); what it did is what its runtime reported (E64, X30); Stop
+// is two rows (X13) and the aftermath is honest about the horizon (§8.13, §8.17.7.4).
+import { agents, honesty, WhyPanel, type Explanation } from "@suiss/access-react";
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 
 import { revoke, search, type Revoking } from "../lib/adp.js";
 import { at, catalogue, t } from "../lib/i18n.js";
 import type { Confirm, Instance, SignatureView } from "../lib/instance.js";
-import { assemble, type Hub as HubData, type Read, type Row } from "./model.js";
+import { assemble, type ActivityRow, type Hub as HubData, type Read, type Row } from "./model.js";
 
 export type Section = "authority" | "activity" | "changes";
 
@@ -25,6 +27,92 @@ async function read(
   } catch {
     return { kind: "unknown" };
   }
+}
+
+/** How a Party is named to the viewer: the viewer is "you"; any other is its identifier. */
+function namer(viewer: string): (party: string) => string {
+  return (party) => (party === viewer ? t("party.you") : party);
+}
+
+function line(l: agents.Line): string {
+  return t(l.text, l.args);
+}
+
+/** The runtime state of the uses made on `grant` (§8.17.7.4): what the runtime confirmed. */
+function runtimeOn(uses: readonly ActivityRow[], grant: string): agents.RuntimeState {
+  const control = uses.filter((u) => u.grant === grant).flatMap((u) => u.reports.control);
+  return agents.runtimeOf({ attested: [], control });
+}
+
+function reportsOf(uses: readonly ActivityRow[], exercise: string): agents.Reports {
+  const of = uses.filter((u) => u.exercise === exercise);
+  return {
+    attested: of.flatMap((u) => u.reports.attested),
+    control: of.flatMap((u) => u.reports.control),
+  };
+}
+
+/** XI-17 */
+function Badge({ face, viewer }: { readonly face: agents.AgentFace; readonly viewer: string }) {
+  return (
+    <p className="meta" data-testid="agent-badge">
+      <agents.AgentBadge face={face} name={namer(viewer)} catalogue={catalogue} />
+    </p>
+  );
+}
+
+/** §8.17.5.8, E31: the next authority check of the agent's open tasks on this Grant. */
+function NextCheck({
+  instance,
+  grant,
+}: {
+  readonly instance: Instance;
+  readonly grant: string;
+}): ReactElement | null {
+  const [next, setNext] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    search(instance, "revocation-impact", { grant })
+      .then((a) => {
+        setNext(agents.nextCheck(agents.exposedOf(a.results[0]), Date.now()));
+      })
+      .catch(() => {
+        setNext(undefined);
+      });
+  }, [instance, grant]);
+  if (next === undefined) return null;
+  return (
+    <p className="meta" data-testid="agent-next-check">
+      {t("agent.next_check", { time: at(next) })}
+    </p>
+  );
+}
+
+/** §8.17.7.1, X31: what the holder passed on from this Grant. */
+function Passed({
+  row,
+  rows,
+  viewer,
+}: {
+  readonly row: Row;
+  readonly rows: readonly Row[];
+  readonly viewer: string;
+}): ReactElement | null {
+  const passed = agents.passedOn(row.grant, rows);
+  if (passed.length === 0 || row.who.party === undefined) return null;
+  const name = namer(viewer);
+  return (
+    <ul className="meta" data-testid="passed-on">
+      {passed.map((p) => (
+        <li key={p.grant}>
+          {t("subdelegation.passed", {
+            agent: name(row.who.party ?? ""),
+            holder: name(p.holder),
+            limits: p.limits.map(line).join(", "),
+          })}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function Owner({ asOf }: { readonly asOf: number }): ReactElement {
@@ -78,19 +166,27 @@ function Why({ row }: { readonly row: Row }): ReactElement {
 function RevokePanel({
   instance,
   row,
+  uses,
+  stop,
   onDone,
   onClose,
 }: {
   readonly instance: Instance;
   readonly row: Row;
+  readonly uses: readonly ActivityRow[];
+  /** "Stop" for an agent (§8.17.7.5): the same revoke, shown as two rows. */
+  readonly stop: boolean;
   readonly onDone: () => void;
   readonly onClose: () => void;
 }): ReactElement {
   const [impact, setImpact] = useState<number | null>(null);
+  const [exposed, setExposed] = useState<readonly agents.Exposed[]>([]);
   const [view, setView] = useState<{ v: SignatureView; resolve: (b: boolean) => void } | null>(
     null,
   );
-  const [state, setState] = useState<{ r: Revoking; next: honesty.Next } | null>(null);
+  const [state, setState] = useState<{ r: Revoking; next: honesty.Next; when: number } | null>(
+    null,
+  );
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     search(instance, "revocation-impact", { grant: row.grant })
@@ -98,6 +194,7 @@ function RevokePanel({
         const first = a.results[0] ?? {};
         const subtree = Array.isArray(first["subtree"]) ? first["subtree"].length : 0;
         setImpact(Math.max(0, subtree - 1));
+        setExposed(agents.exposedOf(first).filter((e) => e.holder === row.who.party));
       })
       .catch(() => {
         setImpact(-1);
@@ -109,21 +206,63 @@ function RevokePanel({
     revoke(instance, confirm, row.grant)
       .then((s) => {
         const next = honesty.next(s.attempt, Date.now());
-        setState({ r: s, next });
+        setState({ r: s, next, when: Date.now() });
         if (next === "done") onDone();
       })
       .catch(() => {
         setFailed(true);
       });
   }, [instance, row, onDone]);
+  const runtime = runtimeOn(uses, row.grant);
+  const recorded = state?.r.shown === "outcome.confirmed";
+  const stopRows =
+    stop && row.agent !== undefined ? (
+      <div data-testid="stop-rows">
+        <agents.StopRows
+          rows={agents.stopRows(
+            runtime,
+            recorded
+              ? { text: "stop.authority_revoked", args: { time: at(state.when) } }
+              : { text: "stop.authority_not_recorded" },
+          )}
+          catalogue={catalogue}
+        />
+        <p className="notice">{t("stop.runtime_note")}</p>
+      </div>
+    ) : null;
   if (state !== null) {
-    const { r: done, next } = state;
+    const { r: done, next, when: now } = state;
     return (
       <section className="panel" aria-label={t("aftermath.title")} data-testid="aftermath">
         <h4>{t("aftermath.title")}</h4>
         <p role="status" data-testid="outcome">
           {t(done.shown)}
         </p>
+        {stopRows}
+        {recorded && row.agent !== undefined && (
+          <ul className="rows" data-testid="agent-aftermath">
+            {(exposed.length === 0 ? [undefined] : exposed).map((e) => {
+              const after =
+                e === undefined
+                  ? undefined
+                  : agents.aftermath(e, reportsOf(uses, e.exercise), now, at);
+              const state = after?.runtime ?? runtime;
+              return (
+                <li key={e?.exercise ?? "none"}>
+                  <p data-testid="agent-status">
+                    {t("agent.status.label", { status: t(agents.runtimeText(state)) })}
+                  </p>
+                  {after !== undefined && <p data-testid="agent-next">{line(after.next)}</p>}
+                  {after?.containment === true && (
+                    <p className="notice" data-testid="containment">
+                      {t("aftermath.containment")}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
         {done.position !== undefined && (
           <p>{t("aftermath.recorded_at", { position: String(done.position) })}</p>
         )}
@@ -134,7 +273,7 @@ function RevokePanel({
             onClick={() => {
               void done.retry().then((s) => {
                 const after = honesty.next(s.attempt, Date.now());
-                setState({ r: s, next: after });
+                setState({ r: s, next: after, when: Date.now() });
                 if (after === "done") onDone();
               });
             }}
@@ -151,6 +290,7 @@ function RevokePanel({
   return (
     <section className="panel" aria-label={t("revoke.title")} data-testid="revoke">
       <h4>{t("revoke.title")}</h4>
+      {stopRows}
       <h5>{t("revoke.impact")}</h5>
       <p data-testid="impact">
         {impact === null
@@ -201,17 +341,21 @@ function RevokePanel({
 function Rows({
   title,
   rows,
+  all,
+  uses,
   instance,
   onChanged,
   testid,
 }: {
   readonly title: string;
   readonly rows: readonly Row[];
+  readonly all: readonly Row[];
+  readonly uses: readonly ActivityRow[];
   readonly instance: Instance;
   readonly onChanged: () => void;
   readonly testid: string;
 }): ReactElement {
-  const [open, setOpen] = useState<{ grant: string; what: "why" | "revoke" } | null>(null);
+  const [open, setOpen] = useState<{ grant: string; what: "why" | "revoke" | "stop" } | null>(null);
   return (
     <section aria-label={title} data-testid={testid}>
       <h3>{title}</h3>
@@ -221,9 +365,12 @@ function Rows({
           const revokeOffer = r.offers.find((o) => o.action === "revoke");
           return (
             <li key={`${testid}:${r.grant}`} className="row" data-grant={r.grant}>
+              {r.agent !== undefined && <Badge face={r.agent} viewer={instance.party} />}
               <p>
                 <span className="mono">{r.what.join(", ")}</span> · <Capacities row={r} />
               </p>
+              {r.agent !== undefined && <NextCheck instance={instance} grant={r.grant} />}
+              <Passed row={r} rows={all} viewer={instance.party} />
               <p className="meta">
                 {r.selection?.at === undefined
                   ? t(r.status)
@@ -256,14 +403,27 @@ function Rows({
                   {t("action.why")}
                 </button>
                 {revokeOffer?.available === true ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpen({ grant: r.grant, what: "revoke" });
-                    }}
-                  >
-                    {t("action.revoke")}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpen({ grant: r.grant, what: "revoke" });
+                      }}
+                    >
+                      {t("action.revoke")}
+                    </button>
+                    {r.agent !== undefined && (
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => {
+                          setOpen({ grant: r.grant, what: "stop" });
+                        }}
+                      >
+                        {t("action.stop_agent")}
+                      </button>
+                    )}
+                  </>
                 ) : (
                   revokeOffer?.whoCan !== undefined && (
                     <span className="meta">{t(revokeOffer.whoCan)}</span>
@@ -271,10 +431,12 @@ function Rows({
                 )}
               </div>
               {open?.grant === r.grant && open.what === "why" && <Why row={r} />}
-              {open?.grant === r.grant && open.what === "revoke" && (
+              {open?.grant === r.grant && open.what !== "why" && (
                 <RevokePanel
                   instance={instance}
                   row={r}
+                  uses={uses}
+                  stop={open.what === "stop"}
                   onDone={onChanged}
                   onClose={() => {
                     setOpen(null);
@@ -310,6 +472,7 @@ export function Hub({
   }, [instance]);
   useEffect(load, [load]);
   if (hub === null) return <p role="status">{t("shell.loading")}</p>;
+  const all = [...hub.yourAuthority, ...hub.actingForYou, ...hub.sharedFromYou];
   return (
     <div className="hub" data-testid="hub">
       <p className="meta" data-testid="domain-status">
@@ -330,6 +493,8 @@ export function Hub({
           <Rows
             title={t("hub.your_authority")}
             rows={hub.yourAuthority}
+            all={all}
+            uses={hub.activity}
             instance={instance}
             onChanged={load}
             testid="your-authority"
@@ -337,6 +502,8 @@ export function Hub({
           <Rows
             title={t("hub.acting_for_you")}
             rows={hub.actingForYou}
+            all={all}
+            uses={hub.activity}
             instance={instance}
             onChanged={load}
             testid="acting-for-you"
@@ -344,6 +511,8 @@ export function Hub({
           <Rows
             title={t("hub.shared_from_you")}
             rows={hub.sharedFromYou}
+            all={all}
+            uses={hub.activity}
             instance={instance}
             onChanged={load}
             testid="shared-from-you"
@@ -369,9 +538,18 @@ export function Hub({
           {hub.activity.length === 0 && <p>{t("hub.empty")}</p>}
           <ul className="rows">
             {hub.activity.map((a) => (
-              <li key={a.pos} className="row">
+              <li key={a.pos} className="row" data-testid="use">
+                {a.agent !== undefined && <Badge face={a.agent} viewer={instance.party} />}
                 {t(a.text)} · {t(a.capacity.text, { party: a.capacity.party ?? "" })}
                 {a.at !== undefined && <> · {at(a.at)}</>}
+                {/* E64, X30 */}
+                {(a.agent !== undefined || a.reports.attested.length > 0) && (
+                  <agents.OutcomeLabels
+                    lines={agents.outcomeLines(a.reports)}
+                    name={namer(instance.party)}
+                    catalogue={catalogue}
+                  />
+                )}
                 <Owner asOf={hub.asOf} />
               </li>
             ))}

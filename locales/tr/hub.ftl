@@ -165,3 +165,4 @@ suggestion-repeated = Bu hafta { $agent } ajanının { $count } benzer { $action
 suggestion-not_applied = Tam yetki vermeyi inceleyip verene kadar hiçbir şey değişmez.
 action-review_delegation = Tam yetki vermeyi incele
 action-not_now = Şimdi değil
+party-you = sen

@@ -1,6 +1,8 @@
-// §8.17.7, §6.4 XI-1, XI-5, XI-9, XI-10, XI-11, XI-14, XI-15, XI-16, XI-22, IA-2: the hub's rows
+// §8.17.7, §6.4 XI-1, XI-5, XI-9, XI-10, XI-11, XI-14, XI-15, XI-16, XI-17, XI-22, IA-2: the hub's rows
 // from the domain's own answers, by the rules of services/experience (domain::hub). Every row
 // names its owner and when it was read; a domain that did not answer is unknown, never empty.
+
+import { agents } from "@suiss/access-react";
 
 type Json = Readonly<Record<string, unknown>>;
 
@@ -67,6 +69,8 @@ export interface Row {
   readonly offers: readonly Offer[];
   readonly source: Json;
   readonly since?: number;
+  /** The holder as an agent (XI-17): an agent is never shown as a person. */
+  readonly agent?: agents.AgentFace;
 }
 
 export interface RootRow {
@@ -81,6 +85,12 @@ export interface ActivityRow {
   readonly text: "activity.by_you" | "activity.for_you";
   readonly capacity: Capacity;
   readonly grant?: string;
+  /** The `ExerciseID` of the use. */
+  readonly exercise?: string;
+  /** The acting agent (XI-17). */
+  readonly agent?: agents.AgentFace;
+  /** What runtimes reported about it (E64, INV-18). */
+  readonly reports: agents.Reports;
 }
 
 export interface ChangeRow {
@@ -187,6 +197,15 @@ function row(
   const [chosen, status] = selection(v);
   const validUntil = num(obj(v["validity"])["until"]);
   const since = num(v["since"]);
+  const holder = obj(v["holder"]);
+  // XI-17
+  const agent = agents.faceOf(
+    v["agent"],
+    str(holder["party"]),
+    arr(v["capacities"])
+      .map((c) => str(obj(c)["for"]))
+      .find((p) => p === viewer),
+  );
   return [
     groups,
     {
@@ -205,6 +224,7 @@ function row(
       offers: offers(v, viewer, roots),
       source: obj(v["source"]),
       ...(since === undefined ? {} : { since }),
+      ...(agent === undefined ? {} : { agent }),
     },
   ];
 }
@@ -219,6 +239,9 @@ function activity(v: Json, viewer: string): ActivityRow | undefined {
   if (pos === undefined) return undefined;
   const at = num(v["at"]);
   const grant = str(obj(v["basis"])["grant"]);
+  const exercise = str(v["exercise"]);
+  // XI-17
+  const agent = v["by_viewer"] ? undefined : agents.faceOf(v["agent"], undefined, forWhom);
   return {
     pos,
     ...(at === undefined ? {} : { at }),
@@ -228,6 +251,9 @@ function activity(v: Json, viewer: string): ActivityRow | undefined {
         ? { text: "capacity.as_yourself" }
         : { text: "capacity.on_behalf_of", party: forWhom },
     ...(grant === undefined ? {} : { grant }),
+    ...(exercise === undefined ? {} : { exercise }),
+    ...(agent === undefined ? {} : { agent }),
+    reports: agents.reportsOf(v),
   };
 }
 

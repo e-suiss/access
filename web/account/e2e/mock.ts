@@ -113,6 +113,8 @@ export class AccountMock {
   signedOutReason: string | null = null;
   /** The device Instance key id the BFF's session names, once this browser set one up. */
   instanceKid: string | null = null;
+  /** S2/S11: the connected accounts for agents `GET /v1/account/vault/connections` lists. */
+  vault: Record<string, unknown>[] = [];
 
   async signIn(context: BrowserContext, baseURL: string): Promise<void> {
     this.signedIn = true;
@@ -136,6 +138,27 @@ export class AccountMock {
       (r) => this.s11(r),
     );
     await context.route(/\/v1\/(sessions|me)(\/|$)/, (r) => this.s10(r));
+    await context.route(/\/v1\/account\/vault\/connections/, (r) => this.vaultRoute(r));
+  }
+
+  private async vaultRoute(r: Route): Promise<void> {
+    const s = this.record(r);
+    const method = r.request().method();
+    const reply = (status: number, body: unknown) =>
+      r.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    if (!this.signedIn) return reply(401, { code: "session-required" });
+    const one = /\/vault\/connections\/([^/?]+)$/.exec(s.path)?.[1];
+    if (one === undefined) return reply(200, { connections: this.vault });
+    if (method === "DELETE") {
+      if (s.headers["idempotency-key"] === undefined) {
+        return reply(400, { code: "idempotency-key-required" });
+      }
+      this.vault = this.vault.map((c) =>
+        c["connection"] === one ? { ...c, status: "disconnected" } : c,
+      );
+      return reply(200, { connection: one, status: "disconnected" });
+    }
+    return reply(404, { code: "not-found" });
   }
 
   private record(r: Route): Seen {

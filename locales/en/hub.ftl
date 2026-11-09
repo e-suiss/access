@@ -165,3 +165,4 @@ suggestion-repeated = You approved { $count } similar { $action } requests from 
 suggestion-not_applied = Nothing changes until you review and give the exact delegation.
 action-review_delegation = Review the exact delegation
 action-not_now = Not now
+party-you = you

@@ -3191,6 +3191,13 @@ owner = "access"
 protected = false
 
 [[message]]
+key = "party-you"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
 key = "agent_connections-empty"
 surface = "account"
 class = "label"
