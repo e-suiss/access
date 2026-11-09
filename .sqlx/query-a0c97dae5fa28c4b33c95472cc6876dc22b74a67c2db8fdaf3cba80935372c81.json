@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.oauth_device_codes SET used_ms = $4\n              WHERE tenant_id = $1 AND realm_id = $2 AND device_id = $3\n                AND decision = 'approved' AND used_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a0c97dae5fa28c4b33c95472cc6876dc22b74a67c2db8fdaf3cba80935372c81"
+}

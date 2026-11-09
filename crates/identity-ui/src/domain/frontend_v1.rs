@@ -645,21 +645,21 @@ pub const ROUTES: &[Route] = &[
         "requestExport",
         "Asks for the person's export: idp.account.export (OP-153 m.3 (cc)).",
     ),
-    planned(
+    live(
         Owner::L2,
         Verb::Get,
         "/device",
         "deviceVerificationPage",
         "The RFC 8628 verification page, a trusted surface of its own: the person enters the code a device shows (OP-154 m.3 (p)).",
     ),
-    planned(
+    live(
         Owner::L2,
         Verb::Post,
         "/v1/device/preview",
         "previewDeviceCode",
         "What a user code asks for: the client's name, the scope, and the IP prefix and country the request came from; five wrong codes wait 15 minutes (OP-154 m.3 (p)).",
     ),
-    planned(
+    live(
         Owner::L2,
         Verb::Post,
         "/v1/device/approval",

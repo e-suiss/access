@@ -10,6 +10,7 @@ use access_crypto::opaque_id::IdKey;
 use access_store::backchannel::LogoutUndelivered;
 use access_store::clients::{CimdRow, CimdSnapshot, ConsentRecordRow};
 use access_store::dcr::{DcrClientRow, DcrPolicyRow, NewDcrClient};
+use access_store::device::{DeviceCodeRow, NewDeviceCode};
 use access_store::identity::{Cursor, OutboxEvent, RealmId, TenantId};
 use access_store::idp::{ClientRow, PlatformClient};
 use access_store::oauth::{
@@ -278,6 +279,58 @@ pub trait OAuthTx: Send {
         &mut self,
         uuid: [u8; 16],
     ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
+    /// Whether the realm offers the device authorization grant (`idp.realm.device_code`).
+    fn device_code_enabled(&mut self) -> impl Future<Output = Result<bool, Unavailable>> + Send;
+    /// Keeps a device authorization; `false` when its user code is already waiting.
+    fn insert_device_code(
+        &mut self,
+        d: &NewDeviceCode<'_>,
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
+    /// The device authorization of a `device_code` digest, locked.
+    fn device_code(
+        &mut self,
+        device_hash: &[u8; 32],
+    ) -> impl Future<Output = Result<Option<DeviceCodeRow>, Unavailable>> + Send;
+    /// The undecided device authorization of a `user_code` digest, locked.
+    fn device_code_by_user(
+        &mut self,
+        user_hash: &[u8; 32],
+    ) -> impl Future<Output = Result<Option<DeviceCodeRow>, Unavailable>> + Send;
+    /// Notes a poll and the interval it leaves.
+    fn poll_device_code(
+        &mut self,
+        device: [u8; 16],
+        now_ms: u64,
+        interval_s: u32,
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send;
+    /// Records the person's decision once.
+    fn decide_device_code(
+        &mut self,
+        device: [u8; 16],
+        approved: Option<([u8; 16], [u8; 16])>,
+        now_ms: u64,
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
+    /// Redeems an approved device authorization once.
+    fn use_device_code(
+        &mut self,
+        device: [u8; 16],
+        now_ms: u64,
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
+    /// Counts a wrong user code.
+    fn miss_device_code(
+        &mut self,
+        ip_prefix: &str,
+        subject: [u8; 16],
+        now_ms: u64,
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send;
+    /// Wrong user codes from an IP prefix and by a person since the given times.
+    fn device_misses(
+        &mut self,
+        ip_prefix: &str,
+        ip_since_ms: u64,
+        subject: [u8; 16],
+        subject_since_ms: u64,
+    ) -> impl Future<Output = Result<(u64, u64), Unavailable>> + Send;
     /// The realm's DCR policy (`idp.client.dcr_policy`, OP-154 m.3 (j)); off when never decided.
     fn dcr_policy(&mut self) -> impl Future<Output = Result<DcrPolicyRow, Unavailable>> + Send;
     /// The live DCR client of `client_id`.

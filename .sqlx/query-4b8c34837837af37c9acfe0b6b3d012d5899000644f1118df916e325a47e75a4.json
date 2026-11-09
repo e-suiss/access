@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.oauth_device_codes (tenant_id, realm_id, device_hash, user_hash,\n                    client_uuid, scope, ip_prefix, country, created_ms, expires_ms, interval_s)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\n             ON CONFLICT (tenant_id, realm_id, user_hash) WHERE decision IS NULL DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4b8c34837837af37c9acfe0b6b3d012d5899000644f1118df916e325a47e75a4"
+}

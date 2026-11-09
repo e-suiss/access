@@ -668,6 +668,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 }
             }
             Change::CimdPolicy(_)
+            | Change::DeviceCode(_)
             | Change::MapperSet { .. }
             | Change::JoseAlg(_)
             | Change::Branding(_)
@@ -1578,6 +1579,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::AccountTapIssue(_) => true,
             // OP-154 m.3 (t)
             Change::Vault(v) => vault::write(t, bound, v).await?,
+            Change::DeviceCode(on) => {
+                t.put_device_code(bound, *on).await?;
+                true
+            }
             Change::DcrPolicy { policy, .. } => {
                 t.put_dcr_policy(
                     bound,

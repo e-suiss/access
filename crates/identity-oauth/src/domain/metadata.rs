@@ -111,6 +111,7 @@ pub const SERVED: Served = Served {
         Endpoint::Revoke,
         Endpoint::Introspect,
         Endpoint::EndSession,
+        Endpoint::DeviceAuthorization,
     ],
     features: &[
         Feature::Dpop,
@@ -165,6 +166,10 @@ const CLIENT_ASSERTION_ALGS: [&str; 2] = ["ES256", "RS256"];
 
 /// What a realm's AS metadata says about the realm itself.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is one realm decision the metadata declares"
+)]
 pub struct RealmFacts {
     /// At least one active client of the realm opted in to the public `sub` (MD-10).
     pub public_sub: bool,
@@ -176,6 +181,9 @@ pub struct RealmFacts {
     /// The realm's DCR profile is open (`idp.client.dcr_policy`); without it no
     /// `registration_endpoint` is declared (§10.1.2, OP-154 m.3 (j)).
     pub dcr: bool,
+    /// The realm offers the device authorization grant (`idp.realm.device_code`); without it
+    /// neither its endpoint nor its grant type is declared (TN-35, OP-154 m.3 (dd)).
+    pub device_code: bool,
 }
 
 /// The RFC 7591 registration endpoint under the issuer.
@@ -206,12 +214,12 @@ pub fn authorization_server(issuer: &Issuer, served: &Served) -> String {
 }
 
 /// The grant types the token endpoint serves (OP-154 m.4).
-fn grant_types(served: &Served) -> Vec<&'static str> {
+fn grant_types(served: &Served, facts: &RealmFacts) -> Vec<&'static str> {
     let mut grants = vec!["authorization_code", "refresh_token"];
     if served.feature(Feature::AuthorizationDetails) {
         grants.push("client_credentials");
     }
-    if served.has(Endpoint::DeviceAuthorization) {
+    if served.has(Endpoint::DeviceAuthorization) && facts.device_code {
         grants.push(DEVICE_CODE_GRANT);
     }
     if served.feature(Feature::TokenExchange) {
@@ -296,7 +304,10 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
             "token_endpoint".into(),
             issuer.endpoint(Endpoint::Token.path()).into(),
         );
-        m.insert("grant_types_supported".into(), json!(grant_types(served)));
+        m.insert(
+            "grant_types_supported".into(),
+            json!(grant_types(served, facts)),
+        );
         m.insert(
             "token_endpoint_auth_methods_supported".into(),
             json!(auth_methods(served)),
@@ -327,7 +338,8 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
             "device_authorization_endpoint",
         ),
     ] {
-        if served.has(e) {
+        // OP-154 m.3 (dd)
+        if served.has(e) && (e != Endpoint::DeviceAuthorization || facts.device_code) {
             m.insert(key.into(), issuer.endpoint(e.path()).into());
         }
     }

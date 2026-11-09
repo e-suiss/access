@@ -46,6 +46,7 @@ impl Directory for Rows {
             domain: Some([n; 32]),
             cimd: n == 3,
             dcr: false,
+            device_code: false,
         })
     }
 }

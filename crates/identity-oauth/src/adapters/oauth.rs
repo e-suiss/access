@@ -412,6 +412,88 @@ impl OAuthTx for PgOAuthTx {
         self.0.cimd_client_by_uuid(uuid).await.map_err(down)
     }
 
+    async fn device_code_enabled(&mut self) -> Result<bool, Unavailable> {
+        self.0.device_code_enabled().await.map_err(down)
+    }
+
+    async fn insert_device_code(
+        &mut self,
+        d: &access_store::device::NewDeviceCode<'_>,
+    ) -> Result<bool, Unavailable> {
+        self.0.insert_device_code(d).await.map_err(down)
+    }
+
+    async fn device_code(
+        &mut self,
+        device_hash: &[u8; 32],
+    ) -> Result<Option<access_store::device::DeviceCodeRow>, Unavailable> {
+        self.0.device_code(device_hash).await.map_err(down)
+    }
+
+    async fn device_code_by_user(
+        &mut self,
+        user_hash: &[u8; 32],
+    ) -> Result<Option<access_store::device::DeviceCodeRow>, Unavailable> {
+        self.0.device_code_by_user(user_hash).await.map_err(down)
+    }
+
+    async fn poll_device_code(
+        &mut self,
+        device: [u8; 16],
+        now_ms: u64,
+        interval_s: u32,
+    ) -> Result<(), Unavailable> {
+        self.0
+            .poll_device_code(device, now_ms, interval_s)
+            .await
+            .map_err(down)
+    }
+
+    async fn decide_device_code(
+        &mut self,
+        device: [u8; 16],
+        approved: Option<([u8; 16], [u8; 16])>,
+        now_ms: u64,
+    ) -> Result<bool, Unavailable> {
+        self.0
+            .decide_device_code(device, approved, now_ms)
+            .await
+            .map_err(down)
+    }
+
+    async fn use_device_code(
+        &mut self,
+        device: [u8; 16],
+        now_ms: u64,
+    ) -> Result<bool, Unavailable> {
+        self.0.use_device_code(device, now_ms).await.map_err(down)
+    }
+
+    async fn miss_device_code(
+        &mut self,
+        ip_prefix: &str,
+        subject: [u8; 16],
+        now_ms: u64,
+    ) -> Result<(), Unavailable> {
+        self.0
+            .miss_device_code(ip_prefix, subject, now_ms)
+            .await
+            .map_err(down)
+    }
+
+    async fn device_misses(
+        &mut self,
+        ip_prefix: &str,
+        ip_since_ms: u64,
+        subject: [u8; 16],
+        subject_since_ms: u64,
+    ) -> Result<(u64, u64), Unavailable> {
+        self.0
+            .device_misses(ip_prefix, ip_since_ms, subject, subject_since_ms)
+            .await
+            .map_err(down)
+    }
+
     async fn dcr_policy(&mut self) -> Result<access_store::dcr::DcrPolicyRow, Unavailable> {
         self.0.dcr_policy().await.map_err(down)
     }

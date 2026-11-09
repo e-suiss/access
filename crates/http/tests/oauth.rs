@@ -277,9 +277,9 @@ async fn a_browser_sees_the_error_page_with_owner_and_reference() {
     assert_eq!(api.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
-// OP-154 m.3 (p), m.4
+// TN-35, OP-154 m.3 (p), (dd): absent until the realm enables the device authorization grant
 #[tokio::test]
-async fn the_device_authorization_endpoint_is_declared_and_not_yet_served() {
+async fn the_device_authorization_endpoint_is_absent_until_the_realm_enables_it() {
     for (path, host) in [
         ("/device_authorization", "acme.id.test"),
         ("/realms/beta/device_authorization", "id.test"),
@@ -292,7 +292,14 @@ async fn the_device_authorization_endpoint_is_declared_and_not_yet_served() {
                 .unwrap(),
         )
         .await;
-        assert_eq!(r.status(), StatusCode::NOT_IMPLEMENTED, "{path}");
+        assert!(
+            matches!(
+                r.status(),
+                StatusCode::NOT_FOUND | StatusCode::SERVICE_UNAVAILABLE
+            ),
+            "{path}: {}",
+            r.status()
+        );
     }
     let elsewhere = send(
         Request::post("/device_authorization")

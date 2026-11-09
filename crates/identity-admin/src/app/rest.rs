@@ -170,6 +170,8 @@ pub enum Op {
     RegisterProtectedResource,
     /// `putDcrPolicy`: `idp.client.dcr_policy`, or `dcr_policy_tighten` (OP-154 m.3 (j)).
     PutDcrPolicy,
+    /// `putDeviceCode`: `idp.realm.device_code`, or `device_code_close` (OP-154 m.3 (p)).
+    PutDeviceCode,
 }
 
 impl Op {
@@ -239,6 +241,7 @@ impl Op {
             "putVaultReleaseMode" => Self::PutVaultReleaseMode,
             "registerProtectedResource" => Self::RegisterProtectedResource,
             "putDcrPolicy" => Self::PutDcrPolicy,
+            "putDeviceCode" => Self::PutDeviceCode,
             _ => return None,
         })
     }
@@ -1153,6 +1156,11 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         Op::PutJoseAlg => {
             only(m, &["alg"])?;
             Change::JoseAlg(JoseAlg::from_name(text(m, "alg")?).ok_or(Invalid::JoseAlg)?)
+        }
+        // OP-154 m.3 (p)
+        Op::PutDeviceCode => {
+            only(m, &["enabled"])?;
+            Change::DeviceCode(flag(m, "enabled")?)
         }
         // OP-154 m.3 (j)
         Op::PutDcrPolicy => {

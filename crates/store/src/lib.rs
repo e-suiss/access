@@ -22,6 +22,7 @@ pub mod consents;
 pub mod console;
 pub mod dcr;
 pub mod derived;
+pub mod device;
 pub mod dpop;
 pub mod ephemeral;
 pub mod events;

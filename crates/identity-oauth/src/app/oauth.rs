@@ -11,6 +11,7 @@ mod authorize;
 mod client_auth;
 pub mod clients;
 pub mod dcr;
+pub mod device;
 mod exchange;
 mod logout;
 mod management;
@@ -56,6 +57,7 @@ pub use crate::app::oauth::approval::{
     ApprovalDraft, ApprovalView, CONSENT_STATE_TTL_MS, NotApproved, consent_csrf,
 };
 pub use crate::app::oauth::authorize::{REQUEST_CONTEXT, consent_resource};
+pub use crate::app::oauth::device::{DeviceRefused, DeviceView, device_csrf};
 pub use crate::app::oauth::token::TokenHttp;
 
 /// `Retry-After` of a shed request, seconds (PD).

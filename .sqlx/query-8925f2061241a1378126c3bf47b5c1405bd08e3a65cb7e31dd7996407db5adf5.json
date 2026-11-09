@@ -1,0 +1,162 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT device_id, client_uuid, scope, ip_prefix, country, expires_ms, interval_s,\n                    polled_ms, decision, subject_id, session_id, used_ms\n               FROM access.oauth_device_codes\n              WHERE tenant_id = $1 AND realm_id = $2 AND user_hash = $3 AND decision IS NULL\n              FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "device_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_device_codes",
+            "name": "device_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "client_uuid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_device_codes",
+            "name": "client_uuid"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "scope",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_device_codes",
+            "name": "scope"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "ip_prefix",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_device_codes",
+            "name": "ip_prefix"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "country",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_device_codes",
+            "name": "country"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_device_codes",
+            "name": "expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "interval_s",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_device_codes",
+            "name": "interval_s"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "polled_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_device_codes",
+            "name": "polled_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "decision",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_device_codes",
+            "name": "decision"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_device_codes",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_device_codes",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "used_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_device_codes",
+            "name": "used_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "8925f2061241a1378126c3bf47b5c1405bd08e3a65cb7e31dd7996407db5adf5"
+}

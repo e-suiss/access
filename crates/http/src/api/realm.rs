@@ -893,8 +893,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "patchAgent" => (Agents, patch(AGENT_PATCH, None)),
         "retireAgent" | "assignAgentSponsor" | "removeAgentSponsor" => (Agents, w(false)),
         "listAgentSponsors" => (AgentSponsors, Shape::List(&["account_id"])),
-        // OP-154 m.3 (g), (j)
-        "defineAgentTemplate" | "putDcrPolicy" => (Settings, w(false)),
+        // OP-154 m.3 (g), (j), (p)
+        "defineAgentTemplate" | "putDcrPolicy" | "putDeviceCode" => (Settings, w(false)),
         "revokeAllAgentInstances" => (Agents, Shape::RevokeAll),
         // OP-154 m.3 (t)
         "listVaultResources" => (

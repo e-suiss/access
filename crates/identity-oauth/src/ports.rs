@@ -65,6 +65,8 @@ pub struct Facts {
     pub cimd: bool,
     /// Whether the realm's DCR profile is open (`idp.client.dcr_policy`, OP-154 m.3 (j)).
     pub dcr: bool,
+    /// Whether the realm offers the device authorization grant (`idp.realm.device_code`).
+    pub device_code: bool,
 }
 
 /// The realm keys the identity signer holds (CMP-22b, OP-143 m.9).

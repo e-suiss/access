@@ -23,7 +23,9 @@ use crate::domain::client::Client;
 use crate::domain::dpop::{
     BindingError, Failure, Jkt, check_code_exchange, check_refresh, refresh_binding,
 };
-use crate::domain::metadata::{Endpoint, Feature, JWT_BEARER_GRANT, SERVED, TOKEN_EXCHANGE_GRANT};
+use crate::domain::metadata::{
+    DEVICE_CODE_GRANT, Endpoint, Feature, JWT_BEARER_GRANT, SERVED, TOKEN_EXCHANGE_GRANT,
+};
 use crate::domain::request::Params;
 use crate::domain::scope;
 use crate::domain::tokens::{CodeDetails, GrantDetails};
@@ -114,7 +116,10 @@ fn admitted(grant_type: Option<&str>) -> Result<bool, Reply> {
         Some(JWT_BEARER_GRANT) => SERVED.feature(Feature::JwtBearer),
         _ => false,
     };
+    // OP-154 m.3 (p)
+    let device = grant_type == Some(DEVICE_CODE_GRANT) && SERVED.has(Endpoint::DeviceAuthorization);
     if agent
+        || device
         || matches!(
             grant_type,
             Some("authorization_code" | "refresh_token" | "client_credentials")
@@ -171,6 +176,10 @@ impl<E: Env> OAuth<E> {
         tx.commit().await
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one token request, its grant types in order"
+    )]
     async fn token_inner(
         &self,
         realm: &Realm,
@@ -188,6 +197,19 @@ impl<E: Env> OAuth<E> {
             Ok(a) => a,
             Err(r) => return Ok(r),
         };
+        // TN-35, OP-154 m.3 (dd)
+        if grant_type == Some(DEVICE_CODE_GRANT) {
+            let mut tx = self.begin(realm).await?;
+            let on = tx.device_code_enabled().await?;
+            tx.commit().await?;
+            if !on {
+                return Ok(Reply::oauth_error(
+                    400,
+                    "unsupported_grant_type",
+                    "the grant type is not supported",
+                ));
+            }
+        }
         // IDP-1, AG-4
         if self.prepare_client(realm, params).await?.is_err() {
             return Ok(Reply::oauth_error(
@@ -263,7 +285,10 @@ impl<E: Env> OAuth<E> {
             return Ok(reply.with_nonce(Some(proof.nonce)));
         }
         let mut tx = self.begin(realm).await?;
-        let reply = if grant_type == Some("authorization_code") {
+        let reply = if grant_type == Some(DEVICE_CODE_GRANT) {
+            self.device_token(&mut tx, realm, &client, params, proof.jkt, now)
+                .await?
+        } else if grant_type == Some("authorization_code") {
             self.exchange(&mut tx, realm, &client, params, proof.jkt, now)
                 .await?
         } else {
@@ -501,6 +526,111 @@ impl<E: Env> OAuth<E> {
         if !tx.rotate_refresh(&hash, signed(now)).await? {
             return Ok(invalid_grant());
         }
+        let body = self
+            .issue(tx, realm, client, &grant, &details, &jkt.text(), None, now)
+            .await?;
+        Ok(Reply::json(200, &body))
+    }
+}
+
+impl<E: Env> OAuth<E> {
+    /// RFC 8628 §3.4-3.5, OP-154 m.3 (p): the device polls with its `device_code`; while the
+    /// person has not answered it waits, too fast it slows down, declined it is denied, and once
+    /// approved it is redeemed once into a DPoP-bound grant of the approving session (G57).
+    async fn device_token(
+        &self,
+        tx: &mut <E::Db as crate::ports::oauth::OAuthDb>::Tx,
+        realm: &Realm,
+        client: &Client,
+        params: &Params,
+        jkt: Jkt,
+        now: u64,
+    ) -> Result<Reply, Unavailable> {
+        use crate::domain::device;
+        let Some(code) = params
+            .get("device_code")
+            .and_then(|c| access_kernel::json::b64url_decode(c).ok())
+        else {
+            return Ok(invalid_grant());
+        };
+        let Some(row) = tx.device_code(&device::device_hash(&code)).await? else {
+            return Ok(invalid_grant());
+        };
+        if row.client != client.uuid || row.used_ms.is_some() {
+            return Ok(invalid_grant());
+        }
+        if row.expires_ms <= now {
+            return Ok(Reply::oauth_error(
+                400,
+                "expired_token",
+                "the device code expired",
+            ));
+        }
+        match row.decision.as_deref() {
+            Some("denied") => {
+                return Ok(Reply::oauth_error(
+                    400,
+                    "access_denied",
+                    "the person declined",
+                ));
+            }
+            Some("approved") => {}
+            _ => {
+                let (interval, early) = device::poll(row.polled_ms, row.interval_s, now);
+                tx.poll_device_code(row.device_id, now, interval).await?;
+                return Ok(if early {
+                    Reply::oauth_error(400, "slow_down", "poll less often")
+                } else {
+                    Reply::oauth_error(400, "authorization_pending", "the person has not answered")
+                });
+            }
+        }
+        let (Some(subject), Some(session_id)) = (row.subject, row.session) else {
+            return Ok(invalid_grant());
+        };
+        // G57
+        let Some(session) = tx
+            .session(session_id)
+            .await?
+            .filter(|s| session_live(s, now) && s.subject == subject)
+        else {
+            return Ok(invalid_grant());
+        };
+        let Ok(bound) = refresh_binding(client.client_type(), Some(jkt)) else {
+            return Ok(binding(BindingError::ProofRequired));
+        };
+        if !tx.use_device_code(row.device_id, now).await? {
+            return Ok(invalid_grant());
+        }
+        let mut details = GrantDetails {
+            scope: row.scope.clone(),
+            auth_time_ms: unsigned(session.auth_time_ms),
+            aal: super::session_aal(&session)?,
+            openid: row.scope.split(' ').any(|s| s == "openid"),
+            authority: None,
+            family: None,
+            projection: None,
+            resource: None,
+            claims: None,
+        };
+        // TN-56
+        withhold_offline(tx, &mut details.scope, session.subject, now).await?;
+        let sid = self.random::<16>()?;
+        let encoded = serde_json::to_vec(&details).map_err(|_| Unavailable)?;
+        let grant_id = tx
+            .insert_grant(&NewGrant {
+                sid,
+                client: client.uuid,
+                subject: session.subject,
+                session: session.id,
+                session_epoch: session.session_epoch,
+                dpop_jkt: bound.as_ref().map(|j| &j.0),
+                details: &encoded,
+                created_ms: signed(now),
+                expires_ms: session.expires_ms,
+            })
+            .await?;
+        let grant = presented(tx, grant_id, session.subject, now).await?;
         let body = self
             .issue(tx, realm, client, &grant, &details, &jkt.text(), None, now)
             .await?;

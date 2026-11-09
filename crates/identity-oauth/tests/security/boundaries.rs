@@ -10,8 +10,33 @@ use serde_json::Value;
 
 use crate::support::{CB, Cluster, VERIFIER, body, error, location, now, query};
 
+// TN-35, OP-154 m.3 (dd), (j), Ek B 4649: device code and DCR are declared only for a realm
+// that turned them on
+#[test]
+fn device_code_and_registration_are_declared_only_when_the_realm_enabled_them() {
+    use access_identity_oauth::domain::metadata::{RealmFacts, authorization_server_of};
+    let issuer = Issuer::parse("https://acme.id.test").unwrap();
+    let on = RealmFacts {
+        device_code: true,
+        dcr: true,
+        ..RealmFacts::default()
+    };
+    let m: Value = serde_json::from_str(&authorization_server_of(&issuer, &SERVED, &on)).unwrap();
+    assert_eq!(
+        m["device_authorization_endpoint"],
+        "https://acme.id.test/device_authorization"
+    );
+    assert_eq!(m["registration_endpoint"], "https://acme.id.test/register");
+    assert!(
+        m["grant_types_supported"]
+            .as_array()
+            .unwrap()
+            .contains(&Value::from("urn:ietf:params:oauth:grant-type:device_code"))
+    );
+}
+
 // TN-34, TN-101, IDP-7, RR-18, §10.4.1, §10.4.6, IDP-24, MD-3, CR-5, §16.4.10, OP-146 m.8 (d)
-// OP-150
+// OP-150, OP-154 m.3 (dd): with nothing turned on by the realm
 #[test]
 fn metadata_offers_no_forbidden_surface() {
     let issuer = Issuer::parse("https://acme.id.test").unwrap();

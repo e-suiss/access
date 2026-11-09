@@ -313,6 +313,9 @@ where
         )
         .route("/login", get(web::page::<D, K, KI, C, M>))
         .route("/login/{*rest}", get(web::page::<D, K, KI, C, M>))
+        // OP-154 m.3 (p), m.7 (f)
+        .route("/device", get(web::page::<D, K, KI, C, M>))
+        .route("/realms/{slug}/device", get(web::page::<D, K, KI, C, M>))
         .route("/assets/{*path}", get(web::asset::<D, K, KI, C, M>))
         // OP-153 m.2
         .route("/realms/{slug}/login", get(web::page::<D, K, KI, C, M>))

@@ -1161,6 +1161,7 @@ mod accounts;
 mod agents;
 mod consent;
 mod dcr;
+mod device;
 mod organizations;
 mod resources;
 mod settings;

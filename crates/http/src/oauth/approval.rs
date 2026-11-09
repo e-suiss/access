@@ -83,7 +83,7 @@ fn framed_never(mut r: Response) -> Response {
     r
 }
 
-fn refused(status: StatusCode, code: &'static str, title: &'static str) -> Response {
+pub(super) fn refused(status: StatusCode, code: &'static str, title: &'static str) -> Response {
     framed_never(Problem::new(status, code, title).into_response())
 }
 
@@ -91,7 +91,7 @@ fn bad() -> Response {
     refused(StatusCode::BAD_REQUEST, "invalid-request", "Bad Request")
 }
 
-fn json_reply(status: StatusCode, body: &Value) -> Response {
+pub(super) fn json_reply(status: StatusCode, body: &Value) -> Response {
     framed_never(
         (
             status,
@@ -106,7 +106,7 @@ fn json_reply(status: StatusCode, body: &Value) -> Response {
 }
 
 /// §11.4.5 #28: only this origin's own page, as JSON.
-fn same_origin_json(headers: &HeaderMap) -> Result<(), Response> {
+pub(super) fn same_origin_json(headers: &HeaderMap) -> Result<(), Response> {
     let host = headers
         .get(header::HOST)
         .and_then(|h| h.to_str().ok())
@@ -161,7 +161,7 @@ fn csrf_ok(headers: &HeaderMap, cookie: Option<&str>, return_to: &str) -> bool {
     }
 }
 
-async fn realm_of<E: Env>(
+pub(super) async fn realm_of<E: Env>(
     s: &OAuth<E>,
     uri: &Uri,
     headers: &HeaderMap,
@@ -174,7 +174,7 @@ async fn realm_of<E: Env>(
     }
 }
 
-fn unavailable() -> Response {
+pub(super) fn unavailable() -> Response {
     let mut r = refused(
         StatusCode::SERVICE_UNAVAILABLE,
         "unavailable",

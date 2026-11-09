@@ -1664,6 +1664,9 @@ pub enum Change {
     Vault(access_identity_vault::domain::resource::VaultChange),
     /// `idp.client.resource_register` (AG-8, OP-154 m.3 (a)).
     ResourceRegister(ProtectedResource),
+    /// `idp.realm.device_code` (`true`, CT2) or `device_code_close` (`false`, CT1), RFC 8628
+    /// (OP-154 m.3 (a), (p)).
+    DeviceCode(bool),
     /// `idp.client.dcr_policy`, or `dcr_policy_tighten` when it only narrows (OP-154 m.3 (j));
     /// `loosens` is resolved against the realm's current policy before the decision.
     DcrPolicy {
@@ -2012,6 +2015,8 @@ impl Change {
             Self::Agent(a) => a.action(),
             Self::Vault(v) => v.action(),
             Self::ResourceRegister(_) => IdpAction::ClientResourceRegister,
+            Self::DeviceCode(true) => IdpAction::RealmDeviceCode,
+            Self::DeviceCode(false) => IdpAction::RealmDeviceCodeClose,
             Self::DcrPolicy { loosens: true, .. } => IdpAction::ClientDcrPolicy,
             Self::DcrPolicy { loosens: false, .. } => IdpAction::ClientDcrPolicyTighten,
             Self::CspMode { loosens: false, .. } => IdpAction::RealmCspMode,
@@ -2078,6 +2083,7 @@ impl Change {
                 }
             }
             Self::AccountBind(_)
+            | Self::DeviceCode(_)
             | Self::CspMode { .. }
             | Self::OrgInviteRevoke { .. }
             | Self::SocialDisable(_)
@@ -2205,6 +2211,7 @@ impl Change {
             Self::GuardianshipRecord(g) => g.to_value(),
             Self::Agent(a) => a.body(),
             Self::Vault(v) => v.body(),
+            Self::DeviceCode(on) => Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))]),
             Self::DcrPolicy { policy, .. } => Value::Map(vec![
                 (Value::text("enabled"), Value::Bool(policy.enabled)),
                 (
@@ -2332,7 +2339,7 @@ impl Change {
             Self::ResourceRegister(r) => {
                 path.extend([String::from("resource"), r.resource.clone()]);
             }
-            Self::DcrPolicy { .. } => path.push(String::from("realm")),
+            Self::DcrPolicy { .. } | Self::DeviceCode(_) => path.push(String::from("realm")),
         }
         ResourceRef {
             namespace: String::from(RESOURCE_NAMESPACE),

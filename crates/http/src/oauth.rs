@@ -19,6 +19,7 @@ use axum::routing::{get, post};
 use crate::Problem;
 
 pub mod approval;
+mod device;
 mod register;
 
 /// The session cookie of the hosted login (TN-17).
@@ -36,6 +37,7 @@ struct Incoming {
     body: Bytes,
     slug: Option<String>,
     chain: Option<crate::tls::ClientChain>,
+    peer: Option<std::net::IpAddr>,
 }
 
 /// The authorization server routes.
@@ -52,17 +54,24 @@ pub fn router<E: Env>(service: OAuth<E>) -> Router {
         Endpoint::EndSession,
         Endpoint::DeviceAuthorization,
     ] {
-        let root = move |s: Shared<E>, m: Method, u: Uri, h: HeaderMap, c: Chain, b: Bytes| {
-            handle(s, e, incoming(m, u, h, b, (None, c)))
-        };
-        let under =
+        let root =
             move |s: Shared<E>,
-                  p: Path<String>,
                   m: Method,
                   u: Uri,
                   h: HeaderMap,
                   c: Chain,
-                  b: Bytes| { handle(s, e, incoming(m, u, h, b, (Some(p.0), c))) };
+                  peer: PeerOf,
+                  b: Bytes| { handle(s, e, incoming(m, u, h, b, (None, c, peer))) };
+        let under = move |s: Shared<E>,
+                          p: Path<String>,
+                          m: Method,
+                          u: Uri,
+                          h: HeaderMap,
+                          c: Chain,
+                          peer: PeerOf,
+                          b: Bytes| {
+            handle(s, e, incoming(m, u, h, b, (Some(p.0), c, peer)))
+        };
         let path = e.path();
         let slugged = format!("/realms/{{slug}}{path}");
         let (a, b) = match e {
@@ -76,18 +85,22 @@ pub fn router<E: Env>(service: OAuth<E>) -> Router {
     // §11.6, OP-154 m.3 (k)
     r.merge(approval::routes::<E>())
         .merge(register::routes::<E>())
+        .merge(device::routes::<E>())
         .with_state(shared)
 }
 
 /// The X.509-SVID chain the TLS layer found on the connection (OP-154 m.3 (r)).
 type Chain = Option<axum::Extension<crate::tls::ClientChain>>;
 
+/// The peer address the listener saw (OP-154 m.3 (p), (j)).
+type PeerOf = Option<axum::Extension<crate::login::Peer>>;
+
 fn incoming(
     method: Method,
     uri: Uri,
     headers: HeaderMap,
     body: Bytes,
-    (slug, chain): (Option<String>, Chain),
+    (slug, chain, peer): (Option<String>, Chain, PeerOf),
 ) -> Incoming {
     Incoming {
         method,
@@ -96,6 +109,7 @@ fn incoming(
         body,
         slug,
         chain: chain.map(|axum::Extension(c)| c),
+        peer: peer.map(|axum::Extension(crate::login::Peer(ip))| ip),
     }
 }
 
@@ -239,6 +253,20 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
         Endpoint::Revoke => s.revoke(&realm, &p, authorization).await,
         Endpoint::Introspect => s.introspect(&realm, &p, authorization).await,
         Endpoint::EndSession => s.end_session(&realm, &p, cookie.as_deref()).await,
+        // OP-154 m.3 (p)
+        Endpoint::DeviceAuthorization => {
+            s.device_authorization(
+                &realm,
+                &p,
+                TokenHttp {
+                    authorization,
+                    dpop: &[],
+                    client_chain: req.chain.as_ref().map_or(&[], |c| &c.0),
+                },
+                req.peer,
+            )
+            .await
+        }
         _ => Reply::NotFound,
     };
     render(reply)

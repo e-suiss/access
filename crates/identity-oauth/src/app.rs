@@ -157,6 +157,7 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
                     domain_metadata,
                     cimd: facts.cimd,
                     dcr: facts.dcr,
+                    device_code: facts.device_code,
                 };
                 Reply::Metadata(metadata::authorization_server_of(
                     &realm.issuer,

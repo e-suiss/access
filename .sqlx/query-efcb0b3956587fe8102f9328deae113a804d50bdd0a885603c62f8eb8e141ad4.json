@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                 count(*) FILTER (WHERE ip_prefix = $3 AND at_ms >= $4) AS \"ip!\",\n                 count(*) FILTER (WHERE subject_id = $5 AND at_ms >= $6) AS \"subject!\"\n               FROM access.oauth_device_misses WHERE tenant_id = $1 AND realm_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ip!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "subject!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "efcb0b3956587fe8102f9328deae113a804d50bdd0a885603c62f8eb8e141ad4"
+}

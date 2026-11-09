@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.oauth_device_codes SET polled_ms = $4, interval_s = $5\n              WHERE tenant_id = $1 AND realm_id = $2 AND device_id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b8f2f22ba2b200d592bad6469d3052c891805ca12f33443b958118ad34b14ea1"
+}
