@@ -1,7 +1,10 @@
-// OP-153 m.3 (gg), §12.4.1, TN-133, XI-17, OP-154 m.3 (t): the connected accounts for agents
-// against the running local deployment, signed in once as its bootstrap test user
-// (signin.setup.ts): the realm's own vault route answers the cookie with the person's
-// connections and never a token, and the page draws them with no person badge for an agent.
+// OP-153 m.3 (gg), §12.4.1, TN-133, XI-17, A-12, E64, OP-154 m.3 (t), m.15 (i): the agent
+// surfaces against the running local deployment, signed in once as its bootstrap test user
+// (signin.setup.ts). The bootstrap's sample agent acts for the test user under the test user's
+// own Grant and made one allowed Exercise; no executor runs there, so nothing reported its
+// outcome, and no upstream account is connected. The realm's own vault route answers the cookie
+// with the person's connections and never a token; with this browser's device set up, the hub
+// shows the sample agent as an agent acting for the test user, and its use with no report.
 import { expect, test } from "@playwright/test";
 
 import { PASSWORD, REALM } from "./signin.js";
@@ -25,9 +28,36 @@ test.describe("@live connected accounts for agents", () => {
     const raw = JSON.stringify(body);
     expect(raw).not.toContain("access_token");
     expect(raw).not.toContain("refresh_token");
-    if (body.connections.length === 0) {
-      await expect(box).toContainText("No accounts are connected for agents.");
-    }
+    // OP-154 m.15 (i)
+    expect(body.connections).toHaveLength(0);
+    await expect(box).toContainText("No accounts are connected for agents.");
+  });
+
+  test("@live the sample agent acts for the test user and is shown as an agent, with no report", async ({
+    page,
+  }) => {
+    // XI-17, A-12, E64, X30
+    await page.goto(`${REALM}/account/authority`);
+    await page.getByRole("button", { name: "Set up this device" }).click();
+    await page
+      .getByRole("dialog", { name: "Check what you're signing" })
+      .getByRole("button", { name: "Sign" })
+      .click();
+    await expect(page.getByTestId("hub")).toBeVisible();
+    const badge = page.getByTestId("acting-for-you").getByTestId("agent-badge").first();
+    await expect(badge).toHaveText(
+      /^Agent · Acting for you · (operated by \S+|operator not confirmed)$/,
+    );
+    await expect(badge.locator("[data-party-kind]")).toHaveAttribute("data-party-kind", "agent");
+    await page.getByRole("link", { name: "Activity" }).click();
+    const use = page
+      .getByTestId("activity")
+      .getByTestId("use")
+      .filter({ has: page.getByTestId("agent-badge") })
+      .first();
+    await expect(use).toContainText("No report of the outcome yet");
+    await expect(use).not.toContainText("reported by");
+    await expect(page.getByText(/\bhuman\b/i)).toHaveCount(0);
   });
 
   test("@live an agent is never given a person badge on the account page", async ({ page }) => {
