@@ -19,7 +19,7 @@ use access_kernel::json::{self as kjson, Json, b64url_decode};
 use access_kernel::meta::{ActorKind, Root};
 use access_kernel::model::{BudgetDimension, BudgetTerm, BudgetWindow};
 use access_sdk::agent::a2a::{self, Inbound, TaskState, security_schemes, task_state};
-use access_sdk::agent::contract::{Adp, AgentError, Change, Exercise, Plan, Signs, Step};
+use access_sdk::agent::contract::{Adp, AgentError, Change, Exercise, Plan, Proof, Signs, Step};
 use access_sdk::agent::decision::Route;
 use access_sdk::agent::request::{Requester, RequesterNote, WorkRefs, handoff};
 use access_sdk::agent::status;
@@ -423,13 +423,6 @@ impl Agents {
     /// The identity plane's `operated_by` Claim naming the root as the agent's operator, as
     /// `idp.agent.register` emits it, carried to the domain by the realm issuer's courier.
     async fn operated_by(&self) {
-        let route = route_by_slug(&self.w.db.router, "acme")
-            .await
-            .unwrap()
-            .unwrap();
-        let t = TenantTx::begin(&self.w.db.app, route.tenant, route.realm)
-            .await
-            .unwrap();
         let order = access_identity_account::domain::claims::agent_claim(
             AGENT.0,
             access_kernel::claim::body::Class::OperatedBy,
@@ -440,8 +433,21 @@ impl Agents {
             now_ms(),
             false,
         );
+        self.issue(&order).await;
+    }
+
+    /// The realm issuer's Claim `order`, emitted by the identity plane and carried to the
+    /// domain by the realm issuer's courier; the recorded Claim's id.
+    async fn issue(&self, order: &access_identity_account::domain::claims::ClaimOrder) -> Id {
+        let route = route_by_slug(&self.w.db.router, "acme")
+            .await
+            .unwrap()
+            .unwrap();
+        let t = TenantTx::begin(&self.w.db.app, route.tenant, route.realm)
+            .await
+            .unwrap();
         let mut pg = access_identity_account::adapters::pg::PgTx(t, None);
-        access_identity_account::app::claims::emit(&mut pg, &order)
+        access_identity_account::app::claims::emit(&mut pg, order)
             .await
             .unwrap();
         pg.0.commit().await.unwrap();
@@ -468,7 +474,20 @@ impl Agents {
         loop {
             let r = courier.step().await.unwrap();
             if r.answered > 0 {
-                return;
+                let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+                    .await
+                    .unwrap();
+                let id = access_store::issuer::last_in_line(
+                    &mut t,
+                    &order.subject,
+                    &access_store::scope::DomainId::from_bytes(self.domain.0),
+                    &order.line.unwrap(),
+                )
+                .await
+                .unwrap()
+                .unwrap();
+                t.commit().await.unwrap();
+                return Id(id);
             }
             assert!(std::time::Instant::now() < deadline, "{r:?}");
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
@@ -929,5 +948,71 @@ async fn the_hub_shows_an_agent_as_an_agent_with_its_operator() {
         used["reports"]["attested"].as_array().unwrap().is_empty(),
         "{used}"
     );
+    a.w.domains.release().await;
+}
+
+/// A runtime attestation of the actor's own Instance (§5.9, L21).
+fn attested_runtime() -> RequirementTerm {
+    RequirementTerm {
+        proof_kind: ProofKind::Claim,
+        class: String::from("attestation_runtime"),
+        count: 1,
+        binding: Binding::ActorInstance,
+        freshness_ms: None,
+        independence: Independence::None,
+        consumption: Consumption::Reusable,
+        source: None,
+        assurance: BTreeMap::new(),
+    }
+}
+
+// §5.9, L21, U20, OP-154 m.3 (s), m.11 (l), OP-153 m.3 (gg), Ek B 4262
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_runtime_attestation_requirement_is_met_only_by_the_actors_attested_instance() {
+    let a = Agents::open("l4-runtime").await;
+    let attested = a
+        .grant(
+            AGENT,
+            a.authority(None, BTreeSet::from([attested_runtime()])),
+            BTreeSet::from([Capacity::Own]),
+        )
+        .await;
+    let mut ex = a.exercise(a.plan("r-1", attested, Some(Capacity::Own)));
+    let step = ex.ask(&a.live, &a.runtime, &Wall).unwrap();
+    let Step::Wait(wait) = &step else {
+        panic!("{step:?}");
+    };
+    assert_eq!(wait.unmet[0].class.as_data(), "attestation_runtime");
+    assert!(wait.unmet[0].satisfiable_by_actor);
+
+    // L21
+    let runtime = access_identity_attest::domain::runtime::RuntimeClass::Tpm.digest();
+    let elsewhere = a
+        .issue(
+            &access_identity_account::domain::claims::runtime_attestation(
+                AGENT.0,
+                [0x5f; 16],
+                runtime,
+                now_ms(),
+            ),
+        )
+        .await;
+    ex.prove(Proof::ClaimRef(elsewhere)).unwrap();
+    let step = ex.ask(&a.live, &a.runtime, &Wall).unwrap();
+    assert!(matches!(step, Step::Wait(_)), "{step:?}");
+
+    let here = a
+        .issue(
+            &access_identity_account::domain::claims::runtime_attestation(
+                AGENT.0,
+                a.instance.0,
+                runtime,
+                now_ms(),
+            ),
+        )
+        .await;
+    ex.prove(Proof::ClaimRef(here)).unwrap();
+    let step = ex.ask(&a.live, &a.runtime, &Wall).unwrap();
+    assert!(matches!(step, Step::Proceed(_)), "{step:?}");
     a.w.domains.release().await;
 }
