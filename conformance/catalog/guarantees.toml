@@ -858,7 +858,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 8
+stage = 13
 title = "Redacted content cannot be recovered"
 tests = []
 

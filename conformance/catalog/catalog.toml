@@ -1,6 +1,6 @@
 # OP-81, SAI-1, SA-59, INV-2
 
-current_stage = 7
+current_stage = 8
 
 enforced_families = [
   "CI", "INV", "EI", "XI", "PI", "SI", "TI", "TI-RT", "SAI", "IDI", "AGI", "TNI", "OPI",
@@ -8,7 +8,7 @@ enforced_families = [
   "MUST-NEVER", "OP-54-RL", "OP-3-G", "ADVISORY", "AB",
 ]
 
-test_roots = ["crates", "bins", "xtask", "sdks"]
+test_roots = ["crates", "bins", "services", "xtask", "sdks"]
 
 [[stage_overrides]]
 family = "N"
@@ -33,7 +33,22 @@ reason = "OP-151: the Ek B Stage 7 item 'Expansion about you' events (SI-21) is 
 [[rule_overrides]]
 id = "XI-26"
 stage = 8
-reason = "OP-151: Stage 7 has no impersonation path (manifest and AIS checks, for(P) projections with act; the TNI-13, G53 and MUST-NEVER-17 tests), but the rule's other half, the support Grant visible in the Party's inventory and the break-glass notify-subject requirement, needs the Authority hub sections (Acting for you, Shared from you, Changes), Stage 8 items no Stage 7 code serves"
+reason = "OP-151, OP-153: no impersonation path exists (manifest and AIS checks, for(P) projections with act; the TNI-13, G53 and MUST-NEVER-17 tests), and a support Grant, one that names the Party in its agency, shows in that Party's Acting for you, Changes and Activity, while acting for the Party without one is refused (a_support_grant_is_a_visible_delegation); the support request flow and the break-glass notify-subject requirement are the Stage 12 items (Ek B lines 5505, 5524, 5539)"
+
+[[rule_overrides]]
+id = "XI-14"
+stage = 11
+reason = "OP-153: the Ek B Stage 8 item 'İki limit iki satır' is half served: the hub shows each BudgetTerm of a Grant as its own authority limit row with the Access owner badge and derives no financial row from it (two_limits_are_two_rows_with_owners); the other fact, the financial limit or hold with the Pay/Money badge, needs Pay's own limit facts, which arrive with the Stage 11 item 'Money / Pay seam ve scheme artefaktları' (Ek B line 5265; §7.9.9, E21, F9); no Stage 8 code reads a financial limit"
+
+[[rule_overrides]]
+id = "XI-15"
+stage = 12
+reason = "OP-153: the hub answer carries only `member` for a rule-shaped holding, which cannot tell a stale statement (the episode stays open, REQUIRE_ACTION; C13, INV-31) from a closed episode (cutoff or affirmative disqualify), and a former member who is not the grantor no longer sees the row at all; 'removed since <date>, HR says' and 'included again, earlier delegations not restored' need the episode closure facts the Stage 12 item 'HR/SCIM kaynaklı mover/leaver etkisi (rule-shaped kapanış)' serves (Ek B line 5571; §8.17.5.7, X16)"
+
+[[rule_overrides]]
+id = "U22"
+stage = 13
+reason = "OP-153: U22 is a user-dependent row: redacted content stays unrecoverable only if every copy applies the redaction. Access's own copy is crypto-shredded for good (a_shredded_body_cannot_be_read_or_revived), but the copies the row is about are replicas, which redaction does not reach by itself (N-11, §17.6.7): the redaction record reaches a replica and its operator applies it, which needs the Stage 13 'Replica agent' item (Ek B line 5812); the Stage 8 redaction job (Ek B lines 3853, 3854) is not built yet either"
 
 [[rule_overrides]]
 id = "SI-11"
