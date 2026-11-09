@@ -339,6 +339,50 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     }
 }
 
+impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
+    /// Applies `idp.account.guardianship_record` `p` with the actor's `ais` (E53, OP-153 m.20
+    /// (g), m.25 (c)), then records the guardianship: its `guardianship` Claim's validity ends
+    /// at the ward's majority by the country table, so it ends without anyone's signature, and
+    /// the ward's `age_range` Claim goes beside it. What the record needs is checked before the
+    /// decision; a retry of a decision already written records nothing again.
+    ///
+    /// # Errors
+    /// [`AdminError`]; a ward of age, or without a date of birth, is [`Invalid::AccountState`].
+    pub async fn record_guardianship(
+        &self,
+        p: &Proposal,
+        ais: Vec<u8>,
+    ) -> Result<(Applied, Option<[u8; 16]>), AdminError> {
+        let Change::GuardianshipRecord(g) = &p.change else {
+            return Err(Invalid::Body.into());
+        };
+        let vault = self
+            .keys
+            .vault(p.realm)
+            .ok_or_else(|| AdminError::Unavailable(String::from("vault")))?;
+        let household = super::household::Household {
+            app: self.app,
+            vault: &vault,
+        };
+        household
+            .recordable((p.tenant, p.realm), (g.guardian, g.ward), &g.country)
+            .await?;
+        let applied = Box::pin(self.apply(p, ais)).await?;
+        if !matches!(applied, Applied::Written { .. }) {
+            return Ok((applied, None));
+        }
+        let id = household
+            .guardianship(
+                (p.tenant, p.realm),
+                (g.guardian, g.ward),
+                g.basis,
+                &g.country,
+            )
+            .await?;
+        Ok((applied, Some(id)))
+    }
+}
+
 /// Opens a migration bundle sealed to `key` (TN-86): its import lines, which the receiving
 /// realm imports with its own `idp.account.import` (TN-85).
 ///

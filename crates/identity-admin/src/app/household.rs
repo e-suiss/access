@@ -195,6 +195,41 @@ impl Household<'_> {
             .and_then(|(_, v)| Date::parse(v)))
     }
 
+    /// Whether `guardian`'s guardianship of `ward` in `country` can be recorded now: the ward's
+    /// date of birth is in the vault and the ward is not of age, and both accounts are bound to
+    /// a Party (E53, OP-153 m.25 (c)).
+    ///
+    /// # Errors
+    /// [`AdminError`]; a ward of age is [`Invalid::AccountState`].
+    pub async fn recordable(
+        &self,
+        (tenant, realm): (TenantId, RealmId),
+        (guardian, ward): ([u8; 16], [u8; 16]),
+        country: &str,
+    ) -> Result<(), AdminError> {
+        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let now = t.server_time().await?;
+        let birth = self
+            .birth(&mut t, ward)
+            .await?
+            .ok_or(Invalid::AccountState)?;
+        let majority = birth.plus_years(majority_years(country)).ms();
+        let bound = access_store::idp::subject_party(&mut t, &guardian)
+            .await?
+            .is_some()
+            && access_store::idp::subject_party(&mut t, &ward)
+                .await?
+                .is_some();
+        t.commit().await?;
+        if majority <= i64::try_from(now).unwrap_or(i64::MAX) {
+            return Err(Invalid::AccountState.into());
+        }
+        if !bound {
+            return Err(Invalid::NoAccount.into());
+        }
+        Ok(())
+    }
+
     /// Records `guardian`'s guardianship of `ward` in `country` on `basis`, until the ward's
     /// majority, and queues its `guardianship` Claim and the ward's `age_range` Claim
     /// (E53). The ward's date of birth must be in the vault.

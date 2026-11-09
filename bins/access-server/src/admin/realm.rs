@@ -464,7 +464,11 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
         // TN-85, TN-86, OP-153 m.19 (d)
         let mut report = None;
         let mut bundle = None;
-        let applied = if matches!(compiled.change, Change::AccountBind(_)) {
+        let applied = if matches!(compiled.change, Change::GuardianshipRecord(_)) {
+            Box::pin(admin.record_guardianship(&proposal, caller.ais))
+                .await
+                .map(|(a, _)| a)
+        } else if matches!(compiled.change, Change::AccountBind(_)) {
             let offer = compiled.body.get("offer").and_then(Value::as_str);
             Box::pin(admin.bind_account(&proposal, caller.ais, offer)).await
         } else if matches!(compiled.change, Change::MigrationExport(_)) {

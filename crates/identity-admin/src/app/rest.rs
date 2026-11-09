@@ -145,6 +145,8 @@ pub enum Op {
     ExportAccounts,
     /// `bindAccount`: `idp.account.bind` (OP-153 m.18 (e)).
     BindAccount,
+    /// `recordGuardianship`: `idp.account.guardianship_record` (E53, OP-153 m.20 (g)).
+    RecordGuardianship,
 }
 
 impl Op {
@@ -202,6 +204,7 @@ impl Op {
             "importAccounts" => Self::ImportAccounts,
             "exportAccounts" => Self::ExportAccounts,
             "bindAccount" => Self::BindAccount,
+            "recordGuardianship" => Self::RecordGuardianship,
             _ => return None,
         })
     }
@@ -758,6 +761,21 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     .and_then(Json::as_u64)
                     .and_then(|n| u32::try_from(n).ok())
                     .ok_or(Invalid::Body)?,
+            })
+        }
+        // E53, OP-153 m.20 (g), m.25 (b), (c)
+        Op::RecordGuardianship => {
+            use access_identity_account::domain::claim_classes::GuardianshipBasis;
+            only(m, &["guardian_account_id", "basis", "country"])?;
+            Change::GuardianshipRecord(crate::domain::accounts::GuardianshipRecord {
+                guardian: subject(ids, text(m, "guardian_account_id")?)?,
+                ward: subject(ids, key_of(key)?)?,
+                basis: match text(m, "basis")? {
+                    "parent" => GuardianshipBasis::Parent,
+                    "legal_guardian" => GuardianshipBasis::LegalGuardian,
+                    _ => return Err(Invalid::Body),
+                },
+                country: String::from(text(m, "country")?),
             })
         }
         // OP-153 m.18 (e), m.25 (b)

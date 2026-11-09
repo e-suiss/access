@@ -310,6 +310,7 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "importAccounts" => IdpAction::AccountImport,
         "exportAccounts" => IdpAction::AccountMigrationExport,
         "bindAccount" => IdpAction::AccountBind,
+        "recordGuardianship" => IdpAction::AccountGuardianshipRecord,
         _ => return None,
     })
 }

@@ -379,10 +379,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     return Err(Invalid::NoAccount.into());
                 }
             }
-            // OP-153 m.25 (b)
-            Change::GuardianshipRecord(_) => {
-                return Err(AdminError::Refused(String::from(NOT_YET_SERVED)));
-            }
+
             // TN-18, OP-153 m.3 (u)
             Change::RelatedOrigins(r) => {
                 let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
@@ -406,7 +403,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 }
             }
             // TN-85, OP-153 m.19 (d), m.25 (b)
-            Change::LocaleOverrides(_) | Change::AccountImport(_) | Change::MigrationExport(_) => {}
+            Change::LocaleOverrides(_)
+            | Change::AccountImport(_)
+            | Change::MigrationExport(_)
+            | Change::GuardianshipRecord(_) => {}
             Change::RpId(rp) => {
                 let issuer = g
                     .issuer
@@ -1425,9 +1425,6 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 idp::set_branding(t, bound, &bytes).await?;
                 true
             }
-            Change::GuardianshipRecord(_) => {
-                return Err(AdminError::Refused(String::from(NOT_YET_SERVED)));
-            }
             Change::RelatedOrigins(r) => {
                 let origins: Vec<String> = r.origins.iter().cloned().collect();
                 idp::set_related_origins(t, bound, &origins).await?;
@@ -1517,6 +1514,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::AccountImport(_)
             | Change::MigrationExport(_)
             | Change::AccountBind(_)
+            | Change::GuardianshipRecord(_)
             | Change::OrgCreate(_)
             | Change::OrgInvite(_)
             | Change::OrgDomainClaim(_)

@@ -1389,6 +1389,101 @@ fn handover(
     meta_write(d, nonce, payload, ExerciseBasis::Anchor(Id(anchor)), seed)
 }
 
+/// The root key's AIS over `p`'s prepared intent.
+async fn root_signed(w: &World, p: &Proposal) -> Vec<u8> {
+    let prepared = w.admin().prepare(p).await.unwrap();
+    sign(
+        &statement(prepared.domain, &p.nonce, prepared.digest, p.basis),
+        ROOT_KEY,
+    )
+}
+
+// E53, OP-153 m.20 (g), m.25 (b), (c), (gg), Ek B 3630, 3631
+#[tokio::test]
+async fn a_guardianship_is_recorded_under_its_decision_and_ends_at_majority_unsigned() {
+    use access_identity_account::domain::claim_classes::GuardianshipBasis;
+    use access_identity_admin::domain::accounts::GuardianshipRecord;
+    let (w, at, d, founder) = ready("household-record").await;
+    let child = account(&w, at, "kid@family.example").await;
+    let grown = account(&w, at, "grown@family.example").await;
+    let v = vault_of(&w, at.1);
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    assert!(
+        access_store::idp::bind_subject_party(&mut t, &child, &ALICE.0)
+            .await
+            .unwrap()
+    );
+    assert!(
+        access_store::idp::bind_subject_party(&mut t, &grown, &[0x0e; 16])
+            .await
+            .unwrap()
+    );
+    let now = t.server_time().await.unwrap();
+    let today = access_identity_admin::app::household::today(now);
+    let born = |years: u16| {
+        format!(
+            "{:04}-{:02}-{:02}",
+            today.year - years,
+            today.month,
+            today.day.min(28)
+        )
+    };
+    access_identity_account::app::vault::set_profile(&mut t, &v, child, "birthdate", &born(9))
+        .await
+        .unwrap();
+    access_identity_account::app::vault::set_profile(&mut t, &v, grown, "birthdate", &born(40))
+        .await
+        .unwrap();
+    t.commit().await.unwrap();
+    let record = |ward, nonce| {
+        proposal(
+            at,
+            Change::GuardianshipRecord(GuardianshipRecord {
+                guardian: founder,
+                ward,
+                basis: GuardianshipBasis::Parent,
+                country: String::from("TR"),
+            }),
+            nonce,
+            idp_anchor(d),
+            1,
+        )
+    };
+    // E53
+    let of_age = record(grown, 0xd0);
+    let ais = root_signed(&w, &of_age).await;
+    assert!(matches!(
+        Box::pin(w.admin().record_guardianship(&of_age, ais)).await,
+        Err(AdminError::Invalid(Invalid::AccountState))
+    ));
+    let p = record(child, 0xd1);
+    let ais = root_signed(&w, &p).await;
+    let (applied, id) = Box::pin(w.admin().record_guardianship(&p, ais.clone()))
+        .await
+        .unwrap();
+    written(&applied);
+    assert!(id.is_some());
+    let again = Box::pin(w.admin().record_guardianship(&p, ais))
+        .await
+        .unwrap();
+    assert_eq!(again.1, None, "a retry records nothing again");
+    // OP-153 m.25 (c)
+    let claims = orders(&identity_events(&w.db, "claim.guardianship", 1).await);
+    let majority = u64::try_from(
+        access_identity_admin::app::household::Date::parse(&born(9))
+            .unwrap()
+            .plus_years(18)
+            .ms(),
+    )
+    .unwrap();
+    assert!(
+        claims
+            .iter()
+            .any(|o| o.subject == child && o.at.saturating_add(o.ttl_ms) == majority),
+        "the Claim's validity ends at the ward's majority"
+    );
+}
+
 // TN-91, TN-92, OP-153 m.3 (p), m.17 (b), (f), (gg), Ek B 3617, 3618, 3619, 3620, 3621
 #[tokio::test]
 async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_can_cancel() {
@@ -1954,14 +2049,10 @@ async fn the_governing_domain_accepts_the_new_account_actions() {
             .prepare(&proposal(at, change.clone(), n, idp_anchor(d), 1))
             .await;
         // TN-85, TN-86, OP-153 m.18 (e), m.19 (d)
-        if matches!(change, Change::GuardianshipRecord(_)) {
-            assert!(
-                matches!(&prepared, Err(AdminError::Refused(c)) if c == NOT_YET_SERVED),
-                "{label}"
-            );
-        } else {
-            assert!(prepared.is_ok(), "{label}");
-        }
+        assert!(
+            !matches!(&prepared, Err(AdminError::Refused(c)) if c == NOT_YET_SERVED),
+            "{label}"
+        );
         let intent = change
             .intent(
                 "r1-catalog",

@@ -192,6 +192,12 @@ pub const ROWS: &[Route] = &[
         "importAccounts",
         "Imports accounts from another identity provider (idp.account.import, TN-85): `content` is the JSON Lines file of `access-server import-accounts`, `file` its SHA-256 and `accounts` its line count, which the signed change names; each line becomes its own account or is reported as skipped, never echoed.",
     ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/accounts/{account_id}/guardianships",
+        "recordGuardianship",
+        "Records that `guardian_account_id` stands for this ward on `basis` (`parent`, `legal_guardian`) in `country` (idp.account.guardianship_record, CT2, E53): its guardianship Claim holds until the ward's majority by the country table and ends then without anyone's signature; the ward's date of birth must be on file.",
+    ),
     secret(
         Verb::Post,
         "/admin/v1/realms/{slug}/accounts/{account_id}/bind",
@@ -693,6 +699,10 @@ const fn put(section: &'static str) -> Shape {
 
 /// The resource kind and shape of a realm row.
 #[must_use]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one match over the realm rows, each arm one row"
+)]
 pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
     use ResourceKind::{
         Accounts, Analytics, Clients, Deliveries, Groups, Hooks, Organizations, Settings, Signals,
@@ -738,7 +748,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "draftOrganizationConnection"
         | "importAccounts"
         | "exportAccounts"
-        | "bindAccount" => (Accounts, w(false)),
+        | "bindAccount"
+        | "recordGuardianship" => (Accounts, w(false)),
         "listUpstreamIdps" => (UpstreamIdps, Shape::List(&["name", "issuer", "status"])),
         "getUpstreamIdp" => (UpstreamIdps, Shape::Get),
         "putUpstreamIdp" => (UpstreamIdps, w(true)),
