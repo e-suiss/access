@@ -9,3 +9,5 @@
 518498146d548a1c8280e07a1cbb2f371736a65f:crates/http/tests/login.rs:generic-api-key:3329
 # F-13: an unsigned test JWT-SVID (header and a spiffe:// subject only) a refusal test feeds the verifier
 837c3941f41e26bc9adf8f487f98082eae2d3320:crates/identity-attest/src/app.rs:generic-api-key:221
+# F-13: a bench input JWT with a placeholder signature ("signature") over {"sub":"agent"}
+8f8e991a7e8518f5413ba973823e877fba919bde:crates/kernel/benches/agent_tokens.rs:jwt:48
