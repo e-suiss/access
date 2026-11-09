@@ -18,6 +18,7 @@ access-identity-oauth = { workspace = true }
 access-identity-attest = { workspace = true }
 access-identity-session = { workspace = true }
 access-identity-ui = { workspace = true }
+access-identity-vault = { workspace = true }
 access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 suiss-crypto = { workspace = true, features = ["aead", "verify"] }

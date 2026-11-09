@@ -875,10 +875,32 @@ fn frontend<I, Q>(
     outbound: Outbound,
 ) -> Result<axum::Router, String>
 where
-    I: DeviceInstances + access_identity_ui::ports::Approvals + Clone + 'static,
+    I: DeviceInstances
+        + access_identity_ui::ports::Approvals
+        + access_identity_vault::ports::Exercises
+        + Clone
+        + 'static,
     Q: access_identity_ui::ports::ApprovalClaims + 'static,
 {
     let identity = config.identity.as_ref().ok_or("no identity section")?;
+    // OP-154 m.3 (t)
+    let vault = access_http::login::vault_router(
+        RealmDiscovery::new(
+            PgDirectory::new(router.clone()),
+            SignerKeys::new(identity.signer.clone()),
+        ),
+        hosted.clone(),
+        access_identity_vault::app::Vault {
+            catalog: access_identity_vault::domain::catalog::Catalog::shipped()
+                .map_err(|e| e.to_string())?,
+            http: access_identity_federation::adapters::OutboundProviders(outbound.clone()),
+            secrets: access_identity_federation::adapters::FileSecrets(
+                config.social.secrets_dir.clone(),
+            ),
+            exercises: plane.clone(),
+            random: idp::vault::OsRandom,
+        },
+    );
     // IDP-31, OP-153 m.3 (l)
     let social = access_http::login::social_router(
         RealmDiscovery::new(
@@ -902,7 +924,7 @@ where
             pep: String::from(IDENTITY_PEP),
         },
     );
-    let me = me.merge(social);
+    let me = me.merge(social).merge(vault);
     // OP-65, OP-67 m.1
     Ok(me.layer(axum::middleware::from_fn_with_state(
         RequestIds::new(Arc::new(admin::OsEntropy)),

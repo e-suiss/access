@@ -671,35 +671,35 @@ pub const ROUTES: &[Route] = &[
         "listAgentConnections",
         "The person's agents and what each is connected to: sponsor, status, authority and connected accounts (OP-154 m.3 (e), (t)).",
     ),
-    planned(
+    live(
         Owner::L5,
         Verb::Get,
         "/v1/account/vault/connections",
         "listVaultConnections",
         "The person's connected accounts for agents, each with its upstream, scopes and state; never a token (OP-154 m.3 (t)).",
     ),
-    planned(
+    live(
         Owner::L5,
         Verb::Post,
         "/v1/account/vault/connections",
         "startVaultConnection",
         "Starts connecting an upstream account after the person's AAS for that client (AS-M15, OP-154 m.3 (t)).",
     ),
-    planned(
+    live(
         Owner::L5,
         Verb::Get,
         "/v1/account/vault/connections/{connection}",
         "getVaultConnection",
         "One connected account: upstream, scopes, state (`active` or `needs_reconnect`); never a token.",
     ),
-    planned(
+    live(
         Owner::L5,
         Verb::Delete,
         "/v1/account/vault/connections/{connection}",
         "disconnectVaultConnection",
         "Disconnects an account: the TokenSet ends and is revoked upstream where it can be; nothing is deleted (OP-73).",
     ),
-    planned(
+    live(
         Owner::L5,
         Verb::Post,
         "/v1/vault/releases",

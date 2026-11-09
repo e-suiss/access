@@ -16,6 +16,7 @@ access-crypto = { workspace = true }
 access-http = { workspace = true }
 access-identity-account = { workspace = true }
 access-identity-federation = { workspace = true }
+access-identity-vault = { workspace = true }
 access-identity-admin = { workspace = true }
 access-identity-events = { workspace = true }
 access-identity-oauth = { workspace = true }

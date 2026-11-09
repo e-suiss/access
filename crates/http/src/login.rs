@@ -10,6 +10,7 @@ mod idempotency;
 mod me;
 mod recovery;
 mod social;
+mod vault;
 pub(crate) mod web;
 
 use std::sync::Arc;
@@ -26,6 +27,7 @@ pub use assets::{Assets, AssetsError};
 pub use idempotency::{CAPACITY as IDEMPOTENCY_CAPACITY, RETENTION as IDEMPOTENCY_RETENTION};
 pub use me::router as me_router;
 pub use social::router as social_router;
+pub use vault::router as vault_router;
 
 /// The client's address, set by the connection layer.
 #[derive(Clone, Copy, Debug)]

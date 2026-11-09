@@ -2261,21 +2261,34 @@
         "operationId": "listVaultConnections",
         "summary": "The person's connected accounts for agents, each with its upstream, scopes and state; never a token (OP-154 m.3 (t)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       },
       "post": {
         "operationId": "startVaultConnection",
         "summary": "Starts connecting an upstream account after the person's AAS for that client (AS-M15, OP-154 m.3 (t)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -2289,8 +2302,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/account/vault/connections/{connection}": {
@@ -2298,8 +2310,15 @@
         "operationId": "getVaultConnection",
         "summary": "One connected account: upstream, scopes, state (`active` or `needs_reconnect`); never a token.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -2314,15 +2333,21 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       },
       "delete": {
         "operationId": "disconnectVaultConnection",
         "summary": "Disconnects an account: the TokenSet ends and is revoked upstream where it can be; nothing is deleted (OP-73).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -2337,8 +2362,7 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       }
     },
     "/v1/vault/releases": {
@@ -2346,8 +2370,15 @@
         "operationId": "releaseVaultToken",
         "summary": "Releases an upstream token only for an allowed Exercise whose PEP is the calling registered executor Instance, once per step, expiring by the horizon (G59, EI-26, OP-154 m.3 (t)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -2361,8 +2392,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/.well-known/http-message-signatures-directory": {

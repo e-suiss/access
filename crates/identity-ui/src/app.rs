@@ -23,6 +23,7 @@ pub mod recovery;
 pub mod shell;
 pub mod signup;
 pub mod social;
+pub mod vault;
 
 pub use me::Devices;
 

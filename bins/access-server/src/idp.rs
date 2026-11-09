@@ -897,5 +897,7 @@ impl RealmKeys for RealmKeyring {
 
 mod projections;
 
+pub(crate) mod vault;
+
 #[cfg(test)]
 mod tests;

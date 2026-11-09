@@ -752,6 +752,29 @@ impl<H: ProviderHttp, S: SocialSecrets, X: Exercises, R: Random> Vault<H, S, X, 
         Ok(id)
     }
 
+    /// The upstream answered with an error: the attempt is used and its pending connection
+    /// ends; nothing was connected.
+    ///
+    /// # Errors
+    /// [`VaultError`].
+    pub async fn abandon(
+        &self,
+        db: &Pool,
+        keys: &Keys<'_>,
+        device: &[u8; 32],
+        state: &str,
+        now: u64,
+    ) -> Result<(), VaultError> {
+        let mut t = keys.begin(db).await?;
+        if let Some((id, _)) = t.take_vault_attempt(&hash(state), device, now).await? {
+            t.set_vault_connection(id, "disconnected", None, now)
+                .await?;
+            audit(&mut t, "vault.connect_refused", "upstream", &id, "connect").await?;
+        }
+        t.commit().await?;
+        Ok(())
+    }
+
     /// `DELETE /v1/account/vault/connections/{connection}`: the connection ends, its tokens are
     /// shredded (OP-73) and, where the upstream has an RFC 7009 endpoint, revoked there.
     ///
