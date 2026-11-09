@@ -137,7 +137,7 @@ impl Client {
 
 const LOOPBACK_HOSTS: [&str; 3] = ["127.0.0.1", "[::1]", "localhost"];
 
-fn loopback(uri: &str) -> Option<(&str, &str)> {
+pub(crate) fn loopback(uri: &str) -> Option<(&str, &str)> {
     let rest = uri.strip_prefix("http://")?;
     let end = rest.find(['/', '?']).unwrap_or(rest.len());
     let (authority, tail) = rest.split_at(end);
