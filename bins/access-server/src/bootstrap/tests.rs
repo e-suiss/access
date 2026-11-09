@@ -2483,6 +2483,7 @@ mod provision {
 }
 
 mod account;
+mod agent;
 mod catalog;
 mod exchange;
 mod experience;

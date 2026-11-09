@@ -55,6 +55,11 @@ pub fn encode(report: &Report) -> Out {
     }
 }
 
+/// A horizon as JSON, absent when it is unbounded: the largest exact JSON integer is 2^53 - 1.
+fn bounded(t: u64) -> Option<Out> {
+    (t < (1 << 53)).then(|| Out::from(t))
+}
+
 /// A-11, E26
 fn agent_status(s: &access_authority_core::app::agent_status::AgentStatus) -> Out {
     let names = |actions: &[access_kernel::model::ActionRef]| {
@@ -67,16 +72,26 @@ fn agent_status(s: &access_authority_core::app::agent_status::AgentStatus) -> Ou
         .holdings
         .iter()
         .map(|h| {
-            json!({
-                "grant": id(&h.grant),
-                "actions": names(&h.actions),
-                "until": h.until,
-                "budgets": h.budgets.iter().map(|b| json!({
-                    "dimension": b.dimension,
-                    "capacity": b.capacity,
-                    "remaining": b.remaining,
-                })).collect::<Vec<_>>(),
-            })
+            let mut m = serde_json::Map::new();
+            m.insert(String::from("grant"), id(&h.grant));
+            m.insert(String::from("actions"), Out::Array(names(&h.actions)));
+            if let Some(u) = bounded(h.until) {
+                m.insert(String::from("until"), u);
+            }
+            m.insert(
+                String::from("budgets"),
+                h.budgets
+                    .iter()
+                    .map(|b| {
+                        json!({
+                            "dimension": b.dimension,
+                            "capacity": b.capacity,
+                            "remaining": b.remaining,
+                        })
+                    })
+                    .collect(),
+            );
+            Out::Object(m)
         })
         .collect();
     let mut out = serde_json::Map::new();
@@ -85,10 +100,12 @@ fn agent_status(s: &access_authority_core::app::agent_status::AgentStatus) -> Ou
     out.insert(String::from("party"), id(&s.party));
     out.insert(String::from("live"), Out::Bool(s.live));
     if let Some((actions, until)) = &s.mandate {
-        out.insert(
-            String::from("mandate"),
-            json!({ "actions": names(actions), "until": until }),
-        );
+        let mut m = serde_json::Map::new();
+        m.insert(String::from("actions"), Out::Array(names(actions)));
+        if let Some(u) = bounded(*until) {
+            m.insert(String::from("until"), u);
+        }
+        out.insert(String::from("mandate"), Out::Object(m));
     }
     out.insert(String::from("holdings"), Out::Array(holdings));
     out.insert(String::from("advisory"), Out::Bool(true));

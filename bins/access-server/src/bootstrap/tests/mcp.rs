@@ -1131,3 +1131,92 @@ async fn rebinding_and_mismatched_headers_stop_before_any_decision() {
     );
     m.w.domains.release().await;
 }
+
+// AGI-4, A-5, A-7, §9.9.5 rule 1, §11.16.3, AG-13, EI-18, OP-153 m.3 (gg), Ek B 4357, 4363
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_agents_human_presence_term_goes_to_its_principal_never_to_interaction_required() {
+    let m = Mcp::open("mcp-agent").await;
+    let (runtime, _) = super::agent::enrol(&m.w, m.domain).await;
+    let presence = RequirementTerm {
+        proof_kind: ProofKind::Authentication,
+        class: String::from("authentication"),
+        count: 1,
+        binding: Binding::ActorInstance,
+        freshness_ms: None,
+        independence: Independence::None,
+        consumption: Consumption::Reusable,
+        source: None,
+        assurance: BTreeMap::from([(String::from("human_presence"), 1)]),
+    };
+    let agent = super::agent::AGENT;
+    let (grant_id, since) = grant(
+        &m.w,
+        m.domain,
+        grant_of(
+            &m.domain,
+            agent,
+            authority(
+                BTreeSet::from([m.action.clone()]),
+                "work",
+                BTreeSet::from([presence]),
+            ),
+        ),
+        agent,
+    )
+    .await;
+    let holding = HoldingRef {
+        grant: grant_id,
+        holder: agent,
+        since,
+    };
+    let dpop = DpopKey::new();
+    let token = m.token(MCP, &dpop).await;
+    let tools = Tools::new(vec![tool("approve", &m.action, None)]).unwrap();
+    let server = m.server(&tools, None);
+    let window = Window {
+        from: wall() - 1_000,
+        until: wall() + 60_000,
+    };
+    let digest =
+        intent_digest(&tool_intent(&tool("approve", &m.action, None), None, window).unwrap())
+            .unwrap();
+    let nonce = Csprng.bytes16();
+    let ais = super::agent::ais_by(
+        &runtime.0,
+        &Statement {
+            domain: m.domain,
+            nonce: nonce.to_vec(),
+            intent: digest,
+            mode: Mode::Commit,
+            pep: String::from(MCP_PEP),
+            capacity: Capacity::Own,
+            basis: ExerciseBasis::Holding(holding),
+            iat: wall(),
+            exercise: None,
+        },
+    )
+    .unwrap();
+    let call = rpc(
+        "tools/call",
+        &format!(
+            r#"{{"name":"approve","_meta":{}}}"#,
+            meta(Some(&ais), Some(window), None)
+        ),
+    );
+    let r = respond(post(&m, &server, (&token, &dpop), &[], &call));
+    assert_eq!(r.status, 200, "{}", r.body);
+    let result = result_of(&r);
+    assert_eq!(
+        result.get("resultType").and_then(Json::as_str),
+        Some("input_required"),
+        "{}",
+        r.body
+    );
+    assert!(!r.body.contains("interaction_required"), "{}", r.body);
+    assert!(
+        r.headers
+            .iter()
+            .all(|(_, v)| !v.contains("interaction_required"))
+    );
+    m.w.domains.release().await;
+}

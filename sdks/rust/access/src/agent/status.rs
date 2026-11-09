@@ -49,8 +49,8 @@ pub struct Holding {
     pub grant: Id,
     /// The actions it covers, `namespace:name`.
     pub actions: Vec<Untrusted>,
-    /// Its horizon.
-    pub until: u64,
+    /// Its horizon; `None` when it has none.
+    pub until: Option<u64>,
     /// Its budgets.
     pub budgets: Vec<Budget>,
 }
@@ -65,7 +65,7 @@ pub struct Status {
     /// Whether the Instance is live.
     pub live: bool,
     /// The actions its Mandate covers, and its horizon, when it has one.
-    pub mandate: Option<(Vec<Untrusted>, u64)>,
+    pub mandate: Option<(Vec<Untrusted>, Option<u64>)>,
     /// The Grants its Party holds.
     pub holdings: Vec<Holding>,
 }
@@ -190,7 +190,7 @@ fn holding(h: &Json) -> Result<Holding, Unread> {
     Ok(Holding {
         grant: id(h.get("grant"))?,
         actions: names(h.get("actions"))?,
-        until: uint(h.get("until"))?,
+        until: h.get("until").map(|u| uint(Some(u))).transpose()?,
         budgets,
     })
 }
@@ -225,7 +225,10 @@ pub fn read(answer: &Answer) -> Result<Status, Unread> {
     }
     let mandate = match r.get("mandate") {
         None => None,
-        Some(m) => Some((names(m.get("actions"))?, uint(m.get("until"))?)),
+        Some(m) => Some((
+            names(m.get("actions"))?,
+            m.get("until").map(|u| uint(Some(u))).transpose()?,
+        )),
     };
     let holdings = match r.get("holdings") {
         Some(Json::Array(items)) => items.iter().map(holding).collect::<Result<_, _>>()?,
