@@ -3034,3 +3034,221 @@ surface = "mail"
 class = "notice"
 owner = "identity_plane"
 protected = false
+
+# L9 (OP-154 m.4)
+[[message]]
+key = "agent-operated_by"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "agent-operator_unknown"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "agent-status-label"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "agent-next_check"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "evidence-upstream_confirmation"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "evidence-independent_recheck"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "evidence-browser_observation"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "aftermath-within_window"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "aftermath-after_window"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "aftermath-ignoring"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "aftermath-containment"
+surface = "hub"
+class = "remediation"
+owner = "access"
+protected = false
+
+[[message]]
+key = "stop-authority_revoked"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "stop-authority_not_recorded"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "stop-runtime_note"
+surface = "hub"
+class = "notice"
+owner = "access"
+protected = false
+
+[[message]]
+key = "limit-amount"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "limit-count"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "subdelegation-passed"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "suggestion-title"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "suggestion-repeated"
+surface = "hub"
+class = "notice"
+owner = "access"
+protected = false
+
+[[message]]
+key = "suggestion-not_applied"
+surface = "hub"
+class = "notice"
+owner = "access"
+protected = false
+
+[[message]]
+key = "action-review_delegation"
+surface = "hub"
+class = "action"
+owner = "access"
+protected = false
+
+[[message]]
+key = "action-not_now"
+surface = "hub"
+class = "action"
+owner = "access"
+protected = false
+
+[[message]]
+key = "agent_connections-empty"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent_connections-not_used"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent_connections-used_by"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent_connections-used_by_at"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent_connections-active"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent_connections-pending"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent_connections-disconnected"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent_connections-unknown"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent_connections-unavailable"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false

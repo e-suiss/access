@@ -17,3 +17,4 @@ export {
   tag,
 } from "./fluent.js";
 export * as delegation from "./delegation/index.js";
+export * as agents from "./agents/index.js";

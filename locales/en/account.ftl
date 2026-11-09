@@ -135,3 +135,13 @@ agent_connections-title = Connected accounts for agents
 agent_connections-needs_reconnect = Needs reconnecting
 action-reconnect = Reconnect
 action-disconnect = Disconnect
+# L9 (OP-154 m.4)
+agent_connections-empty = No accounts are connected for agents.
+agent_connections-not_used = No agent has used it yet
+agent_connections-used_by = Used by { $agent }
+agent_connections-used_by_at = Used by { $agent }, last on { $time }
+agent_connections-active = Connected
+agent_connections-pending = Waiting for the service
+agent_connections-disconnected = Disconnected
+agent_connections-unknown = State not known
+agent_connections-unavailable = We can't read your connected accounts right now.

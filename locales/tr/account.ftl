@@ -135,3 +135,13 @@ agent_connections-title = Ajanlar için bağlı hesaplar
 agent_connections-needs_reconnect = Yeniden bağlanması gerekiyor
 action-reconnect = Yeniden bağla
 action-disconnect = Bağlantıyı kes
+# L9 (OP-154 m.4)
+agent_connections-empty = Ajanlar için bağlı hesap yok.
+agent_connections-not_used = Henüz hiçbir ajan kullanmadı
+agent_connections-used_by = Kullanan: { $agent }
+agent_connections-used_by_at = Kullanan: { $agent }, son kez { $time }
+agent_connections-active = Bağlı
+agent_connections-pending = Hizmet bekleniyor
+agent_connections-disconnected = Bağlantı kesildi
+agent_connections-unknown = Durumu bilinmiyor
+agent_connections-unavailable = Bağlı hesaplarını şu an okuyamıyoruz.
