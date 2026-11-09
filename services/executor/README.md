@@ -8,7 +8,7 @@ It is its own process with its own database. It reaches Access only over Access'
 
 Registered executors come in three kinds, `cloud`, `customer` and `local` (on the person's own device), and all follow the same rules: there is no kind-specific path in the code. An executor is an Instance of its operator's Party; its key signs its reports. The operator is never the actor: a job runs only under the agent's own `commit` statement, and every checkpoint after it needs one of the agent's own `continue` statements.
 
-A Resource in the token vault lists the executors allowed to use its tokens by their client certificate thumbprint. The vault releases a token only for an Exercise that Access allowed with that executor as the enforcement point, once per Exercise, and the token lives in the executor's memory only. Upstream tokens of consequential actions never reach the agent.
+A Resource in the token vault lists the executors allowed to use its tokens by their client certificate thumbprint. The vault releases a token only for an Exercise that Access allowed with that executor as the enforcement point and only once for it, and the token lives in the executor's memory only. Upstream tokens of consequential actions never reach the agent.
 
 ## How a job runs
 

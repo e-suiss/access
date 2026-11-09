@@ -858,7 +858,11 @@ impl<A: Access, U: Upstream, C: Clock, R: Random, S: Signer + Send + Sync> Execu
                         .unwrap_or("claim-invalid"),
                 )),
             )),
-            _ => Err(ExecError::Unavailable(String::from("ingest"))),
+            Some((status, v)) => Err(ExecError::Unavailable(format!(
+                "ingest {status} {}",
+                v.get("code").and_then(Value::as_str).unwrap_or("")
+            ))),
+            None => Err(ExecError::Unavailable(String::from("ingest"))),
         }
     }
 

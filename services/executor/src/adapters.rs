@@ -74,10 +74,9 @@ pub fn state(job: &Job) -> (&'static str, bool) {
     match (job.confirmed, &job.stop_requested) {
         (Some(Confirmed::Stopped), _) => ("stopped", true),
         (_, Some(_)) => ("stopped", false),
+        // E62 (3)
+        _ if unknown => ("unknown", job.confirmed == Some(Confirmed::Paused)),
         _ if job.completed() => ("completed", false),
-        _ if unknown && job.pause_requested => {
-            ("unknown", job.confirmed == Some(Confirmed::Paused))
-        }
         (Some(Confirmed::Paused), _) => ("paused", true),
         _ if job.pause_requested || job.handoff.is_some() => ("paused", false),
         _ => ("running", false),
