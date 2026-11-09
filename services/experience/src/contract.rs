@@ -170,7 +170,7 @@ pub enum Freshness {
     Current,
     /// Its owner could not be reached: "Current status unknown".
     Unknown,
-    /// A rule-shaped holding whose selection lapsed: "Needs refresh — not removed".
+    /// A rule-shaped holding whose selection is not current: "Not current — may have ended".
     NeedsRefresh,
 }
 

@@ -13,7 +13,7 @@ pub const DOMAIN_CURRENT: &str = "domain.current";
 pub const DOMAIN_UNREACHABLE: &str = "domain.unreachable";
 /// The row is current.
 pub const STATUS_CURRENT: &str = "status.current";
-/// "Needs refresh — not removed" (XI-15).
+/// "Not current — may have ended" (XI-15, OP-153 m.21 (c)).
 pub const STATUS_NEEDS_REFRESH: &str = "status.needs_refresh";
 /// "for their own use".
 pub const CAPACITY_OWN_USE: &str = "capacity.own_use";
