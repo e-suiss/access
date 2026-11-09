@@ -112,6 +112,7 @@ export async function inflateStatusList(lst: Uint8Array): Promise<Uint8Array> {
 
 // CMP-17, T41: `auth` (identity) and `authorize` (PEP), kept apart in code
 export * as auth from "./auth.js";
+export * as agent from "./agent/index.js";
 export * as authorize from "./authorize.js";
 export * as reason from "./reason.js";
 export type * as AccessApi from "./generated/access-v1.js";
