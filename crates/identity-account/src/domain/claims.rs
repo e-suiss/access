@@ -102,10 +102,6 @@ impl RiskSignal {
 
 /// What the order claims: a value for a scalar class, or a body whose digest is the value.
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[expect(
-    clippy::large_enum_variant,
-    reason = "one order per identity event, encoded at once; a box gains nothing"
-)]
 pub enum Content {
     /// A scalar value.
     Scalar(EqValue),
@@ -133,6 +129,14 @@ pub enum Content {
     PartyScalar {
         /// The value.
         value: EqValue,
+        /// The subject Party.
+        party: [u8; 16],
+    },
+    /// A body about a subject Party that is no identity subject, always sent beside the Claim,
+    /// such as an agent's workload binding (OP-154 m.3 (d)).
+    PartyBody {
+        /// The body.
+        body: Body,
         /// The subject Party.
         party: [u8; 16],
     },
@@ -545,6 +549,89 @@ pub fn agent_claim(
     }
 }
 
+/// How long a workload's `identity_binding_workload` Claim holds (PD, OP-154 m.3 (d)): an
+/// hour from its presentation; presenting the credential again renews it.
+pub const WORKLOAD_BINDING_TTL_MS: u64 = 3_600_000;
+
+/// Digest context of a workload credential's evidence.
+pub const WORKLOAD_EVIDENCE_CONTEXT: &str = "access/workload-evidence/v1";
+
+/// The line of `agent`'s workload binding of the key `thumbprint`: one line per key.
+#[must_use]
+pub fn workload_line(agent: &[u8; 16], thumbprint: &[u8; 32]) -> [u8; 32] {
+    line(&[
+        Class::IdentityBinding(BindingKind::Workload)
+            .name()
+            .as_bytes(),
+        agent,
+        thumbprint,
+    ])
+}
+
+/// OP-154 m.3 (d), U20, AG-30: the realm issuer's `identity_binding_workload` Claim about the
+/// agent Party `agent`: the verified workload URI and the key it presented. The credential
+/// enters as a digest only (E26); the body always travels, so the authority plane can match the
+/// key of a self-signed `instance_create`.
+#[must_use]
+pub fn workload_binding(
+    agent: [u8; 16],
+    workload: access_kernel::claim::body::Workload,
+    credential: &[u8],
+    at: u64,
+) -> ClaimOrder {
+    let thumbprint = workload.thumbprint;
+    ClaimOrder {
+        subject: agent,
+        class: Class::IdentityBinding(BindingKind::Workload).name(),
+        at,
+        ttl_ms: WORKLOAD_BINDING_TTL_MS,
+        line: Some(workload_line(&agent, &thumbprint)),
+        content: Content::PartyBody {
+            body: Body::IdentityBinding(IdentityBinding {
+                evidence: Digest(context_digest(WORKLOAD_EVIDENCE_CONTEXT, credential).0),
+                workload: Some(workload),
+            }),
+            party: agent,
+        },
+        assurance: BTreeMap::new(),
+        bind: Bind::None,
+        retract: false,
+    }
+}
+
+/// How long an `attestation_runtime` Claim holds (PD, OP-154 m.3 (s)): a day; the key is
+/// attested again after that.
+pub const RUNTIME_TTL_MS: u64 = 24 * 3_600_000;
+
+/// §5.9, L21, Ek B 4262: the realm issuer's `attestation_runtime` Claim about `party` for the
+/// attested runtime class `runtime`, bound to the Instance `instance` whose key was attested.
+#[must_use]
+pub fn runtime_attestation(
+    party: [u8; 16],
+    instance: [u8; 16],
+    runtime: [u8; 32],
+    at: u64,
+) -> ClaimOrder {
+    ClaimOrder {
+        subject: party,
+        class: Class::AttestationRuntime.name(),
+        at,
+        ttl_ms: RUNTIME_TTL_MS,
+        line: Some(line(&[
+            Class::AttestationRuntime.name().as_bytes(),
+            &party,
+            &instance,
+        ])),
+        content: Content::PartyScalar {
+            value: EqValue::Bytes(runtime.to_vec()),
+            party,
+        },
+        assurance: BTreeMap::new(),
+        bind: Bind::Instance(instance),
+        retract: false,
+    }
+}
+
 /// The line of a subject's identity binding of `kind`: the next binding supersedes it.
 #[must_use]
 pub fn binding_line(kind: BindingKind) -> [u8; 32] {
@@ -699,7 +786,7 @@ impl ClaimOrder {
     pub const fn party(&self) -> Option<[u8; 16]> {
         match &self.content {
             Content::About { party, .. } => *party,
-            Content::PartyScalar { party, .. } => Some(*party),
+            Content::PartyScalar { party, .. } | Content::PartyBody { party, .. } => Some(*party),
             _ => None,
         }
     }
@@ -747,6 +834,13 @@ impl ClaimOrder {
                 let digest =
                     crate::domain::claim_classes::digest(class, body).map_err(|_| BadOrder)?;
                 let bytes = dcbor::encode(body, Limits::CEILING).map_err(|_| BadOrder)?;
+                (Some(EqValue::Bytes(digest.to_vec())), Some(bytes))
+            }
+            Content::PartyBody { body, .. } => {
+                let class = Class::parse(&self.class).ok_or(BadOrder)?;
+                let v = body.to_value();
+                let digest = body_digest(class, &v).map_err(|_| BadOrder)?;
+                let bytes = dcbor::encode(&v, Limits::CEILING).map_err(|_| BadOrder)?;
                 (Some(EqValue::Bytes(digest.to_vec())), Some(bytes))
             }
             Content::Body { body, disclose } => {
@@ -829,6 +923,14 @@ impl ClaimOrder {
                 Value::Array(vec![
                     Value::text("party_scalar"),
                     value.to_value(),
+                    Value::Bytes(party.to_vec()),
+                ]),
+                None,
+            ),
+            Content::PartyBody { body, party } => (
+                Value::Array(vec![
+                    Value::text("party_body"),
+                    body.to_value(),
                     Value::Bytes(party.to_vec()),
                 ]),
                 None,
@@ -943,6 +1045,13 @@ fn content_of(value: Option<&Value>, class: &str, disclose: bool) -> Result<Cont
         [Value::Text(tag), inner, Value::Bytes(about)] if tag == "party_scalar" => {
             Ok(Content::PartyScalar {
                 value: EqValue::from_value(inner).map_err(|_| BadOrder)?,
+                party: about.as_slice().try_into().map_err(|_| BadOrder)?,
+            })
+        }
+        [Value::Text(tag), inner, Value::Bytes(about)] if tag == "party_body" => {
+            let parsed = Class::parse(class).ok_or(BadOrder)?;
+            Ok(Content::PartyBody {
+                body: Body::from_value(parsed, inner).map_err(|_| BadOrder)?,
                 party: about.as_slice().try_into().map_err(|_| BadOrder)?,
             })
         }
