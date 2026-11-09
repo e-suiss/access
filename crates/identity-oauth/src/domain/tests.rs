@@ -2,7 +2,8 @@ use serde_json::Value;
 
 use super::issuer::{Issuer, IssuerError, IssuerStyle, RealmBase, check_slug, with_iss};
 use super::metadata::{
-    Document, Endpoint, Feature, SERVED, Served, authorization_server, paths, protected_resource,
+    Document, Endpoint, Feature, RealmFacts, SERVED, Served, authorization_server,
+    authorization_server_of, paths, protected_resource,
 };
 
 fn json(s: &str) -> serde_json::Map<String, Value> {
@@ -168,7 +169,11 @@ fn served_endpoints_carry_the_access_corrections() {
         features: &[Feature::Dpop, Feature::ClientIdMetadataDocument],
     };
     let i = Issuer::parse("https://id.example/realms/acme").unwrap();
-    let m = json(&authorization_server(&i, &all));
+    let cimd = RealmFacts {
+        cimd: true,
+        ..RealmFacts::default()
+    };
+    let m = json(&authorization_server_of(&i, &all, &cimd));
     assert_eq!(
         m["code_challenge_methods_supported"],
         serde_json::json!(["S256"])

@@ -1,6 +1,7 @@
 //! Adapters of the realm ports: the router role's view of the realm rows (OP-132 m.3) and the
 //! identity signer over its Unix socket (CMP-22b).
 
+pub mod cimd;
 pub mod clients;
 pub mod dpop;
 pub mod hooks;
@@ -89,10 +90,15 @@ impl Directory for PgDirectory {
             .await
             .map_err(|_| Unavailable)?
             .map(|g| *g.domain.as_bytes());
+        let cimd = idp::settings(&mut t)
+            .await
+            .map_err(|_| Unavailable)?
+            .is_some_and(|s| s.cimd_enabled);
         t.commit().await.map_err(|_| Unavailable)?;
         Ok(Facts {
             public_sub_clients,
             domain,
+            cimd,
         })
     }
 }

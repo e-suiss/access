@@ -79,6 +79,9 @@ pub enum LoginReason {
     StepUp(Aal),
     /// Ask whether to share identity claims with a third-party client (OP-153 m.3 (z)).
     Share,
+    /// Ask on the Approval Surface for a client the realm did not register: the Grant is the
+    /// person's `grant.issue` with their AAS (§11.6, OP-154 m.3 (k), EI-18).
+    Approve,
 }
 
 /// The live session facts the request is held against.

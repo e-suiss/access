@@ -40,7 +40,10 @@ use access_identity_oauth::domain::issuer::{IssuerStyle, RealmBase};
 use access_identity_oauth::domain::request::Params;
 use access_identity_oauth::ports::Unavailable;
 use access_identity_oauth::ports::dpop::{Clock, ClockUnavailable};
-use access_identity_oauth::ports::oauth::{ClientKeys, Held, ManagementHolders};
+use access_identity_oauth::ports::oauth::{
+    ClientDocuments, ClientKeys, Fetch, FetchRefused, Fetched, GrantStanding, Held,
+    ManagementHolders,
+};
 use access_identity_session::domain::assurance::{Factor, vector};
 use access_identity_session::domain::session::cookie_digest;
 use access_identity_signer::adapters::{DirVault, SealedFactory, now_ms, serve};
@@ -176,6 +179,100 @@ pub struct Rings {
     pub resource: Arc<NonceRing>,
 }
 
+/// Client ID Metadata Documents served in process: what each URL answers, how often it was
+/// fetched, and the hosts that resolve to a special-purpose address. Address literals are
+/// checked by the real SSRF guard.
+#[derive(Clone, Default)]
+pub struct FixtureDocs {
+    pub answers: Arc<Mutex<HashMap<String, Fetched>>>,
+    pub fetches: Arc<Mutex<HashMap<String, u32>>>,
+    pub private_hosts: Arc<Mutex<Vec<String>>>,
+}
+
+impl FixtureDocs {
+    pub fn serve(&self, url: &str, status: u16, max_age_s: Option<u64>, body: &str) {
+        self.answers.lock().unwrap().insert(
+            String::from(url),
+            Fetched {
+                status,
+                max_age_s,
+                content_type: Some(String::from("application/json")),
+                body: body.as_bytes().to_vec(),
+            },
+        );
+    }
+
+    pub fn fetched(&self, url: &str) -> u32 {
+        self.fetches.lock().unwrap().get(url).copied().unwrap_or(0)
+    }
+}
+
+impl ClientDocuments for FixtureDocs {
+    fn vet<'a>(&'a self, url: &'a str) -> Fetch<'a, ()> {
+        Box::pin(async move {
+            let target = access_identity_oauth::adapters::outbound::Target::parse(url)
+                .map_err(|_| FetchRefused::Url)?;
+            let rest = url.strip_prefix("https://").unwrap_or_default();
+            let host = match rest.strip_prefix('[') {
+                Some(v6) => v6.split(']').next().unwrap_or_default(),
+                None => rest.split(['/', ':', '?']).next().unwrap_or_default(),
+            };
+            if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+                return if access_identity_oauth::adapters::outbound::public(ip) {
+                    Ok(())
+                } else {
+                    Err(FetchRefused::Blocked)
+                };
+            }
+            if target.port() != 443
+                || self.private_hosts.lock().unwrap().iter().any(|h| h == host)
+            {
+                return Err(FetchRefused::Blocked);
+            }
+            Ok(())
+        })
+    }
+
+    fn fetch<'a>(
+        &'a self,
+        _: RealmId,
+        url: &'a str,
+        _: &'a str,
+        max_body: usize,
+    ) -> Fetch<'a, Fetched> {
+        Box::pin(async move {
+            *self
+                .fetches
+                .lock()
+                .unwrap()
+                .entry(String::from(url))
+                .or_insert(0) += 1;
+            let a = self
+                .answers
+                .lock()
+                .unwrap()
+                .get(url)
+                .cloned()
+                .ok_or(FetchRefused::Unreachable)?;
+            if a.body.len() > max_body {
+                return Err(FetchRefused::Malformed);
+            }
+            Ok(a)
+        })
+    }
+}
+
+/// The Grants that stand, by (domain, grant).
+#[derive(Clone, Default)]
+pub struct ScriptedStanding(pub Arc<Mutex<Vec<([u8; 32], [u8; 16])>>>);
+
+impl GrantStanding for ScriptedStanding {
+    fn live(&self, domain: [u8; 32], grant: [u8; 16]) -> Held<'_, bool> {
+        let live = self.0.lock().unwrap().contains(&(domain, grant));
+        Box::pin(async move { Ok(live) })
+    }
+}
+
 pub struct TestEnv {
     pub db: PgOAuth,
     pub signer: SignerKeys,
@@ -191,6 +288,8 @@ pub struct TestEnv {
     pub ids: IdKey,
     pub hooks: ScriptedHook,
     pub management: ScriptedManagement,
+    pub documents: FixtureDocs,
+    pub standing: ScriptedStanding,
 }
 
 /// Live Instance keys by (domain, kid).
@@ -254,6 +353,8 @@ impl Clone for TestEnv {
             ids: id_key(),
             hooks: self.hooks.clone(),
             management: self.management.clone(),
+            documents: self.documents.clone(),
+            standing: self.standing.clone(),
         }
     }
 }
@@ -315,6 +416,12 @@ impl Env for TestEnv {
     }
     fn management(&self) -> &(dyn ManagementHolders + Sync) {
         &self.management
+    }
+    fn documents(&self) -> &(dyn ClientDocuments + Sync) {
+        &self.documents
+    }
+    fn standing(&self) -> &(dyn GrantStanding + Sync) {
+        &self.standing
     }
 }
 
@@ -438,6 +545,10 @@ pub async fn domain(db: &TestDb, t: TenantId, seed: u8, allows: u8) -> DomainId 
 /// One realm of the cluster and what its tests present.
 pub struct Fixture {
     pub realm: Realm,
+    /// The next spare ALLOW of the realm's domain, for configuration a test changes.
+    pub spare: std::sync::atomic::AtomicU64,
+    /// The realm's governing domain.
+    pub domain: [u8; 32],
     pub slug: String,
     pub issuer: String,
     pub host: String,
@@ -516,6 +627,9 @@ pub fn new_key() -> EcdsaKeyPair {
 /// redirect URIs.
 pub type Extra = (String, String, String, Vec<String>);
 
+/// Spare ALLOWs of every realm's domain, after its clients' registrations.
+pub const SPARE: usize = 8;
+
 impl Cluster {
     /// Realms `slugs`, each in its own tenant, with the three fixture clients.
     pub async fn new(slugs: &[&str]) -> Self {
@@ -536,7 +650,7 @@ impl Cluster {
             let seed = 40 + u8::try_from(n).unwrap();
             let t = create_tenant(&db.app, "pool-default").await.unwrap();
             let clients = 3 + extra.len();
-            let d = domain(&db, t, seed, u8::try_from(clients).unwrap()).await;
+            let d = domain(&db, t, seed, u8::try_from(clients + SPARE).unwrap()).await;
             let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
             let r = create_realm(&mut tx, &d, slug, "pool-default")
                 .await
@@ -632,6 +746,8 @@ impl Cluster {
                 client_key,
                 n,
                 seed,
+                u64::try_from(clients + 1).unwrap(),
+                *d.as_bytes(),
             ));
         }
         let ids: Vec<RealmId> = seeded.iter().map(|s| s.0).collect();
@@ -663,14 +779,19 @@ impl Cluster {
             ids: id_key(),
             hooks: ScriptedHook::default(),
             management: ScriptedManagement::default(),
+            documents: FixtureDocs::default(),
+            standing: ScriptedStanding::default(),
         };
         let oauth = OAuth::new(env);
         let mut realms = Vec::new();
-        for (_, slug, issuer, subject, secret, keyed_jwks, client_key, n, _) in seeded {
+        for (_, slug, issuer, subject, secret, keyed_jwks, client_key, n, _, spare, domain) in seeded
+        {
             let host = String::from(issuer.authority());
             let realm = oauth.realm(&host, None).await.unwrap().unwrap();
             realms.push(Fixture {
                 realm,
+                spare: std::sync::atomic::AtomicU64::new(spare),
+                domain,
                 slug,
                 issuer: String::from(issuer.as_str()),
                 host,
@@ -735,6 +856,52 @@ impl At<'_> {
             f: self.f,
             key: Arc::new(key),
         }
+    }
+
+    /// Binds the realm's next spare ALLOW to `action`, for a configuration write.
+    pub async fn bound(&self, tx: &mut TenantTx, action: &str) -> access_store::idp::Bound {
+        let p = self.f.spare.fetch_add(1, Ordering::SeqCst);
+        let nonce = [u8::try_from(p).unwrap(); 16];
+        bind(
+            tx,
+            &Decision {
+                domain: &DomainId::from_bytes(self.f.domain),
+                position: p,
+                nonce: &nonce,
+                intent: [9; 32],
+                change: [5; 32],
+                action,
+            },
+        )
+        .await
+        .unwrap()
+        .unwrap()
+    }
+
+    /// Sets the realm's CIMD policy under a spare ALLOW (`idp.client.cimd_policy`).
+    pub async fn cimd_policy(&self, enabled: bool, domains: &[&str]) {
+        let mut tx = TenantTx::begin(&self.c.db.app, self.f.realm.tenant, self.f.realm.realm)
+            .await
+            .unwrap();
+        let b = self.bound(&mut tx, "idp.client.cimd_policy").await;
+        let mut s = access_store::idp::settings(&mut tx).await.unwrap().unwrap();
+        s.cimd_enabled = enabled;
+        s.cimd_domains = domains.iter().map(|d| String::from(*d)).collect();
+        assert!(access_store::idp::update_settings(&mut tx, &b, &s).await.unwrap());
+        tx.commit().await.unwrap();
+    }
+
+    /// Registers a protected resource under a spare ALLOW
+    /// (`idp.client.resource_register`).
+    pub async fn register_resource(&self, resource: &str) {
+        let mut tx = TenantTx::begin(&self.c.db.app, self.f.realm.tenant, self.f.realm.realm)
+            .await
+            .unwrap();
+        let b = self.bound(&mut tx, "idp.client.resource_register").await;
+        access_store::clients::insert_protected_resource(&mut tx, &b, resource, "Tools")
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
     }
 
     /// A signed-in browser: a login session with a password-level assurance (I5).

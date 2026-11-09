@@ -7,6 +7,7 @@ use access_identity_signer::protocol::{Realm, Request, Response};
 use access_identity_signer::service::UNKNOWN_REALM;
 use access_store::Pool;
 use access_store::backchannel::LogoutUndelivered;
+use access_store::clients::{CimdRow, CimdSnapshot, ConsentRecordRow};
 use access_store::identity::{self, Cursor, OutboxEvent, RealmId, TenantId, TenantTx};
 use access_store::idp::{self, ClientRow, PlatformClient};
 use access_store::oauth::{
@@ -319,6 +320,92 @@ impl OAuthTx for PgOAuthTx {
             .map_err(down)
     }
 
+    async fn cimd_policy(&mut self) -> Result<(bool, Vec<String>), Unavailable> {
+        let s = idp::settings(&mut self.0).await.map_err(down)?;
+        Ok(s.map_or((false, Vec::new()), |s| (s.cimd_enabled, s.cimd_domains)))
+    }
+
+    async fn cimd_client(&mut self, client_id: &str) -> Result<Option<CimdRow>, Unavailable> {
+        self.0.cimd_client(client_id).await.map_err(down)
+    }
+
+    async fn insert_cimd_client(
+        &mut self,
+        client_id: &str,
+        s: &CimdSnapshot<'_>,
+    ) -> Result<[u8; 16], Unavailable> {
+        self.0.insert_cimd_client(client_id, s).await.map_err(down)
+    }
+
+    async fn refresh_cimd_client(
+        &mut self,
+        uuid: [u8; 16],
+        s: &CimdSnapshot<'_>,
+        visual_changed: bool,
+    ) -> Result<bool, Unavailable> {
+        self.0
+            .refresh_cimd_client(uuid, s, visual_changed)
+            .await
+            .map_err(down)
+    }
+
+    async fn retire_cimd_client(
+        &mut self,
+        uuid: [u8; 16],
+        reason: &str,
+        now_ms: u64,
+    ) -> Result<bool, Unavailable> {
+        self.0
+            .retire_cimd_client(uuid, reason, now_ms)
+            .await
+            .map_err(down)
+    }
+
+    async fn protected_resource(&mut self, resource: &str) -> Result<bool, Unavailable> {
+        Ok(self
+            .0
+            .protected_resource(resource)
+            .await
+            .map_err(down)?
+            .is_some())
+    }
+
+    async fn consent_record(
+        &mut self,
+        subject: [u8; 16],
+        client: [u8; 16],
+        resource: &str,
+    ) -> Result<Option<ConsentRecordRow>, Unavailable> {
+        self.0
+            .consent_record(subject, client, resource)
+            .await
+            .map_err(down)
+    }
+
+    async fn end_consent_record(
+        &mut self,
+        consent: [u8; 16],
+        reason: &str,
+        now_ms: u64,
+    ) -> Result<bool, Unavailable> {
+        self.0
+            .end_consent_record(consent, reason, now_ms)
+            .await
+            .map_err(down)
+    }
+
+    async fn end_client_consents(
+        &mut self,
+        client: [u8; 16],
+        reason: &str,
+        now_ms: u64,
+    ) -> Result<u64, Unavailable> {
+        self.0
+            .end_client_consents(client, reason, now_ms)
+            .await
+            .map_err(down)
+    }
+
     async fn commit(self) -> Result<(), Unavailable> {
         self.0.commit().await.map_err(down)
     }
@@ -422,6 +509,7 @@ pub const fn reason_name(reason: LoginReason) -> &'static str {
         LoginReason::Create => "create",
         LoginReason::StepUp(_) => "step_up",
         LoginReason::Share => "share",
+        LoginReason::Approve => "approve",
     }
 }
 

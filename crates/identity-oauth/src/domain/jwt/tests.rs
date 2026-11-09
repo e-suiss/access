@@ -41,6 +41,7 @@ const RULES: AssertionRules<'static> = AssertionRules {
     issuer: "https://acme.id.test",
     endpoint: "https://acme.id.test/token",
     now_ms: NOW,
+    rs256: false,
 };
 
 // RFC 7523 §3, §10.4.5, IDI-6, MD-3

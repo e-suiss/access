@@ -264,6 +264,8 @@ pub struct AssertionRules<'a> {
     pub endpoint: &'a str,
     /// Now, Unix milliseconds.
     pub now_ms: u64,
+    /// Whether the client opted in to RS256 (§11.4.5 (a), OP-154 m.3 (l)); ES256 otherwise.
+    pub rs256: bool,
 }
 
 /// RFC 7523 §3, §10.4.5: verifies a client assertion against the client's keys. `alg` comes
@@ -288,7 +290,7 @@ pub fn verify_assertion(
     }
     let alg = text(header, "alg")
         .and_then(ClientAlg::from_name)
-        .filter(|a| ASSERTION_ALGS.contains(a))
+        .filter(|a| ASSERTION_ALGS.contains(a) && (*a != ClientAlg::Rs256 || rules.rs256))
         .ok_or(JwtError::Algorithm)?;
     if text(header, "typ").is_some_and(|t| t != "JWT" && t != "client-authentication+jwt") {
         return Err(JwtError::Header);

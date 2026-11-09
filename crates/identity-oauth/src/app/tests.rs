@@ -44,6 +44,7 @@ impl Directory for Rows {
         Ok(crate::ports::Facts {
             public_sub_clients: u64::from(n == 3),
             domain: Some([n; 32]),
+            cimd: n == 3,
         })
     }
 }
@@ -295,6 +296,22 @@ async fn public_sub_is_declared_only_where_a_client_opted_in() {
         gamma["subject_types_supported"],
         serde_json::json!(["pairwise", "public"])
     );
+}
+
+// §11.3.3, AG-3, OP-148, Ek B 4167, 4654
+#[tokio::test]
+async fn cimd_support_is_declared_only_where_the_realm_accepts_cimd() {
+    let s = service();
+    for doc in [Document::OpenIdConfiguration, Document::AuthorizationServer] {
+        let acme = metadata_of(&s.serve(doc, "acme.id.example", None).await);
+        assert!(acme.get("client_id_metadata_document_supported").is_none());
+        let gamma = metadata_of(&s.serve(doc, "gamma.id.example", None).await);
+        assert_eq!(gamma["client_id_metadata_document_supported"], true);
+        assert_eq!(
+            gamma["token_endpoint_auth_methods_supported"][0], "none",
+            "Claude picks CIMD only with `none` (§11.8.3)"
+        );
+    }
 }
 
 // §9.15.1 k.2, MD-5, P60

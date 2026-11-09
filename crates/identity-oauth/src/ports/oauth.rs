@@ -9,6 +9,7 @@ use access_crypto::jose::JwsAlg;
 use access_crypto::opaque_id::IdKey;
 use access_store::backchannel::LogoutUndelivered;
 use access_store::identity::{Cursor, OutboxEvent, RealmId, TenantId};
+use access_store::clients::{CimdRow, CimdSnapshot, ConsentRecordRow};
 use access_store::idp::{ClientRow, PlatformClient};
 use access_store::oauth::{
     CodeRow, GrantRow, NewCode, NewGrant, NewRequest, RefreshRow, RequestRow,
@@ -210,6 +211,62 @@ pub trait OAuthTx: Send {
         target: &str,
         correlation: &str,
     ) -> impl Future<Output = Result<(), Unavailable>> + Send;
+    /// The realm's CIMD acceptance policy (`idp.client.cimd_policy`): whether CIMD clients are
+    /// accepted, and from which domains.
+    fn cimd_policy(
+        &mut self,
+    ) -> impl Future<Output = Result<(bool, Vec<String>), Unavailable>> + Send;
+    /// The live CIMD client of `client_id`, locked.
+    fn cimd_client(
+        &mut self,
+        client_id: &str,
+    ) -> impl Future<Output = Result<Option<CimdRow>, Unavailable>> + Send;
+    /// Records a CIMD client seen for the first time.
+    fn insert_cimd_client(
+        &mut self,
+        client_id: &str,
+        s: &CimdSnapshot<'_>,
+    ) -> impl Future<Output = Result<[u8; 16], Unavailable>> + Send;
+    /// Replaces a live CIMD client's snapshot.
+    fn refresh_cimd_client(
+        &mut self,
+        uuid: [u8; 16],
+        s: &CimdSnapshot<'_>,
+        visual_changed: bool,
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
+    /// Retires a live CIMD client: its consent records end and its identity grants are revoked.
+    fn retire_cimd_client(
+        &mut self,
+        uuid: [u8; 16],
+        reason: &str,
+        now_ms: u64,
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
+    /// Whether `resource` is a registered protected resource of the realm (AG-8).
+    fn protected_resource(
+        &mut self,
+        resource: &str,
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
+    /// The live consent record of `subject` for `client` at `resource` (P58).
+    fn consent_record(
+        &mut self,
+        subject: [u8; 16],
+        client: [u8; 16],
+        resource: &str,
+    ) -> impl Future<Output = Result<Option<ConsentRecordRow>, Unavailable>> + Send;
+    /// Ends one consent record.
+    fn end_consent_record(
+        &mut self,
+        consent: [u8; 16],
+        reason: &str,
+        now_ms: u64,
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
+    /// Ends every live consent record of `client`.
+    fn end_client_consents(
+        &mut self,
+        client: [u8; 16],
+        reason: &str,
+        now_ms: u64,
+    ) -> impl Future<Output = Result<u64, Unavailable>> + Send;
     /// Commits.
     fn commit(self) -> impl Future<Output = Result<(), Unavailable>> + Send;
 }
@@ -418,6 +475,91 @@ impl ManagementHolders for NoManagement {
     }
 
     fn platform(&self, _: &crate::ports::RealmEntry) -> Held<'_, bool> {
+        Box::pin(async { Ok(false) })
+    }
+}
+
+/// What a Client ID Metadata Document fetch answered (§11.3.4).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Fetched {
+    /// Status; only `200` is a document.
+    pub status: u16,
+    /// `Cache-Control: max-age`, seconds.
+    pub max_age_s: Option<u64>,
+    /// `Content-Type`.
+    pub content_type: Option<String>,
+    /// The body, read up to the limit asked for.
+    pub body: Vec<u8>,
+}
+
+/// Why a client's URL was not fetched or answered nothing usable; every case cancels the
+/// authorization request (AG-4) and nothing is cached (§11.3.5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum FetchRefused {
+    /// Not an `https` URL Access requests.
+    #[error("not an https URL Access requests")]
+    Url,
+    /// The host resolves to a special-purpose address (RFC 6890, §11.3.6).
+    #[error("address refused")]
+    Blocked,
+    /// The per-URL or per-realm fetch rate is spent (OP-154 m.3 (i)).
+    #[error("rate limited")]
+    Limited,
+    /// No answer in time.
+    #[error("no answer")]
+    Unreachable,
+    /// Larger than the read limit or not HTTP/1.1.
+    #[error("malformed or oversized answer")]
+    Malformed,
+}
+
+/// A pending answer of [`ClientDocuments`].
+pub type Fetch<'a, T> =
+    std::pin::Pin<Box<dyn Future<Output = Result<T, FetchRefused>> + Send + 'a>>;
+
+/// The URLs a CIMD client names, reached through the guarded outbound client only
+/// (OP-154 m.1 (d), §11.3.6): no redirect followed, every address public, bounded reads.
+pub trait ClientDocuments: Send + Sync {
+    /// Checks that `url` is one Access requests and that every address its host resolves to is
+    /// public, without connecting.
+    fn vet<'a>(&'a self, url: &'a str) -> Fetch<'a, ()>;
+
+    /// `GET url` for `realm` with `accept`, the body read up to `max_body` bytes.
+    fn fetch<'a>(
+        &'a self,
+        realm: RealmId,
+        url: &'a str,
+        accept: &'a str,
+        max_body: usize,
+    ) -> Fetch<'a, Fetched>;
+}
+
+/// No outbound access: every CIMD client is refused (MD-8).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoDocuments;
+
+impl ClientDocuments for NoDocuments {
+    fn vet<'a>(&'a self, _: &'a str) -> Fetch<'a, ()> {
+        Box::pin(async { Err(FetchRefused::Unreachable) })
+    }
+
+    fn fetch<'a>(&'a self, _: RealmId, _: &'a str, _: &'a str, _: usize) -> Fetch<'a, Fetched> {
+        Box::pin(async { Err(FetchRefused::Unreachable) })
+    }
+}
+
+/// Whether a Grant a consent record names still stands in its domain (§11.6 rule 1, P58).
+pub trait GrantStanding: Send + Sync {
+    /// Whether Grant `grant` of `domain` is live now: issued, not revoked, not lapsed.
+    fn live(&self, domain: [u8; 32], grant: [u8; 16]) -> Held<'_, bool>;
+}
+
+/// No authority plane: no Grant stands, so every consent is asked for again (MD-8).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoStanding;
+
+impl GrantStanding for NoStanding {
+    fn live(&self, _: [u8; 32], _: [u8; 16]) -> Held<'_, bool> {
         Box::pin(async { Ok(false) })
     }
 }

@@ -62,6 +62,8 @@ pub struct Answer {
     pub max_age_s: Option<u64>,
     /// `Retry-After` in seconds.
     pub retry_after_s: Option<u64>,
+    /// `Content-Type`.
+    pub content_type: Option<String>,
     /// The body, when it was read.
     pub body: Vec<u8>,
 }
@@ -435,19 +437,22 @@ pub async fn read_answer<S: AsyncRead + Unpin>(
                         .is_some_and(|v| v.eq_ignore_ascii_case("chunked")),
                     header(resp.headers, "cache-control").and_then(max_age),
                     header(resp.headers, "retry-after").and_then(|v| v.parse::<u64>().ok()),
+                    header(resp.headers, "content-type").map(String::from),
                 )),
                 Ok(httparse::Status::Partial) if buf.len() < MAX_HEAD && n > 0 => None,
                 Ok(httparse::Status::Partial) if n == 0 => return Err(OutboundError::Unreachable),
                 _ => return Err(OutboundError::Malformed),
             }
         };
-        let Some((head, status, length, chunked, max_age_s, retry_after_s)) = complete else {
+        let Some((head, status, length, chunked, max_age_s, retry_after_s, content_type)) = complete
+        else {
             continue;
         };
         let mut answer = Answer {
             status,
             max_age_s,
             retry_after_s,
+            content_type,
             body: Vec::new(),
         };
         if max_body == 0 {
@@ -571,6 +576,7 @@ pub async fn post_over<S: AsyncRead + AsyncWrite + Unpin>(
 pub struct Outbound {
     connector: Option<TlsConnector>,
     timeout: Duration,
+    connect: Option<Duration>,
     declared: Arc<[DeclaredTarget]>,
 }
 
@@ -584,6 +590,7 @@ impl Outbound {
         Self {
             connector: Some(TlsConnector::from(tls)),
             timeout,
+            connect: None,
             declared: Arc::new([]),
         }
     }
@@ -594,8 +601,59 @@ impl Outbound {
         Self {
             connector: None,
             timeout,
+            connect: None,
             declared: Arc::new([]),
         }
+    }
+
+    /// This client with its own deadline for the TCP connection (OP-154 m.3 (i)).
+    #[must_use]
+    pub const fn connecting_within(mut self, connect: Duration) -> Self {
+        self.connect = Some(connect);
+        self
+    }
+
+    /// Checks that Access requests `url` and that every address its host resolves to is public
+    /// (§14.3, §11.3.6), without connecting.
+    ///
+    /// # Errors
+    /// [`OutboundError`].
+    pub async fn vet(&self, url: &str) -> Result<(), OutboundError> {
+        let target = Target::parse(url)?;
+        if target.port != PORT {
+            return Err(OutboundError::Blocked);
+        }
+        tokio::time::timeout(self.timeout, resolve(&target))
+            .await
+            .map_err(|_| OutboundError::Unreachable)?
+            .map(drop)
+    }
+
+    /// `GET url` accepting `accept` as `user_agent`, the body read up to `max_body` bytes: a
+    /// Client ID Metadata Document or its logo (OP-154 m.3 (i)).
+    ///
+    /// # Errors
+    /// [`OutboundError`].
+    pub async fn get_as(
+        &self,
+        url: &str,
+        accept: &str,
+        user_agent: &str,
+        max_body: usize,
+    ) -> Result<Answer, OutboundError> {
+        let target = Target::parse(url)?;
+        if !header_ok("user-agent", user_agent) || !header_ok("accept", accept) {
+            return Err(OutboundError::Url);
+        }
+        let request = format!(
+            "GET {} HTTP/1.1\r\nHost: {}\r\nAccept: {accept}\r\nUser-Agent: {user_agent}\r\n\
+             Accept-Encoding: identity\r\nConnection: close\r\n{}\r\n",
+            target.path,
+            target.host_header(),
+            traceparent(),
+        );
+        self.bounded(&target, request.into_bytes(), max_body, None)
+            .await
     }
 
     /// This client with the operator's declared delivery targets (OP-149 m.23).
@@ -632,9 +690,13 @@ impl Outbound {
             }
             let addr = resolve(target).await?;
             let connector = self.connector.as_ref().ok_or(OutboundError::Unreachable)?;
-            let tcp = TcpStream::connect(addr)
-                .await
-                .map_err(|_| OutboundError::Unreachable)?;
+            let tcp = match self.connect {
+                Some(d) => tokio::time::timeout(d, TcpStream::connect(addr))
+                    .await
+                    .map_err(|_| OutboundError::Unreachable)?,
+                None => TcpStream::connect(addr).await,
+            }
+            .map_err(|_| OutboundError::Unreachable)?;
             (connector, tcp)
         };
         let name = match target.host.parse::<IpAddr>() {

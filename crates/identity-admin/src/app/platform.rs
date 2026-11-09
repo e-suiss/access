@@ -292,6 +292,7 @@ where
                 issuer: realm.issuer.as_str(),
                 endpoint,
                 now_ms: now,
+                rs256: client.rs256,
             },
         )
         .map_err(|_| NO)?;

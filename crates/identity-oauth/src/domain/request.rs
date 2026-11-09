@@ -180,6 +180,11 @@ impl AuthError {
         "the person has not shared these claims with this app",
     );
 
+    /// `invalid_target`: a client the realm did not register names no registered protected
+    /// resource (AG-8, §11.4.3).
+    pub const RESOURCE_REQUIRED: Self =
+        Self::new("invalid_target", "one protected resource is required");
+
     /// `access_denied`.
     pub const ACCESS_DENIED: Self = Self::new("access_denied", "the request was denied");
 
@@ -417,7 +422,13 @@ fn authority_ask(
         return match resource {
             None => Ok((None, None)),
             Some(r) if r == issuer.as_str() => Ok((None, None)),
-            Some(r) if product == Some(r) => Ok((None, Some(String::from(r)))),
+            Some(r)
+                if product.is_some_and(|p| {
+                    p == r || crate::domain::client::canonical_resource(r).as_deref() == Some(p)
+                }) =>
+            {
+                Ok((None, product.map(String::from)))
+            }
             Some(_) => Err(AuthError::new("invalid_target", "unknown resource")),
         };
     };

@@ -7,6 +7,7 @@
 
 mod authority;
 mod authorize;
+pub mod clients;
 mod logout;
 mod management;
 mod resource;
@@ -47,7 +48,7 @@ use crate::ports::{Directory, RealmEntry, Unavailable};
 use access_identity_hooks::domain::{Call, Outcome, TokenIssuance, with_claims};
 use access_identity_hooks::ports::{HookCaller, NoHooks};
 
-pub use crate::app::oauth::authorize::REQUEST_CONTEXT;
+pub use crate::app::oauth::authorize::{REQUEST_CONTEXT, consent_resource};
 pub use crate::app::oauth::token::TokenHttp;
 
 /// `Retry-After` of a shed request, seconds (PD).
@@ -119,6 +120,16 @@ pub trait Env: Send + Sync + 'static {
     /// wires the realms' PII vaults.
     fn claims(&self) -> &(dyn ClaimSource + Sync) {
         &NoClaims
+    }
+    /// The URLs CIMD clients name (OP-154 m.3 (i)); none unless the server wires the guarded
+    /// outbound client, so every CIMD client is refused.
+    fn documents(&self) -> &(dyn crate::ports::oauth::ClientDocuments + Sync) {
+        &crate::ports::oauth::NoDocuments
+    }
+    /// Whether a consent record's Grant stands (P58); none unless the server wires the
+    /// authority plane, so consent is always asked for again.
+    fn standing(&self) -> &(dyn crate::ports::oauth::GrantStanding + Sync) {
+        &crate::ports::oauth::NoStanding
     }
 }
 
@@ -331,8 +342,9 @@ impl<E: Env> OAuth<E> {
             .ok_or(Unavailable)
     }
 
-    /// The registered platform product client a request's `resource` names, when it names one
-    /// (RFC 8707, OP-149 m.26 (a)); the realm issuer names none.
+    /// The resource a request's `resource` names, in its canonical form, when it is a
+    /// registered platform product client (RFC 8707, OP-149 m.26 (a)) or one of the realm's
+    /// registered protected resources (AG-8, §11.4.3); the realm issuer names none.
     pub(crate) async fn product_resource(
         &self,
         realm: &Realm,
@@ -344,12 +356,16 @@ impl<E: Env> OAuth<E> {
         else {
             return Ok(None);
         };
-        Ok(self
-            .env
-            .db()
-            .platform_product(resource)
-            .await?
-            .map(|_| String::from(resource)))
+        if self.env.db().platform_product(resource).await?.is_some() {
+            return Ok(Some(String::from(resource)));
+        }
+        let Some(canonical) = crate::domain::client::canonical_resource(resource) else {
+            return Ok(None);
+        };
+        let mut tx = self.begin(realm).await?;
+        let known = tx.protected_resource(&canonical).await?;
+        tx.commit().await?;
+        Ok(known.then_some(canonical))
     }
 
     /// RFC 6749 §2.3, RFC 7523 §3, §10.4.5: the request's client, authenticated by its
@@ -383,7 +399,7 @@ impl<E: Env> OAuth<E> {
             },
             other => other.client_id().map(String::from).unwrap_or_default(),
         };
-        let Some(client) = tx.client(&client_id).await?.and_then(Client::from_row) else {
+        let Some(client) = self.client_of(tx, &client_id).await? else {
             return Ok(Err(ClientAuthError::Unknown));
         };
         if let Err(e) = check_method(&client, &presented) {
@@ -415,6 +431,7 @@ impl<E: Env> OAuth<E> {
                 issuer: realm.issuer.as_str(),
                 endpoint: &endpoint,
                 now_ms: now,
+                rs256: client.rs256,
             };
             let Ok(a) = verify_assertion(assertion, &keys, &rules) else {
                 return Ok(Err(ClientAuthError::Rejected));

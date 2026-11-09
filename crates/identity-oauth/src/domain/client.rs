@@ -29,6 +29,65 @@ pub enum ClientAuth {
     },
 }
 
+/// Where a client's registration comes from (IDP-1): a policy input only, never authority.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrustLevel {
+    /// Registered by the realm through `idp.client.register`.
+    Registered,
+    /// Named by a Client ID Metadata Document URL (AG-3).
+    Cimd,
+    /// Registered dynamically under the realm's DCR profile (RFC 7591, OP-154 m.3 (j)).
+    Dcr,
+}
+
+impl TrustLevel {
+    /// The wire name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Registered => "registered",
+            Self::Cimd => "cimd",
+            Self::Dcr => "dcr",
+        }
+    }
+}
+
+/// How a `client_id` is resolved (IDP-1, IDI-10).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClientIdKind {
+    /// An opaque id of the realm's own registry.
+    Local,
+    /// A URL: resolved by federation, then CIMD; never by the local or DCR registry.
+    Url,
+}
+
+impl ClientIdKind {
+    /// The kind of `client_id`: anything with a scheme separator is a URL.
+    #[must_use]
+    pub fn of(client_id: &str) -> Self {
+        if client_id.contains("://") || (client_id.contains(':') && client_id.contains('/')) {
+            Self::Url
+        } else {
+            Self::Local
+        }
+    }
+}
+
+/// What a CIMD client brings beyond a registered one (AG-5, OP-154 m.3 (i)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CimdFacts {
+    /// SHA-256 of the document it was resolved with.
+    pub metadata_hash: [u8; 32],
+    /// When the realm first saw it.
+    pub first_seen_ms: u64,
+    /// When its name or logo last changed.
+    pub visual_changed_ms: Option<u64>,
+    /// Whether a logo was prefetched.
+    pub logo: bool,
+    /// `application_type`.
+    pub native: bool,
+}
+
 /// An active client of the realm.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Client {
@@ -54,6 +113,12 @@ pub struct Client {
     pub public_sub: bool,
     /// Whether the realm registered it as a third party (OP-153 m.3 (z)).
     pub third_party: bool,
+    /// Where its registration comes from (IDP-1).
+    pub trust: TrustLevel,
+    /// Whether it opted in to RS256 client assertions (§11.4.5 (a), OP-154 m.3 (l)).
+    pub rs256: bool,
+    /// What its CIMD document said, for a CIMD client.
+    pub cimd: Option<CimdFacts>,
 }
 
 /// The sector of the realm's public `sub` (MD-10): no client has the nil id, so its values are
@@ -94,7 +159,50 @@ impl Client {
             platform_product: row.platform_product,
             public_sub: row.public_sub,
             third_party: row.third_party,
+            trust: TrustLevel::Registered,
+            rs256: false,
+            cimd: None,
         })
+    }
+
+    /// The CIMD client `uuid` its checked document describes (AG-3).
+    #[must_use]
+    pub fn from_cimd(
+        uuid: [u8; 16],
+        doc: &crate::domain::cimd::Document,
+        facts: CimdFacts,
+    ) -> Self {
+        use crate::domain::cimd::DocumentAuth;
+        let auth = match &doc.auth {
+            DocumentAuth::None => ClientAuth::None,
+            DocumentAuth::JwksUri(u) => ClientAuth::PrivateKeyJwt {
+                jwks_uri: u.clone(),
+            },
+            DocumentAuth::Jwks(j) => ClientAuth::PrivateKeyJwtKey { jwks: j.clone() },
+        };
+        Self {
+            uuid,
+            id: doc.client_id.clone(),
+            name: doc.client_name.clone(),
+            auth,
+            redirect_uris: doc.redirect_uris.clone(),
+            post_logout_redirect_uris: Vec::new(),
+            backchannel_logout_uri: None,
+            require_par: false,
+            platform_product: None,
+            public_sub: false,
+            third_party: false,
+            trust: TrustLevel::Cimd,
+            rs256: doc.rs256,
+            cimd: Some(facts),
+        }
+    }
+
+    /// Whether every authorization asks the person on the Approval Surface and waits on a live
+    /// Grant (§11.6, OP-154 m.3 (k)): a client the realm did not register itself.
+    #[must_use]
+    pub const fn approval_required(&self) -> bool {
+        !matches!(self.trust, TrustLevel::Registered)
     }
 
     /// The sector its `sub` values are kept under (MD-10, OP-146 m.5 (b)): the client itself,
@@ -167,6 +275,33 @@ pub fn redirect_matches(registered: &str, presented: &str) -> bool {
         (Some((rh, rt)), Some((ph, pt))) => rh == ph && rt == pt,
         _ => false,
     }
+}
+
+/// RFC 8707, §11.4.3 (Ek B 4161): the canonical form of a `resource`: an absolute `https`
+/// URI without fragment, query or user info; scheme and host lowercase; no trailing slash.
+/// `None` is `invalid_target`.
+#[must_use]
+pub fn canonical_resource(uri: &str) -> Option<String> {
+    if uri.len() > 2048 || !uri.bytes().all(|c| c.is_ascii_graphic()) || uri.contains(['#', '?'])
+    {
+        return None;
+    }
+    let (scheme, rest) = uri.split_once("://")?;
+    if !scheme.eq_ignore_ascii_case("https") {
+        return None;
+    }
+    let end = rest.find('/').unwrap_or(rest.len());
+    let (authority, path) = rest.split_at(end);
+    let valid = !authority.is_empty()
+        && !authority.contains('@')
+        && authority
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b".-:[]".contains(&c));
+    if !valid || path.split('/').any(|s| s == "." || s == "..") {
+        return None;
+    }
+    let path = path.strip_suffix('/').unwrap_or(path);
+    Some(format!("https://{}{path}", authority.to_ascii_lowercase()))
 }
 
 /// Why a request's client credentials are refused; every case answers `invalid_client`

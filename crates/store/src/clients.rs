@@ -390,6 +390,20 @@ impl TenantTx {
         Ok(true)
     }
 
+    /// The database's clock, Unix milliseconds: the time of a change no request clock names,
+    /// such as a policy decision retiring clients.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn db_now_ms(&mut self) -> Result<u64, StoreError> {
+        let ms = sqlx::query_scalar!(
+            r#"SELECT (extract(epoch FROM clock_timestamp()) * 1000)::bigint AS "ms!""#
+        )
+        .fetch_one(&mut *self.tx)
+        .await?;
+        u64::try_from(ms).map_err(|_| StoreError::Range)
+    }
+
     /// The live consent record of `subject` for `client` at `resource`.
     ///
     /// # Errors

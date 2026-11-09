@@ -37,6 +37,21 @@ fn problem(u: Unredirectable) -> Reply {
     }
 }
 
+/// AG-8: a client the realm did not register names one registered protected resource; no
+/// default audience is used for it.
+fn mcp_without_resource(client: &Client, request: &AuthRequest) -> bool {
+    client.approval_required() && request.resource.is_none() && request.authority.is_none()
+}
+
+/// The protected resource a consent record is kept for: the token's audience.
+#[must_use]
+pub fn consent_resource(request: &AuthRequest) -> Option<&str> {
+    request
+        .resource
+        .as_deref()
+        .or_else(|| request.authority.as_ref().map(|a| a.resource.as_str()))
+}
+
 /// The request a browser brings: parsed now, or stored earlier under a `request_uri`.
 struct Loaded {
     client: Client,
@@ -66,7 +81,7 @@ impl<E: Env> OAuth<E> {
         now: u64,
     ) -> Result<Result<Loaded, Reply>, Unavailable> {
         let client = match params.get("client_id") {
-            Some(id) => tx.client(id).await?.and_then(Client::from_row),
+            Some(id) => self.client_of(tx, id).await?,
             None => None,
         };
         if let Some(uri) = params.get("request_uri") {
@@ -114,6 +129,15 @@ impl<E: Env> OAuth<E> {
         }
         let product = self.product_resource(realm, params).await?;
         match stage_two(params, &client, redirect, &realm.issuer, product.as_deref()) {
+            // AG-8, §11.4.3
+            Ok(request) if mcp_without_resource(&client, &request) => {
+                Ok(Err(Reply::Redirect(error_redirect(
+                    redirect,
+                    AuthError::RESOURCE_REQUIRED,
+                    params.get("state"),
+                    &realm.issuer,
+                ))))
+            }
             Ok(request) => Ok(Ok(Loaded {
                 client,
                 request,
@@ -135,6 +159,10 @@ impl<E: Env> OAuth<E> {
         params: &Params,
         cookie: Option<&str>,
     ) -> Result<Reply, Unavailable> {
+        // IDP-1, AG-4
+        if self.prepare_client(realm, params).await?.is_err() {
+            return Ok(problem(Unredirectable::Client));
+        }
         let now = self.now()?;
         let mut tx = self.begin(realm).await?;
         let l = match self.load(&mut tx, realm, params, now).await? {
@@ -176,6 +204,22 @@ impl<E: Env> OAuth<E> {
         let (Some(session), Some(s)) = (session, signed_in) else {
             return Ok(back(AuthError::LOGIN_REQUIRED));
         };
+        // §11.6, P58, EI-18
+        if l.client.approval_required() && !self.approved(&mut tx, &l, session.subject, now).await?
+        {
+            if req.prompt == Prompt::None {
+                return Ok(back(AuthError::CONSENT_REQUIRED));
+            }
+            return self
+                .to_login(
+                    tx,
+                    realm,
+                    &l,
+                    now,
+                    crate::domain::tokens::LoginReason::Approve,
+                )
+                .await;
+        }
         // OP-153 m.3 (z)
         if self.unshared(&mut tx, &l, session.subject).await? {
             if req.prompt == Prompt::None {
@@ -267,6 +311,38 @@ impl<E: Env> OAuth<E> {
         )))
     }
 
+    /// §11.6 rule 1, P58: whether the person's consent record for this client and resource
+    /// covers the request's scopes and the Grant it names still stands. A record whose Grant
+    /// ended ends too, and consent is asked again.
+    async fn approved(
+        &self,
+        tx: &mut <E::Db as crate::ports::oauth::OAuthDb>::Tx,
+        l: &Loaded,
+        subject: [u8; 16],
+        now: u64,
+    ) -> Result<bool, Unavailable> {
+        let Some(resource) = consent_resource(&l.request) else {
+            return Ok(false);
+        };
+        let Some(record) = tx.consent_record(subject, l.client.uuid, resource).await? else {
+            return Ok(false);
+        };
+        if !l.request.scope.iter().all(|s| record.scopes.contains(s)) {
+            return Ok(false);
+        }
+        if self
+            .env
+            .standing()
+            .live(record.grant_domain, record.grant_ref)
+            .await?
+        {
+            return Ok(true);
+        }
+        tx.end_consent_record(record.consent_id, "grant_ended", now)
+            .await?;
+        Ok(false)
+    }
+
     /// Whether a third-party client asks for claims the person has not shared with it
     /// (OP-153 m.3 (z)); a first-party client is never asked.
     async fn unshared(
@@ -341,6 +417,14 @@ impl<E: Env> OAuth<E> {
         authorization: Option<&str>,
         dpop: &[&str],
     ) -> Result<Reply, Unavailable> {
+        // IDP-1, AG-4
+        if self.prepare_client(realm, params).await?.is_err() {
+            return Ok(Reply::oauth_error(
+                401,
+                "invalid_client",
+                "client authentication failed",
+            ));
+        }
         let now = self.now()?;
         let mut tx = self.begin(realm).await?;
         let req = ClientRequest {
@@ -371,6 +455,11 @@ impl<E: Env> OAuth<E> {
                 Ok(r) => r,
                 Err(e) => return Ok(Reply::oauth_error(400, e.error, e.description)),
             };
+        // AG-8
+        if mcp_without_resource(&client, &request) {
+            let e = AuthError::RESOURCE_REQUIRED;
+            return Ok(Reply::oauth_error(400, e.error, e.description));
+        }
         // RFC 9449 §10.1
         let mut nonce = None;
         if !dpop.is_empty() {

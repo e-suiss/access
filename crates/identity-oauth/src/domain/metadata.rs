@@ -111,6 +111,7 @@ pub const SERVED: Served = Served {
     ],
     features: &[
         Feature::Dpop,
+        Feature::ClientIdMetadataDocument,
         Feature::BackchannelLogout,
         Feature::AuthorizationDetails,
     ],
@@ -163,6 +164,9 @@ pub struct RealmFacts {
     pub public_sub: bool,
     /// The address of the governing domain's signed Domain Metadata (§9.15.1 k.2, P60).
     pub domain_metadata: Option<String>,
+    /// The realm accepts CIMD clients (`idp.client.cimd_policy`); without it the member is
+    /// absent, which reads as unsupported (§11.3.3).
+    pub cimd: bool,
 }
 
 /// The AS metadata member that names the governing domain's Domain Metadata: the AS metadata
@@ -281,7 +285,8 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
             json!(SIGNING_ALGS),
         );
     }
-    if served.feature(Feature::ClientIdMetadataDocument) {
+    // §11.3.3, AG-3
+    if served.feature(Feature::ClientIdMetadataDocument) && facts.cimd {
         m.insert(
             "client_id_metadata_document_supported".into(),
             Value::Bool(true),

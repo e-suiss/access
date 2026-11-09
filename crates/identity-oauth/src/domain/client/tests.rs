@@ -204,3 +204,45 @@ fn presented_credentials_do_not_print_their_secrets() {
     assert!(!printed.contains("eyJ"), "{printed}");
     assert!(printed.contains("cli_x"));
 }
+
+// §11.4.3, RFC 8707, Ek B 4161
+#[test]
+fn resources_have_one_canonical_form() {
+    use super::canonical_resource as c;
+    for (given, canonical) in [
+        ("https://mcp.example.com/mcp", "https://mcp.example.com/mcp"),
+        ("https://mcp.example.com", "https://mcp.example.com"),
+        ("https://mcp.example.com/", "https://mcp.example.com"),
+        ("https://mcp.example.com:8443", "https://mcp.example.com:8443"),
+        ("https://mcp.example.com/server/mcp", "https://mcp.example.com/server/mcp"),
+        ("HTTPS://MCP.Example.com/Mcp", "https://mcp.example.com/Mcp"),
+    ] {
+        assert_eq!(c(given).as_deref(), Some(canonical), "{given}");
+    }
+    for bad in [
+        "mcp.example.com",
+        "https://mcp.example.com#fragment",
+        "https://mcp.example.com/mcp?x=1",
+        "http://mcp.example.com/mcp",
+        "https://user@mcp.example.com/mcp",
+        "https:///mcp",
+        "https://mcp.example.com/../x",
+    ] {
+        assert_eq!(c(bad), None, "{bad}");
+    }
+}
+
+// IDI-10, IDP-1
+#[test]
+fn a_url_client_id_is_never_a_local_one() {
+    use super::ClientIdKind;
+    assert_eq!(ClientIdKind::of("cli_0123456789abcdefghjkmnpqrs"), ClientIdKind::Local);
+    for url in [
+        "https://app.example/client.json",
+        "http://app.example/c",
+        "HTTPS://app.example/c",
+        "urn:x:y/z",
+    ] {
+        assert_eq!(ClientIdKind::of(url), ClientIdKind::Url, "{url}");
+    }
+}

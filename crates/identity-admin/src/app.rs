@@ -1401,7 +1401,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     t.insert_rp_id_change(s.rp_id.as_deref(), r.as_str())
                         .await?;
                 }
-                idp::update_settings(t, bound, &settings_with(s, change)).await?
+                let done = idp::update_settings(t, bound, &settings_with(s, change)).await?;
+                if let Change::CimdPolicy(p) = change {
+                    retire_cimd_outside(t, p).await?;
+                }
+                done
             }
             Change::Branding(b) => {
                 // OP-153 m.22 (g)
@@ -2269,6 +2273,26 @@ fn upstream_row(u: &Upstream) -> UpstreamRow {
         active: true,
         position: 0,
     }
+}
+
+/// AG-5, §11.3.6: a CIMD client the realm's new policy no longer admits retires now: its
+/// consent records end and its identity grants are revoked, so introspection answers inactive.
+async fn retire_cimd_outside(t: &mut TenantTx, p: &crate::domain::CimdPolicy) -> Result<(), AdminError> {
+    use access_identity_oauth::domain::cimd::{domain_admitted, host};
+    let domains: Vec<String> = p.domains.iter().cloned().collect();
+    let live = t.cimd_clients().await?;
+    if live.is_empty() {
+        return Ok(());
+    }
+    let now = t.db_now_ms().await?;
+    for (uuid, url) in live {
+        let admitted = host(&url).is_some_and(|h| domain_admitted(&domains, &h));
+        if !p.enabled || !admitted {
+            let reason = if p.enabled { "domain_policy" } else { "disabled" };
+            t.retire_cimd_client(uuid, reason, now).await?;
+        }
+    }
+    Ok(())
 }
 
 fn settings_with(mut s: SettingsRow, change: &Change) -> SettingsRow {

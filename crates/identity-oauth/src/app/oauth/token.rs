@@ -166,6 +166,14 @@ impl<E: Env> OAuth<E> {
                 ),
             });
         }
+        // IDP-1, AG-4
+        if self.prepare_client(realm, params).await?.is_err() {
+            return Ok(Reply::oauth_error(
+                401,
+                "invalid_client",
+                "client authentication failed",
+            ));
+        }
         let now = self.now()?;
         let mut tx = self.begin(realm).await?;
         let req = ClientRequest {
