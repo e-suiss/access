@@ -291,6 +291,81 @@ impl LinkPurpose {
     }
 }
 
+/// A notice about an agent the person sponsors or operates (OP-154 m.2 L0, m.3 (e)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AgentNotice {
+    /// The agent was suspended: its last sponsor left, or an administrator suspended it.
+    Suspended,
+    /// The agent has no active human sponsor and waits for one (AG-41).
+    SponsorNeeded,
+}
+
+impl AgentNotice {
+    const ALL: [Self; 2] = [Self::Suspended, Self::SponsorNeeded];
+
+    /// Its outbox kind and `CloudEvents` `type`.
+    #[must_use]
+    pub const fn kind(self) -> &'static str {
+        match self {
+            Self::Suspended => "relay.message.agent_suspended.v1",
+            Self::SponsorNeeded => "relay.message.agent_sponsor_needed.v1",
+        }
+    }
+
+    fn of_kind(kind: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|n| n.kind() == kind)
+    }
+}
+
+/// A prompt that asks the person to act on a trusted surface through a link (OP-154 m.2 L0).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Prompt {
+    /// An agent's connected account must be connected again; nothing falls back
+    /// (OP-154 m.3 (t)). The name is the connection's.
+    AgentConnectionNeedsReconnect,
+    /// A device asks for approval of its device code (RFC 8628, OP-154 m.3 (p)). The name is the
+    /// client's.
+    DeviceCodeApproval,
+    /// An approval waits on the person's Approval Surface; the invite stands in for CIBA until
+    /// Stage 10 (OP-154 m.3 (ff)). The name is the requester's.
+    ApprovalRequested,
+}
+
+impl Prompt {
+    /// Every prompt.
+    pub const ALL: [Self; 3] = [
+        Self::AgentConnectionNeedsReconnect,
+        Self::DeviceCodeApproval,
+        Self::ApprovalRequested,
+    ];
+
+    /// Its outbox kind and `CloudEvents` `type`.
+    #[must_use]
+    pub const fn kind(self) -> &'static str {
+        match self {
+            Self::AgentConnectionNeedsReconnect => {
+                "relay.message.agent_connection_needs_reconnect.v1"
+            }
+            Self::DeviceCodeApproval => "relay.message.device_code_approval.v1",
+            Self::ApprovalRequested => "relay.message.approval_requested.v1",
+        }
+    }
+
+    /// The member its name travels in.
+    #[must_use]
+    pub const fn name_member(self) -> &'static str {
+        match self {
+            Self::AgentConnectionNeedsReconnect => "connection",
+            Self::DeviceCodeApproval => "client",
+            Self::ApprovalRequested => "requester",
+        }
+    }
+
+    fn of_kind(kind: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|n| n.kind() == kind)
+    }
+}
+
 /// What the message says.
 pub enum Body {
     /// A one-time code (`relay.message.otp.v1`).
@@ -358,6 +433,28 @@ pub enum Body {
         /// Unix ms after which it is worthless.
         expires_at_ms: u64,
     },
+    /// A notice about an agent (each [`AgentNotice`] its own kind). The name is attacker input:
+    /// Relay renders it as text.
+    Agent {
+        /// Which.
+        notice: AgentNotice,
+        /// The agent's display name, at most 200 characters.
+        agent: String,
+        /// When, Unix ms.
+        at_ms: u64,
+    },
+    /// A prompt to act through a link (each [`Prompt`] its own kind). The name is attacker
+    /// input: Relay renders it as text, never as a link.
+    Prompt {
+        /// Which.
+        prompt: Prompt,
+        /// The `https` link, at most 2048 bytes.
+        link: Secret<String>,
+        /// The connection's, client's or requester's name, at most 200 characters.
+        name: String,
+        /// Unix ms after which it is worthless.
+        expires_at_ms: u64,
+    },
 }
 
 impl fmt::Debug for Body {
@@ -419,12 +516,29 @@ impl fmt::Debug for Body {
                 .field("inviter", &"[redacted]")
                 .field("expires_at_ms", expires_at_ms)
                 .finish(),
+            Self::Agent { notice, at_ms, .. } => f
+                .debug_struct("Agent")
+                .field("notice", notice)
+                .field("agent", &"[redacted]")
+                .field("at_ms", at_ms)
+                .finish(),
+            Self::Prompt {
+                prompt,
+                expires_at_ms,
+                ..
+            } => f
+                .debug_struct("Prompt")
+                .field("prompt", prompt)
+                .field("link", &"[redacted]")
+                .field("name", &"[redacted]")
+                .field("expires_at_ms", expires_at_ms)
+                .finish(),
         }
     }
 }
 
 /// Every kind of the contract, as outbox kind and `CloudEvents` `type`.
-pub const KINDS: [&str; 22] = [
+pub const KINDS: [&str; 27] = [
     "relay.message.otp.v1",
     "relay.message.magic_link.v1",
     "relay.message.password_changed.v1",
@@ -447,6 +561,11 @@ pub const KINDS: [&str; 22] = [
     "relay.message.reset_intent.v1",
     "relay.message.export_ready.v1",
     "relay.message.invitation.v1",
+    "relay.message.agent_suspended.v1",
+    "relay.message.agent_sponsor_needed.v1",
+    "relay.message.agent_connection_needs_reconnect.v1",
+    "relay.message.device_code_approval.v1",
+    "relay.message.approval_requested.v1",
 ];
 
 impl Body {
@@ -462,6 +581,8 @@ impl Body {
             Self::Notice { notice, .. } => notice.kind(),
             Self::Link { purpose, .. } => purpose.kind(),
             Self::Invitation { .. } => KINDS[21],
+            Self::Agent { notice, .. } => notice.kind(),
+            Self::Prompt { prompt, .. } => prompt.kind(),
         }
     }
 
@@ -472,7 +593,8 @@ impl Body {
             Self::Otp { expires_at_ms, .. }
             | Self::MagicLink { expires_at_ms, .. }
             | Self::Link { expires_at_ms, .. }
-            | Self::Invitation { expires_at_ms, .. } => Some(*expires_at_ms),
+            | Self::Invitation { expires_at_ms, .. }
+            | Self::Prompt { expires_at_ms, .. } => Some(*expires_at_ms),
             _ => None,
         }
     }
@@ -497,6 +619,16 @@ impl Body {
                 https_link(link.expose())?;
                 name(organization, "organization")?;
                 name(inviter, "inviter")
+            }
+            Self::Agent { agent, .. } => name(agent, "agent"),
+            Self::Prompt {
+                prompt,
+                link,
+                name: n,
+                ..
+            } => {
+                https_link(link.expose())?;
+                name(n, prompt.name_member())
             }
             Self::Notice {
                 notice, until_ms, ..
@@ -623,6 +755,20 @@ impl Message {
                 m.insert("link".into(), Value::String(link.expose().clone()));
                 m.insert("expires_at_ms".into(), (*expires_at_ms).into());
             }
+            Body::Agent { agent, at_ms, .. } => {
+                m.insert("agent".into(), Value::String(agent.clone()));
+                m.insert("at_ms".into(), (*at_ms).into());
+            }
+            Body::Prompt {
+                prompt,
+                link,
+                name,
+                expires_at_ms,
+            } => {
+                m.insert("link".into(), Value::String(link.expose().clone()));
+                m.insert(prompt.name_member().into(), Value::String(name.clone()));
+                m.insert("expires_at_ms".into(), (*expires_at_ms).into());
+            }
             Body::PasswordChanged { at_ms } => {
                 m.insert("at_ms".into(), (*at_ms).into());
             }
@@ -687,6 +833,19 @@ impl Message {
                     Body::Link {
                         purpose,
                         link: Secret::new(text("link")?.to_owned()),
+                        expires_at_ms: int("expires_at_ms")?,
+                    }
+                } else if let Some(notice) = AgentNotice::of_kind(k) {
+                    Body::Agent {
+                        notice,
+                        agent: text("agent")?.to_owned(),
+                        at_ms: int("at_ms")?,
+                    }
+                } else if let Some(prompt) = Prompt::of_kind(k) {
+                    Body::Prompt {
+                        prompt,
+                        link: Secret::new(text("link")?.to_owned()),
+                        name: text(prompt.name_member())?.to_owned(),
                         expires_at_ms: int("expires_at_ms")?,
                     }
                 } else {
@@ -764,6 +923,20 @@ impl Message {
                 ..
             } => {
                 m.insert("link".into(), Value::String(link.expose().clone()));
+                m.insert("expires_at".into(), rfc3339(*expires_at_ms)?.into());
+            }
+            Body::Agent { agent, at_ms, .. } => {
+                m.insert("agent".into(), Value::String(agent.clone()));
+                m.insert("at".into(), rfc3339(*at_ms)?.into());
+            }
+            Body::Prompt {
+                prompt,
+                link,
+                name,
+                expires_at_ms,
+            } => {
+                m.insert("link".into(), Value::String(link.expose().clone()));
+                m.insert(prompt.name_member().into(), Value::String(name.clone()));
                 m.insert("expires_at".into(), rfc3339(*expires_at_ms)?.into());
             }
             Body::PasswordChanged { at_ms } => {

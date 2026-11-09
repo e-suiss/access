@@ -34,7 +34,8 @@ use access_identity_account::notify::delivery::{
 use access_identity_account::notify::envelope::{EventId, Header, parse, seal};
 use access_identity_account::notify::http::{HttpRelay, HttpRelayConfig, RelayEndpoint};
 use access_identity_account::notify::message::{
-    Address, Body, KINDS, LinkPurpose, Message, Notice, OtpPurpose, SignInMethod,
+    Address, AgentNotice, Body, KINDS, LinkPurpose, Message, Notice, OtpPurpose, Prompt,
+    SignInMethod,
 };
 use access_identity_account::notify::notifier::OutboxNotifier;
 use access_identity_account::notify::pg::PgCourierStore;
@@ -888,6 +889,31 @@ fn every_kind_matches_the_json_schema() {
             expires_at_ms: START_MS + 1,
         },
     }])
+    .chain(
+        [AgentNotice::Suspended, AgentNotice::SponsorNeeded].map(|notice| Message {
+            subject: s,
+            to: to(),
+            locale: None,
+            valid_since_ms: Some(START_MS - 86_400_000),
+            body: Body::Agent {
+                notice,
+                agent: "Billing bot".to_owned(),
+                at_ms: START_MS,
+            },
+        }),
+    )
+    .chain(Prompt::ALL.map(|prompt| Message {
+        subject: s,
+        to: to(),
+        locale: None,
+        valid_since_ms: Some(START_MS - 86_400_000),
+        body: Body::Prompt {
+            prompt,
+            link: Secret::new("https://id.example/p/abc".to_owned()),
+            name: "Calendar <script>".to_owned(),
+            expires_at_ms: START_MS + 1,
+        },
+    }))
     .collect::<Vec<_>>();
     assert_eq!(messages.len(), KINDS.len());
     for (m, kind) in messages.iter().zip(KINDS) {
