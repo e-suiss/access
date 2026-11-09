@@ -13,8 +13,8 @@ pub mod provision;
 pub mod rest;
 mod signals;
 pub mod transfers;
-pub mod workloads;
 pub mod vault;
+pub mod workloads;
 
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::adapters::pg::PgTx;
