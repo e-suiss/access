@@ -1,0 +1,274 @@
+; Access parser worker protocol, version 1 (RFC 8610; OP-155 m.3 (c), (d); MD-1, MD-18, U43).
+;
+; `access-parser-worker` is the only process that parses XML, DER, ASN.1 and XAdES. It runs
+; under the ParserWorker sandbox profile: no network syscalls, no keys, no file system. The
+; caller (a gateway, or access-server for LoTL and OCSP) talks to it over a Unix domain socket
+; whose peer is checked with SCM_CREDENTIALS. Each frame is a big-endian u32 length and one
+; deterministic CBOR (RFC 8949 §4.2.1) item: one request, then one response with the same `id`.
+;
+; Limits the worker enforces before it allocates (OP-155 m.3 (c)):
+;   - frame ≤ 1 MiB; XML input ≤ 1 MiB after decoding, DOCTYPE refused, depth ≤ 64,
+;     ≤ 50 000 elements, expansion ratio ≤ 100, only the 5 predefined entities;
+;   - DER input ≤ 8 KiB;
+;   - RLIMIT_AS 256 MiB, CPU 2 s, wall clock 5 s per request.
+; The worker is replaced after 1000 requests or after its first error response. A panic ends
+; only that worker; the caller sees `internal` or a closed socket and never a partial answer.
+;
+; The worker holds no key. Signing and decryption are split around it: `xml.sign_layout` and
+; `xml.decrypt_layout` return what a key holder (the identity signer's `saml` purpose key, or a
+; realm `jwe-enc` key) must sign or unwrap, and the caller sends the result back.
+;
+; A parse result only ever carries what a verified signature covers when the request asked for
+; a signature: `signed` lists the covered elements by path and the caller reads only those
+; (XSW defence, IDI-8).
+
+parser-request = xml-parse-verify-request / xml-sign-layout-request /
+  xml-decrypt-layout-request / der-parse-request / asn1-kerberos-request /
+  xades-verify-request
+
+parser-response = parser-ok / parser-error
+
+; The request number in this worker's life; a response repeats it.
+request-id = uint .le 999
+
+parser-op = "xml.parse_verify" / "xml.sign_layout" / "xml.decrypt_layout" / "der.parse" /
+  "asn1.kerberos" / "xades.verify"
+
+; --- xml.parse_verify ---------------------------------------------------------------------
+
+xml-parse-verify-request = {
+  v: 1,
+  id: request-id,
+  op: "xml.parse_verify",
+  profile: xml-profile,
+  input: bstr .size (1..1048576),
+  signature: "required" / "absent",     ; "absent" refuses a signed input, "required" an unsigned one
+  trust: [* verify-key],                ; the keys a required signature must verify under
+}
+
+; What the document must be: the root element and the bindings the caller expects.
+xml-profile = "saml.authn_request" / "saml.response" / "saml.logout_request" /
+  "saml.logout_response" / "saml.metadata" / "saml.ecp" / "wsfed.request" / "wsfed.rstr"
+
+xml-parse-verify-ok = {
+  root: xml-element,
+  signed: [* signed-ref],
+}
+
+; One element; `children` keeps document order. Text is normalised to NFC and never holds a
+; comment or a processing instruction (both are dropped before canonicalisation).
+xml-element = {
+  name: qname,
+  ? attrs: [* xml-attr],
+  ? children: [* xml-node],
+}
+
+xml-node = xml-element / tstr
+
+xml-attr = [name: qname, value: tstr]
+
+qname = [ns: tstr, local: tstr .size (1..256)]
+
+; A reference a verified signature covers: the element's `ID`, its path from the root as child
+; indexes, the key in `trust` that verified it, and the algorithms used.
+signed-ref = {
+  id: tstr .size (1..256),
+  path: [* uint],
+  key: uint,
+  alg: xml-sig-alg,
+  digest: xml-digest-alg,
+}
+
+; SHA-1 is never accepted (OP-155 m.3 (e)).
+xml-sig-alg = "rsa-sha256" / "rsa-sha384" / "rsa-sha512" / "ecdsa-sha256" / "ecdsa-sha384" /
+  "rsa-pss-sha256"
+
+xml-digest-alg = "sha256" / "sha384" / "sha512"
+
+; A public key the caller trusts for this request: a DER SubjectPublicKeyInfo or a DER
+; certificate whose key is used; the worker checks no chain (the caller did).
+verify-key = {
+  kind: "spki" / "certificate",
+  der: bstr .size (1..8192),
+}
+
+; --- xml.sign_layout ----------------------------------------------------------------------
+
+; Phase "prepare" answers the canonical SignedInfo octets the key holder signs; phase
+; "assemble" takes that signature back and answers the signed document.
+xml-sign-layout-request = {
+  v: 1,
+  id: request-id,
+  op: "xml.sign_layout",
+  phase: "prepare" / "assemble",
+  input: bstr .size (1..1048576),       ; the unsigned document the caller built
+  reference: tstr .size (1..256),       ; the `ID` of the element to sign
+  alg: xml-sig-alg,
+  key_info: [* bstr .size (1..8192)],   ; the DER certificates to place in KeyInfo, leaf first
+  ? signature: bstr .size (1..1024),    ; present exactly in phase "assemble"
+}
+
+xml-sign-layout-ok = xml-sign-prepared / xml-sign-assembled
+
+xml-sign-prepared = {
+  phase: "prepare",
+  signed_info: bstr .size (1..65536),   ; exclusive C14N octets of ds:SignedInfo
+}
+
+xml-sign-assembled = {
+  phase: "assemble",
+  output: bstr .size (1..1048576),
+}
+
+; --- xml.decrypt_layout -------------------------------------------------------------------
+
+; An EncryptedAssertion or EncryptedID taken apart for the key holder: it unwraps
+; `encrypted_key`, decrypts `ciphertext` itself and sends the plaintext back through
+; xml.parse_verify. RSA1_5 and CBC modes are refused here.
+xml-decrypt-layout-request = {
+  v: 1,
+  id: request-id,
+  op: "xml.decrypt_layout",
+  profile: "saml.encrypted_assertion" / "saml.encrypted_id",
+  input: bstr .size (1..1048576),
+}
+
+xml-decrypt-layout-ok = {
+  key_transport: "rsa-oaep-mgf1p" / "rsa-oaep" / "ecdh-es-kw-aes256",
+  ? oaep_digest: xml-digest-alg,
+  encrypted_key: bstr .size (1..1024),
+  ? originator_key: bstr .size (1..1024),  ; the ephemeral DER SPKI of ECDH-ES
+  ? recipient: tstr .size (1..256),
+  enc: "aes128-gcm" / "aes256-gcm",
+  iv: bstr .size 12,
+  ciphertext: bstr .size (1..1048576),  ; the GCM tag is its last 16 bytes
+}
+
+; --- der.parse ----------------------------------------------------------------------------
+
+der-parse-request = {
+  v: 1,
+  id: request-id,
+  op: "der.parse",
+  kind: "x509.certificate" / "ocsp.response",
+  input: bstr .size (1..8192),
+}
+
+der-parse-ok = x509-parsed / ocsp-parsed
+
+x509-parsed = {
+  kind: "x509.certificate",
+  tbs: bstr,                            ; the exact TBSCertificate octets the signature covers
+  sig_alg: oid,
+  signature: bstr,
+  serial: bstr .size (1..20),
+  issuer: [* rdn],
+  subject: [* rdn],
+  not_before: int,                      ; Unix seconds
+  not_after: int,
+  spki: bstr,
+  extensions: [* x509-extension],
+}
+
+rdn = [* [type: oid, value: tstr]]
+
+x509-extension = {
+  oid: oid,
+  critical: bool,
+  value: bstr,
+}
+
+ocsp-parsed = {
+  kind: "ocsp.response",
+  status: "successful" / "malformed_request" / "internal_error" / "try_later" /
+    "sig_required" / "unauthorized",
+  ? basic: ocsp-basic,                  ; present exactly when status is "successful"
+}
+
+ocsp-basic = {
+  tbs: bstr,                            ; the exact ResponseData octets the signature covers
+  sig_alg: oid,
+  signature: bstr,
+  responder: ["name", [* rdn]] / ["key_hash", bstr .size 20],
+  produced_at: int,
+  responses: [* ocsp-single],
+  certs: [* bstr .size (1..8192)],
+  ? nonce: bstr .size (1..32),
+}
+
+ocsp-single = {
+  hash_alg: oid,
+  issuer_name_hash: bstr,
+  issuer_key_hash: bstr,
+  serial: bstr .size (1..20),
+  status: "good" / "revoked" / "unknown",
+  ? revoked_at: int,
+  this_update: int,
+  ? next_update: int,
+}
+
+; Dotted decimal.
+oid = tstr .regexp "[0-2](\\.[0-9]{1,10}){1,20}"
+
+; --- asn1.kerberos ------------------------------------------------------------------------
+
+; SPNEGO and Kerberos framing only: the mechanism list is read so that NTLM is refused before
+; any GSS call, and an AP-REQ is described for the acceptor (OP-155 m.3 (o)). The worker never
+; decrypts a ticket.
+asn1-kerberos-request = {
+  v: 1,
+  id: request-id,
+  op: "asn1.kerberos",
+  kind: "spnego.init" / "spnego.resp" / "krb5.ap_req",
+  input: bstr .size (1..65536),
+}
+
+asn1-kerberos-ok = {
+  kind: "spnego.init" / "spnego.resp" / "krb5.ap_req",
+  mechs: [* oid],
+  ntlm: bool,                           ; an NTLM mechanism or token was offered
+  ? inner: bstr .size (1..65536),       ; the mechToken or responseToken
+  ? realm: tstr .size (1..256),
+  ? sname: [+ tstr .size (1..256)],
+  ? etype: int,                         ; only AES256 enctypes (18, 20) are accepted downstream
+}
+
+; --- xades.verify -------------------------------------------------------------------------
+
+; The XAdES signature of an EU List of Trusted Lists or Trusted List (OP-155 m.3 (p)).
+xades-verify-request = {
+  v: 1,
+  id: request-id,
+  op: "xades.verify",
+  profile: "eu.lotl" / "eu.tl",
+  input: bstr .size (1..1048576),
+  trust: [+ verify-key],                ; the pinned LoTL or TL signer certificates
+}
+
+xades-verify-ok = {
+  root: xml-element,
+  signed: [+ signed-ref],
+  signing_time: int,                    ; Unix seconds of xades:SigningTime
+  signer: bstr .size (1..8192),         ; the DER certificate xades:SigningCertificateV2 names
+}
+
+; --- responses ----------------------------------------------------------------------------
+
+parser-ok = {
+  v: 1,
+  id: request-id,
+  op: parser-op,
+  ok: xml-parse-verify-ok / xml-sign-layout-ok / xml-decrypt-layout-ok / der-parse-ok /
+    asn1-kerberos-ok / xades-verify-ok,
+}
+
+parser-error = {
+  v: 1,
+  id: request-id,
+  error: parser-error-code,
+}
+
+; One stable code per refusal; nothing of the input is echoed back.
+parser-error-code = "frame" / "doctype" / "entity" / "depth" / "elements" / "size" / "ratio" /
+  "malformed" / "profile" / "signature-missing" / "signature-unexpected" / "signature" /
+  "reference" / "algorithm" / "der" / "unsupported" / "limit" / "timeout" / "internal"

@@ -1,0 +1,61 @@
+{
+  "cases": [
+    {
+      "cbor": "a4617601626964500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a626f6ba36461757468a36261741b000001a1a3dafc006361616c01676d6574686f647381646c646170676f7574636f6d656d61757468656e74696361746564677375626a656374500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a6463616c6c6c61757468656e746963617465",
+      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"call\": \"authenticate\", \"ok\": {\"outcome\": \"authenticated\", \"subject\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"auth\": {\"methods\": [\"ldap\"], \"aal\": 1, \"at\": 1793750400000}}}",
+      "id": "authenticated",
+      "valid": true
+    },
+    {
+      "cbor": "a4617601626964500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a626f6ba1676f7574636f6d6567726566757365646463616c6c6c61757468656e746963617465",
+      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"call\": \"authenticate\", \"ok\": {\"outcome\": \"refused\"}}",
+      "id": "refused",
+      "valid": true
+    },
+    {
+      "cbor": "a4617601626964500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a626f6ba265636c61696d42d28468636c61696d5f6964822f58200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b6463616c6c6b69737375655f636c61696d",
+      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"call\": \"issue_claim\", \"ok\": {\"claim\": h'd284', \"claim_id\": [-16, h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b']}}",
+      "id": "claim-issued",
+      "valid": true
+    },
+    {
+      "cbor": "a4617601626964500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a626f6ba365666f756e64f5677375626a656374500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a6a61747472696275746573a16b646973706c61794e616d6581634164616463616c6c6e7375626a6563745f6c6f6f6b7570",
+      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"call\": \"subject_lookup\", \"ok\": {\"found\": true, \"subject\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"attributes\": {\"displayName\": [\"Ada\"]}}}",
+      "id": "lookup",
+      "valid": true
+    },
+    {
+      "cbor": "a4617601626964500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a626f6ba463736964500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a6461757468a36261741b000001a1a3dafc006361616c03676d6574686f6473816368776b677375626a656374500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a6a657870697265735f61741b000001a1a59270006463616c6c6e73657373696f6e5f617474657374",
+      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"call\": \"session_attest\", \"ok\": {\"subject\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"sid\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"auth\": {\"methods\": [\"hwk\"], \"aal\": 3, \"at\": 1793750400000}, \"expires_at\": 1793779200000}}",
+      "id": "attested",
+      "valid": true
+    },
+    {
+      "cbor": "a4617601626964500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a626f6ba266636f6f6b696558200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b67656e747269657381a262646e78197569643d6164612c6f753d70656f706c652c64633d61636d656a61747472696275746573a262636e8163416461697569644e756d626572811a0012d6876463616c6c6e6469726563746f72795f72656164",
+      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"call\": \"directory_read\", \"ok\": {\"entries\": [{\"dn\": \"uid=ada,ou=people,dc=acme\", \"attributes\": {\"cn\": [\"Ada\"], \"uidNumber\": [1234567]}}], \"cookie\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b'}}",
+      "id": "directory-page",
+      "valid": true
+    },
+    {
+      "cbor": "a4617601626964500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a626f6ba1687265636f72646564f56463616c6c656175646974",
+      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"call\": \"audit\", \"ok\": {\"recorded\": true}}",
+      "id": "recorded",
+      "valid": true
+    },
+    {
+      "cbor": "a4617601626964500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a656572726f726c726174652d6c696d697465646d72657472795f61667465725f7305",
+      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"error\": \"rate-limited\", \"retry_after_s\": 5}",
+      "id": "rate-limited",
+      "valid": true
+    },
+    {
+      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"error\": \"user-not-found\"}",
+      "id": "unknown-error",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "edge-channel.cddl"
+  ],
+  "contract": "edge-response"
+}

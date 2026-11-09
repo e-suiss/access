@@ -256,6 +256,20 @@ fn party_lookup_examples_meet_the_cddl() {
     check_examples("party-lookup.json");
 }
 
+// OP-155 m.3 (c), (d), U43, IDI-8
+#[test]
+fn parser_worker_examples_meet_the_cddl() {
+    check_examples("parser-worker-request.json");
+    check_examples("parser-worker-response.json");
+}
+
+// OP-155 m.3 (c), IDI-11, IDP-26
+#[test]
+fn edge_channel_examples_meet_the_cddl() {
+    check_examples("edge-channel-request.json");
+    check_examples("edge-channel-response.json");
+}
+
 // E43, TI-20, OP-141 m.38
 #[test]
 fn explanation_examples_meet_both_schemas() {
