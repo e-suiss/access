@@ -1,0 +1,460 @@
+{
+  "components": {
+    "responses": {
+      "NotYetServed": {
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description": "not-yet-served: declared and not served yet; nothing was read or changed (OP-154 m.4)."
+      },
+      "Problem": {
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description": "RFC 9457 problem details."
+      }
+    },
+    "schemas": {
+      "Job": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "description": "Whether an executor_control Claim confirms the pause or stop (U5).",
+            "type": "boolean"
+          },
+          "exercise": {
+            "description": "The ExerciseID the job runs.",
+            "type": "string"
+          },
+          "job": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "paused",
+              "stopped",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/Step"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "job",
+          "exercise",
+          "state"
+        ],
+        "type": "object"
+      },
+      "Outcome": {
+        "description": "What the executor reports an effect came to (E64); `done` names at least one evidence kind.",
+        "enum": [
+          "done",
+          "not-done",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "Problem": {
+        "description": "RFC 9457 problem details.",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "type": "object"
+      },
+      "Step": {
+        "additionalProperties": false,
+        "properties": {
+          "commit_at": {
+            "description": "When an irreversible step's delayed commit sends it.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "enum": [
+                "upstream-confirmation",
+                "independent-recheck",
+                "browser-observation"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "idempotency_key": {
+            "description": "H(ExerciseID ‖ StepRef), forwarded upstream (E62 (2)).",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/Outcome"
+          },
+          "step": {
+            "description": "The StepRef, a digest.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "step",
+          "idempotency_key"
+        ],
+        "type": "object"
+      },
+      "StepPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Step"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Jobs of a registered executor (B21, AG-40): each runs one allowed Exercise of an agent Instance durably and reports its effects as Claims. The executor decides nothing. A planned route answers 501 not-yet-served.",
+    "license": {
+      "identifier": "Apache-2.0",
+      "name": "Apache-2.0"
+    },
+    "title": "Access Executor API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/executor/v1/jobs": {
+      "post": {
+        "operationId": "startJob",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Starts a job for one allowed Exercise of the calling agent Instance; the executor is an Instance of its operator Party and never decides (E62, OP-154 m.3 (u)).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/executor/v1/jobs/{job}": {
+      "get": {
+        "operationId": "getJob",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "One job: its Exercise, its state (running, paused, stopped, unknown), whether a pause or stop is confirmed, and its steps.",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/executor/v1/jobs/{job}/pause": {
+      "post": {
+        "operationId": "pauseJob",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Pauses the job at its next step; the pause counts once an executor_control Claim confirms it (U5).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/executor/v1/jobs/{job}/resume": {
+      "post": {
+        "operationId": "resumeJob",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Resumes a paused job; going on is a new Access decision, never the old one (E63 (2)).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/executor/v1/jobs/{job}/steps": {
+      "get": {
+        "operationId": "listJobSteps",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepPage"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "The job's steps: each with its StepRef, idempotency key and reported outcome; a step whose result could not be verified is unknown and is never retried on its own (E62 (3)).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/executor/v1/jobs/{job}/steps/{step}/cancel": {
+      "post": {
+        "operationId": "cancelStep",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "step",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Cancels an irreversible step inside its delayed-commit window (15 s by default); silence is not approval (E47 (2)).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/executor/v1/jobs/{job}/stop": {
+      "post": {
+        "operationId": "stopJob",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Stops the job; no further effect once the executor confirms it with an executor_control Claim (U5).",
+        "x-suiss-status": "planned"
+      }
+    }
+  }
+}

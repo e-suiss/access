@@ -1,0 +1,21 @@
+[package]
+name = "access-executor"
+description = "Access Executor (B21, AG-40): runs an agent's allowed Exercises durably, step by step, and reports each effect as a Claim; it decides nothing."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+# OP-154 m.3 (u), OP-62
+axum = { workspace = true, features = ["http1", "tokio", "json"] }
+serde_json = { workspace = true, features = ["std"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }
+tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true
