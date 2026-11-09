@@ -246,7 +246,7 @@ pub(crate) const DECLARED_RESERVED: [&str; 0] = [];
 
 /// Writes `access admin` refuses: a bulk job is a set of Exercises the command line already
 /// makes one at a time (TN-125, X20); `apply` sends one write per change.
-pub(crate) const UNSUPPORTED: [&str; 1] = ["createJob"];
+pub(crate) const UNSUPPORTED: [&str; 2] = ["createJob", "revokeAllAgentInstances"];
 
 /// The `idp.*` action a write operation compiles to; `None` for an operation the command line
 /// does not know, which it treats as reserved (fail closed, TN-122). A protection mode change
@@ -311,6 +311,21 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "exportAccounts" => IdpAction::AccountMigrationExport,
         "bindAccount" => IdpAction::AccountBind,
         "recordGuardianship" => IdpAction::AccountGuardianshipRecord,
+        // OP-154 m.3 (a)
+        "registerAgent" => IdpAction::AgentRegister,
+        "patchAgent" => IdpAction::AgentUpdate,
+        "retireAgent" => IdpAction::AgentRetire,
+        "assignAgentSponsor" => IdpAction::AgentSponsorAssign,
+        "removeAgentSponsor" => IdpAction::AgentSponsorRemove,
+        "defineAgentTemplate" => IdpAction::AgentTemplateDefine,
+        "registerProtectedResource" => IdpAction::ClientResourceRegister,
+        "putDcrPolicy" => IdpAction::ClientDcrPolicy,
+        "createCrossAppConnection" => IdpAction::ClientCrossAppConnection,
+        "retireCrossAppConnection" => IdpAction::ClientCrossAppConnectionRetire,
+        "putDeviceCode" => IdpAction::RealmDeviceCode,
+        "putVaultResource" => IdpAction::VaultResourceRegister,
+        "disableVaultResource" => IdpAction::VaultResourceDisable,
+        "putVaultReleaseMode" => IdpAction::VaultReleaseModeOpen,
         _ => return None,
     })
 }
