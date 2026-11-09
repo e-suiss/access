@@ -152,6 +152,8 @@ struct Realm {
     g2: HoldingRef,
     stranger_own: HoldingRef,
     idp: EcdsaKeyPair,
+    confidential: (String, EcdsaKeyPair),
+    nonce: std::sync::Mutex<Option<String>>,
 }
 
 /// Commits `payload` as the key's `commit` on `basis` in `capacity`.
@@ -402,6 +404,33 @@ impl Realm {
         let client = String::from(json["test_user"]["client_id"].as_str().unwrap());
         let action = sample.action_ref();
         let route = route_by_slug(&w.db.router, "acme").await.unwrap().unwrap();
+        // §11.11.2 (e)
+        let confidential_key = EcdsaKeyPair::generate(&ECDSA_P256_SHA256_FIXED_SIGNING).unwrap();
+        let admin = b.admin(&ids, None);
+        let confidential_id = admin.new_client_id().await.unwrap();
+        let confidential = String::from(confidential_id.as_str());
+        b.change(
+            &admin,
+            (route.tenant, route.realm),
+            domain,
+            &root_key(&w.keys).unwrap(),
+            Change::ClientRegister(access_identity_admin::domain::Client {
+                id: confidential_id,
+                display_name: String::from("Agent client"),
+                auth: AuthMethod::PrivateKeyJwtKey {
+                    key: PublicKey::P256(confidential_key.public_key().as_ref().to_vec()),
+                },
+                redirect_uris: vec![RedirectUri::parse("https://agent.access.test/cb").unwrap()],
+                post_logout_redirect_uris: Vec::new(),
+                backchannel_logout_uri: None,
+                require_par: false,
+                platform: None,
+                subject: access_identity_admin::domain::Subject::default(),
+                third_party: false,
+            }),
+        )
+        .await
+        .unwrap();
         let agent = |label: &str| {
             let key = token_key(&w.keys, label).unwrap();
             let public = key.public_key();
@@ -513,6 +542,8 @@ impl Realm {
             g2,
             stranger_own,
             idp,
+            confidential: (confidential, confidential_key),
+            nonce: std::sync::Mutex::new(None),
         }
     }
 
@@ -643,7 +674,7 @@ impl Realm {
 
     /// One `POST /token` by `agent` with `pairs`, a DPoP proof and the nonce retry.
     async fn token(&self, agent: &Agent, pairs: &[(&str, &str)]) -> (StatusCode, JsonValue) {
-        let mut nonce: Option<String> = None;
+        let mut nonce: Option<String> = self.nonce.lock().unwrap().clone();
         for _ in 0..2 {
             let p = proof(
                 agent,
@@ -672,6 +703,9 @@ impl Realm {
                 .map(str::to_owned);
             let bytes = to_bytes(r.into_body(), 1 << 20).await.unwrap();
             let body: JsonValue = serde_json::from_slice(&bytes).unwrap_or(JsonValue::Null);
+            if let Some(f) = &fresh {
+                *self.nonce.lock().unwrap() = Some(f.clone());
+            }
             if body["error"] == "use_dpop_nonce" && fresh.is_some() {
                 nonce = fresh;
                 continue;
@@ -1087,4 +1121,72 @@ async fn transaction_tokens_are_audit_context_and_id_jags_need_a_strong_client()
         )
         .await;
     assert_eq!(body["error"], "unauthorized_client", "{body}");
+
+    // MD-18, L6, §11.11.2, Ek B 4188, 4402
+    let (id, key) = &r.confidential;
+    let now_s = now_ms() / 1000;
+    let header = json!({ "alg": "ES256", "typ": "JWT" });
+    let claims = json!({
+        "iss": id, "sub": id, "aud": ISSUER, "iat": now_s, "exp": now_s + 60,
+        "jti": b64url_encode(&nonce16()),
+    });
+    let input = format!(
+        "{}.{}",
+        b64url_encode(header.to_string().as_bytes()),
+        b64url_encode(claims.to_string().as_bytes())
+    );
+    let sig = key.sign(&SystemRandom::new(), input.as_bytes()).unwrap();
+    let assertion = format!("{input}.{}", b64url_encode(sig.as_ref()));
+    let (e, _) = r
+        .exercise(&r.a2, UPSTREAM, r.g2, Capacity::For(r.p.party), 200_000)
+        .await;
+    let exercise = encode_exercise(&e).unwrap();
+    let details = r.details();
+    let resource_as = "https://as.upstream.access.test";
+    let (status, body) = r
+        .token(
+            &r.a2,
+            &[
+                (
+                    "grant_type",
+                    "urn:ietf:params:oauth:grant-type:token-exchange",
+                ),
+                (
+                    "client_assertion_type",
+                    "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+                ),
+                ("client_assertion", assertion.as_str()),
+                ("client_id", id.as_str()),
+                ("subject_token", subject.as_str()),
+                ("subject_token_type", ACCESS_TOKEN_TYPE),
+                (
+                    "requested_token_type",
+                    "urn:ietf:params:oauth:token-type:id-jag",
+                ),
+                ("audience", resource_as),
+                ("resource", UPSTREAM),
+                ("scope", "work.approve"),
+                ("authorization_details", details.as_str()),
+                ("access_exercise", exercise.as_str()),
+            ],
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["issued_token_type"],
+        "urn:ietf:params:oauth:token-type:id-jag"
+    );
+    assert_eq!(body["token_type"], "N_A");
+    let jag = body["access_token"].as_str().unwrap();
+    assert_eq!(header_of(jag)["typ"], "oauth-id-jag+jwt");
+    let c = claims_of(jag);
+    assert_eq!(c["iss"], ISSUER);
+    assert_eq!(c["aud"], resource_as);
+    assert_eq!(c["client_id"], id.as_str());
+    assert_eq!(c["resource"], UPSTREAM);
+    assert_eq!(c["sub"], claims_of(&subject)["sub"]);
+    assert!(c["exp"].as_u64().unwrap() - c["iat"].as_u64().unwrap() <= 300);
+    for authority in ["authorization_details", "act", "cnf", "access_contract"] {
+        assert!(c.get(authority).is_none(), "{authority} in {c}");
+    }
 }

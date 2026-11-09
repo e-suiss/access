@@ -54,6 +54,31 @@ consent screen shows the client's hostname and redirect hostnames, warns when ev
 a loopback one or the client is new, and shows the client's name and logo as the client's own
 claim. Every authorization response carries `iss`.
 
+## Token exchange and assertions
+
+An agent trades a token for another with RFC 8693. The subject token can be an Access token of
+this realm, an ID token this realm issued to the same client, or a JWT of an issuer the realm's
+domain accepts. SAML assertions are not read yet. The subject token is only input: the new token
+is the agent's own decision on its own Grant, for the resource it asks for, and never names more
+actions or lives longer than an Access subject token. Its `act` lists the agents that delegated
+down to the caller, taken from the domain's record and never copied from a presented token, so
+two valid tokens cannot be spliced into a chain that was never granted. A resource server never
+forwards the token it received; it exchanges it for its own token to the upstream.
+
+`requested_token_type` may also ask for:
+
+- an ID-JAG (`oauth-id-jag+jwt`) for another authorization server: only for a client that
+  authenticates with `private_key_jwt`, only after the caller's decision for the `resource`
+  allowed it, five minutes at most, and with no authority in it;
+- a Transaction Token (`txntoken+jwt`): sixty seconds of audit context naming the Exercise; it is
+  never accepted as a subject token.
+
+The JWT bearer grant (RFC 7523) takes an ID-JAG or a cloud workload JWT (AWS, GCP) of an
+accepted issuer. The assertion is checked for its signature, `typ`, audience, client and times,
+and its `jti` is used once; without the replay store nothing is accepted. The assertion never
+grants anything: without the caller's Exercise there is no token, and without a Grant behind it
+the answer is `invalid_grant`. An `email` in an assertion is never kept.
+
 ## Client interop notes (2026-11-09)
 
 These notes describe what two widely used clients do today. They are not part of the profile;
