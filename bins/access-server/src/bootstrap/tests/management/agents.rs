@@ -305,6 +305,27 @@ async fn the_registry_lists_an_agent_and_revoke_all_ends_every_instance() {
         "{}",
         after.body
     );
+    // P59, §9.16.2 k.5, Ek B 4387, 4388
+    let events: Vec<_> = access_store::authority::read_outbox(
+        &c.w.db.app,
+        &access_store::scope::DomainId::from_bytes(c.domain.0),
+        (0, 0),
+        1_000,
+    )
+    .await
+    .unwrap()
+    .iter()
+    .map(|r| access_internal_api::events::Event::from_bytes(&r.event).unwrap())
+    .filter(|e| e.kind == access_internal_api::events::Kind::InstanceTerminated)
+    .collect();
+    for i in &instances {
+        assert!(
+            events
+                .iter()
+                .any(|e| e.subject == access_internal_api::events::Subject::Instance(*i)),
+            "{events:?}"
+        );
+    }
     for k in &runtimes {
         let ais = k.ais(
             c.domain,
