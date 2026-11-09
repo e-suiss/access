@@ -40,11 +40,11 @@ use tower::ServiceExt as _;
 
 use super::*;
 
-const ISSUER: &str = "https://access.test/realms/acme";
+pub(super) const ISSUER: &str = "https://access.test/realms/acme";
 const TOKEN: &str = "/realms/acme/token";
 const RS: &str = "https://mcp.access.test/mcp";
-const UPSTREAM: &str = "https://upstream.access.test/api";
-const IDP: &str = "https://idp.l2.test";
+pub(super) const UPSTREAM: &str = "https://upstream.access.test/api";
+pub(super) const IDP: &str = "https://idp.l2.test";
 
 struct Csprng;
 
@@ -59,10 +59,10 @@ impl Random for Csprng {
 }
 
 /// An agent Instance's key in the token: its AIS key and its DPoP key.
-struct Agent {
+pub(super) struct Agent {
     key: HsmSigner,
     public: PublicKey,
-    party: Id,
+    pub(super) party: Id,
 }
 
 impl Agent {
@@ -104,7 +104,7 @@ fn form(pairs: &[(&str, &str)]) -> String {
         .join("&")
 }
 
-fn claims_of(token: &str) -> JsonValue {
+pub(super) fn claims_of(token: &str) -> JsonValue {
     let payload = token.split('.').nth(1).unwrap();
     serde_json::from_slice(&b64url_decode(payload).unwrap()).unwrap()
 }
@@ -114,7 +114,7 @@ fn header_of(token: &str) -> JsonValue {
     serde_json::from_slice(&b64url_decode(h).unwrap()).unwrap()
 }
 
-fn act_chain(claims: &JsonValue) -> Vec<String> {
+pub(super) fn act_chain(claims: &JsonValue) -> Vec<String> {
     let mut out = Vec::new();
     let mut at = claims.get("act");
     while let Some(a) = at {
@@ -125,7 +125,7 @@ fn act_chain(claims: &JsonValue) -> Vec<String> {
 }
 
 /// An ES256 JWT of the test issuer.
-fn idp_jwt(key: &EcdsaKeyPair, typ: &str, claims: &JsonValue) -> String {
+pub(super) fn idp_jwt(key: &EcdsaKeyPair, typ: &str, claims: &JsonValue) -> String {
     let public = PublicKey::P256(key.public_key().as_ref().to_vec());
     let header = json!({ "alg": "ES256", "kid": b64url_encode(&thumbprint(&public)), "typ": typ });
     let input = format!(
@@ -137,21 +137,21 @@ fn idp_jwt(key: &EcdsaKeyPair, typ: &str, claims: &JsonValue) -> String {
     format!("{input}.{}", b64url_encode(sig.as_ref()))
 }
 
-struct Realm {
-    w: World,
+pub(super) struct Realm {
+    pub(super) w: World,
     oauth: axum::Router,
-    domain: Digest,
+    pub(super) domain: Digest,
     action: ActionRef,
-    client: String,
-    p: Agent,
+    pub(super) client: String,
+    pub(super) p: Agent,
     a1: Agent,
-    a2: Agent,
-    stranger: Agent,
+    pub(super) a2: Agent,
+    pub(super) stranger: Agent,
     g0: HoldingRef,
     g1: HoldingRef,
-    g2: HoldingRef,
-    stranger_own: HoldingRef,
-    idp: EcdsaKeyPair,
+    pub(super) g2: HoldingRef,
+    pub(super) stranger_own: HoldingRef,
+    pub(super) idp: EcdsaKeyPair,
     confidential: (String, EcdsaKeyPair),
     nonce: std::sync::Mutex<Option<String>>,
 }
@@ -213,7 +213,7 @@ async fn commit(
     (c.exercise, c.position)
 }
 
-fn delegated(action: &ActionRef, depth: u64, to: Option<Id>) -> CanonicalAuthority {
+pub(super) fn delegated(action: &ActionRef, depth: u64, to: Option<Id>) -> CanonicalAuthority {
     let mut a = authority(BTreeSet::from([action.clone()]), "work", BTreeSet::new());
     a.delegation = DelegationTerms {
         depth,
@@ -223,7 +223,7 @@ fn delegated(action: &ActionRef, depth: u64, to: Option<Id>) -> CanonicalAuthori
 }
 
 /// `holder`'s Grant from `grantor`'s holding (or the meta-anchor), committed by `grantor`.
-async fn issue(
+pub(super) async fn issue(
     w: &World,
     domain: Digest,
     grantor: &HsmSigner,
@@ -329,7 +329,7 @@ fn sorted(mut m: Vec<(Value, Value)>) -> Value {
 
 impl Realm {
     #[allow(clippy::too_many_lines, reason = "one realm and its delegation chain")]
-    async fn open(name: &str) -> Self {
+    pub(super) async fn open(name: &str) -> Self {
         let (w, signer) = World::open(name, true).await;
         let signer = signer.unwrap();
         let declared = DeclaredTargets::default();
@@ -751,7 +751,7 @@ impl Realm {
 
     /// A `jwt-bearer` request with `assertion` for the upstream, with the Exercise of
     /// `with` when given (by A2 otherwise).
-    async fn bearer(
+    pub(super) async fn bearer(
         &self,
         assertion: String,
         with: Option<(&Agent, HoldingRef, Capacity)>,

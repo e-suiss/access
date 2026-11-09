@@ -1166,5 +1166,6 @@ mod organizations;
 mod resources;
 mod settings;
 mod vault;
+mod walkthrough_enterprise;
 mod workloads;
 mod writes;

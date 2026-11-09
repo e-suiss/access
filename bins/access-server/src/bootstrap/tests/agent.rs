@@ -33,11 +33,11 @@ use tower::ServiceExt as _;
 use super::*;
 
 /// The agent's transport identity as the ADP's PEP.
-const AGENT_PEP: &str = "agent-runtime";
+pub(super) const AGENT_PEP: &str = "agent-runtime";
 pub(super) const AGENT: Id = Id([0x0c; 16]);
 const STRANGER: Id = Id([0x0d; 16]);
 
-struct Wall;
+pub(super) struct Wall;
 
 impl Clock for Wall {
     fn now(&self) -> Option<u64> {
@@ -45,11 +45,11 @@ impl Clock for Wall {
     }
 }
 
-fn nonce() -> Vec<u8> {
+pub(super) fn nonce() -> Vec<u8> {
     access_crypto::random::bytes::<16>().unwrap().to_vec()
 }
 
-fn block<F: std::future::Future>(f: F) -> F::Output {
+pub(super) fn block<F: std::future::Future>(f: F) -> F::Output {
     tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(f))
 }
 
@@ -69,13 +69,13 @@ impl Signs for Runtime {
 }
 
 /// ADP in this process, reached as the agent's own PEP.
-struct Live {
-    adp: axum::Router,
-    asked: AtomicUsize,
+pub(super) struct Live {
+    pub(super) adp: axum::Router,
+    pub(super) asked: AtomicUsize,
 }
 
 impl Live {
-    fn post(&self, path: &str, body: &str) -> Answer {
+    pub(super) fn post(&self, path: &str, body: &str) -> Answer {
         self.asked.fetch_add(1, Ordering::SeqCst);
         let mut req = HttpRequest::post(path)
             .header(header::CONTENT_TYPE, "application/json")
@@ -165,21 +165,38 @@ fn self_signed(
 /// Registers [`AGENT`] with the root as its operator and opens an Instance for a fresh
 /// runtime key under a sponsor's session (OP-154 m.3 (c)): the runtime key and the Instance.
 pub(super) async fn enrol(w: &World, domain: Digest) -> (Runtime, Id) {
-    let route = route_by_slug(&w.db.router, "acme").await.unwrap().unwrap();
     let root_party = root_party(&root_key(&w.keys).unwrap().public_key());
-    let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
-        .await
-        .unwrap();
-    let subject = t
-        .insert_subject("active", "realm-kek:1", &[9; 40])
-        .await
-        .unwrap();
-    assert!(
-        idp::bind_subject_party(&mut t, &subject, &root_party.0)
+    enrol_for(w, domain, root_party, None).await
+}
+
+/// Registers [`AGENT`] with `operator` as its operator and opens an Instance for a fresh
+/// runtime key under the session of `subject`, or of a new subject of `operator`.
+pub(super) async fn enrol_for(
+    w: &World,
+    domain: Digest,
+    operator: Id,
+    subject: Option<[u8; 16]>,
+) -> (Runtime, Id) {
+    let route = route_by_slug(&w.db.router, "acme").await.unwrap().unwrap();
+    let root_party = operator;
+    let subject = if let Some(s) = subject {
+        s
+    } else {
+        let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
             .await
-            .unwrap()
-    );
-    t.commit().await.unwrap();
+            .unwrap();
+        let subject = t
+            .insert_subject("active", "realm-kek:1", &[9; 40])
+            .await
+            .unwrap();
+        assert!(
+            idp::bind_subject_party(&mut t, &subject, &root_party.0)
+                .await
+                .unwrap()
+        );
+        t.commit().await.unwrap();
+        subject
+    };
     // OP-154 m.3 (c)
     let one_time = SoftSigner::generate_p256().unwrap().0;
     let register = Payload::PartyRegister {

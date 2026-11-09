@@ -2495,3 +2495,4 @@ mod recovery;
 mod recovery_authority;
 mod timing;
 mod vault;
+mod walkthrough;

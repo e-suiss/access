@@ -19,14 +19,14 @@ use access_kernel::verify::cose::PublicKey;
 use super::writes::Written;
 use super::*;
 
-const AGENT: Id = Id([0x0e; 16]);
-const BUNDLE: &str = "https://bundle.acme.example/bundle.json";
+pub(super) const AGENT: Id = Id([0x0e; 16]);
+pub(super) const BUNDLE: &str = "https://bundle.acme.example/bundle.json";
 const OTHER_BUNDLE: &str = "https://bundle.beta.example/bundle.json";
-const WORKLOAD: &str = "spiffe://acme.example/agent/mail/w1";
+pub(super) const WORKLOAD: &str = "spiffe://acme.example/agent/mail/w1";
 const ISSUER: &str = "https://access.test/realms/acme";
 const TOKEN: &str = "https://access.test/realms/acme/token";
 
-fn signer() -> Browser {
+pub(super) fn signer() -> Browser {
     Browser {
         jar: Vec::new(),
         csrf: String::new(),
@@ -59,7 +59,7 @@ fn jws(by: &SoftSigner, header: &serde_json::Value, claims: &serde_json::Value) 
 }
 
 /// A trust domain's bundle with the JWT-SVID key `by`.
-fn bundle(by: &SoftSigner) -> String {
+pub(super) fn bundle(by: &SoftSigner) -> String {
     let (x, y) = xy(&by.public_key());
     serde_json::json!({
         "keys": [{ "use": "jwt-svid", "kty": "EC", "crv": "P-256", "kid": "k1", "x": x, "y": y }],
@@ -69,7 +69,7 @@ fn bundle(by: &SoftSigner) -> String {
     .to_string()
 }
 
-fn svid(by: &SoftSigner, sub: &str) -> String {
+pub(super) fn svid(by: &SoftSigner, sub: &str) -> String {
     jws(
         by,
         &serde_json::json!({ "alg": "ES256", "kid": "k1", "typ": "JWT" }),
@@ -140,7 +140,7 @@ async fn token(
 
 /// `client_credentials` with a fresh JWT-SVID from `assertion` each time, retried once with
 /// the nonce the server hands out (TN-29); the answer and the nonce to go on with.
-async fn present(
+pub(super) async fn present(
     c: &Console,
     assertion: &dyn Fn() -> String,
     key: &SoftSigner,
@@ -153,7 +153,7 @@ async fn present(
 }
 
 /// Registers the agent AGENT of the founder with the founder as its sponsor (OP-154 m.3 (c)).
-async fn agent(c: &Console) {
+pub(super) async fn agent(c: &Console) {
     let one_time = signer();
     let register = Payload::PartyRegister {
         party: AGENT,
@@ -216,7 +216,7 @@ async fn agent(c: &Console) {
 }
 
 /// A workload client of AGENT selecting `spiffe_id`, by REST (OP-154 m.3 (r)).
-async fn workload_client(c: &Console, spiffe_id: &str, endpoint: &str) -> Written {
+pub(super) async fn workload_client(c: &Console, spiffe_id: &str, endpoint: &str) -> Written {
     c.rest_write(
         &Method::POST,
         "/admin/v1/realms/acme/clients",
@@ -252,7 +252,7 @@ async fn bound(c: &Console, key: &PublicKey) -> bool {
 }
 
 /// Steps the realm issuer's courier until AGENT's workload binding of `key` is issued.
-async fn issued(c: &Console, key: &PublicKey) {
+pub(super) async fn issued(c: &Console, key: &PublicKey) {
     let k = super::super::recovery::courier(c);
     let deadline = std::time::Instant::now() + Duration::from_secs(20);
     while !bound(c, key).await {
@@ -263,7 +263,7 @@ async fn issued(c: &Console, key: &PublicKey) {
 }
 
 /// The key `by` opens its own Instance of AGENT (OP-154 m.3 (d)).
-async fn open(c: &Console, by: &Browser) -> RegistrationVerdict {
+pub(super) async fn open(c: &Console, by: &Browser) -> RegistrationVerdict {
     let challenge = access_crypto::random::bytes::<32>().unwrap().to_vec();
     let validity = window();
     let mut r = WorkloadInstance {

@@ -122,7 +122,7 @@ pub(super) struct Lab {
     pub(super) party: Id,
     pub(super) holding: HoldingRef,
     pub(super) subject: [u8; 16],
-    client: String,
+    pub(super) client: String,
     cookies: BTreeMap<String, String>,
 }
 
@@ -362,7 +362,7 @@ impl Lab {
     }
 
     /// One request of the person's browser to the realm's pages.
-    async fn page(
+    pub(super) async fn page(
         &mut self,
         method: &Method,
         path: &str,
@@ -401,7 +401,7 @@ impl Lab {
     }
 
     /// `POST /v1/vault/releases`, by `pep` when the transport named one.
-    async fn release(
+    pub(super) async fn release(
         &self,
         pep: Option<&str>,
         body: &serde_json::Value,
@@ -491,7 +491,7 @@ impl Lab {
         (exercise, out["decision"] == true)
     }
 
-    fn body(
+    pub(super) fn body(
         &self,
         exercise: &Digest,
         intent: &IntentEnvelope,

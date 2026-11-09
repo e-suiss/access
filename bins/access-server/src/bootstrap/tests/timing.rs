@@ -43,7 +43,7 @@ async fn discover(router: &axum::Router, path: &str) -> (StatusCode, bool, Durat
     (status, whole, took)
 }
 
-// §11.4.5 #25, AG-17, OP-154 m.3 (gg), Ek B 4579
+// §11.4.5 item 25, AG-17, OP-154 m.3 (gg), Ek B 4579
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn discovery_and_the_token_endpoint_answer_within_ten_seconds() {
     let r = Realm::open("l10-timing").await;
@@ -83,7 +83,7 @@ async fn discovery_and_the_token_endpoint_answer_within_ten_seconds() {
     r.w.domains.release().await;
 }
 
-// §11.5.6 #25, RS-M1, OP-154 m.3 (gg), Ek B 4579
+// §11.5.6 item 25, RS-M1, OP-154 m.3 (gg), Ek B 4579
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn resource_metadata_answers_within_five_seconds_and_a_stream_is_never_held() {
     let (r, took) = metadata_answer("l10-timing-prm").await;
