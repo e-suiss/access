@@ -129,7 +129,24 @@ pub(super) struct Lab {
 /// Commits the root's `grant_issue` of `authority` to `holder` on the meta-anchor.
 async fn grant(w: &World, domain: Digest, holder: Id, authority: CanonicalAuthority) -> HoldingRef {
     let root = root_key(&w.keys).unwrap();
-    let payload = Payload::GrantIssue(grant_of(&domain, holder, authority));
+    let basis = ExerciseBasis::Anchor(meta::meta_anchor(&domain));
+    grant_content(
+        w,
+        (domain, &root, basis),
+        holder,
+        grant_of(&domain, holder, authority),
+    )
+    .await
+}
+
+/// Commits `grantor`'s `grant_issue` of `content` to `holder` on `basis`.
+async fn grant_content(
+    w: &World,
+    (domain, grantor, basis): (Digest, &HsmSigner, ExerciseBasis),
+    holder: Id,
+    content: GrantContent,
+) -> HoldingRef {
+    let payload = Payload::GrantIssue(content);
     let now = server_time(&w.db.app).await.unwrap();
     let validity = Window {
         from: now - 60_000,
@@ -137,9 +154,8 @@ async fn grant(w: &World, domain: Digest, holder: Id, authority: CanonicalAuthor
     };
     let intent = self_signed_intent(&payload, holder, validity).unwrap();
     let nonce = access_crypto::random::bytes::<16>().unwrap().to_vec();
-    let basis = ExerciseBasis::Anchor(meta::meta_anchor(&domain));
     let ais = sign(
-        &root,
+        grantor,
         &Statement {
             domain,
             nonce: nonce.clone(),
@@ -448,23 +464,33 @@ impl Lab {
         pep: &str,
         basis: HoldingRef,
     ) -> (Digest, bool) {
+        self.commit_by(intent, pep, (basis, Capacity::Own), |s| {
+            sign(&self.person, s).unwrap()
+        })
+        .await
+    }
+
+    /// [`Self::commit`] by the actor whose key `by` signs, in `capacity`.
+    async fn commit_by(
+        &self,
+        intent: &IntentEnvelope,
+        pep: &str,
+        (basis, capacity): (HoldingRef, Capacity),
+        by: impl Fn(&Statement) -> Vec<u8>,
+    ) -> (Digest, bool) {
         let nonce = access_crypto::random::bytes::<16>().unwrap();
         let digest = intent_digest(intent).unwrap();
-        let ais = sign(
-            &self.person,
-            &Statement {
-                domain: self.domain,
-                nonce: nonce.to_vec(),
-                intent: digest,
-                mode: Mode::Commit,
-                pep: String::from(pep),
-                capacity: Capacity::Own,
-                basis: ExerciseBasis::Holding(basis),
-                iat: now_ms(),
-                exercise: None,
-            },
-        )
-        .unwrap();
+        let ais = by(&Statement {
+            domain: self.domain,
+            nonce: nonce.to_vec(),
+            intent: digest,
+            mode: Mode::Commit,
+            pep: String::from(pep),
+            capacity,
+            basis: ExerciseBasis::Holding(basis),
+            iat: now_ms(),
+            exercise: None,
+        });
         let basis = ExerciseBasis::Holding(basis);
         let body = adp_body(&ExerciseRequest {
             domain: &self.domain,
@@ -474,7 +500,7 @@ impl Lab {
             envelope: Some(intent),
             actor: &SdkActor::Statement(ais),
             basis: &basis,
-            capacity: Capacity::Own,
+            capacity,
             pep,
             exercise: None,
         })
@@ -910,5 +936,138 @@ async fn a_refused_refresh_needs_the_person_again() {
     let id = <[u8; 16]>::try_from(b64url_decode(&connection).unwrap()).unwrap();
     assert!(t.vault_token_set(id).await.unwrap().is_none());
     t.commit().await.unwrap();
+    l.w.domains.release().await;
+}
+
+// S11, §12.4.1, AG-21, AG-41, AGI-2, OP-154 m.3 (e), (t), OP-153 m.3 (gg), Ek B 4219
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_person_sees_which_agent_used_which_of_their_accounts() {
+    let mut l = Lab::open("vault-agents").await;
+    l.change(VaultChange::Enable(Box::new(l.resource()))).await;
+    l.consent().await;
+    let connection = l
+        .connect(r#"{"access_token":"at-1","refresh_token":"rt-1","expires_in":3600,"token_type":"Bearer"}"#)
+        .await;
+    let (status, empty, _) = l
+        .page(&Method::GET, "/v1/account/agent-connections", None)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{empty}");
+    assert_eq!(empty["agents"], serde_json::json!([]), "{empty}");
+    assert_eq!(empty["connections"][0]["connection"], connection.as_str());
+
+    let (runtime, _) = super::agent::enrol(&l.w, l.domain).await;
+    // OP-154 m.3 (c)
+    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.realm)
+        .await
+        .unwrap();
+    t.insert_agent(&access_store::agents::NewAgent {
+        party: super::agent::AGENT.0,
+        operator: root_party(&root_key(&l.w.keys).unwrap().public_key()).0,
+        kind: "cloud",
+        display_name: "Mail helper",
+        description: None,
+        exercise: &[6; 32],
+    })
+    .await
+    .unwrap();
+    t.commit().await.unwrap();
+    // §9.9.4
+    let root = root_key(&l.w.keys).unwrap();
+    let work = |depth: u64| {
+        let mut a = authority(BTreeSet::from([l.action.clone()]), "work", BTreeSet::new());
+        a.delegation = DelegationTerms {
+            depth,
+            downstream_holder_class: Some(SubjectSelector::Party(super::agent::AGENT)),
+        };
+        a
+    };
+    let mine = grant_content(
+        &l.w,
+        (
+            l.domain,
+            &root,
+            ExerciseBasis::Anchor(meta::meta_anchor(&l.domain)),
+        ),
+        l.party,
+        grant_of(&l.domain, l.party, work(1)),
+    )
+    .await;
+    let acting = grant_content(
+        &l.w,
+        (l.domain, &l.person, ExerciseBasis::Holding(mine)),
+        super::agent::AGENT,
+        GrantContent {
+            basis: GrantBasis::Holding(mine),
+            holder: SubjectSelector::Party(super::agent::AGENT),
+            authority: work(0),
+            agency: BTreeSet::from([Capacity::For(l.party)]),
+            named: None,
+        },
+    )
+    .await;
+    let intent = l.intent(1_200_000);
+    let (allowed, ok) = l
+        .commit_by(&intent, EXECUTOR, (acting, Capacity::For(l.party)), |s| {
+            super::agent::ais_by(&runtime.0, s).unwrap()
+        })
+        .await;
+    assert!(ok);
+    let (status, r) = l
+        .release(
+            Some(EXECUTOR),
+            &l.body(&allowed, &intent, &connection, "executor"),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{r}");
+
+    let (status, listed, _) = l
+        .page(&Method::GET, "/v1/account/agent-connections", None)
+        .await;
+    assert_eq!(status, StatusCode::OK, "{listed}");
+    let agent = &listed["agents"][0];
+    assert_eq!(
+        agent["agent"],
+        b64url_encode(&super::agent::AGENT.0),
+        "{listed}"
+    );
+    assert_eq!(agent["status"], "active", "{listed}");
+    assert_eq!(agent["sponsor"], false, "{listed}");
+    assert_eq!(
+        agent["connections"],
+        serde_json::json!([connection]),
+        "{listed}"
+    );
+    assert!(agent["last_used_ms"].as_u64().is_some(), "{listed}");
+    assert_eq!(agent["name"], "Mail helper", "{listed}");
+    assert_eq!(agent["kind"], "cloud", "{listed}");
+    assert_eq!(
+        listed["connections"][0]["used"][0]["agent"],
+        b64url_encode(&super::agent::AGENT.0)
+    );
+    let shown = listed.to_string();
+    assert!(
+        !shown.contains("at-1") && !shown.contains("rt-1"),
+        "{shown}"
+    );
+
+    // AG-41
+    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.realm)
+        .await
+        .unwrap();
+    t.open_sponsorship(super::agent::AGENT.0, l.subject, &[7; 32])
+        .await
+        .unwrap();
+    t.commit().await.unwrap();
+    let (_, listed, _) = l
+        .page(&Method::GET, "/v1/account/agent-connections", None)
+        .await;
+    assert_eq!(listed["agents"][0]["sponsor"], true, "{listed}");
+    assert_eq!(listed["agents"].as_array().unwrap().len(), 1, "{listed}");
+
+    l.cookies.clear();
+    let (status, _, _) = l
+        .page(&Method::GET, "/v1/account/agent-connections", None)
+        .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
     l.w.domains.release().await;
 }

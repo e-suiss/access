@@ -89,6 +89,10 @@ where
                     .delete(disconnect::<D, K, KI, C, M, H, S, X, R>),
             )
             .route(
+                &format!("{prefix}/v1/account/agent-connections"),
+                get(agents::<D, K, KI, C, M, H, S, X, R>),
+            )
+            .route(
                 &format!("{prefix}/v1/vault/releases"),
                 post(release::<D, K, KI, C, M, H, S, X, R>),
             );
@@ -185,6 +189,14 @@ handler! {
             None => None,
         };
         Ok(s.login.hosted.vault_connections(&entry, &jar.browser(), callback, &s.vault).await)
+    }
+}
+
+handler! {
+    /// `GET /v1/account/agent-connections` (S11).
+    agents(s, entry, jar, p, bytes, headers, uri, pep) false {
+        let _ = (&p, &bytes, &uri, &pep);
+        Ok(s.login.hosted.agent_connections(&entry, &jar.browser(), &s.vault).await)
     }
 }
 

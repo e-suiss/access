@@ -1128,7 +1128,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The person's agents and what each is connected to: sponsor, status, authority and connected accounts (OP-154 m.3 (e), (t)). */
+        /** The person's agents (those they sponsor and those that used their accounts) and their connected accounts: name, kind, status, sponsor, last use; never a token or authority (OP-154 m.3 (e), (t)). */
         get: operations["listAgentConnections"];
         put?: never;
         post?: never;
@@ -3157,7 +3157,15 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };

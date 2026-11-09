@@ -113,8 +113,10 @@ export class AccountMock {
   signedOutReason: string | null = null;
   /** The device Instance key id the BFF's session names, once this browser set one up. */
   instanceKid: string | null = null;
-  /** S2/S11: the connected accounts for agents `GET /v1/account/vault/connections` lists. */
+  /** S2/S11: the connected accounts for agents `GET /v1/account/agent-connections` lists. */
   vault: Record<string, unknown>[] = [];
+  /** S11: the person's agents `GET /v1/account/agent-connections` lists. */
+  agents: Record<string, unknown>[] = [];
 
   async signIn(context: BrowserContext, baseURL: string): Promise<void> {
     this.signedIn = true;
@@ -139,6 +141,15 @@ export class AccountMock {
     );
     await context.route(/\/v1\/(sessions|me)(\/|$)/, (r) => this.s10(r));
     await context.route(/\/v1\/account\/vault\/connections/, (r) => this.vaultRoute(r));
+    await context.route(/\/v1\/account\/agent-connections/, (r) => this.agentsRoute(r));
+  }
+
+  private async agentsRoute(r: Route): Promise<void> {
+    this.record(r);
+    const reply = (status: number, body: unknown) =>
+      r.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    if (!this.signedIn) return reply(401, { code: "session-required" });
+    return reply(200, { agents: this.agents, connections: this.vault });
   }
 
   private async vaultRoute(r: Route): Promise<void> {

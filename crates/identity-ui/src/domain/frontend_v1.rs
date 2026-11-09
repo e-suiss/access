@@ -666,12 +666,12 @@ pub const ROUTES: &[Route] = &[
         "approveDeviceCode",
         "Approves or declines a user code with the person's AAS; the token it releases is DPoP-bound (OP-154 m.3 (p)).",
     ),
-    planned(
+    live(
         Owner::L3,
         Verb::Get,
         "/v1/account/agent-connections",
         "listAgentConnections",
-        "The person's agents and what each is connected to: sponsor, status, authority and connected accounts (OP-154 m.3 (e), (t)).",
+        "The person's agents (those they sponsor and those that used their accounts) and their connected accounts: name, kind, status, sponsor, last use; never a token or authority (OP-154 m.3 (e), (t)).",
     ),
     live(
         Owner::L5,

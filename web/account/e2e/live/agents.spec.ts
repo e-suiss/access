@@ -1,10 +1,11 @@
-// OP-153 m.3 (gg), §12.4.1, TN-133, XI-17, A-12, E64, OP-154 m.3 (t), m.15 (i): the agent
+// OP-153 m.3 (gg), §12.4.1, TN-133, XI-17, A-12, E64, OP-154 m.3 (e), (t), m.15 (i): the agent
 // surfaces against the running local deployment, signed in once as its bootstrap test user
 // (signin.setup.ts). The bootstrap's sample agent acts for the test user under the test user's
 // own Grant and made one allowed Exercise; no executor runs there, so nothing reported its
-// outcome, and no upstream account is connected. The realm's own vault route answers the cookie
-// with the person's connections and never a token; with this browser's device set up, the hub
-// shows the sample agent as an agent acting for the test user, and its use with no report.
+// outcome, and no upstream account is connected. The realm's agent-connections route answers
+// the cookie with the person's connections and agents and never a token; with this browser's
+// device set up, the hub shows the sample agent as an agent acting for the test user, and its
+// use with no report.
 import { expect, test } from "@playwright/test";
 
 import { PASSWORD, REALM } from "./signin.js";
@@ -12,17 +13,21 @@ import { PASSWORD, REALM } from "./signin.js";
 test.describe("@live connected accounts for agents", () => {
   test.skip(PASSWORD === "", "ACCESS_LOCAL_TEST_PASSWORD names the bootstrap test user's password");
 
-  test("@live S11 reads the person's connected accounts for agents from the vault route", async ({
+  test("@live S11 reads the person's connected accounts for agents from the agent-connections route", async ({
     page,
   }) => {
     await page.goto(`${REALM}/account`);
     const box = page.getByTestId("agent-accounts");
     await expect(box.getByRole("heading", { name: "Connected accounts for agents" })).toBeVisible();
     await expect(box.getByText("We can't read your connected accounts right now.")).toHaveCount(0);
-    const r = await page.request.get(`${REALM}/v1/account/vault/connections`);
+    const r = await page.request.get(`${REALM}/v1/account/agent-connections`);
     expect(r.status()).toBe(200);
-    const body = (await r.json()) as { connections: Record<string, unknown>[] };
+    const body = (await r.json()) as {
+      agents: Record<string, unknown>[];
+      connections: Record<string, unknown>[];
+    };
     expect(Array.isArray(body.connections)).toBe(true);
+    expect(Array.isArray(body.agents)).toBe(true);
     const rows = box.locator("[data-connection]");
     await expect(rows).toHaveCount(body.connections.length);
     const raw = JSON.stringify(body);

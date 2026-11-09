@@ -219,6 +219,52 @@ impl<K: Kits, C: Clock + Sync, M: Messages> Hosted<K, C, M> {
         }
     }
 
+    /// `GET /v1/account/agent-connections` (S11, OP-154 m.3 (e), (t)): the person's connected
+    /// accounts and their agents, each with its name, kind, status, whether the person sponsors
+    /// it and which of the person's accounts it used; never a token, never authority.
+    pub async fn agent_connections<H, S, X, R>(
+        &self,
+        entry: &RealmEntry,
+        b: &Browser<'_>,
+        vault: &Vault<H, S, X, R>,
+    ) -> Reply
+    where
+        H: ProviderHttp,
+        S: SocialSecrets,
+        X: Exercises,
+        R: Random,
+    {
+        let kit = match self.vault_kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        let (subject, _) = match self.fresh(&kit, b, None).await {
+            Ok(s) => s,
+            Err(r) => return r,
+        };
+        match vault
+            .agent_connections(&self.db, &keys(&kit), subject)
+            .await
+        {
+            Ok(a) => Reply::json(
+                200,
+                json!({
+                    "agents": a.agents.iter().map(|v| json!({
+                        "agent": b64url_encode(&v.agent.party),
+                        "name": v.agent.display_name,
+                        "kind": v.agent.kind,
+                        "status": v.agent.status,
+                        "sponsor": v.sponsor,
+                        "connections": v.connections.iter().map(|c| b64url_encode(c)).collect::<Vec<_>>(),
+                        "last_used_ms": v.last_used_ms,
+                    })).collect::<Vec<_>>(),
+                    "connections": a.connections.iter().map(view).collect::<Vec<_>>(),
+                }),
+            ),
+            Err(e) => refused(e),
+        }
+    }
+
     /// `GET /v1/account/vault/connections/{connection}`: one connected account; never a token.
     pub async fn vault_connection<H, S, X, R>(
         &self,

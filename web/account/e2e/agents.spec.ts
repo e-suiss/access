@@ -247,12 +247,24 @@ test("S11 shows which agent used which connected account, with one-click Disconn
       used: [],
     },
   ];
+  bff.agents = [
+    {
+      agent: "agent-a",
+      name: "Mail helper",
+      kind: "cloud",
+      status: "active",
+      sponsor: true,
+      connections: ["c-mail"],
+      last_used_ms: 1_700_000_000_000,
+    },
+  ];
   await page.goto("/account/");
   const box = page.getByTestId("agent-accounts");
   await expect(box.getByRole("heading", { name: "Connected accounts for agents" })).toBeVisible();
   const mail = box.locator('[data-connection="c-mail"]');
   await expect(mail).toContainText("Gmail · Connected");
-  await expect(mail).toContainText("Agent Used by agent-a, last on");
+  await expect(mail).toContainText("Agent Used by Mail helper, last on");
+  expect(bff.seen.some((s) => s.path.endsWith("/v1/account/agent-connections"))).toBe(true);
   await expect(box.locator('[data-connection="c-chat"]')).toContainText("Needs reconnecting");
   await mail.getByRole("button", { name: "Disconnect" }).click();
   await expect(box.getByTestId("said")).toHaveText("Disconnected");

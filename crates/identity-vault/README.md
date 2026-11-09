@@ -49,6 +49,14 @@ Each release is a projection row of its Exercise plus an audit event. The upstre
 belongs to the upstream: Access does not guarantee that it stays within the Grant, and the release
 says so.
 
+## What the person sees
+
+`GET /v1/account/agent-connections` is the account page's view: the person's connected accounts,
+which agent used each and when, and the person's agents (the ones they sponsor and the ones whose
+allowed Exercises had a token released from one of their accounts), each with its name, kind,
+status and the person's accounts it used. An agent only ever lists the person's own accounts. It
+carries no token and no authority.
+
 ## What the vault is not
 
 Agents have no route to the vault and never see a token in their model's context. Access keeps no

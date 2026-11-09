@@ -2262,16 +2262,22 @@
     "/v1/account/agent-connections": {
       "get": {
         "operationId": "listAgentConnections",
-        "summary": "The person's agents and what each is connected to: sponsor, status, authority and connected accounts (OP-154 m.3 (e), (t)).",
+        "summary": "The person's agents (those they sponsor and those that used their accounts) and their connected accounts: name, kind, status, sponsor, last use; never a token or authority (OP-154 m.3 (e), (t)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/account/vault/connections": {

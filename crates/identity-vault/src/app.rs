@@ -193,6 +193,28 @@ pub struct ConnectionView {
     pub releases: Vec<ReleaseRow>,
 }
 
+/// One of the person's agents on S11: an agent they sponsor or one that used their accounts.
+#[derive(Clone, Debug)]
+pub struct AgentView {
+    /// The agent's record.
+    pub agent: access_store::agents::AgentRow,
+    /// Whether the person sponsors it now.
+    pub sponsor: bool,
+    /// The person's connections it used, by the newest release first.
+    pub connections: Vec<[u8; 16]>,
+    /// Its newest release from the person's connections, Unix milliseconds.
+    pub last_used_ms: Option<u64>,
+}
+
+/// `listAgentConnections`: the person's connected accounts and their agents.
+#[derive(Clone, Debug, Default)]
+pub struct AgentConnections {
+    /// The person's connected accounts, as [`Vault::connections`] lists them.
+    pub connections: Vec<ConnectionView>,
+    /// The person's agents, by name.
+    pub agents: Vec<AgentView>,
+}
+
 fn kind_of(connection: &[u8; 16]) -> String {
     format!("vault-token-set:{}", b64url_encode(connection))
 }
@@ -863,6 +885,66 @@ impl<H: ProviderHttp, S: SocialSecrets, X: Exercises, R: Random> Vault<H, S, X, 
         }
         t.commit().await?;
         Ok(out)
+    }
+
+    /// The person's connected accounts and their agents (S11, §12.4.1, OP-154 m.3 (e), (t)): the
+    /// agents the person sponsors and the agents whose allowed Exercises had a token released
+    /// from one of the person's accounts. An agent lists only the person's own connections;
+    /// nothing here is authority (AG-19) and nothing carries a token.
+    ///
+    /// # Errors
+    /// [`VaultError::Unavailable`].
+    pub async fn agent_connections(
+        &self,
+        db: &Pool,
+        keys: &Keys<'_>,
+        subject: [u8; 16],
+    ) -> Result<AgentConnections, VaultError> {
+        let connections = self.connections(db, keys, subject).await?;
+        let mut t = keys.begin(db).await?;
+        let sponsored = t.sponsored_by(subject).await?;
+        let mut used: Vec<([u8; 16], [u8; 16], u64)> = Vec::new();
+        for v in &connections {
+            for r in &v.releases {
+                if let Some(a) = r.actor {
+                    used.push((a, v.row.id, r.released_ms));
+                }
+            }
+        }
+        used.sort_by(|a, b| b.2.cmp(&a.2));
+        let mut parties: Vec<[u8; 16]> = sponsored.clone();
+        parties.extend(used.iter().map(|u| u.0));
+        parties.sort_unstable();
+        parties.dedup();
+        let mut agents = Vec::with_capacity(parties.len());
+        for party in parties {
+            let Some(agent) = t.agent(party).await? else {
+                continue;
+            };
+            let mut mine: Vec<[u8; 16]> = Vec::new();
+            for u in used.iter().filter(|u| u.0 == party) {
+                if !mine.contains(&u.1) {
+                    mine.push(u.1);
+                }
+            }
+            agents.push(AgentView {
+                agent,
+                sponsor: sponsored.contains(&party),
+                connections: mine,
+                last_used_ms: used.iter().find(|u| u.0 == party).map(|u| u.2),
+            });
+        }
+        t.commit().await?;
+        agents.sort_by(|a, b| {
+            a.agent
+                .display_name
+                .cmp(&b.agent.display_name)
+                .then(a.agent.party.cmp(&b.agent.party))
+        });
+        Ok(AgentConnections {
+            connections,
+            agents,
+        })
     }
 }
 
