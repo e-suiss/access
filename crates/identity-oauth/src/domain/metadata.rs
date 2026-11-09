@@ -29,6 +29,9 @@ pub enum Endpoint {
     /// `POST /device_authorization` (RFC 8628), turned on per realm by
     /// `idp.realm.device_code` (OP-154 m.3 (p)).
     DeviceAuthorization,
+    /// `POST /bc-authorize`, the CIBA backchannel authentication endpoint, turned on per realm
+    /// by `idp.realm.ciba` (OP-155 m.3 (l)).
+    BackchannelAuthentication,
 }
 
 impl Endpoint {
@@ -44,6 +47,7 @@ impl Endpoint {
             Self::Introspect => "/introspect",
             Self::EndSession => "/end-session",
             Self::DeviceAuthorization => "/device_authorization",
+            Self::BackchannelAuthentication => "/bc-authorize",
         }
     }
 }
@@ -336,6 +340,10 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
         (
             Endpoint::DeviceAuthorization,
             "device_authorization_endpoint",
+        ),
+        (
+            Endpoint::BackchannelAuthentication,
+            "backchannel_authentication_endpoint",
         ),
     ] {
         // OP-154 m.3 (dd)

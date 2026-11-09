@@ -181,10 +181,12 @@ pub enum Report {
     Outcome(Box<crate::app::outcome::Outcome>),
 }
 
-/// Search kinds declared for Stage 9 and not served yet, each owned by its lane: `discovery`
-/// (L3, auditor-only and advisory, OP-154 m.3 (z)). A search of one answers
-/// `501 not-yet-served` (OP-154 m.4).
-pub const RESERVED_KINDS: [&str; 1] = ["discovery"];
+/// Search kinds declared and not served yet, each owned by its lane: `discovery` (Stage 9 L3,
+/// auditor-only and advisory, OP-154 m.3 (z)), `federation-chain` (Stage 10 P6, each OIDF
+/// issuer's chain state and lapse, OP-155 m.3 (j)) and `scim-sync` (Stage 10 P3, inbound and
+/// outbound SCIM provisioning results, OP-155 m.3 (g)). A search of one answers
+/// `501 not-yet-served` (OP-154 m.4, OP-155 m.4).
+pub const RESERVED_KINDS: [&str; 3] = ["discovery", "federation-chain", "scim-sync"];
 
 impl Query {
     /// The path segment of the search intent's resource.

@@ -53,6 +53,7 @@ pub fn router<E: Env>(service: OAuth<E>) -> Router {
         Endpoint::Introspect,
         Endpoint::EndSession,
         Endpoint::DeviceAuthorization,
+        Endpoint::BackchannelAuthentication,
     ] {
         let root =
             move |s: Shared<E>,

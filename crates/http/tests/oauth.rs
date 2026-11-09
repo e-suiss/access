@@ -311,3 +311,41 @@ async fn the_device_authorization_endpoint_is_absent_until_the_realm_enables_it(
     .await;
     assert_eq!(elsewhere.status(), StatusCode::NOT_FOUND);
 }
+
+// OP-155 m.3 (l), m.4
+#[tokio::test]
+async fn the_backchannel_authentication_endpoint_is_declared_and_not_yet_served() {
+    for (path, host) in [
+        ("/bc-authorize", "acme.id.test"),
+        ("/realms/beta/bc-authorize", "id.test"),
+    ] {
+        let r = send(
+            Request::post(path)
+                .header(header::HOST, host)
+                .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                .body(Body::from("client_id=cli_x&scope=openid"))
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(r.status(), StatusCode::NOT_IMPLEMENTED, "{path}");
+    }
+    let elsewhere = send(
+        Request::post("/bc-authorize")
+            .header(header::HOST, "evil.test")
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body(Body::from("client_id=cli_x"))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(elsewhere.status(), StatusCode::NOT_FOUND);
+    let issuer =
+        access_identity_oauth::domain::issuer::Issuer::parse("https://acme.id.test").unwrap();
+    let m: serde_json::Value = serde_json::from_str(
+        &access_identity_oauth::domain::metadata::authorization_server(
+            &issuer,
+            &access_identity_oauth::domain::metadata::SERVED,
+        ),
+    )
+    .unwrap();
+    assert!(m.get("backchannel_authentication_endpoint").is_none());
+}

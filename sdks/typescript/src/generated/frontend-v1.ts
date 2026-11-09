@@ -1310,6 +1310,653 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scim/v2/Users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** SCIM: lists or filters Users; filter depth ≤ 32 and length ≤ 4 KB, at most 1000 results, pages of at most 200 with an HMAC'd RFC 9865 cursor (OP-155 m.3 (g)). */
+        get: operations["scimListUsers"];
+        put?: never;
+        /** SCIM: creates a User; the writes go through the account use cases and the client is a Claim source, never a grantor (IDP-23). */
+        post: operations["scimCreateUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scim/v2/Users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** SCIM: one User; a deleted one answers 404. */
+        get: operations["scimGetUser"];
+        /** SCIM: replaces a User. */
+        put: operations["scimReplaceUser"];
+        post?: never;
+        /** SCIM: soft-deletes a User with a tombstone; its id and externalId are never reused (INV-32, OP-73). */
+        delete: operations["scimDeleteUser"];
+        options?: never;
+        head?: never;
+        /** SCIM: PATCH of a User, atomic: one failed operation fails them all. */
+        patch: operations["scimPatchUser"];
+        trace?: never;
+    };
+    "/scim/v2/Groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** SCIM: lists or filters Groups; filter depth ≤ 32 and length ≤ 4 KB, at most 1000 results, pages of at most 200 with an HMAC'd RFC 9865 cursor (OP-155 m.3 (g)). */
+        get: operations["scimListGroups"];
+        put?: never;
+        /** SCIM: creates a Group; the writes go through the account use cases and the client is a Claim source, never a grantor (IDP-23). */
+        post: operations["scimCreateGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scim/v2/Groups/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** SCIM: one Group; a deleted one answers 404. */
+        get: operations["scimGetGroup"];
+        /** SCIM: replaces a Group. */
+        put: operations["scimReplaceGroup"];
+        post?: never;
+        /** SCIM: soft-deletes a Group with a tombstone; its id and externalId are never reused (INV-32, OP-73). */
+        delete: operations["scimDeleteGroup"];
+        options?: never;
+        head?: never;
+        /** SCIM: PATCH of a Group, atomic: one failed operation fails them all. */
+        patch: operations["scimPatchGroup"];
+        trace?: never;
+    };
+    "/scim/v2/Devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** SCIM: lists or filters Devices; filter depth ≤ 32 and length ≤ 4 KB, at most 1000 results, pages of at most 200 with an HMAC'd RFC 9865 cursor (OP-155 m.3 (g)). */
+        get: operations["scimListDevices"];
+        put?: never;
+        /** SCIM: creates a Device; the writes go through the account use cases and the client is a Claim source, never a grantor (IDP-23). */
+        post: operations["scimCreateDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scim/v2/Devices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** SCIM: one Device; a deleted one answers 404. */
+        get: operations["scimGetDevice"];
+        /** SCIM: replaces a Device. */
+        put: operations["scimReplaceDevice"];
+        post?: never;
+        /** SCIM: soft-deletes a Device with a tombstone; its id and externalId are never reused (INV-32, OP-73). */
+        delete: operations["scimDeleteDevice"];
+        options?: never;
+        head?: never;
+        /** SCIM: PATCH of a Device, atomic: one failed operation fails them all. */
+        patch: operations["scimPatchDevice"];
+        trace?: never;
+    };
+    "/scim/v2/ServiceProviderConfig": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** SCIM: what the server supports; bulk.supported is false. */
+        get: operations["scimServiceProviderConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scim/v2/ResourceTypes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** SCIM: the resource types, User, Group and Device. */
+        get: operations["scimResourceTypes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scim/v2/Schemas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** SCIM: the schemas and extensions the server knows. */
+        get: operations["scimSchemas"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/scim/v2/Bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** SCIM Bulk is not offered and always answers 501 (OP-155 m.3 (g)). */
+        post: operations["scimBulk"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/saml/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The SAML IdP metadata, signed with the realm's saml key (OP-155 m.3 (e)). */
+        get: operations["samlMetadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/saml/sso": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** SAML SSO, HTTP-Redirect binding: access-server keeps the cookies and forwards the AuthnRequest to the SAML gateway with session_attest (OP-155 m.3 (c)). */
+        get: operations["samlSsoRedirect"];
+        put?: never;
+        /** SAML SSO, HTTP-POST binding. */
+        post: operations["samlSsoPost"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/saml/sso/{sp}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** IdP-initiated SSO to one service provider, only when its registration allows it; the assertion lives 2 minutes. */
+        get: operations["samlIdpInitiated"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/saml/slo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** SAML single logout, HTTP-Redirect binding. */
+        get: operations["samlSloRedirect"];
+        put?: never;
+        /** SAML single logout, HTTP-POST binding. */
+        post: operations["samlSloPost"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/saml/ecp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** SAML ECP (PAOS) with a per-application credential, never Basic authentication with the account's password (OP-155 m.3 (e)). */
+        post: operations["samlEcp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/wsfed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** WS-Federation passive requestor: wsignin1.0 and wsignout1.0 with a SAML 1.1 or 2.0 token per relying party (OP-155 m.3 (f)). */
+        get: operations["wsfedPassive"];
+        put?: never;
+        /** WS-Federation passive requestor, POST form. */
+        post: operations["wsfedPassivePost"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/wsfed/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The WS-Federation metadata document. */
+        get: operations["wsfedMetadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/login/upstream/{connection}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Starts sign-in at an enterprise upstream identity provider (OIDC or SAML); home realm discovery confirms the organization first when it is on (OP-155 m.3 (h)). */
+        get: operations["startUpstreamSignIn"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/login/upstream/{connection}/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The OIDC upstream's redirect back; its subject key is the connection's own, sub or [tid, oid]. */
+        get: operations["upstreamCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/login/upstream/{connection}/saml/acs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The SAML upstream's assertion consumer service; an unsolicited Response is refused unless the connection opens it, and the raw assertion is sealed under the subject's DEK. */
+        post: operations["upstreamSamlAcs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/login/upstream/{connection}/saml/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Access's SP metadata for one SAML upstream connection. */
+        get: operations["upstreamSamlMetadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sso-setup/{link}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What a one-use, 72-hour organization setup link opens: the organization and the wizard's steps (OP-155 m.3 (i)). */
+        get: operations["getSsoSetup"];
+        put?: never;
+        /** Submits a wizard step: the identity provider's metadata or a test sign-in; enacting the connection stays the organization root's idp.upstream.register. */
+        post: operations["submitSsoSetup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/.well-known/openid-federation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The realm issuer's OpenID Federation entity configuration, signed with its federation key (OP-155 m.3 (j)). */
+        get: operations["oidfEntityConfiguration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/fetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fetches a subordinate statement; served only in the intermediate or trust anchor role. */
+        get: operations["oidfFetch"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists subordinates; served only in the intermediate or trust anchor role. */
+        get: operations["oidfList"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resolves an entity's metadata through its trust chain, at most 8 links; rate-limited. */
+        get: operations["oidfResolve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/trust_mark_status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Whether a trust mark is still active. */
+        post: operations["oidfTrustMarkStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/federation/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Explicit OIDF client registration, when the realm opened it. */
+        post: operations["oidfRegister"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ciba/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What a CIBA request asks: the client's name, the binding message and the scope, for the person's Approval Surface (OP-155 m.3 (l)). */
+        post: operations["previewCiba"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ciba/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approves or declines a CIBA request with the person's AAS; the client learns it by poll or ping. */
+        post: operations["approveCiba"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/login/certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Certificate, PIV and CAC sign-in on the mTLS listener: trust comes only from TLS that ends at access-server, never from a forwarded header (OP-155 m.3 (k), (m)). */
+        get: operations["certificateLoginPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/ldap-credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The person's directory app passwords: application, created, last used; never the password (OP-155 m.3 (n)). */
+        get: operations["listLdapCredentials"];
+        put?: never;
+        /** Creates a directory app password for one application, shown once and kept as Argon2id. */
+        post: operations["createLdapCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/ldap-credentials/{credential}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revokes a directory app password; nothing is deleted (OP-73). */
+        post: operations["revokeLdapCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/.well-known/openid-credential-issuer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The OID4VCI issuer metadata of the person-attribute issuer (OP-155 m.3 (p)). */
+        get: operations["oid4vciIssuerMetadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oid4vci/credential": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issues one person-attribute credential bound to the holder's device key or agent KeyBinding; other types are refused. */
+        post: operations["oid4vciCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oid4vci/nonce": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A fresh c_nonce for the holder's key proof. */
+        post: operations["oid4vciNonce"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/credential-offers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The credential types the person may add to a wallet. */
+        get: operations["listCredentialOffers"];
+        put?: never;
+        /** Makes a pre-authorized credential offer for one type, after the person's AAS. */
+        post: operations["createCredentialOffer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3478,6 +4125,849 @@ export interface operations {
                     "application/json": Record<string, never>;
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimListUsers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimCreateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimGetUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimReplaceUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimDeleteUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimPatchUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimListGroups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimCreateGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimGetGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimReplaceGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimDeleteGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimPatchGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimListDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimCreateDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimGetDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimReplaceDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimDeleteDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimPatchDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimServiceProviderConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimResourceTypes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimSchemas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    scimBulk: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    samlMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    samlSsoRedirect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    samlSsoPost: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    samlIdpInitiated: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sp: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    samlSloRedirect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    samlSloPost: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    samlEcp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    wsfedPassive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    wsfedPassivePost: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    wsfedMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    startUpstreamSignIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    upstreamCallback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    upstreamSamlAcs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    upstreamSamlMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getSsoSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    submitSsoSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    oidfEntityConfiguration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    oidfFetch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    oidfList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    oidfResolve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    oidfTrustMarkStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    oidfRegister: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    previewCiba: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    approveCiba: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    certificateLoginPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listLdapCredentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    createLdapCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    revokeLdapCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credential: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    oid4vciIssuerMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    oid4vciCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    oid4vciNonce: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listCredentialOffers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    createCredentialOffer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
             default: components["responses"]["Problem"];
         };
     };

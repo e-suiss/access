@@ -359,6 +359,10 @@ fn schemas() -> Value {
             "type": "object",
             "description": "The realm's settings: JOSE algorithm, Argon2, RP ID, CIMD, sign-in requirements (TN-132), console session policy (TN-129), branding (TN-106), mappers (TN-117), the extension policy (`allow_private_targets`, `hook_disclosure`; OP-151 m.10 (e)), the hosted pages' `csp_mode` (`enforce` or `report_only`), `related_origins` (TN-18) and `locale_overrides` by locale and key (X35).",
         },
+        "Declared": {
+            "type": "object",
+            "description": "A resource whose route is declared and not served yet; its lane names its members when it serves it (OP-155 m.4).",
+        },
         "Page": {
             "type": "object",
             "additionalProperties": false,

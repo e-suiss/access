@@ -2614,6 +2614,1193 @@
           }
         }
       }
+    },
+    "/scim/v2/Users": {
+      "get": {
+        "operationId": "scimListUsers",
+        "summary": "SCIM: lists or filters Users; filter depth ≤ 32 and length ≤ 4 KB, at most 1000 results, pages of at most 200 with an HMAC'd RFC 9865 cursor (OP-155 m.3 (g)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      },
+      "post": {
+        "operationId": "scimCreateUser",
+        "summary": "SCIM: creates a User; the writes go through the account use cases and the client is a Claim source, never a grantor (IDP-23).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/scim/v2/Users/{id}": {
+      "get": {
+        "operationId": "scimGetUser",
+        "summary": "SCIM: one User; a deleted one answers 404.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      },
+      "put": {
+        "operationId": "scimReplaceUser",
+        "summary": "SCIM: replaces a User.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      },
+      "patch": {
+        "operationId": "scimPatchUser",
+        "summary": "SCIM: PATCH of a User, atomic: one failed operation fails them all.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      },
+      "delete": {
+        "operationId": "scimDeleteUser",
+        "summary": "SCIM: soft-deletes a User with a tombstone; its id and externalId are never reused (INV-32, OP-73).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      }
+    },
+    "/scim/v2/Groups": {
+      "get": {
+        "operationId": "scimListGroups",
+        "summary": "SCIM: lists or filters Groups; filter depth ≤ 32 and length ≤ 4 KB, at most 1000 results, pages of at most 200 with an HMAC'd RFC 9865 cursor (OP-155 m.3 (g)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      },
+      "post": {
+        "operationId": "scimCreateGroup",
+        "summary": "SCIM: creates a Group; the writes go through the account use cases and the client is a Claim source, never a grantor (IDP-23).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/scim/v2/Groups/{id}": {
+      "get": {
+        "operationId": "scimGetGroup",
+        "summary": "SCIM: one Group; a deleted one answers 404.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      },
+      "put": {
+        "operationId": "scimReplaceGroup",
+        "summary": "SCIM: replaces a Group.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      },
+      "patch": {
+        "operationId": "scimPatchGroup",
+        "summary": "SCIM: PATCH of a Group, atomic: one failed operation fails them all.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      },
+      "delete": {
+        "operationId": "scimDeleteGroup",
+        "summary": "SCIM: soft-deletes a Group with a tombstone; its id and externalId are never reused (INV-32, OP-73).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      }
+    },
+    "/scim/v2/Devices": {
+      "get": {
+        "operationId": "scimListDevices",
+        "summary": "SCIM: lists or filters Devices; filter depth ≤ 32 and length ≤ 4 KB, at most 1000 results, pages of at most 200 with an HMAC'd RFC 9865 cursor (OP-155 m.3 (g)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      },
+      "post": {
+        "operationId": "scimCreateDevice",
+        "summary": "SCIM: creates a Device; the writes go through the account use cases and the client is a Claim source, never a grantor (IDP-23).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/scim/v2/Devices/{id}": {
+      "get": {
+        "operationId": "scimGetDevice",
+        "summary": "SCIM: one Device; a deleted one answers 404.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      },
+      "put": {
+        "operationId": "scimReplaceDevice",
+        "summary": "SCIM: replaces a Device.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      },
+      "patch": {
+        "operationId": "scimPatchDevice",
+        "summary": "SCIM: PATCH of a Device, atomic: one failed operation fails them all.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      },
+      "delete": {
+        "operationId": "scimDeleteDevice",
+        "summary": "SCIM: soft-deletes a Device with a tombstone; its id and externalId are never reused (INV-32, OP-73).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      }
+    },
+    "/scim/v2/ServiceProviderConfig": {
+      "get": {
+        "operationId": "scimServiceProviderConfig",
+        "summary": "SCIM: what the server supports; bulk.supported is false.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/scim/v2/ResourceTypes": {
+      "get": {
+        "operationId": "scimResourceTypes",
+        "summary": "SCIM: the resource types, User, Group and Device.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/scim/v2/Schemas": {
+      "get": {
+        "operationId": "scimSchemas",
+        "summary": "SCIM: the schemas and extensions the server knows.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/scim/v2/Bulk": {
+      "post": {
+        "operationId": "scimBulk",
+        "summary": "SCIM Bulk is not offered and always answers 501 (OP-155 m.3 (g)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/saml/metadata": {
+      "get": {
+        "operationId": "samlMetadata",
+        "summary": "The SAML IdP metadata, signed with the realm's saml key (OP-155 m.3 (e)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/saml/sso": {
+      "get": {
+        "operationId": "samlSsoRedirect",
+        "summary": "SAML SSO, HTTP-Redirect binding: access-server keeps the cookies and forwards the AuthnRequest to the SAML gateway with session_attest (OP-155 m.3 (c)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      },
+      "post": {
+        "operationId": "samlSsoPost",
+        "summary": "SAML SSO, HTTP-POST binding.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/saml/sso/{sp}": {
+      "get": {
+        "operationId": "samlIdpInitiated",
+        "summary": "IdP-initiated SSO to one service provider, only when its registration allows it; the assertion lives 2 minutes.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "sp",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      }
+    },
+    "/saml/slo": {
+      "get": {
+        "operationId": "samlSloRedirect",
+        "summary": "SAML single logout, HTTP-Redirect binding.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      },
+      "post": {
+        "operationId": "samlSloPost",
+        "summary": "SAML single logout, HTTP-POST binding.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/saml/ecp": {
+      "post": {
+        "operationId": "samlEcp",
+        "summary": "SAML ECP (PAOS) with a per-application credential, never Basic authentication with the account's password (OP-155 m.3 (e)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/wsfed": {
+      "get": {
+        "operationId": "wsfedPassive",
+        "summary": "WS-Federation passive requestor: wsignin1.0 and wsignout1.0 with a SAML 1.1 or 2.0 token per relying party (OP-155 m.3 (f)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      },
+      "post": {
+        "operationId": "wsfedPassivePost",
+        "summary": "WS-Federation passive requestor, POST form.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/wsfed/metadata": {
+      "get": {
+        "operationId": "wsfedMetadata",
+        "summary": "The WS-Federation metadata document.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/login/upstream/{connection}": {
+      "get": {
+        "operationId": "startUpstreamSignIn",
+        "summary": "Starts sign-in at an enterprise upstream identity provider (OIDC or SAML); home realm discovery confirms the organization first when it is on (OP-155 m.3 (h)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/login/upstream/{connection}/callback": {
+      "get": {
+        "operationId": "upstreamCallback",
+        "summary": "The OIDC upstream's redirect back; its subject key is the connection's own, sub or [tid, oid].",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/login/upstream/{connection}/saml/acs": {
+      "post": {
+        "operationId": "upstreamSamlAcs",
+        "summary": "The SAML upstream's assertion consumer service; an unsolicited Response is refused unless the connection opens it, and the raw assertion is sealed under the subject's DEK.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/login/upstream/{connection}/saml/metadata": {
+      "get": {
+        "operationId": "upstreamSamlMetadata",
+        "summary": "Access's SP metadata for one SAML upstream connection.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/sso-setup/{link}": {
+      "get": {
+        "operationId": "getSsoSetup",
+        "summary": "What a one-use, 72-hour organization setup link opens: the organization and the wizard's steps (OP-155 m.3 (i)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "link",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      },
+      "post": {
+        "operationId": "submitSsoSetup",
+        "summary": "Submits a wizard step: the identity provider's metadata or a test sign-in; enacting the connection stays the organization root's idp.upstream.register.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "link",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/.well-known/openid-federation": {
+      "get": {
+        "operationId": "oidfEntityConfiguration",
+        "summary": "The realm issuer's OpenID Federation entity configuration, signed with its federation key (OP-155 m.3 (j)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/federation/fetch": {
+      "get": {
+        "operationId": "oidfFetch",
+        "summary": "Fetches a subordinate statement; served only in the intermediate or trust anchor role.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/federation/list": {
+      "get": {
+        "operationId": "oidfList",
+        "summary": "Lists subordinates; served only in the intermediate or trust anchor role.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/federation/resolve": {
+      "get": {
+        "operationId": "oidfResolve",
+        "summary": "Resolves an entity's metadata through its trust chain, at most 8 links; rate-limited.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/federation/trust_mark_status": {
+      "post": {
+        "operationId": "oidfTrustMarkStatus",
+        "summary": "Whether a trust mark is still active.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/federation/register": {
+      "post": {
+        "operationId": "oidfRegister",
+        "summary": "Explicit OIDF client registration, when the realm opened it.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/ciba/preview": {
+      "post": {
+        "operationId": "previewCiba",
+        "summary": "What a CIBA request asks: the client's name, the binding message and the scope, for the person's Approval Surface (OP-155 m.3 (l)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/ciba/approval": {
+      "post": {
+        "operationId": "approveCiba",
+        "summary": "Approves or declines a CIBA request with the person's AAS; the client learns it by poll or ping.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/login/certificate": {
+      "get": {
+        "operationId": "certificateLoginPage",
+        "summary": "Certificate, PIV and CAC sign-in on the mTLS listener: trust comes only from TLS that ends at access-server, never from a forwarded header (OP-155 m.3 (k), (m)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/ldap-credentials": {
+      "get": {
+        "operationId": "listLdapCredentials",
+        "summary": "The person's directory app passwords: application, created, last used; never the password (OP-155 m.3 (n)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      },
+      "post": {
+        "operationId": "createLdapCredential",
+        "summary": "Creates a directory app password for one application, shown once and kept as Argon2id.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/ldap-credentials/{credential}/revoke": {
+      "post": {
+        "operationId": "revokeLdapCredential",
+        "summary": "Revokes a directory app password; nothing is deleted (OP-73).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "credential",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/.well-known/openid-credential-issuer": {
+      "get": {
+        "operationId": "oid4vciIssuerMetadata",
+        "summary": "The OID4VCI issuer metadata of the person-attribute issuer (OP-155 m.3 (p)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/oid4vci/credential": {
+      "post": {
+        "operationId": "oid4vciCredential",
+        "summary": "Issues one person-attribute credential bound to the holder's device key or agent KeyBinding; other types are refused.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/oid4vci/nonce": {
+      "post": {
+        "operationId": "oid4vciNonce",
+        "summary": "A fresh c_nonce for the holder's key proof.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/credential-offers": {
+      "get": {
+        "operationId": "listCredentialOffers",
+        "summary": "The credential types the person may add to a wallet.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      },
+      "post": {
+        "operationId": "createCredentialOffer",
+        "summary": "Makes a pre-authorized credential offer for one type, after the person's AAS.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
     }
   },
   "components": {

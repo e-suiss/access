@@ -23,7 +23,7 @@ use access_identity_ui::app::Hosted;
 use access_identity_ui::domain::frontend_v1::{ROUTES, Verb};
 use access_identity_ui::ports::{Clock, Kits, Messages};
 use axum::Router;
-use axum::routing::{delete, get, post, put};
+use axum::routing::{delete, get, patch, post, put};
 
 pub use assets::{Assets, AssetsError};
 pub use did::router as did_router;
@@ -307,6 +307,7 @@ where
                 Verb::Post => reads.route(&path, post(web::not_yet_served::<D, K, KI, C, M>)),
                 Verb::Put => reads.route(&path, put(web::not_yet_served::<D, K, KI, C, M>)),
                 Verb::Delete => reads.route(&path, delete(web::not_yet_served::<D, K, KI, C, M>)),
+                Verb::Patch => reads.route(&path, patch(web::not_yet_served::<D, K, KI, C, M>)),
             };
         }
     }

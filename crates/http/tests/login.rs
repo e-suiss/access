@@ -1142,6 +1142,7 @@ async fn a_planned_frontend_route_answers_not_yet_served_only_for_a_known_realm(
             Verb::Post => "POST",
             Verb::Put => "PUT",
             Verb::Delete => "DELETE",
+            Verb::Patch => "PATCH",
         };
         let a = b.send(method, &path, None, Some("k")).await;
         assert_eq!(a.status, StatusCode::NOT_IMPLEMENTED, "{}", r.operation);
@@ -1151,6 +1152,16 @@ async fn a_planned_frontend_route_answers_not_yet_served_only_for_a_known_realm(
     b.host = "evil.example".into();
     let a = b.send("POST", "/v1/recovery", None, Some("k")).await;
     assert_eq!(a.status, StatusCode::NOT_FOUND);
+    // OP-155 m.4
+    for (method, path) in [
+        ("GET", "/scim/v2/Users"),
+        ("POST", "/saml/sso"),
+        ("GET", "/.well-known/openid-federation"),
+        ("POST", "/oid4vci/credential"),
+    ] {
+        let a = b.send(method, path, None, Some("k")).await;
+        assert_eq!(a.status, StatusCode::NOT_FOUND, "{path}");
+    }
 }
 
 // EI-18 §11.4.5 OP-154 m.3 (k) Ek B 4538

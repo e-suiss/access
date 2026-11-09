@@ -216,6 +216,274 @@ const STAGE9: [Route; 20] = [
     ),
 ];
 
+/// The Stage 10 realm routes, declared before their lanes serve them (OP-155 m.4): each answers
+/// `501 not-yet-served` behind its permission until its lane fills the handler.
+const STAGE10: [Route; 45] = [
+    list(
+        "/admin/v1/realms/{slug}/saml-sps",
+        "listSamlSps",
+        "The realm's SAML service providers and WS-Federation relying parties: entity ID, template, status (OP-155 m.3 (e)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/saml-sps",
+        "registerSamlSp",
+        "Registers a SAML service provider from its metadata or SSO catalog template: idp.saml.sp_register, or sp_mapping (reserved) when the template maps a Claim that selects authority.",
+    ),
+    read(
+        "/admin/v1/realms/{slug}/saml-sps/{sp}",
+        "getSamlSp",
+        "One SAML service provider: entity ID, ACS and SLO endpoints, NameID format, attribute release, signing algorithm and its interop profile.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/saml-sps/{sp}",
+        "putSamlSp",
+        "Replaces a SAML service provider's registration: idp.saml.sp_update.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/saml-sps/{sp}/retire",
+        "retireSamlSp",
+        "Retires a SAML service provider: idp.saml.sp_retire; its entity ID is never reused and nothing is deleted (OP-73).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/saml-certificate",
+        "putSamlCertificatePolicy",
+        "Sets the SAML signing certificate rotation policy: idp.saml.cert_policy (OP-155 m.3 (e)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/settings/saml-certificate/replace",
+        "replaceSamlCertificate",
+        "Replaces the SAML signing certificate at once, outside the policy: idp.saml.cert_emergency (reserved).",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/scim-clients",
+        "listScimClients",
+        "The realm's inbound SCIM clients: name, tolerance profile, status, last request (OP-155 m.3 (g)).",
+    ),
+    secret(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/scim-clients",
+        "registerScimClient",
+        "Registers an inbound SCIM client: idp.scim.client_register; its opaque bearer secret is shown once and only its SHA-256 is kept.",
+    ),
+    secret(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/scim-clients/{scim_client}/secret/rotate",
+        "rotateScimSecret",
+        "Replaces an inbound SCIM client's bearer secret, shown once; the old one stops working at once (OP-155 m.3 (g)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/scim-clients/{scim_client}/retire",
+        "retireScimClient",
+        "Retires an inbound SCIM client: idp.scim.client_retire.",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/scim-targets",
+        "listScimTargets",
+        "The realm's outbound SCIM targets and their last results; never a secret.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/scim-targets",
+        "registerScimTarget",
+        "Registers an outbound SCIM target whose secret is sealed in the vault: idp.scim.outbound_register.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/scim-targets/{target}/retire",
+        "retireScimTarget",
+        "Retires an outbound SCIM target: idp.scim.outbound_retire.",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/gateways",
+        "listGateways",
+        "The realm's edge gateways (SAML, LDAP, RADIUS, Kerberos) with their internal identity and status (OP-155 m.3 (c)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/gateways",
+        "registerGateway",
+        "Registers an edge gateway and its mTLS identity urn:suiss:access:gw:<kind>:<name>: idp.gateway.register.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/gateways/{gateway}/retire",
+        "retireGateway",
+        "Retires an edge gateway; its identity is never reused: idp.gateway.retire.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/gateways/{gateway}/keytab-policy",
+        "putKeytabPolicy",
+        "Sets a Kerberos gateway's keytab rotation policy: idp.gateway.keytab_policy (OP-155 m.3 (o)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/gateways/{gateway}/keytab/replace",
+        "replaceKeytab",
+        "Replaces a Kerberos gateway's keytab at once: idp.gateway.keytab_emergency (reserved).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/gateways/{gateway}/radius-clients",
+        "registerRadiusClient",
+        "Registers a RadSec client of a RADIUS gateway; RADIUS over UDP is never answered: idp.gateway.radius_client_register (OP-155 m.3 (f)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/federation",
+        "putFederation",
+        "Turns OpenID Federation on as a leaf (idp.federation.enable) or off (disable) (OP-155 m.3 (j)).",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/federation/trust-anchors",
+        "listTrustAnchors",
+        "The trust anchors the realm trusts and each chain's state.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/federation/trust-anchors",
+        "addTrustAnchor",
+        "Trusts a federation's trust anchor: idp.federation.trust_anchor_add (reserved).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/federation/trust-anchors/{anchor}/remove",
+        "removeTrustAnchor",
+        "Stops trusting a trust anchor: idp.federation.trust_anchor_remove.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/federation-authority",
+        "putFederationAuthority",
+        "Turns on the intermediate or trust anchor role, off by default: idp.federation.ta_enable.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/federation-registration",
+        "putFederationRegistration",
+        "Opens (idp.federation.registration_open) or closes (registration_close) OIDF client registration.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/vc-verifier",
+        "putVcVerifier",
+        "Turns the OID4VP verifier on (idp.vc.verifier_enable) or off (verifier_disable) (OP-155 m.3 (p)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/vc-trusted-lists",
+        "putVcTrustedLists",
+        "Sets the trusted lists whose issuers the verifier accepts: idp.vc.trusted_list (reserved).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/vc-issuer",
+        "putVcIssuer",
+        "Turns the person-attribute OID4VCI issuer on (idp.vc.issuer_enable) or off (issuer_disable).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/clients/{client_id}/profile",
+        "putClientProfile",
+        "Puts a client under FAPI 2.0 (idp.client.profile) or takes it out (profile_loosen) (OP-155 m.3 (k)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/clients/{client_id}/legacy-authentication",
+        "putClientLegacyAuthentication",
+        "Allows a client client_secret_post or client_secret_jwt: idp.client.auth_method_legacy.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/clients/{client_id}/signing-alg",
+        "putClientSigningAlg",
+        "Lets a client take RS256 identity assertions: idp.client.alg_rs256; the realm's RSA-3072 key is made on first use (MD-6).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/clients/{client_id}/encryption",
+        "putClientEncryption",
+        "Turns on JWE for a client's identity assertions, userinfo or JARM: idp.client.encryption; RSA1_5 is never offered.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/clients/{client_id}/saml-bearer",
+        "putClientSamlBearer",
+        "Allows a client the SAML 2.0 bearer grant from an accepted SAML upstream: idp.client.saml_bearer.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/clients/{client_id}/legacy-bearer",
+        "putClientLegacyBearer",
+        "Grants a client the legacy bearer exception, never advertised: idp.client.legacy_bearer.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/ciba",
+        "putCiba",
+        "Turns CIBA poll and ping on (idp.realm.ciba) or off (ciba_close) (OP-155 m.3 (l)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/certificate-login",
+        "putCertificateLogin",
+        "Turns on certificate, PIV and CAC sign-in: idp.realm.certificate_login (OP-155 m.3 (m)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/mtls-aliases",
+        "putMtlsAliases",
+        "Publishes mtls_endpoint_aliases on the mTLS listener: idp.realm.mtls_aliases.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/hrd",
+        "putHrd",
+        "Turns home realm discovery on (idp.realm.hrd) or off (hrd_close) (OP-155 m.3 (h)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/frontchannel-logout",
+        "putFrontchannelLogout",
+        "Lets the realm's clients opt in to front-channel logout: idp.realm.frontchannel_logout.",
+    ),
+    read(
+        "/admin/v1/realms/{slug}/organizations/{organization}/sso-enforcement/preview",
+        "previewSsoEnforcement",
+        "What enforcing SSO on the organization would end: members' local sign-in methods, API keys, sign-ins and refresh families, service accounts included, and the pending invitations (OP-155 m.3 (i)); changes nothing.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/organizations/{organization}/sso-enforcement",
+        "enforceOrganizationSso",
+        "Enforces SSO on the organization: idp.org.sso_enforce; the body names the pending invitations' fate (cancel or redirect_to_sso), there is no default.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/organizations/{organization}/sso-enforcement/lift",
+        "liftOrganizationSso",
+        "Lifts the organization's SSO enforcement: idp.org.sso_enforce_lift.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/organizations/{organization}/setup-links",
+        "createOrganizationSetupLink",
+        "Issues the organization's one-use SSO setup link, valid 72 hours and sent by Relay: idp.org.setup_link.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/upstream-idps/{name}/assurance-map",
+        "putUpstreamAssuranceMap",
+        "Maps an upstream's acr, amr or AuthnContextClassRef onto assurance; unmapped values count as the lowest class: idp.upstream.assurance_map (reserved).",
+    ),
+];
+
 /// Every realm resource route, in contract order.
 pub const ROWS: &[Route] = &ALL_ROWS;
 
@@ -225,8 +493,8 @@ const BASE_LEN: usize = BASE.len();
     clippy::indexing_slicing,
     reason = "evaluated at compile time; an out-of-range index fails the build"
 )]
-const ALL_ROWS: [Route; BASE_LEN + STAGE9.len()] = {
-    let mut out = [BASE[0]; BASE_LEN + STAGE9.len()];
+const ALL_ROWS: [Route; BASE_LEN + STAGE9.len() + STAGE10.len()] = {
+    let mut out = [BASE[0]; BASE_LEN + STAGE9.len() + STAGE10.len()];
     let mut i = 0;
     while i < BASE_LEN {
         out[i] = BASE[i];
@@ -237,12 +505,30 @@ const ALL_ROWS: [Route; BASE_LEN + STAGE9.len()] = {
         out[BASE_LEN + j] = STAGE9[j];
         j += 1;
     }
+    let mut k = 0;
+    while k < STAGE10.len() {
+        out[BASE_LEN + STAGE9.len() + k] = STAGE10[k];
+        k += 1;
+    }
     out
 };
 
-/// Whether a realm row is a Stage 9 declaration (OP-154 m.4).
+/// Whether a realm row is a Stage 9 or Stage 10 declaration (OP-154 m.4, OP-155 m.4).
 fn declared(operation_id: &str) -> bool {
-    STAGE9.iter().any(|r| r.operation_id == operation_id)
+    STAGE9
+        .iter()
+        .chain(STAGE10.iter())
+        .any(|r| r.operation_id == operation_id)
+}
+
+/// The response schema a declared route will answer with: a page for a list, a declared
+/// resource for a read, the write result for a write (OP-155 m.4).
+fn planned_body(operation_id: &str) -> &'static str {
+    match STAGE10.iter().find(|r| r.operation_id == operation_id) {
+        Some(r) if r.verb == Verb::Get && !r.query.is_empty() => "Page",
+        Some(r) if r.verb == Verb::Get => "Declared",
+        _ => "WriteResult",
+    }
 }
 
 /// Whether a realm row is declared and not served yet (OP-154 m.4).
@@ -913,7 +1199,7 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
             Shape::List(&["resource", "display_name"]),
         ),
         "registerProtectedResource" => (ProtectedResources, CREATE),
-        o if declared(o) => (Settings, Shape::Planned("WriteResult")),
+        o if declared(o) => (Settings, Shape::Planned(planned_body(o))),
         "listClients" => (
             Clients,
             Shape::List(&["client_id", "display_name", "status"]),

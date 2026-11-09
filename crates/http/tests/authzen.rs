@@ -676,7 +676,7 @@ async fn search_pages_through_results() {
     assert_eq!(body["code"], "search");
 }
 
-// OP-154 m.4
+// OP-154 m.4, OP-155 m.4
 #[tokio::test]
 async fn a_reserved_search_kind_is_not_yet_served() {
     for kind in access_authority_core::query::RESERVED_KINDS {
