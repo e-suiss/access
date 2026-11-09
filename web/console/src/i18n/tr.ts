@@ -397,6 +397,16 @@ export const tr: Record<Key, string> = {
   settingsRpCountHint: "Hepsinin çalışmayı bırakacağını onaylamak için sayıyı yazın.",
   settingsRpIrreversible: "Kaydedildi. Bu değişiklik passkey'ler için geri döndürülemez.",
   settingsRpMismatch: "Sayı bu realm'in passkey'leriyle eşleşmiyor. Hiçbir şey değiştirilmedi.",
+  settingsCspMode: "Sayfa güvenlik politikası",
+  settingsCspCurrent: "Şu an",
+  settingsCspEnforce: "Uygula: markanın görsel kökenleri yalnız listelendiği gibi yüklenir",
+  settingsCspReportOnly: "Yalnız raporla: markanın görsel kökenleri uygulanmaz, raporlanır",
+  settingsCspLoosens:
+    "Yalnız raporlamaya geçmek giriş sayfalarını gevşetir ve daha üst katman bir imza ister.",
+  settingsDbsc: "Tarayıcı destekliyorsa her girişi cihazın anahtarına bağla (DBSC)",
+  settingsDbscOn: "Girişlere cihaz anahtarı önerilir.",
+  settingsDbscOff: "Girişlere cihaz anahtarı önerilmez.",
+  settingsRelatedList: "İlişkili kökenler, her satıra bir tane (https://…)",
   settingsRelated: "İlişkili kökenler",
   settingsRelatedText:
     "Her ilişkili köken, public suffix listesindeki kayıt edilebilir bir alan adında olmalıdır ve en çok 5 farklı etikete izin verilir.",

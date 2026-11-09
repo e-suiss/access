@@ -131,6 +131,9 @@ function readIntent(method: string, target: string): string {
 /** The `idp.*` action each admin operation compiles to (identity-admin). */
 const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   patchBranding: ["idp.realm", "branding"],
+  putCspMode: ["idp.realm", "csp_mode"],
+  patchSigninPolicy: ["idp.realm", "signin_policy"],
+  putRelatedOrigins: ["idp.realm", "related_origins"],
   putRpId: ["idp.realm", "rp_id"],
   suspendAccount: ["idp.account", "suspend"],
   reactivateAccount: ["idp.account", "reactivate"],
@@ -140,6 +143,7 @@ export interface Write {
   readonly method: string;
   readonly path: string;
   readonly body: Record<string, unknown>;
+  readonly ifMatch?: string;
 }
 
 export interface Seen {
@@ -255,7 +259,7 @@ export class ConsoleMock {
         .map((c) => c.trim().split("=", 2))
         .filter((c): c is [string, string] => c.length === 2),
     );
-    const reply = async (status: number, body?: unknown) => {
+    const reply = async (status: number, body?: unknown, extra: Record<string, string> = {}) => {
       this.seen.push({
         method: r.method(),
         path,
@@ -265,6 +269,7 @@ export class ConsoleMock {
       await route.fulfill({
         status,
         contentType: "application/json",
+        headers: extra,
         body: body === undefined ? "" : JSON.stringify(body),
       });
     };
@@ -442,7 +447,13 @@ export class ConsoleMock {
         ) {
           return problem(409, "passkey-loss-not-acknowledged");
         }
-        this.writes.push({ method: r.method(), path: rest, body: b });
+        const ifMatch = headers["if-match"];
+        this.writes.push({
+          method: r.method(),
+          path: rest,
+          body: b,
+          ...(ifMatch === undefined ? {} : { ifMatch }),
+        });
         return reply(200, {
           exercise_id: Buffer.alloc(32, this.writes.length).toString("base64url"),
           position: { seq: this.writes.length },
@@ -450,7 +461,8 @@ export class ConsoleMock {
       }
       const answer = this.admin.get(rest);
       if (answer === undefined) return problem(404, "not-found");
-      return reply(200, answer);
+      // OP-65: the settings view carries the ETag its writes send back as If-Match
+      return reply(200, answer, rest.endsWith("/settings") ? { etag: '"settings-1"' } : {});
     }
     // OP-151 m.19: a commit goes on only with the session's own commit AIS
     if (path === "/proxy/adp/evaluation" || path === "/proxy/adp/audit/export") {

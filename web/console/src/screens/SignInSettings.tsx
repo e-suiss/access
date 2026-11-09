@@ -1,20 +1,23 @@
 // §8.17.4.1 identity plane note, E34, MD-14: realm configuration. Every change is drafted, shown
 // on the signature screen and committed as one Exercise. The RP ID change is marked irreversible
 // for passkeys (TN-17, X-L12); a new realm's first 90 minutes are shown (TN-111, CR-25); delayed
-// signals (§8.13) and a missing GeoIP source (OP-151 m.3 (b)) are stated, never hidden.
+// signals (§8.13) and a missing GeoIP source (OP-151 m.3 (b)) are stated, never hidden. The page
+// CSP mode, the DBSC switch and the Related Origins are set here too (OP-153 m.22 (c), (g), (k)).
 import { useState, type ReactElement } from "react";
 
 import { t } from "../i18n/index.js";
-import { adminGet, change, type WriteResult } from "../lib/admin.js";
+import { adminGet, adminGetTagged, change, type WriteResult } from "../lib/admin.js";
 import { Problem } from "../lib/api.js";
 import { type Ctx, at, Field, Panel, Show, useLoad, useRun } from "./parts.js";
 import { UpstreamLink } from "./UpstreamLink.js";
 
 interface Settings {
   readonly rp_id?: string | null;
-  readonly signin_policy?: unknown;
+  readonly signin_policy?: { readonly dbsc?: boolean };
   readonly session_policy?: unknown;
   readonly branding?: { readonly display_name?: string | null };
+  readonly csp_mode?: "enforce" | "report_only";
+  readonly related_origins?: readonly string[];
   /** Sections the repository manages (GitOps); shown read-only. */
   readonly managed?: readonly string[];
 }
@@ -116,7 +119,161 @@ function Keys({ ctx }: { readonly ctx: Ctx }): ReactElement {
   );
 }
 
-function Branding({ ctx, s }: { readonly ctx: Ctx; readonly s: Settings }): ReactElement {
+/** The settings view and the `ETag` its `PUT`s and `PATCH`es send (OP-65). */
+interface Tagged {
+  readonly s: Settings;
+  readonly etag?: string;
+}
+
+/** OP-153 m.22 (g): report-only loosens the page and is the higher tier; enforce tightens it. */
+function CspMode({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElement {
+  const current = s.csp_mode ?? "enforce";
+  const [mode, setMode] = useState<"enforce" | "report_only">(current);
+  const [w, write] = useRun<WriteResult>();
+  const label = (m: "enforce" | "report_only") =>
+    m === "enforce" ? t("settingsCspEnforce") : t("settingsCspReportOnly");
+  return (
+    <Panel id="csp-mode" title={t("settingsCspMode")}>
+      <p>
+        {t("settingsCspCurrent")}: <span data-testid="csp-current">{label(current)}</span>
+      </p>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          write(() =>
+            change(ctx.instance, ctx.confirm, ctx.session.realm, {
+              operation: "putCspMode",
+              method: "PUT",
+              path: "settings/csp-mode",
+              body: { csp_mode: mode },
+              ...(etag === undefined ? {} : { ifMatch: etag }),
+            }),
+          );
+        }}
+      >
+        {(["enforce", "report_only"] as const).map((m) => (
+          <label key={m}>
+            <input
+              type="radio"
+              name="csp-mode"
+              value={m}
+              checked={mode === m}
+              onChange={() => {
+                setMode(m);
+              }}
+            />{" "}
+            {label(m)}
+          </label>
+        ))}
+        {mode === "report_only" && current === "enforce" && (
+          <p role="note" className="banner" data-testid="csp-loosens">
+            {t("settingsCspLoosens")}
+          </p>
+        )}
+        <button type="submit" disabled={mode === current}>
+          {t("settingsSave")}
+        </button>
+      </form>
+      <Show l={w}>
+        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+      </Show>
+    </Panel>
+  );
+}
+
+/** TN-33, OP-153 m.22 (c): whether a hosted sign-in is offered a device key. */
+function SignInPolicy({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElement {
+  const managed = (s.managed ?? []).includes("signin_policy");
+  const current = s.signin_policy?.dbsc !== false;
+  const [dbsc, setDbsc] = useState(current);
+  const [w, write] = useRun<WriteResult>();
+  return (
+    <Panel id="signin-policy" title={t("settingsSignin")}>
+      <p data-testid="dbsc-state">{current ? t("settingsDbscOn") : t("settingsDbscOff")}</p>
+      {managed ? (
+        <p className="hint">{t("settingsGitops")}</p>
+      ) : (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            write(() =>
+              change(ctx.instance, ctx.confirm, ctx.session.realm, {
+                operation: "patchSigninPolicy",
+                method: "PATCH",
+                path: "settings/signin-policy",
+                body: { dbsc },
+                ...(etag === undefined ? {} : { ifMatch: etag }),
+              }),
+            );
+          }}
+        >
+          <label>
+            <input
+              type="checkbox"
+              checked={dbsc}
+              onChange={(e) => {
+                setDbsc(e.target.checked);
+              }}
+            />{" "}
+            {t("settingsDbsc")}
+          </label>
+          <button type="submit" disabled={dbsc === current}>
+            {t("settingsSave")}
+          </button>
+        </form>
+      )}
+      <Show l={w}>
+        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+      </Show>
+    </Panel>
+  );
+}
+
+/** TN-18, OP-153 m.22 (j), (k): the Related Origins, under the organizations' verified domains. */
+function RelatedOrigins({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElement {
+  const [list, setList] = useState((s.related_origins ?? []).join("\n"));
+  const [w, write] = useRun<WriteResult>();
+  const origins = list
+    .split("\n")
+    .map((o) => o.trim())
+    .filter((o) => o !== "");
+  return (
+    <Panel id="related" title={t("settingsRelated")}>
+      <p data-testid="related-origins">{t("settingsRelatedText")}</p>
+      {!(s.managed ?? []).includes("related_origins") && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            write(() =>
+              change(ctx.instance, ctx.confirm, ctx.session.realm, {
+                operation: "putRelatedOrigins",
+                method: "PUT",
+                path: "settings/related-origins",
+                body: { origins },
+                ...(etag === undefined ? {} : { ifMatch: etag }),
+              }),
+            );
+          }}
+        >
+          <label htmlFor="related-list">{t("settingsRelatedList")}</label>
+          <textarea
+            id="related-list"
+            value={list}
+            onChange={(e) => {
+              setList(e.target.value);
+            }}
+          />
+          <button type="submit">{t("settingsSave")}</button>
+        </form>
+      )}
+      <Show l={w}>
+        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+      </Show>
+    </Panel>
+  );
+}
+
+function Branding({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElement {
   const managed = (s.managed ?? []).includes("branding");
   const [name, setName] = useState(s.branding?.display_name ?? "");
   const [w, write] = useRun<WriteResult>();
@@ -137,6 +294,7 @@ function Branding({ ctx, s }: { readonly ctx: Ctx; readonly s: Settings }): Reac
                 method: "PATCH",
                 path: "settings/branding",
                 body: { display_name: name },
+                ...(etag === undefined ? {} : { ifMatch: etag }),
               }),
             );
           }}
@@ -153,7 +311,7 @@ function Branding({ ctx, s }: { readonly ctx: Ctx; readonly s: Settings }): Reac
 }
 
 /** §8.10, TN-17, IDI-4: an RP ID change is irreversible for passkeys; the count confirms it. */
-function RpId({ ctx, s }: { readonly ctx: Ctx; readonly s: Settings }): ReactElement {
+function RpId({ ctx, s, etag }: { readonly ctx: Ctx } & Tagged): ReactElement {
   const managed = (s.managed ?? []).includes("rp_id");
   const [rp, setRp] = useState("");
   const [count, setCount] = useState("");
@@ -181,6 +339,7 @@ function RpId({ ctx, s }: { readonly ctx: Ctx; readonly s: Settings }): ReactEle
                 method: "PUT",
                 path: "settings/rp-id",
                 body: { rp_id: rp, acknowledge_passkey_loss: count },
+                ...(etag === undefined ? {} : { ifMatch: etag }),
               }).catch((err: unknown) => {
                 if (err instanceof Problem && err.code === "passkey-loss-not-acknowledged") {
                   setMismatch(true);
@@ -209,8 +368,6 @@ function RpId({ ctx, s }: { readonly ctx: Ctx; readonly s: Settings }): ReactEle
       ) : (
         <Show l={w}>{() => <p role="status">{t("settingsRpIrreversible")}</p>}</Show>
       )}
-      <h4>{t("settingsRelated")}</h4>
-      <p data-testid="related-origins">{t("settingsRelatedText")}</p>
     </Panel>
   );
 }
@@ -370,19 +527,28 @@ export function AnalyticsPanel({ ctx }: { readonly ctx: Ctx }): ReactElement {
 }
 
 export function SignInSettings({ ctx }: { readonly ctx: Ctx }): ReactElement {
-  const l = useLoad(() => adminGet<Settings>(ctx.instance, realmPath(ctx, "/settings")));
+  const l = useLoad(async () => {
+    const r = await adminGetTagged(ctx.instance, realmPath(ctx, "/settings"));
+    return { s: r.value as Settings, ...(r.etag === undefined ? {} : { etag: r.etag }) };
+  });
   return (
     <>
       <p>{t("settingsIntro")}</p>
       <Status ctx={ctx} />
       <Keys ctx={ctx} />
       <Show l={l}>
-        {(s) => (
-          <>
-            <Branding ctx={ctx} s={s} />
-            <RpId ctx={ctx} s={s} />
-          </>
-        )}
+        {({ s, etag }) => {
+          const tag = etag === undefined ? {} : { etag };
+          return (
+            <>
+              <SignInPolicy ctx={ctx} s={s} {...tag} />
+              <Branding ctx={ctx} s={s} {...tag} />
+              {!(s.managed ?? []).includes("branding") && <CspMode ctx={ctx} s={s} {...tag} />}
+              <RpId ctx={ctx} s={s} {...tag} />
+              <RelatedOrigins ctx={ctx} s={s} {...tag} />
+            </>
+          );
+        }}
       </Show>
       <Listing ctx={ctx} path="/clients" title={t("settingsClients")} id="clients" />
       <Listing ctx={ctx} path="/upstream-idps" title={t("settingsUpstreams")} id="upstreams" />

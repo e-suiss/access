@@ -33,6 +33,17 @@ export async function adminGet<T>(instance: Instance, path: string): Promise<T> 
   return (await r.json()) as T;
 }
 
+/** A management read and its `ETag`, which a `PUT` or `PATCH` of it sends as `If-Match` (OP-65). */
+export async function adminGetTagged(
+  instance: Instance,
+  path: string,
+): Promise<{ readonly value: unknown; readonly etag?: string }> {
+  const r = await adminRead(instance, path);
+  if (!r.ok) throw await problemOf(r);
+  const etag = r.headers.get("etag");
+  return { value: (await r.json()) as unknown, ...(etag === null ? {} : { etag }) };
+}
+
 /** What a draft returns (`IntentDraft`). */
 export interface IntentDraft {
   readonly operation: string;
@@ -59,6 +70,8 @@ export interface Change {
   readonly method: "POST" | "PUT" | "PATCH";
   readonly path: string;
   readonly body: Readonly<Record<string, unknown>>;
+  /** The resource's `ETag` for a `PUT` or `PATCH` (OP-65). */
+  readonly ifMatch?: string;
 }
 
 function same(a: unknown, b: unknown): boolean {
@@ -112,6 +125,7 @@ export async function change(
     fromB64url(d.intent),
     d.body,
     d.pep,
+    c.ifMatch,
   );
   if (!r.ok) throw await problemOf(r);
   return (await r.json()) as WriteResult;

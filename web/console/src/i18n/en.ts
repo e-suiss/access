@@ -393,6 +393,16 @@ export const en = {
   settingsRelated: "Related origins",
   settingsRelatedText:
     "Each related origin must be on a registrable domain from the public suffix list, and at most 5 distinct labels are allowed.",
+  settingsCspMode: "Page security policy",
+  settingsCspCurrent: "Now",
+  settingsCspEnforce: "Enforce: the branding's image origins load only as listed",
+  settingsCspReportOnly: "Report only: the branding's image origins are reported, not enforced",
+  settingsCspLoosens:
+    "Moving to report only loosens the sign-in pages and needs a higher-tier signature.",
+  settingsDbsc: "Tie each sign-in to the device's key (DBSC) where the browser can",
+  settingsDbscOn: "Sign-ins are offered a device key.",
+  settingsDbscOff: "Sign-ins are not offered a device key.",
+  settingsRelatedList: "Related origins, one per line (https://…)",
   settingsClients: "Apps",
   settingsUpstreams: "Upstream providers",
   settingsSocial: "Social sign-in",

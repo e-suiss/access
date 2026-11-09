@@ -392,6 +392,62 @@ test("an RP ID change needs the passkey count", async ({ page, bff }) => {
   expect(bff.writes.map((w) => w.path)).toEqual(["realms/acme/settings/rp-id"]);
 });
 
+// OP-153 m.22 (g), m.25 (b): report-only loosens the page and is said so before signing
+test("the CSP mode is changed with the settings' ETag and says when it loosens", async ({
+  page,
+  bff,
+}) => {
+  await open(page, bff, "/console/admin/sign-in");
+  const csp = page.getByRole("region", { name: "Page security policy" });
+  await expect(page.getByTestId("csp-current")).toContainText("Enforce");
+  await expect(page.getByTestId("csp-loosens")).toHaveCount(0);
+  await csp.getByLabel(/Report only/).check();
+  await expect(page.getByTestId("csp-loosens")).toContainText("higher-tier signature");
+  await csp.getByRole("button").click();
+  await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
+  await expect(csp.getByRole("status")).toContainText("Recorded");
+  expect(bff.writes).toEqual([
+    {
+      method: "PUT",
+      path: "realms/acme/settings/csp-mode",
+      body: expect.objectContaining({ csp_mode: "report_only" }) as unknown,
+      ifMatch: '"settings-1"',
+    },
+  ]);
+});
+
+// TN-33, OP-153 m.22 (c), m.25 (b), Ek B 4103: the DBSC switch is a sign-in policy patch
+test("the device key offer is turned off by a sign-in policy patch", async ({ page, bff }) => {
+  await open(page, bff, "/console/admin/sign-in");
+  const panel = page.getByRole("region", { name: "Sign-in policy" });
+  await expect(page.getByTestId("dbsc-state")).toHaveText("Sign-ins are offered a device key.");
+  await panel.getByRole("checkbox").uncheck();
+  await panel.getByRole("button").click();
+  await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
+  await expect(panel.getByRole("status")).toContainText("Recorded");
+  expect(bff.writes.map((w) => [w.method, w.path, w.body["dbsc"], w.ifMatch])).toEqual([
+    ["PATCH", "realms/acme/settings/signin-policy", false, '"settings-1"'],
+  ]);
+});
+
+// TN-18, OP-153 m.22 (k): the Related Origins are one list, one change
+test("the related origins are set as one list", async ({ page, bff }) => {
+  await open(page, bff, "/console/admin/sign-in");
+  await page
+    .getByLabel("Related origins, one per line (https://…)")
+    .fill("https://shop.acme.example\n\nhttps://acme-brand.example ");
+  const related = page.getByRole("region", { name: "Related origins" });
+  await related.getByRole("button").click();
+  await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
+  await expect(related.getByRole("status")).toContainText("Recorded");
+  expect(bff.writes.map((w) => [w.path, w.body["origins"]])).toEqual([
+    [
+      "realms/acme/settings/related-origins",
+      ["https://shop.acme.example", "https://acme-brand.example"],
+    ],
+  ]);
+});
+
 // OP-151 m.3, GitOps: a section the repository manages is read-only
 test("a GitOps-managed section is read-only", async ({ page, bff }) => {
   await open(page, bff, "/console/admin/sign-in");

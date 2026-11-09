@@ -281,6 +281,7 @@ export async function adminWrite(
   envelope: Uint8Array,
   body: unknown,
   pep: string = instance.pep,
+  ifMatch?: string,
 ): Promise<Response> {
   const k = await loadKernel();
   const n = nonce();
@@ -306,7 +307,11 @@ export async function adminWrite(
   return call(`/proxy/admin/${path}`, {
     method,
     body,
-    headers: { "x-access-ais": ais, "idempotency-key": b64url(n) },
+    headers: {
+      "x-access-ais": ais,
+      "idempotency-key": b64url(n),
+      ...(ifMatch === undefined ? {} : { "if-match": ifMatch }),
+    },
   });
 }
 
