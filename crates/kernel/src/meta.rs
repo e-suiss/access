@@ -2278,6 +2278,44 @@ fn co_root(count: u64) -> RequirementTerm {
     }
 }
 
+/// The contribution class a Party gives to a root change that makes it a root (L0-META-20,
+/// TN-91): its own consent, bound to the change's intent.
+pub const ACCEPT_ROOT: &str = "accept_root";
+
+fn root_parties(r: &Root) -> BTreeSet<Id> {
+    match r {
+        Root::Sole(p) => BTreeSet::from([*p]),
+        Root::Joint { parties, .. } => parties.iter().copied().collect(),
+    }
+}
+
+/// One `accept_root` contribution from `party`, single use, bound to the intent.
+#[must_use]
+pub fn accept_root(party: Id) -> RequirementTerm {
+    RequirementTerm {
+        proof_kind: crate::model::ProofKind::Contribution,
+        class: String::from(ACCEPT_ROOT),
+        count: 1,
+        binding: crate::model::Binding::IntentDigest,
+        freshness_ms: None,
+        independence: crate::model::Independence::DistinctParty,
+        consumption: crate::model::Consumption::SingleUse,
+        source: Some(SubjectSelector::Party(party)),
+        assurance: BTreeMap::new(),
+    }
+}
+
+/// The `accept_root` terms of a root change from `old` to `new`: one for each Party `new`
+/// names and `old` does not (L0-META-20, TN-91, OP-153 m.17 (b)).
+fn accepting(old: &Root, new: &Root) -> BTreeSet<RequirementTerm> {
+    let had = root_parties(old);
+    root_parties(new)
+        .into_iter()
+        .filter(|p| !had.contains(p))
+        .map(accept_root)
+        .collect()
+}
+
 /// The requirements of acting as `anchor`'s root: its root terms and, for a joint root of `k`,
 /// `k − 1` further `co_root` contributions (L0-META-10); `None` when the actor is not a root.
 #[must_use]
@@ -2505,6 +2543,17 @@ fn bind_mandate(
     Ok(())
 }
 
+/// Refuses a payload that does not read back as itself: an in-process payload whose
+/// identifiers the codec would refuse writes state no reader can decode (L0-META-1).
+fn readable(payload: &Payload) -> Result<(), MetaError> {
+    // OP-153 m.20 (a), m.25 (a)
+    match Payload::from_value(&payload.to_value()) {
+        Ok(p) if p == *payload => Ok(()),
+        Ok(_) => Err(MetaError::Malformed(ModelError::Shape)),
+        Err(e) => Err(MetaError::Malformed(e)),
+    }
+}
+
 /// Decides a meta-action under the implicit powers of OP-141 m.3 and returns what it does.
 /// The caller still evaluates the requirements it returns, and for a meta-action no implicit
 /// power covers it evaluates an ordinary Grant over the core action instead.
@@ -2516,6 +2565,7 @@ fn bind_mandate(
     reason = "one arm per meta-action of the closed list"
 )]
 pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Outcome, MetaError> {
+    readable(payload)?;
     let mut out = Outcome::default();
     let actor = ctx.actor;
     match payload {
@@ -2557,9 +2607,12 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             if anchor_of_basis(ctx)? != *anchor {
                 return Err(MetaError::Basis);
             }
-            let (mut a, req) = root_power(view, anchor, &actor)?;
+            let (mut a, mut req) = root_power(view, anchor, &actor)?;
             dispose(view, &mut out, anchor, disposition, ctx.pos, true)?;
+            req.extend(accepting(&a.root, r));
             a.root = r.clone();
+            // L0-META-6
+            a.since = ctx.pos;
             out.requirements = req;
             out.expansion = true;
             set(&mut out, kind::ANCHOR, anchor, a.to_value());
@@ -2572,8 +2625,9 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             if anchor_of_basis(ctx)? != *anchor {
                 return Err(MetaError::Basis);
             }
-            let (mut a, req) = root_power(view, anchor, &actor)?;
+            let (mut a, mut req) = root_power(view, anchor, &actor)?;
             if let Some(r) = r {
+                req.extend(accepting(&a.root, r));
                 a.root = r.clone();
             }
             if let Some(t) = root_terms {
@@ -2581,6 +2635,8 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                 a.root_terms.clone_from(t);
             }
             out.expansion |= r.is_some();
+            // L0-META-6
+            a.since = ctx.pos;
             out.requirements = req;
             set(&mut out, kind::ANCHOR, anchor, a.to_value());
         }

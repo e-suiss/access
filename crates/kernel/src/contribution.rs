@@ -9,8 +9,8 @@ use alloc::vec;
 
 use crate::digest::Digest;
 use crate::intent::{ContextRefs, IntentEnvelope};
-use crate::meta::{self, PAYLOAD_PARAM, Payload};
-use crate::model::{ResourceRef, Window};
+use crate::meta::{self, AnchorScope, PAYLOAD_PARAM, Payload};
+use crate::model::{Id, ResourceRef, Window};
 
 /// The resource namespace a contribution names its class in (L0-META-30).
 pub const NAMESPACE: &str = "access.contribution";
@@ -25,6 +25,13 @@ pub fn contribute_payload(target: Digest, class: &str) -> Payload {
         target,
         class: String::from(class),
     }
+}
+
+/// Whether root power over an Anchor of `scope` authorizes `party`'s contribution of `class`
+/// without a Grant: only `accept_root`, under the Party's own self-anchor (L0-META-30, TN-91).
+#[must_use]
+pub fn self_authorized(class: &str, scope: &AnchorScope, party: &Id) -> bool {
+    class == meta::ACCEPT_ROOT && *scope == AnchorScope::Party(*party)
 }
 
 /// The intent an approver Instance signs for a contribution of `class` to `target` over
@@ -74,5 +81,20 @@ mod tests {
         );
         assert_ne!(contribute_intent(Digest([5; 32]), "approve", w).unwrap(), a);
         assert_ne!(contribute_intent(Digest([4; 32]), "witness", w).unwrap(), a);
+    }
+
+    // L0-META-30, TN-91, OP-153 m.17 (b)
+    #[test]
+    fn only_a_root_acceptance_is_authorized_by_the_own_self_anchor() {
+        let p = Id([2; 16]);
+        let own = AnchorScope::Party(p);
+        assert!(self_authorized(meta::ACCEPT_ROOT, &own, &p));
+        assert!(!self_authorized("approve", &own, &p));
+        assert!(!self_authorized(meta::ACCEPT_ROOT, &own, &Id([3; 16])));
+        assert!(!self_authorized(
+            meta::ACCEPT_ROOT,
+            &AnchorScope::Domain,
+            &p
+        ));
     }
 }

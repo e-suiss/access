@@ -459,6 +459,22 @@ class Apply:
                 self.requirements.append(term)
         self.requirements.extend(anchor.get("root_terms", []))
 
+    def add_accept_root(self, old, new):
+        # L0-META-20
+        def parties(root):
+            return [root["sole"]] if "sole" in root else list(root["joint"]["parties"])
+        had = parties(old)
+        for party in parties(new):
+            if party not in had:
+                self.requirements.append({
+                    "proof_kind": "contribution",
+                    "class": "accept_root",
+                    "binding": "intent_digest",
+                    "independence": {"distinct": "party"},
+                    "consumption": "single_use",
+                    "source": {"party": party},
+                })
+
     def basis_anchor(self, wanted=None):
         # L0-META-13
         if "anchor" not in self.basis:
@@ -551,6 +567,7 @@ class Apply:
         self.require_root(anchor)
         revoked = self.dispose(anchor_id, body["disposition"], keep_allowed=True)
         self.revoke_grants(revoked)
+        self.add_accept_root(anchor["root"], body["root"])
         value = dict(anchor, root=body["root"], since=self.pos)
         self.write("anchor", anchor_id, value)
         return True
@@ -563,6 +580,7 @@ class Apply:
         expansion = False
         if "root" in body:
             expansion = expansion or not same(body["root"], anchor["root"])
+            self.add_accept_root(anchor["root"], body["root"])
             value["root"] = body["root"]
         if "root_terms" in body:
             expansion = expansion or not is_subset(anchor.get("root_terms", []), body["root_terms"])
@@ -1176,10 +1194,11 @@ def apply(state, domain_id, exercise, pos, now, party, instance, basis, capacity
     exercise_basis = decode_canonical(basis)
     check_exercise_basis(exercise_basis)
     run = Apply(store, domain_id, exercise, pos, now, party, instance, exercise_basis, decode_canonical(capacity))
+    before = run.read("anchor", exercise_basis["anchor"]) if "anchor" in exercise_basis else None
     expansion = getattr(run, name)(body)
-    # §13.7.3, SEC26, OP-141 m.43
+    # §13.7.3, SEC26, OP-141 m.43: the root the actor acts as, before the change
     if expansion and name in CT3_META and "anchor" in exercise_basis:
-        anchor = run.read("anchor", exercise_basis["anchor"]) or {}
+        anchor = before or {}
         root = anchor.get("root", {})
         if "joint" in root and run.party in root["joint"]["parties"]:
             others = len(root["joint"]["parties"]) - 1

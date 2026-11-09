@@ -653,6 +653,31 @@ fn identifiers_and_payload_round_trip() {
     assert!(Payload::from_value(&tagged("grant_explode", map([]))).is_err());
 }
 
+/// A Grant issue whose action name is not a Kernel identifier.
+fn unreadable_issue() -> Payload {
+    let mut p = issue(ALICE, GrantBasis::Anchor(shop_anchor()), &["eu"], 0);
+    if let Payload::GrantIssue(c) = &mut p {
+        let mut a = c.authority.authority.actions.exact.pop_first().unwrap();
+        a.name = "enterprise-connection-manager".to_string();
+        c.authority.authority.actions.exact.insert(a);
+    }
+    p
+}
+
+// L0-META-1, OP-153 m.20 (a), m.25 (a)
+#[test]
+fn a_payload_that_does_not_read_back_writes_nothing() {
+    let mut r = Run::new();
+    let p = unreadable_issue();
+    assert!(Payload::from_value(&p.to_value()).is_err());
+    let before = r.state.0.clone();
+    assert!(matches!(
+        r.act(ROOT, ROOT, ExerciseBasis::Anchor(shop_anchor()), &p),
+        Err(MetaError::Malformed(_))
+    ));
+    assert_eq!(r.state.0, before);
+}
+
 // L0-META-30
 #[test]
 fn a_contribution_is_recorded_under_its_exercise() {
@@ -2379,6 +2404,54 @@ fn meta_vectors_match() {
             key: p256_key(9),
         },
     );
+    // L0-META-1, OP-153 m.20 (a)
+    r.step_raw(
+        "unreadable-identifier",
+        &["L0-META-1", "L0-META-31"],
+        (ROOT, ROOT),
+        anchor,
+        &unreadable_issue().to_value(),
+    );
+    // L0-META-20, TN-91, OP-153 m.17 (b)
+    let made = r
+        .step(
+            "handover-anchor",
+            &["L0-META-20"],
+            (ROOT, ROOT),
+            ExerciseBasis::Anchor(meta_anchor(&DOMAIN)),
+            &Payload::AnchorCreate {
+                scope: AnchorScope::Resource(shop(&["handover"])),
+                root: Root::Sole(ROOT),
+                root_terms: BTreeSet::new(),
+            },
+        )
+        .unwrap();
+    let handed = object_id(&made, kind::ANCHOR, 0);
+    r.step(
+        "transfer-asks-each-new-root",
+        &["L0-META-20", "L0-META-21"],
+        (ROOT, ROOT),
+        ExerciseBasis::Anchor(handed),
+        &Payload::AnchorTransfer {
+            anchor: handed,
+            root: Root::Joint {
+                parties: BTreeSet::from([ROOT, BOB]),
+                k: 1,
+            },
+            disposition: BTreeMap::new(),
+        },
+    );
+    r.step(
+        "amend-root-asks-the-new-root",
+        &["L0-META-20"],
+        (BOB, BOB),
+        ExerciseBasis::Anchor(handed),
+        &Payload::AnchorAmend {
+            anchor: handed,
+            root: Some(Root::Sole(CAROL)),
+            root_terms: None,
+        },
+    );
     let json = format!(
         "{{\n \"rule\": \"OP-141\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"meta.apply\",\n {},\n \"cases\": [\n{}\n ]\n}}\n",
         field(&["L0-META-1", "L0-META-2"]),
@@ -2891,6 +2964,8 @@ fn anchor_transfer_and_amend_act_on_the_named_anchor() {
     assert_eq!(r.act(ROOT, ROOT, meta, &transfer), Err(MetaError::Basis));
     let (_, out) = r.act(ROOT, ROOT, basis, &transfer).unwrap();
     assert!(out.expansion);
+    // L0-META-20, TN-91, OP-153 m.17 (b)
+    assert_eq!(out.requirements, BTreeSet::from([accept_root(BOB)]));
     assert!(r.grant(&g).ended.is_none());
     let anchor: AnchorState = read(&r.state, kind::ANCHOR, &a).unwrap();
     assert_eq!(anchor.root, Root::Sole(BOB));
@@ -2914,8 +2989,18 @@ fn anchor_transfer_and_amend_act_on_the_named_anchor() {
         .act(BOB, BOB, basis, &amend(Some(Root::Sole(CAROL)), None))
         .unwrap();
     assert!(out.expansion);
+    assert!(out.requirements.contains(&accept_root(CAROL)));
     let anchor: AnchorState = read(&r.state, kind::ANCHOR, &a).unwrap();
     assert_eq!(anchor.root, Root::Sole(CAROL));
+    let joint = Root::Joint {
+        parties: BTreeSet::from([CAROL, ALICE]),
+        k: 1,
+    };
+    let (_, out) = r
+        .act(CAROL, CAROL, basis, &amend(Some(joint), None))
+        .unwrap();
+    assert!(out.requirements.contains(&accept_root(ALICE)));
+    assert!(!out.requirements.contains(&accept_root(CAROL)));
 }
 
 // C14
