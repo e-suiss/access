@@ -12,6 +12,7 @@ It builds on the open [`esuiss-access-kernel`](https://crates.io/crates/esuiss-a
 - **`resource`.** The resource server. `ResourceServer::verify` takes an RFC 9068 access token whose authority is in RAR `authorization_details`, checks the DPoP proof (or mTLS thumbprint) with your replay and nonce ports, the signing key against the domain's binding-signed Domain Metadata within the `key_epoch` window (only an operational key declared for `token` and live at the token's `iat`; a realm JWKS key never verifies an authority token), the Kernel token profile (one `aud` = you, this issuer, this domain, `cnf`), a bounds token's resource scope, parameters, recipient and purpose against your intent with the Kernel's `covers` (pass the intent with its envelope; what cannot be evaluated is refused), the contract's local requirements against those you satisfied (`Presented::satisfied`; when the only unmet ones are the user's authentication strength or freshness the refusal is `Denied::StepUp`, and `Denied::www_authenticate` gives the RFC 9470 `insufficient_user_authentication` challenge with `max_age` and `acr_values` to answer with 401), the ValidityContract view, the Token Status List entry within Δ, locally known revocations, introspection under the strict profile, and exact-intent single use. It returns the same `Authorized<R, A>` plus what the token proved. The verified value holds no token: nothing can be passed through.
 - **`transport`.** The `Answer`/`Response`/`Fault` types your I/O hands back, and the `Clock` port.
 - **`mcp`** (feature `mcp`). An MCP server as an OAuth resource server and the domain's PEP. See [MCP resource server](#mcp-resource-server).
+- **`agent`**. The agent's side of a decision: the agent contract and its A2A extension. See [Agents](#agents).
 
 ## Ports
 
@@ -143,6 +144,36 @@ A resource server built on `McpServer` meets the MCP resource server profile as 
 | SSE with `X-Accel-Buffering: no`; the stream closes at the earlier of token expiry and horizon | `listen::Listen`, `server::Stream` |
 
 The guarantees that lists are labelled `public` only when every item comes from a Public Grant, and that a stream carries no event after its horizon, hold for a server built on this module that passes the conformance vectors. They do not hold for a server that writes its own enforcement code.
+
+## Agents
+
+`agent` is the agent's side of a decision: the agent contract (A-1 to A-12) as types, so an agent built on it cannot skip a step. The decision point, the Instance key and the clock are ports, as everywhere else.
+
+- **One intent, one nonce.** `contract::Exercise::new` refuses a plan without a capacity (`FOR(principal)` for the principal's work, `OWN` for the agent's own) or a basis. `ask` sends a signed `commit` and returns a `Step`:
+  - `Proceed(Allowed)`: the ALLOW holds for this envelope only. `Allowed::effect` refuses any other one, a changed parameter included.
+  - `Wait(Wait)`: a `REQUIRE_ACTION`. The agent keeps the nonce, adds a proof with `prove`, and asks again.
+  - `Stop(Stopped)`: a DENY closes the nonce. Asking again is an error, and `renew` makes a new nonce only after a change of state: a new basis, a fresh Claim, or a budget window that has reset.
+  - `Unknown`: no decision could be read, so nothing happens.
+- **Proofs.** A proof is a recorded contribution's Exercise or a Claim. There is no proof made of text, a chat answer or an elicitation result. An approval comes only from the user's own Instance on a trusted surface, and Access ignores any contribution an agent makes to its own request.
+- **Routes.** Each unmet requirement says where it goes. A requirement the agent cannot meet, such as a person being present, goes to the principal: as an approval when it accepts a contribution, as "This must be done by you" when it does not. Neither is ever turned into OAuth `interaction_required`.
+- **Coordinator.** `request::handoff` builds the typed request a coordinator shows (the `authority-request` contract in `conformance/cddl`), with the routes and whether the agent will ask again under the same nonce. The agent's own words travel only as the "Requester's note".
+- **Data, not instructions.** Remediation codes are a closed set. Labels, classes, card fields and any other text are `text::Untrusted`: data with no `Display`, and nothing in the SDK acts on what it says.
+- **Long-running work.** `contract::Continuation` asks `continue` halfway to the horizon, at each declared checkpoint and after a pause or a takeover. A DENY or a missing answer stops it, and no new effect starts after that.
+- **No splitting.** `contract::Refusals` refuses an intent on the same action and resources whose amount is below one Access already refused or held. The request goes to the coordinator instead.
+- **Advisory checks.** `Exercise::check` asks `check` and returns an `Advisory`, which never turns into an `Allowed`.
+- **Own status.** `status::body` and `status::read` use the `agent-status` search. The answer covers the agent's own Instance only: whether it is live, its Mandate, and its Party's Grants with their actions, horizon and remaining budget. Nothing about anyone else's delegations is in it.
+- **Self-identification.** `identity::Disclosure` is the badge a user-facing surface shows. It is always `party_kind: agent`, with the operator and, under `FOR`, the principal. `identity::signature_agent` gives the `Signature-Agent` header value for the key directory.
+
+### A2A
+
+`agent::a2a` carries the same data over A2A in the extension `urn:suiss:access:a2a:authority:v1`: an authority request, the causal reference to the Exercise that caused a task, a `REQUIRE_ACTION` with its remediation codes and nonce, and a continuation.
+
+- A `REQUIRE_ACTION` maps to `TASK_STATE_INPUT_REQUIRED` when a person has to act, and to `TASK_STATE_AUTH_REQUIRED` when the agent's side has to authenticate or refresh a Claim. A DENY maps to `TASK_STATE_FAILED`.
+- A task message carries no authority, so `inbound` reads only the extension member. To take a task over, the delegating agent sub-delegates from its own Grant, or the receiving agent makes its own Exercise under its own basis (`separate_exercise`). The cause is recorded only as `upstream_exercise`.
+- An Agent Card is a Claim. `verify_card` checks an ES256 JWS over the card's RFC 8785 form under a key the domain accepted for the card's issuer. A card that no accepted key signed is nothing. `securitySchemes`, skills and descriptions stay data.
+- `security_schemes` writes the identity plane's entries for a card's `securitySchemes` from the realm's discovery document. These are OpenID Connect discovery, the `authorizationCode`, `clientCredentials` and `deviceCode` flows the realm serves, and mutual TLS when tokens are bound to client certificates.
+
+Access does not try to stop prompt injection. Injected text is not prevented; what an injected instruction can do is bounded by the authority the agent holds, the requirements on it and the approvals a person gives.
 
 ## Versions and support
 
