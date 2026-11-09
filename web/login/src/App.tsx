@@ -3,6 +3,7 @@
 import { Approval } from "./Approval.js";
 import { Branding } from "./Branding.js";
 import { Consent } from "./Consent.js";
+import { Device } from "./Device.js";
 import { ErrorPage } from "./ErrorPage.js";
 import { Invitation } from "./Invitation.js";
 import { MagicLink } from "./MagicLink.js";
@@ -11,9 +12,19 @@ import { SignIn } from "./SignIn.js";
 
 /** The page a location draws. */
 export type Page =
-  "sign_in" | "sign_up" | "consent" | "approval" | "recovery" | "invitation" | "link" | "error";
+  | "sign_in"
+  | "sign_up"
+  | "consent"
+  | "approval"
+  | "device"
+  | "recovery"
+  | "invitation"
+  | "link"
+  | "error";
 
 export function pageOf(path: string, search: string): Page {
+  // OP-154 m.3 (p), m.7 (f)
+  if (/^(\/realms\/[a-z0-9-]+)?\/device\/?$/.test(path)) return "device";
   const rest = path.replace(/^(\/realms\/[a-z0-9-]+)?\/login/, "").replace(/\/+$/, "");
   if (rest === "/recovery") return "recovery";
   if (rest === "/link") return "link";
@@ -39,6 +50,8 @@ function Body({ page }: { readonly page: Page }) {
       return <Consent />;
     case "approval":
       return <Approval />;
+    case "device":
+      return <Device />;
     case "recovery":
       return <Recovery />;
     case "invitation":

@@ -21,7 +21,7 @@ import {
   register,
   type Session,
   sign,
-} from "./device.js";
+} from "./instance.js";
 import { t } from "./i18n.js";
 
 interface Draft {

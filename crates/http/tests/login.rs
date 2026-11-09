@@ -1168,8 +1168,10 @@ async fn only_the_consent_screen_may_compile_the_kernel_and_no_page_is_framed() 
     assert!(csp.contains("frame-ancestors 'none'"), "{csp}");
     assert!(!csp.contains("unsafe-inline"), "{csp}");
     assert!(consent.headers.get(header::SET_COOKIE).is_none());
-    for path in ["/login", "/login?reason=share"] {
+    // OP-154 m.3 (p), m.7 (f)
+    for path in ["/login", "/login?reason=share", "/device"] {
         let page = b.get(path).await;
+        assert_eq!(page.status, StatusCode::OK, "{path}");
         let csp = page.headers["content-security-policy"].to_str().unwrap();
         assert!(csp.contains("script-src 'self';"), "{path}: {csp}");
         assert!(!csp.contains("wasm-unsafe-eval"), "{path}: {csp}");

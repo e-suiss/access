@@ -56,6 +56,24 @@ test.describe("@live hosted pages", () => {
     await clean(page);
   });
 
+  // RFC 8628, TN-35, OP-154 m.3 (p), (dd), Ek B 4649, 4651
+  test("@live the device page is a framed-never page that needs a sign-in to read a code", async ({
+    page,
+  }) => {
+    const r = await page.goto(`${REALM}/device`);
+    expect(r?.status()).toBe(200);
+    const csp = r?.headers()["content-security-policy"] ?? "";
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).not.toContain("unsafe-inline");
+    await expect(page.getByRole("heading", { name: "Connect a device" })).toBeVisible();
+    const preview = await page.request.post(`${REALM}/v1/device/preview`, {
+      data: { user_code: "BCDF-GHJZ" },
+      headers: { origin: new URL(page.url()).origin },
+    });
+    expect([401, 404]).toContain(preview.status());
+    await clean(page);
+  });
+
   test("@live the sign-up page opens a registration flow and passes axe", async ({ page }) => {
     await page.goto(`${REALM}/login?reason=create`);
     await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
