@@ -32,6 +32,9 @@ const CATALOG_LABEL: &[u8] = b"access-bootstrap/catalog:1";
 /// What the root signs to derive the nonce prefix of a recovery upgrade step.
 const RECOVERY_LABEL: &[u8] = b"access-bootstrap/recovery:1";
 
+/// What the root signs to derive the nonce prefix of the `org_member` upgrade step.
+const ORG_MEMBER_LABEL: &[u8] = b"access-bootstrap/org-member:1";
+
 /// Length of the nonce prefix: a SHA-256.
 const PREFIX_LEN: usize = 32;
 
@@ -203,6 +206,88 @@ where
             );
         }
         Ok(out)
+    }
+
+    /// Makes a domain opened before the realm issuer's `org_member` subject selection take it
+    /// (OP-153 m.17 (c), m.25 (i) (3)): the founding root establishes
+    /// [`access_internal_api::idp::org_member_selection`], a CT3 widening behind the time-lock.
+    /// A domain with a
+    /// live Acceptance of the issuer that selects by `org_member` already has it.
+    ///
+    /// # Errors
+    /// [`BootstrapError`]; a refusal stops the run.
+    pub(crate) async fn upgrade_org_members(
+        &self,
+        (tenant, realm): (
+            access_store::identity::TenantId,
+            access_store::identity::RealmId,
+        ),
+        domain: Digest,
+        root: &HsmSigner,
+        party: Id,
+    ) -> Result<Vec<CatalogOut>, BootstrapError> {
+        let issuer = {
+            let mut t = access_store::identity::TenantTx::begin(self.app, tenant, realm).await?;
+            let i = access_store::issuer::realm_issuer(&mut t).await?;
+            t.commit().await?;
+            i.map(Id)
+        };
+        let Some(issuer) = issuer else {
+            return Ok(Vec::new());
+        };
+        if self.selects_org_members(domain, issuer).await? {
+            return Ok(Vec::new());
+        }
+        self.lead(domain).await?;
+        let mut label = ORG_MEMBER_LABEL.to_vec();
+        label.extend_from_slice(&domain.0);
+        Ok(vec![
+            self.time_locked(
+                domain,
+                root,
+                party,
+                &label,
+                Payload::AcceptanceEstablish(access_internal_api::idp::org_member_selection(
+                    issuer,
+                )),
+                String::from("access.org_member"),
+            )
+            .await?,
+        ])
+    }
+
+    /// Whether `issuer` has a live subject-selection Acceptance of `org_member` in `domain`.
+    async fn selects_org_members(
+        &self,
+        domain: Digest,
+        issuer: Id,
+    ) -> Result<bool, BootstrapError> {
+        let d = DomainId::from_bytes(domain.0);
+        let index = state_of(self.app, &d, &[meta::key(meta::kind::ACCEPTANCES, &issuer)]).await?;
+        let Some(dcbor::Value::Array(ids)) = index
+            .first()
+            .and_then(|r| r.value.as_deref())
+            .and_then(|v| dcbor::decode(v, Limits::CEILING).ok())
+        else {
+            return Ok(false);
+        };
+        let keys: Vec<Vec<u8>> = ids
+            .iter()
+            .filter_map(|v| Id::from_value(v).ok())
+            .map(|id| meta::key(meta::kind::ACCEPTANCE, &id))
+            .collect();
+        let class = access_kernel::claim::body::Class::OrgMember.name();
+        Ok(state_of(self.app, &d, &keys)
+            .await?
+            .iter()
+            .filter_map(|r| r.value.as_deref())
+            .filter_map(|v| dcbor::decode(v, Limits::CEILING).ok())
+            .filter_map(|v| meta::ContentState::from_value(&v).ok())
+            .filter(|a| a.ended.is_none())
+            .filter_map(|a| access_kernel::claim::Gate::of(&a.content).ok())
+            .any(|g| {
+                g.use_ == access_kernel::claim::SUBJECT_SELECTION && g.classes.contains(&class)
+            }))
     }
 
     /// One root-signed meta-Exercise behind the CT3 time-lock, idempotent across runs: the

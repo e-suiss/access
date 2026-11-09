@@ -1357,6 +1357,11 @@ where
                 self.upgrade_recovery((tenant, realm), domain, &root, party)
                     .await?,
             );
+            // OP-153 m.17 (c), m.25 (i) (3)
+            upgraded.extend(
+                self.upgrade_org_members((tenant, realm), domain, &root, party)
+                    .await?,
+            );
             // OP-151 m.12 (b)
             if let Some(origin) = self.console {
                 self.console_client(&admin, (tenant, realm), domain, &root, origin)

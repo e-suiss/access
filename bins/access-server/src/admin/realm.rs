@@ -392,6 +392,12 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                     Err(e) => refusal(&e).map(Written::Rejected),
                 };
             }
+            // TN-90, OP-153 m.25 (i) (3)
+            Some(MetaTarget::Autojoin(org)) => {
+                self.admin(&ids)
+                    .issue_autojoin_grant(place, *org, submission)
+                    .await
+            }
             Some(MetaTarget::CompleteHandover(org, handover)) => {
                 self.admin(&ids)
                     .complete_transfer(place, *org, *handover, submission)

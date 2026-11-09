@@ -263,7 +263,15 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 causal_binding: r.causal_binding,
                 schemas: r.schemas.clone(),
                 issuer: Some(access_kernel::model::Id(claim_issuer)),
-                acceptances: r.acceptances.clone(),
+                // E18, OP-153 m.25 (i) (3)
+                acceptances: r
+                    .acceptances
+                    .iter()
+                    .cloned()
+                    .chain([access_internal_api::idp::org_member_selection(
+                        access_kernel::model::Id(claim_issuer),
+                    )])
+                    .collect(),
                 issuer_predicate_input: predicate_input(&r.issuer_predicate_input),
             })
             .await

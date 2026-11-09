@@ -544,3 +544,57 @@ async fn a_domain_opened_before_recovery_takes_it_once_its_root_signs_it() {
     let again = w.run(&old_plan("elder")).await;
     assert_eq!(upgraded(&again, "elder"), []);
 }
+
+/// Opens Genesis as a realm was opened before the realm issuer's `org_member` subject
+/// selection (OP-153 m.25 (i) (3)).
+struct PreOrgMember<'a> {
+    plane: &'a TestPlane,
+    domains: &'a TestDomains,
+}
+
+impl Governance for PreOrgMember<'_> {
+    async fn open(&self, mut order: GenesisOrder) -> Result<GenesisOpened, Unavailable> {
+        order.ct3_delay_s = Some(0);
+        order.acceptances.retain(|a| {
+            access_kernel::claim::Gate::of(a).is_ok_and(|g| g.use_ != "subject-selection")
+        });
+        let fields = access_authority_core::genesis::realm(&order, &mut OsSalts)
+            .map_err(|e| Unavailable(e.to_string()))?;
+        let now = Instances::now(self.plane).await?;
+        let domain = self
+            .domains
+            .create(order.tenant, fields, now)
+            .await
+            .unwrap();
+        Ok(GenesisOpened { domain })
+    }
+}
+
+impl Instances for PreOrgMember<'_> {
+    async fn register(&self, r: Registration) -> Result<RegistrationVerdict, Unavailable> {
+        Instances::register(self.plane, r).await
+    }
+
+    async fn now(&self) -> Result<u64, Unavailable> {
+        Instances::now(self.plane).await
+    }
+}
+
+// E18, OP-153 m.17 (c), m.25 (i) (3), OP-152 m.8 (a)
+#[tokio::test]
+async fn a_domain_opened_before_org_member_selection_takes_it_once_its_root_signs_it() {
+    let w = World::new("org-member-upgrade").await;
+    let governance = PreOrgMember {
+        plane: &w.plane,
+        domains: &w.domains,
+    };
+    realm_with(&w, &governance, "older").await;
+    let summary = w.run(&old_plan("older")).await;
+    let steps: Vec<_> = upgraded(&summary, "older")
+        .iter()
+        .map(|c| (c.namespace.as_str(), c.state))
+        .collect();
+    assert_eq!(steps, vec![("access.org_member", "accepted")]);
+    let again = w.run(&old_plan("older")).await;
+    assert_eq!(upgraded(&again, "older"), []);
+}

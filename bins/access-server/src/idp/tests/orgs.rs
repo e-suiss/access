@@ -932,6 +932,208 @@ async fn membership_claims_wait_for_the_autojoin_cooling() {
     assert!(!scalar.iter().any(|o| o.subject == bob));
 }
 
+/// An owner's `grant_issue` of the autojoin role on the organization's Anchor `anchor`, held
+/// by `holder` (TN-90, OP-153 m.25 (i) (3)).
+fn autojoin_issue(anchor: [u8; 16], holder: access_kernel::model::SubjectSelector) -> Payload {
+    use access_kernel::model::{
+        ActionSet, AuthoritySet, CanonicalAuthority, ConstraintSet, ResourceSelector, Structural,
+    };
+    let hex = String::from("0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a");
+    Payload::GrantIssue(access_kernel::meta::GrantContent {
+        basis: access_kernel::meta::GrantBasis::Anchor(Id(anchor)),
+        holder,
+        authority: CanonicalAuthority {
+            authority: AuthoritySet {
+                actions: ActionSet {
+                    exact: std::collections::BTreeSet::from([
+                        access_internal_api::idp::IdpAction::AccountRead.action_ref(),
+                    ]),
+                    prefix: std::collections::BTreeSet::new(),
+                },
+                resource: ResourceSelector::Structural(Structural {
+                    namespace: String::from("access.party"),
+                    prefix: vec![hex],
+                    kind: None,
+                    attrs: std::collections::BTreeMap::new(),
+                }),
+                params: std::collections::BTreeMap::new(),
+                recipient: None,
+                purpose: None,
+            },
+            constraints: ConstraintSet {
+                validity: Window {
+                    from: 0,
+                    until: u64::MAX / 2,
+                },
+                conditions: std::collections::BTreeSet::new(),
+                budget: std::collections::BTreeSet::new(),
+            },
+            delegation: access_kernel::model::DelegationTerms::default(),
+            requirements: std::collections::BTreeSet::new(),
+        },
+        agency: std::collections::BTreeSet::from([Capacity::Own]),
+        named: None,
+    })
+}
+
+// TN-90, C13, E18, OP-153 m.17 (c), m.25 (i) (3), (gg), Ek B 3612
+#[tokio::test]
+async fn an_owner_issues_the_autojoin_role_to_the_organizations_org_member_claims() {
+    use access_identity_admin::app::org_flows::NOT_THE_AUTOJOIN_GRANT;
+    use access_identity_admin::app::transfers::OWNER_ONLY;
+    use access_identity_admin::domain::org::org_members;
+    let (w, at, d, founder) = ready("org-autojoin").await;
+    create_org(&w, at, d, founder).await;
+    onboard(&w.plane, d, ALICE, ALICE_KEY).await;
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let anchor = t.party_anchor(ORG).await.unwrap().unwrap();
+    let issuer = access_store::issuer::realm_issuer(&mut t)
+        .await
+        .unwrap()
+        .unwrap();
+    t.commit().await.unwrap();
+
+    // E18
+    let index = access_store::authority::state_of(
+        &w.db.app,
+        &DomainId::from_bytes(d.0),
+        &[meta::key(kind::ACCEPTANCES, &Id(issuer))],
+    )
+    .await
+    .unwrap();
+    let ids = match suiss_crypto::dcbor::decode(
+        index[0].value.as_deref().unwrap(),
+        suiss_crypto::dcbor::Limits::CEILING,
+    )
+    .unwrap()
+    {
+        suiss_crypto::dcbor::Value::Array(ids) => ids,
+        other => panic!("{other:?}"),
+    };
+    let keys: Vec<Vec<u8>> = ids
+        .iter()
+        .map(|v| meta::key(kind::ACCEPTANCE, &Id::from_value(v).unwrap()))
+        .collect();
+    let selects = access_store::authority::state_of(&w.db.app, &DomainId::from_bytes(d.0), &keys)
+        .await
+        .unwrap()
+        .iter()
+        .filter_map(|r| r.value.as_deref())
+        .filter_map(|v| suiss_crypto::dcbor::decode(v, suiss_crypto::dcbor::Limits::CEILING).ok())
+        .filter_map(|v| meta::ContentState::from_value(&v).ok())
+        .filter_map(|a| access_kernel::claim::Gate::of(&a.content).ok())
+        .any(|g| g.use_ == access_kernel::claim::SUBJECT_SELECTION && g.classes == ["org_member"]);
+    assert!(selects);
+
+    let on_anchor = ExerciseBasis::Anchor(Id(anchor));
+    let issue =
+        |holder, nonce, seed| meta_write(d, nonce, autojoin_issue(anchor, holder), on_anchor, seed);
+    // TN-90
+    refusal(
+        Box::pin(
+            w.admin()
+                .issue_autojoin_grant(at, ORG, issue(org_members(ORG), 0x70, ROOT_KEY)),
+        )
+        .await,
+        NOT_THE_AUTOJOIN_GRANT,
+    );
+    let founder_does = |change: Change, nonce: u8| as_founder(at, d, change, nonce, founder);
+    let claim = compile(
+        Op::ClaimOrganizationDomain,
+        Some(&b64url_encode(&ORG)),
+        &json!({ "domain": "acme.example", "method": "dns_txt" }),
+        &w.ids,
+    )
+    .unwrap();
+    let challenge = match exercise(&w, &founder_does(claim, 0x60), ROOT_KEY)
+        .await
+        .unwrap()
+    {
+        Applied::Written {
+            secret: Some(s), ..
+        } => s.expose().to_owned(),
+        other => panic!("{other:?}"),
+    };
+    let probe = Probe::default();
+    *probe.mx.lock().unwrap() = vec![String::from("mx1.acme.example")];
+    *probe.registrar.lock().unwrap() = Some(String::from("1910"));
+    *probe.txt.lock().unwrap() = vec![format!("suiss-access-verify={challenge}")];
+    assert_eq!(watch_pass(&w, at, &probe).await.verified, 1);
+    let autojoin = compile(
+        Op::PatchOrganization,
+        Some(&b64url_encode(&ORG)),
+        &json!({ "autojoin": { "domain": "acme.example", "on": true } }),
+        &w.ids,
+    )
+    .unwrap();
+    written(
+        &exercise(&w, &founder_does(autojoin, 0x61), ROOT_KEY)
+            .await
+            .unwrap(),
+    );
+
+    refusal(
+        Box::pin(w.admin().issue_autojoin_grant(
+            at,
+            ORG,
+            issue(
+                access_kernel::model::SubjectSelector::Party(ALICE),
+                0x71,
+                ROOT_KEY,
+            ),
+        ))
+        .await,
+        NOT_THE_AUTOJOIN_GRANT,
+    );
+    refusal(
+        Box::pin(w.admin().issue_autojoin_grant(
+            at,
+            ORG,
+            issue(org_members([0x0d; 16]), 0x72, ROOT_KEY),
+        ))
+        .await,
+        NOT_THE_AUTOJOIN_GRANT,
+    );
+    refusal(
+        Box::pin(
+            w.admin()
+                .issue_autojoin_grant(at, ORG, issue(org_members(ORG), 0x73, ALICE_KEY)),
+        )
+        .await,
+        OWNER_ONLY,
+    );
+    let applied = Box::pin(w.admin().issue_autojoin_grant(
+        at,
+        ORG,
+        issue(org_members(ORG), 0x74, ROOT_KEY),
+    ))
+    .await
+    .unwrap();
+    written(&applied);
+    let origin = meta::exercise_id(&d, &[0x74; 16]).unwrap();
+    let grant = meta::object_id(&origin, kind::GRANT, 0);
+    let rows = access_store::authority::state_of(
+        &w.db.app,
+        &DomainId::from_bytes(d.0),
+        &[meta::key(kind::GRANT, &grant)],
+    )
+    .await
+    .unwrap();
+    let state = meta::GrantState::from_value(
+        &suiss_crypto::dcbor::decode(
+            rows[0].value.as_deref().unwrap(),
+            suiss_crypto::dcbor::Limits::CEILING,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(state.content.holder, org_members(ORG));
+    assert_eq!(
+        state.content.basis,
+        access_kernel::meta::GrantBasis::Anchor(Id(anchor))
+    );
+}
+
 // TN-120, OP-153 m.3 (p), (gg), OP-153 m.17 (h), Ek B 3625
 #[tokio::test]
 async fn the_connection_manager_template_only_drafts_for_seven_days_and_never_delegates() {

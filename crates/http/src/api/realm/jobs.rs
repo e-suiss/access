@@ -46,12 +46,13 @@ pub const JOB_CONTEXT: &str = "access/admin-job/v1";
 const IF_MATCH: &str = "if_match";
 
 /// The job operations that are core meta-action writes (E17), with their meta-action.
-pub const META_OPERATIONS: [(&str, &str); 5] = [
+pub const META_OPERATIONS: [(&str, &str); 6] = [
     ("revokeGrant", "grant_revoke"),
     ("amendGrant", "grant_amend"),
     ("issueRoleGrant", "grant_issue"),
     ("proposeOwnershipHandover", "anchor_transfer"),
     ("completeOwnershipHandover", "anchor_transfer"),
+    ("issueAutojoinGrant", "grant_issue"),
 ];
 
 fn id16(text: &str) -> Option<[u8; 16]> {
@@ -61,7 +62,8 @@ fn id16(text: &str) -> Option<[u8; 16]> {
 }
 
 /// The record an item names by its key (TN-89 (3), TN-91): `org:account` for a role Grant,
-/// `org:from:to` for a handover's proposal and `org:handover` for its completion.
+/// `org:from:to` for a handover's proposal, `org:handover` for its completion and `org` for
+/// an autojoin role Grant (OP-153 m.25 (i) (3)).
 #[must_use]
 pub fn meta_target(operation: &str, key: &str) -> Option<crate::api::ports::MetaTarget> {
     use crate::api::ports::MetaTarget;
@@ -78,6 +80,7 @@ pub fn meta_target(operation: &str, key: &str) -> Option<crate::api::ports::Meta
             MetaTarget::ProposeHandover(org, from.to_owned(), to.to_owned())
         }
         "completeOwnershipHandover" => MetaTarget::CompleteHandover(org, id16(parts.next()?)?),
+        "issueAutojoinGrant" => MetaTarget::Autojoin(org),
         _ => return None,
     };
     (operation == "issueRoleGrant" || parts.next().is_none()).then_some(target)
@@ -847,6 +850,15 @@ mod tests {
         assert_eq!(
             meta_target("completeOwnershipHandover", &format!("{org}:{h}")),
             Some(MetaTarget::CompleteHandover([0x0a; 16], [0x0b; 16]))
+        );
+        // OP-153 m.25 (i) (3)
+        assert_eq!(
+            meta_target("issueAutojoinGrant", &org),
+            Some(MetaTarget::Autojoin([0x0a; 16]))
+        );
+        assert_eq!(
+            meta_target("issueAutojoinGrant", &format!("{org}:usr_1")),
+            None
         );
         assert_eq!(
             meta_target("proposeOwnershipHandover", &format!("{org}:usr_1")),

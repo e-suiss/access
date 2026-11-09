@@ -680,6 +680,38 @@ pub enum Verdict {
     },
 }
 
+/// The realm issuer's Acceptance of `org_member` for subject selection (C13, E18, OP-153
+/// m.17 (c), m.25 (i) (3)): an organization's rule-shaped Grants, such as its autojoin role,
+/// select the Parties whose live `org_member` Claim names it. The identity plane names it
+/// explicitly in each realm's Genesis order; a domain opened before it establishes it once its
+/// root signs it.
+#[must_use]
+pub fn org_member_selection(issuer: access_kernel::model::Id) -> suiss_crypto::dcbor::Value {
+    use access_kernel::codec::Canonical as _;
+    use suiss_crypto::dcbor::Value;
+    Value::Map(vec![
+        (Value::text("issuer"), issuer.to_value()),
+        (
+            Value::text("use"),
+            Value::text(access_kernel::claim::SUBJECT_SELECTION),
+        ),
+        (
+            Value::text("classes"),
+            Value::Array(vec![Value::text(
+                &access_kernel::claim::body::Class::OrgMember.name(),
+            )]),
+        ),
+        (
+            Value::text("subject"),
+            access_kernel::model::SubjectSelector::Public.to_value(),
+        ),
+        (
+            Value::text("validity"),
+            Value::Array(vec![Value::Unsigned(0), Value::Unsigned(u64::MAX)]),
+        ),
+    ])
+}
+
 /// What a new realm's governing domain is opened with (TN-111, §12.5.1).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GenesisOrder {

@@ -112,6 +112,9 @@ const NOT_THE_ROLE: &str = "not-the-membership-role";
 /// Only the inviter's own client issues the role it invited to (TN-89 (3)).
 const INVITER_ONLY: &str = "inviter-only";
 
+/// Why an autojoin Grant submission is not the organization's (OP-153 m.25 (i) (3)).
+pub const NOT_THE_AUTOJOIN_GRANT: &str = "not-the-autojoin-grant";
+
 /// The reserved `idp.*` actions, as `(namespace, name)`.
 fn reserved_actions() -> Vec<(String, String)> {
     access_internal_api::idp::IdpAction::ALL
@@ -214,5 +217,79 @@ where
             t.commit().await?;
         }
         Ok(applied)
+    }
+
+    /// Issues an organization's autojoin role Grant (TN-90, C13, OP-153 m.17 (c), m.25 (i)
+    /// (3)): `w` is the `grant_issue` an owner's own client signed on the organization's
+    /// Anchor, held by every Party with a live `org_member` Claim naming the organization
+    /// ([`crate::domain::org::org_members`]), which the realm issuer's subject-selection
+    /// Acceptance admits. Only an organization with a domain whose autojoin is on takes one, and
+    /// like a first acceptance it never grants an `anchor_*` meta-action or a reserved action.
+    ///
+    /// # Errors
+    /// [`AdminError`]; the domain's DENY or pending decision is [`super::Applied::NotAllowed`].
+    pub async fn issue_autojoin_grant(
+        &self,
+        (tenant, realm): (
+            access_store::identity::TenantId,
+            access_store::identity::RealmId,
+        ),
+        org: [u8; 16],
+        w: access_internal_api::idp::Submission,
+    ) -> Result<super::Applied, AdminError> {
+        use access_kernel::meta::{ExerciseBasis, GrantBasis, Payload};
+        use access_kernel::model::Id;
+
+        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let found = live_org(&mut t, org).await?;
+        let anchor = t.party_anchor(found.party).await?.ok_or(Invalid::NoOrg)?;
+        let autojoin = t
+            .open_domain_claims(Some(found.id))
+            .await?
+            .iter()
+            .any(|d| d.autojoin && d.verified_ms.is_some());
+        let mut owners = Vec::new();
+        for m in t.members(found.id).await?.iter().filter(|m| m.owner) {
+            if let Some(p) = access_store::idp::subject_party(&mut t, &m.subject).await? {
+                owners.push(p);
+            }
+        }
+        t.commit().await?;
+        if !autojoin {
+            return Err(AdminError::Refused(String::from(NOT_THE_AUTOJOIN_GRANT)));
+        }
+        let Some(Payload::GrantIssue(content)) = w.payload.as_deref() else {
+            return Err(AdminError::Refused(String::from(NOT_THE_AUTOJOIN_GRANT)));
+        };
+        let on_anchor = content.basis == GrantBasis::Anchor(Id(anchor))
+            && w.basis == ExerciseBasis::Anchor(Id(anchor));
+        if !on_anchor || content.holder != crate::domain::org::org_members(found.party) {
+            return Err(AdminError::Refused(String::from(NOT_THE_AUTOJOIN_GRANT)));
+        }
+        // TN-89 (10)
+        let set = &content.authority.authority.actions;
+        let reserved = reserved_actions();
+        let actions: Vec<(String, String)> = set
+            .exact
+            .iter()
+            .map(|a| (a.namespace.clone(), a.name.clone()))
+            .collect();
+        let whole = set.prefix.iter().any(|(ns, _)| {
+            ns == access_kernel::meta::NAMESPACE || reserved.iter().any(|(r, _)| r == ns)
+        });
+        if whole || !crate::domain::org::first_accept_allowed(&actions, &reserved) {
+            return Err(AdminError::Refused(String::from(NOT_THE_AUTOJOIN_GRANT)));
+        }
+        let signer = self
+            .decider
+            .signer(w.domain, &w.ais)
+            .await
+            .map_err(|e| AdminError::Unavailable(e.0))?;
+        if !signer.is_some_and(|s| owners.contains(&s.0)) {
+            return Err(AdminError::Refused(String::from(
+                super::transfers::OWNER_ONLY,
+            )));
+        }
+        Box::pin(self.meta((tenant, realm), w)).await
     }
 }

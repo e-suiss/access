@@ -327,6 +327,9 @@ pub enum MetaTarget {
     ProposeHandover([u8; 16], String, String),
     /// A contributed handover's completion: the organization's Party and the handover (TN-91).
     CompleteHandover([u8; 16], [u8; 16]),
+    /// An organization's autojoin role Grant, held by its `org_member` Claims: the
+    /// organization's Party (TN-90, OP-153 m.25 (i) (3)).
+    Autojoin([u8; 16]),
 }
 
 /// What a draft found.

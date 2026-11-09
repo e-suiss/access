@@ -459,7 +459,7 @@ pub const ROWS: &[Route] = &[
         Verb::Post,
         "/admin/v1/realms/{slug}/jobs",
         "createJob",
-        "Starts a bulk job: each item is its own write under its own AIS, and `revokeGrant` or `amendGrant` items are Grant revokes or amends, each its own Exercise (E17); `issueRoleGrant` issues an accepted invitation's role (TN-89), and `proposeOwnershipHandover` (accepted, nothing decided yet) and `completeOwnershipHandover` carry an organization's `anchor_transfer` (TN-91); answers 202.",
+        "Starts a bulk job: each item is its own write under its own AIS, and `revokeGrant` or `amendGrant` items are Grant revokes or amends, each its own Exercise (E17); `issueRoleGrant` issues an accepted invitation's role (TN-89), `proposeOwnershipHandover` (accepted, nothing decided yet) and `completeOwnershipHandover` carry an organization's `anchor_transfer` (TN-91), and `issueAutojoinGrant` (key: the organization) an owner's `grant_issue` of the autojoin role, held by the organization's `org_member` Claims (TN-90); answers 202.",
     ),
     read(
         "/admin/v1/realms/{slug}/jobs/{job_id}",
