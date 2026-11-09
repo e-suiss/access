@@ -255,7 +255,7 @@ fn hub_entries_carry_capacity_and_no_action() {
         named: None,
         since: 5,
         revision: 0,
-        member: None,
+        selection: None,
     };
     let change = access_authority_core::app::management::Change {
         position: 7,
@@ -293,4 +293,62 @@ fn hub_entries_carry_capacity_and_no_action() {
                 .all(|k| !k.contains("action_required") && *k != "revoke")
         );
     }
+}
+
+// XI-15, OP-153 m.25 (d)
+#[test]
+fn a_rule_shaped_row_carries_its_selection_state() {
+    use access_authority_core::app::hub::{Entry, Group, Holder, Holding, Selection, Source};
+    use access_kernel::model::{ResourceSelector, Structural};
+    let row = |selection| {
+        Hit::Entry(Box::new(Entry::Holding(Box::new(Holding {
+            grant: Id([1; 16]),
+            groups: vec![Group::YourAuthority],
+            holder: Holder::Group(vec!["staff".to_owned()]),
+            source: Source::Anchor(Id([3; 16])),
+            capacities: Vec::new(),
+            actions: Vec::new(),
+            resource: ResourceSelector::Structural(Structural {
+                namespace: "shop".to_owned(),
+                prefix: Vec::new(),
+                kind: None,
+                attrs: std::collections::BTreeMap::new(),
+            }),
+            validity: Window { from: 0, until: 9 },
+            budget: Vec::new(),
+            conditions: 0,
+            named: None,
+            since: 5,
+            revision: 0,
+            selection,
+        }))))
+    };
+    let out = encode_search(
+        &[
+            row(Some(Selection::Stale { since: 4 })),
+            row(Some(Selection::Ended {
+                pos: Some(8),
+                at: Some(80),
+            })),
+            row(Some(Selection::Ended {
+                pos: None,
+                at: None,
+            })),
+            row(None),
+        ],
+        None,
+        true,
+    );
+    let r = &out["results"];
+    assert_eq!(
+        r[0]["selection"],
+        serde_json::json!({ "state": "stale", "since": 4 })
+    );
+    assert_eq!(
+        r[1]["selection"],
+        serde_json::json!({ "state": "ended", "pos": 8, "at": 80 })
+    );
+    assert_eq!(r[2]["selection"], serde_json::json!({ "state": "ended" }));
+    assert!(r[3].get("selection").is_none());
+    assert!(r[0].get("member").is_none());
 }

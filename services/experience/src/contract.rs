@@ -162,7 +162,7 @@ pub struct HubRequest {
     pub reads: Vec<SignedRead>,
 }
 
-/// Whether what a row or domain shows is current (XI-15, XI-16).
+/// Whether what a row or domain shows is current (XI-16).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Freshness {
@@ -170,8 +170,35 @@ pub enum Freshness {
     Current,
     /// Its owner could not be reached: "Current status unknown".
     Unknown,
-    /// A rule-shaped holding whose selection is not current: "Not current — may have ended".
-    NeedsRefresh,
+}
+
+/// Where the reader stands in a rule-shaped holder, from the membership episode (XI-15, C13,
+/// INV-31, OP-153 m.25 (d)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SelectionState {
+    /// Selected now.
+    Current,
+    /// Selected; a statement is older than an action allows: "Needs refresh — not removed".
+    Stale,
+    /// The episode closed: "Removed since …". A rejoin is a new episode, never this one back.
+    Ended,
+}
+
+/// The reader's selection by a rule-shaped holder (XI-15).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Selection {
+    /// Current, stale or ended.
+    pub state: SelectionState,
+    /// The open episode's first position.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since: Option<u64>,
+    /// The closing record's position, when ended by one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pos: Option<u64>,
+    /// When the episode closed, Unix ms, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<u64>,
 }
 
 /// A domain as this answer saw it.
@@ -278,10 +305,13 @@ pub struct Row {
     pub owner: Owner,
     /// When it was read (XI-16).
     pub as_of: u64,
-    /// Current, or needs refresh.
+    /// Read just now.
     pub freshness: Freshness,
     /// The status text key.
     pub status: String,
+    /// The reader's selection, for a rule-shaped holder that ever selected the reader (XI-15).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selection: Option<Selection>,
     /// The holder.
     pub who: Who,
     /// Capacity (XI-10).
@@ -523,7 +553,16 @@ fn requests() -> Map<String, Value> {
 
 #[allow(clippy::too_many_lines, reason = "one schema table")]
 fn rows() -> Map<String, Value> {
-    let freshness = json!({ "type": "string", "enum": ["current", "unknown", "needs_refresh"] });
+    let freshness = json!({ "type": "string", "enum": ["current", "unknown"] });
+    let selection = object(
+        &json!({
+            "state": { "type": "string", "enum": ["current", "stale", "ended"], "description": "XI-15: `stale` keeps the episode open and is never \"removed\"; `ended` is a closed episode, and a rejoin is a new one." },
+            "since": uint("The open episode's first position."),
+            "pos": uint("The closing record's position."),
+            "at": uint("When the episode closed, Unix ms."),
+        }),
+        &["state"],
+    );
     let capacity = object(
         &json!({
             "text": { "type": "string", "enum": ["capacity.own_use", "capacity.on_behalf_of", "capacity.as_yourself"] },
@@ -533,6 +572,7 @@ fn rows() -> Map<String, Value> {
     );
     let mut m = Map::new();
     m.insert("Freshness".into(), freshness);
+    m.insert("Selection".into(), selection);
     m.insert("CapacityLabel".into(), capacity);
     m.insert(
         "DomainStatus".into(),
@@ -558,7 +598,8 @@ fn rows() -> Map<String, Value> {
                 "owner": owner(),
                 "as_of": uint("When it was read (XI-16)."),
                 "freshness": r("Freshness"),
-                "status": text("`status.current` or `status.needs_refresh` (XI-15: never \"removed\")."),
+                "status": text("`status.current`, `status.stale` (\"Needs refresh — not removed\"), `status.ended` (\"Removed since …\") or `status.ended_undated` (XI-15)."),
+                "selection": r("Selection"),
                 "who": object(&json!({
                     "kind": { "type": "string", "enum": ["party", "everyone", "group", "foreign"] },
                     "party": text("Party."),

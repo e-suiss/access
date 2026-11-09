@@ -20,7 +20,7 @@ The contract is [`sdks/openapi/experience-v1.json`](../../sdks/openapi/experienc
 - **Capacity.** Every holding says in whose name it is used ("for their own use", "on behalf of …"), apart from where it came from. Everything the reader gave shows in at least one group.
 - **Limits.** An authority limit and a financial limit are two rows with two owners.
 - **Actions.** A row shows the actions the reader can take, at most two steps away; one the reader cannot take is shown with who can.
-- **Rule-shaped holdings.** A selection that is not current reads "Not current — may have ended".
+- **Rule-shaped holdings.** A stale selection reads "Needs refresh — not removed"; an ended one reads "Removed since …", and a rejoin is a new selection, not the old one back.
 - **Coverage.** The hub always says "Not shown: domains you haven't connected"; it never claims to be complete.
 - **Changes are information.** No change asks for an action; there is no notification centre.
 

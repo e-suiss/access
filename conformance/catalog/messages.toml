@@ -1310,7 +1310,21 @@ owner = "access"
 protected = false
 
 [[message]]
-key = "status-needs_refresh"
+key = "status-stale"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "status-ended"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "status-ended_undated"
 surface = "hub"
 class = "status"
 owner = "access"

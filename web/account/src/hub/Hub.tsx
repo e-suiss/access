@@ -225,7 +225,9 @@ function Rows({
                 <span className="mono">{r.what.join(", ")}</span> · <Capacities row={r} />
               </p>
               <p className="meta">
-                {t(r.status)}
+                {r.selection?.at === undefined
+                  ? t(r.status)
+                  : t(r.status, { time: at(r.selection.at) })}
                 {r.validUntil !== undefined && (
                   <> · {t("validity.valid_until", { time: at(r.validUntil) })}</>
                 )}

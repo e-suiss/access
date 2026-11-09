@@ -1327,8 +1327,17 @@ export interface components {
             since: number;
             /** @description Revision, 0 at issue. */
             revision: number;
-            /** @description For a rule-shaped holder: whether the reader is a member now; `false` reads "needs refresh", never "removed" (XI-15). */
-            member?: boolean;
+            /** @description For a rule-shaped holder the reader was ever selected by, from the membership episode (XI-15, C13, INV-31): `current` and `stale` (the episode is open; an exercise asks for a fresher statement, never "removed") carry the episode's first position `since`, so a rejoin shows its new episode; `ended` (a cutoff, a disqualifying statement or an expired membership Claim) carries the closing position `pos` and time `at` when known. */
+            selection?: {
+                /** @enum {string} */
+                state: "current" | "stale" | "ended";
+                /** @description The episode's first position (`current`, `stale`). */
+                since?: number;
+                /** @description The closing record's position (`ended`). */
+                pos?: number;
+                /** @description When it closed, Unix ms (`ended`). */
+                at?: number;
+            };
         };
         HubRoot: {
             /** @constant */

@@ -878,7 +878,7 @@ id = "XI-15"
 family = "XI"
 section = "6.4"
 status = "canonical"
-stage = 12
+stage = 8
 title = "Rule-shaped authority explained in two parts; stale is not removed"
 tests = []
 

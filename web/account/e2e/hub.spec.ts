@@ -19,7 +19,21 @@ test.beforeEach(async ({ bff, context, baseURL }) => {
   await bff.signIn(context, baseURL ?? "");
   bff.searches.set("inventory", [
     holding("g-given"),
-    holding("g-lapsed", { member: false }),
+    holding("g-stale", {
+      groups: ["your_authority"],
+      holder: { group: ["staff"] },
+      selection: { state: "stale", since: 4 },
+    }),
+    holding("g-removed", {
+      groups: ["your_authority"],
+      holder: { group: ["staff"] },
+      selection: { state: "ended", pos: 9, at: 1_700_000_000_000 },
+    }),
+    holding("g-rejoined", {
+      groups: ["your_authority"],
+      holder: { group: ["staff"] },
+      selection: { state: "current", since: 12 },
+    }),
     holding("g-not-mine", { source: { holder: "someone-else", grant: "parent" } }),
     holding("g-held", { groups: ["your_authority"], holder: { party: PARTY } }),
     { type: "root", anchor: "root-anchor", sole: true },
@@ -57,16 +71,14 @@ test("every row says whose record it is, when it was read, and in whose name", a
 }) => {
   await setUp(page, bff);
   const shared = page.getByTestId("shared-from-you");
-  await expect(shared.locator("li.row")).toHaveCount(3);
+  await expect(shared.locator("li.row")).toHaveCount(2);
   for (const row of await shared.locator("li.row").all()) {
     await expect(row).toContainText("Recorded by Access");
     await expect(row).toContainText("As of");
     await expect(row).toContainText("for their own use");
   }
   await expect(page.getByTestId("your-authority")).toContainText("as yourself");
-  await expect(shared.locator('[data-grant="g-lapsed"]')).toContainText(
-    "Not current — may have ended",
-  );
+  await expect(page.getByText(/may have ended/)).toHaveCount(0);
   await expect(shared.locator('[data-grant="g-not-mine"]')).toContainText(
     "Who can: the person who gave it",
   );
@@ -76,6 +88,24 @@ test("every row says whose record it is, when it was read, and in whose name", a
   expect(reads.every((s) => typeof (s.body["context"] as { ais?: unknown }).ais === "string")).toBe(
     true,
   );
+});
+
+test("a stale selection is not removed, an ended one is, and a rejoin reads current", async ({
+  page,
+  bff,
+}) => {
+  // XI-15, C13, INV-31
+  await setUp(page, bff);
+  const yours = page.getByTestId("your-authority");
+  const stale = yours.locator('[data-grant="g-stale"]');
+  await expect(stale).toContainText("Needs refresh — not removed");
+  await expect(stale).not.toContainText("Removed since");
+  const removed = yours.locator('[data-grant="g-removed"]');
+  await expect(removed).toContainText("Removed since");
+  await expect(removed).not.toContainText("Needs refresh");
+  const rejoined = yours.locator('[data-grant="g-rejoined"]');
+  await expect(rejoined).toContainText("Current");
+  await expect(rejoined).not.toContainText("Removed");
 });
 
 test("Why? says where a holding comes from, as recorded, with details on request", async ({

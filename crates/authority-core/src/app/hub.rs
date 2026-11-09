@@ -8,13 +8,16 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use access_authority_sequencer::ports::DomainLog;
 use access_kernel::claim::body::{BindingKind, Class};
+use access_kernel::claim::{self, ClaimState};
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::Capacity;
 use access_kernel::digest::Digest;
 use access_kernel::meta::{
     self, Actor, AnchorState, ExerciseBasis, GrantBasis, GrantState, InstanceState, Root, kind,
 };
-use access_kernel::model::{ActionRef, BudgetTerm, Id, ResourceSelector, SubjectSelector, Window};
+use access_kernel::model::{
+    ActionRef, BudgetTerm, Conjunct, Id, ProofKind, ResourceSelector, SubjectSelector, Window,
+};
 use access_kernel::record::{RecordEnvelope, RecordKind};
 use suiss_crypto::dcbor::{self, Limits, Value};
 
@@ -109,9 +112,47 @@ pub struct Holding {
     pub since: u64,
     /// Revision, 0 at issue.
     pub revision: u64,
-    /// Whether the viewer is a current member of a rule-shaped holder group; `None` when the
-    /// holder is not a group (XI-15: a lapsed membership is "needs refresh", never "removed").
-    pub member: Option<bool>,
+    /// Where the viewer stands in a rule-shaped holder group; `None` when the holder is not a
+    /// group or the viewer was never selected by it (XI-15).
+    pub selection: Option<Selection>,
+}
+
+/// The viewer's selection by a rule-shaped holder, from its membership episode (C13, INV-31,
+/// XI-15, OP-153 m.25 (d)): stale is not removed, and a rejoin is a new episode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Selection {
+    /// Selected, in the episode that began at position `since`.
+    Current {
+        /// The episode's first position.
+        since: u64,
+    },
+    /// Selected, but a statement the Grant requires is older than it allows: the episode stays
+    /// open and an exercise asks for a fresher one (`REQUIRE_ACTION`).
+    Stale {
+        /// The episode's first position.
+        since: u64,
+    },
+    /// The last episode closed: a cutoff, a disqualifying statement or an expired membership
+    /// Claim.
+    Ended {
+        /// The closing record's position, when a record closed it.
+        pos: Option<u64>,
+        /// When it closed, Unix ms, when known.
+        at: Option<u64>,
+    },
+}
+
+/// When one membership Claim stopped selecting its subject.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct End {
+    pos: Option<u64>,
+    at: Option<u64>,
+}
+
+impl End {
+    fn key(self) -> u64 {
+        self.at.unwrap_or(u64::MAX)
+    }
 }
 
 /// An Anchor the viewer roots.
@@ -326,12 +367,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     ) -> Result<Option<Holding>, CoreError> {
         let viewer = actor.party;
         let c = &state.content;
-        let (holder, member) = match &c.holder {
+        let (holder, selection) = match &c.holder {
             SubjectSelector::Party(p) => (Holder::Party(*p), None),
             SubjectSelector::Public => (Holder::Public, None),
             SubjectSelector::Pred(conj) => (
                 Holder::Group(conj.iter().map(|t| t.claim_class.clone()).collect()),
-                Some(self.holds(&grant, actor, now).await?),
+                self.selection(state, conj, &viewer, now).await?,
             ),
             SubjectSelector::Foreign { .. } => (Holder::Foreign, None),
         };
@@ -347,7 +388,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             }
         };
         let mut groups = Vec::new();
-        if holder == Holder::Party(viewer) || member == Some(true) {
+        // XI-15
+        if holder == Holder::Party(viewer) || selection.is_some() {
             groups.push(Group::YourAuthority);
         }
         if for_viewer && holder != Holder::Party(viewer) {
@@ -381,8 +423,184 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             named: c.named.as_ref().map(|(n, v, _)| (n.clone(), *v)),
             since: state.since,
             revision: state.revision,
-            member,
+            selection,
         }))
+    }
+
+    /// The selection of `party` by the holder `conjuncts` of Grant `state` (C13, INV-31): an open
+    /// episode is current or stale; a closed one ended when the latest Claim meeting a conjunct
+    /// stopped selecting, the earliest such end over the conjuncts; `None` when no Claim ever met
+    /// every conjunct.
+    async fn selection(
+        &self,
+        state: &GrantState,
+        conjuncts: &BTreeSet<Conjunct>,
+        party: &Id,
+        now: u64,
+    ) -> Result<Option<Selection>, CoreError> {
+        let mut snap = Snapshot::default();
+        if let Some(since) = self.episode(&mut snap, conjuncts, party, now).await? {
+            // C13
+            let refresh = self.stale(&mut snap, state, conjuncts, party, now).await?;
+            return Ok(Some(if refresh {
+                Selection::Stale { since }
+            } else {
+                Selection::Current { since }
+            }));
+        }
+        let mut closed: Option<End> = None;
+        for c in conjuncts {
+            let latest = self
+                .members(&mut snap, c, party)
+                .await?
+                .into_iter()
+                .filter(|(_, s)| s.statement.validity.from <= now)
+                .max_by_key(|(_, s)| s.since);
+            let Some((id, s)) = latest else {
+                return Ok(None);
+            };
+            let last = self.claim_end(&mut snap, &id, &s, now).await?;
+            if closed.is_none_or(|e| last.key() < e.key()) {
+                closed = Some(last);
+            }
+        }
+        Ok(closed.map(|e| Selection::Ended {
+            pos: e.pos,
+            at: e.at,
+        }))
+    }
+
+    /// The recorded Claims about `party` whose class and value meet `c`, ended or not.
+    async fn members(
+        &self,
+        snap: &mut Snapshot,
+        c: &Conjunct,
+        party: &Id,
+    ) -> Result<Vec<(Id, ClaimState)>, CoreError> {
+        let mut out = Vec::new();
+        for (_, value, _) in self
+            .scan(&claim::member_prefix(&c.claim_class, party))
+            .await?
+        {
+            let Some(id) = value.and_then(|v| Id::from_value(&v).ok()) else {
+                continue;
+            };
+            let Some(s) = self
+                .get(snap, &meta::key(kind::CLAIM, &id))
+                .await?
+                .and_then(|v| ClaimState::from_value(&v).ok())
+            else {
+                continue;
+            };
+            let st = &s.statement;
+            if st.subject == *party
+                && st.class == c.claim_class
+                && c.value
+                    .as_ref()
+                    .is_none_or(|v| st.value.as_ref() == Some(v))
+            {
+                out.push((id, s));
+            }
+        }
+        Ok(out)
+    }
+
+    /// When Claim `id` stopped selecting: its ending record, its first successor in the issuer
+    /// line (a disqualifying statement), the end of its validity, or the cutoff of the
+    /// Acceptances that admitted it (OP-141 m.42); neither position nor time when none is known.
+    async fn claim_end(
+        &self,
+        snap: &mut Snapshot,
+        id: &Id,
+        s: &ClaimState,
+        now: u64,
+    ) -> Result<End, CoreError> {
+        let mut pos = s.ended.as_ref().map(|e| e.at);
+        if pos.is_none() {
+            for (_, value, _) in self.scan(&claim::successor_prefix(id)).await? {
+                let Some(next) = value.and_then(|v| Id::from_value(&v).ok()) else {
+                    continue;
+                };
+                let since = self
+                    .get(snap, &meta::key(kind::CLAIM, &next))
+                    .await?
+                    .and_then(|v| ClaimState::from_value(&v).ok())
+                    .filter(|n| claim::same_line(&s.statement, &n.statement))
+                    .map(|n| n.since);
+                if let Some(since) = since
+                    && pos.is_none_or(|p| since < p)
+                {
+                    pos = Some(since);
+                }
+            }
+        }
+        if let Some(pos) = pos {
+            return Ok(End {
+                pos: Some(pos),
+                at: self.reader.recorded_at(pos).await?,
+            });
+        }
+        let until = s.statement.validity.until;
+        if until < now {
+            return Ok(End {
+                pos: None,
+                at: Some(until),
+            });
+        }
+        // OP-141 m.42
+        let cutoff = self
+            .widened_gates(snap, &s.statement.issuer)
+            .await?
+            .iter()
+            .filter_map(|(g, _)| {
+                g.ingest_until.filter(|u| {
+                    *u < now && g.admits_for(claim::SUBJECT_SELECTION, &s.statement, *u)
+                })
+            })
+            .max();
+        Ok(End {
+            pos: None,
+            at: cutoff,
+        })
+    }
+
+    /// Whether a membership statement the Grant requires is older than the requirement allows
+    /// for every Claim about `party` that meets it now (C13: staleness is not lapse).
+    async fn stale(
+        &self,
+        snap: &mut Snapshot,
+        state: &GrantState,
+        conjuncts: &BTreeSet<Conjunct>,
+        party: &Id,
+        now: u64,
+    ) -> Result<bool, CoreError> {
+        for term in &state.content.authority.requirements {
+            let Some(max) = term.freshness_ms else {
+                continue;
+            };
+            if term.proof_kind != ProofKind::Claim {
+                continue;
+            }
+            let Some(c) = conjuncts.iter().find(|c| c.claim_class == term.class) else {
+                continue;
+            };
+            let mut fresh = false;
+            for (id, s) in self.members(snap, c, party).await? {
+                let issued = s.statement.issued_at;
+                if claim::satisfies(c, &s, now)
+                    && issued <= now
+                    && now.checked_sub(issued).is_some_and(|age| age <= max)
+                    && self.in_line(snap, &id, &s.statement, now).await?
+                {
+                    fresh = true;
+                    break;
+                }
+            }
+            if !fresh {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     /// The window of records one log page walks: up to [`LOG_WINDOW`] records ending before

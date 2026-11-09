@@ -228,8 +228,7 @@
       "Freshness": {
         "enum": [
           "current",
-          "unknown",
-          "needs_refresh"
+          "unknown"
         ],
         "type": "string"
       },
@@ -633,8 +632,11 @@
             ],
             "type": "string"
           },
+          "selection": {
+            "$ref": "#/components/schemas/Selection"
+          },
           "status": {
-            "description": "`status.current` or `status.needs_refresh` (XI-15: never \"removed\").",
+            "description": "`status.current`, `status.stale` (\"Needs refresh — not removed\"), `status.ended` (\"Removed since …\") or `status.ended_undated` (XI-15).",
             "type": "string"
           },
           "validity": {
@@ -705,6 +707,39 @@
           "validity",
           "limits",
           "offers"
+        ],
+        "type": "object"
+      },
+      "Selection": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "description": "When the episode closed, Unix ms.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "pos": {
+            "description": "The closing record's position.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "since": {
+            "description": "The open episode's first position.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "state": {
+            "description": "XI-15: `stale` keeps the episode open and is never \"removed\"; `ended` is a closed episode, and a rejoin is a new one.",
+            "enum": [
+              "current",
+              "stale",
+              "ended"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
         ],
         "type": "object"
       },

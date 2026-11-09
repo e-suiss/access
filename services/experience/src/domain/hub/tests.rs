@@ -1,6 +1,7 @@
 #![allow(
     clippy::unwrap_used,
     clippy::indexing_slicing,
+    clippy::panic,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
@@ -126,19 +127,45 @@ fn two_limits_are_two_rows_with_owners() {
     assert_ne!(limits[0].term, limits[1].term);
 }
 
-// XI-15, X16
+// XI-15, X16, C13, INV-31
 #[test]
-fn a_lapsed_selection_needs_refresh_and_is_not_removed() {
-    let rule = holding(
-        &["your_authority"],
-        &json!({ "anchor": ANCHOR }),
-        &json!({ "holder": { "group": ["employee"] }, "member": false }),
+fn stale_is_not_removed_and_a_rejoin_is_a_new_episode() {
+    let rule = |selection: Value| {
+        holding(
+            &["your_authority"],
+            &json!({ "anchor": ANCHOR }),
+            &json!({ "holder": { "group": ["employee"] }, "selection": selection }),
+        )
+    };
+    let rows = vec![
+        rule(json!({ "state": "stale", "since": 4 })),
+        rule(json!({ "state": "ended", "pos": 9, "at": 1_700 })),
+        rule(json!({ "state": "ended" })),
+        rule(json!({ "state": "current", "since": 12 })),
+    ];
+    let hub = assemble(ME, Depth::Default, 10, &one(rows));
+    let [stale, ended, undated, rejoined] = &hub.your_authority[..] else {
+        panic!("{:?}", hub.your_authority);
+    };
+    assert_eq!(stale.status, texts::STATUS_STALE);
+    assert_eq!(stale.freshness, Freshness::Current);
+    assert_eq!(
+        stale.selection.map(|s| (s.state, s.since)),
+        Some((SelectionState::Stale, Some(4)))
     );
-    let hub = assemble(ME, Depth::Default, 10, &one(vec![rule]));
-    let r = &hub.your_authority[0];
-    assert_eq!(r.freshness, Freshness::NeedsRefresh);
-    assert_eq!(r.status, texts::STATUS_NEEDS_REFRESH);
-    assert_eq!(r.who.classes, ["employee"]);
+    assert_eq!(stale.who.classes, ["employee"]);
+    assert_eq!(ended.status, texts::STATUS_ENDED);
+    assert_eq!(
+        ended.selection.map(|s| (s.state, s.pos, s.at, s.since)),
+        Some((SelectionState::Ended, Some(9), Some(1_700), None))
+    );
+    assert_eq!(undated.status, texts::STATUS_ENDED_UNDATED);
+    assert_ne!(stale.status, ended.status);
+    assert_eq!(rejoined.status, texts::STATUS_CURRENT);
+    assert_eq!(
+        rejoined.selection.map(|s| (s.state, s.since)),
+        Some((SelectionState::Current, Some(12)))
+    );
 }
 
 // XI-16, §8.17.7.2, E25, IA-6

@@ -1,7 +1,7 @@
 //! The hub's rows from the domains' answers (§8.17.7.1, §8.17.7.2, §6.4): owner and time on
 //! every row (XI-1, XI-16), capacity apart from provenance (XI-10), one row per limit and owner
-//! (XI-14), offered actions with who can (XI-11) at most two steps away (XI-5), a lapsed
-//! selection as "needs refresh" (XI-15), and only what is about the reader (XI-9, XI-22). A
+//! (XI-14), offered actions with who can (XI-11) at most two steps away (XI-5), a stale
+//! selection apart from an ended one (XI-15), and only what is about the reader (XI-9, XI-22). A
 //! domain that did not answer is unknown, never empty and never pending.
 
 use std::collections::BTreeSet;
@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 
 use crate::contract::{
     ActivityRow, CapacityLabel, ChangeRow, Depth, DomainRef, DomainStatus, Expert, Freshness, Hub,
-    Kind, Limit, Offer, Owner, RootRow, Row, Validity, Who,
+    Kind, Limit, Offer, Owner, RootRow, Row, Selection, SelectionState, Validity, Who,
 };
 use crate::domain::texts;
 
@@ -153,6 +153,34 @@ fn offers(row: &Value, viewer: &str, roots: &BTreeSet<String>) -> Vec<Offer> {
     out
 }
 
+/// The reader's selection by a rule-shaped holder and its status text (XI-15, OP-153 m.25 (d)).
+fn selection(v: &Value) -> (Option<Selection>, &'static str) {
+    let s = &v["selection"];
+    let state = match s["state"].as_str() {
+        Some("current") => SelectionState::Current,
+        Some("stale") => SelectionState::Stale,
+        Some("ended") => SelectionState::Ended,
+        _ => return (None, texts::STATUS_CURRENT),
+    };
+    let at = s["at"].as_u64();
+    let text = match state {
+        SelectionState::Current => texts::STATUS_CURRENT,
+        SelectionState::Stale => texts::STATUS_STALE,
+        SelectionState::Ended if at.is_some() => texts::STATUS_ENDED,
+        SelectionState::Ended => texts::STATUS_ENDED_UNDATED,
+    };
+    let ended = state == SelectionState::Ended;
+    (
+        Some(Selection {
+            state,
+            since: s["since"].as_u64().filter(|_| !ended),
+            pos: s["pos"].as_u64().filter(|_| ended),
+            at: at.filter(|_| ended),
+        }),
+        text,
+    )
+}
+
 /// One holding row, or `None` when the answer is not a holding about the reader.
 fn row(
     v: &Value,
@@ -171,23 +199,16 @@ fn row(
     }
     let yours = groups.iter().any(|g| g == "your_authority");
     // XI-15
-    let lapsed = v.get("member") == Some(&Value::Bool(false));
+    let (selection, status) = selection(v);
     let row = Row {
         domain: String::from(domain),
         label: label.cloned(),
         grant: text(&v["grant"])?,
         owner: Owner::Access,
         as_of,
-        freshness: if lapsed {
-            Freshness::NeedsRefresh
-        } else {
-            Freshness::Current
-        },
-        status: String::from(if lapsed {
-            texts::STATUS_NEEDS_REFRESH
-        } else {
-            texts::STATUS_CURRENT
-        }),
+        freshness: Freshness::Current,
+        status: String::from(status),
+        selection,
         who: who(&v["holder"]),
         capacity: capacities(v, yours),
         what: v["actions"]

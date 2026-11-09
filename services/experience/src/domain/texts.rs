@@ -13,8 +13,12 @@ pub const DOMAIN_CURRENT: &str = "domain.current";
 pub const DOMAIN_UNREACHABLE: &str = "domain.unreachable";
 /// The row is current.
 pub const STATUS_CURRENT: &str = "status.current";
-/// "Not current — may have ended" (XI-15, OP-153 m.21 (c)).
-pub const STATUS_NEEDS_REFRESH: &str = "status.needs_refresh";
+/// "Needs refresh — not removed": the episode is open (XI-15, C13, OP-153 m.25 (d)).
+pub const STATUS_STALE: &str = "status.stale";
+/// "Removed since …": the episode closed (XI-15, INV-31).
+pub const STATUS_ENDED: &str = "status.ended";
+/// "Removed": the episode closed at a time the domain did not say.
+pub const STATUS_ENDED_UNDATED: &str = "status.ended_undated";
 /// "for their own use".
 pub const CAPACITY_OWN_USE: &str = "capacity.own_use";
 /// "on behalf of *Acme*".
@@ -65,13 +69,15 @@ pub const OUTCOME_BUSY: &str = "outcome.busy_retry";
 pub const OUTCOME_TIME: &str = "outcome.unavailable_time_check";
 
 /// Every key, for the catalogue check.
-pub const ALL: [&str; 27] = [
+pub const ALL: [&str; 29] = [
     NOT_SHOWN,
     SOME_UNKNOWN,
     DOMAIN_CURRENT,
     DOMAIN_UNREACHABLE,
     STATUS_CURRENT,
-    STATUS_NEEDS_REFRESH,
+    STATUS_STALE,
+    STATUS_ENDED,
+    STATUS_ENDED_UNDATED,
     CAPACITY_OWN_USE,
     CAPACITY_ON_BEHALF,
     CAPACITY_AS_YOURSELF,

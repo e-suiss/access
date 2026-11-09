@@ -210,7 +210,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
 
     /// The live Acceptances of `issuer`, each with the position of its last widening
     /// (OP-141 m.42 (a)).
-    async fn widened_gates(
+    pub(crate) async fn widened_gates(
         &self,
         snap: &mut Snapshot,
         issuer: &Id,

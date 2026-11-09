@@ -139,7 +139,7 @@ export interface components {
             text: string;
         };
         /** @enum {string} */
-        Freshness: "current" | "unknown" | "needs_refresh";
+        Freshness: "current" | "unknown";
         Hub: {
             /** @description Holdings whose agency names the reader. */
             acting_for_you: components["schemas"]["Row"][];
@@ -267,7 +267,8 @@ export interface components {
              * @enum {string}
              */
             owner: "access" | "executor" | "verifier" | "relay" | "pay";
-            /** @description `status.current` or `status.needs_refresh` (XI-15: never "removed"). */
+            selection?: components["schemas"]["Selection"];
+            /** @description `status.current`, `status.stale` ("Needs refresh — not removed"), `status.ended` ("Removed since …") or `status.ended_undated` (XI-15). */
             status: string;
             validity: {
                 /** @constant */
@@ -285,6 +286,19 @@ export interface components {
                 /** @description Party. */
                 party?: string;
             };
+        };
+        Selection: {
+            /** @description When the episode closed, Unix ms. */
+            at?: number;
+            /** @description The closing record's position. */
+            pos?: number;
+            /** @description The open episode's first position. */
+            since?: number;
+            /**
+             * @description XI-15: `stale` keeps the episode open and is never "removed"; `ended` is a closed episode, and a rejoin is a new one.
+             * @enum {string}
+             */
+            state: "current" | "stale" | "ended";
         };
         Signal: {
             /** @description Read again; the answer reflects at least this position. */

@@ -1753,3 +1753,314 @@ async fn a_support_grant_is_a_visible_delegation() {
     let rows = holdings(&core.search(&inc, &q, None, NOW).await.unwrap());
     assert!(rows.iter().all(|r| r.grant != support));
 }
+
+/// Genesis where ALICE issues `staff` membership Claims under a `subject-selection` Acceptance;
+/// members with `staff = true` hold two Grants to read the shop, the second only with a `staff`
+/// statement at most `fresh_ms` old.
+fn staffed(fresh_ms: u64) -> BTreeMap<String, Opened> {
+    use access_kernel::model::{
+        Binding as ProofBinding, Conjunct, Consumption, EqValue, Independence, ProofKind,
+        RequirementTerm,
+    };
+    let mut g = genesis();
+    let Some(Value::Array(mut grants)) = g.get("grants").map(|o| o.value.clone()) else {
+        panic!("genesis has grants");
+    };
+    let staff = SubjectSelector::Pred(BTreeSet::from([Conjunct {
+        claim_class: "staff".to_owned(),
+        value: Some(EqValue::Bool(true)),
+    }]));
+    let plain = authority(vec![action("shop", "read")], selector("shop"));
+    let mut fresh = plain.clone();
+    fresh.requirements.insert(RequirementTerm {
+        proof_kind: ProofKind::Claim,
+        class: "staff".to_owned(),
+        count: 1,
+        binding: ProofBinding::None,
+        freshness_ms: Some(fresh_ms),
+        independence: Independence::None,
+        consumption: Consumption::Reusable,
+        source: None,
+        assurance: BTreeMap::new(),
+    });
+    for a in [plain, fresh] {
+        grants.push(Value::Map(vec![
+            (Value::text("anchor"), Value::Unsigned(1)),
+            (Value::text("holder"), staff.to_value()),
+            (Value::text("authority"), a.to_value()),
+            (
+                Value::text("agency"),
+                Value::Array(vec![meta::capacity_value(Capacity::Own)]),
+            ),
+        ]));
+    }
+    g.insert(
+        "grants".to_owned(),
+        Opened {
+            value: Value::Array(grants),
+            salt: [3; 32],
+        },
+    );
+    let mut all = match g.get("acceptances").map(|o| o.value.clone()) {
+        Some(Value::Array(a)) => a,
+        _ => Vec::new(),
+    };
+    all.push(staff_acceptance(None));
+    let mut keyed: Vec<(Vec<u8>, Value)> = all
+        .into_iter()
+        .map(|v| {
+            let b = dcbor::encode(&v, Limits::CEILING).unwrap();
+            (b.clone(), dcbor::decode(&b, Limits::CEILING).unwrap())
+        })
+        .collect();
+    keyed.sort_by(|a, b| a.0.cmp(&b.0));
+    g.insert(
+        "acceptances".to_owned(),
+        Opened {
+            value: Value::Array(keyed.into_iter().map(|(_, v)| v).collect()),
+            salt: [3; 32],
+        },
+    );
+    g
+}
+
+/// ALICE's `subject-selection` Acceptance of `staff`, with an ingest cutoff when given.
+fn staff_acceptance(cutoff: Option<u64>) -> Value {
+    let mut fields = vec![
+        (Value::text("issuer"), ALICE.to_value()),
+        (Value::text("use"), Value::text("subject-selection")),
+        (
+            Value::text("classes"),
+            Value::Array(vec![Value::text("staff")]),
+        ),
+        (Value::text("subject"), SubjectSelector::Public.to_value()),
+        (
+            Value::text("validity"),
+            Value::Array(vec![Value::Unsigned(0), Value::Unsigned(1_000_000)]),
+        ),
+    ];
+    if let Some(c) = cutoff {
+        fields.push((Value::text("ingest_until"), Value::Unsigned(c)));
+    }
+    let b = dcbor::encode(&Value::Map(fields), Limits::CEILING).unwrap();
+    dcbor::decode(&b, Limits::CEILING).unwrap()
+}
+
+/// ALICE's `staff` Claim about ROOT, superseding `supersedes` when given.
+fn staff_claim(d: Digest, member: bool, supersedes: Option<Id>) -> Vec<u8> {
+    let st = access_kernel::claim::Statement {
+        domain: d,
+        issuer: ALICE,
+        subject: ROOT,
+        class: "staff".to_owned(),
+        value: Some(access_kernel::model::EqValue::Bool(member)),
+        issued_at: NOW,
+        validity: Window {
+            from: 0,
+            until: 1_000_000,
+        },
+        assurance: BTreeMap::new(),
+        bound_intent: None,
+        bound_instance: None,
+        bound_resource: None,
+        supersedes,
+    };
+    let with = signing(ALICE_KEY);
+    let prot = dcbor::encode(
+        &Value::Map(vec![
+            (Value::Unsigned(ALG), Value::int(-19)),
+            (
+                Value::Unsigned(CT),
+                Value::text(access_kernel::claim::CONTENT_TYPE),
+            ),
+            (
+                Value::Unsigned(KID),
+                Value::Bytes(thumbprint(&public(ALICE_KEY)).to_vec()),
+            ),
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap();
+    let payload = st.to_bytes().unwrap();
+    let sig = with
+        .sign(&to_be_signed(&prot, &payload).unwrap())
+        .to_bytes();
+    let body = dcbor::encode(
+        &Value::Array(vec![
+            Value::Bytes(prot),
+            Value::Map(Vec::new()),
+            Value::Bytes(payload),
+            Value::Bytes(sig.to_vec()),
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap();
+    [vec![0xd2], body].concat()
+}
+
+async fn staff_inventory(core: &mut Core, d: Digest, nonce: u8, at: u64) -> Vec<HubHolding> {
+    let inc = incoming(search_request(d, nonce, "inventory"), ROOT_KEY);
+    let found = core
+        .search(&inc, &Query::Inventory { party: ROOT }, None, at)
+        .await
+        .unwrap();
+    holdings(&found)
+}
+
+async fn prove_staff(core: &mut Core, d: Digest, nonce: u8, claim: Vec<u8>) {
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let mut r = shop_request(d, nonce, Mode::Commit, shop);
+    r.proofs = vec![access_authority_core::domain::ProofRef::Claim(claim)];
+    allowed(&send(core, r, ROOT_KEY).await.unwrap());
+}
+
+fn row_of(rows: &[HubHolding], grant: Id) -> HubHolding {
+    rows.iter().find(|r| r.grant == grant).cloned().unwrap()
+}
+
+// XI-15, C13, INV-31, OP-153 m.25 (d), §8.17.5.7
+#[tokio::test]
+async fn the_hub_tells_stale_from_ended_and_a_rejoin_from_a_restore() {
+    use access_authority_core::app::hub::{Group, Selection};
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, staffed(1_000), 1_000)
+        .await
+        .unwrap();
+    let log = PgLog::new(db.sequencer.clone(), d, TENANT, "t".to_owned(), TTL);
+    let leader = Leader::acquire(log, d, EventKey::new(Secret::new([5; 32])))
+        .await
+        .unwrap();
+    let reader = PgReader::new(db.app.clone(), DomainId::from_bytes(d.0));
+    let mut core: Core = Authority::new(leader, reader, binding(), Counter(0), d);
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let plain = meta::object_id(&d, kind::GRANT, 1);
+    let fresh_only = meta::object_id(&d, kind::GRANT, 2);
+
+    let rows = staff_inventory(&mut core, d, 21, NOW).await;
+    let p = row_of(&rows, plain);
+    assert_eq!(
+        p.selection, None,
+        "never selected: neither stale nor removed"
+    );
+    assert_eq!(p.groups, [Group::SharedFromYou]);
+
+    let joined = staff_claim(d, true, None);
+    let joined_id = access_kernel::claim::claim_id(&joined);
+    prove_staff(&mut core, d, 22, joined).await;
+    let rows = staff_inventory(&mut core, d, 23, NOW).await;
+    let p = row_of(&rows, plain);
+    let Some(Selection::Current { since: first }) = p.selection else {
+        panic!("{p:?}");
+    };
+    assert!(p.groups.contains(&Group::YourAuthority));
+    assert_eq!(
+        row_of(&rows, fresh_only).selection,
+        Some(Selection::Current { since: first })
+    );
+
+    // C13
+    let rows = staff_inventory(&mut core, d, 24, NOW + 2_000).await;
+    assert_eq!(
+        row_of(&rows, plain).selection,
+        Some(Selection::Current { since: first })
+    );
+    assert_eq!(
+        row_of(&rows, fresh_only).selection,
+        Some(Selection::Stale { since: first })
+    );
+
+    let left = staff_claim(d, false, Some(joined_id));
+    let left_id = access_kernel::claim::claim_id(&left);
+    prove_staff(&mut core, d, 25, left).await;
+    let rows = staff_inventory(&mut core, d, 26, NOW).await;
+    let p = row_of(&rows, plain);
+    let Some(Selection::Ended {
+        pos: Some(removed),
+        at: Some(_),
+    }) = p.selection
+    else {
+        panic!("{p:?}");
+    };
+    assert!(removed > first);
+    assert_eq!(row_of(&rows, fresh_only).selection, p.selection);
+    assert!(p.groups.contains(&Group::YourAuthority));
+
+    // INV-31
+    prove_staff(&mut core, d, 27, staff_claim(d, true, Some(left_id))).await;
+    let rows = staff_inventory(&mut core, d, 28, NOW).await;
+    let p = row_of(&rows, plain);
+    let Some(Selection::Current { since: again }) = p.selection else {
+        panic!("{p:?}");
+    };
+    assert!(again > removed, "a rejoin is a new episode");
+    let restored = send(
+        &mut core,
+        shop_request(
+            d,
+            29,
+            Mode::Check,
+            ExerciseBasis::Holding(HoldingRef {
+                grant: plain,
+                holder: ROOT,
+                since: first,
+            }),
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    assert_ne!(restored.decision.outcome, Outcome::Allow);
+
+    let rows = staff_inventory(&mut core, d, 30, 1_000_001).await;
+    let p = row_of(&rows, plain);
+    assert_eq!(
+        p.selection,
+        Some(Selection::Ended {
+            pos: None,
+            at: Some(1_000_000)
+        }),
+        "an expired membership Claim ended the episode"
+    );
+    assert_eq!(
+        row_of(&rows, fresh_only).selection,
+        p.selection,
+        "expired is ended, not stale"
+    );
+
+    // OP-141 m.42
+    let state = access_store::authority::state_of(
+        &db.app,
+        &DomainId::from_bytes(d.0),
+        &[meta::key(kind::ACCEPTANCES, &ALICE)],
+    )
+    .await
+    .unwrap();
+    let Value::Array(ids) =
+        dcbor::decode(state[0].value.as_deref().unwrap(), Limits::CEILING).unwrap()
+    else {
+        panic!("acceptance index");
+    };
+    let amend = Payload::AcceptanceAmend {
+        acceptance: Id::from_value(&ids[0]).unwrap(),
+        content: staff_acceptance(Some(NOW + 100)),
+    };
+    allowed(
+        &send(
+            &mut core,
+            meta_request(d, 31, meta_anchor(d), amend),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    let rows = staff_inventory(&mut core, d, 32, NOW + 200).await;
+    assert_eq!(
+        row_of(&rows, plain).selection,
+        Some(Selection::Ended {
+            pos: None,
+            at: Some(NOW + 100)
+        }),
+        "a cutoff ended the episode"
+    );
+}

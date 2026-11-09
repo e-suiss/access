@@ -34,11 +34,23 @@ export interface Offer {
   readonly steps: number;
 }
 
+/**
+ * The viewer's selection by a rule-shaped holder (XI-15, C13, INV-31): stale keeps the episode open
+ * and is never "removed"; ended is a closed episode, and a rejoin is a new one.
+ */
+export interface Selection {
+  readonly state: "current" | "stale" | "ended";
+  readonly since?: number;
+  readonly pos?: number;
+  readonly at?: number;
+}
+
 export interface Row {
   readonly grant: string;
   readonly owner: "access";
   readonly asOf: number;
-  readonly status: "status.current" | "status.needs_refresh";
+  readonly status: "status.current" | "status.stale" | "status.ended" | "status.ended_undated";
+  readonly selection?: Selection;
   readonly who: {
     readonly kind: "party" | "everyone" | "group" | "foreign";
     readonly party?: string;
@@ -125,6 +137,27 @@ function offers(row: Json, viewer: string, roots: ReadonlySet<string>): Offer[] 
   return out;
 }
 
+function selection(v: Json): [Selection | undefined, Row["status"]] {
+  const s = obj(v["selection"]);
+  const state = s["state"];
+  if (state !== "current" && state !== "stale" && state !== "ended") {
+    return [undefined, "status.current"];
+  }
+  if (state === "ended") {
+    const pos = num(s["pos"]);
+    const at = num(s["at"]);
+    return [
+      { state, ...(pos === undefined ? {} : { pos }), ...(at === undefined ? {} : { at }) },
+      at === undefined ? "status.ended_undated" : "status.ended",
+    ];
+  }
+  const since = num(s["since"]);
+  return [
+    { state, ...(since === undefined ? {} : { since }) },
+    state === "stale" ? "status.stale" : "status.current",
+  ];
+}
+
 function row(
   v: Json,
   viewer: string,
@@ -135,7 +168,8 @@ function row(
   const groups = arr(v["groups"]).filter((g): g is string => typeof g === "string");
   const grant = str(v["grant"]);
   if (groups.length === 0 || grant === undefined) return undefined;
-  const lapsed = v["member"] === false;
+  // XI-15
+  const [chosen, status] = selection(v);
   const validUntil = num(obj(v["validity"])["until"]);
   const since = num(v["since"]);
   return [
@@ -144,7 +178,8 @@ function row(
       grant,
       owner: "access",
       asOf,
-      status: lapsed ? "status.needs_refresh" : "status.current",
+      status,
+      ...(chosen === undefined ? {} : { selection: chosen }),
       who: who(obj(v["holder"])),
       capacity: capacities(v, groups.includes("your_authority")),
       what: arr(v["actions"]).map(

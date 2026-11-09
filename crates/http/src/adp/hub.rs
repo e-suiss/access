@@ -3,7 +3,9 @@
 //! (XI-9, XI-22); none carries an action, which the surface derives from the viewer's authority
 //! (XI-11).
 
-use access_authority_core::app::hub::{Basis, Entry, Holder, Holding, Rooted, Source, Use};
+use access_authority_core::app::hub::{
+    Basis, Entry, Holder, Holding, Rooted, Selection, Source, Use,
+};
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::Capacity;
 use access_kernel::json::b64url_encode;
@@ -74,10 +76,29 @@ fn holding(h: &Holding) -> Out {
     }
     m.insert("since".into(), Out::from(h.since));
     m.insert("revision".into(), Out::from(h.revision));
-    if let Some(member) = h.member {
-        m.insert("member".into(), Out::from(member));
+    if let Some(s) = h.selection {
+        m.insert("selection".into(), selection(s));
     }
     Out::Object(m)
+}
+
+/// XI-15, OP-153 m.25 (d)
+fn selection(s: Selection) -> Out {
+    match s {
+        Selection::Current { since } => json!({ "state": "current", "since": since }),
+        Selection::Stale { since } => json!({ "state": "stale", "since": since }),
+        Selection::Ended { pos, at } => {
+            let mut m = Map::new();
+            m.insert("state".into(), "ended".into());
+            if let Some(p) = pos {
+                m.insert("pos".into(), Out::from(p));
+            }
+            if let Some(t) = at {
+                m.insert("at".into(), Out::from(t));
+            }
+            Out::Object(m)
+        }
+    }
 }
 
 fn rooted(r: &Rooted) -> Out {
