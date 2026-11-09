@@ -7,7 +7,10 @@
 use access_crypto::oauth::opaque_digest;
 use access_identity_session::domain::dbsc::split_cookie;
 use access_identity_session::domain::session::cookie_digest;
-use access_kernel::json::b64url_decode;
+use access_kernel::intent::IntentEnvelope;
+use access_kernel::json::{b64url_decode, b64url_encode};
+use access_kernel::meta::{HoldingRef, Payload};
+use access_kernel::model::{Id, Window};
 use access_store::clients::NewConsentRecord;
 
 use super::authorize::{REQUEST_CONTEXT, consent_resource};
@@ -15,7 +18,7 @@ use super::{Env, OAuth, Realm, bound_live, decode32, from_day, session_live, uns
 use crate::domain::cimd::{self, loopback_only, new_app, redirect_hosts};
 use crate::domain::client::Client;
 use crate::domain::login::return_to_ok;
-use crate::domain::request::{AuthRequest, Params, REQUEST_URI_PREFIX};
+use crate::domain::request::{AuthError, AuthRequest, Params, REQUEST_URI_PREFIX, error_redirect};
 use crate::ports::Unavailable;
 use crate::ports::oauth::{OAuthDb, OAuthTx};
 
@@ -47,6 +50,50 @@ pub struct ApprovalView {
     pub resource: String,
     /// The scopes asked for.
     pub scopes: Vec<String>,
+    /// The `grant.issue` the person signs to approve; `None` when they hold nothing they may
+    /// pass on, so nothing can be approved (EI-18).
+    pub draft: Option<ApprovalDraft>,
+}
+
+/// The `grant.issue` Exercise the consent page has the person's device Instance sign (EI-18,
+/// §11.6): a Grant to themselves from a holding of theirs, in the realm's governing domain.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ApprovalDraft {
+    /// The governing domain.
+    pub domain: [u8; 32],
+    /// The intent, valid while the request may be approved.
+    pub envelope: IntentEnvelope,
+    /// The encoded `grant_issue` payload.
+    pub payload: Vec<u8>,
+    /// The holding the Exercise is based on.
+    pub basis: HoldingRef,
+}
+
+/// How long a waiting request may be approved after it was stored (§11.6 rule 3, OP-154 m.3 (k)).
+pub const CONSENT_STATE_TTL_MS: u64 = 10 * 60 * 1000;
+
+const CSRF_CONTEXT: &str = "access/consent-csrf/v1";
+
+/// The consent page's CSRF token for the request `return_to` names, bound to the session
+/// cookie `cookie` (§11.4.5 #28): only a page of this origin that read the session's own
+/// preview knows it. `None` when either is malformed.
+#[must_use]
+pub fn consent_csrf(cookie: &str, return_to: &str) -> Option<String> {
+    let value = decode32(split_cookie(cookie).0)?;
+    let handle = request_handle(return_to)?;
+    let mut bound = Vec::with_capacity(64);
+    bound.extend_from_slice(&value);
+    bound.extend_from_slice(&opaque_digest(REQUEST_CONTEXT, &handle));
+    Some(b64url_encode(&opaque_digest(CSRF_CONTEXT, &bound)))
+}
+
+fn request_handle(return_to: &str) -> Option<Vec<u8>> {
+    let query = return_to.split_once('?').map_or("", |(_, q)| q);
+    Params::parse(query)
+        .ok()
+        .and_then(|p| p.get("request_uri").map(String::from))
+        .and_then(|u| u.strip_prefix(REQUEST_URI_PREFIX).map(String::from))
+        .and_then(|h| b64url_decode(&h).ok())
 }
 
 /// Why nothing is shown or kept.
@@ -89,21 +136,16 @@ impl<E: Env> OAuth<E> {
         if !return_to_ok(&realm.issuer, return_to) {
             return Ok(Err(NotApproved::NoRequest));
         }
-        let query = return_to.split_once('?').map_or("", |(_, q)| q);
-        let Some(handle) = Params::parse(query)
-            .ok()
-            .and_then(|p| p.get("request_uri").map(String::from))
-            .and_then(|u| u.strip_prefix(REQUEST_URI_PREFIX).map(String::from))
-            .and_then(|h| b64url_decode(&h).ok())
-        else {
+        let Some(handle) = request_handle(return_to) else {
             return Ok(Err(NotApproved::NoRequest));
         };
         let hash = opaque_digest(REQUEST_CONTEXT, &handle);
-        let Some(row) = tx
-            .request(from_day(now), &hash)
-            .await?
-            .filter(|r| r.used_ms.is_none() && unsigned(r.expires_ms) > now)
-        else {
+        // §11.6 rule 3, Ek B 4540
+        let Some(row) = tx.request(from_day(now), &hash).await?.filter(|r| {
+            r.used_ms.is_none()
+                && unsigned(r.expires_ms) > now
+                && unsigned(r.created_ms).saturating_add(CONSENT_STATE_TTL_MS) > now
+        }) else {
             return Ok(Err(NotApproved::NoRequest));
         };
         let Ok(request) = serde_json::from_slice::<AuthRequest>(&row.params) else {
@@ -146,7 +188,13 @@ impl<E: Env> OAuth<E> {
             Ok(w) => w,
             Err(n) => return Ok(Err(n)),
         };
+        let party = tx.subject_party(w.subject).await?;
+        let domain = tx.governing().await?;
         tx.commit().await?;
+        let draft = match (party, domain) {
+            (Some(party), Some(domain)) => self.draft(domain, party, now).await?,
+            _ => None,
+        };
         let facts = w.client.cimd.clone();
         Ok(Ok(ApprovalView {
             client_host: cimd::host(&w.client.id).unwrap_or_default(),
@@ -163,7 +211,64 @@ impl<E: Env> OAuth<E> {
                 .map(String::from)
                 .unwrap_or_default(),
             scopes: w.request.scope.clone(),
+            draft,
         }))
+    }
+
+    /// The consent `grant.issue` of `party` in `domain`, valid while the request may be
+    /// approved (EI-18).
+    async fn draft(
+        &self,
+        domain: [u8; 32],
+        party: [u8; 16],
+        now: u64,
+    ) -> Result<Option<ApprovalDraft>, Unavailable> {
+        let Some(basis) = self.env.standing().consent_basis(domain, party).await? else {
+            return Ok(None);
+        };
+        let payload = Payload::GrantIssue(basis.content);
+        let validity = Window {
+            from: now.saturating_sub(60_000),
+            until: now.saturating_add(CONSENT_STATE_TTL_MS),
+        };
+        let Some(envelope) =
+            access_internal_api::instances::self_signed_intent(&payload, Id(party), validity)
+        else {
+            return Err(Unavailable);
+        };
+        let bytes = access_kernel::codec::Canonical::to_bytes(&payload).map_err(|_| Unavailable)?;
+        Ok(Some(ApprovalDraft {
+            domain,
+            envelope,
+            payload: bytes,
+            basis: basis.holding,
+        }))
+    }
+
+    /// The person declined (X-L8): the waiting request goes back to the client with
+    /// `access_denied`, and nothing is kept.
+    ///
+    /// # Errors
+    /// [`Unavailable`].
+    pub async fn decline_approval(
+        &self,
+        realm: &Realm,
+        cookie: Option<&str>,
+        return_to: &str,
+    ) -> Result<Result<String, NotApproved>, Unavailable> {
+        let now = self.now()?;
+        let mut tx = self.begin(realm).await?;
+        let w = match self.waiting(&mut tx, realm, cookie, return_to, now).await? {
+            Ok(w) => w,
+            Err(n) => return Ok(Err(n)),
+        };
+        tx.commit().await?;
+        Ok(Ok(error_redirect(
+            &w.request.redirect_uri,
+            AuthError::ACCESS_DENIED,
+            w.request.state.as_deref(),
+            &realm.issuer,
+        )))
     }
 
     /// Keeps the consent record of the request `return_to` names (§9.14.5 k.3, P58): only when
@@ -187,6 +292,9 @@ impl<E: Env> OAuth<E> {
             Err(n) => return Ok(Err(n)),
         };
         let party = tx.subject_party(w.subject).await?;
+        if tx.governing().await? != Some(domain) {
+            return Ok(Err(NotApproved::NoGrant));
+        }
         let issued = self.env.standing().issued(domain, exercise).await?;
         // EI-18, §11.6, Ek B 4542
         let Some(issued) = issued.filter(|g| party.is_some_and(|p| p == g.holder && p == g.signer))

@@ -51,7 +51,9 @@ use crate::ports::{Directory, RealmEntry, Unavailable};
 use access_identity_hooks::domain::{Call, Outcome, TokenIssuance, with_claims};
 use access_identity_hooks::ports::{HookCaller, NoHooks};
 
-pub use crate::app::oauth::approval::{ApprovalView, NotApproved};
+pub use crate::app::oauth::approval::{
+    ApprovalDraft, ApprovalView, CONSENT_STATE_TTL_MS, NotApproved, consent_csrf,
+};
 pub use crate::app::oauth::authorize::{REQUEST_CONTEXT, consent_resource};
 pub use crate::app::oauth::token::TokenHttp;
 

@@ -2044,6 +2044,7 @@ pub mod agents;
 pub mod approval;
 pub mod audit;
 mod binding;
+pub mod consent;
 mod events;
 pub mod export;
 pub mod faces;

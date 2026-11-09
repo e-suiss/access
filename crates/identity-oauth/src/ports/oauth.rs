@@ -589,6 +589,22 @@ pub trait GrantStanding: Send + Sync {
     /// The live Grant the allowed `grant.issue` Exercise `exercise` of `domain` created; `None`
     /// for any other Exercise, a refused one, or a Grant that no longer stands.
     fn issued(&self, domain: [u8; 32], exercise: [u8; 32]) -> Held<'_, Option<IssuedGrant>>;
+
+    /// The Grant `party` would issue to itself to approve a client in `domain`, and the
+    /// holding it comes from (§11.6, EI-18); `None` when it holds nothing it may pass on.
+    fn consent_basis(&self, _domain: [u8; 32], _party: [u8; 16]) -> Held<'_, Option<ConsentBasis>> {
+        Box::pin(async { Ok(None) })
+    }
+}
+
+/// What a person's consent `grant.issue` names (§11.6, EI-18): a Grant to themselves from a
+/// holding of theirs, passed on no further.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConsentBasis {
+    /// The holding it comes from, the Exercise's basis.
+    pub holding: access_kernel::meta::HoldingRef,
+    /// The Grant it issues.
+    pub content: access_kernel::meta::GrantContent,
 }
 
 /// An issuer the governing domain accepted for `actor-binding` with a pinned key set (§9.13,

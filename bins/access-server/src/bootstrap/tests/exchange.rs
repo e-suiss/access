@@ -521,6 +521,7 @@ impl Realm {
             issuers: std::sync::Arc::new(w.plane.clone()),
             bundles: std::sync::Arc::new(access_identity_attest::ports::NoBundles),
             workload_trust: std::sync::Arc::new(w.plane.clone()),
+            standing: std::sync::Arc::new(w.plane.clone()),
             tenant_ids: ids,
             hooks: std::sync::Arc::new(access_identity_hooks::ports::NoHooks),
             management: std::sync::Arc::new(crate::admin::tokens::PlaneHolders(

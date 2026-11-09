@@ -95,6 +95,8 @@ pub(crate) struct ServerEnv<P> {
     pub(crate) bundles: Arc<dyn access_identity_attest::ports::Bundles + Sync>,
     /// Which trust domains the authority plane accepts (OP-154 m.3 (r)).
     pub(crate) workload_trust: Arc<dyn access_identity_oauth::ports::oauth::WorkloadTrust + Sync>,
+    /// Whether a consent record's Grant stands, read from the authority plane (P58, EI-18).
+    pub(crate) standing: Arc<dyn access_identity_oauth::ports::oauth::GrantStanding + Sync>,
 }
 
 impl<P: Projections + 'static> Env for ServerEnv<P> {
@@ -176,6 +178,9 @@ impl<P: Projections + 'static> Env for ServerEnv<P> {
     }
     fn workload_trust(&self) -> &(dyn access_identity_oauth::ports::oauth::WorkloadTrust + Sync) {
         &*self.workload_trust
+    }
+    fn standing(&self) -> &(dyn access_identity_oauth::ports::oauth::GrantStanding + Sync) {
+        &*self.standing
     }
 }
 

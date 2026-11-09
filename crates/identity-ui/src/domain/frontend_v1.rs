@@ -59,6 +59,8 @@ pub enum Owner {
     L5,
     /// Stage 9 L6: Access Executor and Web Bot Auth.
     L6,
+    /// Stage 9 L1b: the hosted consent of clients the realm did not register.
+    L1,
 }
 
 /// One route.
@@ -712,6 +714,27 @@ pub const ROUTES: &[Route] = &[
         "/.well-known/http-message-signatures-directory",
         "webBotAuthDirectory",
         "The Web Bot Auth key directory: the Ed25519 keys bound to live agent Instances; revoking an Instance removes its key (RFC 9421, OP-154 m.3 (u)).",
+    ),
+    live(
+        Owner::L1,
+        Verb::Post,
+        "/v1/login/approval/preview",
+        "previewApproval",
+        "What the consent screen of a client the realm did not register shows: hostnames, the client's own claims, the resource, the scopes, the grant.issue the person's device Instance signs, and the CSRF token (§11.6, AS-M14, OP-154 m.3 (k)).",
+    ),
+    live(
+        Owner::L1,
+        Verb::Post,
+        "/v1/login/approval",
+        "approveClient",
+        "Keeps the consent record once the named Exercise is the person's own allowed grant.issue, then sends the browser back to the request (EI-18, P58).",
+    ),
+    live(
+        Owner::L1,
+        Verb::Post,
+        "/v1/login/approval/decline",
+        "declineClient",
+        "The person declined: the waiting request goes back to the client with access_denied and nothing is kept (X-L8).",
     ),
     planned(
         Owner::L3,

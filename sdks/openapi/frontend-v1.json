@@ -2410,6 +2410,96 @@
         "x-suiss-status": "planned"
       }
     },
+    "/v1/login/approval/preview": {
+      "post": {
+        "operationId": "previewApproval",
+        "summary": "What the consent screen of a client the realm did not register shows: hostnames, the client's own claims, the resource, the scopes, the grant.issue the person's device Instance signs, and the CSRF token (§11.6, AS-M14, OP-154 m.3 (k)).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/login/approval": {
+      "post": {
+        "operationId": "approveClient",
+        "summary": "Keeps the consent record once the named Exercise is the person's own allowed grant.issue, then sends the browser back to the request (EI-18, P58).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/login/approval/decline": {
+      "post": {
+        "operationId": "declineClient",
+        "summary": "The person declined: the waiting request goes back to the client with access_denied and nothing is kept (X-L8).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
     "/u/{party}/did.json": {
       "get": {
         "operationId": "didWebDocument",

@@ -44,6 +44,7 @@ use crate::{keys, parties};
 
 mod audit;
 mod binding;
+mod consent;
 mod projection;
 mod reconcile;
 mod vault;
@@ -51,6 +52,7 @@ mod workload;
 pub use audit::{
     AUDIT_EVENT_EXPORT, AUDIT_EVENT_READ, AUDIT_EVENT_REJECTED, audit_text, is_rejection, txn,
 };
+pub use consent::IssuedGrant;
 pub use projection::{
     BOUNDS_HORIZON_MS, CONTRACT_LABEL, FAMILY_CLAIM, INTENT_HORIZON_MS, Projected, STATUS_CLAIM,
     Token, TokenAuthority, TokenOrder,

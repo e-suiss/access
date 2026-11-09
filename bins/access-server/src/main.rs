@@ -1180,6 +1180,7 @@ where
         + admin::realm::LiveKeys
         + access_identity_oauth::ports::oauth::AssertionIssuers
         + access_identity_oauth::ports::oauth::WorkloadTrust
+        + access_identity_oauth::ports::oauth::GrantStanding
         + Clone
         + 'static,
 {
@@ -1203,6 +1204,7 @@ where
             outbound,
         )),
         workload_trust: Arc::new(projections.clone()),
+        standing: Arc::new(projections.clone()),
         directory: PgDirectory::new(router),
         app,
         nonces: oauth::HsmNonces::new(nonce_keys),

@@ -1208,6 +1208,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/login/approval/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What the consent screen of a client the realm did not register shows: hostnames, the client's own claims, the resource, the scopes, the grant.issue the person's device Instance signs, and the CSRF token (§11.6, AS-M14, OP-154 m.3 (k)). */
+        post: operations["previewApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/login/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Keeps the consent record once the named Exercise is the person's own allowed grant.issue, then sends the browser back to the request (EI-18, P58). */
+        post: operations["approveClient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/login/approval/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The person declined: the waiting request goes back to the client with access_denied and nothing is kept (X-L8). */
+        post: operations["declineClient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/u/{party}/did.json": {
         parameters: {
             query?: never;
@@ -3213,6 +3264,81 @@ export interface operations {
         requestBody?: never;
         responses: {
             501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    previewApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    approveClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    declineClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };

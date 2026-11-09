@@ -239,6 +239,87 @@ where
     }
 }
 
+// §11.6 rule 1, P58, EI-18, OP-154 m.3 (k)
+impl<K, B, S, C> access_identity_oauth::ports::oauth::GrantStanding for Plane<K, B, S, C>
+where
+    K: Keys + Send + Sync + 'static,
+    B: Binding + Clone + Send + Sync + 'static,
+    S: Salts + Clone + Send + Sync + 'static,
+    C: Clock + Clone + Send + Sync + 'static,
+{
+    fn live(
+        &self,
+        domain: [u8; 32],
+        grant: [u8; 16],
+    ) -> access_identity_oauth::ports::oauth::Held<'_, bool> {
+        Box::pin(async move {
+            self.domains
+                .grant_live(access_kernel::digest::Digest(domain), Id(grant))
+                .await
+                .map_err(|e| {
+                    tracing::warn!(event = "oauth.grant_standing.unavailable", outcome = "error", error = %e, "grant standing unavailable");
+                    access_identity_oauth::ports::Unavailable
+                })
+        })
+    }
+
+    fn issued(
+        &self,
+        domain: [u8; 32],
+        exercise: [u8; 32],
+    ) -> access_identity_oauth::ports::oauth::Held<
+        '_,
+        Option<access_identity_oauth::ports::oauth::IssuedGrant>,
+    > {
+        Box::pin(async move {
+            let found = self
+                .domains
+                .issued_grant(
+                    access_kernel::digest::Digest(domain),
+                    access_kernel::digest::Digest(exercise),
+                )
+                .await
+                .map_err(|e| {
+                    tracing::warn!(event = "oauth.grant_standing.unavailable", outcome = "error", error = %e, "grant standing unavailable");
+                    access_identity_oauth::ports::Unavailable
+                })?;
+            Ok(
+                found.map(|g| access_identity_oauth::ports::oauth::IssuedGrant {
+                    grant: g.grant.0,
+                    holder: g.holder.0,
+                    signer: g.signer.0,
+                }),
+            )
+        })
+    }
+
+    fn consent_basis(
+        &self,
+        domain: [u8; 32],
+        party: [u8; 16],
+    ) -> access_identity_oauth::ports::oauth::Held<
+        '_,
+        Option<access_identity_oauth::ports::oauth::ConsentBasis>,
+    > {
+        Box::pin(async move {
+            let found = self
+                .domains
+                .consent_basis(access_kernel::digest::Digest(domain), Id(party))
+                .await
+                .map_err(|e| {
+                    tracing::warn!(event = "oauth.grant_standing.unavailable", outcome = "error", error = %e, "consent basis unavailable");
+                    access_identity_oauth::ports::Unavailable
+                })?;
+            Ok(found.map(
+                |(holding, content)| access_identity_oauth::ports::oauth::ConsentBasis {
+                    holding,
+                    content,
+                },
+            ))
+        })
+    }
+}
+
 impl<K, B, S, C> crate::admin::realm::LiveKeys for Plane<K, B, S, C>
 where
     K: Keys + Send + Sync + 'static,
