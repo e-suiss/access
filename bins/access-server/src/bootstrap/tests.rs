@@ -284,6 +284,7 @@ fn plan() -> Plan {
         sample: None,
         test_user: None,
         compromise: None,
+        sample_agent: None,
     }
 }
 
@@ -2493,6 +2494,7 @@ mod mcp;
 mod privacy;
 mod recovery;
 mod recovery_authority;
+mod sample_agent;
 mod timing;
 mod vault;
 mod walkthrough;

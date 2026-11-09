@@ -12,6 +12,7 @@
 //! time-locked `acceptance_establish` (OP-151 m.18 (g)). Every step looks for its result first,
 //! so a second run changes nothing.
 
+mod agent;
 mod catalog;
 pub(crate) mod local;
 
@@ -166,6 +167,7 @@ struct PlanFile {
     sample: Option<SampleFile>,
     test_user: Option<TestUserFile>,
     compromise: Option<CompromiseFile>,
+    sample_agent: Option<agent::SampleAgentFile>,
 }
 
 /// `[test_user]` as written: the password is never in the plan file itself unless the operator
@@ -730,6 +732,7 @@ pub(crate) struct Plan {
     pub(crate) sample: Option<SamplePlan>,
     pub(crate) test_user: Option<TestUserPlan>,
     pub(crate) compromise: Option<CompromisePlan>,
+    pub(crate) sample_agent: Option<agent::SampleAgentPlan>,
 }
 
 /// One of the plan's sample tenants, or a plan error naming the section.
@@ -802,6 +805,15 @@ impl Plan {
                 redirect_uris,
             });
         }
+        // OP-154 m.15 (i)
+        let sample_agent = match file.sample_agent {
+            None => None,
+            Some(a) => Some(agent::SampleAgentPlan::from_file(
+                a,
+                file.sample.as_ref().map(|s| s.realm.as_str()),
+                file.test_user.as_ref().map(|u| u.realm.as_str()),
+            )?),
+        };
         let sample = match file.sample {
             None => None,
             Some(s) => Some(SamplePlan::from_file(
@@ -848,6 +860,7 @@ impl Plan {
             sample,
             test_user,
             compromise,
+            sample_agent,
         })
     }
 }
@@ -1059,6 +1072,9 @@ pub(crate) struct Summary {
     /// Present when the plan names a compromise declarant.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) compromise: Option<CompromiseOut>,
+    /// Present when the plan names a sample agent (OP-154 m.15 (i)).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) sample_agent: Option<agent::SampleAgentOut>,
 }
 
 /// Meta-actions the bootstrap's keys sign, committed by the authority plane with the identity
@@ -1319,6 +1335,7 @@ where
         let mut sample = None;
         let mut test_user = None;
         let mut compromise = None;
+        let mut sample_agent = None;
         // OP-149 m.26 (c)
         let declarant = match &plan.compromise {
             Some(_) => Some(self.declarant()?),
@@ -1388,6 +1405,16 @@ where
                     None => None,
                 };
                 test_user = Some(out);
+                // OP-154 m.15 (i)
+                if let (Some(s), Some(a)) = (
+                    catalog,
+                    plan.sample_agent.as_ref().filter(|a| a.realm == *slug),
+                ) {
+                    sample_agent = Some(
+                        self.sample_agent(&admin, (tenant, realm), domain, &root, (s, a), party)
+                            .await?,
+                    );
+                }
             }
             if let Some((c, (key, issuer))) = accepted {
                 compromise = Some(
@@ -1417,6 +1444,7 @@ where
             sample,
             test_user,
             compromise,
+            sample_agent,
         })
     }
 

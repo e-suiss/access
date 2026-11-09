@@ -52,3 +52,14 @@ totp_seed_file = "/var/lib/access/bootstrap/test-user-totp"
 # `access-local-client compromise` sends the Claim.
 [compromise]
 realm = "acme"
+
+# OP-154 m.15 (i): a sample agent in acme, operated by the realm's root, with the test user as
+# its sponsor. Its key (`access/bootstrap/sample-agent`) signs its own `party_register` and the
+# root signs `idp.agent.register`; its runtime key (`access/bootstrap/sample-agent-runtime`)
+# opens one Instance under the test user's account; the test user's device issues it a Grant of
+# the sample action for the test user, and it makes one allowed Exercise of it. No executor runs
+# here, so nothing reports that Exercise's outcome. The summary says `sample_agent` (party,
+# operator, instance, basis, exercise). Leave the section out for a realm without an agent.
+[sample_agent]
+realm = "acme"
+display_name = "Local sample agent"
