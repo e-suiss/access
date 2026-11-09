@@ -297,6 +297,7 @@ fn local_plan() -> Plan {
             client_display_name: String::from("Local test client"),
             redirect_uri: RedirectUri::parse("http://127.0.0.1/cb").unwrap(),
             breach_ranges_dir: None,
+            totp: None,
         }),
         compromise: Some(CompromisePlan {
             realm: String::from("acme"),
@@ -748,6 +749,110 @@ async fn a_one_shot_change_commits_while_another_process_leads() {
 }
 
 // OP-69, OP-149 m.21, TN-111, L0-META-7, OP-149 m.4, MD-14, EI-25, OP-137
+/// The test user's TOTP credentials and the seeds they hold, in base32.
+async fn totp_seeds(w: &World, identifier: &str) -> Vec<String> {
+    use access_identity_account::adapters::pg::PgAccounts;
+    use access_identity_account::app::Realm;
+    use access_identity_account::app::sealing::{open, subject_key};
+    use access_identity_account::ports::{AccountDb as _, AccountTx as _};
+    use access_identity_events::adapters::RealmKek as _;
+    use access_identity_session::app::TOTP;
+
+    let route = route_by_slug(&w.db.router, "acme").await.unwrap().unwrap();
+    let keks = crate::login::RealmKeks::new(w.keys.clone());
+    let kek = keks.kek(route.tenant, route.realm).unwrap();
+    let ids = cell_ids(&w.db.app, &w.keys).await.unwrap();
+    let scope = Realm {
+        tenant: route.tenant,
+        realm: route.realm,
+        kek: &*kek,
+        ids: &ids,
+    };
+    let accounts = PgAccounts::sealed(w.db.app.clone(), keks.vault(route.realm).unwrap());
+    let mut tx = accounts.begin(route.tenant, route.realm).await.unwrap();
+    let subject = tx.subject_by_identifier(identifier).await.unwrap().unwrap();
+    let row = tx.subject(subject, false).await.unwrap().unwrap();
+    let dek = subject_key(&scope, &row).unwrap();
+    let seeds = tx
+        .credentials(subject, TOTP)
+        .await
+        .unwrap()
+        .iter()
+        .map(|c| {
+            let hex = open(&scope, &dek, &subject, TOTP, &c.sealed).unwrap();
+            let raw: Vec<u8> = (0..hex.expose().len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&hex.expose()[i..i + 2], 16).unwrap())
+                .collect();
+            access_identity_session::domain::codes::base32(&raw)
+        })
+        .collect();
+    tx.commit().await.unwrap();
+    seeds
+}
+
+// OP-149 m.26 (b), §10.2.2, TN-64, TI-9
+#[tokio::test]
+async fn the_test_users_authenticator_app_is_enrolled_once_and_its_seed_kept_owner_only() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let w = World::new("bootstrap-totp").await;
+    let dir = std::env::temp_dir().join(format!("abs-totp-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("test-user-totp");
+    std::fs::write(
+        &path,
+        "left over from somewhere else, and longer than a seed\n",
+    )
+    .unwrap();
+    let mut plan = local_plan();
+    let open = || TotpSeedFile::open(&path).unwrap();
+    plan.test_user.as_mut().unwrap().totp = Some(open());
+    assert!(!plan.test_user.as_ref().unwrap().totp.as_ref().unwrap().held);
+
+    let first = w.run(&plan).await;
+    let totp = first.test_user.as_ref().unwrap().totp.clone().unwrap();
+    assert!(totp.created);
+    assert_eq!(totp.seed_file, path.display().to_string());
+    assert_eq!((totp.algorithm, totp.digits, totp.period), ("SHA1", 6, 30));
+    let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o600);
+    let text = std::fs::read_to_string(&path).unwrap();
+    let seed = text.strip_suffix('\n').unwrap().to_owned();
+    assert!(is_seed(&seed), "{text:?}");
+    let summary = serde_json::to_string(&first).unwrap();
+    assert!(!summary.contains(&seed));
+    assert!(!format!("{plan:?}").contains(&seed));
+    assert_eq!(
+        totp_seeds(&w, "Test.User@acme.example").await,
+        vec![seed.clone()]
+    );
+
+    plan.test_user.as_mut().unwrap().totp = Some(open());
+    assert!(plan.test_user.as_ref().unwrap().totp.as_ref().unwrap().held);
+    let second = w.run(&plan).await;
+    assert!(!second.test_user.unwrap().totp.unwrap().created);
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+    assert_eq!(
+        totp_seeds(&w, "Test.User@acme.example").await,
+        vec![seed.clone()]
+    );
+
+    std::fs::write(&path, "").unwrap();
+    plan.test_user.as_mut().unwrap().totp = Some(open());
+    let third = w.run(&plan).await;
+    assert!(third.test_user.unwrap().totp.unwrap().created);
+    let renewed = std::fs::read_to_string(&path).unwrap();
+    let renewed = renewed.strip_suffix('\n').unwrap();
+    assert_ne!(renewed, seed);
+    let mut seeds = totp_seeds(&w, "Test.User@acme.example").await;
+    seeds.sort();
+    let mut expected = vec![seed, renewed.to_owned()];
+    expected.sort();
+    assert_eq!(seeds, expected);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 #[tokio::test]
 async fn the_bootstrap_is_idempotent() {
     let w = World::new("bootstrap").await;
@@ -1324,6 +1429,7 @@ fn shipped(path: &Path, keys: &Path) -> Plan {
     std::fs::write(
         &local,
         text.replace("/etc/access/products", keys.to_str().unwrap())
+            .replace("/var/lib/access/bootstrap", keys.to_str().unwrap())
             .replace(
                 "password_env = \"BOOTSTRAP_TEST_PASSWORD\"",
                 "password = \"only for this test\"",
@@ -1359,6 +1465,11 @@ fn every_shipped_plan_is_valid() {
         // OP-149 m.26 (b), (c)
         let user = plan.test_user.as_ref().unwrap();
         assert_eq!(user.realm, "acme", "{name}");
+        assert_eq!(
+            user.totp.as_ref().map(|t| t.path.clone()),
+            Some(keys.join("test-user-totp")),
+            "{name}"
+        );
         assert_eq!(plan.compromise.as_ref().unwrap().realm, "acme", "{name}");
         for p in &plan.products {
             let id = ClientId::parse("cli_0123456789abcdefghjkmnpqrs").unwrap();

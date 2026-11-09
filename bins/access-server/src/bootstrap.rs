@@ -180,6 +180,7 @@ struct TestUserFile {
     client_display_name: Option<String>,
     redirect_uri: String,
     breach_ranges_dir: Option<PathBuf>,
+    totp_seed_file: Option<PathBuf>,
 }
 
 impl core::fmt::Debug for TestUserFile {
@@ -190,6 +191,7 @@ impl core::fmt::Debug for TestUserFile {
             .field("password", &self.password.as_ref().map(|_| "<redacted>"))
             .field("password_env", &self.password_env)
             .field("redirect_uri", &self.redirect_uri)
+            .field("totp_seed_file", &self.totp_seed_file)
             .finish_non_exhaustive()
     }
 }
@@ -216,6 +218,84 @@ pub(crate) struct TestUserPlan {
     pub(crate) redirect_uri: RedirectUri,
     /// A local mirror of the breach ranges, when the deployment has one (IDP-3).
     pub(crate) breach_ranges_dir: Option<PathBuf>,
+    /// Where the seed of the test user's authenticator app is kept, when the plan asks for one.
+    pub(crate) totp: Option<TotpSeedFile>,
+}
+
+/// The file the test user's TOTP seed is written to, in base32 (OP-149 m.26 (b)): opened,
+/// made `0600` and read before the lockdown, written after it through the open descriptor.
+#[derive(Clone, Debug)]
+pub(crate) struct TotpSeedFile {
+    /// Where it is.
+    pub(crate) path: PathBuf,
+    file: Arc<std::fs::File>,
+    /// Whether it already held a seed.
+    pub(crate) held: bool,
+}
+
+/// Characters of a base32 seed of 160 bits, without padding (§10.2.2).
+const TOTP_SEED_CHARS: usize = 32;
+
+impl TotpSeedFile {
+    /// Opens or creates the file at `path`, owner-only; content that is not one base32 seed
+    /// is discarded.
+    ///
+    /// # Errors
+    /// [`BootstrapError::Plan`] naming the file.
+    pub(crate) fn open(path: &Path) -> Result<Self, BootstrapError> {
+        use std::io::Read as _;
+        use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
+        let bad = |e: std::io::Error| {
+            BootstrapError::Plan(format!("test_user totp_seed_file {}: {e}", path.display()))
+        };
+        let mut file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(0o600)
+            .open(path)
+            .map_err(bad)?;
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))
+            .map_err(bad)?;
+        let mut text = String::new();
+        let held = file.read_to_string(&mut text).is_ok() && is_seed(text.trim_end());
+        if !held {
+            file.set_len(0).map_err(bad)?;
+        }
+        Ok(Self {
+            path: path.to_owned(),
+            file: Arc::new(file),
+            held,
+        })
+    }
+
+    /// Writes `seed` and a line end over the file's start.
+    ///
+    /// # Errors
+    /// [`BootstrapError::Unavailable`].
+    pub(crate) fn write(&self, seed: &str) -> Result<(), BootstrapError> {
+        use std::os::unix::fs::FileExt as _;
+        if !is_seed(seed) {
+            return Err(BootstrapError::Encode);
+        }
+        self.file
+            .write_all_at(format!("{seed}\n").as_bytes(), 0)
+            .map_err(|e| {
+                BootstrapError::Unavailable(format!(
+                    "test_user totp_seed_file {}: {e}",
+                    self.path.display()
+                ))
+            })
+    }
+}
+
+/// Whether `text` is one unpadded base32 seed of 160 bits.
+fn is_seed(text: &str) -> bool {
+    text.len() == TOTP_SEED_CHARS
+        && text
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || (b'2'..=b'7').contains(&b))
 }
 
 impl core::fmt::Debug for TestUserPlan {
@@ -225,6 +305,7 @@ impl core::fmt::Debug for TestUserPlan {
             .field("identifier", &self.identifier)
             .field("client_display_name", &self.client_display_name)
             .field("redirect_uri", &self.redirect_uri)
+            .field("totp", &self.totp.as_ref().map(|t| &t.path))
             .finish_non_exhaustive()
     }
 }
@@ -743,6 +824,11 @@ impl Plan {
                     redirect_uri: RedirectUri::parse(&u.redirect_uri)
                         .map_err(|e| BootstrapError::Plan(e.to_string()))?,
                     breach_ranges_dir: u.breach_ranges_dir,
+                    totp: u
+                        .totp_seed_file
+                        .as_deref()
+                        .map(TotpSeedFile::open)
+                        .transpose()?,
                 })
             }
         };
@@ -877,11 +963,30 @@ pub(crate) struct TestUserOut {
     pub(crate) instance: String,
     /// The credential id of the user's software passkey, base64url (OP-149 m.26 (e)).
     pub(crate) passkey: String,
+    /// The user's authenticator app, when the plan asks for one (OP-149 m.26 (b)).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) totp: Option<TotpOut>,
     /// The allowed Exercise the user's Party holds, when the sample names one (OP-149 m.29
     /// (b)).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) allowed: Option<AllowedOut>,
     /// Whether this run created the account.
+    pub(crate) created: bool,
+}
+
+/// The test user's authenticator app (OP-149 m.26 (b), §10.2.2): where its seed is kept, never
+/// the seed itself, and the RFC 6238 parameters a code is computed with.
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct TotpOut {
+    /// The file holding the seed in base32.
+    pub(crate) seed_file: String,
+    /// The HMAC of the code.
+    pub(crate) algorithm: &'static str,
+    /// Digits of a code.
+    pub(crate) digits: u8,
+    /// Seconds of a step.
+    pub(crate) period: u64,
+    /// Whether this run enrolled it.
     pub(crate) created: bool,
 }
 

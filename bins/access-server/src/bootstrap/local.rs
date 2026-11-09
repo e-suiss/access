@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use access_crypto::opaque_id::IdKey;
+use access_crypto::totp::{TotpParams, hotp, step_of};
 use access_identity_account::adapters::hibp::MirrorRanges;
 use access_identity_account::adapters::pg::{PgAccounts, PgTx};
 use access_identity_account::adapters::system::{
@@ -28,7 +29,9 @@ use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::password::Argon2Params;
 use access_identity_account::domain::status::AccountStatus;
 use access_identity_account::domain::throttle::ThrottlePolicy;
-use access_identity_account::ports::{AccountDb, AccountTx, BreachRanges, RangeUnavailable};
+use access_identity_account::ports::{
+    AccountDb, AccountTx, BreachRanges, Clock as _, RangeUnavailable,
+};
 use access_identity_admin::AdminError;
 use access_identity_admin::app::{Admin, Applied};
 use access_identity_admin::domain::{AuthMethod, Change, Client, ClientId};
@@ -39,7 +42,8 @@ use access_identity_oauth::domain::issuer::Issuer;
 use access_identity_oauth::ports::RealmEntry;
 use access_identity_session::adapters::OsRandom;
 use access_identity_session::adapters::passkeys::PgPasskeys;
-use access_identity_session::app::{Auth, Passkeys};
+use access_identity_session::app::{Auth, Passkeys, TOTP};
+use access_identity_session::domain::codes::base32;
 use access_identity_session::domain::session::SessionPolicy;
 use access_identity_ui::adapters::{LogSignals, Outbox};
 use access_identity_ui::app::devices::{self, DeviceKey};
@@ -66,7 +70,7 @@ use suiss_crypto::signer::Signer as _;
 
 use super::{
     Bootstrap, BootstrapError, CompromiseOut, CompromisePlan, MetaExercises, Plan, TestUserOut,
-    TestUserPlan, cell_ids, root_key, root_party, token_key,
+    TestUserPlan, TotpOut, TotpSeedFile, cell_ids, root_key, root_party, token_key,
 };
 use crate::login::{HsmKits, RealmKeks};
 
@@ -254,7 +258,9 @@ where
             .public_client(admin, (tenant, realm), domain, root, u)
             .await?;
         let (party, instance) = self.device_party((tenant, realm), domain, subject).await?;
-        let passkey = self.passkey(&u.realm, subject, identifier.value()).await?;
+        let (passkey, totp) = self
+            .authenticators(&u.realm, subject, identifier.value(), u.totp.as_ref())
+            .await?;
         Ok((
             TestUserOut {
                 realm: u.realm.clone(),
@@ -266,6 +272,7 @@ where
                 party: b64url_encode(&party.0),
                 instance: b64url_encode(&instance.0),
                 passkey: b64url_encode(&passkey),
+                totp,
                 allowed: None,
                 created,
             },
@@ -299,17 +306,22 @@ where
     /// answers the realm's own registration ceremony, through the step the hosted
     /// `POST /v1/account/passkeys/{registration}` finishes with (§10.2.4, OP-150 L2), so the
     /// passkey is a device-bound, user-verified credential of the account like any other. A
-    /// registered passkey of that key is found, not made again. Returns the credential id.
+    /// registered passkey of that key is found, not made again. With `totp`, also the user's
+    /// authenticator app (OP-149 m.26 (b), §10.2.2): the realm's own TOTP enrollment makes the
+    /// seed, a code computed from it confirms it, and the seed goes to the plan's file; an
+    /// account with an authenticator app and a file holding a seed keeps both. Returns the
+    /// passkey's credential id and the authenticator app.
     #[expect(
         clippy::too_many_lines,
-        reason = "one passkey registration through the sign-in service, as a person would"
+        reason = "one passkey registration and one TOTP enrollment through the sign-in service, as a person would"
     )]
-    async fn passkey(
+    async fn authenticators(
         &self,
         slug: &str,
         subject: [u8; 16],
         identifier: &str,
-    ) -> Result<[u8; 32], BootstrapError> {
+        totp: Option<&TotpSeedFile>,
+    ) -> Result<([u8; 32], Option<TotpOut>), BootstrapError> {
         let key = token_key(self.hsm, TEST_PASSKEY_LABEL)?;
         let PublicKey::Ed25519(public) = key.public_key() else {
             return Err(BootstrapError::Encode);
@@ -342,12 +354,9 @@ where
             kek: &*kit.kek,
             ids: &kit.ids,
         };
-        if self
+        let registered = self
             .has_passkey(&kit, &registry, subject, &authenticator.credential_id)
-            .await?
-        {
-            return Ok(authenticator.credential_id);
-        }
+            .await?;
         let db = PgAccounts::sealed(self.app.clone(), kit.vault());
         let realm = kit.realm();
         let notifier = Outbox.notifier(&realm);
@@ -382,34 +391,71 @@ where
                 client: None,
             },
         };
-        let start = auth
-            .start_passkey(subject, identifier, identifier)
-            .await
-            .map_err(|e| BootstrapError::Unavailable(e.to_string()))?;
-        let origin = format!("https://{}", entry.issuer.authority());
-        let reg =
-            authenticator.registration(kit.rp.rp_id.as_str(), &origin, &start.state.challenge);
-        let outcome = auth
-            .register_passkey(
-                subject,
-                &start.state,
-                &RegistrationResponse {
-                    raw_id: &reg.id,
-                    client_data_json: &reg.client_data_json,
-                    attestation_object: &reg.attestation_object,
-                    transports: &[String::from("internal")],
-                    extensions: ClientExtensionResults::default(),
-                },
-                BOOTSTRAP.correlation,
-            )
-            .await
-            .map_err(|e| BootstrapError::Unavailable(e.to_string()))?;
-        match outcome {
-            RegistrationOutcome::Registered(_) => Ok(authenticator.credential_id),
-            RegistrationOutcome::Rejected(r) => {
-                Err(BootstrapError::Refused(format!("test_user passkey: {r}")))
+        let down =
+            |e: access_identity_session::SessionError| BootstrapError::Unavailable(e.to_string());
+        if !registered {
+            let start = auth
+                .start_passkey(subject, identifier, identifier)
+                .await
+                .map_err(down)?;
+            let origin = format!("https://{}", entry.issuer.authority());
+            let reg =
+                authenticator.registration(kit.rp.rp_id.as_str(), &origin, &start.state.challenge);
+            let outcome = auth
+                .register_passkey(
+                    subject,
+                    &start.state,
+                    &RegistrationResponse {
+                        raw_id: &reg.id,
+                        client_data_json: &reg.client_data_json,
+                        attestation_object: &reg.attestation_object,
+                        transports: &[String::from("internal")],
+                        extensions: ClientExtensionResults::default(),
+                    },
+                    BOOTSTRAP.correlation,
+                )
+                .await
+                .map_err(down)?;
+            if let RegistrationOutcome::Rejected(r) = outcome {
+                return Err(BootstrapError::Refused(format!("test_user passkey: {r}")));
             }
         }
+        let Some(file) = totp else {
+            return Ok((authenticator.credential_id, None));
+        };
+        let params = TotpParams::DEFAULT;
+        let enrolled = auth
+            .sign_in_methods(subject)
+            .await
+            .map_err(down)?
+            .iter()
+            .any(|m| m.kind == TOTP);
+        let created = !(enrolled && file.held);
+        if created {
+            let start = auth.start_totp(subject).await.map_err(down)?;
+            let step = step_of(SystemClock.now_ms() / 1000, params.step_s);
+            let code = hotp(start.seed.expose(), params.algorithm, step, params.digits);
+            if let Err(refused) = auth
+                .register_totp(subject, &start, &code, BOOTSTRAP.correlation)
+                .await
+                .map_err(down)?
+            {
+                return Err(BootstrapError::Refused(format!(
+                    "test_user totp: {refused:?}"
+                )));
+            }
+            file.write(&base32(start.seed.expose()))?;
+        }
+        Ok((
+            authenticator.credential_id,
+            Some(TotpOut {
+                seed_file: file.path.display().to_string(),
+                algorithm: params.algorithm.uri_name(),
+                digits: params.digits,
+                period: params.step_s,
+                created,
+            }),
+        ))
     }
 
     /// The test user's Party and device Instance in the realm's governing domain (OP-149 m.28

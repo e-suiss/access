@@ -42,12 +42,17 @@ step_up = "aal2"
 # party, instance, passkey, allowed).
 # Without a local mirror of the breach ranges (`breach_ranges_dir`) the password is not checked
 # against one; the bootstrap says so.
+# With `totp_seed_file` the user also has an authenticator app (RFC 6238: SHA-1, 6 digits, 30 s),
+# enrolled through the realm's own TOTP enrollment with a seed the realm draws at random; the
+# seed is written to that file in base32, owner-only, and never printed. The summary says
+# `test_user.totp` (seed_file, algorithm, digits, period).
 [test_user]
 realm = "acme"
 identifier = "test@acme.example"
 password_env = "BOOTSTRAP_TEST_PASSWORD"
 client_display_name = "Local test client"
 redirect_uri = "http://127.0.0.1/cb"
+totp_seed_file = "/var/lib/access/bootstrap/test-user-totp"
 
 # OP-149 m.26 (c): acme accepts unsigned `party_compromise` Claims from a local declarant Party,
 # so Work's PEP can hand one to `POST /access/v1/claims:ingest` with its PEP certificate and

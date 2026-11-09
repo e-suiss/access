@@ -17,7 +17,7 @@ use access_identity_webauthn::domain::ids::UserHandle;
 use access_identity_webauthn::domain::options::UserEntity;
 use access_identity_webauthn::domain::prf::PrfSalt;
 use access_identity_webauthn::ports::{CredentialRegistry, SignalSink};
-use access_store::accounts::{NewCredential, Revoke, SealedSecret};
+use access_store::accounts::{NewCredential, Revoke, SealedSecret, SubjectRow};
 use access_store::sessions::NewFlow;
 use serde_json::Value;
 
@@ -62,6 +62,24 @@ pub struct TotpConfirmed {
     /// Recovery codes, shown once, when the account had none (§10.2.2: mandatory companion).
     pub recovery_codes: Option<Vec<Secret<String>>>,
     /// The subject's new epoch: every other session ended (TN-64).
+    pub session_epoch: i64,
+}
+
+/// A TOTP enrollment started outside a browser flow (OP-149 m.26 (b)).
+pub struct TotpStart {
+    /// The seed sealed under the subject's DEK, finished against.
+    pub sealed: SealedSecret,
+    /// The seed, for the authenticator.
+    pub seed: Secret<Vec<u8>>,
+}
+
+/// A TOTP enrollment finished outside a browser flow (OP-149 m.26 (b)).
+pub struct TotpEnrolled {
+    /// The new credential.
+    pub credential: [u8; 16],
+    /// Recovery codes, when the account had none (§10.2.2: mandatory companion).
+    pub recovery_codes: Option<Vec<Secret<String>>>,
+    /// The subject's new epoch: every session ended (TN-64).
     pub session_epoch: i64,
 }
 
@@ -244,14 +262,7 @@ where
             }
         };
         let subject = session.subject;
-        let row = tx
-            .subject(subject, false)
-            .await?
-            .ok_or(SessionError::Corrupt)?;
-        let dek = subject_key(&self.realm, &row)?;
-        let mut seed = [0; TOTP_SEED_BYTES];
-        self.random.fill(&mut seed)?;
-        let sealed = seal(&self.realm, &dek, &subject, TOTP, hex(&seed).as_bytes())?;
+        let (seed, sealed) = self.new_seed(&mut tx, subject).await?;
         let mut state = FlowState::new(
             Purpose::EnrollTotp {
                 session: session.id,
@@ -330,56 +341,21 @@ where
             .subject(subject, true)
             .await?
             .ok_or(SessionError::Corrupt)?;
-        let dek = subject_key(&self.realm, &row)?;
-        let seed = open(&self.realm, &dek, &subject, TOTP, &sealed)?;
-        let key = Secret::new(hex_decode(seed.expose()).ok_or(SessionError::Corrupt)?);
-        let params = access_crypto::totp::TotpParams::DEFAULT;
-        let Some(step) = access_crypto::totp::matching_step(&key, &params, now / 1000, code.trim())
+        let Some((credential, recovery_codes)) = self
+            .add_totp(&mut tx, subject, &row, &sealed, code, now)
+            .await?
         else {
             tx.commit().await?;
             return Ok(Err(refuse(CODE_NOT_ACCEPTED)));
-        };
-        let credential = tx
-            .insert_credential(&NewCredential {
-                subject,
-                kind: TOTP,
-                algorithm: TOTP_ALGORITHM,
-                sealed: &sealed,
-            })
-            .await?;
-        if !tx.use_otp_step(credential, i64_of(step)?).await? {
-            return Err(SessionError::Corrupt);
-        }
-        totp_enrolled(&mut tx, subject, credential, now).await?;
-        // OP-151 m.3 (i)
-        events::credential(&mut tx, &self.realm, subject, TOTP, CredentialChange::Added).await?;
-        let recovery_codes = if tx.credentials(subject, RECOVERY_CODE).await?.is_empty() {
-            Some(self.new_recovery_codes(&mut tx, subject, &dek).await?)
-        } else {
-            None
         };
         let epoch = self
             .end_other_sessions(&mut tx, &session, row.session_epoch)
             .await?;
         l.state.sealed = None;
         save(&mut tx, &l, "done", Resume::Clear).await?;
-        let target = self.external(subject)?;
-        audit(
-            &mut tx,
-            "credential.totp.enrolled",
-            &target,
-            &target,
-            correlation,
-        )
-        .await?;
-        // OP-148, §7.9.8, E42
-        self.account_notice(
-            &mut tx,
-            subject,
-            access_identity_account::notify::message::Notice::SecondFactorEnabled,
-            now,
-        )
-        .await?;
+        let target = self
+            .totp_announced(&mut tx, subject, now, correlation)
+            .await?;
         audit(
             &mut tx,
             "session.ended_others",
@@ -390,6 +366,150 @@ where
         .await?;
         tx.commit().await?;
         Ok(Ok(TotpConfirmed {
+            credential,
+            recovery_codes,
+            session_epoch: epoch,
+        }))
+    }
+
+    /// A fresh 160-bit seed for `subject`, sealed under its DEK (§10.2.2).
+    async fn new_seed(
+        &self,
+        tx: &mut D::Tx,
+        subject: [u8; 16],
+    ) -> Result<([u8; TOTP_SEED_BYTES], SealedSecret), SessionError> {
+        let row = tx
+            .subject(subject, false)
+            .await?
+            .ok_or(SessionError::Corrupt)?;
+        let dek = subject_key(&self.realm, &row)?;
+        let mut seed = [0; TOTP_SEED_BYTES];
+        self.random.fill(&mut seed)?;
+        let sealed = seal(&self.realm, &dek, &subject, TOTP, hex(&seed).as_bytes())?;
+        Ok((seed, sealed))
+    }
+
+    /// The credential of the sealed seed once `code` matches it: its first step used, its
+    /// binding Claim and signal queued, and recovery codes when the account has none; `None`
+    /// when the code does not match.
+    async fn add_totp(
+        &self,
+        tx: &mut D::Tx,
+        subject: [u8; 16],
+        row: &SubjectRow,
+        sealed: &SealedSecret,
+        code: &str,
+        now: u64,
+    ) -> Result<Option<([u8; 16], Option<Vec<Secret<String>>>)>, SessionError> {
+        let dek = subject_key(&self.realm, row)?;
+        let seed = open(&self.realm, &dek, &subject, TOTP, sealed)?;
+        let key = Secret::new(hex_decode(seed.expose()).ok_or(SessionError::Corrupt)?);
+        let params = access_crypto::totp::TotpParams::DEFAULT;
+        let Some(step) = access_crypto::totp::matching_step(&key, &params, now / 1000, code.trim())
+        else {
+            return Ok(None);
+        };
+        let credential = tx
+            .insert_credential(&NewCredential {
+                subject,
+                kind: TOTP,
+                algorithm: TOTP_ALGORITHM,
+                sealed,
+            })
+            .await?;
+        if !tx.use_otp_step(credential, i64_of(step)?).await? {
+            return Err(SessionError::Corrupt);
+        }
+        totp_enrolled(tx, subject, credential, now).await?;
+        // OP-151 m.3 (i)
+        events::credential(tx, &self.realm, subject, TOTP, CredentialChange::Added).await?;
+        let recovery_codes = if tx.credentials(subject, RECOVERY_CODE).await?.is_empty() {
+            Some(self.new_recovery_codes(tx, subject, &dek).await?)
+        } else {
+            None
+        };
+        Ok(Some((credential, recovery_codes)))
+    }
+
+    /// The audit record and the account holder's notice of a confirmed TOTP; returns the
+    /// subject's external id.
+    async fn totp_announced(
+        &self,
+        tx: &mut D::Tx,
+        subject: [u8; 16],
+        now: u64,
+        correlation: &str,
+    ) -> Result<String, SessionError> {
+        let target = self.external(subject)?;
+        audit(
+            tx,
+            "credential.totp.enrolled",
+            &target,
+            &target,
+            correlation,
+        )
+        .await?;
+        // OP-148, §7.9.8, E42
+        self.account_notice(tx, subject, Notice::SecondFactorEnabled, now)
+            .await?;
+        Ok(target)
+    }
+
+    /// Starts a TOTP enrollment for `subject` outside a browser flow (OP-149 m.26 (b)): the
+    /// seed [`Self::begin_totp`] makes, its sealed form kept by the caller.
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub async fn start_totp(&self, subject: [u8; 16]) -> Result<TotpStart, SessionError> {
+        let mut tx = self.begin().await?;
+        let (seed, sealed) = self.new_seed(&mut tx, subject).await?;
+        tx.commit().await?;
+        Ok(TotpStart {
+            sealed,
+            seed: Secret::new(seed.to_vec()),
+        })
+    }
+
+    /// Finishes a TOTP enrollment [`Self::start_totp`] started with its first code, as
+    /// [`Self::confirm_totp`] does; with no session to keep, TN-64 ends every session of the
+    /// subject.
+    ///
+    /// # Errors
+    /// [`SessionError`]; a code that does not match is a refused [`Step`].
+    pub async fn register_totp(
+        &self,
+        subject: [u8; 16],
+        start: &TotpStart,
+        code: &str,
+        correlation: &str,
+    ) -> Result<Result<TotpEnrolled, Step>, SessionError> {
+        let now = self.now();
+        let mut tx = self.begin().await?;
+        let row = tx
+            .subject(subject, true)
+            .await?
+            .ok_or(SessionError::Corrupt)?;
+        let Some((credential, recovery_codes)) = self
+            .add_totp(&mut tx, subject, &row, &start.sealed, code, now)
+            .await?
+        else {
+            tx.commit().await?;
+            return Ok(Err(refuse(CODE_NOT_ACCEPTED)));
+        };
+        // TN-64
+        let epoch = tx
+            .end_sessions(subject)
+            .await?
+            .ok_or(SessionError::Corrupt)?;
+        // TN-41, MD-7
+        let s = Signal::session_revoked(fresh_id()?, subject, Initiator::System, now);
+        signal(&mut tx, &s).await?;
+        // OP-151 m.3 (i)
+        events::sessions_ended(&mut tx, &self.realm, subject, epoch).await?;
+        self.totp_announced(&mut tx, subject, now, correlation)
+            .await?;
+        tx.commit().await?;
+        Ok(Ok(TotpEnrolled {
             credential,
             recovery_codes,
             session_epoch: epoch,
