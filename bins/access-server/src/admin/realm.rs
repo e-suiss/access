@@ -99,6 +99,8 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::Deliveries => Kind::Deliveries,
         ResourceKind::SocialProviders => Kind::Socials,
         ResourceKind::Organizations => Kind::Organizations,
+        ResourceKind::Agents => Kind::Agents,
+        ResourceKind::AgentSponsors => Kind::AgentSponsors,
     }
 }
 

@@ -35,11 +35,14 @@ pub(super) fn slug(ctx: &Ctx<impl Env>) -> String {
     }
 }
 
+/// The path's natural key; a nested key joins its parts with `:` (`agent:sponsor`).
 fn key_of(params: &RawPathParams) -> Option<String> {
-    params
+    let parts: Vec<&str> = params
         .iter()
-        .find(|(k, _)| *k != "slug")
-        .map(|(_, v)| v.to_owned())
+        .filter(|(k, _)| *k != "slug")
+        .map(|(_, v)| v)
+        .collect();
+    (!parts.is_empty()).then(|| parts.join(":"))
 }
 
 /// The member a created resource's server-assigned id is in.
@@ -48,6 +51,7 @@ pub const fn id_member(kind: ResourceKind) -> &'static str {
     match kind {
         ResourceKind::Hooks => "hook_id",
         ResourceKind::Webhooks => "webhook_id",
+        ResourceKind::Agents => "agent",
         _ => "client_id",
     }
 }
@@ -114,6 +118,11 @@ pub async fn serve<E: Env>(
         Shape::Audit => audit(&ctx, &uri).await,
         Shape::AuditProof => audit_proof(&ctx, key).await,
         Shape::Planned(_) => Err(&codes::NOT_YET_SERVED),
+        // OP-154 m.3 (f)
+        Shape::RevokeAll => match key {
+            Some(k) => super::jobs::revoke_all(&ctx, k, &body).await,
+            None => Err(&codes::NOT_FOUND),
+        },
     };
     answer.unwrap_or_else(problem)
 }
@@ -311,8 +320,8 @@ async fn draft<E: Env>(ctx: &Ctx<E>, raw: &[u8]) -> Result<Response, &'static Co
         .filter(|r| r.access == crate::api::manifest::Access::Write)
         .ok_or(&codes::realm::UNKNOWN_OPERATION)?;
     let (kind, shape) = spec(operation.operation_id).ok_or(&codes::realm::UNKNOWN_OPERATION)?;
-    // TN-125
-    if shape == Shape::JobCreate {
+    // TN-125, OP-154 m.3 (f)
+    if matches!(shape, Shape::JobCreate | Shape::RevokeAll) {
         let Some(Value::Object(body)) = request.remove("body") else {
             return Err(&codes::realm::INVALID_JOB);
         };

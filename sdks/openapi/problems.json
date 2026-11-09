@@ -620,6 +620,20 @@
       "description": "The organization keeps at least one active owner on every path; add another owner first (TN-91)."
     },
     {
+      "code": "invalid-agent",
+      "type": "urn:suiss:access:problem:invalid-agent",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The agent is malformed: an unknown kind, an operator that is no live organization or person, a bad name or description, or no distinct active sponsor (OP-154 m.3 (c), (e))."
+    },
+    {
+      "code": "invalid-agent-template",
+      "type": "urn:suiss:access:problem:invalid-agent-template",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "An agent Grant template needs its budget (a count per window, and for consumption a cap per intent and a daily window), at most one delegation hop and no core meta-action (OP-154 m.3 (g), RR-12)."
+    },
+    {
       "code": "invalid-recovery-policy",
       "type": "urn:suiss:access:problem:invalid-recovery-policy",
       "status": 400,

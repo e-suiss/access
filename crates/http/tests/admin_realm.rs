@@ -89,8 +89,8 @@ async fn every_realm_write_without_its_actor_proof_changes_nothing() {
             );
             assert_eq!(h.position(), before, "{op} case {i}");
         }
-        // TN-125
-        if op == "createJob" {
+        // TN-125, OP-154 m.3 (f)
+        if matches!(op, "createJob" | "revokeAllAgentInstances") {
             continue;
         }
         let signed = ais(&own, realm_domain(), nonce, h.now());
@@ -145,7 +145,8 @@ async fn a_planned_realm_read_answers_not_yet_served_behind_its_permission() {
         .iter()
         .filter(|r| access_http::api::realm::planned(r.operation_id) && r.access != Access::Write)
         .collect();
-    assert_eq!(planned.len(), 5);
+    // OP-154 m.4
+    assert_eq!(planned.len(), 2);
     for row in planned {
         let (r, body) = send(&router, read(&path_of(row), &token)).await;
         assert_eq!(

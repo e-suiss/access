@@ -240,10 +240,15 @@ const ALL_ROWS: [Route; BASE_LEN + STAGE9.len()] = {
     out
 };
 
+/// Whether a realm row is a Stage 9 declaration (OP-154 m.4).
+fn declared(operation_id: &str) -> bool {
+    STAGE9.iter().any(|r| r.operation_id == operation_id)
+}
+
 /// Whether a realm row is declared and not served yet (OP-154 m.4).
 #[must_use]
 pub fn planned(operation_id: &str) -> bool {
-    STAGE9.iter().any(|r| r.operation_id == operation_id)
+    declared(operation_id) && matches!(spec(operation_id), Some((_, Shape::Planned(_))))
 }
 
 const BASE: &[Route] = &[
@@ -771,6 +776,9 @@ pub enum Shape {
     /// A declared route its lane does not serve yet: `501 not-yet-served` behind its
     /// permission (OP-154 m.4); the response schema it will answer with.
     Planned(&'static str),
+    /// An agent's `revoke-all`: a bulk job of the caller's signed `instance_terminate` items,
+    /// one per live Instance of the agent (OP-154 m.3 (f), P59).
+    RevokeAll,
 }
 
 const CLIENT_PATCH: &[&str] = &[
@@ -786,6 +794,7 @@ const CLIENT_PATCH: &[&str] = &[
     "sector_identifier_uri",
 ];
 const GROUP_PATCH: &[&str] = &["display_name"];
+const AGENT_PATCH: &[&str] = &["display_name", "description"];
 const UPSTREAM_PATCH: &[&str] = &[
     "issuer",
     "client_id",
@@ -859,8 +868,8 @@ const fn put(section: &'static str) -> Shape {
 )]
 pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
     use ResourceKind::{
-        Accounts, Analytics, Clients, Deliveries, Groups, Hooks, Organizations, Settings, Signals,
-        SocialProviders, UpstreamIdps, Webhooks,
+        Accounts, AgentSponsors, Agents, Analytics, Clients, Deliveries, Groups, Hooks,
+        Organizations, Settings, Signals, SocialProviders, UpstreamIdps, Webhooks,
     };
     const CREATE: Shape = Shape::Write {
         patch: None,
@@ -870,11 +879,20 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
     };
     Some(match operation_id {
         "draftIntent" => (Settings, Shape::Draft),
-        "listAgents" | "listAgentSponsors" | "listProtectedResources" | "listVaultResources" => {
-            (Settings, Shape::Planned("Page"))
-        }
-        "getAgent" => (Settings, Shape::Planned("Agent")),
-        o if planned(o) => (Settings, Shape::Planned("WriteResult")),
+        // OP-154 m.3 (c), (e), (f), (g)
+        "listAgents" => (
+            Agents,
+            Shape::List(&["agent", "display_name", "agent_kind", "status"]),
+        ),
+        "getAgent" => (Agents, Shape::Get),
+        "registerAgent" => (Agents, CREATE),
+        "patchAgent" => (Agents, patch(AGENT_PATCH, None)),
+        "retireAgent" | "assignAgentSponsor" | "removeAgentSponsor" => (Agents, w(false)),
+        "listAgentSponsors" => (AgentSponsors, Shape::List(&["account_id"])),
+        "defineAgentTemplate" => (Settings, w(false)),
+        "revokeAllAgentInstances" => (Agents, Shape::RevokeAll),
+        "listProtectedResources" | "listVaultResources" => (Settings, Shape::Planned("Page")),
+        o if declared(o) => (Settings, Shape::Planned("WriteResult")),
         "listClients" => (
             Clients,
             Shape::List(&["client_id", "display_name", "status"]),
@@ -1051,7 +1069,10 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::DomainContested => &r::DOMAIN_CONTESTED,
             Invalid::DomainUnverified => &r::DOMAIN_NOT_VERIFIED,
             Invalid::SsoDraft => &r::INVALID_CONNECTION_DRAFT,
+            Invalid::Agent => &r::INVALID_AGENT,
+            Invalid::AgentTemplate => &r::INVALID_AGENT_TEMPLATE,
             Invalid::NoClient
+            | Invalid::NoAgent
             | Invalid::NoKey
             | Invalid::NoGroup
             | Invalid::NoAccount

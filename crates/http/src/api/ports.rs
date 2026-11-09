@@ -185,6 +185,10 @@ pub enum ResourceKind {
     SocialProviders,
     /// Organizations, by their Party's base64url (§8.5 S7, OP-153 m.10 (c)).
     Organizations,
+    /// Agents, by their Party's base64url (OP-154 m.3 (e), AG-41).
+    Agents,
+    /// One agent's sponsorships, by the agent's Party (AG-41, SI-21).
+    AgentSponsors,
 }
 
 impl ResourceKind {
@@ -204,6 +208,8 @@ impl ResourceKind {
             Self::Deliveries => "deliveries",
             Self::SocialProviders => "social-providers",
             Self::Organizations => "organizations",
+            Self::Agents => "agents",
+            Self::AgentSponsors => "agent-sponsors",
         }
     }
 }

@@ -349,6 +349,20 @@ pub const CATALOG_UPGRADE_REQUIRED: Code = code(
     "Conflict",
     "The realm does not accept this action's catalog yet; its catalog upgrade must commit first (OP-153 m.3 (a)).",
 );
+/// A malformed agent: kind, operator, name, description or sponsors (OP-154 m.3 (c), (e)).
+pub const INVALID_AGENT: Code = code(
+    "invalid-agent",
+    400,
+    "Bad Request",
+    "The agent is malformed: an unknown kind, an operator that is no live organization or person, a bad name or description, or no distinct active sponsor (OP-154 m.3 (c), (e)).",
+);
+/// An agent Grant template outside OP-154 m.3 (g).
+pub const INVALID_AGENT_TEMPLATE: Code = code(
+    "invalid-agent-template",
+    400,
+    "Bad Request",
+    "An agent Grant template needs its budget (a count per window, and for consumption a cap per intent and a daily window), at most one delegation hop and no core meta-action (OP-154 m.3 (g), RR-12).",
+);
 /// The change would leave the organization without an active owner (TN-91, OP-153 m.3 (p)).
 pub const LAST_OWNER: Code = code(
     "last-owner",

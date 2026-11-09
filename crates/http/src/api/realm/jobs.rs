@@ -46,13 +46,15 @@ pub const JOB_CONTEXT: &str = "access/admin-job/v1";
 const IF_MATCH: &str = "if_match";
 
 /// The job operations that are core meta-action writes (E17), with their meta-action.
-pub const META_OPERATIONS: [(&str, &str); 6] = [
+pub const META_OPERATIONS: [(&str, &str); 7] = [
     ("revokeGrant", "grant_revoke"),
     ("amendGrant", "grant_amend"),
     ("issueRoleGrant", "grant_issue"),
     ("proposeOwnershipHandover", "anchor_transfer"),
     ("completeOwnershipHandover", "anchor_transfer"),
     ("issueAutojoinGrant", "grant_issue"),
+    // OP-154 m.3 (f)
+    ("terminateAgentInstance", "instance_terminate"),
 ];
 
 fn id16(text: &str) -> Option<[u8; 16]> {
@@ -255,6 +257,8 @@ fn meta_item(op: &mut Map<String, Value>) -> Result<Option<Item>, &'static Code>
             access_kernel::model::Id([0; 16]),
             access_kernel::model::Id([0; 16]),
         )
+    } else if *action == "instance_terminate" {
+        terminate_target(&key, &request)?
     } else if *action == "grant_issue" {
         // TN-89 (3)
         role_key(&key).ok_or(&codes::realm::INVALID_JOB)?;
@@ -311,6 +315,79 @@ fn meta_item(op: &mut Map<String, Value>) -> Result<Option<Item>, &'static Code>
         ais,
         meta: Some(request),
     }))
+}
+
+/// The Instance a `terminateAgentInstance` item ends: its key's, and its payload's
+/// (OP-154 m.3 (f), P59).
+fn terminate_target(
+    key: &str,
+    request: &access_authority_core::domain::Request,
+) -> Result<(access_kernel::model::Id, access_kernel::model::Id), &'static Code> {
+    let (_, instance) = agent_instance_key(key).ok_or(&codes::realm::INVALID_JOB)?;
+    match &request.payload {
+        Some(access_kernel::meta::Payload::InstanceTerminate { instance: i })
+            if i.0 == instance =>
+        {
+            Ok((*i, *i))
+        }
+        _ => Err(&codes::realm::JOB_OPERATION_NOT_ALLOWED),
+    }
+}
+
+/// The key of a `terminateAgentInstance` item: the agent's Party and the Instance, both
+/// base64url, as `agent:instance` (OP-154 m.3 (f)).
+#[must_use]
+pub fn agent_instance_key(key: &str) -> Option<([u8; 16], [u8; 16])> {
+    let (a, i) = key.split_once(':')?;
+    Some((id16(a)?, id16(i)?))
+}
+
+/// `POST …/agents/{agent}/revoke-all` (OP-154 m.3 (f), P59, §9.16.2 k.6): a job whose items are
+/// exactly one `terminateAgentInstance` per live Instance of the agent, each the caller's own
+/// signed `instance_terminate`. It is a convenience over those Exercises; there is no bulk
+/// Exercise and no system key.
+pub(super) async fn revoke_all<E: Env>(
+    ctx: &Ctx<E>,
+    agent: String,
+    raw: &[u8],
+) -> Result<Response, &'static Code> {
+    let job = parse(raw)?;
+    let agent_id = id16(&agent).ok_or(&codes::NOT_FOUND)?;
+    let found = ctx
+        .api
+        .env()
+        .realm()
+        .read(crate::api::ports::ResourceQuery {
+            slug: slug(ctx),
+            kind: crate::api::ports::ResourceKind::Agents,
+            key: Some(agent.clone()),
+            after: None,
+            limit: 1,
+        })
+        .await
+        .map_err(|_| &codes::UNAVAILABLE)?
+        .and_then(|l| l.items.into_iter().next())
+        .ok_or(&codes::NOT_FOUND)?;
+    let live: std::collections::BTreeSet<[u8; 16]> = found
+        .body
+        .get("instances")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(|v| v.as_str().and_then(id16)).collect())
+        .unwrap_or_default();
+    let mut named = std::collections::BTreeSet::new();
+    for i in &job.items {
+        let key = i.key.as_deref().and_then(agent_instance_key);
+        match key {
+            Some((a, instance)) if i.operation == "terminateAgentInstance" && a == agent_id => {
+                named.insert(instance);
+            }
+            _ => return Err(&codes::realm::JOB_OPERATION_NOT_ALLOWED),
+        }
+    }
+    if live.is_empty() || named != live {
+        return Err(&codes::realm::INVALID_JOB);
+    }
+    create(ctx, raw).await
 }
 
 /// The domain a meta item is decoded with before the realm's own replaces it.

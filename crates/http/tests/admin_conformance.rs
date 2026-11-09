@@ -140,7 +140,10 @@ fn every_realm_write_is_an_idp_exercise() {
     {
         assert_eq!(row.access, Access::Write, "{}", row.operation_id);
         // OP-154 m.4
-        if row.operation_id == "createJob" || access_http::api::realm::planned(row.operation_id) {
+        // OP-154 m.3 (f)
+        if matches!(row.operation_id, "createJob" | "revokeAllAgentInstances")
+            || access_http::api::realm::planned(row.operation_id)
+        {
             continue;
         }
         assert!(
