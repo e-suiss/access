@@ -596,6 +596,7 @@ dependencies = [
  "access-authority-sequencer",
  "access-authority-signer",
  "access-crypto",
+ "access-executor",
  "access-experience",
  "access-http",
  "access-identity-account",

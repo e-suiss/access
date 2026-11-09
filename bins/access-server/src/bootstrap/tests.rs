@@ -2486,6 +2486,7 @@ mod account;
 mod agent;
 mod catalog;
 mod exchange;
+mod executor;
 mod experience;
 mod management;
 mod mcp;

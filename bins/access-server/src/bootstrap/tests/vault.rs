@@ -35,15 +35,15 @@ use super::recovery::Recording;
 use super::*;
 
 /// The registered executor's PEP identity, as its client certificate names it.
-const EXECUTOR: &str = "ZXhlY3V0b3ItY2VydGlmaWNhdGUtdGh1bWJwcmludDA";
+pub(super) const EXECUTOR: &str = "ZXhlY3V0b3ItY2VydGlmaWNhdGUtdGh1bWJwcmludDA";
 /// A PEP that is not this Resource's executor.
 const OTHER_PEP: &str = "b3RoZXItcGVwLWNlcnRpZmljYXRlLXRodW1icHJpbnQ";
 const GMAIL_SEND: &str = "https://www.googleapis.com/auth/gmail.send";
 
 /// The upstream's token endpoint: scripted answers, in order, and the forms it was sent.
 #[derive(Default)]
-struct Upstream {
-    answers: StdMutex<VecDeque<(u16, String)>>,
+pub(super) struct Upstream {
+    pub(super) answers: StdMutex<VecDeque<(u16, String)>>,
     forms: StdMutex<Vec<String>>,
 }
 
@@ -110,18 +110,18 @@ fn work(path: &str) -> ResourceRef {
     }
 }
 
-struct Lab {
-    w: World,
-    pages: axum::Router,
-    adp: axum::Router,
-    upstream: Arc<Upstream>,
-    domain: Digest,
-    route: access_store::tenancy::RealmRoute,
-    action: ActionRef,
-    person: HsmSigner,
-    party: Id,
-    holding: HoldingRef,
-    subject: [u8; 16],
+pub(super) struct Lab {
+    pub(super) w: World,
+    pub(super) pages: axum::Router,
+    pub(super) adp: axum::Router,
+    pub(super) upstream: Arc<Upstream>,
+    pub(super) domain: Digest,
+    pub(super) route: access_store::tenancy::RealmRoute,
+    pub(super) action: ActionRef,
+    pub(super) person: HsmSigner,
+    pub(super) party: Id,
+    pub(super) holding: HoldingRef,
+    pub(super) subject: [u8; 16],
     client: String,
     cookies: BTreeMap<String, String>,
 }
@@ -184,7 +184,7 @@ async fn grant(w: &World, domain: Digest, holder: Id, authority: CanonicalAuthor
 }
 
 impl Lab {
-    async fn open(name: &str) -> Self {
+    pub(super) async fn open(name: &str) -> Self {
         let (w, signer) = World::open(name, true).await;
         let signer = signer.unwrap();
         let summary = w.run(&sample_plan()).await;
@@ -336,7 +336,7 @@ impl Lab {
     }
 
     /// The person's live consent record for the test client: their AAS for it (AS-M15).
-    async fn consent(&self) {
+    pub(super) async fn consent(&self) {
         let mut t = TenantTx::begin(&self.w.db.app, self.route.tenant, self.route.realm)
             .await
             .unwrap();
@@ -422,7 +422,7 @@ impl Lab {
     }
 
     /// The `work.approve` intent on `work:inbox`, valid for `ms` from now.
-    fn intent(&self, ms: u64) -> IntentEnvelope {
+    pub(super) fn intent(&self, ms: u64) -> IntentEnvelope {
         let now = now_ms();
         IntentEnvelope {
             provenance: BTreeMap::new(),
@@ -508,7 +508,7 @@ impl Lab {
     }
 
     /// Commits an `idp.vault.*` change as the realm's root.
-    async fn change(&self, change: VaultChange) {
+    pub(super) async fn change(&self, change: VaultChange) {
         let declared = DeclaredTargets::default();
         let b = Bootstrap {
             app: &self.w.db.app,
@@ -532,7 +532,7 @@ impl Lab {
         .unwrap();
     }
 
-    fn resource(&self) -> Resource {
+    pub(super) fn resource(&self) -> Resource {
         Resource {
             name: String::from("google"),
             origin: Origin::Catalog,
@@ -553,7 +553,7 @@ impl Lab {
 
     /// Connects the person's account through the real pages: start, then the upstream's
     /// redirect back with `code`, answered by `answer`.
-    async fn connect(&mut self, answer: &str) -> String {
+    pub(super) async fn connect(&mut self, answer: &str) -> String {
         let (status, started, _) = self
             .page(
                 &Method::POST,
@@ -824,7 +824,7 @@ async fn register_client(
 }
 
 /// Revokes the person's Grant as the realm's root.
-async fn revoke(l: &Lab) {
+pub(super) async fn revoke(l: &Lab) {
     let root = root_key(&l.w.keys).unwrap();
     let payload = Payload::GrantRevoke {
         grant: l.holding.grant,
