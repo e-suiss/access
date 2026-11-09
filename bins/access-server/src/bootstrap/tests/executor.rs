@@ -718,6 +718,49 @@ async fn a_stop_confirms_and_an_irreversible_step_waits_out_its_window() {
     rig.lab.w.domains.release().await;
 }
 
+// E51, E45, E47 (4), Ek B 4328, OP-154 m.3 (u)
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_blocked_request_hands_off_to_a_person_and_silence_stops_the_job() {
+    let rig = Rig::open("executor-blocked").await;
+    let exec = rig.executor(Arc::clone(&rig.tokens));
+    let intent = rig.lab.intent(1_200_000);
+    let (job, _) = rig
+        .start(
+            &exec,
+            &intent,
+            vec![
+                rig.step("one", "one", Reversibility::Reversible, false),
+                rig.step("two", "two", Reversibility::Reversible, false),
+            ],
+            1,
+        )
+        .await
+        .unwrap();
+    rig.answer(403, r#"{"error":"automated clients are not allowed"}"#);
+    let Next::Wait(until) = exec.drive(job).await.unwrap() else {
+        panic!()
+    };
+    let view = access_executor::adapters::view(&exec.job(job).await.unwrap());
+    assert_eq!(view["state"], "paused", "{view}");
+    assert_eq!(view["reason"], "blocked");
+    assert_eq!(view["handoff_until_ms"].as_u64(), Some(until));
+    assert_eq!(view["steps"][0]["outcome"], "not-done");
+    let seen = rig.api.seen.lock().unwrap().clone();
+    assert_eq!(seen.len(), 1);
+    assert_eq!(header_of(&seen[0], "User-Agent"), Some("access-executor/1"));
+    rig.wall.0.store(
+        access_executor::domain::HANDOFF_WAIT_MS + 1_000,
+        Ordering::SeqCst,
+    );
+    assert_eq!(exec.drive(job).await.unwrap(), Next::Done);
+    let view = access_executor::adapters::view(&exec.job(job).await.unwrap());
+    assert_eq!(view["state"], "stopped", "{view}");
+    assert_eq!(view["reason"], "silence");
+    assert_eq!(view["confirmed"], true);
+    assert_eq!(rig.api.seen.lock().unwrap().len(), 1);
+    rig.lab.w.domains.release().await;
+}
+
 // TI-6, E62 (1), (3), §7.9.7.2, Ek B 4496, 4497, OP-154 m.3 (u)
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_crash_after_the_outbox_sends_once_more_with_the_same_key_after_a_new_decision() {
@@ -786,5 +829,45 @@ async fn a_crash_after_the_outbox_sends_once_more_with_the_same_key_after_a_new_
     assert_eq!(view["state"], "unknown", "{view}");
     assert_eq!(view["steps"][0]["outcome"], "unknown");
     assert_eq!(rig.api.seen.lock().unwrap().len(), 1);
+    rig.lab.w.domains.release().await;
+}
+
+// AG-39, AG-40, E62 (2), OP-154 m.3 (u), Ek B 4417
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_mcp_client_driver_calls_an_official_server_with_the_released_token() {
+    let rig = Rig::open("executor-mcp").await;
+    let exec = rig.executor(Arc::clone(&rig.tokens));
+    let intent = rig.lab.intent(1_200_000);
+    let mut step = rig.step("tool", "tool", Reversibility::Reversible, true);
+    step.call = Call::Mcp {
+        server: String::from("https://mcp.upstream.test/mcp"),
+        tool: String::from("send_message"),
+        arguments: serde_json::json!({ "to": "someone@example.org" }),
+    };
+    let (job, _) = rig.start(&exec, &intent, vec![step], 0).await.unwrap();
+    rig.answer(
+        200,
+        "event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"content\":[]}}\n\n",
+    );
+    assert_eq!(exec.drive(job).await.unwrap(), Next::Done);
+    let seen = rig.api.seen.lock().unwrap().clone();
+    assert_eq!(seen.len(), 1);
+    assert_eq!(seen[0].url, "https://mcp.upstream.test/mcp");
+    assert_eq!(
+        header_of(&seen[0], "Authorization"),
+        Some("Bearer at-second")
+    );
+    let body: serde_json::Value = serde_json::from_slice(&seen[0].body).unwrap();
+    assert_eq!(body["method"], "tools/call");
+    assert_eq!(body["params"]["name"], "send_message");
+    let j = exec.job(job).await.unwrap();
+    assert_eq!(
+        body["params"]["_meta"][access_executor::drivers::MCP_IDEMPOTENCY],
+        b64url_encode(&j.steps[0].key.0)
+    );
+    assert_eq!(
+        access_executor::adapters::view(&j)["steps"][0]["outcome"],
+        "done"
+    );
     rig.lab.w.domains.release().await;
 }
