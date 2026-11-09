@@ -415,6 +415,7 @@ impl TextId {
 
     /// The stable id on the wire.
     #[must_use]
+    #[expect(clippy::too_many_lines, reason = "one id per text, read top to bottom")]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::LoginFailed => "login.failed",

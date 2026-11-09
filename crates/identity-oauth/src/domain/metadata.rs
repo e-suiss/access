@@ -178,6 +178,24 @@ pub fn authorization_server(issuer: &Issuer, served: &Served) -> String {
     authorization_server_of(issuer, served, &RealmFacts::default())
 }
 
+/// The grant types the token endpoint serves (OP-154 m.4).
+fn grant_types(served: &Served) -> Vec<&'static str> {
+    let mut grants = vec!["authorization_code", "refresh_token"];
+    if served.feature(Feature::AuthorizationDetails) {
+        grants.push("client_credentials");
+    }
+    if served.has(Endpoint::DeviceAuthorization) {
+        grants.push(DEVICE_CODE_GRANT);
+    }
+    if served.feature(Feature::TokenExchange) {
+        grants.push(TOKEN_EXCHANGE_GRANT);
+    }
+    if served.feature(Feature::JwtBearer) {
+        grants.push(JWT_BEARER_GRANT);
+    }
+    grants
+}
+
 /// The AS metadata of the realm `issuer` with what is known about the realm (`facts`).
 #[must_use]
 pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFacts) -> String {
@@ -223,21 +241,7 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
             "token_endpoint".into(),
             issuer.endpoint(Endpoint::Token.path()).into(),
         );
-        let mut grants = vec!["authorization_code", "refresh_token"];
-        if served.feature(Feature::AuthorizationDetails) {
-            grants.push("client_credentials");
-        }
-        // OP-154 m.4
-        if served.has(Endpoint::DeviceAuthorization) {
-            grants.push(DEVICE_CODE_GRANT);
-        }
-        if served.feature(Feature::TokenExchange) {
-            grants.push(TOKEN_EXCHANGE_GRANT);
-        }
-        if served.feature(Feature::JwtBearer) {
-            grants.push(JWT_BEARER_GRANT);
-        }
-        m.insert("grant_types_supported".into(), json!(grants));
+        m.insert("grant_types_supported".into(), json!(grant_types(served)));
         m.insert(
             "token_endpoint_auth_methods_supported".into(),
             json!(["none", "private_key_jwt", "client_secret_basic"]),
