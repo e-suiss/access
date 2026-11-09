@@ -8843,6 +8843,12 @@ async fn an_origin_outside_the_mandate_is_denied_on_commit() {
                 write,
             },
         );
+        // E54 (1), MUST-NEVER-6
+        r.intent.provenance.insert(
+            "target".to_owned(),
+            access_kernel::intent::Provenance::UntrustedExternal,
+        );
+        r.intent.context.plan = Some(Digest([0x42; 32]));
         r
     };
     allowed(
