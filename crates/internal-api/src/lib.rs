@@ -3,6 +3,7 @@
 pub mod approvals;
 pub mod claims;
 pub mod context;
+pub mod edge;
 pub mod epochs;
 pub mod events;
 pub mod idp;
