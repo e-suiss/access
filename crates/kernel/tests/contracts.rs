@@ -270,6 +270,18 @@ fn edge_channel_examples_meet_the_cddl() {
     check_examples("edge-channel-response.json");
 }
 
+// IDP-40, F23, OP-155 m.3 (q)
+#[test]
+fn interop_profile_examples_meet_both_schemas() {
+    check_examples("interop-profile.json");
+}
+
+// IDP-23, OP-155 m.3 (g)
+#[test]
+fn scim_set_examples_meet_the_cddl() {
+    check_examples("scim-set.json");
+}
+
 // E43, TI-20, OP-141 m.38
 #[test]
 fn explanation_examples_meet_both_schemas() {

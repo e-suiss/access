@@ -1,0 +1,44 @@
+; Access interop profile, version 1 (RFC 8610; IDP-40, F23, OP-155 m.3 (g), (q)).
+;
+; A divergence profile is data: the known format differences of one counterpart system (a SAML
+; service provider, a SCIM client) that the SAML IdP and the SCIM server tolerate when the SSO
+; catalog template that names the profile is chosen (IDP-28). The JSON form is
+; `interop-profile.schema.json`; both describe the same value.
+;
+; Security boundary (IDP-40 (5)): a profile tolerates format only. No rule exists that relaxes
+; signature verification, time and clock-skew checks, audience or recipient checks, XML parser
+; isolation, authentication of the client, or any size, depth or rate limit; an unknown rule
+; makes the whole profile invalid. Every tolerance names the test case that pins it
+; (OP-155 m.3 (q)). Rule names are only ever appended.
+
+interop-profile = {
+  v: 1,
+  profile: tstr .regexp "[a-z]{4}\\.[a-z0-9][a-z0-9_-]{0,62}",
+  protocol: "saml" / "scim",
+  counterpart: tstr .size (1..128),
+  revision: uint,
+  ? template: tstr .regexp "[a-z0-9][a-z0-9_-]{0,62}",
+  tolerances: [* tolerance],
+}
+
+tolerance = {
+  rule: saml-rule / scim-rule,
+  ? value: tstr / bool / uint / [+ tstr],
+  test: tstr .regexp "[a-z0-9_]{1,64}(::[a-z0-9_]{1,64}){1,6}",
+  ? source: tstr .size (1..512),
+}
+
+saml-rule = "saml.nameid_format" / "saml.sign_assertion" / "saml.sign_response" /
+  "saml.signature_alg" / "saml.key_info_certificate" / "saml.attribute_name_format" /
+  "saml.attribute_names" / "saml.attribute_multi_value" / "saml.audience_value" /
+  "saml.acs_binding" / "saml.authn_context_class" / "saml.idp_initiated" /
+  "saml.slo_binding" / "saml.encrypt_assertion" / "saml.relay_state_echo"
+
+scim-rule = "scim.aad_opt_scim_062020" / "scim.patch_bool_as_string" /
+  "scim.patch_path_case_insensitive" / "scim.patch_op_case_insensitive" /
+  "scim.patch_remove_member_by_value" / "scim.patch_single_value_array" /
+  "scim.filter_attribute_case_insensitive" / "scim.ignore_unknown_attributes" /
+  "scim.empty_value_clears" / "scim.group_members_omitted" /
+  "scim.user_name_case_insensitive" / "scim.missing_schemas" /
+  "scim.enterprise_extension_flattened" / "scim.content_type_json" /
+  "scim.active_as_string" / "scim.no_etag" / "scim.list_without_total"

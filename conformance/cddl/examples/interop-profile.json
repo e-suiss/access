@@ -1,0 +1,172 @@
+{
+  "cases": [
+    {
+      "cbor": "a76176016770726f66696c656f73616d6c2e736572766963656e6f776870726f746f636f6c6473616d6c687265766973696f6e016874656d706c6174656a736572766963656e6f776a746f6c6572616e63657382a46472756c657273616d6c2e6e616d6569645f666f726d61746474657374782a73616d6c5f70726f66696c65733a3a736572766963656e6f773a3a6e616d6569645f69735f656d61696c6576616c7565783675726e3a6f617369733a6e616d65733a74633a53414d4c3a312e313a6e616d6569642d666f726d61743a656d61696c4164647265737366736f7572636577536572766963654e6f772053414d4c20322e302053534fa36472756c657273616d6c2e7369676e5f726573706f6e73656474657374782d73616d6c5f70726f66696c65733a3a736572766963656e6f773a3a726573706f6e73655f69735f7369676e65646576616c7565f56b636f756e746572706172746a536572766963654e6f77",
+      "edn": "{\"v\": 1, \"profile\": \"saml.servicenow\", \"protocol\": \"saml\", \"counterpart\": \"ServiceNow\", \"revision\": 1, \"template\": \"servicenow\", \"tolerances\": [{\"rule\": \"saml.nameid_format\", \"value\": \"urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress\", \"test\": \"saml_profiles::servicenow::nameid_is_email\", \"source\": \"ServiceNow SAML 2.0 SSO\"}, {\"rule\": \"saml.sign_response\", \"value\": true, \"test\": \"saml_profiles::servicenow::response_is_signed\"}]}",
+      "id": "servicenow-saml",
+      "json": {
+        "counterpart": "ServiceNow",
+        "profile": "saml.servicenow",
+        "protocol": "saml",
+        "revision": 1,
+        "template": "servicenow",
+        "tolerances": [
+          {
+            "rule": "saml.nameid_format",
+            "source": "ServiceNow SAML 2.0 SSO",
+            "test": "saml_profiles::servicenow::nameid_is_email",
+            "value": "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"
+          },
+          {
+            "rule": "saml.sign_response",
+            "test": "saml_profiles::servicenow::response_is_signed",
+            "value": true
+          }
+        ],
+        "v": 1
+      },
+      "valid": true
+    },
+    {
+      "cbor": "a76176016770726f66696c656a7363696d2e656e7472616870726f746f636f6c647363696d687265766973696f6e036874656d706c61746565656e7472616a746f6c6572616e63657383a36472756c6578187363696d2e6161645f6f70745f7363696d5f3036323032306474657374781e7363696d5f70726f66696c65733a3a656e7472613a3a6f70745f666c61676576616c7565f5a26472756c6578197363696d2e70617463685f626f6f6c5f61735f737472696e676474657374782a7363696d5f70726f66696c65733a3a656e7472613a3a6163746976655f66616c73655f61735f74657874a36472756c6578217363696d2e70617463685f72656d6f76655f6d656d6265725f62795f76616c75656474657374782c7363696d5f70726f66696c65733a3a656e7472613a3a72656d6f76655f6d656d6265725f62795f76616c75656576616c756581676d656d626572736b636f756e74657270617274724d6963726f736f667420456e747261204944",
+      "edn": "{\"v\": 1, \"profile\": \"scim.entra\", \"protocol\": \"scim\", \"counterpart\": \"Microsoft Entra ID\", \"revision\": 3, \"template\": \"entra\", \"tolerances\": [{\"rule\": \"scim.aad_opt_scim_062020\", \"value\": true, \"test\": \"scim_profiles::entra::opt_flag\"}, {\"rule\": \"scim.patch_bool_as_string\", \"test\": \"scim_profiles::entra::active_false_as_text\"}, {\"rule\": \"scim.patch_remove_member_by_value\", \"value\": [\"members\"], \"test\": \"scim_profiles::entra::remove_member_by_value\"}]}",
+      "id": "entra-scim",
+      "json": {
+        "counterpart": "Microsoft Entra ID",
+        "profile": "scim.entra",
+        "protocol": "scim",
+        "revision": 3,
+        "template": "entra",
+        "tolerances": [
+          {
+            "rule": "scim.aad_opt_scim_062020",
+            "test": "scim_profiles::entra::opt_flag",
+            "value": true
+          },
+          {
+            "rule": "scim.patch_bool_as_string",
+            "test": "scim_profiles::entra::active_false_as_text"
+          },
+          {
+            "rule": "scim.patch_remove_member_by_value",
+            "test": "scim_profiles::entra::remove_member_by_value",
+            "value": [
+              "members"
+            ]
+          }
+        ],
+        "v": 1
+      },
+      "valid": true
+    },
+    {
+      "cbor": "a66176016770726f66696c656e7363696d2e6a756d70636c6f75646870726f746f636f6c647363696d687265766973696f6e006a746f6c6572616e636573806b636f756e74657270617274694a756d70436c6f7564",
+      "edn": "{\"v\": 1, \"profile\": \"scim.jumpcloud\", \"protocol\": \"scim\", \"counterpart\": \"JumpCloud\", \"revision\": 0, \"tolerances\": []}",
+      "id": "empty-profile",
+      "json": {
+        "counterpart": "JumpCloud",
+        "profile": "scim.jumpcloud",
+        "protocol": "scim",
+        "revision": 0,
+        "tolerances": [],
+        "v": 1
+      },
+      "valid": true
+    },
+    {
+      "edn": "{\"v\": 1, \"profile\": \"saml.servicenow\", \"protocol\": \"saml\", \"counterpart\": \"ServiceNow\", \"revision\": 1, \"template\": \"servicenow\", \"tolerances\": [{\"rule\": \"saml.skip_signature\", \"value\": true, \"test\": \"saml_profiles::x::y\"}]}",
+      "id": "relaxes-signature-verification",
+      "json": {
+        "counterpart": "ServiceNow",
+        "profile": "saml.servicenow",
+        "protocol": "saml",
+        "revision": 1,
+        "template": "servicenow",
+        "tolerances": [
+          {
+            "rule": "saml.skip_signature",
+            "test": "saml_profiles::x::y",
+            "value": true
+          }
+        ],
+        "v": 1
+      },
+      "valid": false
+    },
+    {
+      "edn": "{\"v\": 1, \"profile\": \"saml.servicenow\", \"protocol\": \"saml\", \"counterpart\": \"ServiceNow\", \"revision\": 1, \"template\": \"servicenow\", \"tolerances\": [{\"rule\": \"saml.clock_skew\", \"value\": 600, \"test\": \"saml_profiles::x::y\"}]}",
+      "id": "widens-clock-skew",
+      "json": {
+        "counterpart": "ServiceNow",
+        "profile": "saml.servicenow",
+        "protocol": "saml",
+        "revision": 1,
+        "template": "servicenow",
+        "tolerances": [
+          {
+            "rule": "saml.clock_skew",
+            "test": "saml_profiles::x::y",
+            "value": 600
+          }
+        ],
+        "v": 1
+      },
+      "valid": false
+    },
+    {
+      "edn": "{\"v\": 1, \"profile\": \"scim.entra\", \"protocol\": \"scim\", \"counterpart\": \"Microsoft Entra ID\", \"revision\": 3, \"template\": \"entra\", \"tolerances\": [{\"rule\": \"scim.no_etag\"}]}",
+      "id": "tolerance-without-test",
+      "json": {
+        "counterpart": "Microsoft Entra ID",
+        "profile": "scim.entra",
+        "protocol": "scim",
+        "revision": 3,
+        "template": "entra",
+        "tolerances": [
+          {
+            "rule": "scim.no_etag"
+          }
+        ],
+        "v": 1
+      },
+      "valid": false
+    },
+    {
+      "edn": "{\"v\": 1, \"profile\": \"scim.entra\", \"protocol\": \"scim\", \"counterpart\": \"Microsoft Entra ID\", \"revision\": 3, \"template\": \"entra\", \"tolerances\": [{\"rule\": \"scim.aad_opt_scim_062020\", \"value\": true, \"test\": \"scim_profiles::entra::opt_flag\"}, {\"rule\": \"scim.patch_bool_as_string\", \"test\": \"scim_profiles::entra::active_false_as_text\"}, {\"rule\": \"scim.patch_remove_member_by_value\", \"value\": [\"members\"], \"test\": \"scim_profiles::entra::remove_member_by_value\"}], \"allow_sha1\": true}",
+      "id": "unknown-member",
+      "json": {
+        "allow_sha1": true,
+        "counterpart": "Microsoft Entra ID",
+        "profile": "scim.entra",
+        "protocol": "scim",
+        "revision": 3,
+        "template": "entra",
+        "tolerances": [
+          {
+            "rule": "scim.aad_opt_scim_062020",
+            "test": "scim_profiles::entra::opt_flag",
+            "value": true
+          },
+          {
+            "rule": "scim.patch_bool_as_string",
+            "test": "scim_profiles::entra::active_false_as_text"
+          },
+          {
+            "rule": "scim.patch_remove_member_by_value",
+            "test": "scim_profiles::entra::remove_member_by_value",
+            "value": [
+              "members"
+            ]
+          }
+        ],
+        "v": 1
+      },
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "interop-profile.cddl"
+  ],
+  "contract": "interop-profile",
+  "schema": "interop-profile.schema.json"
+}

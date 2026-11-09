@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:interop-profile:1",
+  "title": "Access interop profile (IDP-40, F23, OP-155 m.3 (g), (q))",
+  "description": "The known format differences of one counterpart system, tolerated when the SSO catalog template naming the profile is chosen. A profile tolerates format only: no rule relaxes signature verification, time checks, audience or recipient checks, parser isolation, client authentication or any limit, and an unknown rule makes the profile invalid. Every tolerance names the test case that pins it. The CDDL twin is interop-profile.cddl.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "v",
+    "profile",
+    "protocol",
+    "counterpart",
+    "revision",
+    "tolerances"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "profile": {
+      "type": "string",
+      "pattern": "^[a-z]{4}\\.[a-z0-9][a-z0-9_-]{0,62}$",
+      "description": "The protocol, a dot and the profile's name, e.g. `saml.salesforce` or `scim.entra`."
+    },
+    "protocol": {
+      "enum": [
+        "saml",
+        "scim"
+      ]
+    },
+    "counterpart": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "The counterpart product as its vendor names it."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Raised on every change; the interop lab records which revision it tested."
+    },
+    "template": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+      "description": "The SSO catalog template that applies the profile (IDP-28)."
+    },
+    "tolerances": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/tolerance"
+      }
+    }
+  },
+  "$defs": {
+    "tolerance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "test"
+      ],
+      "properties": {
+        "rule": {
+          "enum": [
+            "saml.nameid_format",
+            "saml.sign_assertion",
+            "saml.sign_response",
+            "saml.signature_alg",
+            "saml.key_info_certificate",
+            "saml.attribute_name_format",
+            "saml.attribute_names",
+            "saml.attribute_multi_value",
+            "saml.audience_value",
+            "saml.acs_binding",
+            "saml.authn_context_class",
+            "saml.idp_initiated",
+            "saml.slo_binding",
+            "saml.encrypt_assertion",
+            "saml.relay_state_echo",
+            "scim.aad_opt_scim_062020",
+            "scim.patch_bool_as_string",
+            "scim.patch_path_case_insensitive",
+            "scim.patch_op_case_insensitive",
+            "scim.patch_remove_member_by_value",
+            "scim.patch_single_value_array",
+            "scim.filter_attribute_case_insensitive",
+            "scim.ignore_unknown_attributes",
+            "scim.empty_value_clears",
+            "scim.group_members_omitted",
+            "scim.user_name_case_insensitive",
+            "scim.missing_schemas",
+            "scim.enterprise_extension_flattened",
+            "scim.content_type_json",
+            "scim.active_as_string",
+            "scim.no_etag",
+            "scim.list_without_total"
+          ]
+        },
+        "value": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "test": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]{1,64}(::[a-z0-9_]{1,64}){1,6}$",
+          "description": "The test case, as a Rust path, that pins the tolerance."
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "Where the difference is documented."
+        }
+      }
+    }
+  }
+}

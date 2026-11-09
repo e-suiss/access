@@ -1,0 +1,73 @@
+; SCIM Security Event Token claims (RFC 9967 over RFC 8417; IDP-23, OP-155 m.3 (g)).
+;
+; The JSON claims set of a SET the SCIM server emits and the outbound SCIM client accepts, in
+; the JSON data model (RFC 8610 §3.8). The subject is `sub_id` of format `scim`, never `sub`.
+; `txn` and the resource `version` are carried. A password or any other secret is never part of
+; an event, not even in a `full` event (§10.6.2). Delivery and stream management are SSF's
+; (§9.16.2).
+
+scim-set = {
+  iss: tstr,
+  iat: uint,
+  jti: tstr .size (1..256),
+  aud: tstr / [+ tstr],
+  txn: tstr .size (1..256),
+  sub_id: scim-subject,
+  ? toe: uint,
+  events: {
+    + scim-event-uri => scim-event,
+  },
+}
+
+; RFC 9967 subject identifier format `scim`: the resource's URI relative to the SCIM base.
+scim-subject = {
+  format: "scim",
+  uri: tstr .regexp "/[A-Za-z]{1,32}(/[A-Za-z0-9._~-]{1,256})?",
+  ? externalId: tstr .size (1..256),
+}
+
+; The 12 event URIs.
+scim-event-uri = "urn:ietf:params:SCIM:event:prov:create:notice" /
+  "urn:ietf:params:SCIM:event:prov:create:full" /
+  "urn:ietf:params:SCIM:event:prov:patch:notice" /
+  "urn:ietf:params:SCIM:event:prov:patch:full" /
+  "urn:ietf:params:SCIM:event:prov:put:notice" /
+  "urn:ietf:params:SCIM:event:prov:put:full" /
+  "urn:ietf:params:SCIM:event:prov:delete" /
+  "urn:ietf:params:SCIM:event:prov:activate" /
+  "urn:ietf:params:SCIM:event:prov:deactivate" /
+  "urn:ietf:params:SCIM:event:sig:authMethod" /
+  "urn:ietf:params:SCIM:event:sig:pwdReset" /
+  "urn:ietf:params:SCIM:event:misc:asyncResp"
+
+scim-event = scim-notice / scim-full / scim-plain / scim-auth-method / scim-async-response
+
+; A notice names the changed attributes only.
+scim-notice = {
+  attributes: [+ scim-attribute],
+  ? version: tstr,
+}
+
+; A full event carries the resource, or for `patch` the PatchOp body.
+scim-full = {
+  data: {* tstr => any},
+  ? version: tstr,
+}
+
+; `delete`, `activate`, `deactivate` and `pwdReset` carry no resource attribute.
+scim-plain = {
+  ? version: tstr,
+}
+
+scim-auth-method = {
+  method: tstr .size (1..64),
+  ? version: tstr,
+}
+
+scim-async-response = {
+  status: tstr .regexp "[1-5][0-9][0-9]",
+  ? location: tstr,
+  ? version: tstr,
+}
+
+scim-attribute = tstr .regexp "[A-Za-z][A-Za-z0-9:._$-]{0,255}"

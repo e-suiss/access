@@ -1,0 +1,64 @@
+{
+  "cases": [
+    {
+      "cbor": "a763617564817768747470733a2f2f7363696d2e6578616d706c652f7632636961741a6aea758063697373781e68747470733a2f2f69642e6578616d706c652f7265616c6d732f61636d65636a7469782034643335353965633637353034616162613635643430623033363366616164386374786e686239633663316331666576656e7473a1782d75726e3a696574663a706172616d733a5343494d3a6576656e743a70726f763a6372656174653a6e6f74696365a26776657273696f6e73572f22613333306263353466303637316339226a617474726962757465738268757365724e616d656b646973706c61794e616d65667375625f6964a2637572696f2f55736572732f323831396332323366666f726d6174647363696d",
+      "edn": "{\"iss\": \"https://id.example/realms/acme\", \"iat\": 1793750400, \"jti\": \"4d3559ec67504aaba65d40b0363faad8\", \"aud\": [\"https://scim.example/v2\"], \"txn\": \"b9c6c1c1\", \"sub_id\": {\"format\": \"scim\", \"uri\": \"/Users/2819c223\"}, \"events\": {\"urn:ietf:params:SCIM:event:prov:create:notice\": {\"attributes\": [\"userName\", \"displayName\"], \"version\": \"W/\\\"a330bc54f0671c9\\\"\"}}}",
+      "id": "create-notice",
+      "valid": true
+    },
+    {
+      "cbor": "a763617564817768747470733a2f2f7363696d2e6578616d706c652f7632636961741a6aea758063697373781e68747470733a2f2f69642e6578616d706c652f7265616c6d732f61636d65636a7469782034643335353965633637353034616162613635643430623033363366616164386374786e686239633663316331666576656e7473a1782a75726e3a696574663a706172616d733a5343494d3a6576656e743a70726f763a70617463683a66756c6ca26464617461a267736368656d617381782d75726e3a696574663a706172616d733a7363696d3a6170693a6d657373616765733a322e303a50617463684f706a4f7065726174696f6e7381a3626f70677265706c6163656470617468666163746976656576616c7565f46776657273696f6e65572f226222667375625f6964a2637572696f2f55736572732f323831396332323366666f726d6174647363696d",
+      "edn": "{\"iss\": \"https://id.example/realms/acme\", \"iat\": 1793750400, \"jti\": \"4d3559ec67504aaba65d40b0363faad8\", \"aud\": [\"https://scim.example/v2\"], \"txn\": \"b9c6c1c1\", \"sub_id\": {\"format\": \"scim\", \"uri\": \"/Users/2819c223\"}, \"events\": {\"urn:ietf:params:SCIM:event:prov:patch:full\": {\"data\": {\"schemas\": [\"urn:ietf:params:scim:api:messages:2.0:PatchOp\"], \"Operations\": [{\"op\": \"replace\", \"path\": \"active\", \"value\": false}]}, \"version\": \"W/\\\"b\\\"\"}}}",
+      "id": "patch-full",
+      "valid": true
+    },
+    {
+      "cbor": "a763617564817768747470733a2f2f7363696d2e6578616d706c652f7632636961741a6aea758063697373781e68747470733a2f2f69642e6578616d706c652f7265616c6d732f61636d65636a7469782034643335353965633637353034616162613635643430623033363366616164386374786e686239633663316331666576656e7473a1782675726e3a696574663a706172616d733a5343494d3a6576656e743a70726f763a64656c657465a0667375625f6964a2637572696f2f55736572732f323831396332323366666f726d6174647363696d",
+      "edn": "{\"iss\": \"https://id.example/realms/acme\", \"iat\": 1793750400, \"jti\": \"4d3559ec67504aaba65d40b0363faad8\", \"aud\": [\"https://scim.example/v2\"], \"txn\": \"b9c6c1c1\", \"sub_id\": {\"format\": \"scim\", \"uri\": \"/Users/2819c223\"}, \"events\": {\"urn:ietf:params:SCIM:event:prov:delete\": {}}}",
+      "id": "delete-carries-no-attribute",
+      "valid": true
+    },
+    {
+      "cbor": "a763617564817768747470733a2f2f7363696d2e6578616d706c652f7632636961741a6aea758063697373781e68747470733a2f2f69642e6578616d706c652f7265616c6d732f61636d65636a7469782034643335353965633637353034616162613635643430623033363366616164386374786e686239633663316331666576656e7473a1782a75726e3a696574663a706172616d733a5343494d3a6576656e743a70726f763a64656163746976617465a16776657273696f6e65572f226322667375625f6964a2637572696f2f55736572732f323831396332323366666f726d6174647363696d",
+      "edn": "{\"iss\": \"https://id.example/realms/acme\", \"iat\": 1793750400, \"jti\": \"4d3559ec67504aaba65d40b0363faad8\", \"aud\": [\"https://scim.example/v2\"], \"txn\": \"b9c6c1c1\", \"sub_id\": {\"format\": \"scim\", \"uri\": \"/Users/2819c223\"}, \"events\": {\"urn:ietf:params:SCIM:event:prov:deactivate\": {\"version\": \"W/\\\"c\\\"\"}}}",
+      "id": "deactivate",
+      "valid": true
+    },
+    {
+      "cbor": "a763617564817768747470733a2f2f7363696d2e6578616d706c652f7632636961741a6aea758063697373781e68747470733a2f2f69642e6578616d706c652f7265616c6d732f61636d65636a7469782034643335353965633637353034616162613635643430623033363366616164386374786e686239633663316331666576656e7473a1782775726e3a696574663a706172616d733a5343494d3a6576656e743a7369673a7077645265736574a0667375625f6964a2637572696f2f55736572732f323831396332323366666f726d6174647363696d",
+      "edn": "{\"iss\": \"https://id.example/realms/acme\", \"iat\": 1793750400, \"jti\": \"4d3559ec67504aaba65d40b0363faad8\", \"aud\": [\"https://scim.example/v2\"], \"txn\": \"b9c6c1c1\", \"sub_id\": {\"format\": \"scim\", \"uri\": \"/Users/2819c223\"}, \"events\": {\"urn:ietf:params:SCIM:event:sig:pwdReset\": {}}}",
+      "id": "password-reset",
+      "valid": true
+    },
+    {
+      "cbor": "a763617564817768747470733a2f2f7363696d2e6578616d706c652f7632636961741a6aea758063697373781e68747470733a2f2f69642e6578616d706c652f7265616c6d732f61636d65636a7469782034643335353965633637353034616162613635643430623033363366616164386374786e686239633663316331666576656e7473a1782975726e3a696574663a706172616d733a5343494d3a6576656e743a6d6973633a6173796e6352657370a26673746174757363323031686c6f636174696f6e6f2f55736572732f3238313963323233667375625f6964a2637572696f2f55736572732f323831396332323366666f726d6174647363696d",
+      "edn": "{\"iss\": \"https://id.example/realms/acme\", \"iat\": 1793750400, \"jti\": \"4d3559ec67504aaba65d40b0363faad8\", \"aud\": [\"https://scim.example/v2\"], \"txn\": \"b9c6c1c1\", \"sub_id\": {\"format\": \"scim\", \"uri\": \"/Users/2819c223\"}, \"events\": {\"urn:ietf:params:SCIM:event:misc:asyncResp\": {\"status\": \"201\", \"location\": \"/Users/2819c223\"}}}",
+      "id": "async-response",
+      "valid": true
+    },
+    {
+      "edn": "{\"iss\": \"https://id.example/realms/acme\", \"iat\": 1793750400, \"jti\": \"4d3559ec67504aaba65d40b0363faad8\", \"aud\": [\"https://scim.example/v2\"], \"txn\": \"b9c6c1c1\", \"events\": {\"urn:ietf:params:SCIM:event:prov:delete\": {}}, \"sub\": \"2819c223\"}",
+      "id": "sub-instead-of-sub-id",
+      "valid": false
+    },
+    {
+      "edn": "{\"iss\": \"https://id.example/realms/acme\", \"iat\": 1793750400, \"jti\": \"4d3559ec67504aaba65d40b0363faad8\", \"aud\": [\"https://scim.example/v2\"], \"txn\": \"b9c6c1c1\", \"sub_id\": {\"format\": \"scim\", \"uri\": \"/Users/2819c223\"}, \"events\": {\"urn:ietf:params:SCIM:event:prov:merge\": {}}}",
+      "id": "unknown-event",
+      "valid": false
+    },
+    {
+      "edn": "{\"iss\": \"https://id.example/realms/acme\", \"iat\": 1793750400, \"jti\": \"4d3559ec67504aaba65d40b0363faad8\", \"aud\": [\"https://scim.example/v2\"], \"sub_id\": {\"format\": \"scim\", \"uri\": \"/Users/2819c223\"}, \"events\": {\"urn:ietf:params:SCIM:event:prov:delete\": {}}}",
+      "id": "no-txn",
+      "valid": false
+    },
+    {
+      "edn": "{\"iss\": \"https://id.example/realms/acme\", \"iat\": 1793750400, \"jti\": \"4d3559ec67504aaba65d40b0363faad8\", \"aud\": [\"https://scim.example/v2\"], \"txn\": \"b9c6c1c1\", \"sub_id\": {\"format\": \"scim\", \"uri\": \"/Users/2819c223\"}, \"events\": {\"urn:ietf:params:SCIM:event:sig:pwdReset\": {\"password\": \"hunter2\"}}}",
+      "id": "password-in-a-reset",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "scim-set.cddl"
+  ],
+  "contract": "scim-set"
+}
