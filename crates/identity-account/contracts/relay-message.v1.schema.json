@@ -57,7 +57,11 @@
         "relay.message.agent_sponsor_needed.v1",
         "relay.message.agent_connection_needs_reconnect.v1",
         "relay.message.device_code_approval.v1",
-        "relay.message.approval_requested.v1"
+        "relay.message.approval_requested.v1",
+        "relay.message.sso_setup_link.v1",
+        "relay.message.ciba_invite.v1",
+        "relay.message.upstream_subject_conflict.v1",
+        "relay.message.ldap_credential_changed.v1"
       ]
     },
     "subject": {
@@ -512,6 +516,70 @@
         "properties": {
           "data": {
             "$ref": "#/$defs/relay.message.approval_requested.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.sso_setup_link.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.sso_setup_link.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.ciba_invite.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.ciba_invite.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.upstream_subject_conflict.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.upstream_subject_conflict.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.ldap_credential_changed.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.ldap_credential_changed.v1"
           }
         }
       }
@@ -1330,6 +1398,154 @@
           "description": "Attacker input: who asks for the approval, rendered as text, never as a link (OP-154 m.3 (ff))."
         },
         "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.sso_setup_link.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "link",
+        "organization",
+        "expires_at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the link. Never logged."
+        },
+        "organization": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the organization's name, rendered as text, never as a link (OP-155 m.3 (i))."
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.ciba_invite.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "link",
+        "client",
+        "expires_at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the link. Never logged."
+        },
+        "client": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the requesting client's name, rendered as text, never as a link (OP-155 m.3 (l))."
+        },
+        "binding_message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "description": "Attacker input: the client's binding message for the person to compare, rendered as text; at most 32 characters. The intent itself is never carried (OP-155 m.3 (l))."
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.upstream_subject_conflict.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "upstream",
+        "at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "upstream": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the upstream identity provider's name, rendered as text (OP-155 m.3 (h))."
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.ldap_credential_changed.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "change",
+        "application",
+        "at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "change": {
+          "type": "string",
+          "enum": [
+            "created",
+            "revoked"
+          ]
+        },
+        "application": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the application's name, rendered as text; the password is never carried (OP-155 m.3 (n))."
+        },
+        "at": {
           "type": "string",
           "format": "date-time"
         }

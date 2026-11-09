@@ -34,8 +34,8 @@ use access_identity_account::notify::delivery::{
 use access_identity_account::notify::envelope::{EventId, Header, parse, seal};
 use access_identity_account::notify::http::{HttpRelay, HttpRelayConfig, RelayEndpoint};
 use access_identity_account::notify::message::{
-    Address, AgentNotice, Body, KINDS, LinkPurpose, Message, Notice, OtpPurpose, Prompt,
-    SignInMethod,
+    Address, AgentNotice, AppPasswordChange, Body, KINDS, LinkPurpose, Message, Notice, OtpPurpose,
+    Prompt, SignInMethod,
 };
 use access_identity_account::notify::notifier::OutboxNotifier;
 use access_identity_account::notify::pg::PgCourierStore;
@@ -734,6 +734,34 @@ fn the_contract_validates_its_fields() {
     assert!(m.validate().is_err());
 }
 
+// OP-155 m.3 (l), E42
+#[test]
+fn a_ciba_invite_carries_a_short_binding_message_and_no_intent() {
+    let invite = |binding: Option<&str>| Message {
+        subject: [1; 16],
+        to: Address::Phone("+905551112233".to_owned()),
+        locale: None,
+        valid_since_ms: None,
+        body: Body::CibaInvite {
+            link: Secret::new("https://id.example/a/abc".to_owned()),
+            client: "Bank".to_owned(),
+            binding_message: binding.map(str::to_owned),
+            expires_at_ms: 1,
+        },
+    };
+    assert!(invite(None).validate().is_ok());
+    assert!(invite(Some(&"ç".repeat(32))).validate().is_ok());
+    assert!(invite(Some(&"x".repeat(33))).validate().is_err());
+    assert!(invite(Some("a\u{7}b")).validate().is_err());
+    assert!(invite(Some("")).validate().is_err());
+    let printed = format!("{:?}", invite(Some("K7-42")));
+    assert!(
+        !printed.contains("K7-42") && !printed.contains("Bank"),
+        "{printed}"
+    );
+    assert_eq!(invite(None).body.kind(), "relay.message.ciba_invite.v1");
+}
+
 // OP-131, E42 m.5
 #[test]
 fn relay_answers_are_classified_and_backoff_grows_to_a_ceiling() {
@@ -914,6 +942,41 @@ fn every_kind_matches_the_json_schema() {
             expires_at_ms: START_MS + 1,
         },
     }))
+    .chain([
+        Message {
+            subject: s,
+            to: to(),
+            locale: None,
+            valid_since_ms: Some(START_MS - 86_400_000),
+            body: Body::CibaInvite {
+                link: Secret::new("https://id.example/a/abc".to_owned()),
+                client: "Bank <b>".to_owned(),
+                binding_message: Some("K7-42".to_owned()),
+                expires_at_ms: START_MS + 1,
+            },
+        },
+        Message {
+            subject: s,
+            to: to(),
+            locale: None,
+            valid_since_ms: Some(START_MS - 86_400_000),
+            body: Body::UpstreamSubjectConflict {
+                upstream: "Acme Entra".to_owned(),
+                at_ms: START_MS,
+            },
+        },
+        Message {
+            subject: s,
+            to: to(),
+            locale: None,
+            valid_since_ms: Some(START_MS - 86_400_000),
+            body: Body::LdapCredentialChanged {
+                change: AppPasswordChange::Created,
+                application: "Printer".to_owned(),
+                at_ms: START_MS,
+            },
+        },
+    ])
     .collect::<Vec<_>>();
     assert_eq!(messages.len(), KINDS.len());
     for (m, kind) in messages.iter().zip(KINDS) {

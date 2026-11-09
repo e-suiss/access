@@ -326,17 +326,22 @@ pub enum Prompt {
     /// A device asks for approval of its device code (RFC 8628, OP-154 m.3 (p)). The name is the
     /// client's.
     DeviceCodeApproval,
-    /// An approval waits on the person's Approval Surface; the invite stands in for CIBA until
-    /// Stage 10 (OP-154 m.3 (ff)). The name is the requester's.
+    /// An approval waits on the person's Approval Surface; a CIBA request uses
+    /// [`Body::CibaInvite`] instead (OP-154 m.3 (ff), OP-155 m.3 (l), E42). The name is the
+    /// requester's.
     ApprovalRequested,
+    /// An organization's one-use SSO setup link, valid 72 hours (OP-155 m.3 (i)). The name is
+    /// the organization's.
+    SsoSetupLink,
 }
 
 impl Prompt {
     /// Every prompt.
-    pub const ALL: [Self; 3] = [
+    pub const ALL: [Self; 4] = [
         Self::AgentConnectionNeedsReconnect,
         Self::DeviceCodeApproval,
         Self::ApprovalRequested,
+        Self::SsoSetupLink,
     ];
 
     /// Its outbox kind and `CloudEvents` `type`.
@@ -348,6 +353,7 @@ impl Prompt {
             }
             Self::DeviceCodeApproval => "relay.message.device_code_approval.v1",
             Self::ApprovalRequested => "relay.message.approval_requested.v1",
+            Self::SsoSetupLink => "relay.message.sso_setup_link.v1",
         }
     }
 
@@ -358,6 +364,7 @@ impl Prompt {
             Self::AgentConnectionNeedsReconnect => "connection",
             Self::DeviceCodeApproval => "client",
             Self::ApprovalRequested => "requester",
+            Self::SsoSetupLink => "organization",
         }
     }
 
@@ -365,6 +372,35 @@ impl Prompt {
         Self::ALL.into_iter().find(|n| n.kind() == kind)
     }
 }
+
+/// What happened to a directory app password (OP-155 m.3 (n)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AppPasswordChange {
+    /// One was created for an application.
+    Created,
+    /// One was revoked.
+    Revoked,
+}
+
+impl AppPasswordChange {
+    const ALL: [Self; 2] = [Self::Created, Self::Revoked];
+
+    /// Wire name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Created => "created",
+            Self::Revoked => "revoked",
+        }
+    }
+
+    fn parse(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|c| c.name() == s)
+    }
+}
+
+/// Longest CIBA `binding_message`, in characters (OP-155 m.3 (l)).
+pub const BINDING_MESSAGE_MAX: usize = 32;
 
 /// What the message says.
 pub enum Body {
@@ -455,6 +491,39 @@ pub enum Body {
         /// Unix ms after which it is worthless.
         expires_at_ms: u64,
     },
+    /// A CIBA request waits for the person on the Approval Surface
+    /// (`relay.message.ciba_invite.v1`, OP-155 m.3 (l)). It names the client and the binding
+    /// message, never the intent. Both are attacker input: Relay renders them as text.
+    CibaInvite {
+        /// The `https` link to the Approval Surface, at most 2048 bytes.
+        link: Secret<String>,
+        /// The client's name, at most 200 characters.
+        client: String,
+        /// The client's binding message, at most 32 characters.
+        binding_message: Option<String>,
+        /// Unix ms after which it is worthless: the request's `expires_in`.
+        expires_at_ms: u64,
+    },
+    /// An upstream identity provider answered with another subject for the person's link; no
+    /// re-link happened (`relay.message.upstream_subject_conflict.v1`, OP-155 m.3 (h)). The
+    /// name is the upstream's, attacker input rendered as text.
+    UpstreamSubjectConflict {
+        /// The upstream's display name, at most 200 characters.
+        upstream: String,
+        /// When, Unix ms.
+        at_ms: u64,
+    },
+    /// A directory app password was created or revoked
+    /// (`relay.message.ldap_credential_changed.v1`, OP-155 m.3 (n)). The application's name is
+    /// attacker input rendered as text; the password is never carried.
+    LdapCredentialChanged {
+        /// What happened.
+        change: AppPasswordChange,
+        /// The application's name, at most 200 characters.
+        application: String,
+        /// When, Unix ms.
+        at_ms: u64,
+    },
 }
 
 impl fmt::Debug for Body {
@@ -533,12 +602,30 @@ impl fmt::Debug for Body {
                 .field("name", &"[redacted]")
                 .field("expires_at_ms", expires_at_ms)
                 .finish(),
+            Self::CibaInvite { expires_at_ms, .. } => f
+                .debug_struct("CibaInvite")
+                .field("link", &"[redacted]")
+                .field("client", &"[redacted]")
+                .field("binding_message", &"[redacted]")
+                .field("expires_at_ms", expires_at_ms)
+                .finish(),
+            Self::UpstreamSubjectConflict { at_ms, .. } => f
+                .debug_struct("UpstreamSubjectConflict")
+                .field("upstream", &"[redacted]")
+                .field("at_ms", at_ms)
+                .finish(),
+            Self::LdapCredentialChanged { change, at_ms, .. } => f
+                .debug_struct("LdapCredentialChanged")
+                .field("change", change)
+                .field("application", &"[redacted]")
+                .field("at_ms", at_ms)
+                .finish(),
         }
     }
 }
 
 /// Every kind of the contract, as outbox kind and `CloudEvents` `type`.
-pub const KINDS: [&str; 27] = [
+pub const KINDS: [&str; 31] = [
     "relay.message.otp.v1",
     "relay.message.magic_link.v1",
     "relay.message.password_changed.v1",
@@ -566,6 +653,10 @@ pub const KINDS: [&str; 27] = [
     "relay.message.agent_connection_needs_reconnect.v1",
     "relay.message.device_code_approval.v1",
     "relay.message.approval_requested.v1",
+    "relay.message.sso_setup_link.v1",
+    "relay.message.ciba_invite.v1",
+    "relay.message.upstream_subject_conflict.v1",
+    "relay.message.ldap_credential_changed.v1",
 ];
 
 impl Body {
@@ -583,6 +674,9 @@ impl Body {
             Self::Invitation { .. } => KINDS[21],
             Self::Agent { notice, .. } => notice.kind(),
             Self::Prompt { prompt, .. } => prompt.kind(),
+            Self::CibaInvite { .. } => KINDS[28],
+            Self::UpstreamSubjectConflict { .. } => KINDS[29],
+            Self::LdapCredentialChanged { .. } => KINDS[30],
         }
     }
 
@@ -594,7 +688,8 @@ impl Body {
             | Self::MagicLink { expires_at_ms, .. }
             | Self::Link { expires_at_ms, .. }
             | Self::Invitation { expires_at_ms, .. }
-            | Self::Prompt { expires_at_ms, .. } => Some(*expires_at_ms),
+            | Self::Prompt { expires_at_ms, .. }
+            | Self::CibaInvite { expires_at_ms, .. } => Some(*expires_at_ms),
             _ => None,
         }
     }
@@ -621,6 +716,18 @@ impl Body {
                 name(inviter, "inviter")
             }
             Self::Agent { agent, .. } => name(agent, "agent"),
+            Self::CibaInvite {
+                link,
+                client,
+                binding_message,
+                ..
+            } => {
+                https_link(link.expose())?;
+                name(client, "client")?;
+                binding_message.as_deref().map_or(Ok(()), binding)
+            }
+            Self::UpstreamSubjectConflict { upstream, .. } => name(upstream, "upstream"),
+            Self::LdapCredentialChanged { application, .. } => name(application, "application"),
             Self::Prompt {
                 prompt,
                 link,
@@ -652,6 +759,15 @@ fn https_link(l: &str) -> Result<(), Invalid> {
         Ok(())
     } else {
         Err(Invalid("link"))
+    }
+}
+
+// OP-155 m.3 (l)
+fn binding(m: &str) -> Result<(), Invalid> {
+    if (1..=BINDING_MESSAGE_MAX).contains(&m.chars().count()) && !m.chars().any(char::is_control) {
+        Ok(())
+    } else {
+        Err(Invalid("binding_message"))
     }
 }
 
@@ -705,6 +821,7 @@ impl Message {
     }
 
     /// The sealed form stored in the outbox: integer times, no wire formatting.
+    #[expect(clippy::too_many_lines, reason = "one arm per body, each its members")]
     pub(crate) fn to_sealed_json(&self) -> Value {
         let mut m = Map::new();
         m.insert("recipient".into(), self.to.to_json());
@@ -769,6 +886,32 @@ impl Message {
                 m.insert(prompt.name_member().into(), Value::String(name.clone()));
                 m.insert("expires_at_ms".into(), (*expires_at_ms).into());
             }
+            Body::CibaInvite {
+                link,
+                client,
+                binding_message,
+                expires_at_ms,
+            } => {
+                m.insert("link".into(), Value::String(link.expose().clone()));
+                m.insert("client".into(), Value::String(client.clone()));
+                if let Some(b) = binding_message {
+                    m.insert("binding_message".into(), Value::String(b.clone()));
+                }
+                m.insert("expires_at_ms".into(), (*expires_at_ms).into());
+            }
+            Body::UpstreamSubjectConflict { upstream, at_ms } => {
+                m.insert("upstream".into(), Value::String(upstream.clone()));
+                m.insert("at_ms".into(), (*at_ms).into());
+            }
+            Body::LdapCredentialChanged {
+                change,
+                application,
+                at_ms,
+            } => {
+                m.insert("change".into(), change.name().into());
+                m.insert("application".into(), Value::String(application.clone()));
+                m.insert("at_ms".into(), (*at_ms).into());
+            }
             Body::PasswordChanged { at_ms } => {
                 m.insert("at_ms".into(), (*at_ms).into());
             }
@@ -811,6 +954,25 @@ impl Message {
             },
             "relay.message.account_status.v1" => Body::AccountStatus {
                 status: AccountStatus::parse(text("status")?).ok_or(Invalid("status"))?,
+                at_ms: int("at_ms")?,
+            },
+            "relay.message.ciba_invite.v1" => Body::CibaInvite {
+                link: Secret::new(text("link")?.to_owned()),
+                client: text("client")?.to_owned(),
+                binding_message: match v.get("binding_message") {
+                    None => None,
+                    Some(Value::String(b)) => Some(b.clone()),
+                    Some(_) => return Err(Invalid("binding_message")),
+                },
+                expires_at_ms: int("expires_at_ms")?,
+            },
+            "relay.message.upstream_subject_conflict.v1" => Body::UpstreamSubjectConflict {
+                upstream: text("upstream")?.to_owned(),
+                at_ms: int("at_ms")?,
+            },
+            "relay.message.ldap_credential_changed.v1" => Body::LdapCredentialChanged {
+                change: AppPasswordChange::parse(text("change")?).ok_or(Invalid("change"))?,
+                application: text("application")?.to_owned(),
                 at_ms: int("at_ms")?,
             },
             "relay.message.invitation.v1" => Body::Invitation {
@@ -874,6 +1036,7 @@ impl Message {
     }
 
     /// The `CloudEvents` `data` member: RFC 3339 times, the secret in clear for Relay only.
+    #[expect(clippy::too_many_lines, reason = "one arm per body, each its members")]
     pub(crate) fn to_wire_data(&self) -> Result<Value, Invalid> {
         let mut m = Map::new();
         m.insert("recipient".into(), self.to.to_json());
@@ -938,6 +1101,32 @@ impl Message {
                 m.insert("link".into(), Value::String(link.expose().clone()));
                 m.insert(prompt.name_member().into(), Value::String(name.clone()));
                 m.insert("expires_at".into(), rfc3339(*expires_at_ms)?.into());
+            }
+            Body::CibaInvite {
+                link,
+                client,
+                binding_message,
+                expires_at_ms,
+            } => {
+                m.insert("link".into(), Value::String(link.expose().clone()));
+                m.insert("client".into(), Value::String(client.clone()));
+                if let Some(b) = binding_message {
+                    m.insert("binding_message".into(), Value::String(b.clone()));
+                }
+                m.insert("expires_at".into(), rfc3339(*expires_at_ms)?.into());
+            }
+            Body::UpstreamSubjectConflict { upstream, at_ms } => {
+                m.insert("upstream".into(), Value::String(upstream.clone()));
+                m.insert("at".into(), rfc3339(*at_ms)?.into());
+            }
+            Body::LdapCredentialChanged {
+                change,
+                application,
+                at_ms,
+            } => {
+                m.insert("change".into(), change.name().into());
+                m.insert("application".into(), Value::String(application.clone()));
+                m.insert("at".into(), rfc3339(*at_ms)?.into());
             }
             Body::PasswordChanged { at_ms } => {
                 m.insert("at".into(), rfc3339(*at_ms)?.into());
