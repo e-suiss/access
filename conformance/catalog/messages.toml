@@ -2733,3 +2733,304 @@ surface = "login"
 class = "claim"
 owner = "identity_plane"
 protected = false
+
+[[message]]
+key = "consent-agent_title"
+text_id = "consent.agent_title"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "consent-client_says"
+text_id = "consent.client_says"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "consent-resource"
+text_id = "consent.resource"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "consent-redirect_host"
+text_id = "consent.redirect_host"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "consent-loopback"
+text_id = "consent.loopback"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "consent-new_app"
+text_id = "consent.new_app"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-approve_access"
+text_id = "action.approve_access"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-decline_access"
+text_id = "action.decline_access"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "device_code-title"
+text_id = "device_code.title"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-device_code"
+text_id = "label.device_code"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "device_code-invalid"
+text_id = "device_code.invalid"
+surface = "login"
+class = "auth_failed"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "device_code-request"
+text_id = "device_code.request"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "device_code-approved"
+text_id = "device_code.approved"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "device_code-denied"
+text_id = "device_code.denied"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent-badge"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent-status-running"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent-status-on_hold"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent-status-on_hold_confirmed"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent-status-stopped"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent-status-unknown"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent-status-suspended"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-stop_agent"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent-long_running"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent-acting_for"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent_connections-title"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "agent_connections-needs_reconnect"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-reconnect"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-disconnect"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "outcome-attested_conforming"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "outcome-attested_nonconforming"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "outcome-not_done"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "outcome-unknown"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "outcome-unattested"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "executor-delayed_commit"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "action-reverse"
+surface = "hub"
+class = "action"
+owner = "access"
+protected = false
+
+[[message]]
+key = "action-request_refund"
+surface = "hub"
+class = "action"
+owner = "access"
+protected = false
+
+[[message]]
+key = "mail-agent_suspended-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-agent_sponsor_needed-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-agent_connection_needs_reconnect-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-device_code_approval-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-approval_requested-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false

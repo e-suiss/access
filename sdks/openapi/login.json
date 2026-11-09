@@ -632,7 +632,21 @@
           "claim.issuer_says",
           "label.keep_signed_in",
           "label.remember_device",
-          "action.continue_with"
+          "action.continue_with",
+          "consent.agent_title",
+          "consent.client_says",
+          "consent.resource",
+          "consent.redirect_host",
+          "consent.loopback",
+          "consent.new_app",
+          "action.approve_access",
+          "action.decline_access",
+          "device_code.title",
+          "label.device_code",
+          "device_code.invalid",
+          "device_code.request",
+          "device_code.approved",
+          "device_code.denied"
         ]
       },
       "Text": {

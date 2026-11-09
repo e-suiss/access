@@ -264,11 +264,53 @@ pub enum TextId {
     /// N5: a sign-in provider's button (OP-153 m.3 (l)); `{ $provider }` is its name.
     #[serde(rename = "action.continue_with")]
     ContinueWith,
+    /// L1: the MCP/CIMD consent screen's title (OP-154 m.3 (k)); `{ $client }` is the client's claimed name.
+    #[serde(rename = "consent.agent_title")]
+    ConsentAgentTitle,
+    /// L1: the client's name and logo are its own claim (OP-154 m.3 (k)).
+    #[serde(rename = "consent.client_says")]
+    ConsentClientSays,
+    /// L1: the protected resource the Grant covers (OP-154 m.3 (k)).
+    #[serde(rename = "consent.resource")]
+    ConsentResource,
+    /// L1: the redirect hostname, always shown (OP-154 m.3 (k)).
+    #[serde(rename = "consent.redirect_host")]
+    ConsentRedirectHost,
+    /// L1: the extra warning for a client whose only redirects are loopback (AG-6, OP-154 m.3 (k)).
+    #[serde(rename = "consent.loopback")]
+    ConsentLoopback,
+    /// L1: a client first seen less than 7 days ago (OP-154 m.3 (i)).
+    #[serde(rename = "consent.new_app")]
+    ConsentNewApp,
+    /// L1: approving the consent on the Approval Surface (EI-18).
+    #[serde(rename = "action.approve_access")]
+    ApproveAccess,
+    /// L1: declining the consent.
+    #[serde(rename = "action.decline_access")]
+    DeclineAccess,
+    /// L2: the device-code page's title (RFC 8628, OP-154 m.3 (p)).
+    #[serde(rename = "device_code.title")]
+    DeviceTitle,
+    /// L2: the user code field (OP-154 m.3 (p)).
+    #[serde(rename = "label.device_code")]
+    DeviceCodeLabel,
+    /// L2: a user code that did not match; the same for every wrong code.
+    #[serde(rename = "device_code.invalid")]
+    DeviceCodeInvalid,
+    /// L2: what the device asks for and where the request came from (OP-154 m.3 (p)).
+    #[serde(rename = "device_code.request")]
+    DeviceRequest,
+    /// L2: the device was connected.
+    #[serde(rename = "device_code.approved")]
+    DeviceApproved,
+    /// L2: the device was not connected.
+    #[serde(rename = "device_code.denied")]
+    DeviceDenied,
 }
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 86] = [
+    pub const ALL: [Self; 100] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -355,6 +397,20 @@ impl TextId {
         Self::KeepSignedInLabel,
         Self::RememberDeviceLabel,
         Self::ContinueWith,
+        Self::ConsentAgentTitle,
+        Self::ConsentClientSays,
+        Self::ConsentResource,
+        Self::ConsentRedirectHost,
+        Self::ConsentLoopback,
+        Self::ConsentNewApp,
+        Self::ApproveAccess,
+        Self::DeclineAccess,
+        Self::DeviceTitle,
+        Self::DeviceCodeLabel,
+        Self::DeviceCodeInvalid,
+        Self::DeviceRequest,
+        Self::DeviceApproved,
+        Self::DeviceDenied,
     ];
 
     /// The stable id on the wire.
@@ -447,6 +503,20 @@ impl TextId {
             Self::KeepSignedInLabel => "label.keep_signed_in",
             Self::RememberDeviceLabel => "label.remember_device",
             Self::ContinueWith => "action.continue_with",
+            Self::ConsentAgentTitle => "consent.agent_title",
+            Self::ConsentClientSays => "consent.client_says",
+            Self::ConsentResource => "consent.resource",
+            Self::ConsentRedirectHost => "consent.redirect_host",
+            Self::ConsentLoopback => "consent.loopback",
+            Self::ConsentNewApp => "consent.new_app",
+            Self::ApproveAccess => "action.approve_access",
+            Self::DeclineAccess => "action.decline_access",
+            Self::DeviceTitle => "device_code.title",
+            Self::DeviceCodeLabel => "label.device_code",
+            Self::DeviceCodeInvalid => "device_code.invalid",
+            Self::DeviceRequest => "device_code.request",
+            Self::DeviceApproved => "device_code.approved",
+            Self::DeviceDenied => "device_code.denied",
         }
     }
 
@@ -568,6 +638,26 @@ impl TextId {
             Self::KeepSignedInLabel => "Keep me signed in on this device",
             Self::RememberDeviceLabel => "Don't ask for a second step on this device for 30 days",
             Self::ContinueWith => "Continue with { $provider }",
+            Self::ConsentAgentTitle => "{ $client } asks for access",
+            Self::ConsentClientSays => {
+                "The app calls itself { $name }. Access hasn't checked this name."
+            }
+            Self::ConsentResource => "It will use { $resource } for you.",
+            Self::ConsentRedirectHost => "After you answer, you go to { $host }.",
+            Self::ConsentLoopback => {
+                "This app sends you back to a program on this device. Approve only if you started it."
+            }
+            Self::ConsentNewApp => "This app is new: Access first saw it less than 7 days ago.",
+            Self::ApproveAccess => "Approve",
+            Self::DeclineAccess => "Don't approve",
+            Self::DeviceTitle => "Connect a device",
+            Self::DeviceCodeLabel => "Code shown on the device",
+            Self::DeviceCodeInvalid => "This code didn't work. Check it and try again.",
+            Self::DeviceRequest => {
+                "{ $client } asks for { $scope }. The request came from { $prefix } in { $country }."
+            }
+            Self::DeviceApproved => "The device is connected. You can close this page.",
+            Self::DeviceDenied => "The device wasn't connected.",
         }
     }
 
@@ -622,6 +712,17 @@ impl TextId {
                 | Self::CombineWarning
                 | Self::StepUpRequired
                 | Self::IssuerSays
+                | Self::ConsentAgentTitle
+                | Self::ConsentClientSays
+                | Self::ConsentResource
+                | Self::ConsentRedirectHost
+                | Self::ConsentLoopback
+                | Self::ConsentNewApp
+                | Self::ApproveAccess
+                | Self::DeclineAccess
+                | Self::DeviceRequest
+                | Self::DeviceApproved
+                | Self::DeviceDenied
         )
     }
 }
