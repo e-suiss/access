@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use access_experience::adapters::{Beacon, router as experience_router};
 use access_experience::app::Experience;
-use access_experience::contract::{Hub, Kind, Plan};
+use access_experience::contract::{Freshness, Hub, Kind, Owner, Plan};
 use access_experience::domain::honesty::{self, Answer as Seen, Attempt, Next, Path, Sent, Shown};
 use access_experience::ports::{Clock, Random, Upstream};
 use access_http::adp::adapters::{Discovery, Pep, router as adp_router};
@@ -213,7 +213,7 @@ fn revoke_body(c: &Console, grant: access_kernel::model::Id, nonce: &[u8], now: 
     .into_bytes()
 }
 
-// CMP-16, XI-18, IA-7, X6, XI-10, XI-11, XI-5, XI-16, XI-9, XI-22, IA-2, SI-21, §8.17.7.2,
+// CMP-16, XI-18, IA-7, X6, XI-10, XI-11, XI-5, XI-16, XI-9, XI-22, IA-2, SI-21, XI-1, §8.17.7.2,
 // OP-153 m.3 (v), (gg), Ek B 3731, 3745, 3751, 3839, 3987
 #[tokio::test]
 async fn the_hub_is_read_with_the_browsers_ais_through_the_public_search() {
@@ -278,6 +278,29 @@ async fn the_hub_is_read_with_the_browsers_ais_through_the_public_search() {
     assert!(
         seen.notices
             .contains(&String::from("hub.not_shown_unconnected"))
+    );
+    // XI-1, E25
+    assert_eq!(
+        (shop.owner, shop.freshness),
+        (Owner::Access, Freshness::Unknown)
+    );
+    let rows = seen
+        .acting_for_you
+        .iter()
+        .chain(&seen.shared_from_you)
+        .chain(&seen.your_authority);
+    let owned: Vec<(Owner, &str)> = rows
+        .map(|r| (r.owner, r.domain.as_str()))
+        .chain(seen.roots.iter().map(|r| (r.owner, r.domain.as_str())))
+        .chain(seen.activity.iter().map(|r| (r.owner, r.domain.as_str())))
+        .chain(seen.changes.iter().map(|r| (r.owner, r.domain.as_str())))
+        .collect();
+    assert!(owned.len() > 3, "{owned:?}");
+    assert!(
+        owned
+            .iter()
+            .all(|(owner, domain)| *owner == Owner::Access && *domain == acme),
+        "every row carries the one owner whose record it is, and the unreachable domain shows no row"
     );
     // IA-2, SI-21
     assert!(
