@@ -791,7 +791,7 @@ async fn totp_seeds(w: &World, identifier: &str) -> Vec<String> {
     seeds
 }
 
-// OP-149 m.26 (b), §10.2.2, TN-64, TI-9
+// OP-149 m.26 (b), §10.2.2, TI-9
 #[tokio::test]
 async fn the_test_users_authenticator_app_is_enrolled_once_and_its_seed_kept_owner_only() {
     use std::os::unix::fs::PermissionsExt as _;
