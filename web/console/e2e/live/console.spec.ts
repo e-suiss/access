@@ -8,58 +8,30 @@ import { expect, type Page, test } from "@playwright/test";
 
 import { nextStep, totp } from "./totp.js";
 
-const REALM_ORIGIN = process.env["ACCESS_LIVE_ORIGIN"] ?? "https://access-server:8443";
 const IDENTIFIER = process.env["ACCESS_LIVE_IDENTIFIER"] ?? "test@acme.example";
 const PASSWORD = process.env["ACCESS_LOCAL_TEST_PASSWORD"] ?? "";
 const SEED = process.env["ACCESS_LIVE_TEST_TOTP_SEED"] ?? "";
 
-async function step(page: Page, path: string, body?: unknown): Promise<Record<string, unknown>> {
-  const r = await page.context().request.post(`${REALM_ORIGIN}${path}`, {
-    headers: {
-      origin: REALM_ORIGIN,
-      "sec-fetch-site": "same-origin",
-      "content-type": "application/json",
-      "idempotency-key": crypto.randomUUID(),
-    },
-    ...(body === undefined ? {} : { data: body }),
-  });
-  expect(r.status(), `${path}: ${await r.text()}`).toBeLessThan(300);
-  return (await r.json()) as Record<string, unknown>;
-}
-
-/** The console's sign-in: the realm's authorize (`prompt=login` sends it to the hosted login), the
- * login's JSON steps after that request, then the authorize request again. */
+/** The console's sign-in: the realm's authorize (`prompt=login` sends it to the hosted login),
+ * then the hosted login's own page: identifier, password and the authenticator app's code. */
 async function signIn(page: Page): Promise<void> {
-  const totpStep = SEED === "" ? 0 : await nextStep();
   const start = await page.request.get("/console/api/sign-in?realm=acme", { maxRedirects: 0 });
   expect(start.status()).toBe(303);
   const authorize = start.headers()["location"] ?? "";
   expect(authorize).toContain("/realms/acme/authorize?");
   await page.goto(authorize);
   await page.waitForURL(/\/realms\/acme\/login\?/);
-  const returnTo = new URL(page.url()).searchParams.get("return_to") ?? "";
-  expect(returnTo).toContain("/realms/acme/authorize?");
-  const started = await step(page, "/realms/acme/v1/login/flows");
-  const identified = await step(page, `/realms/acme${String(started["action"])}`, {
-    method: "identifier",
-    fields: { identifier: IDENTIFIER },
-  });
-  let done = await step(page, `/realms/acme${String(identified["action"])}`, {
-    method: "password",
-    fields: { password: PASSWORD },
-  });
-  if (done["step"] === "second_factor") {
-    expect(
-      SEED,
-      "ACCESS_LIVE_TEST_TOTP_SEED names the test user's authenticator app seed",
-    ).not.toBe("");
-    done = await step(page, `/realms/acme${String(done["action"])}`, {
-      method: "totp",
-      fields: { totp_code: totp(SEED, totpStep) },
-    });
-  }
-  expect(done["step"]).toBe("complete");
-  await page.goto(`${REALM_ORIGIN}${returnTo}`);
+  await page.getByLabel("Email or username").fill(IDENTIFIER);
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  const code = page.getByLabel("Code from your authenticator app");
+  await code.waitFor();
+  expect(SEED, "ACCESS_LIVE_TEST_TOTP_SEED names the test user's authenticator app seed").not.toBe(
+    "",
+  );
+  await code.fill(totp(SEED, await nextStep()));
+  await code.press("Enter");
   await page.waitForURL(/\/console(?:[?#]|$)/);
 }
 
