@@ -233,6 +233,11 @@ export function Approval() {
                 {t("consent.loopback")}
               </p>
             )}
+            {preview.visual_changed && (
+              <p role="alert" className="warning" data-testid="visual-changed">
+                {t("consent.visual_changed")}
+              </p>
+            )}
             {preview.new_app && (
               <p className="warning" data-testid="new-app">
                 {t("consent.new_app")}

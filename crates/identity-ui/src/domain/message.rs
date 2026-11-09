@@ -306,11 +306,14 @@ pub enum TextId {
     /// L2: the device was not connected.
     #[serde(rename = "device_code.denied")]
     DeviceDenied,
+    /// L1b: the client's name or logo changed since it was first seen (AG-5, OP-154 m.3 (k)).
+    #[serde(rename = "consent.visual_changed")]
+    ConsentVisualChanged,
 }
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 100] = [
+    pub const ALL: [Self; 101] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -411,6 +414,7 @@ impl TextId {
         Self::DeviceRequest,
         Self::DeviceApproved,
         Self::DeviceDenied,
+        Self::ConsentVisualChanged,
     ];
 
     /// The stable id on the wire.
@@ -518,6 +522,7 @@ impl TextId {
             Self::DeviceRequest => "device_code.request",
             Self::DeviceApproved => "device_code.approved",
             Self::DeviceDenied => "device_code.denied",
+            Self::ConsentVisualChanged => "consent.visual_changed",
         }
     }
 
@@ -659,6 +664,9 @@ impl TextId {
             }
             Self::DeviceApproved => "The device is connected. You can close this page.",
             Self::DeviceDenied => "The device wasn't connected.",
+            Self::ConsentVisualChanged => {
+                "This app changed its name or logo since Access first saw it. Check that it is the app you expect."
+            }
         }
     }
 
@@ -724,6 +732,7 @@ impl TextId {
                 | Self::DeviceRequest
                 | Self::DeviceApproved
                 | Self::DeviceDenied
+                | Self::ConsentVisualChanged
         )
     }
 }

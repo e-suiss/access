@@ -6,7 +6,12 @@ import { expect, test } from "./fixtures.js";
 const returnTo =
   "/authorize?client_id=https%3A%2F%2Fapp.example%2Fclient.json&request_uri=urn%3Aietf%3Aparams%3Aoauth%3Arequest_uri%3Aabc";
 
-function approval(mock: import("./mock.js").LoginMock, draft: unknown, loopback = false) {
+function approval(
+  mock: import("./mock.js").LoginMock,
+  draft: unknown,
+  loopback = false,
+  visual = false,
+) {
   mock.json.set("POST /v1/login/approval/preview", {
     status: 200,
     body: {
@@ -16,7 +21,7 @@ function approval(mock: import("./mock.js").LoginMock, draft: unknown, loopback 
       redirect_hosts: loopback ? ["127.0.0.1"] : ["app.example"],
       loopback_only: loopback,
       new_app: true,
-      visual_changed: false,
+      visual_changed: visual,
       resource: "https://mcp.example.com/mcp",
       scopes: [],
       csrf: "csrf-token",
@@ -60,6 +65,15 @@ test("a client that only redirects to this device gets the extra warning", async
   await page.goto(`/login?reason=approve&return_to=${encodeURIComponent(returnTo)}`);
   await expect(page.getByTestId("loopback")).toHaveText(
     "This app sends you back to a program on this device. Approve only if you started it.",
+  );
+});
+
+// AG-5, OP-154 m.3 (k), Ek B 4250
+test("a client whose name or logo changed is shown with a warning", async ({ page, mock }) => {
+  approval(mock, null, false, true);
+  await page.goto(`/login?reason=approve&return_to=${encodeURIComponent(returnTo)}`);
+  await expect(page.getByTestId("visual-changed")).toHaveText(
+    "This app changed its name or logo since Access first saw it. Check that it is the app you expect.",
   );
 });
 

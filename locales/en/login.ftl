@@ -119,3 +119,4 @@ device_code-invalid = This code didn't work. Check it and try again.
 device_code-request = { $client } asks for { $scope }. The request came from { $prefix } in { $country }.
 device_code-approved = The device is connected. You can close this page.
 device_code-denied = The device wasn't connected.
+consent-visual_changed = This app changed its name or logo since Access first saw it. Check that it is the app you expect.

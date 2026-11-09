@@ -646,7 +646,8 @@
           "device_code.invalid",
           "device_code.request",
           "device_code.approved",
-          "device_code.denied"
+          "device_code.denied",
+          "consent.visual_changed"
         ]
       },
       "Text": {

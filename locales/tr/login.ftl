@@ -119,3 +119,4 @@ device_code-invalid = Bu kod işe yaramadı. Kontrol edip yeniden dene.
 device_code-request = { $client } şunu istiyor: { $scope }. İstek { $country } içinden { $prefix } adresinden geldi.
 device_code-approved = Cihaz bağlandı. Bu sayfayı kapatabilirsin.
 device_code-denied = Cihaz bağlanmadı.
+consent-visual_changed = Bu uygulama, Access onu ilk gördüğünden beri adını ya da logosunu değiştirdi. Beklediğiniz uygulama olduğunu kontrol edin.
