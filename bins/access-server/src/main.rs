@@ -718,6 +718,25 @@ fn lockdown(config: &Config) -> Lockdown {
     if let Some(dir) = &config.risk.breach_ranges_dir {
         lockdown = lockdown.allow_read(dir);
     }
+    // OP-90
+    let signup = &config.signup;
+    let anchors = config
+        .identity
+        .as_ref()
+        .and_then(|i| i.outbound_ca_file.as_ref());
+    for file in anchors
+        .into_iter()
+        .chain(&signup.bot_secret_file)
+        .chain(&signup.privacy_pass_key_files)
+        .chain(
+            config
+                .delivery_targets
+                .iter()
+                .filter_map(|t| t.ca_file.as_ref()),
+        )
+    {
+        lockdown = lockdown.allow_read(file);
+    }
     lockdown
 }
 
@@ -852,8 +871,8 @@ fn frontend<I, Q>(
     config: &Config,
     router: Pool,
     hosted: HostedLogin,
-    plane: I,
-    claims: Q,
+    (plane, claims): (I, Q),
+    outbound: Outbound,
 ) -> Result<axum::Router, String>
 where
     I: DeviceInstances + access_identity_ui::ports::Approvals + Clone + 'static,
@@ -867,7 +886,7 @@ where
             SignerKeys::new(identity.signer.clone()),
         ),
         hosted.clone(),
-        social(config)?,
+        social(config, outbound)?,
     );
     let me = me_router(
         RealmDiscovery::new(
@@ -936,6 +955,7 @@ where
 /// outbound client, secrets from the mounted directory, the shipped presets.
 fn social(
     config: &Config,
+    outbound: Outbound,
 ) -> Result<
     access_identity_ui::app::social::Social<
         access_identity_federation::adapters::OutboundProviders,
@@ -965,7 +985,7 @@ fn social(
         })
         .collect();
     Ok(access_identity_ui::app::social::Social {
-        http: access_identity_federation::adapters::OutboundProviders(outbound(config)?),
+        http: access_identity_federation::adapters::OutboundProviders(outbound),
         secrets: access_identity_federation::adapters::FileSecrets(
             config.social.secrets_dir.clone(),
         ),
@@ -1064,7 +1084,7 @@ fn login(
     app: Pool,
     products: Pool,
     keks: login::RealmKeks,
-    assets: Option<Assets>,
+    (assets, outbound): (Option<Assets>, Outbound),
     (hooks, risk): (
         Arc<dyn access_identity_hooks::ports::HookCaller + Sync>,
         access_identity_session::app::RiskServices,
@@ -1094,10 +1114,8 @@ fn login(
                 cgroup_memory_budget(),
             ));
             // TN-85
-            match migration::legacy_idp(
-                config.migration.legacy_idp_verify_url.as_deref(),
-                outbound(config)?,
-            ) {
+            match migration::legacy_idp(config.migration.legacy_idp_verify_url.as_deref(), outbound)
+            {
                 Some(idp) => h.with_legacy_idp(idp),
                 None => h,
             }
@@ -1378,7 +1396,7 @@ async fn serve(
         app.clone(),
         outbox_reader,
         keks,
-        prepared.assets,
+        (prepared.assets, prepared.outbound.clone()),
         (hooks.clone(), risk_services),
     )?;
     let tenants_pool = router_pool.clone();
@@ -1505,7 +1523,13 @@ async fn serve(
         prepared.account_assets,
         limits,
     );
-    let me = frontend(config, tenants_pool.clone(), hosted, idp_plane, courier)?;
+    let me = frontend(
+        config,
+        tenants_pool.clone(),
+        hosted,
+        (idp_plane, courier),
+        prepared.outbound.clone(),
+    )?;
     let products = product::routes(
         config,
         domains.clone(),
