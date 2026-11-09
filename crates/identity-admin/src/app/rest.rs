@@ -654,6 +654,7 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     "domain_deny",
                     "enumeration",
                     "email_keep_days",
+                    "dbsc",
                 ],
             )?;
             let set = |k| -> Result<BTreeSet<String>, Invalid> {
@@ -683,6 +684,12 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                             .and_then(|d| u32::try_from(d).ok())
                             .ok_or(Invalid::SigninPolicy)?,
                     ),
+                },
+                // OP-153 m.22 (c), m.25 (b)
+                dbsc: match m.get("dbsc") {
+                    None => true,
+                    Some(Json::Bool(b)) => *b,
+                    Some(_) => return Err(Invalid::SigninPolicy),
                 },
             })
         }
@@ -1101,6 +1108,7 @@ pub fn default_signin() -> SigninPolicy {
         domain_deny: BTreeSet::new(),
         enumeration: EnumerationMode::Uniform,
         email_keep_days: None,
+        dbsc: true,
     }
 }
 
@@ -1352,6 +1360,16 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 Change::ProtectionMode {
                     mode,
                     loosens: tier == access_identity_risk::domain::mode::Tier::Ct2,
+                }
+            }
+            // OP-153 m.22 (g), m.25 (b)
+            Change::CspMode { mode, .. } => {
+                let stored = access_store::idp::branding(&mut t)
+                    .await?
+                    .and_then(|b| dcbor::decode(&b, Limits::CEILING).ok());
+                Change::CspMode {
+                    mode,
+                    loosens: mode.loosens(crate::domain::accounts::CspMode::of(stored.as_ref())),
                 }
             }
             // TN-136

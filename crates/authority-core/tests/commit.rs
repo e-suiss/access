@@ -8449,6 +8449,10 @@ fn self_anchor(d: Digest, n: u8) -> ExerciseBasis {
 
 // L0-META-20, L0-META-30, TN-91, OP-153 m.17 (b), m.25 (a)
 #[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one root change from its opening through refused and accepted contributions"
+)]
 async fn a_root_change_waits_for_the_new_roots_own_acceptance() {
     let db = fresh().await.unwrap();
     let (mut core, d) = setup_with(&db, gated(&[])).await;

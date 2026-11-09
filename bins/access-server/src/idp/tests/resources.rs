@@ -742,3 +742,67 @@ mod inbound {
         );
     }
 }
+
+// OP-153 m.22 (g), m.25 (b), §13.7.1
+#[tokio::test]
+async fn the_csp_mode_action_follows_its_tier_and_keeps_the_branding() {
+    use access_identity_admin::domain::accounts::CspMode;
+    use access_internal_api::idp::IdpAction;
+    let (w, at, d) = ready("csp").await;
+    let brand = compile(
+        Op::PutBranding,
+        None,
+        &json!({"display_name": "Acme", "csp_origins": ["https://cdn.acme.example"]}),
+        &w.ids,
+    )
+    .unwrap();
+    written(&run(&w, at, d, brand.clone(), 1).await.unwrap());
+    let stored = || async {
+        let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+        let b = access_store::idp::branding(&mut t).await.unwrap();
+        t.commit().await.unwrap();
+        b.and_then(|b| dcbor::decode(&b, Limits::CEILING).ok())
+    };
+    let mode = |m| Change::CspMode {
+        mode: m,
+        loosens: false,
+    };
+    let loosen = w
+        .admin()
+        .resolve(at.0, at.1, mode(CspMode::ReportOnly))
+        .await
+        .unwrap();
+    assert_eq!(loosen.action(), IdpAction::RealmCspModeLoosen);
+    assert!(matches!(
+        w.admin()
+            .prepare(&proposal(
+                at,
+                mode(CspMode::ReportOnly),
+                2,
+                idp_anchor(d),
+                1
+            ))
+            .await,
+        Err(AdminError::Conflict)
+    ));
+    written(&run(&w, at, d, loosen, 3).await.unwrap());
+    assert_eq!(CspMode::of(stored().await.as_ref()), CspMode::ReportOnly);
+    written(&run(&w, at, d, brand, 4).await.unwrap());
+    assert_eq!(CspMode::of(stored().await.as_ref()), CspMode::ReportOnly);
+    let tighten = w
+        .admin()
+        .resolve(at.0, at.1, mode(CspMode::Enforce))
+        .await
+        .unwrap();
+    assert_eq!(tighten.action(), IdpAction::RealmCspMode);
+    written(&run(&w, at, d, tighten, 5).await.unwrap());
+    let back = stored().await;
+    assert_eq!(CspMode::of(back.as_ref()), CspMode::Enforce);
+    let Some(Value::Map(m)) = back else {
+        panic!("branding");
+    };
+    assert!(
+        m.iter()
+            .any(|(k, v)| *k == Value::text("display_name") && *v == Value::text("Acme"))
+    );
+}

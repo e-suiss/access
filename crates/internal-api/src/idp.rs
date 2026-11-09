@@ -14,8 +14,8 @@ use access_kernel::schema::{ActionSchema, EffectClass, Spp, action_digest};
 /// The resource namespace every `idp.*` action addresses: `[slug, kind, …]` paths.
 pub const RESOURCE_NAMESPACE: &str = "idp";
 
-/// Version of every `idp.*` catalog (OP-153 m.3 (a)).
-pub const CATALOG_VERSION: u64 = 2;
+/// Version of every `idp.*` catalog (OP-153 m.3 (a), m.25 (b)).
+pub const CATALOG_VERSION: u64 = 3;
 
 /// The `idp.*` action namespaces, one SPP each (OP-141 m.35, OP-153 m.3 (a)).
 pub const NAMESPACES: [&str; 10] = [
@@ -202,11 +202,26 @@ pub enum IdpAction {
     RealmRetentionHoldPlace,
     /// Lifts a legal hold, letting destruction run on its schedule again (T39): CT2.
     RealmRetentionHoldLift,
+    /// Binds two accounts of two realms of the same tenant as one person, by an administrator
+    /// (OP-153 m.18 (e), m.25 (b)): CT2.
+    AccountBind,
+    /// Imports accounts from another identity provider (§12.3.7, TN-85, OP-153 m.19 (d),
+    /// m.25 (b)): CT2.
+    AccountImport,
+    /// Records a guardianship between two accounts of the realm (E53, OP-153 m.20 (g),
+    /// m.25 (b)): CT2.
+    AccountGuardianshipRecord,
+    /// Tightens the realm's hosted-page CSP mode: report-only to enforce (OP-153 m.22 (g),
+    /// m.25 (b)); narrowing, CT1.
+    RealmCspMode,
+    /// Changes the realm's hosted-page CSP mode so that it loosens: enforce to report-only
+    /// (OP-153 m.22 (g), m.25 (b)): CT2.
+    RealmCspModeLoosen,
 }
 
 impl IdpAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 68] = [
+    pub const ALL: [Self; 73] = [
         Self::ClientRegister,
         Self::ClientUpdate,
         Self::ClientRetire,
@@ -275,12 +290,22 @@ impl IdpAction {
         Self::AccountEmailChange,
         Self::RealmRetentionHoldPlace,
         Self::RealmRetentionHoldLift,
+        Self::AccountBind,
+        Self::AccountImport,
+        Self::AccountGuardianshipRecord,
+        Self::RealmCspMode,
+        Self::RealmCspModeLoosen,
     ];
 
     /// The catalog version that first declared it (OP-153 m.3 (a)).
     #[must_use]
     pub const fn since(self) -> u64 {
         match self {
+            Self::AccountBind
+            | Self::AccountImport
+            | Self::AccountGuardianshipRecord
+            | Self::RealmCspMode
+            | Self::RealmCspModeLoosen => 3,
             Self::AccountResetIntent
             | Self::AccountTapIssue
             | Self::AccountRecoveryPolicy
@@ -351,7 +376,9 @@ impl IdpAction {
             | Self::RealmRetentionExtend
             | Self::RealmCustomDomain
             | Self::RealmRetentionHoldPlace
-            | Self::RealmRetentionHoldLift => "idp.realm",
+            | Self::RealmRetentionHoldLift
+            | Self::RealmCspMode
+            | Self::RealmCspModeLoosen => "idp.realm",
             Self::OrgCreate
             | Self::OrgUpdate
             | Self::OrgDomainClaim
@@ -381,7 +408,10 @@ impl IdpAction {
             | Self::AccountMigrationExport
             | Self::AccountRead
             | Self::AccountProfileUpdate
-            | Self::AccountEmailChange => "idp.account",
+            | Self::AccountEmailChange
+            | Self::AccountBind
+            | Self::AccountImport
+            | Self::AccountGuardianshipRecord => "idp.account",
         }
     }
 
@@ -456,6 +486,11 @@ impl IdpAction {
             Self::AccountEmailChange => "email_change",
             Self::RealmRetentionHoldPlace => "retention_hold_place",
             Self::RealmRetentionHoldLift => "retention_hold_lift",
+            Self::AccountBind => "bind",
+            Self::AccountImport => "import",
+            Self::AccountGuardianshipRecord => "guardianship_record",
+            Self::RealmCspMode => "csp_mode",
+            Self::RealmCspModeLoosen => "csp_mode_loosen",
         }
     }
 
@@ -494,7 +529,8 @@ impl IdpAction {
             | Self::SocialDisable
             | Self::AccountRead
             | Self::AccountProfileUpdate
-            | Self::RealmRetentionHoldPlace => EffectClass::Reversible,
+            | Self::RealmRetentionHoldPlace
+            | Self::RealmCspMode => EffectClass::Reversible,
             _ => EffectClass::Irreversible,
         }
     }

@@ -1,0 +1,60 @@
+; Access migration bundle, version 1 (RFC 8610; TN-86, OP-153 m.19 (d), m.25 (b)).
+; Deterministic CBOR (RFC 8949 §4.2.1). An `idp.account.migration_export` (reserved, CT3) writes
+; one bundle encrypted to the P-256 key its change names; `idp.account.import` and
+; `access-server import-accounts` read the plaintext.
+;
+; Sealing: an ephemeral P-256 key `epk`; ECDH of `epk` and the recipient key; HKDF-SHA256 over the
+; shared secret with salt `recipient` and info "access/migration-bundle/v1" gives a 32-byte key;
+; AES-256-GCM with `nonce` seals the plaintext, the additional data being the dCBOR of the bundle
+; without `ciphertext`. The plaintext is the import line format: UTF-8 JSON Lines, one account per
+; line, each line an object of `email`, `username`, `password_hash`, `hash_transform` and
+; `legacy_idp_reference` as `import-accounts` reads it.
+
+migration-bundle = {
+  version: 1,
+  realm: tstr,                      ; the exporting realm's issuer
+  exported_at: uint,                ; Unix milliseconds
+  accounts: uint,                   ; lines in the plaintext
+  recipient: bstr .size 32,         ; RFC 7638 thumbprint of the recipient key
+  epk: bstr .size 65,               ; ephemeral P-256 key, SEC1 uncompressed
+  nonce: bstr .size 12,
+  ciphertext: bstr,
+}
+
+; The change bodies the catalog's account actions bind (EI-25, OP-153 m.25 (b)).
+account-bind = {                    ; idp.account.bind, CT2 (OP-153 m.18 (e))
+  subject: id,                      ; the account in this realm
+  peer_realm: id,                   ; another realm of the same tenant
+  peer_subject: id,                 ; the account there
+}
+account-import = {                  ; idp.account.import, CT2 (TN-85, OP-153 m.19 (d))
+  file: bstr .size 32,              ; SHA-256 of the import file
+  accounts: 1..100000,
+}
+migration-export = {                ; idp.account.migration_export, reserved, CT3 (TN-86)
+  recipient: bstr .size 65,         ; P-256 key, SEC1 uncompressed
+}
+guardianship-record = {             ; idp.account.guardianship_record, CT2 (E53, OP-153 m.20 (g))
+  guardian: id,
+  ward: id,
+  basis: "parent" / "legal_guardian",
+  country: tstr .regexp "[A-Z]{2}",
+}
+csp-mode = {                        ; idp.realm.csp_mode (CT1) / csp_mode_loosen (CT2), m.22 (g)
+  csp_mode: "enforce" / "report_only",
+}
+
+; The claims of a realm-signed binding offer (OP-153 m.18 (e)): a compact JWS with
+; `typ` "binding-offer+jwt" under the offering realm's JOSE key, carried in JSON.
+binding-offer = {
+  iss: tstr,                        ; the offering realm's issuer
+  aud: tstr,                        ; the realm the offer is for
+  binding: tstr,                    ; base64url of the 16-byte binding id
+  proof: "verified_idp_subject",
+  idp_subject: tstr,                ; base64url SHA-256("access/binding-offer-subject/v1" || 0x00
+                                    ;   || upstream issuer || 0x00 || sub)
+  iat: uint,                        ; Unix seconds
+  exp: uint,                        ; at most 600 seconds after iat
+}
+
+id = bstr .size 16

@@ -173,6 +173,10 @@ pub enum Applied {
     },
 }
 
+/// Stable code of a change the catalog declares whose identity-plane write is not served yet
+/// (OP-153 m.25 (b)).
+pub const NOT_YET_SERVED: &str = "not-yet-served";
+
 /// A server-generated client secret: 256 random bits as base64url (CR-38). Shown to the
 /// caller once; only its digest is stored. It never appears in `Debug`.
 #[derive(PartialEq, Eq)]
@@ -348,6 +352,23 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     ) -> Result<(), AdminError> {
         change.check(declared)?;
         match change {
+            // OP-153 m.22 (g), m.25 (b)
+            Change::CspMode { mode, loosens } => {
+                let stored = idp::branding(t)
+                    .await?
+                    .and_then(|b| dcbor::decode(&b, Limits::CEILING).ok());
+                let current = crate::domain::accounts::CspMode::of(stored.as_ref());
+                if mode.loosens(current) != *loosens {
+                    return Err(AdminError::Conflict);
+                }
+            }
+            // OP-153 m.25 (b)
+            Change::AccountBind(_)
+            | Change::AccountImport(_)
+            | Change::MigrationExport(_)
+            | Change::GuardianshipRecord(_) => {
+                return Err(AdminError::Refused(String::from(NOT_YET_SERVED)));
+            }
             // TN-18, OP-153 m.3 (u)
             Change::RelatedOrigins(r) => {
                 let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
@@ -1357,10 +1378,32 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 idp::update_settings(t, bound, &settings_with(s, change)).await?
             }
             Change::Branding(b) => {
-                let bytes = dcbor::encode(&b.to_value(), Limits::CEILING)
+                // OP-153 m.22 (g)
+                let stored = idp::branding(t)
+                    .await?
+                    .and_then(|b| dcbor::decode(&b, Limits::CEILING).ok());
+                let mode = crate::domain::accounts::CspMode::of(stored.as_ref());
+                let bytes = dcbor::encode(&mode.applied_to(b.to_value()), Limits::CEILING)
                     .map_err(|_| AdminError::Encode)?;
                 idp::set_branding(t, bound, &bytes).await?;
                 true
+            }
+            Change::CspMode { mode, .. } => {
+                // OP-153 m.22 (g), m.25 (b)
+                let stored = idp::branding(t)
+                    .await?
+                    .and_then(|b| dcbor::decode(&b, Limits::CEILING).ok())
+                    .unwrap_or_else(|| crate::domain::Branding::default().to_value());
+                let bytes = dcbor::encode(&mode.applied_to(stored), Limits::CEILING)
+                    .map_err(|_| AdminError::Encode)?;
+                idp::set_branding(t, bound, &bytes).await?;
+                true
+            }
+            Change::AccountBind(_)
+            | Change::AccountImport(_)
+            | Change::MigrationExport(_)
+            | Change::GuardianshipRecord(_) => {
+                return Err(AdminError::Refused(String::from(NOT_YET_SERVED)));
             }
             Change::RelatedOrigins(r) => {
                 let origins: Vec<String> = r.origins.iter().cloned().collect();

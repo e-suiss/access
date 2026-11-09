@@ -140,6 +140,13 @@ fn idp_actions_carry_their_consequence_tiers() {
         (IdpAction::RealmProtectionMode, Tier::Ct1),
         (IdpAction::RealmProtectionModeLoosen, Tier::Ct2),
         (IdpAction::AccountCanary, Tier::Ct2),
+        // OP-153 m.18 (e), m.19 (d), m.20 (g), m.22 (g), m.25 (b)
+        (IdpAction::AccountBind, Tier::Ct2),
+        (IdpAction::AccountImport, Tier::Ct2),
+        (IdpAction::AccountMigrationExport, Tier::Ct3),
+        (IdpAction::AccountGuardianshipRecord, Tier::Ct2),
+        (IdpAction::RealmCspMode, Tier::Ct1),
+        (IdpAction::RealmCspModeLoosen, Tier::Ct2),
     ] {
         assert_eq!(tier(a), t, "{}", a.label());
     }

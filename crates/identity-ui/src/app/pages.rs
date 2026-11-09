@@ -338,6 +338,10 @@ where
         P: access_identity_webauthn::ports::CredentialRegistry + Sync,
         S: access_identity_webauthn::ports::SignalSink + Sync,
     {
+        // OP-153 m.22 (c), m.25 (b)
+        if !kit.signin.dbsc {
+            return reply;
+        }
         match auth.dbsc_offer(session).await {
             Ok(Some(c)) => reply.header(
                 REGISTRATION_HEADER,

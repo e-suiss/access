@@ -26,6 +26,8 @@ pub struct RealmSignin {
     pub strict: bool,
     /// Days a given-up e-mail address stays taken; `None` never frees it (OP-153 m.3 (i)).
     pub email_keep_days: Option<u32>,
+    /// Whether a hosted sign-in offers DBSC registration (TN-33, OP-153 m.22 (c), m.25 (b)).
+    pub dbsc: bool,
 }
 
 impl Default for RealmSignin {
@@ -40,6 +42,7 @@ impl Default for RealmSignin {
             required_fields: BTreeSet::from([String::from("email")]),
             strict: false,
             email_keep_days: None,
+            dbsc: true,
         }
     }
 }
@@ -86,6 +89,12 @@ impl RealmSignin {
             Some(Value::Unsigned(d)) => Some(u32::try_from(*d).ok().filter(|d| *d >= 365)?),
             Some(_) => return None,
         };
+        // OP-153 m.25 (b)
+        let dbsc = match get("dbsc") {
+            None => true,
+            Some(Value::Bool(b)) => *b,
+            Some(_) => return None,
+        };
         let required_fields = match get("required_fields") {
             None => BTreeSet::from([String::from("email")]),
             v => texts(v)?,
@@ -98,6 +107,7 @@ impl RealmSignin {
             required_fields,
             strict,
             email_keep_days,
+            dbsc,
         })
     }
 
@@ -183,6 +193,23 @@ mod tests {
         let a = u.apply(AuthPolicy::DEFAULT);
         assert!(a.password && !a.passkey && !a.email_otp);
         assert_eq!(a.mfa, MfaPolicy::WhenEnrolled);
+    }
+
+    // TN-33, OP-153 m.22 (c), m.25 (b)
+    #[test]
+    fn a_policy_offers_dbsc_unless_it_says_no() {
+        let on = stored(&["email"], false, &[], &[]);
+        assert!(RealmSignin::decode(&on).unwrap().dbsc);
+        let Ok(Value::Map(mut m)) = dcbor::decode(&on, Limits::CEILING) else {
+            panic!("a policy map");
+        };
+        m.push((Value::text("dbsc"), Value::Bool(false)));
+        let off = dcbor::encode(&Value::Map(m.clone()), Limits::CEILING).unwrap_or_default();
+        assert!(!RealmSignin::decode(&off).unwrap().dbsc);
+        m.pop();
+        m.push((Value::text("dbsc"), Value::text("no")));
+        let bad = dcbor::encode(&Value::Map(m), Limits::CEILING).unwrap_or_default();
+        assert_eq!(RealmSignin::decode(&bad), None);
     }
 
     // MD-8

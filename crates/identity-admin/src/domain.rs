@@ -23,6 +23,7 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::digest::context_digest;
 use suiss_crypto::rotation::Policy;
 
+pub mod accounts;
 pub mod dns;
 pub mod org;
 pub mod provision;
@@ -1577,6 +1578,23 @@ pub enum Change {
     },
     /// `idp.org.sso_draft` (TN-120, OP-153 m.3 (p)).
     OrgSsoDraft(crate::domain::org::SsoDraft),
+    /// `idp.account.bind` (OP-153 m.18 (e), m.25 (b)).
+    AccountBind(accounts::AccountBind),
+    /// `idp.account.import` (TN-85, OP-153 m.19 (d), m.25 (b)).
+    AccountImport(accounts::AccountImport),
+    /// `idp.account.migration_export` (TN-86, OP-153 m.19 (d), m.25 (b)).
+    MigrationExport(accounts::MigrationExport),
+    /// `idp.account.guardianship_record` (E53, OP-153 m.20 (g), m.25 (b)).
+    GuardianshipRecord(accounts::GuardianshipRecord),
+    /// `idp.realm.csp_mode` when it only tightens, `idp.realm.csp_mode_loosen` when it moves the
+    /// page to report-only (OP-153 m.22 (g), m.25 (b)); `loosens` is resolved against the
+    /// realm's current mode before the intent is drawn.
+    CspMode {
+        /// The new mode.
+        mode: accounts::CspMode,
+        /// Whether it loosens the current mode.
+        loosens: bool,
+    },
 }
 
 /// A change to an organization's profile (TN-98): its name, and whether home realm discovery
@@ -1863,6 +1881,12 @@ impl Change {
             Self::OrgDomainClaim(_) => IdpAction::OrgDomainClaim,
             Self::OrgDomainRelease { .. } => IdpAction::OrgDomainRelease,
             Self::OrgSsoDraft(_) => IdpAction::OrgSsoDraft,
+            Self::AccountBind(_) => IdpAction::AccountBind,
+            Self::AccountImport(_) => IdpAction::AccountImport,
+            Self::MigrationExport(_) => IdpAction::AccountMigrationExport,
+            Self::GuardianshipRecord(_) => IdpAction::AccountGuardianshipRecord,
+            Self::CspMode { loosens: false, .. } => IdpAction::RealmCspMode,
+            Self::CspMode { loosens: true, .. } => IdpAction::RealmCspModeLoosen,
         }
     }
 
@@ -1911,7 +1935,12 @@ impl Change {
             Self::OrgUpdate(u) => u.check(),
             Self::OrgDomainClaim(d) => d.check(),
             Self::OrgSsoDraft(d) => d.check(),
-            Self::OrgInviteRevoke { .. }
+            Self::AccountImport(i) => i.check(),
+            Self::MigrationExport(e) => e.check(),
+            Self::GuardianshipRecord(g) => g.check(),
+            Self::AccountBind(_)
+            | Self::CspMode { .. }
+            | Self::OrgInviteRevoke { .. }
             | Self::SocialDisable(_)
             | Self::OrgDomainRelease { .. }
             | Self::OrgMemberRemove(_)
@@ -2027,6 +2056,13 @@ impl Change {
                 (Value::text("claim"), Value::Bytes(claim.to_vec())),
             ]),
             Self::OrgSsoDraft(d) => d.to_value(),
+            Self::AccountBind(b) => b.to_value(),
+            Self::AccountImport(i) => i.to_value(),
+            Self::MigrationExport(e) => e.to_value(),
+            Self::GuardianshipRecord(g) => g.to_value(),
+            Self::CspMode { mode, .. } => {
+                Value::Map(vec![(Value::text("csp_mode"), Value::text(mode.name()))])
+            }
         }
     }
 
@@ -2066,8 +2102,13 @@ impl Change {
             | Self::AccountCanary(s)
             | Self::AccountDelete(s)
             | Self::AccountResetIntent { subject: s, .. }
-            | Self::AccountTapIssue(TapIssue { subject: s, .. }) => {
+            | Self::AccountTapIssue(TapIssue { subject: s, .. })
+            | Self::AccountBind(accounts::AccountBind { subject: s, .. })
+            | Self::GuardianshipRecord(accounts::GuardianshipRecord { ward: s, .. }) => {
                 path.extend([String::from("account"), b64url_encode(s)]);
+            }
+            Self::AccountImport(_) | Self::MigrationExport(_) => {
+                path.push(String::from("accounts"));
             }
             Self::UpstreamRegister(Upstream { name, .. })
             | Self::UpstreamUpdate(Upstream { name, .. })
@@ -2089,7 +2130,8 @@ impl Change {
             | Self::SessionPolicy(_)
             | Self::ProtectionMode { .. }
             | Self::RecoveryPolicy { .. }
-            | Self::ExtensionPolicy(_) => {
+            | Self::ExtensionPolicy(_)
+            | Self::CspMode { .. } => {
                 path.push(String::from("realm"));
             }
             Self::Hook(HookChange::Register { id, .. } | HookChange::Retire { id }) => {

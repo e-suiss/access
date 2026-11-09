@@ -485,6 +485,9 @@ pub struct SigninPolicy {
     /// Days a given-up e-mail address stays taken before it can be registered again; `None`
     /// never frees it, the default (OP-153 m.3 (i)).
     pub email_keep_days: Option<u32>,
+    /// Whether a hosted sign-in offers to bind the new sign-in to a device key (DBSC, TN-33,
+    /// OP-153 m.22 (c), m.25 (b)); on by default.
+    pub dbsc: bool,
 }
 
 impl SigninPolicy {
@@ -551,6 +554,10 @@ impl SigninPolicy {
                 Value::text("email_keep_days"),
                 Value::Unsigned(u64::from(d)),
             ));
+        }
+        // OP-153 m.25 (b)
+        if !self.dbsc {
+            m.push((Value::text("dbsc"), Value::Bool(false)));
         }
         Value::Map(m)
     }

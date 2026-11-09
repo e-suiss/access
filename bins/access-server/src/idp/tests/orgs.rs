@@ -1336,7 +1336,7 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
         .contribute_transfer(at, ORG, id, (bob, [0x78; 32]))
         .await
         .unwrap();
-    // L0-META-20, OP-153 m.25 (a): an acceptance the domain does not hold completes nothing
+    // L0-META-20, OP-153 m.25 (a)
     let unaccepted = Box::pin(w.admin().complete_transfer(at, ORG, id, second)).await;
     assert!(
         !matches!(
@@ -1519,4 +1519,76 @@ async fn an_idp_domain_claim_is_verified_by_an_owners_upstream_assertion() {
     let c = claims_of(&w, at, org).await;
     assert!(c[0].verified_ms.is_some() && c[0].claimed);
     assert_eq!(c[0].method, "idp");
+}
+
+// OP-153 m.18 (e), m.19 (d), m.20 (g), m.25 (b), OP-141 m.35, §13.7.1
+#[tokio::test]
+async fn the_governing_domain_accepts_the_new_account_actions() {
+    use access_identity_account::domain::claim_classes::GuardianshipBasis;
+    use access_identity_admin::app::NOT_YET_SERVED;
+    use access_identity_admin::domain::accounts::{
+        AccountBind, AccountImport, GuardianshipRecord, MigrationExport,
+    };
+    let (w, at, d, founder) = ready_with("r1-catalog", Some(0)).await;
+    let changes = [
+        Change::AccountBind(AccountBind {
+            subject: founder,
+            peer_realm: [0x21; 16],
+            peer_subject: [0x22; 16],
+        }),
+        Change::AccountImport(AccountImport {
+            file: [0x23; 32],
+            accounts: 2,
+        }),
+        Change::MigrationExport(MigrationExport {
+            recipient: [vec![4], vec![0x24; 64]].concat(),
+        }),
+        Change::GuardianshipRecord(GuardianshipRecord {
+            guardian: founder,
+            ward: [0x25; 16],
+            basis: GuardianshipBasis::Parent,
+            country: String::from("TR"),
+        }),
+    ];
+    for (n, change) in (0xb0_u8..).zip(changes) {
+        let label = change.action().label();
+        assert!(
+            matches!(
+                w.admin()
+                    .prepare(&proposal(at, change.clone(), n, idp_anchor(d), 1))
+                    .await,
+                Err(AdminError::Refused(c)) if c == NOT_YET_SERVED
+            ),
+            "{label}"
+        );
+        let intent = change
+            .intent(
+                "r1-catalog",
+                Window {
+                    from: NOW,
+                    until: NOW + HOUR,
+                },
+            )
+            .unwrap();
+        let digest = intent_digest(&intent).unwrap();
+        let basis = idp_anchor(d);
+        let v = Decider::decide(
+            &w.plane,
+            Submission {
+                domain: d,
+                nonce: vec![n; 16],
+                ais: sign(&statement(d, &[n; 16], digest, basis), ROOT_KEY),
+                intent,
+                payload: None,
+                basis,
+                capacity: Capacity::Own,
+                contributions: Vec::new(),
+                pep: String::from(PEP),
+                actor: None,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(matches!(v, Verdict::Committed(_)), "{label}: {v:?}");
+    }
 }
