@@ -281,7 +281,7 @@ async fn an_untrusted_amount_needs_an_approval_once_the_domain_opts_in() {
     allowed(&plain);
 }
 
-// §11.19 enterprise row, Ek B 4464
+// §11.19 row, Ek B 4464
 #[tokio::test]
 async fn an_enterprise_agents_high_consequence_action_waits_for_an_administrator() {
     for (kind, outcome) in [
@@ -350,7 +350,7 @@ async fn an_enterprise_agents_high_consequence_action_waits_for_an_administrator
     }
 }
 
-// F11, SEC30, §7.9.10.3, IFC Option B, Ek B 4642
+// F11, SEC30, §7.9.10.3, Ek B 4642
 #[tokio::test]
 async fn disclosure_needs_the_data_owners_contribution_and_declassify_is_ct3() {
     use access_kernel::tier::Tier;

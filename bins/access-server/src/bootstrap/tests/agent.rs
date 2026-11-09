@@ -598,7 +598,7 @@ impl Adp for Injecting<'_> {
 }
 
 // A-11, A-12, E26, AG-34, AGI-7, §11.15, OP-153 m.3 (gg), Ek B 4193, 4273, 4355, 4356,
-// 4443, 4448, 4549
+// AG-34, Ek B 4443, 4448, 4549
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_agent_reads_its_own_status_and_takes_no_authority_from_a_task() {
     let a = Agents::open("l8-status").await;

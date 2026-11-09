@@ -138,7 +138,7 @@ pub fn admissible(
                 // AGI-4
                 let human = p.party == actor.party
                     && p.assurance.get(HUMAN_PRESENCE).is_some_and(|v| *v > 0);
-                // Ek B 4121
+                // X19, §8.18.3, Ek B 4121
                 let actor_side =
                     p.binding.actor_instance == Some(actor.instance) && p.class != runtime;
                 let hardware = p.assurance.get("hardware_bound").is_some_and(|v| *v > 0);
