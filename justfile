@@ -300,6 +300,10 @@ experience-contract:
 executor-contract:
     ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-executor --test contract
 
+# OP-65, OP-155 m.3 (p): rewrite sdks/openapi/vc-verifier-v1.json from services/vc-verifier
+vc-verifier-contract:
+    ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-vc-verifier --test contract
+
 # OP-65, OP-151 m.4: rewrite sdks/openapi/admin-v1.json and problems.json from crates/http
 admin-contract:
     ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-http --test admin_contract

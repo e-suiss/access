@@ -1,0 +1,21 @@
+[package]
+name = "access-vc-verifier"
+description = "OID4VP verifier service: SD-JWT VC and mdoc presentations under the HAIP profile, checked against trusted lists and sent to Claim Ingest as Claims; it holds and writes no authority."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+
+[dependencies]
+# OP-155 m.3 (p), OP-62
+axum = { workspace = true, features = ["http1", "tokio", "json"] }
+serde_json = { workspace = true, features = ["std"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true

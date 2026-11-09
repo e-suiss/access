@@ -735,6 +735,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-vc-verifier"
+version = "0.4.0"
+dependencies = [
+ "axum",
+ "serde_json",
+ "tokio",
+ "tower",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
