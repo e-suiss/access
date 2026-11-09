@@ -137,6 +137,19 @@ pub trait DeviceInstances: Send + Sync {
     ) -> impl Future<Output = Result<Verdict, InstancesUnavailable>> + Send;
 }
 
+/// The live Instance keys of a Party in the realm's governing domain, for its `did:web`
+/// document (OP-154 m.3 (aa)): a read, never authority.
+pub trait PartyKeys: Send + Sync {
+    /// The keys of `party`'s live Instances in `domain`, in the order the domain created them.
+    fn live_keys(
+        &self,
+        domain: Digest,
+        party: [u8; 16],
+    ) -> impl Future<
+        Output = Result<Vec<access_kernel::verify::cose::PublicKey>, InstancesUnavailable>,
+    > + Send;
+}
+
 /// The authority plane behind the Approval Surface, reached only through `internal-api`
 /// (OP-62, §9.14.1 A, OP-150 L6).
 pub trait Approvals: Send + Sync {

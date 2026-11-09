@@ -274,16 +274,41 @@ impl Lab {
     }
 
     fn pages(w: &World, upstream: Arc<Upstream>) -> axum::Router {
+        access_http::login::vault_router(
+            access_identity_oauth::app::Discovery::new(
+                access_identity_oauth::adapters::PgDirectory::new(w.db.router.clone()),
+                SignerKeys::new(w.identity_signer.clone()),
+            ),
+            Self::hosted(w),
+            Vault {
+                catalog: Catalog::shipped().unwrap(),
+                http: Scripted(upstream),
+                secrets: Secrets,
+                exercises: w.plane.clone(),
+                random: crate::idp::vault::OsRandom,
+            },
+        )
+    }
+
+    /// The realm's hosted pages, as the server builds them.
+    pub(super) fn hosted(
+        w: &World,
+    ) -> Arc<
+        access_identity_ui::app::Hosted<
+            crate::login::HsmKits,
+            access_identity_account::adapters::system::SystemClock,
+            Recording,
+        >,
+    > {
         use access_identity_account::adapters::system::SystemClock;
         use access_identity_account::app::local::LocalLimiter;
         use access_identity_account::app::login::LoginGate;
         use access_identity_account::domain::throttle::ThrottlePolicy;
-        use access_identity_oauth::app::Discovery as RealmDiscovery;
         use access_identity_session::domain::session::SessionPolicy;
         use access_identity_ui::app::Hosted;
         let mut risk = access_identity_session::app::RiskServices::without_sources();
         risk.breach = Arc::new(Clean);
-        let hosted = Arc::new(Hosted {
+        Arc::new(Hosted {
             kits: crate::login::HsmKits::new(
                 crate::login::RealmKeks::new(Arc::clone(&w.keys)),
                 w.db.router.clone(),
@@ -300,21 +325,7 @@ impl Lab {
             hooks: Arc::new(access_identity_hooks::ports::NoHooks),
             risk,
             signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
-        });
-        access_http::login::vault_router(
-            RealmDiscovery::new(
-                access_identity_oauth::adapters::PgDirectory::new(w.db.router.clone()),
-                SignerKeys::new(w.identity_signer.clone()),
-            ),
-            hosted,
-            Vault {
-                catalog: Catalog::shipped().unwrap(),
-                http: Scripted(upstream),
-                secrets: Secrets,
-                exercises: w.plane.clone(),
-                random: crate::idp::vault::OsRandom,
-            },
-        )
+        })
     }
 
     /// A live session of the person, as a sign-in leaves it.
@@ -1069,5 +1080,102 @@ async fn the_person_sees_which_agent_used_which_of_their_accounts() {
         .page(&Method::GET, "/v1/account/agent-connections", None)
         .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
+    l.w.domains.release().await;
+}
+
+// E56, MD-10, OP-154 m.3 (aa), OP-153 m.3 (gg), Ek B 4329
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_did_web_document_names_the_live_keys_of_a_bound_party_only() {
+    let l = Lab::open("did-web").await;
+    let did = access_http::login::did_router(
+        access_identity_oauth::app::Discovery::new(
+            access_identity_oauth::adapters::PgDirectory::new(l.w.db.router.clone()),
+            SignerKeys::new(l.w.identity_signer.clone()),
+        ),
+        Lab::hosted(&l.w),
+        l.w.plane.clone(),
+    );
+    let get = |party: String| {
+        let did = did.clone();
+        async move {
+            let req = HttpRequest::get(format!("/realms/acme/u/{party}/did.json"))
+                .header(header::HOST, "access.test")
+                .body(Body::empty())
+                .unwrap();
+            let (r, bytes) = send(&did, req).await;
+            (
+                r.status(),
+                serde_json::from_slice::<serde_json::Value>(&bytes).unwrap_or_default(),
+            )
+        }
+    };
+    let agent = b64url_encode(&super::agent::AGENT.0);
+    let (status, _) = get(agent.clone()).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let (runtime, _) = super::agent::enrol(&l.w, l.domain).await;
+    let (status, _) = get(agent.clone()).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.realm)
+        .await
+        .unwrap();
+    t.insert_agent(&access_store::agents::NewAgent {
+        party: super::agent::AGENT.0,
+        operator: root_party(&root_key(&l.w.keys).unwrap().public_key()).0,
+        kind: "cloud",
+        display_name: "Mail helper",
+        description: None,
+        exercise: &[6; 32],
+    })
+    .await
+    .unwrap();
+    t.commit().await.unwrap();
+    let (status, doc) = get(agent.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{doc}");
+    let id = doc["id"].as_str().unwrap();
+    assert!(id.starts_with("did:web:"), "{doc}");
+    assert!(id.ends_with(&format!(":realms:acme:u:{agent}")), "{doc}");
+    let kid = b64url_encode(&access_kernel::verify::key_scope::thumbprint(
+        &runtime.0.public_key(),
+    ));
+    let methods = doc["verificationMethod"].as_array().unwrap();
+    assert_eq!(methods.len(), 1, "{doc}");
+    assert_eq!(methods[0]["id"], format!("{id}#{kid}"), "{doc}");
+    assert_eq!(methods[0]["controller"], id, "{doc}");
+    assert_eq!(methods[0]["publicKeyJwk"]["kid"], kid.as_str(), "{doc}");
+    assert_eq!(doc["authentication"][0], methods[0]["id"], "{doc}");
+    assert!(doc.get("service").is_none(), "{doc}");
+    let shown = doc.to_string();
+    assert!(
+        !shown.contains("Mail helper") && !shown.contains("\"d\""),
+        "{shown}"
+    );
+
+    // MD-10
+    let (status, person) = get(b64url_encode(&l.party.0)).await;
+    assert_eq!(status, StatusCode::OK, "{person}");
+    assert!(
+        person["id"]
+            .as_str()
+            .unwrap()
+            .ends_with(&format!(":u:{}", b64url_encode(&l.party.0)))
+    );
+
+    // OP-73
+    let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.realm)
+        .await
+        .unwrap();
+    assert!(
+        t.set_agent_status(super::agent::AGENT.0, "retired")
+            .await
+            .unwrap()
+    );
+    t.commit().await.unwrap();
+    let (status, _) = get(agent).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = get(b64url_encode(&[0x77; 16])).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = get(String::from("not-a-party")).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
     l.w.domains.release().await;
 }

@@ -2529,8 +2529,15 @@
         "operationId": "didWebDocument",
         "summary": "The did:web document of a person or agent: verification keys and service endpoints; an identifier, never authority (OP-154 m.3 (aa)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -2545,8 +2552,7 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       }
     }
   },

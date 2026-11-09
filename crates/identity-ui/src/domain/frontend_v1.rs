@@ -736,7 +736,7 @@ pub const ROUTES: &[Route] = &[
         "declineClient",
         "The person declined: the waiting request goes back to the client with access_denied and nothing is kept (X-L8).",
     ),
-    planned(
+    live(
         Owner::L3,
         Verb::Get,
         "/u/{party}/did.json",

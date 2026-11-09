@@ -14,6 +14,7 @@ mod account;
 mod approve;
 mod credential;
 pub mod devices;
+pub mod did;
 pub mod household;
 mod me;
 pub mod orgs;

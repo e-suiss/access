@@ -706,6 +706,26 @@ where
     }
 }
 
+impl<K, B, S, C> access_identity_ui::ports::PartyKeys for Plane<K, B, S, C>
+where
+    K: Keys + Send + Sync + 'static,
+    B: Binding + Clone + Send + Sync + 'static,
+    S: Salts + Clone + Send + Sync + 'static,
+    C: Clock + Clone + Send + Sync + 'static,
+{
+    async fn live_keys(
+        &self,
+        domain: Digest,
+        party: [u8; 16],
+    ) -> Result<Vec<access_kernel::verify::cose::PublicKey>, Unavailable> {
+        // OP-154 m.3 (aa)
+        self.domains
+            .party_keys(domain, Id(party))
+            .await
+            .map_err(|e| unavailable(&e))
+    }
+}
+
 impl<K, B, S, C> DeviceInstances for Plane<K, B, S, C>
 where
     K: Keys + Send + Sync + 'static,
