@@ -1,0 +1,20 @@
+# AG-39: Zoom user-level OAuth apps. Source: developers.zoom.us/docs/integrations/oauth
+id = "zoom"
+display_name = "Zoom"
+authorization_endpoint = "https://zoom.us/oauth/authorize"
+token_endpoint = "https://zoom.us/oauth/token"
+revocation_endpoint = "https://zoom.us/oauth/revoke"
+lifetime_s = 3600
+refresh = "rotating"
+
+[[scopes]]
+name = "user:read"
+description = "Read the person's profile"
+
+[[scopes]]
+name = "meeting:read"
+description = "Read meetings"
+
+[[scopes]]
+name = "meeting:write"
+description = "Create and edit meetings"

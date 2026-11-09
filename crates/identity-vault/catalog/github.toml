@@ -1,0 +1,23 @@
+# AG-39: GitHub OAuth app tokens do not expire and GitHub has no RFC 7009 endpoint, so a
+# release goes to the executor (AG-40 (4)). Source: docs.github.com/apps/oauth-apps
+id = "github"
+display_name = "GitHub"
+authorization_endpoint = "https://github.com/login/oauth/authorize"
+token_endpoint = "https://github.com/login/oauth/access_token"
+refresh = "none"
+
+[[scopes]]
+name = "repo"
+description = "Full control of private repositories"
+
+[[scopes]]
+name = "public_repo"
+description = "Public repositories"
+
+[[scopes]]
+name = "read:user"
+description = "Read profile data"
+
+[[scopes]]
+name = "read:org"
+description = "Read organization membership"

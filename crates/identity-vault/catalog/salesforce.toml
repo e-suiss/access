@@ -1,0 +1,20 @@
+# AG-39: Salesforce web server flow; the session lifetime is the org's, not in the answer.
+# Source: help.salesforce.com, OAuth 2.0 Web Server Flow
+id = "salesforce"
+display_name = "Salesforce"
+authorization_endpoint = "https://login.salesforce.com/services/oauth2/authorize"
+token_endpoint = "https://login.salesforce.com/services/oauth2/token"
+revocation_endpoint = "https://login.salesforce.com/services/oauth2/revoke"
+refresh = "reusable"
+
+[[scopes]]
+name = "api"
+description = "Access the person's data through the APIs"
+
+[[scopes]]
+name = "refresh_token"
+description = "Keep access while the person is away (refresh)"
+
+[[scopes]]
+name = "offline_access"
+description = "Keep access while the person is away"

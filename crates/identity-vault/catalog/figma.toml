@@ -1,0 +1,22 @@
+# AG-39: Figma; refreshes go to their own endpoint.
+# Source: developers.figma.com/docs/rest-api/authentication
+id = "figma"
+display_name = "Figma"
+authorization_endpoint = "https://www.figma.com/oauth"
+token_endpoint = "https://api.figma.com/v1/oauth/token"
+refresh_endpoint = "https://api.figma.com/v1/oauth/refresh"
+lifetime_s = 7776000
+refresh = "reusable"
+scope_separator = ","
+
+[[scopes]]
+name = "current_user:read"
+description = "Read the person's profile"
+
+[[scopes]]
+name = "file_content:read"
+description = "Read file contents"
+
+[[scopes]]
+name = "file_comments:write"
+description = "Post comments"

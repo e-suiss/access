@@ -1,0 +1,27 @@
+# AG-39: Dropbox short-lived tokens with offline refresh; revocation is its own API, not
+# RFC 7009. Source: developers.dropbox.com/oauth-guide
+id = "dropbox"
+display_name = "Dropbox"
+authorization_endpoint = "https://www.dropbox.com/oauth2/authorize"
+token_endpoint = "https://api.dropboxapi.com/oauth2/token"
+lifetime_s = 14400
+refresh = "reusable"
+
+[authorize_params]
+token_access_type = "offline"
+
+[[scopes]]
+name = "account_info.read"
+description = "Read account information"
+
+[[scopes]]
+name = "files.metadata.read"
+description = "Read file and folder names"
+
+[[scopes]]
+name = "files.content.read"
+description = "Read file contents"
+
+[[scopes]]
+name = "files.content.write"
+description = "Edit file contents"

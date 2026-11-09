@@ -1,0 +1,16 @@
+# AG-39: Box. Source: developer.box.com/guides/authentication/oauth2
+id = "box"
+display_name = "Box"
+authorization_endpoint = "https://account.box.com/api/oauth2/authorize"
+token_endpoint = "https://api.box.com/oauth2/token"
+revocation_endpoint = "https://api.box.com/oauth2/revoke"
+lifetime_s = 3600
+refresh = "rotating"
+
+[[scopes]]
+name = "root_readonly"
+description = "Read all files and folders"
+
+[[scopes]]
+name = "root_readwrite"
+description = "Read and write all files and folders"

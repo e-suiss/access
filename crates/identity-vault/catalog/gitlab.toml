@@ -1,0 +1,24 @@
+# AG-39: GitLab.com. Source: docs.gitlab.com/api/oauth2
+id = "gitlab"
+display_name = "GitLab"
+authorization_endpoint = "https://gitlab.com/oauth/authorize"
+token_endpoint = "https://gitlab.com/oauth/token"
+revocation_endpoint = "https://gitlab.com/oauth/revoke"
+lifetime_s = 7200
+refresh = "rotating"
+
+[[scopes]]
+name = "read_user"
+description = "Read the person's profile"
+
+[[scopes]]
+name = "read_api"
+description = "Read access to the API"
+
+[[scopes]]
+name = "api"
+description = "Full access to the API"
+
+[[scopes]]
+name = "read_repository"
+description = "Read repositories"

@@ -1,0 +1,8 @@
+# AG-39: Calendly. Source: developer.calendly.com/api-docs/oauth
+id = "calendly"
+display_name = "Calendly"
+authorization_endpoint = "https://auth.calendly.com/oauth/authorize"
+token_endpoint = "https://auth.calendly.com/oauth/token"
+revocation_endpoint = "https://auth.calendly.com/oauth/revoke"
+lifetime_s = 7200
+refresh = "rotating"

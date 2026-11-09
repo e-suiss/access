@@ -35,6 +35,7 @@ access-identity-events = { path = "crates/identity-events", default-features = f
 access-identity-hooks = { path = "crates/identity-hooks", default-features = false }
 access-identity-risk = { path = "crates/identity-risk", default-features = false }
 access-identity-federation = { path = "crates/identity-federation", default-features = false }
+access-identity-vault = { path = "crates/identity-vault", default-features = false }
 access-authority-ingest = { path = "crates/authority-ingest", default-features = false }
 access-sdk = { package = "esuiss-access-sdk", path = "sdks/rust/access", version = "=0.4.0", default-features = false }
 access-experience = { path = "services/experience", default-features = false }

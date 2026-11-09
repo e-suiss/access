@@ -1,0 +1,32 @@
+# AG-39: Microsoft Graph through the Microsoft identity platform; no RFC 7009 endpoint.
+# Source: learn.microsoft.com/entra/identity-platform/v2-oauth2-auth-code-flow
+id = "microsoft-graph"
+display_name = "Microsoft 365"
+authorization_endpoint = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+token_endpoint = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+lifetime_s = 3600
+refresh = "rotating"
+
+[[scopes]]
+name = "offline_access"
+description = "Keep access while the person is away (refresh)"
+
+[[scopes]]
+name = "User.Read"
+description = "Read the signed-in person's profile"
+
+[[scopes]]
+name = "Mail.Read"
+description = "Read mail"
+
+[[scopes]]
+name = "Mail.Send"
+description = "Send mail"
+
+[[scopes]]
+name = "Calendars.ReadWrite"
+description = "Read and write calendars"
+
+[[scopes]]
+name = "Files.Read"
+description = "Read files"

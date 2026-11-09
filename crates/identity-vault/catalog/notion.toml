@@ -1,0 +1,11 @@
+# AG-39: Notion public integrations; capabilities are set on the integration, not as scopes.
+# Source: developers.notion.com/docs/authorization
+id = "notion"
+display_name = "Notion"
+authorization_endpoint = "https://api.notion.com/v1/oauth/authorize"
+token_endpoint = "https://api.notion.com/v1/oauth/token"
+refresh = "none"
+pkce = false
+
+[authorize_params]
+owner = "user"

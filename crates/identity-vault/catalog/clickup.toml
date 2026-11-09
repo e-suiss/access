@@ -1,0 +1,8 @@
+# AG-39: ClickUp; permissions are the workspaces the person picks, tokens do not expire.
+# Source: developer.clickup.com/docs/authentication
+id = "clickup"
+display_name = "ClickUp"
+authorization_endpoint = "https://app.clickup.com/api"
+token_endpoint = "https://api.clickup.com/api/v2/oauth/token"
+refresh = "none"
+pkce = false

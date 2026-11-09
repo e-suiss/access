@@ -1,0 +1,22 @@
+# AG-39: Shopify, per shop; offline tokens do not expire.
+# Source: shopify.dev/docs/apps/build/authentication-authorization
+id = "shopify"
+display_name = "Shopify"
+authorization_endpoint = "https://{shop}.myshopify.com/admin/oauth/authorize"
+token_endpoint = "https://{shop}.myshopify.com/admin/oauth/access_token"
+refresh = "none"
+pkce = false
+scope_separator = ","
+placeholders = ["shop"]
+
+[[scopes]]
+name = "read_products"
+description = "Read products"
+
+[[scopes]]
+name = "write_products"
+description = "Create and edit products"
+
+[[scopes]]
+name = "read_orders"
+description = "Read orders"

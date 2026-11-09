@@ -1,0 +1,41 @@
+# AG-39: Google APIs for Gmail, Calendar and Drive.
+# Source: developers.google.com/identity/protocols/oauth2/web-server
+id = "google"
+display_name = "Google"
+authorization_endpoint = "https://accounts.google.com/o/oauth2/v2/auth"
+token_endpoint = "https://oauth2.googleapis.com/token"
+revocation_endpoint = "https://oauth2.googleapis.com/revoke"
+lifetime_s = 3600
+refresh = "reusable"
+
+[authorize_params]
+access_type = "offline"
+prompt = "consent"
+
+[[scopes]]
+name = "https://www.googleapis.com/auth/gmail.readonly"
+description = "Gmail: read messages and settings"
+
+[[scopes]]
+name = "https://www.googleapis.com/auth/gmail.send"
+description = "Gmail: send messages"
+
+[[scopes]]
+name = "https://www.googleapis.com/auth/gmail.modify"
+description = "Gmail: read, compose and send, without permanent deletion"
+
+[[scopes]]
+name = "https://www.googleapis.com/auth/calendar.readonly"
+description = "Calendar: read calendars and events"
+
+[[scopes]]
+name = "https://www.googleapis.com/auth/calendar.events"
+description = "Calendar: view and edit events"
+
+[[scopes]]
+name = "https://www.googleapis.com/auth/drive.readonly"
+description = "Drive: read files"
+
+[[scopes]]
+name = "https://www.googleapis.com/auth/drive.file"
+description = "Drive: files the app created or the person opened with it"

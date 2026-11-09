@@ -1,0 +1,19 @@
+# AG-39: Zendesk, per subdomain. Source: developer.zendesk.com/api-reference/ticketing/oauth
+id = "zendesk"
+display_name = "Zendesk"
+authorization_endpoint = "https://{subdomain}.zendesk.com/oauth/authorizations/new"
+token_endpoint = "https://{subdomain}.zendesk.com/oauth/tokens"
+refresh = "none"
+placeholders = ["subdomain"]
+
+[[scopes]]
+name = "read"
+description = "Read everything the person can"
+
+[[scopes]]
+name = "tickets:read"
+description = "Read tickets"
+
+[[scopes]]
+name = "tickets:write"
+description = "Create and edit tickets"

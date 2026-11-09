@@ -1,0 +1,20 @@
+# AG-39: Asana. Source: developers.asana.com/docs/oauth
+id = "asana"
+display_name = "Asana"
+authorization_endpoint = "https://app.asana.com/-/oauth_authorize"
+token_endpoint = "https://app.asana.com/-/oauth_token"
+revocation_endpoint = "https://app.asana.com/-/oauth_revoke"
+lifetime_s = 3600
+refresh = "reusable"
+
+[[scopes]]
+name = "tasks:read"
+description = "Read tasks"
+
+[[scopes]]
+name = "tasks:write"
+description = "Create and edit tasks"
+
+[[scopes]]
+name = "projects:read"
+description = "Read projects"

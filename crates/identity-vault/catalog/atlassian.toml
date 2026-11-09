@@ -1,0 +1,36 @@
+# AG-39: Atlassian Cloud OAuth 2.0 (3LO) for Jira and Confluence; no RFC 7009 endpoint.
+# Source: developer.atlassian.com/cloud/jira/platform/oauth-2-3lo-apps
+id = "atlassian"
+display_name = "Atlassian (Jira, Confluence)"
+authorization_endpoint = "https://auth.atlassian.com/authorize"
+token_endpoint = "https://auth.atlassian.com/oauth/token"
+lifetime_s = 3600
+refresh = "rotating"
+
+[authorize_params]
+audience = "api.atlassian.com"
+prompt = "consent"
+
+[[scopes]]
+name = "offline_access"
+description = "Keep access while the person is away (refresh)"
+
+[[scopes]]
+name = "read:jira-work"
+description = "Jira: read issues and projects"
+
+[[scopes]]
+name = "write:jira-work"
+description = "Jira: create and edit issues"
+
+[[scopes]]
+name = "read:jira-user"
+description = "Jira: read people"
+
+[[scopes]]
+name = "read:confluence-content.all"
+description = "Confluence: read pages and blog posts"
+
+[[scopes]]
+name = "write:confluence-content"
+description = "Confluence: create and edit pages"

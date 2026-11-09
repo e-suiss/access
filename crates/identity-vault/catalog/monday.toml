@@ -1,0 +1,19 @@
+# AG-39: monday.com; tokens do not expire. Source: developer.monday.com/apps/docs/oauth
+id = "monday"
+display_name = "monday.com"
+authorization_endpoint = "https://auth.monday.com/oauth2/authorize"
+token_endpoint = "https://auth.monday.com/oauth2/token"
+refresh = "none"
+pkce = false
+
+[[scopes]]
+name = "me:read"
+description = "Read the person's profile"
+
+[[scopes]]
+name = "boards:read"
+description = "Read boards"
+
+[[scopes]]
+name = "boards:write"
+description = "Create and edit boards"

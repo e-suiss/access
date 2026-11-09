@@ -1,0 +1,25 @@
+# AG-39: Linear. Source: linear.app/developers/oauth-2-0-authentication
+id = "linear"
+display_name = "Linear"
+authorization_endpoint = "https://linear.app/oauth/authorize"
+token_endpoint = "https://api.linear.app/oauth/token"
+revocation_endpoint = "https://api.linear.app/oauth/revoke"
+lifetime_s = 86399
+refresh = "rotating"
+scope_separator = ","
+
+[[scopes]]
+name = "read"
+description = "Read the workspace"
+
+[[scopes]]
+name = "write"
+description = "Write to the workspace"
+
+[[scopes]]
+name = "issues:create"
+description = "Create issues"
+
+[[scopes]]
+name = "comments:create"
+description = "Create comments"

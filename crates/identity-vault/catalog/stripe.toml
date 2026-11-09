@@ -1,0 +1,16 @@
+# AG-39: Stripe Connect OAuth; access tokens do not expire and deauthorization is its own API.
+# Source: docs.stripe.com/connect/oauth-reference
+id = "stripe"
+display_name = "Stripe"
+authorization_endpoint = "https://connect.stripe.com/oauth/authorize"
+token_endpoint = "https://connect.stripe.com/oauth/token"
+refresh = "reusable"
+pkce = false
+
+[[scopes]]
+name = "read_only"
+description = "Read the account's data"
+
+[[scopes]]
+name = "read_write"
+description = "Read and change the account's data"

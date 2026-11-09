@@ -1,0 +1,8 @@
+# AG-39: Intercom; permissions are set on the app and tokens do not expire.
+# Source: developers.intercom.com/docs/build-an-integration/learn-more/authentication
+id = "intercom"
+display_name = "Intercom"
+authorization_endpoint = "https://app.intercom.com/oauth"
+token_endpoint = "https://api.intercom.io/auth/eagle/token"
+refresh = "none"
+pkce = false

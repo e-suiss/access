@@ -1,0 +1,35 @@
+[package]
+name = "access-identity-vault"
+description = "Token vault of the identity plane (MD-13, OP-154 m.3 (t)): upstream Resources and their catalog as data, connected accounts, TokenSets sealed under the person's key, and the release that only an allowed Exercise opens."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-crypto = { workspace = true }
+access-identity-account = { workspace = true }
+access-identity-federation = { workspace = true }
+access-identity-oauth = { workspace = true }
+access-internal-api = { workspace = true }
+access-kernel = { workspace = true }
+access-store = { workspace = true }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+suiss-crypto = { workspace = true, features = ["aead"] }
+thiserror = { workspace = true }
+toml = { workspace = true, features = ["std", "parse", "serde"] }
+tracing = { workspace = true, features = ["std"] }
+zeroize = { workspace = true, features = ["alloc", "std"] }
+
+[dev-dependencies]
+access-crypto = { workspace = true, features = ["testing"] }
+access-identity-account = { workspace = true, features = ["testing"] }
+access-store = { workspace = true, features = ["testing"] }
+suiss-crypto = { workspace = true, features = ["aead", "testing"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,25 @@
+# AG-39: Slack OAuth v2; tokens do not expire unless token rotation is on, and revocation is
+# auth.revoke, not RFC 7009. Source: api.slack.com/authentication/oauth-v2
+id = "slack"
+display_name = "Slack"
+authorization_endpoint = "https://slack.com/oauth/v2/authorize"
+token_endpoint = "https://slack.com/api/oauth.v2.access"
+refresh = "none"
+pkce = false
+scope_separator = ","
+
+[[scopes]]
+name = "channels:read"
+description = "View basic information about public channels"
+
+[[scopes]]
+name = "channels:history"
+description = "View messages in public channels"
+
+[[scopes]]
+name = "chat:write"
+description = "Send messages"
+
+[[scopes]]
+name = "users:read"
+description = "View people in the workspace"

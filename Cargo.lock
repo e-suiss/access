@@ -452,6 +452,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-identity-vault"
+version = "0.4.0"
+dependencies = [
+ "access-crypto",
+ "access-identity-account",
+ "access-identity-federation",
+ "access-identity-oauth",
+ "access-internal-api",
+ "access-store",
+ "esuiss-access-kernel",
+ "esuiss-crypto",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "toml 1.1.6+spec-1.1.0",
+ "tracing",
+ "zeroize",
+]
+
+[[package]]
 name = "access-identity-webauthn"
 version = "0.4.0"
 dependencies = [
