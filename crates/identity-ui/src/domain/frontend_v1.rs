@@ -66,7 +66,7 @@ pub enum Owner {
     L1,
     /// Stage 9 L4: workload Instances and runtime attestation.
     L4,
-    /// Stage 10 P2: the SAML 2.0 IdP and WS-Federation, forwarded to the SAML gateway
+    /// Stage 10 P2: the SAML 2.0 identity provider and WS-Federation, forwarded to the SAML gateway
     /// (OP-155 m.2).
     P2,
     /// Stage 10 P3: the SCIM 2.0 server.

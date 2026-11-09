@@ -265,6 +265,10 @@ fn auth_methods(served: &Served) -> Vec<&'static str> {
 
 /// The AS metadata of the realm `issuer` with what is known about the realm (`facts`).
 #[must_use]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one metadata member after another, each behind its served flag"
+)]
 pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFacts) -> String {
     let mut m = Map::new();
     m.insert("issuer".into(), issuer.as_str().into());

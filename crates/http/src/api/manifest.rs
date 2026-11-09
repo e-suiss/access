@@ -170,6 +170,10 @@ const ALL_LEN: usize = 2 + super::realm::ROWS.len() + super::platform::ROWS.len(
     clippy::indexing_slicing,
     reason = "evaluated at compile time; an out-of-range index fails the build"
 )]
+#[expect(
+    clippy::large_const_arrays,
+    reason = "composed at compile time into the manifest, which a static cannot be"
+)]
 const ALL: [Route; ALL_LEN] = {
     let mut out = [PLATFORM_ROOT; ALL_LEN];
     out[1] = REALM_ROOT;

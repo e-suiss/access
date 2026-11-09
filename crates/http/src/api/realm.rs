@@ -493,6 +493,10 @@ const BASE_LEN: usize = BASE.len();
     clippy::indexing_slicing,
     reason = "evaluated at compile time; an out-of-range index fails the build"
 )]
+#[expect(
+    clippy::large_const_arrays,
+    reason = "composed at compile time into the manifest, which a static cannot be"
+)]
 const ALL_ROWS: [Route; BASE_LEN + STAGE9.len() + STAGE10.len()] = {
     let mut out = [BASE[0]; BASE_LEN + STAGE9.len() + STAGE10.len()];
     let mut i = 0;
