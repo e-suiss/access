@@ -641,6 +641,13 @@
       "description": "A workload client names a SPIFFE ID or a whole-segment prefix ending in /*, an https Bundle Endpoint and its agent, and no redirect URI (OP-154 m.3 (r), §11.12.1)."
     },
     {
+      "code": "invalid-vault-resource",
+      "type": "urn:suiss:access:problem:invalid-vault-resource",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The vault Resource is malformed: an upstream the catalog does not have or an own upstream outside the catalog format, a client secret that is not a secret:// reference, a scope the upstream does not offer, a mapped action outside the Resource's scopes or in the access or idp namespaces, or an executor that is not a certificate thumbprint (OP-154 m.3 (t))."
+    },
+    {
       "code": "invalid-recovery-policy",
       "type": "urn:suiss:access:problem:invalid-recovery-policy",
       "status": 400,
