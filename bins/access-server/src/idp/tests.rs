@@ -50,6 +50,7 @@ use suiss_crypto::rotation::Policy;
 use super::*;
 use crate::testing::hsm;
 
+mod accounts;
 mod claims;
 mod extensions;
 mod governance;

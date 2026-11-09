@@ -372,7 +372,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 }
             }
             // OP-153 m.25 (b)
-            Change::AccountBind(_) | Change::MigrationExport(_) | Change::GuardianshipRecord(_) => {
+            Change::AccountBind(_) | Change::GuardianshipRecord(_) => {
                 return Err(AdminError::Refused(String::from(NOT_YET_SERVED)));
             }
             // TN-18, OP-153 m.3 (u)
@@ -398,7 +398,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 }
             }
             // TN-85, OP-153 m.19 (d), m.25 (b)
-            Change::LocaleOverrides(_) | Change::AccountImport(_) => {}
+            Change::LocaleOverrides(_) | Change::AccountImport(_) | Change::MigrationExport(_) => {}
             Change::RpId(rp) => {
                 let issuer = g
                     .issuer
@@ -1406,7 +1406,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 idp::set_branding(t, bound, &bytes).await?;
                 true
             }
-            Change::AccountBind(_) | Change::MigrationExport(_) | Change::GuardianshipRecord(_) => {
+            Change::AccountBind(_) | Change::GuardianshipRecord(_) => {
                 return Err(AdminError::Refused(String::from(NOT_YET_SERVED)));
             }
             Change::RelatedOrigins(r) => {
@@ -1496,6 +1496,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             Change::AccountDelete(_)
             | Change::AccountImport(_)
+            | Change::MigrationExport(_)
             | Change::OrgCreate(_)
             | Change::OrgInvite(_)
             | Change::OrgDomainClaim(_)

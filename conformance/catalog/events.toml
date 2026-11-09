@@ -161,6 +161,14 @@ fields = ["created", "legacy", "skipped"]
 ocsf = "application_lifecycle"
 
 [[event]]
+name = "accounts.exported"
+plane = "ops"
+severity = "info"
+since = "unreleased"
+fields = ["accounts"]
+ocsf = "application_lifecycle"
+
+[[event]]
 name = "login.succeeded"
 plane = "identity"
 severity = "info"

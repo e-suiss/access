@@ -1952,8 +1952,11 @@ async fn the_governing_domain_accepts_the_new_account_actions() {
             .admin()
             .prepare(&proposal(at, change.clone(), n, idp_anchor(d), 1))
             .await;
-        // TN-85, OP-153 m.19 (d)
-        if matches!(change, Change::AccountImport(_)) {
+        // TN-85, TN-86, OP-153 m.19 (d)
+        if matches!(
+            change,
+            Change::AccountImport(_) | Change::MigrationExport(_)
+        ) {
             assert!(prepared.is_ok(), "{label}");
         } else {
             assert!(

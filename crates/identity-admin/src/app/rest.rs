@@ -141,6 +141,8 @@ pub enum Op {
     PutLocaleOverrides,
     /// `importAccounts`: `idp.account.import` over a file the body carries (TN-85, OP-153 m.19 (d)).
     ImportAccounts,
+    /// `exportAccounts`: `idp.account.migration_export`, reserved (TN-86, OP-153 m.19 (d)).
+    ExportAccounts,
 }
 
 impl Op {
@@ -196,6 +198,7 @@ impl Op {
             "putRelatedOrigins" => Self::PutRelatedOrigins,
             "putLocaleOverrides" => Self::PutLocaleOverrides,
             "importAccounts" => Self::ImportAccounts,
+            "exportAccounts" => Self::ExportAccounts,
             _ => return None,
         })
     }
@@ -752,6 +755,13 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     .and_then(Json::as_u64)
                     .and_then(|n| u32::try_from(n).ok())
                     .ok_or(Invalid::Body)?,
+            })
+        }
+        // TN-86, OP-153 m.19 (d), m.25 (b)
+        Op::ExportAccounts => {
+            only(m, &["recipient"])?;
+            Change::MigrationExport(crate::domain::accounts::MigrationExport {
+                recipient: b64url_decode(text(m, "recipient")?).map_err(|_| Invalid::Body)?,
             })
         }
         // OP-153 m.22 (g), m.25 (b)

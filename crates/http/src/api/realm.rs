@@ -192,6 +192,12 @@ pub const ROWS: &[Route] = &[
         "importAccounts",
         "Imports accounts from another identity provider (idp.account.import, TN-85): `content` is the JSON Lines file of `access-server import-accounts`, `file` its SHA-256 and `accounts` its line count, which the signed change names; each line becomes its own account or is reported as skipped, never echoed.",
     ),
+    secret(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/accounts/migration-export",
+        "exportAccounts",
+        "Exports every active account to another deployment (idp.account.migration_export, reserved, TN-86): sealed to the P-256 `recipient` key (SEC1, base64url) it names; the `bundle` (dCBOR, base64url) is shown once and holds the import lines that deployment's importAccounts takes.",
+    ),
     write(
         Verb::Post,
         "/admin/v1/realms/{slug}/accounts/{account_id}/suspend",
@@ -724,7 +730,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "claimOrganizationDomain"
         | "releaseOrganizationDomain"
         | "draftOrganizationConnection"
-        | "importAccounts" => (Accounts, w(false)),
+        | "importAccounts"
+        | "exportAccounts" => (Accounts, w(false)),
         "listUpstreamIdps" => (UpstreamIdps, Shape::List(&["name", "issuer", "status"])),
         "getUpstreamIdp" => (UpstreamIdps, Shape::Get),
         "putUpstreamIdp" => (UpstreamIdps, w(true)),

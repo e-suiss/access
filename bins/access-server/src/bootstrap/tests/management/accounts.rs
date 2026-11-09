@@ -60,3 +60,48 @@ async fn an_import_file_named_by_its_digest_imports_through_admin_rest() {
         before["items"].as_array().unwrap().len() + 2
     );
 }
+
+// TN-85, TN-86, OP-153 m.19 (d), m.25 (b), (i)
+#[tokio::test]
+async fn a_migration_export_through_admin_rest_opens_for_its_recipient_only() {
+    let c = console("rest-export", false).await;
+    let content = r#"{"email":"exp.rest@example.com","legacy_idp_reference":"r-9"}"#;
+    let imported = c
+        .rest_write(
+            &Method::POST,
+            "/admin/v1/realms/acme/accounts/import",
+            ("importAccounts", None),
+            import_body(content),
+            None,
+        )
+        .await;
+    assert_eq!(imported.status, StatusCode::OK, "{}", imported.body);
+    let key = access_crypto::migration_bundle::RecipientKey::generate().unwrap();
+    let target = "/admin/v1/realms/acme/accounts/migration-export";
+    let bad = c
+        .rest_write(
+            &Method::POST,
+            target,
+            ("exportAccounts", None),
+            serde_json::json!({ "recipient": b64url_encode(&[2; 33]) }),
+            None,
+        )
+        .await;
+    assert_eq!(bad.status, StatusCode::BAD_REQUEST, "{}", bad.body);
+    let done = c
+        .rest_write(
+            &Method::POST,
+            target,
+            ("exportAccounts", None),
+            serde_json::json!({ "recipient": b64url_encode(&key.public().unwrap()) }),
+            None,
+        )
+        .await;
+    assert_eq!(done.status, StatusCode::OK, "{}", done.body);
+    assert!(done.body.get("resource").is_none());
+    let bundle = b64url_decode(done.body["bundle"].as_str().unwrap()).unwrap();
+    let lines = access_identity_admin::app::accounts::open_bundle(&bundle, &key).unwrap();
+    assert_eq!(lines, format!("{content}\n"));
+    let other = access_crypto::migration_bundle::RecipientKey::generate().unwrap();
+    assert!(access_identity_admin::app::accounts::open_bundle(&bundle, &other).is_err());
+}

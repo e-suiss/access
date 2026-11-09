@@ -440,9 +440,18 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             statement.basis,
             statement.capacity,
         );
-        // TN-85, OP-153 m.19 (d)
+        // TN-85, TN-86, OP-153 m.19 (d)
         let mut report = None;
-        let applied = if matches!(compiled.change, Change::AccountImport(_)) {
+        let mut bundle = None;
+        let applied = if matches!(compiled.change, Change::MigrationExport(_)) {
+            match Box::pin(admin.export_accounts(&proposal, caller.ais)).await {
+                Ok((a, b)) => {
+                    bundle = b.map(|b| access_kernel::json::b64url_encode(&b));
+                    Ok(a)
+                }
+                Err(e) => Err(e),
+            }
+        } else if matches!(compiled.change, Change::AccountImport(_)) {
             let content = compiled
                 .body
                 .get("content")
@@ -472,8 +481,10 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             Some(r) => serde_json::to_value(&r)
                 .ok()
                 .map(|body| Item { body, version: 0 }),
+            None if bundle.is_some() => None,
             None => self.after(&ids, &compiled, &w).await,
         };
+        let secret = secret.or(bundle);
         Ok(Written::Committed {
             exercise_id,
             position,

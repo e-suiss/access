@@ -5,6 +5,7 @@ pub mod binding;
 pub mod breach;
 pub mod claims;
 pub mod events;
+pub mod export;
 pub mod external;
 pub mod hasher;
 pub mod import;
