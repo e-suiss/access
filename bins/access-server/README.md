@@ -3,7 +3,8 @@
 The Access server: the authority plane and the identity plane in one process. It reads its
 configuration, opens its database pools and its PKCS#11 token, locks itself down (Landlock and
 seccomp) and serves three listeners: the public one (ADP, the realms' OAuth and OpenID endpoints,
-the hosted login, the Frontend and product APIs), the management one (`/admin/v1/*` and the
+the hosted login, the Frontend and product APIs, and the protocol gateways' edge channel on
+`/edge/v1/*`, open only to a registered gateway's client certificate), the management one (`/admin/v1/*` and the
 console) and the internal one (`/livez`, `/readyz`, `/healthz`, `/metrics`).
 
 ```

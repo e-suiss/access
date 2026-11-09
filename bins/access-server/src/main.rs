@@ -16,6 +16,7 @@ mod checkpoints;
 mod claims;
 mod config;
 mod console;
+mod edge;
 mod events;
 mod idp;
 mod ids;
@@ -1452,6 +1453,7 @@ async fn serve(
     let (platform_outbound, platform_keks) = (prepared.outbound.clone(), keks.clone());
     let admin_keks = keks.clone();
     let claim_keks = keks.clone();
+    let edge_keks = keks.clone();
     let platform_pools = event_pools(&all, &cell_ids, &prepared.outbound);
     // TN-135, OP-151 m.3 (j)
     let hooks = oauth::hooks(all.app.clone(), prepared.outbound.clone(), keks.clone());
@@ -1483,6 +1485,8 @@ async fn serve(
     )?;
     let tenants_pool = router_pool.clone();
     let sandbox_pool = router_pool.clone();
+    // OP-155 m.3 (c), IDI-11
+    let edge_calls = edge::routes(router_pool.clone(), app.clone(), edge_keks);
     let realms = identity(config, router_pool, app.clone(), prepared.tls_names.clone()).await?;
     // OP-67 m.3, OP-138
     background.jwks.set(true);
@@ -1628,6 +1632,7 @@ async fn serve(
             .merge(sign_in.merge(me))
             .merge(account_pages)
             .merge(authorize)
+            .merge(edge_calls)
             .merge(declared(&Declarations::of(config.provider))),
     );
     let served = listen(

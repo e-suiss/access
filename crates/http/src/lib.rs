@@ -8,6 +8,7 @@ pub mod api;
 pub mod audit;
 pub mod console;
 pub mod declarations;
+pub mod edge;
 pub mod ingest;
 pub mod internal;
 pub mod login;
@@ -97,6 +98,8 @@ pub fn harden(routes: Router, limits: Limits) -> Router {
             StatusCode::SERVICE_UNAVAILABLE,
             limits.request_timeout,
         ))
+        // IDI-11, P-ID-5
+        .layer(axum::middleware::from_fn(edge::confine))
         // TN-113
         .layer(axum::middleware::from_fn(path::canonical))
         // RFC 9113 §8.3.1

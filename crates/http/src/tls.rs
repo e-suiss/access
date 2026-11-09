@@ -228,6 +228,11 @@ pub async fn serve(
                 Some(chain) => app.layer(Extension(chain)),
                 None => app,
             };
+            // OP-155 m.3 (c)
+            let app = match gateway(tls.get_ref().1) {
+                Some(gateway) => app.layer(Extension(gateway)),
+                None => app,
+            };
             let service = TowerToHyperService::new(match pep(tls.get_ref().1) {
                 Some(pep) => app.layer(Extension(pep)),
                 None => app,
@@ -254,11 +259,16 @@ fn svid_chain(conn: &rustls::ServerConnection) -> Option<ClientChain> {
     ))
 }
 
+/// The protocol gateway the verified client certificate names (OP-155 m.3 (c)).
+fn gateway(conn: &rustls::ServerConnection) -> Option<crate::edge::GatewayCert> {
+    crate::edge::gateway_cert(conn.peer_certificates()?.first()?.as_ref())
+}
+
 /// The PEP named by the verified client certificate: the base64url SHA-256 of the leaf, as
-/// RFC 8705 `x5t#S256` (OP-141 m.18 (b)). An X.509-SVID names no PEP.
+/// RFC 8705 `x5t#S256` (OP-141 m.18 (b)). An X.509-SVID or a gateway names no PEP (IDI-11).
 fn pep(conn: &rustls::ServerConnection) -> Option<Pep> {
     let leaf = conn.peer_certificates()?.first()?;
-    if svid_leaf(leaf.as_ref()) {
+    if svid_leaf(leaf.as_ref()) || crate::edge::gateway_cert(leaf.as_ref()).is_some() {
         return None;
     }
     Some(Pep(b64url_encode(&suiss_crypto::digest::sha256(

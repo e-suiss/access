@@ -282,6 +282,19 @@ pub fn verify_x509(
     })
 }
 
+/// The one `uniformResourceIdentifier` of a certificate's subjectAltName; `None` when it has
+/// none, more than one, or does not parse. Read after TLS verified the chain (OP-155 m.3 (c):
+/// a gateway's identity).
+#[must_use]
+pub fn x509_uri(leaf: &[u8]) -> Option<String> {
+    let cert = Cert::parse(leaf).ok()?;
+    let uris = cert.san_uris().ok()?;
+    let [uri] = uris.as_slice() else {
+        return None;
+    };
+    Some(String::from(*uri))
+}
+
 /// The SPIFFE ID an X.509-SVID names, read before its trust domain's bundle is fetched;
 /// nothing is verified yet.
 ///

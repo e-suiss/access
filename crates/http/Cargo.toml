@@ -16,6 +16,8 @@ access-identity-events = { workspace = true }
 access-identity-federation = { workspace = true }
 access-identity-oauth = { workspace = true }
 access-identity-attest = { workspace = true }
+access-identity-account = { workspace = true }
+access-identity-edge = { workspace = true }
 access-identity-session = { workspace = true }
 access-identity-ui = { workspace = true }
 access-identity-vault = { workspace = true }
