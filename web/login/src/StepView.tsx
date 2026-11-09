@@ -14,7 +14,7 @@ import type {
   UiNode,
 } from "./contract.js";
 import { LOGIN, under } from "./base.js";
-import { follow } from "./http.js";
+import { follow, returnTo } from "./http.js";
 import { t, text } from "./i18n.js";
 import {
   conditionalCreateAvailable,
@@ -203,7 +203,8 @@ export function StepView({ ui, busy, onSubmit }: Props) {
     const signals = ui.nodes.flatMap((n) => (n.type === "passkey_signal" ? [n.signal] : []));
     for (const s of signals) if (s.kind === "unknown_credential") refused.add(s.credential_id);
     void Promise.all(signals.map(sendSignal)).then(async () => {
-      if (ui.step !== "complete" || ui.redirect_to === undefined) return;
+      const target = ui.step === "complete" ? (returnTo() ?? ui.redirect_to) : undefined;
+      if (target === undefined) return;
       if (create?.mediation === "explicit") return;
       // §10.2.4
       if (create?.mediation === "conditional" && (await conditionalCreateAvailable())) {
@@ -217,7 +218,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
           return;
         }
       }
-      follow(ui.redirect_to);
+      follow(target);
     });
   }, [ui, create, onSubmit]);
 

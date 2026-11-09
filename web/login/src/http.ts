@@ -64,3 +64,22 @@ export function follow(target: string): void {
   const url = new URL(target, window.location.origin);
   if (url.protocol === "https:" || url.protocol === "http:") window.location.assign(url.href);
 }
+
+/** The authorization request that sent the browser to this page, when `return_to` names this
+ * realm's own `/authorize` on this origin (TN-104, X41); otherwise `null`. */
+export function returnTo(): string | null {
+  const raw = new URL(window.location.href).searchParams.get("return_to");
+  if (raw === null) return null;
+  try {
+    const url = new URL(raw, window.location.origin);
+    const base = window.location.pathname.replace(/\/login(?:\/.*)?$/, "");
+    const ok =
+      url.origin === window.location.origin &&
+      url.pathname === `${base}/authorize` &&
+      url.search.length > 1 &&
+      url.hash === "";
+    return ok ? url.href : null;
+  } catch {
+    return null;
+  }
+}

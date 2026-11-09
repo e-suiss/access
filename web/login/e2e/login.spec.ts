@@ -116,3 +116,27 @@ test("a plain sign-in never asks for a step-up", async ({ page, mock }) => {
   await expect(page.getByLabel("Email or username")).toBeVisible();
   expect(mock.requests).not.toContain("POST /v1/login/step-up");
 });
+
+// TN-104, X41
+test("a completed sign-in returns to the authorization request that sent it, and only to this realm's", async ({
+  page,
+  mock,
+}) => {
+  await page.route("**/authorize?**", (r) => r.fulfill({ status: 200, body: "authorize" }));
+  for (const [returnTo, back] of [
+    ["/authorize?client_id=cli_x&request_uri=urn", true],
+    ["https://evil.example/authorize?client_id=cli_x", false],
+    ["/other?client_id=cli_x", false],
+  ] as const) {
+    await page.goto(`/login?return_to=${encodeURIComponent(returnTo)}`);
+    await page.getByLabel("Email or username").fill("ada@example.org");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await page.getByLabel("Code from your authenticator app").fill(totp);
+    await page.getByRole("button", { name: "Verify" }).click();
+    if (back) await expect(page).toHaveURL(/\/authorize\?client_id=cli_x&request_uri=urn$/);
+    else await expect(page.getByRole("heading", { name: "Signed in" })).toBeVisible();
+    mock.submissions.length = 0;
+  }
+});
