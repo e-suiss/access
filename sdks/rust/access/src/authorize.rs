@@ -621,10 +621,10 @@ impl Pep {
     }
 }
 
-struct Out(String);
+pub(crate) struct Out(pub(crate) String);
 
 impl Out {
-    fn text(&mut self, s: &str) {
+    pub(crate) fn text(&mut self, s: &str) {
         self.0.push('"');
         for c in s.chars() {
             match c {
@@ -642,39 +642,39 @@ impl Out {
         self.0.push('"');
     }
 
-    fn key(&mut self, k: &str) {
+    pub(crate) fn key(&mut self, k: &str) {
         self.text(k);
         self.0.push(':');
     }
 
-    fn bytes(&mut self, b: &[u8]) {
+    pub(crate) fn bytes(&mut self, b: &[u8]) {
         self.text(&b64url_encode(b));
     }
 
-    fn uint(&mut self, n: u64) {
+    pub(crate) fn uint(&mut self, n: u64) {
         let _ = write!(self.0, "{n}");
     }
 
-    fn int(&mut self, n: i64) {
+    pub(crate) fn int(&mut self, n: i64) {
         let _ = write!(self.0, "{n}");
     }
 
-    fn id(&mut self, id: &Id) {
+    pub(crate) fn id(&mut self, id: &Id) {
         self.bytes(&id.0);
     }
 
-    fn digest(&mut self, d: &Digest) {
+    pub(crate) fn digest(&mut self, d: &Digest) {
         self.bytes(&d.0);
     }
 
-    fn comma(&mut self, first: &mut bool) {
+    pub(crate) fn comma(&mut self, first: &mut bool) {
         if !*first {
             self.0.push(',');
         }
         *first = false;
     }
 
-    fn action(&mut self, a: &ActionRef) {
+    pub(crate) fn action(&mut self, a: &ActionRef) {
         self.0.push('{');
         self.key("namespace");
         self.text(&a.namespace);
@@ -690,7 +690,7 @@ impl Out {
         self.0.push('}');
     }
 
-    fn resource(&mut self, r: &ResourceRef) {
+    pub(crate) fn resource(&mut self, r: &ResourceRef) {
         self.0.push('{');
         self.key("namespace");
         self.text(&r.namespace);
@@ -709,7 +709,7 @@ impl Out {
         self.0.push('}');
     }
 
-    fn purpose(&mut self, p: &PurposeRef) {
+    pub(crate) fn purpose(&mut self, p: &PurposeRef) {
         self.0.push('{');
         match p {
             PurposeRef::Code(c) => {
@@ -728,7 +728,7 @@ impl Out {
         self.0.push('}');
     }
 
-    fn param(&mut self, v: &ParamValue) {
+    pub(crate) fn param(&mut self, v: &ParamValue) {
         self.0.push('{');
         match v {
             ParamValue::Enum(s) => {
@@ -797,7 +797,7 @@ impl Out {
         self.0.push('}');
     }
 
-    fn window(&mut self, from: u64, until: u64) {
+    pub(crate) fn window(&mut self, from: u64, until: u64) {
         self.0.push('{');
         self.key("from");
         self.uint(from);
@@ -807,7 +807,7 @@ impl Out {
         self.0.push('}');
     }
 
-    fn envelope(&mut self, e: &IntentEnvelope) {
+    pub(crate) fn envelope(&mut self, e: &IntentEnvelope) {
         self.0.push('{');
         self.key("action");
         self.action(&e.action);
@@ -893,7 +893,7 @@ impl Out {
         self.0.push('}');
     }
 
-    fn basis(&mut self, b: &ExerciseBasis) {
+    pub(crate) fn basis(&mut self, b: &ExerciseBasis) {
         self.0.push('{');
         match b {
             ExerciseBasis::Anchor(id) => {
@@ -929,6 +929,13 @@ impl Out {
 /// (L1-ADP-8).
 #[must_use]
 pub fn adp_body(request: &ExerciseRequest<'_>) -> Option<String> {
+    let mut out = adp_open(request)?;
+    out.0.push_str("}}");
+    Some(out.0)
+}
+
+/// [`adp_body`] without its two closing braces, so a caller can add `context` members.
+pub(crate) fn adp_open(request: &ExerciseRequest<'_>) -> Option<Out> {
     let envelope = request.envelope?;
     let primary = envelope.resources.first()?;
     let mut out = Out(String::new());
@@ -989,6 +996,5 @@ pub fn adp_body(request: &ExerciseRequest<'_>) -> Option<String> {
         out.key("exercise");
         out.digest(e);
     }
-    out.0.push_str("}}");
-    Some(out.0)
+    Some(out)
 }

@@ -4,7 +4,8 @@
 //! single-flight. `authorize` and `resource` are the enforcement side: the policy enforcement
 //! point's half of an Access decision and the resource server's verification of an authority
 //! token. With the `mcp` feature, `mcp` makes an MCP server a resource server and the domain's
-//! PEP. It builds on the open Kernel and `esuiss-crypto` only and does no I/O: time, randomness,
+//! PEP. `agent` is the agent's side of a decision: the agent contract A-1 to A-12 and its A2A
+//! extension (OP-154 m.3 (w), (y)). It builds on the open Kernel and `esuiss-crypto` only and does no I/O: time, randomness,
 //! the decision point, keys, replay state, nonces, status lists and introspection are ports the
 //! caller supplies.
 //!
@@ -19,6 +20,7 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
+pub mod agent;
 pub mod auth;
 pub mod authorize;
 #[cfg(feature = "mcp")]
