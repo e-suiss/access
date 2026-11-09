@@ -1669,8 +1669,14 @@ export interface components {
             /** @description Display name. */
             display_name?: string;
             /** @enum {string} */
-            token_endpoint_auth_method?: "none" | "private_key_jwt" | "client_secret_basic";
+            token_endpoint_auth_method?: "none" | "private_key_jwt" | "client_secret_basic" | "spiffe_jwt" | "spiffe_x509";
             jwks_uri?: string | null;
+            /** @description A workload client's SPIFFE ID, or a whole-segment prefix ending in /*; any other wildcard selects nothing (OP-154 m.3 (r)). */
+            spiffe_id?: string;
+            /** @description The https Bundle Endpoint of the workload client's trust domain (OP-154 m.3 (r)). */
+            spiffe_bundle_endpoint?: string;
+            /** @description The agent Party whose Instances the workloads become, unpadded base64url (OP-154 m.3 (d)). */
+            agent?: string;
             redirect_uris?: string[];
             post_logout_redirect_uris?: string[];
             backchannel_logout_uri?: string | null;
