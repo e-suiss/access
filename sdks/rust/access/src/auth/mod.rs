@@ -6,7 +6,8 @@
 //! in-memory DPoP replay store for a resource server (§10.4.3).
 //!
 //! Every check fails closed: an unknown answer is a refusal, never a session (TI-9). SAML SP
-//! and MCP helpers belong to their protocol stages.
+//! helpers belong to their protocol stage; the MCP client helpers are in `mcp::client`
+//! (feature `mcp`).
 
 use alloc::string::String;
 use core::fmt::Write as _;

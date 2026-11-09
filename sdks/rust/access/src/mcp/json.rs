@@ -58,8 +58,9 @@ pub(crate) fn value(out: &mut String, v: &Json) {
     }
 }
 
-/// `v` as text.
-pub(crate) fn render(v: &Json) -> String {
+/// `v` as JSON text.
+#[must_use]
+pub fn render(v: &Json) -> String {
     let mut out = String::new();
     value(&mut out, v);
     out

@@ -17,6 +17,7 @@ pub mod cache;
 pub mod challenge;
 pub mod client;
 pub(crate) mod json;
+pub use json::render as render_json;
 pub mod listen;
 pub mod prm;
 pub mod server;

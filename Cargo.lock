@@ -1834,7 +1834,10 @@ dependencies = [
  "esuiss-access-kernel",
  "esuiss-access-sdk",
  "esuiss-crypto",
+ "futures-util",
  "miniz_oxide",
+ "rustls",
+ "rustls-pki-types",
  "thiserror",
  "tokio",
 ]

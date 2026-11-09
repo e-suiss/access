@@ -3,7 +3,8 @@
 //! (discovery, PKCE, `state`, `nonce`, ID token validation), DPoP proofs and the refresh
 //! single-flight. `authorize` and `resource` are the enforcement side: the policy enforcement
 //! point's half of an Access decision and the resource server's verification of an authority
-//! token. It builds on the open Kernel and `esuiss-crypto` only and does no I/O: time, randomness,
+//! token. With the `mcp` feature, `mcp` makes an MCP server a resource server and the domain's
+//! PEP. It builds on the open Kernel and `esuiss-crypto` only and does no I/O: time, randomness,
 //! the decision point, keys, replay state, nonces, status lists and introspection are ports the
 //! caller supplies.
 //!
