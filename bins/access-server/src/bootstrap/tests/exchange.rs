@@ -852,6 +852,57 @@ async fn an_exchange_writes_act_from_the_lineage_only() {
     assert_eq!(act_chain(&out), chain);
     assert!(!out.to_string().contains("mallory"));
 
+    // AG-22, §11.9.4, OP-154 m.3 (h), Ek B 4207
+    let (e, _) = r
+        .exercise(&r.a2, UPSTREAM, r.g2, Capacity::For(r.p.party), 16 * 60_000)
+        .await;
+    let long = encode_exercise(&e).unwrap();
+    let details = r.details();
+    let (_, body) = r
+        .token(
+            &r.a2,
+            &[
+                (
+                    "grant_type",
+                    "urn:ietf:params:oauth:grant-type:token-exchange",
+                ),
+                ("client_id", r.client.as_str()),
+                ("subject_token", forged.as_str()),
+                ("subject_token_type", JWT_TYPE),
+                ("resource", UPSTREAM),
+                ("authorization_details", details.as_str()),
+                ("access_exercise", long.as_str()),
+            ],
+        )
+        .await;
+    assert_eq!(body["access_error"], "projection-horizon", "{body}");
+
+    // AG-18, PI-11, P48, Ek B 4432
+    let (e, _) = r
+        .exercise(&r.a2, UPSTREAM, r.g2, Capacity::For(r.p.party), 200_000)
+        .await;
+    let bearer = HttpRequest::post(TOKEN)
+        .header(header::HOST, "access.test")
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from(form(&[
+            (
+                "grant_type",
+                "urn:ietf:params:oauth:grant-type:token-exchange",
+            ),
+            ("client_id", r.client.as_str()),
+            ("subject_token", subject.as_str()),
+            ("subject_token_type", ACCESS_TOKEN_TYPE),
+            ("resource", UPSTREAM),
+            ("authorization_details", details.as_str()),
+            ("access_exercise", encode_exercise(&e).unwrap().as_str()),
+        ])))
+        .unwrap();
+    let answer = r.oauth.clone().oneshot(bearer).await.unwrap();
+    assert_eq!(answer.status(), StatusCode::BAD_REQUEST);
+    let refused: JsonValue =
+        serde_json::from_slice(&to_bytes(answer.into_body(), 1 << 20).await.unwrap()).unwrap();
+    assert_eq!(refused["error"], "invalid_dpop_proof", "{refused}");
+
     // §11.10.2, Ek B 4395
     let other = r.subject_token(ISSUER).await;
     let (status, body) = r
