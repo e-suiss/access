@@ -14,6 +14,7 @@
 use std::collections::BTreeSet;
 use std::time::Duration;
 
+use access_identity_admin::domain::Change;
 use access_identity_oauth::adapters::clients::{CachePolicy, HttpClientKeys};
 use access_identity_oauth::adapters::oauth::PgOAuth;
 use access_identity_oauth::adapters::outbound::Outbound;
@@ -1191,12 +1192,86 @@ async fn transaction_tokens_are_audit_context_and_id_jags_need_a_strong_client()
     );
     let sig = key.sign(&SystemRandom::new(), input.as_bytes()).unwrap();
     let assertion = format!("{input}.{}", b64url_encode(sig.as_ref()));
+    let fresh = || {
+        let claims = json!({
+            "iss": id, "sub": id, "aud": ISSUER, "iat": now_s, "exp": now_s + 60,
+            "jti": b64url_encode(&nonce16()),
+        });
+        let input = format!(
+            "{}.{}",
+            b64url_encode(header.to_string().as_bytes()),
+            b64url_encode(claims.to_string().as_bytes())
+        );
+        let sig = key.sign(&SystemRandom::new(), input.as_bytes()).unwrap();
+        format!("{input}.{}", b64url_encode(sig.as_ref()))
+    };
     let (e, _) = r
         .exercise(&r.a2, UPSTREAM, r.g2, Capacity::For(r.p.party), 200_000)
         .await;
     let exercise = encode_exercise(&e).unwrap();
     let details = r.details();
     let resource_as = "https://as.upstream.access.test";
+    let ask = |exercise: String, assertion: String| {
+        let (id, details, subject) = (id.clone(), details.clone(), subject.clone());
+        let r = &r;
+        async move {
+            r.token(
+                &r.a2,
+                &[
+                    (
+                        "grant_type",
+                        "urn:ietf:params:oauth:grant-type:token-exchange",
+                    ),
+                    (
+                        "client_assertion_type",
+                        "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+                    ),
+                    ("client_assertion", assertion.as_str()),
+                    ("client_id", id.as_str()),
+                    ("subject_token", subject.as_str()),
+                    ("subject_token_type", ACCESS_TOKEN_TYPE),
+                    (
+                        "requested_token_type",
+                        "urn:ietf:params:oauth:token-type:id-jag",
+                    ),
+                    ("audience", resource_as),
+                    ("resource", UPSTREAM),
+                    ("scope", "work.approve"),
+                    ("authorization_details", details.as_str()),
+                    ("access_exercise", exercise.as_str()),
+                ],
+            )
+            .await
+        }
+    };
+    // AG-28, OP-154 m.3 (n), Ek B 4191
+    let (status, refused) = ask(exercise.clone(), fresh()).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{refused}");
+    assert_eq!(refused["error"], "invalid_target", "{refused}");
+    r.cross_app(Change::CrossAppConnection(
+        access_identity_admin::domain::CrossAppConnection {
+            name: String::from("upstream"),
+            client_id: id.clone(),
+            audience: String::from("https://as.upstream.access.test/other"),
+            resource: String::from(UPSTREAM),
+            scopes: vec![String::from("work.approve")],
+        },
+    ))
+    .await;
+    let (status, refused) = ask(exercise.clone(), fresh()).await;
+    assert_eq!(refused["error"], "invalid_target", "{status} {refused}");
+    r.cross_app(Change::CrossAppConnectionRetire(String::from("upstream")))
+        .await;
+    r.cross_app(Change::CrossAppConnection(
+        access_identity_admin::domain::CrossAppConnection {
+            name: String::from("upstream"),
+            client_id: id.clone(),
+            audience: String::from(resource_as),
+            resource: String::from(UPSTREAM),
+            scopes: vec![String::from("work.approve")],
+        },
+    ))
+    .await;
     let (status, body) = r
         .token(
             &r.a2,
@@ -1242,5 +1317,46 @@ async fn transaction_tokens_are_audit_context_and_id_jags_need_a_strong_client()
     assert!(c["exp"].as_u64().unwrap() - c["iat"].as_u64().unwrap() <= 300);
     for authority in ["authorization_details", "act", "cnf", "access_contract"] {
         assert!(c.get(authority).is_none(), "{authority} in {c}");
+    }
+
+    // OP-73, Ek B 4191
+    r.cross_app(Change::CrossAppConnectionRetire(String::from("upstream")))
+        .await;
+    let (e, _) = r
+        .exercise(&r.a2, UPSTREAM, r.g2, Capacity::For(r.p.party), 200_000)
+        .await;
+    let (status, refused) = ask(encode_exercise(&e).unwrap(), fresh()).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{refused}");
+    assert_eq!(refused["error"], "invalid_target", "{refused}");
+}
+
+impl Realm {
+    /// Commits an `idp.client.cross_app_connection*` change as the realm's root.
+    async fn cross_app(&self, change: Change) {
+        let declared = DeclaredTargets::default();
+        let b = Bootstrap {
+            app: &self.w.db.app,
+            router: &self.w.db.router,
+            plane: &self.w.plane,
+            realm_keys: &self.w.keyring,
+            hsm: &self.w.keys,
+            base: &self.w.base,
+            declared: &declared,
+            console: None,
+        };
+        let route = route_by_slug(&self.w.db.router, "acme")
+            .await
+            .unwrap()
+            .unwrap();
+        let ids = cell_ids(&self.w.db.app, &self.w.keys).await.unwrap();
+        b.change(
+            &b.admin(&ids, None),
+            (route.tenant, route.realm),
+            self.domain,
+            &root_key(&self.w.keys).unwrap(),
+            change,
+        )
+        .await
+        .unwrap();
     }
 }

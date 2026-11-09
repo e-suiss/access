@@ -452,6 +452,7 @@ pub const CODES: &[Code] = &[
     codes::realm::INVALID_VAULT_RESOURCE,
     codes::realm::INVALID_PROTECTED_RESOURCE,
     codes::realm::INVALID_DCR_POLICY,
+    codes::realm::INVALID_CROSS_APP_CONNECTION,
     codes::realm::INVALID_RECOVERY_POLICY,
     codes::realm::RECOVERY_OPTION_OFF,
     codes::realm::SELF_ISSUE_REFUSED,

@@ -498,6 +498,18 @@ impl OAuthTx for PgOAuthTx {
         self.0.dcr_policy().await.map_err(down)
     }
 
+    async fn cross_app_connected(
+        &mut self,
+        client_id: &str,
+        audience: &str,
+        resource: &str,
+    ) -> Result<bool, Unavailable> {
+        self.0
+            .cross_app_connected(client_id, audience, resource)
+            .await
+            .map_err(down)
+    }
+
     async fn dcr_client(
         &mut self,
         client_id: &str,

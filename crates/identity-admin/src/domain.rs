@@ -212,6 +212,13 @@ pub enum Invalid {
     /// that is not a SHA-256 digest, or a domain that is not a DNS name.
     #[error("invalid dcr policy")]
     DcrPolicy,
+    /// A cross-app connection outside OP-154 m.3 (n): a name, client, audience, resource or
+    /// scope out of shape, or a subject policy other than `pairwise`.
+    #[error("invalid cross-app connection")]
+    CrossAppConnection,
+    /// No live cross-app connection by that name.
+    #[error("no such cross-app connection")]
+    NoCrossAppConnection,
     /// A platform product client outside the platform tenant (OP-149 m.4).
     #[error("platform clients belong to the platform tenant")]
     PlatformTenant,
@@ -503,6 +510,8 @@ impl Invalid {
             Self::ClientExists => "client-exists",
             Self::ProtectedResource => "invalid-protected-resource",
             Self::DcrPolicy => "invalid-dcr-policy",
+            Self::CrossAppConnection => "invalid-cross-app-connection",
+            Self::NoCrossAppConnection => "no-such-cross-app-connection",
             Self::ResourceExists => "protected-resource-exists",
             Self::PlatformTenant => "platform-tenant-only",
             Self::PlatformAuth => "platform-requires-private-key-jwt",
@@ -1232,6 +1241,64 @@ impl ProtectedResource {
     }
 }
 
+/// A cross-app connection for ID-JAG (§11.11.2, AG-28, OP-154 m.3 (n)): the requesting client,
+/// the Resource authorization server's issuer it may ask an ID-JAG for and the resource there.
+/// The scopes are a hint only; the subject is the decided projection's pairwise `sub`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CrossAppConnection {
+    /// Its name in the realm.
+    pub name: String,
+    /// The requesting client.
+    pub client_id: String,
+    /// The Resource AS's issuer, the ID-JAG's `aud`.
+    pub audience: String,
+    /// The resource at the Resource AS.
+    pub resource: String,
+    /// The scopes it may ask for.
+    pub scopes: Vec<String>,
+}
+
+impl CrossAppConnection {
+    /// Checks the name is a slug, the client id is 1–2048 printable characters, the audience
+    /// and resource are canonical `https` URIs and there are at most 64 scopes of RFC 6749 shape.
+    ///
+    /// # Errors
+    /// [`Invalid::CrossAppConnection`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        let https = |u: &str| {
+            access_identity_oauth::domain::client::canonical_resource(u).as_deref() == Some(u)
+                && u.starts_with("https://")
+                && u.len() <= 2048
+        };
+        let scope_ok = |s: &String| {
+            !s.is_empty()
+                && s.len() <= 256
+                && s.bytes()
+                    .all(|b| b == 0x21 || (0x23..=0x5b).contains(&b) || (0x5d..=0x7e).contains(&b))
+        };
+        if !slug(&self.name)
+            || self.client_id.is_empty()
+            || self.client_id.len() > 2048
+            || self.client_id.chars().any(char::is_control)
+            || !https(&self.audience)
+            || !https(&self.resource)
+            || self.scopes.len() > 64
+            || !self.scopes.iter().all(scope_ok)
+        {
+            return Err(Invalid::CrossAppConnection);
+        }
+        Ok(())
+    }
+}
+
+/// Whether `name` is a lower-case slug of at most 64 characters.
+fn slug(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(|c| c.is_ascii_lowercase())
+        && name.len() <= 64
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+}
+
 /// The realm's client and CIMD acceptance policy (§11.3, AG-4): off by default.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CimdPolicy {
@@ -1664,6 +1731,10 @@ pub enum Change {
     Vault(access_identity_vault::domain::resource::VaultChange),
     /// `idp.client.resource_register` (AG-8, OP-154 m.3 (a)).
     ResourceRegister(ProtectedResource),
+    /// `idp.client.cross_app_connection` (CT2, OP-154 m.3 (a), (n)).
+    CrossAppConnection(CrossAppConnection),
+    /// `idp.client.cross_app_connection_retire` (CT1): the connection by name.
+    CrossAppConnectionRetire(String),
     /// `idp.realm.device_code` (`true`, CT2) or `device_code_close` (`false`, CT1), RFC 8628
     /// (OP-154 m.3 (a), (p)).
     DeviceCode(bool),
@@ -2015,6 +2086,8 @@ impl Change {
             Self::Agent(a) => a.action(),
             Self::Vault(v) => v.action(),
             Self::ResourceRegister(_) => IdpAction::ClientResourceRegister,
+            Self::CrossAppConnection(_) => IdpAction::ClientCrossAppConnection,
+            Self::CrossAppConnectionRetire(_) => IdpAction::ClientCrossAppConnectionRetire,
             Self::DeviceCode(true) => IdpAction::RealmDeviceCode,
             Self::DeviceCode(false) => IdpAction::RealmDeviceCodeClose,
             Self::DcrPolicy { loosens: true, .. } => IdpAction::ClientDcrPolicy,
@@ -2075,6 +2148,14 @@ impl Change {
             Self::Agent(a) => a.check(),
             Self::Vault(v) => v.check().map_err(|_| Invalid::VaultResource),
             Self::ResourceRegister(r) => r.check(),
+            Self::CrossAppConnection(c) => c.check(),
+            Self::CrossAppConnectionRetire(name) => {
+                if slug(name) {
+                    Ok(())
+                } else {
+                    Err(Invalid::CrossAppConnection)
+                }
+            }
             Self::DcrPolicy { policy, .. } => {
                 if policy.check() {
                     Ok(())
@@ -2229,6 +2310,20 @@ impl Change {
                     ),
                 ),
             ]),
+            Self::CrossAppConnection(c) => Value::Map(vec![
+                (Value::text("name"), Value::text(c.name.as_str())),
+                (Value::text("client_id"), Value::text(c.client_id.as_str())),
+                (Value::text("audience"), Value::text(c.audience.as_str())),
+                (Value::text("resource"), Value::text(c.resource.as_str())),
+                (
+                    Value::text("scopes"),
+                    Value::Array(c.scopes.iter().map(|s| Value::text(s)).collect()),
+                ),
+                (Value::text("subject_policy"), Value::text("pairwise")),
+            ]),
+            Self::CrossAppConnectionRetire(name) => {
+                Value::Map(vec![(Value::text("name"), Value::text(name.as_str()))])
+            }
             Self::ResourceRegister(r) => Value::Map(vec![
                 (Value::text("resource"), Value::text(r.resource.as_str())),
                 (
@@ -2338,6 +2433,10 @@ impl Change {
             Self::Vault(v) => path.extend(v.path()),
             Self::ResourceRegister(r) => {
                 path.extend([String::from("resource"), r.resource.clone()]);
+            }
+            Self::CrossAppConnection(CrossAppConnection { name, .. })
+            | Self::CrossAppConnectionRetire(name) => {
+                path.extend([String::from("cross-app"), name.clone()]);
             }
             Self::DcrPolicy { .. } | Self::DeviceCode(_) => path.push(String::from("realm")),
         }

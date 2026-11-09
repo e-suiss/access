@@ -909,6 +909,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
             Shape::List(&["resource", "display_name"]),
         ),
         "registerProtectedResource" => (ProtectedResources, CREATE),
+        // OP-154 m.3 (n)
+        "createCrossAppConnection" | "retireCrossAppConnection" => (Settings, w(false)),
         o if declared(o) => (Settings, Shape::Planned("WriteResult")),
         "listClients" => (
             Clients,
@@ -1052,6 +1054,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::SessionPolicy => &r::INVALID_SESSION_POLICY,
             Invalid::ProtectedResource => &r::INVALID_PROTECTED_RESOURCE,
             Invalid::DcrPolicy => &r::INVALID_DCR_POLICY,
+            Invalid::CrossAppConnection => &r::INVALID_CROSS_APP_CONNECTION,
             Invalid::ClientExists
             | Invalid::GroupExists
             | Invalid::UpstreamExists
@@ -1111,6 +1114,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             | Invalid::NoInvitation
             | Invalid::NoSocial
             | Invalid::NoVaultResource
+            | Invalid::NoCrossAppConnection
             | Invalid::NoDomain => &codes::NOT_FOUND,
         },
         AdminError::Issuer(_) | AdminError::NoRealm => &codes::NOT_FOUND,

@@ -1160,6 +1160,7 @@ async fn the_audit_stream_is_served_in_three_renderings_and_each_read_is_audited
 mod accounts;
 mod agents;
 mod consent;
+mod cross_app;
 mod dcr;
 mod device;
 mod organizations;

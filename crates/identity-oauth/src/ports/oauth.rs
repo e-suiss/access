@@ -333,6 +333,14 @@ pub trait OAuthTx: Send {
     ) -> impl Future<Output = Result<(u64, u64), Unavailable>> + Send;
     /// The realm's DCR policy (`idp.client.dcr_policy`, OP-154 m.3 (j)); off when never decided.
     fn dcr_policy(&mut self) -> impl Future<Output = Result<DcrPolicyRow, Unavailable>> + Send;
+    /// Whether a live cross-app connection lets `client_id` ask for an ID-JAG for `audience`
+    /// and `resource` (`idp.client.cross_app_connection`, OP-154 m.3 (n)).
+    fn cross_app_connected(
+        &mut self,
+        client_id: &str,
+        audience: &str,
+        resource: &str,
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
     /// The live DCR client of `client_id`.
     fn dcr_client(
         &mut self,

@@ -68,8 +68,10 @@ forwards the token it received; it exchanges it for its own token to the upstrea
 `requested_token_type` may also ask for:
 
 - an ID-JAG (`oauth-id-jag+jwt`) for another authorization server: only for a client that
-  authenticates with `private_key_jwt`, only after the caller's decision for the `resource`
-  allowed it, five minutes at most, and with no authority in it;
+  authenticates with `private_key_jwt`, only for an `audience` and `resource` a live cross-app
+  connection of the realm names for that client (`idp.client.cross_app_connection`; its scopes
+  are a hint), only after the caller's decision for the `resource` allowed it, five minutes at
+  most, and with no authority in it;
 - a Transaction Token (`txntoken+jwt`): sixty seconds of audit context naming the Exercise; it is
   never accepted as a subject token.
 

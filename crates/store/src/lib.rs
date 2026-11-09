@@ -20,6 +20,7 @@ pub mod clients;
 pub mod connect;
 pub mod consents;
 pub mod console;
+pub mod cross_app;
 pub mod dcr;
 pub mod derived;
 pub mod device;

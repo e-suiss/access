@@ -385,6 +385,13 @@ pub const INVALID_DCR_POLICY: Code = code(
     "Bad Request",
     "A DCR policy names whether registration is open, at most 64 redirect domains and at most 16 initial access tokens as unpadded base64url SHA-256 digests; an open policy names at least one (OP-154 m.3 (j)).",
 );
+/// A cross-app connection outside OP-154 m.3 (n).
+pub const INVALID_CROSS_APP_CONNECTION: Code = code(
+    "invalid-cross-app-connection",
+    400,
+    "Bad Request",
+    "A cross-app connection names a slug, a registered client, the Resource authorization server's issuer and the resource there as canonical https URIs, at most 64 scopes as a hint, and the pairwise subject policy (OP-154 m.3 (n), AG-28).",
+);
 /// A vault Resource outside OP-154 m.3 (t), or an upstream the catalog does not have.
 pub const INVALID_VAULT_RESOURCE: Code = code(
     "invalid-vault-resource",

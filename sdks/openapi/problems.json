@@ -662,6 +662,13 @@
       "description": "A DCR policy names whether registration is open, at most 64 redirect domains and at most 16 initial access tokens as unpadded base64url SHA-256 digests; an open policy names at least one (OP-154 m.3 (j))."
     },
     {
+      "code": "invalid-cross-app-connection",
+      "type": "urn:suiss:access:problem:invalid-cross-app-connection",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A cross-app connection names a slug, a registered client, the Resource authorization server's issuer and the resource there as canonical https URIs, at most 64 scopes as a hint, and the pairwise subject policy (OP-154 m.3 (n), AG-28)."
+    },
+    {
       "code": "invalid-recovery-policy",
       "type": "urn:suiss:access:problem:invalid-recovery-policy",
       "status": 400,

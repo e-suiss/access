@@ -172,6 +172,10 @@ pub enum Op {
     PutDcrPolicy,
     /// `putDeviceCode`: `idp.realm.device_code`, or `device_code_close` (OP-154 m.3 (p)).
     PutDeviceCode,
+    /// `createCrossAppConnection`: `idp.client.cross_app_connection` (OP-154 m.3 (n)).
+    CreateCrossAppConnection,
+    /// `retireCrossAppConnection`: `idp.client.cross_app_connection_retire`.
+    RetireCrossAppConnection,
 }
 
 impl Op {
@@ -242,6 +246,8 @@ impl Op {
             "registerProtectedResource" => Self::RegisterProtectedResource,
             "putDcrPolicy" => Self::PutDcrPolicy,
             "putDeviceCode" => Self::PutDeviceCode,
+            "createCrossAppConnection" => Self::CreateCrossAppConnection,
+            "retireCrossAppConnection" => Self::RetireCrossAppConnection,
             _ => return None,
         })
     }
@@ -1183,6 +1189,34 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             }
         }
         // AG-8, OP-154 m.3 (a)
+        // OP-154 m.3 (n), AG-28
+        Op::CreateCrossAppConnection => {
+            only(
+                m,
+                &[
+                    "connection",
+                    "client_id",
+                    "audience",
+                    "resource",
+                    "scopes",
+                    "subject_policy",
+                ],
+            )?;
+            if opt_text(m, "subject_policy")?.is_some_and(|p| p != "pairwise") {
+                return Err(Invalid::CrossAppConnection);
+            }
+            Change::CrossAppConnection(crate::domain::CrossAppConnection {
+                name: String::from(text(m, "connection")?),
+                client_id: String::from(text(m, "client_id")?),
+                audience: String::from(text(m, "audience")?),
+                resource: String::from(text(m, "resource")?),
+                scopes: texts(m, "scopes")?.into_iter().map(String::from).collect(),
+            })
+        }
+        Op::RetireCrossAppConnection => {
+            only(m, &[])?;
+            Change::CrossAppConnectionRetire(String::from(key_of(key)?))
+        }
         Op::RegisterProtectedResource => {
             only(m, &["resource", "display_name"])?;
             Change::ResourceRegister(crate::domain::ProtectedResource {

@@ -335,6 +335,19 @@ impl<E: Env> OAuth<E> {
         else {
             return Ok(invalid_request("audience and resource are required"));
         };
+        // AG-28, OP-154 m.3 (n)
+        let mut tx = self.begin(realm).await?;
+        let connected = tx
+            .cross_app_connected(client.id.as_str(), audience, resource)
+            .await?;
+        tx.commit().await?;
+        if !connected {
+            return Ok(Reply::oauth_error(
+                400,
+                "invalid_target",
+                "no cross-app connection lets this client ask for that audience and resource",
+            ));
+        }
         let asked = Asked {
             params,
             authorized: None,

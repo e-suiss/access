@@ -458,6 +458,26 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     return Err(Invalid::ResourceExists.into());
                 }
             }
+            // OP-154 m.3 (n), AG-28
+            Change::CrossAppConnection(c) => {
+                if t.cross_app_connection(&c.name)
+                    .await?
+                    .is_some_and(|r| r.state == "live")
+                {
+                    return Err(AdminError::Conflict);
+                }
+                if access_store::idp::client(t, &c.client_id).await?.is_none() {
+                    return Err(Invalid::NoClient.into());
+                }
+            }
+            Change::CrossAppConnectionRetire(name) => {
+                if t.cross_app_connection(name)
+                    .await?
+                    .is_none_or(|r| r.state != "live")
+                {
+                    return Err(Invalid::NoCrossAppConnection.into());
+                }
+            }
             Change::OrgInvite(i) => orgs::invite_current(t, i).await?,
             Change::OrgUpdate(u) => orgs::update_current(t, u).await?,
             Change::OrgInviteRevoke { org, invitation } => {
@@ -1617,6 +1637,43 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 .await?;
                 true
             }
+            // OP-154 m.3 (n), OP-73
+            Change::CrossAppConnection(c) => {
+                let version = t
+                    .cross_app_connection(&c.name)
+                    .await?
+                    .map_or(1, |r| r.version.saturating_add(1));
+                t.put_cross_app_connection(
+                    bound,
+                    &access_store::cross_app::CrossAppRow {
+                        name: c.name.clone(),
+                        version,
+                        state: String::from("live"),
+                        client_id: c.client_id.clone(),
+                        audience: c.audience.clone(),
+                        resource: c.resource.clone(),
+                        scopes: c.scopes.clone(),
+                        subject_policy: String::from("pairwise"),
+                    },
+                )
+                .await?;
+                true
+            }
+            Change::CrossAppConnectionRetire(name) => match t.cross_app_connection(name).await? {
+                Some(r) if r.state == "live" => {
+                    t.put_cross_app_connection(
+                        bound,
+                        &access_store::cross_app::CrossAppRow {
+                            version: r.version.saturating_add(1),
+                            state: String::from("retired"),
+                            ..r
+                        },
+                    )
+                    .await?;
+                    true
+                }
+                _ => false,
+            },
             Change::OrgInviteRevoke { invitation, .. } => t.revoke_invitation(*invitation).await?,
             Change::OrgDomainRelease { org, claim } => {
                 org_flows::release_domain(t, *org, *claim).await?
