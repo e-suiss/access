@@ -2046,6 +2046,7 @@ pub mod audit;
 mod binding;
 mod events;
 pub mod export;
+pub mod faces;
 pub mod hub;
 pub mod impact;
 mod ingest;

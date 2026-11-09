@@ -119,7 +119,7 @@ impl Outcome {
     }
 }
 
-const fn outcome_word(o: EffectOutcome) -> &'static str {
+pub(crate) const fn outcome_word(o: EffectOutcome) -> &'static str {
     match o {
         EffectOutcome::Done => "done",
         EffectOutcome::NotDone => "not-done",
@@ -127,7 +127,7 @@ const fn outcome_word(o: EffectOutcome) -> &'static str {
     }
 }
 
-const fn evidence_word(e: EvidenceKind) -> &'static str {
+pub(crate) const fn evidence_word(e: EvidenceKind) -> &'static str {
     match e {
         EvidenceKind::UpstreamConfirmation => "upstream-confirmation",
         EvidenceKind::IndependentRecheck => "independent-recheck",
@@ -203,7 +203,7 @@ pub fn conformance(
 }
 
 impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
-    async fn statement_of(
+    pub(crate) async fn statement_of(
         &self,
         r: &RecordEnvelope,
     ) -> Result<Option<(Statement, Body)>, CoreError> {

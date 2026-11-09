@@ -257,6 +257,7 @@ fn hub_entries_carry_capacity_and_no_action() {
         revision: 0,
         selection: None,
         said: None,
+        agent: None,
     };
     let change = access_authority_core::app::management::Change {
         position: 7,
@@ -326,6 +327,7 @@ fn a_rule_shaped_row_carries_its_selection_state() {
                 at: 70,
             }),
             selection,
+            agent: None,
         }))))
     };
     let out = encode_search(

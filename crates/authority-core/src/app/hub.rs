@@ -118,6 +118,8 @@ pub struct Holding {
     /// Who says so: the statement that selects the viewer, or the last one that did when the
     /// selection ended (XI-15's second part, §8.17.5.7).
     pub said: Option<Said>,
+    /// The holder as an agent, when it is one (XI-17).
+    pub agent: Option<crate::app::faces::AgentFace>,
 }
 
 /// The Claim behind a selection (XI-15, INV-16, §8.17.5.7): its issuer and when it was stated.
@@ -210,6 +212,8 @@ pub struct Use {
     pub at: Option<u64>,
     /// The intent digest.
     pub intent: Digest,
+    /// Its `ExerciseID`.
+    pub exercise: Digest,
     /// The basis it rested on.
     pub basis: Basis,
     /// The capacity it was exercised in.
@@ -218,6 +222,10 @@ pub struct Use {
     pub instance: Id,
     /// Whether the viewer acted, rather than someone acting for the viewer.
     pub by_viewer: bool,
+    /// The acting Party and its face, when it is an agent (XI-17).
+    pub agent: Option<(Id, crate::app::faces::AgentFace)>,
+    /// What executors reported about its Exercise (E64, INV-18).
+    pub reports: crate::app::faces::Reports,
 }
 
 /// One hub entry.
@@ -415,6 +423,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             return Ok(None);
         }
         let set = &c.authority;
+        let agent = match &holder {
+            Holder::Party(p) => self.agent_face(p, now).await?,
+            _ => None,
+        };
         Ok(Some(Holding {
             grant,
             groups,
@@ -437,6 +449,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             revision: state.revision,
             selection,
             said,
+            agent,
         }))
     }
 
@@ -711,7 +724,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let mut opened: BTreeMap<Vec<u8>, (Id, Basis, Capacity)> = BTreeMap::new();
         let mut parties: BTreeMap<Id, Option<Id>> = BTreeMap::new();
         let mut uses = Vec::new();
+        let mut exercises = Vec::new();
+        let mut reports = crate::app::faces::ByExercise::new();
         for r in self.records(first, last).await? {
+            // E64, INV-18
+            self.collect_report(&r, &mut reports).await?;
             let Some(Value::Bytes(nonce)) = field(&r, "nonce") else {
                 continue;
             };
@@ -749,8 +766,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     if !by_viewer && capacity != Capacity::For(viewer) {
                         continue;
                     }
+                    let exercise = meta::exercise_id(&self.domain, nonce)
+                        .map_err(|_| CoreError::Protocol("nonce"))?;
+                    exercises.push(party);
                     uses.push(Use {
                         pos: r.header.pos,
+                        exercise,
                         at: None,
                         intent: field(&r, "intent")
                             .and_then(Digest::from_value)
@@ -759,16 +780,35 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         capacity,
                         instance,
                         by_viewer,
+                        agent: None,
+                        reports: crate::app::faces::Reports::default(),
                     });
                 }
                 _ => {}
             }
         }
         uses.reverse();
+        exercises.reverse();
         uses.truncate(PAGE as usize);
         let mut hits = Vec::with_capacity(uses.len());
-        for mut u in uses {
+        let mut faces: BTreeMap<Id, Option<crate::app::faces::AgentFace>> = BTreeMap::new();
+        for (mut u, party) in uses.into_iter().zip(exercises) {
             u.at = self.reader.recorded_at(u.pos).await?;
+            // XI-17
+            if let Some(p) = party {
+                let face = if let Some(f) = faces.get(&p) {
+                    *f
+                } else {
+                    let f = self.agent_face(&p, now).await?;
+                    faces.insert(p, f);
+                    f
+                };
+                u.agent = face.map(|f| (p, f));
+            }
+            u.reports = reports
+                .remove(&u.exercise)
+                .unwrap_or_default()
+                .against(&u.intent);
             hits.push(Hit::Entry(Box::new(Entry::Use(u))));
         }
         Ok(Found {

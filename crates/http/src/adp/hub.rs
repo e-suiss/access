@@ -3,6 +3,7 @@
 //! (XI-9, XI-22); none carries an action, which the surface derives from the viewer's authority
 //! (XI-11).
 
+use access_authority_core::app::faces::{AgentFace, Reports};
 use access_authority_core::app::hub::{
     Basis, Entry, Holder, Holding, Rooted, Selection, Source, Use,
 };
@@ -76,6 +77,10 @@ fn holding(h: &Holding) -> Out {
     }
     m.insert("since".into(), Out::from(h.since));
     m.insert("revision".into(), Out::from(h.revision));
+    // XI-17, A-12
+    if let Some(a) = &h.agent {
+        m.insert("agent".into(), face(a));
+    }
     if let Some(s) = h.selection {
         let mut out = selection(s);
         // XI-15, §8.17.5.7
@@ -129,9 +134,48 @@ fn used(u: &Use) -> Out {
         m.insert("at".into(), Out::from(at));
     }
     m.insert("intent".into(), Out::from(b64url_encode(&u.intent.0)));
+    m.insert("exercise".into(), Out::from(b64url_encode(&u.exercise.0)));
     m.insert("basis".into(), basis);
     m.insert("capacity".into(), capacity(u.capacity));
     m.insert("instance".into(), id(&u.instance));
     m.insert("by_viewer".into(), Out::from(u.by_viewer));
+    // XI-17, A-12
+    if let Some((party, a)) = &u.agent {
+        let mut f = face(a);
+        if let Out::Object(o) = &mut f {
+            o.insert("party".into(), id(party));
+        }
+        m.insert("agent".into(), f);
+    }
+    // E64, INV-18, OP-154 m.3 (u)
+    m.insert("reports".into(), reports(&u.reports));
     Out::Object(m)
+}
+
+/// XI-17: an agent is shown as an agent, with its operator when an accepted Claim names one.
+fn face(a: &AgentFace) -> Out {
+    let mut m = Map::new();
+    m.insert("party_kind".into(), "agent".into());
+    if let Some(op) = &a.operator {
+        m.insert("operator".into(), id(op));
+    }
+    Out::Object(m)
+}
+
+fn reports(r: &Reports) -> Out {
+    json!({
+        "attested": r.attested.iter().map(|a| json!({
+            "position": a.position,
+            "reporter": id(&a.reporter),
+            "outcome": a.outcome,
+            "evidence": a.evidence,
+            "at": a.at,
+            "intent": if a.same_intent { "same" } else { "different" },
+        })).collect::<Vec<_>>(),
+        "control": r.control.iter().map(|c| json!({
+            "position": c.position,
+            "state": c.state,
+            "reporter": id(&c.reporter),
+        })).collect::<Vec<_>>(),
+    })
 }

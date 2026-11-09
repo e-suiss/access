@@ -402,13 +402,23 @@ impl Rig {
 
     /// The `outcome` search of `exercise` by the person, through the real ADP router.
     async fn outcome(&self, exercise: Digest, intent: &IntentEnvelope) -> serde_json::Value {
+        self.search(
+            "outcome",
+            serde_json::json!({ "exercise": b64url_encode(&exercise.0), "intent": b64url_encode(&intent.to_bytes().unwrap()) }),
+        )
+        .await["results"][0]
+            .clone()
+    }
+
+    /// One search of `kind` by the person, through the real ADP router.
+    async fn search(&self, kind: &str, query: serde_json::Value) -> serde_json::Value {
         let now = now_ms();
         let search = IntentEnvelope {
             provenance: BTreeMap::new(),
             action: meta::core_action("read"),
             resources: vec![ResourceRef {
                 namespace: String::from("access.search"),
-                path: vec![String::from("outcome")],
+                path: vec![String::from(kind)],
                 incarnation: 0,
             }],
             params: BTreeMap::new(),
@@ -445,15 +455,15 @@ impl Rig {
             "nonce": b64url_encode(&nonce),
             "intent": {
                 "action": { "namespace": action.namespace, "name": action.name, "major": action.major, "schema": b64url_encode(&action.schema.0) },
-                "resources": [{ "namespace": "access.search", "path": ["outcome"] }],
+                "resources": [{ "namespace": "access.search", "path": [kind] }],
                 "validity": { "from": search.validity.from, "until": search.validity.until },
             },
             "basis": { "anchor": b64url_encode(&meta::meta_anchor(&self.lab.domain).0) },
             "capacity": "own",
             "ais": b64url_encode(&ais),
-            "query": { "exercise": b64url_encode(&exercise.0), "intent": b64url_encode(&intent.to_bytes().unwrap()) },
+            "query": query,
         }});
-        let mut req = HttpRequestOf::post("/access/v1/search/outcome")
+        let mut req = HttpRequestOf::post(format!("/access/v1/search/{kind}"))
             .header(header::CONTENT_TYPE, "application/json")
             .body(Body::from(body.to_string()))
             .unwrap();
@@ -464,7 +474,26 @@ impl Rig {
         let out: serde_json::Value =
             serde_json::from_slice(&to_bytes(r.into_body(), 1 << 22).await.unwrap()).unwrap();
         assert_eq!(status, axum::http::StatusCode::OK, "{out}");
-        out["results"][0].clone()
+        out
+    }
+
+    /// The person's activity row of `exercise`'s decision: its use, as the hub reads it.
+    async fn use_of(&self, exercise: Digest) -> serde_json::Value {
+        let party = self.lab.party;
+        let digest = b64url_encode(&exercise.0);
+        let found = self
+            .search(
+                "activity",
+                serde_json::json!({ "party": b64url_encode(&party.0) }),
+            )
+            .await;
+        found["results"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|u| u["exercise"] == digest.as_str())
+            .cloned()
+            .unwrap_or_else(|| panic!("{found}"))
     }
 }
 
@@ -542,6 +571,18 @@ async fn an_executor_runs_an_allowed_exercise_and_its_reports_never_change_the_d
     assert!(attested[1]["position"].as_u64().unwrap() > allowed_at);
     let again = rig.outcome(exercise, &intent).await;
     assert_eq!(again["allowed_at"].as_u64(), Some(allowed_at));
+    // E64, INV-18, §8.17.10.3, OP-153 m.3 (gg), Ek B 4278
+    let used = rig.use_of(exercise).await;
+    let hub = used["reports"]["attested"].as_array().unwrap();
+    assert_eq!(hub.len(), 2, "{used}");
+    assert_eq!(hub[0]["outcome"], "done");
+    assert_eq!(hub[0]["reporter"], b64url_encode(&OPERATOR.0));
+    assert_eq!(hub[0]["evidence"][0], "upstream-confirmation");
+    assert_eq!(hub[0]["intent"], "same");
+    assert_eq!(hub[1]["outcome"], "not-done");
+    assert_eq!(used["reports"]["control"], serde_json::json!([]));
+    // XI-17
+    assert!(used.get("agent").is_none(), "{used}");
 
     // AG-40, F7, Ek B 4600
     let foreign = HoldingRef {
@@ -659,6 +700,16 @@ async fn a_revoked_grant_stops_the_job_at_its_next_check_and_the_stop_is_confirm
         report["control"][0]["state"], "stopped_confirmed",
         "{report}"
     );
+    // §8.17.7.4, §13.8, OP-153 m.3 (gg), Ek B 4234, 4482
+    let used = rig.use_of(exercise).await;
+    assert_eq!(
+        used["reports"]["control"][0]["state"], "stopped_confirmed",
+        "{used}"
+    );
+    assert_eq!(
+        used["reports"]["control"][0]["reporter"],
+        b64url_encode(&OPERATOR.0)
+    );
     assert_eq!(report["attested"].as_array().unwrap().len(), 1);
     assert_eq!(exec.stop(job).await.map(|()| 0).unwrap(), 0);
     assert_eq!(exec.drive(job).await.unwrap(), Next::Done);
@@ -724,7 +775,7 @@ async fn a_blocked_request_hands_off_to_a_person_and_silence_stops_the_job() {
     let rig = Rig::open("executor-blocked").await;
     let exec = rig.executor(Arc::clone(&rig.tokens));
     let intent = rig.lab.intent(1_200_000);
-    let (job, _) = rig
+    let (job, exercise) = rig
         .start(
             &exec,
             &intent,
@@ -745,6 +796,13 @@ async fn a_blocked_request_hands_off_to_a_person_and_silence_stops_the_job() {
     assert_eq!(view["reason"], "blocked");
     assert_eq!(view["handoff_until_ms"].as_u64(), Some(until));
     assert_eq!(view["steps"][0]["outcome"], "not-done");
+    // §8.17.7.4, U5, Ek B 4482
+    let used = rig.use_of(exercise).await;
+    assert_eq!(used["reports"]["control"], serde_json::json!([]), "{used}");
+    assert_eq!(
+        used["reports"]["attested"][0]["outcome"], "not-done",
+        "{used}"
+    );
     let seen = rig.api.seen.lock().unwrap().clone();
     assert_eq!(seen.len(), 1);
     assert_eq!(header_of(&seen[0], "User-Agent"), Some("access-executor/1"));

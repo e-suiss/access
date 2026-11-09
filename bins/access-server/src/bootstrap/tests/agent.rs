@@ -402,6 +402,128 @@ impl Agents {
     fn exercise(&self, plan: Plan) -> Exercise {
         Exercise::new(self.domain, AGENT_PEP, plan, nonce()).unwrap()
     }
+
+    /// The identity plane's `operated_by` Claim naming the root as the agent's operator, as
+    /// `idp.agent.register` emits it, carried to the domain by the realm issuer's courier.
+    async fn operated_by(&self) {
+        let route = route_by_slug(&self.w.db.router, "acme")
+            .await
+            .unwrap()
+            .unwrap();
+        let t = TenantTx::begin(&self.w.db.app, route.tenant, route.realm)
+            .await
+            .unwrap();
+        let order = access_identity_account::domain::claims::agent_claim(
+            AGENT.0,
+            access_kernel::claim::body::Class::OperatedBy,
+            (
+                access_kernel::model::EqValue::Bytes(self.root_party.0.to_vec()),
+                &[],
+            ),
+            now_ms(),
+            false,
+        );
+        let mut pg = access_identity_account::adapters::pg::PgTx(t, None);
+        access_identity_account::app::claims::emit(&mut pg, &order)
+            .await
+            .unwrap();
+        pg.0.commit().await.unwrap();
+        let w = &self.w;
+        // OP-146 m.5 (f)
+        let today = i32::try_from(server_time(&w.db.app).await.unwrap() / 86_400_000).unwrap();
+        for o in access_store::ephemeral::open_days(&w.db.archive, today, 1).await {
+            o.result.unwrap();
+        }
+        let courier = access_identity_account::app::claims::Courier {
+            app: w.db.app.clone(),
+            reader: w.db.reader.clone(),
+            signer: access_identity_oauth::adapters::SignerKeys::new(w.identity_signer.clone()),
+            ingest: access_authority_ingest::app::Ingest::new(
+                w.domains.clone(),
+                crate::ingest::PgSubmissions(w.db.app.clone()),
+                crate::ingest::Trusted(tokio::sync::Mutex::new(
+                    access_authority_sequencer::adapters::SourcesClock::new(w.db.app.clone()),
+                )),
+            ),
+            clock: access_identity_account::adapters::system::SystemClock,
+        };
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        loop {
+            let r = courier.step().await.unwrap();
+            if r.answered > 0 {
+                return;
+            }
+            assert!(std::time::Instant::now() < deadline, "{r:?}");
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    }
+
+    /// One hub search of `kind` by the root, as the account pages sign it.
+    async fn root_search(&self, kind: &str) -> Vec<serde_json::Value> {
+        let now = now_ms();
+        let search = IntentEnvelope {
+            provenance: BTreeMap::new(),
+            action: meta::core_action("read"),
+            resources: vec![ResourceRef {
+                namespace: String::from("access.search"),
+                path: vec![String::from(kind)],
+                incarnation: 0,
+            }],
+            params: BTreeMap::new(),
+            opaque: BTreeMap::new(),
+            recipient: None,
+            purpose: None,
+            context: ContextRefs::default(),
+            validity: Window {
+                from: now - 60_000,
+                until: now + 300_000,
+            },
+        };
+        let n = nonce();
+        let basis = ExerciseBasis::Anchor(meta::meta_anchor(&self.domain));
+        let ais = sign(
+            &self.root,
+            &Statement {
+                domain: self.domain,
+                nonce: n.clone(),
+                intent: intent_digest(&search).unwrap(),
+                mode: Mode::Check,
+                pep: String::from("access-hub-test"),
+                capacity: Capacity::Own,
+                basis,
+                iat: now,
+                exercise: None,
+            },
+        )
+        .unwrap();
+        let action = &search.action;
+        let body = serde_json::json!({ "context": {
+            "domain": b64url_encode(&self.domain.0),
+            "mode": "check",
+            "nonce": b64url_encode(&n),
+            "intent": {
+                "action": { "namespace": action.namespace, "name": action.name, "major": action.major, "schema": b64url_encode(&action.schema.0) },
+                "resources": [{ "namespace": "access.search", "path": [kind] }],
+                "validity": { "from": search.validity.from, "until": search.validity.until },
+            },
+            "basis": { "anchor": b64url_encode(&meta::meta_anchor(&self.domain).0) },
+            "capacity": "own",
+            "ais": b64url_encode(&ais),
+            "query": { "party": b64url_encode(&self.root_party.0) },
+        }});
+        let mut req = HttpRequest::post(format!("/access/v1/search/{kind}"))
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        req.extensions_mut()
+            .insert(PepId(String::from("access-hub-test")));
+        let r = self.live.adp.clone().oneshot(req).await.unwrap();
+        let status = r.status().as_u16();
+        let out: serde_json::Value =
+            serde_json::from_slice(&to_bytes(r.into_body(), 1 << 22).await.unwrap()).unwrap();
+        assert_eq!(status, 200, "{out}");
+        out["results"].as_array().cloned().unwrap_or_default()
+    }
 }
 
 /// A human-presence step-up bound to the actor's Instance (§8.18.3, AGI-4).
@@ -721,5 +843,74 @@ async fn an_agent_reads_its_own_status_and_takes_no_authority_from_a_task() {
     let flows = j.get("access_oauth2").and_then(|o| o.get("flows")).unwrap();
     assert!(flows.get("authorizationCode").is_some(), "{schemes}");
     assert!(flows.get("deviceCode").is_none(), "{schemes}");
+    a.w.domains.release().await;
+}
+
+// XI-17, A-12, §6.4, §8.10, §8.17.5.11, §8.17.7.1, OP-153 m.3 (gg), Ek B 4230
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_hub_shows_an_agent_as_an_agent_with_its_operator() {
+    let a = Agents::open("l9-faces").await;
+    let acting = a
+        .grant(
+            AGENT,
+            a.authority(None, BTreeSet::new()),
+            BTreeSet::from([Capacity::For(a.root_party)]),
+        )
+        .await;
+    let person = a
+        .grant(
+            a.root_party,
+            a.authority(None, BTreeSet::new()),
+            BTreeSet::from([Capacity::Own]),
+        )
+        .await;
+    let mut ex = a.exercise(a.plan("f-1", acting, Some(Capacity::For(a.root_party))));
+    let Step::Proceed(_) = ex.ask(&a.live, &a.runtime, &Wall).unwrap() else {
+        panic!("allow");
+    };
+    let before = a.root_search("inventory").await;
+    let unnamed = before
+        .iter()
+        .find(|r| r["grant"] == b64url_encode(&acting.grant.0).as_str())
+        .unwrap();
+    assert_eq!(unnamed["agent"]["party_kind"], "agent", "{unnamed}");
+    assert!(unnamed["agent"].get("operator").is_none(), "{unnamed}");
+    a.operated_by().await;
+
+    let inventory = a.root_search("inventory").await;
+    let row = |g: Id| {
+        inventory
+            .iter()
+            .find(|r| r["grant"] == b64url_encode(&g.0).as_str())
+            .cloned()
+            .unwrap_or_else(|| panic!("{inventory:?}"))
+    };
+    let agent = row(acting.grant);
+    assert_eq!(agent["groups"][0], "acting_for_you", "{agent}");
+    assert_eq!(agent["agent"]["party_kind"], "agent", "{agent}");
+    assert_eq!(
+        agent["agent"]["operator"],
+        b64url_encode(&a.root_party.0),
+        "{agent}"
+    );
+    let own = row(person.grant);
+    assert!(own.get("agent").is_none(), "{own}");
+
+    let activity = a.root_search("activity").await;
+    let used = activity
+        .iter()
+        .find(|u| u["by_viewer"] == false)
+        .unwrap_or_else(|| panic!("{activity:?}"));
+    assert_eq!(used["agent"]["party_kind"], "agent", "{used}");
+    assert_eq!(used["agent"]["party"], b64url_encode(&AGENT.0), "{used}");
+    assert_eq!(
+        used["agent"]["operator"],
+        b64url_encode(&a.root_party.0),
+        "{used}"
+    );
+    assert!(
+        used["reports"]["attested"].as_array().unwrap().is_empty(),
+        "{used}"
+    );
     a.w.domains.release().await;
 }
