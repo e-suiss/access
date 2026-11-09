@@ -159,6 +159,17 @@ pub trait Instances: Send + Sync {
         async { Err(Unavailable(String::from("agent-registration"))) }
     }
 
+    /// Commits a workload's self-signed `instance_create` with no actor binding held: the
+    /// authority plane takes the actor from the realm issuer's `identity_binding_workload`
+    /// Claim that names the key (OP-154 m.3 (d)).
+    fn register_workload(
+        &self,
+        registration: WorkloadInstance,
+    ) -> impl Future<Output = Result<RegistrationVerdict, Unavailable>> + Send {
+        let _ = registration;
+        async { Err(Unavailable(String::from("workload-registration"))) }
+    }
+
     /// The live Instances of `party` in `domain` at the head (AG-21, OP-154 m.3 (f)).
     fn instances(
         &self,
@@ -167,6 +178,46 @@ pub trait Instances: Send + Sync {
     ) -> impl Future<Output = Result<Vec<Id>, Unavailable>> + Send {
         let _ = (domain, party);
         async { Err(Unavailable(String::from("instance-lookup"))) }
+    }
+}
+
+/// A workload's first Instance (OP-154 m.3 (d)): the key the realm issuer's
+/// `identity_binding_workload` Claim names signs its own `instance_create` under the bootstrap
+/// basis; the Instance still acts only through a Grant.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WorkloadInstance {
+    /// The realm's governing domain.
+    pub domain: Digest,
+    /// The agent Party.
+    pub party: Id,
+    /// The workload's key, the one its DPoP proofs use.
+    pub key: PublicKey,
+    /// The self-signed `instance_create`.
+    pub create: SelfSigned,
+    /// The identity plane as PEP.
+    pub pep: String,
+}
+
+impl WorkloadInstance {
+    /// The `instance_create` payload.
+    #[must_use]
+    pub fn payload(&self) -> access_kernel::meta::Payload {
+        access_kernel::meta::Payload::InstanceCreate {
+            party: self.party,
+            key: self.key.clone(),
+            mandate: None,
+        }
+    }
+
+    /// The Instance it opens: the first object of its Exercise.
+    #[must_use]
+    pub fn instance(&self) -> Option<Id> {
+        let exercise = access_kernel::meta::exercise_id(&self.domain, &self.create.nonce).ok()?;
+        Some(access_kernel::meta::object_id(
+            &exercise,
+            access_kernel::meta::kind::INSTANCE,
+            0,
+        ))
     }
 }
 

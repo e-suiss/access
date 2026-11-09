@@ -634,6 +634,13 @@
       "description": "An agent Grant template needs its budget (a count per window, and for consumption a cap per intent and a daily window), at most one delegation hop and no core meta-action (OP-154 m.3 (g), RR-12)."
     },
     {
+      "code": "invalid-workload-client",
+      "type": "urn:suiss:access:problem:invalid-workload-client",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A workload client names a SPIFFE ID or a whole-segment prefix ending in /*, an https Bundle Endpoint and its agent, and no redirect URI (OP-154 m.3 (r), §11.12.1)."
+    },
+    {
       "code": "invalid-recovery-policy",
       "type": "urn:suiss:access:problem:invalid-recovery-policy",
       "status": 400,

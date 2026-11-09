@@ -418,6 +418,10 @@ pub enum Invalid {
     /// No such agent, or the agent is retired (OP-154 m.3 (c)).
     #[error("no such agent")]
     NoAgent,
+    /// A workload client whose SPIFFE ID selects nothing, whose Bundle Endpoint is not
+    /// `https`, or that names redirect URIs (OP-154 m.3 (r)).
+    #[error("invalid workload client")]
+    Workload,
     /// A malformed agent: kind, operator, name, description or sponsors (OP-154 m.3 (c), (e)).
     #[error("invalid agent")]
     Agent,
@@ -464,6 +468,7 @@ impl Invalid {
             Self::SsoDraft => "invalid-connection-draft",
             Self::InviteReputation => "invitation-reputation",
             Self::NoAgent => "no-such-agent",
+            Self::Workload => "invalid-workload-client",
             Self::Agent => "invalid-agent",
             Self::AgentTemplate => "invalid-agent-template",
             Self::DisplayName => "invalid-display-name",
@@ -765,6 +770,24 @@ pub enum AuthMethod {
     },
     /// A shared secret, for pre-registered confidential clients only.
     ClientSecretBasic,
+    /// A workload client: `spiffe_jwt` or `spiffe_x509` (`draft-ietf-oauth-spiffe-client-auth`
+    /// §4, §5.1, OP-154 m.3 (r)).
+    Spiffe(Box<SpiffeAuth>),
+}
+
+/// A workload client's SPIFFE registration (OP-154 m.3 (d), (r), AG-30): which workloads it
+/// names, where their trust domain's bundle is served and which agent Party they are
+/// Instances of. It authenticates; it grants nothing (L25).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SpiffeAuth {
+    /// X.509-SVID over mutual TLS rather than JWT-SVID.
+    pub x509: bool,
+    /// The SPIFFE ID, or a whole-segment prefix written `…/*` (§5.1).
+    pub spiffe_id: String,
+    /// The trust domain's Bundle Endpoint, `https`.
+    pub bundle_endpoint: String,
+    /// The agent Party.
+    pub agent: [u8; 16],
 }
 
 impl AuthMethod {
@@ -775,6 +798,8 @@ impl AuthMethod {
             Self::None => "none",
             Self::PrivateKeyJwt { .. } | Self::PrivateKeyJwtKey { .. } => "private_key_jwt",
             Self::ClientSecretBasic => "client_secret_basic",
+            Self::Spiffe(s) if s.x509 => "spiffe_x509",
+            Self::Spiffe(_) => "spiffe_jwt",
         }
     }
 
@@ -929,6 +954,14 @@ impl Client {
         {
             return Err(Invalid::SectorIdentifier);
         }
+        // OP-154 m.3 (r), §11.12.1
+        if let AuthMethod::Spiffe(w) = &self.auth {
+            let selects = access_identity_attest::domain::workload::Selector::parse(&w.spiffe_id)
+                .is_ok_and(|s| s.trust_domain().is_some());
+            if !selects || !https(&w.bundle_endpoint) || !self.redirect_uris.is_empty() {
+                return Err(Invalid::Workload);
+            }
+        }
         if let Some(p) = &self.platform {
             if !matches!(
                 self.auth,
@@ -966,6 +999,14 @@ impl Client {
         }
         if let AuthMethod::PrivateKeyJwtKey { key } = &self.auth {
             m.push((Value::text("public_key"), Value::Bytes(cose_key(key))));
+        }
+        if let AuthMethod::Spiffe(w) = &self.auth {
+            m.push((Value::text("spiffe_id"), Value::text(&w.spiffe_id)));
+            m.push((
+                Value::text("spiffe_bundle_endpoint"),
+                Value::text(&w.bundle_endpoint),
+            ));
+            m.push((Value::text("agent"), Value::Bytes(w.agent.to_vec())));
         }
         if let Some(p) = &self.platform {
             m.push((

@@ -356,6 +356,9 @@ fn client(id: ClientId, m: &Map<String, Json>) -> Result<Client, Invalid> {
             "public_sub_opt_in",
             "sector_identifier_uri",
             "third_party",
+            "spiffe_id",
+            "spiffe_bundle_endpoint",
+            "agent",
         ],
     )?;
     // OP-149 m.4
@@ -363,10 +366,34 @@ fn client(id: ClientId, m: &Map<String, Json>) -> Result<Client, Invalid> {
         return Err(Invalid::PlatformTenant);
     }
     let method = opt_text(m, "token_endpoint_auth_method")?.unwrap_or("none");
+    let auth = match method {
+        // OP-154 m.3 (r)
+        "spiffe_jwt" | "spiffe_x509" => AuthMethod::Spiffe(Box::new(crate::domain::SpiffeAuth {
+            x509: method == "spiffe_x509",
+            spiffe_id: String::from(opt_text(m, "spiffe_id")?.ok_or(Invalid::Workload)?),
+            bundle_endpoint: String::from(
+                opt_text(m, "spiffe_bundle_endpoint")?.ok_or(Invalid::Workload)?,
+            ),
+            agent: party_of(
+                opt_text(m, "agent")?.ok_or(Invalid::Workload)?,
+                Invalid::Workload,
+            )?,
+        })),
+        _ => {
+            let spiffe = ["spiffe_id", "spiffe_bundle_endpoint", "agent"];
+            if spiffe
+                .iter()
+                .any(|k| m.get(*k).is_some_and(|v| !v.is_null()))
+            {
+                return Err(Invalid::Workload);
+            }
+            AuthMethod::from_parts(method, opt_text(m, "jwks_uri")?)?
+        }
+    };
     Ok(Client {
         id,
         display_name: String::from(text(m, "display_name")?),
-        auth: AuthMethod::from_parts(method, opt_text(m, "jwks_uri")?)?,
+        auth,
         redirect_uris: uris(&texts(m, "redirect_uris")?)?,
         post_logout_redirect_uris: uris(&texts(m, "post_logout_redirect_uris")?)?,
         backchannel_logout_uri: opt_text(m, "backchannel_logout_uri")?.map(String::from),
@@ -1217,6 +1244,24 @@ pub fn acknowledged_passkeys(body: &Json) -> Option<u64> {
         .and_then(|v| ms_text(v).ok())
 }
 
+/// A workload client's view: its registration beside the client's (OP-154 m.3 (r)).
+#[must_use]
+pub fn workload_client_view(
+    c: &ClientRow,
+    w: Option<&access_store::workloads::ClientWorkload>,
+) -> Json {
+    let mut v = client_view(c);
+    if let (Some(w), Some(o)) = (w, v.as_object_mut()) {
+        o.insert(String::from("spiffe_id"), json!(w.spiffe_id));
+        o.insert(
+            String::from("spiffe_bundle_endpoint"),
+            json!(w.bundle_endpoint),
+        );
+        o.insert(String::from("agent"), json!(b64url_encode(&w.agent)));
+    }
+    v
+}
+
 /// A client's view: no secret, ever (CR-38).
 #[must_use]
 pub fn client_view(c: &ClientRow) -> Json {
@@ -1716,10 +1761,14 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             (Kind::Clients, Some(k)) => {
                 let c = idp::client(t, k).await?;
                 let at = resources::client_position(t, k).await?;
+                let w = match &c {
+                    Some(c) => access_store::workloads::client_workload(t, c.client_uuid).await?,
+                    None => None,
+                };
                 Read {
                     items: c
                         .zip(at)
-                        .map(|(c, p)| (client_view(&c), p))
+                        .map(|(c, p)| (workload_client_view(&c, w.as_ref()), p))
                         .into_iter()
                         .collect(),
                     last: None,
@@ -1727,9 +1776,14 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             (Kind::Clients, None) => {
                 let rows = resources::clients(t, after_text, limit).await?;
+                let mut items = Vec::with_capacity(rows.len());
+                for (c, p) in &rows {
+                    let w = access_store::workloads::client_workload(t, c.client_uuid).await?;
+                    items.push((workload_client_view(c, w.as_ref()), *p));
+                }
                 Read {
                     last: full(&rows, limit, |(c, _)| c.client_id.clone()),
-                    items: rows.iter().map(|(c, p)| (client_view(c), *p)).collect(),
+                    items,
                 }
             }
             (Kind::Groups, Some(k)) => Read {

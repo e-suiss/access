@@ -22,6 +22,30 @@ fn text(description: &str) -> Value {
     json!({ "type": "string", "description": description })
 }
 
+/// OP-154 m.3 (d), (r): a workload client's registration beside the client's.
+fn with_workload_clients(mut schemas: Value) -> Value {
+    if let Some(p) = schemas
+        .pointer_mut("/Client/properties")
+        .and_then(Value::as_object_mut)
+    {
+        p.insert(
+            String::from("spiffe_id"),
+            text("A workload client's SPIFFE ID, or a whole-segment prefix ending in /*; any other wildcard selects nothing (OP-154 m.3 (r))."),
+        );
+        p.insert(
+            String::from("spiffe_bundle_endpoint"),
+            text(
+                "The https Bundle Endpoint of the workload client's trust domain (OP-154 m.3 (r)).",
+            ),
+        );
+        p.insert(
+            String::from("agent"),
+            text("The agent Party whose Instances the workloads become, unpadded base64url (OP-154 m.3 (d))."),
+        );
+    }
+    schemas
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "one JSON literal of the contract's component schemas"
@@ -110,7 +134,7 @@ fn schemas() -> Value {
             "properties": {
                 "client_id": text("Server-generated, never reused (OP-137, TN-20)."),
                 "display_name": text("Display name."),
-                "token_endpoint_auth_method": { "type": "string", "enum": ["none", "private_key_jwt", "client_secret_basic"] },
+                "token_endpoint_auth_method": { "type": "string", "enum": ["none", "private_key_jwt", "client_secret_basic", "spiffe_jwt", "spiffe_x509"] },
                 "jwks_uri": { "type": ["string", "null"] },
                 "redirect_uris": { "type": "array", "items": text("Compared as an exact string.") },
                 "post_logout_redirect_uris": { "type": "array", "items": { "type": "string" } },
@@ -781,7 +805,7 @@ pub fn openapi() -> Value {
         ],
         "paths": paths,
         "components": {
-            "schemas": schemas(),
+            "schemas": with_workload_clients(schemas()),
             "headers": headers(),
             "parameters": parameters(),
             "responses": responses(),

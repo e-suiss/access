@@ -363,6 +363,13 @@ pub const INVALID_AGENT_TEMPLATE: Code = code(
     "Bad Request",
     "An agent Grant template needs its budget (a count per window, and for consumption a cap per intent and a daily window), at most one delegation hop and no core meta-action (OP-154 m.3 (g), RR-12).",
 );
+/// A workload client outside OP-154 m.3 (r).
+pub const INVALID_WORKLOAD_CLIENT: Code = code(
+    "invalid-workload-client",
+    400,
+    "Bad Request",
+    "A workload client names a SPIFFE ID or a whole-segment prefix ending in /*, an https Bundle Endpoint and its agent, and no redirect URI (OP-154 m.3 (r), §11.12.1).",
+);
 /// The change would leave the organization without an active owner (TN-91, OP-153 m.3 (p)).
 pub const LAST_OWNER: Code = code(
     "last-owner",

@@ -13,6 +13,7 @@ pub mod provision;
 pub mod rest;
 mod signals;
 pub mod transfers;
+pub mod workloads;
 
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::adapters::pg::PgTx;
@@ -276,6 +277,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .chain([
                         agents::agent_claims(access_kernel::model::Id(claim_issuer)),
                         agents::agent_selection(access_kernel::model::Id(claim_issuer)),
+                    ])
+                    // OP-154 m.3 (d), (s)
+                    .chain([
+                        workloads::workload_binding(access_kernel::model::Id(claim_issuer)),
+                        workloads::runtime_attestation(access_kernel::model::Id(claim_issuer)),
                     ])
                     .collect(),
                 issuer_predicate_input: predicate_input(&r.issuer_predicate_input),
@@ -1379,6 +1385,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         } else {
             idp::update_client(t, bound, &row).await?
         };
+        // OP-154 m.3 (r), (d)
+        if let (true, crate::domain::AuthMethod::Spiffe(w)) = (done, &c.auth) {
+            Box::pin(workloads::register(t, bound, row.client_uuid, w)).await?;
+        }
         if done && c.subject.public && !was_public {
             PUBLIC_SUB_OPT_IN.incr([]);
         }

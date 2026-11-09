@@ -792,6 +792,9 @@ const CLIENT_PATCH: &[&str] = &[
     "subject_type",
     "public_sub_opt_in",
     "sector_identifier_uri",
+    "spiffe_id",
+    "spiffe_bundle_endpoint",
+    "agent",
 ];
 const GROUP_PATCH: &[&str] = &["display_name"];
 const AGENT_PATCH: &[&str] = &["display_name", "description"];
@@ -1071,6 +1074,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::SsoDraft => &r::INVALID_CONNECTION_DRAFT,
             Invalid::Agent => &r::INVALID_AGENT,
             Invalid::AgentTemplate => &r::INVALID_AGENT_TEMPLATE,
+            Invalid::Workload => &r::INVALID_WORKLOAD_CLIENT,
             Invalid::NoClient
             | Invalid::NoAgent
             | Invalid::NoKey

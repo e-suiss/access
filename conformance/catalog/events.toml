@@ -427,6 +427,14 @@ fields = ["error"]
 ocsf = "application_error"
 
 [[event]]
+name = "oauth.workload_trust.unavailable"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["error"]
+ocsf = "application_error"
+
+[[event]]
 name = "privacy.job.completed"
 plane = "identity"
 severity = "info"
