@@ -113,6 +113,22 @@ impl<R: Resource, A: Action> Intent<R, A> {
 }
 
 impl<R, A> Intent<R, A> {
+    /// The intent of an envelope whose action is data rather than a type, such as one row of
+    /// an MCP tool table (§9.4.1, AG-2): the digest is computed here, the type parameters name
+    /// no action.
+    ///
+    /// # Errors
+    /// [`IntentError::Encode`].
+    pub fn named(envelope: IntentEnvelope) -> Result<Self, IntentError> {
+        let digest = intent_digest(&envelope).map_err(|_| IntentError::Encode)?;
+        Ok(Self {
+            digest,
+            action: Some(envelope.action.clone()),
+            envelope: Some(envelope),
+            marker: PhantomData,
+        })
+    }
+
     /// An intent known only by the digest the Conformant Surface approved, and the action it
     /// names when the PEP knows it.
     #[must_use]

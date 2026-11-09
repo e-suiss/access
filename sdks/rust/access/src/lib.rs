@@ -20,6 +20,8 @@ extern crate std;
 
 pub mod auth;
 pub mod authorize;
+#[cfg(feature = "mcp")]
+pub mod mcp;
 pub mod reason;
 pub mod resource;
 pub mod transport;

@@ -457,6 +457,11 @@ pub struct Authority {
     pub as_of: u64,
     /// The head position introspection reflected, under the strict profile.
     pub introspected_as_of: Option<u64>,
+    /// The thumbprint of the key the token is bound to: the holder Instance's key binding
+    /// (PI-11).
+    pub holder: [u8; 32],
+    /// The token's `exp`.
+    pub expires_at: TrustedTime,
 }
 
 /// A verified presentation: the proof the effect runs under and what the token proved.
@@ -495,6 +500,12 @@ fn replay_key(proof: &dpop::Proof) -> [u8; 32] {
 
 fn single_use_key(exercise: &Digest) -> [u8; 32] {
     context_digest(SINGLE_USE_CONTEXT, &exercise.0).0
+}
+
+struct Target<'a> {
+    digest: &'a Digest,
+    action: Option<&'a access_kernel::model::ActionRef>,
+    envelope: Option<&'a access_kernel::intent::IntentEnvelope>,
 }
 
 struct Verdict {
@@ -672,10 +683,6 @@ impl ResourceServer {
     ///
     /// # Errors
     /// [`Denied`]: no effect.
-    #[allow(
-        clippy::too_many_lines,
-        reason = "one pass over the checks, in spec order"
-    )]
     pub fn verify<R, A, K, P, N, S, I, V>(
         &self,
         presented: &Presented<'_>,
@@ -683,6 +690,65 @@ impl ResourceServer {
         clock: &impl Clock,
         ports: &Ports<'_, K, P, N, S, I, V>,
     ) -> Result<Verified<R, A>, Denied>
+    where
+        K: KeySource,
+        P: ReplayStore,
+        N: NonceSource,
+        S: StatusSource,
+        I: Introspector,
+        V: Revocations,
+    {
+        let target = Target {
+            digest: intent.digest(),
+            action: intent.action(),
+            envelope: intent.envelope(),
+        };
+        let authority = self.admitted(presented, Some(&target), clock, ports)?;
+        Ok(Verified {
+            authorized: Authorized::new(
+                authority.exercise,
+                *intent.digest(),
+                authority.as_of,
+                None,
+            ),
+            authority,
+        })
+    }
+
+    /// Verifies one presentation of an authority token as [`ResourceServer::verify`] does,
+    /// without an intent: what the token proved, for a disclosure such as a list, which is not
+    /// an effect (§9.7, AG-12). Nothing is authorized and an exact-intent token is not spent.
+    ///
+    /// # Errors
+    /// [`Denied`].
+    pub fn authenticate<K, P, N, S, I, V>(
+        &self,
+        presented: &Presented<'_>,
+        clock: &impl Clock,
+        ports: &Ports<'_, K, P, N, S, I, V>,
+    ) -> Result<Authority, Denied>
+    where
+        K: KeySource,
+        P: ReplayStore,
+        N: NonceSource,
+        S: StatusSource,
+        I: Introspector,
+        V: Revocations,
+    {
+        self.admitted(presented, None, clock, ports)
+    }
+
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one pass over the checks, in spec order"
+    )]
+    fn admitted<K, P, N, S, I, V>(
+        &self,
+        presented: &Presented<'_>,
+        target: Option<&Target<'_>>,
+        clock: &impl Clock,
+        ports: &Ports<'_, K, P, N, S, I, V>,
+    ) -> Result<Authority, Denied>
     where
         K: KeySource,
         P: ReplayStore,
@@ -721,19 +787,21 @@ impl ResourceServer {
         }
         let as_of = first.basis_position;
         // §9.9.1
-        match kind {
-            Kind::Intent => {
-                if first.intent.as_ref() != Some(intent.digest()) {
-                    return Err(Denied::Intent);
+        if let Some(target) = target {
+            match kind {
+                Kind::Intent => {
+                    if first.intent.as_ref() != Some(target.digest) {
+                        return Err(Denied::Intent);
+                    }
                 }
-            }
-            Kind::Bounds => {
-                let action = intent.action().ok_or(Denied::Bounds)?;
-                if !verdict.details.iter().any(|d| d.action.is(action)) {
-                    return Err(Denied::Bounds);
+                Kind::Bounds => {
+                    let action = target.action.ok_or(Denied::Bounds)?;
+                    if !verdict.details.iter().any(|d| d.action.is(action)) {
+                        return Err(Denied::Bounds);
+                    }
+                    // §9.9.1, §5.3, OP-150 m.9 (b)
+                    bounds::bounds(claims, claims::validity(claims)?, target.envelope)?;
                 }
-                // §9.9.1, §5.3, OP-150 m.9 (b)
-                bounds::bounds(claims, claims::validity(claims)?, intent.envelope())?;
             }
         }
         // OP-150 m.8 (b)
@@ -764,7 +832,7 @@ impl ResourceServer {
             return Err(Denied::IntrospectionStale);
         }
         // §9.9.1
-        if kind == Kind::Intent {
+        if kind == Kind::Intent && target.is_some() {
             let until = claims::time_ms(claims, "exp")?.saturating_add(self.claims_skew_ms);
             match ports.replay.record(&single_use_key(&exercise), until) {
                 Replay::Fresh => {}
@@ -784,10 +852,9 @@ impl ResourceServer {
             client_id: claims::client_id(claims)?,
             as_of,
             introspected_as_of: verdict.introspected_as_of,
+            holder: *confirmation.thumbprint(),
+            expires_at: claims::time_ms(claims, "exp")?,
         };
-        Ok(Verified {
-            authorized: Authorized::new(exercise, *intent.digest(), as_of, None),
-            authority,
-        })
+        Ok(authority)
     }
 }

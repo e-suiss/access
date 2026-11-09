@@ -1829,6 +1829,7 @@ dependencies = [
 name = "esuiss-access-sdk"
 version = "0.3.2"
 dependencies = [
+ "axum",
  "ed25519-dalek",
  "esuiss-access-kernel",
  "esuiss-access-sdk",

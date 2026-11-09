@@ -64,6 +64,12 @@ pub trait Clock {
     fn now(&self) -> Option<TrustedTime>;
 }
 
+impl<T: Clock + ?Sized> Clock for &T {
+    fn now(&self) -> Option<TrustedTime> {
+        (**self).now()
+    }
+}
+
 /// A clock fixed at one instant, for a request whose trusted time the caller already read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FixedClock(pub TrustedTime);
