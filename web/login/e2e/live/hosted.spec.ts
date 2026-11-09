@@ -64,6 +64,17 @@ test.describe("@live hosted pages", () => {
     }
   });
 
+  // X35, OP-153 m.22 (k): the pages read the realm's stored texts; none are protected keys
+  test("@live the realm's text overrides are served to the pages", async ({ page }) => {
+    const r = await page.request.get(`${REALM}/v1/login/messages`);
+    expect(r.status()).toBe(200);
+    const body = (await r.json()) as { overrides?: Record<string, Record<string, string>> };
+    expect(typeof body.overrides).toBe("object");
+    for (const texts of Object.values(body.overrides ?? {})) {
+      expect(Object.keys(texts)).not.toContain("login-failed");
+    }
+  });
+
   test("@live recovery answers the same for an unknown address", async ({ page }) => {
     await page.goto(`${REALM}/login/recovery`);
     await page.getByLabel("Email or username").fill(`nobody-${String(Date.now())}@example.org`);

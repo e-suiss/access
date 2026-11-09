@@ -250,5 +250,45 @@ impl Catalogs {
     }
 }
 
+/// The realm's stored overrides (`idp.realm.locale_overrides`, deterministic CBOR) as the
+/// hosted pages read them: `{locale: {key: text}}`, keeping only well-formed locales, known
+/// unprotected keys and plain texts (X35, XI-25, OP-153 m.22 (k)); anything else is dropped.
+#[must_use]
+pub fn stored_overrides(bytes: Option<&[u8]>) -> serde_json::Value {
+    use suiss_crypto::dcbor::{self, Limits, Value};
+    let mut out = serde_json::Map::new();
+    let (Some(Value::Map(locales)), Ok(catalogs)) = (
+        bytes.and_then(|b| dcbor::decode(b, Limits::CEILING).ok()),
+        Catalogs::embedded(),
+    ) else {
+        return serde_json::Value::Object(out);
+    };
+    let en = catalogs.access(DEFAULT_LANGUAGE);
+    for (locale, texts) in &locales {
+        let (Value::Text(locale), Value::Map(texts)) = (locale, texts) else {
+            continue;
+        };
+        if tag(locale).is_err() {
+            continue;
+        }
+        let mut kept = serde_json::Map::new();
+        for (k, v) in texts {
+            let (Value::Text(k), Value::Text(v)) = (k, v) else {
+                continue;
+            };
+            let plain = !v
+                .chars()
+                .any(|c| c.is_control() || matches!(c, '{' | '}' | '<' | '>'));
+            if plain && !catalogs.is_protected(k) && en.is_some_and(|m| m.contains_key(k)) {
+                kept.insert(k.clone(), serde_json::Value::String(v.clone()));
+            }
+        }
+        if !kept.is_empty() {
+            out.insert(locale.to_ascii_lowercase(), serde_json::Value::Object(kept));
+        }
+    }
+    serde_json::Value::Object(out)
+}
+
 #[cfg(test)]
 mod tests;

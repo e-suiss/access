@@ -464,3 +464,31 @@ test("a path realm keeps its prefix on every call and link", async ({ page, mock
   await expect(page.getByLabel("Password")).toBeVisible();
   expect(mock.requests.at(-1)).toBe("POST /realms/acme/v1/login/flows/lgf_example");
 });
+
+// X35, XI-25, OP-153 m.22 (k): the realm's texts replace Access's, never a protected one
+test("the realm's text overrides are drawn, and a protected key keeps Access's text", async ({
+  page,
+  mock,
+}) => {
+  mock.messages = {
+    status: 200,
+    body: {
+      overrides: {
+        en: { "label-identifier": "Your work email", "login-failed": "Welcome back anyway" },
+      },
+    },
+  };
+  await page.goto("/");
+  await page.getByLabel("Your work email").fill("ada@example.org");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Password").fill("not it");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("alert")).toHaveText("We couldn't sign you in with these details.");
+});
+
+// OP-153 m.22 (k): without an answer the pages keep Access's own texts
+test("the pages keep Access's texts when the overrides cannot be read", async ({ page, mock }) => {
+  mock.messages = { status: 404, body: { code: "not-found" } };
+  await page.goto("/");
+  await expect(page.getByLabel("Email or username")).toBeVisible();
+});

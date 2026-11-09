@@ -278,6 +278,31 @@ where
         }
     }
 
+    /// `GET /v1/login/messages` (X35, XI-25, OP-153 m.22 (k)): the realm's stored texts by
+    /// locale and key, rechecked as they are read; a protected key or a text with a placeholder
+    /// or markup is never handed to the page.
+    pub async fn message_overrides(&self, entry: &RealmEntry) -> Reply {
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        let read = async {
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let b = access_store::idp::locale_overrides(&mut t).await?;
+            t.commit().await?;
+            Ok::<_, access_store::StoreError>(b)
+        };
+        match read.await {
+            Ok(b) => Reply::json(
+                200,
+                serde_json::json!({
+                    "overrides": crate::domain::locale::stored_overrides(b.as_deref()),
+                }),
+            ),
+            Err(_) => Reply::problem(UNAVAILABLE),
+        }
+    }
+
     /// `POST /csp-reports` (OP-153 m.3 (t), IDP-36): accepted with `204`, at most
     /// [`CSP_REPORTS_PER_MINUTE`] a minute per realm, kept pseudonymous for 30 days.
     pub async fn csp_report(&self, entry: &RealmEntry, b: &Browser<'_>, body: &[u8]) -> Reply {

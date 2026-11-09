@@ -985,6 +985,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/login/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The realm's own texts for unprotected message keys, by locale and key, which the hosted pages draw in place of Access's (X35, OP-153 m.22 (k)). */
+        get: operations["getMessageOverrides"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/account/connected-apps/decline": {
         parameters: {
             query?: never;
@@ -2719,6 +2736,27 @@ export interface operations {
         };
     };
     getBranding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getMessageOverrides: {
         parameters: {
             query?: never;
             header?: never;

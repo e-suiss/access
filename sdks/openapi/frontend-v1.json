@@ -2045,6 +2045,27 @@
         }
       }
     },
+    "/v1/login/messages": {
+      "get": {
+        "operationId": "getMessageOverrides",
+        "summary": "The realm's own texts for unprotected message keys, by locale and key, which the hosted pages draw in place of Access's (X35, OP-153 m.22 (k)).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/v1/account/connected-apps/decline": {
       "post": {
         "operationId": "declineSharing",

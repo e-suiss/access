@@ -272,6 +272,10 @@ where
                 get(web::branding::<D, K, KI, C, M>),
             )
             .route(
+                &format!("{prefix}/v1/login/messages"),
+                get(web::message_overrides::<D, K, KI, C, M>),
+            )
+            .route(
                 &format!("{prefix}/v1/dbsc/register"),
                 post(web::dbsc_register::<D, K, KI, C, M>),
             )

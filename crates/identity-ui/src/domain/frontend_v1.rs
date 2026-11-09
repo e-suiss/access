@@ -595,6 +595,13 @@ pub const ROUTES: &[Route] = &[
     ),
     live(
         Owner::N5,
+        Verb::Get,
+        "/v1/login/messages",
+        "getMessageOverrides",
+        "The realm's own texts for unprotected message keys, by locale and key, which the hosted pages draw in place of Access's (X35, OP-153 m.22 (k)).",
+    ),
+    live(
+        Owner::N5,
         Verb::Post,
         "/v1/account/connected-apps/decline",
         "declineSharing",

@@ -174,6 +174,8 @@ export class LoginMock {
   readonly json = new Map<string, Canned | ((body: unknown) => Canned)>();
   readonly posted: { key: string; body: unknown }[] = [];
   branding: Canned = { status: 200, body: { display_name: null, logo_uri: null } };
+  /** `GET /v1/login/messages`: the realm's text overrides (OP-153 m.22 (k)). */
+  messages: Canned = { status: 200, body: { overrides: {} } };
   theme = "";
   private identifier = "";
 
@@ -185,6 +187,13 @@ export class LoginMock {
         status: this.branding.status,
         contentType: "application/json",
         body: JSON.stringify(this.branding.body ?? {}),
+      }),
+    );
+    await page.route(/\/v1\/login\/messages$/, (route) =>
+      route.fulfill({
+        status: this.messages.status,
+        contentType: "application/json",
+        body: JSON.stringify(this.messages.body ?? {}),
       }),
     );
     await page.route(/\/login\/theme\.css$/, (route) =>

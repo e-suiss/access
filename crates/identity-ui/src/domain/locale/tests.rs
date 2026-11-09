@@ -87,3 +87,35 @@ fn the_parser_refuses_fluent_logic() {
         TextId::LoginFailed.default_text()
     );
 }
+
+// X35, XI-25, OP-153 m.22 (k)
+#[test]
+fn the_pages_read_only_known_unprotected_plain_overrides() {
+    use suiss_crypto::dcbor::{self, Limits, Value};
+    let texts = |pairs: &[(&str, &str)]| {
+        Value::Map(
+            pairs
+                .iter()
+                .map(|(k, v)| (Value::text(k), Value::text(v)))
+                .collect(),
+        )
+    };
+    let stored = Value::Map(vec![
+        (
+            Value::text("tr"),
+            texts(&[
+                ("login-unavailable", "Giriş kısa süre kapalı."),
+                ("login-failed", "Hep evet"),
+                ("made-up", "x"),
+                ("login-throttled", "{ $x }"),
+            ]),
+        ),
+        (Value::text("-bad"), texts(&[("login-unavailable", "x")])),
+    ]);
+    let bytes = dcbor::encode(&stored, Limits::CEILING).unwrap();
+    assert_eq!(
+        stored_overrides(Some(&bytes)),
+        serde_json::json!({ "tr": { "login-unavailable": "Giriş kısa süre kapalı." } })
+    );
+    assert_eq!(stored_overrides(None), serde_json::json!({}));
+}

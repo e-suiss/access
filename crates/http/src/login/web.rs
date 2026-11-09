@@ -669,6 +669,14 @@ handler! {
     }
 }
 
+handler! {
+    /// `GET /v1/login/messages` (X35, OP-153 m.22 (k)).
+    message_overrides(s, entry, b, p, bytes, headers) false {
+        let _ = (&b, &p, &bytes);
+        Ok(s.hosted.message_overrides(&entry).await)
+    }
+}
+
 /// The DBSC proof of a request, when it carries exactly one.
 fn dbsc_proof(headers: &HeaderMap) -> Option<&str> {
     let mut all = headers

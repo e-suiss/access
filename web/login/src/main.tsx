@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./App.js";
 import { linkTheme } from "./Branding.js";
-import { applyDocument } from "./i18n.js";
+import { applyDocument, loadOverrides } from "./i18n.js";
 import "./styles.css";
 
 applyDocument();
@@ -12,8 +12,11 @@ const root = document.getElementById("root");
 if (root === null) {
   throw new Error("missing #root element");
 }
-createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+const mount = root;
+void loadOverrides().finally(() => {
+  createRoot(mount).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+});

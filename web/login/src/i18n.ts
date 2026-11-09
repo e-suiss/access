@@ -2,12 +2,15 @@
 // five-step chain; `ui_locales` wins over the browser's languages; `ar-XB` is the right-to-left
 // pseudo-locale that draws the English texts mirrored. The runtime is the shared one of
 // web/components, taken from its source so the login bundle carries no React components of it.
-import { Catalogs, keyOf, parseProtected } from "../../components/src/fluent.js";
+// The realm's own texts for unprotected keys (`idp.realm.locale_overrides`) are read once before
+// the first render and come first in the chain; a protected key never takes one (X35, m.22 (k)).
+import { Catalogs, keyOf, type Overrides, parseProtected } from "../../components/src/fluent.js";
 
 import enLogin from "../../../locales/en/login.ftl?raw";
 import trLogin from "../../../locales/tr/login.ftl?raw";
 import protectedToml from "../../../conformance/catalog/protected-messages.toml?raw";
 import type { Text } from "./contract.js";
+import { getJson } from "./http.js";
 
 const catalogs = new Catalogs({ en: [enLogin], tr: [trLogin] }, parseProtected(protectedToml));
 
@@ -32,6 +35,37 @@ export function choose(search: string, languages: readonly string[]): string {
 
 export const locale = choose(window.location.search, navigator.languages);
 
+/** The path of the realm's text overrides. */
+export const messagesPath = "/v1/login/messages";
+
+let realm: Overrides | undefined;
+
+/** The realm's overrides from their JSON, `{locale: {key: text}}`: strings only, each checked. */
+export function overridesOf(json: unknown): Overrides | undefined {
+  if (typeof json !== "object" || json === null) return undefined;
+  const out = new Map<string, Map<string, string>>();
+  for (const [tag, texts] of Object.entries(json as Record<string, unknown>)) {
+    if (typeof texts !== "object" || texts === null) continue;
+    const kept = new Map<string, string>();
+    for (const [k, v] of Object.entries(texts as Record<string, unknown>)) {
+      if (typeof v === "string" && !catalogs.isProtected(k)) kept.set(k, v);
+    }
+    out.set(tag.toLowerCase(), kept);
+  }
+  try {
+    catalogs.check(out);
+  } catch {
+    return undefined;
+  }
+  return out;
+}
+
+/** Reads the realm's overrides; without an answer the pages use Access's own texts. */
+export async function loadOverrides(): Promise<void> {
+  const a = await getJson<{ overrides?: unknown }>(messagesPath);
+  realm = a.ok ? overridesOf(a.body.overrides) : undefined;
+}
+
 /** Writing direction of `tag`. */
 export function direction(tag: string): "rtl" | "ltr" {
   if (tag === PSEUDO_RTL) return "rtl";
@@ -46,17 +80,17 @@ export function applyDocument(): void {
 
 /** The text of wire id `id` with `args` placed as plain text; the id itself when no catalog has it. */
 export function t(id: string, args?: Readonly<Record<string, string>>): string {
-  return catalogs.format(keyOf(id), locale, undefined, args) ?? id;
+  return catalogs.format(keyOf(id), locale, realm, args) ?? id;
 }
 
 /** The text of `id` when a catalog has it. */
 export function maybe(id: string, args?: Readonly<Record<string, string>>): string | undefined {
-  return catalogs.format(keyOf(id), locale, undefined, args);
+  return catalogs.format(keyOf(id), locale, realm, args);
 }
 
 /** A server text: the catalog's for its id in the viewer's locale, else the server's own words. */
 export function text(value: Text): string {
-  return catalogs.format(keyOf(value.id), locale) ?? value.text;
+  return catalogs.format(keyOf(value.id), locale, realm) ?? value.text;
 }
 
 /** A time as the viewer reads it. */
