@@ -633,7 +633,9 @@ impl Governance for PreOrgMember<'_> {
     async fn open(&self, mut order: GenesisOrder) -> Result<GenesisOpened, Unavailable> {
         order.ct3_delay_s = Some(0);
         order.acceptances.retain(|a| {
-            access_kernel::claim::Gate::of(a).is_ok_and(|g| g.use_ != "subject-selection")
+            access_kernel::claim::Gate::of(a).is_ok_and(|g| {
+                g.use_ != "subject-selection" || !g.classes.iter().any(|c| c == "org_member")
+            })
         });
         let fields = access_authority_core::genesis::realm(&order, &mut OsSalts)
             .map_err(|e| Unavailable(e.to_string()))?;
@@ -674,4 +676,132 @@ async fn a_domain_opened_before_org_member_selection_takes_it_once_its_root_sign
     assert_eq!(steps, vec![("access.org_member", "accepted")]);
     let again = w.run(&old_plan("older")).await;
     assert_eq!(upgraded(&again, "older"), []);
+}
+
+/// Opens Genesis as a realm was opened before the agent and workload Acceptances (OP-154 m.9
+/// (f), m.11 (d)).
+struct PreAgents<'a> {
+    plane: &'a TestPlane,
+    domains: &'a TestDomains,
+}
+
+impl Governance for PreAgents<'_> {
+    async fn open(&self, mut order: GenesisOrder) -> Result<GenesisOpened, Unavailable> {
+        order.ct3_delay_s = Some(0);
+        let agents = [
+            "operated_by",
+            "sponsored_by",
+            "agent_kind",
+            "identity_binding_workload",
+            "attestation_runtime",
+        ];
+        order.acceptances.retain(|a| {
+            access_kernel::claim::Gate::of(a)
+                .is_ok_and(|g| !g.classes.iter().any(|c| agents.contains(&c.as_str())))
+        });
+        let fields = access_authority_core::genesis::realm(&order, &mut OsSalts)
+            .map_err(|e| Unavailable(e.to_string()))?;
+        let now = Instances::now(self.plane).await?;
+        let domain = self
+            .domains
+            .create(order.tenant, fields, now)
+            .await
+            .unwrap();
+        Ok(GenesisOpened { domain })
+    }
+}
+
+impl Instances for PreAgents<'_> {
+    async fn register(&self, r: Registration) -> Result<RegistrationVerdict, Unavailable> {
+        Instances::register(self.plane, r).await
+    }
+
+    async fn now(&self) -> Result<u64, Unavailable> {
+        Instances::now(self.plane).await
+    }
+}
+
+// OP-154 m.3 (c), (d), (s), m.9 (f), m.11 (d), OP-152 m.8 (a)
+#[tokio::test]
+async fn a_domain_opened_before_agents_takes_their_acceptances_once_its_root_signs_them() {
+    let w = World::new("agents-upgrade").await;
+    let governance = PreAgents {
+        plane: &w.plane,
+        domains: &w.domains,
+    };
+    realm_with(&w, &governance, "agentless").await;
+    let summary = w.run(&old_plan("agentless")).await;
+    let mut steps: Vec<_> = upgraded(&summary, "agentless")
+        .iter()
+        .map(|c| (c.namespace.as_str(), c.state))
+        .collect();
+    steps.sort_unstable();
+    assert_eq!(
+        steps,
+        vec![
+            ("access.agent_claims", "accepted"),
+            ("access.agent_selection", "accepted"),
+            ("access.attestation_runtime", "accepted"),
+            ("access.workload_binding", "accepted"),
+        ]
+    );
+    let again = w.run(&old_plan("agentless")).await;
+    assert_eq!(upgraded(&again, "agentless"), []);
+}
+
+/// Opens Genesis as one before the agent Acceptances, with the CT3 time-lock of a real realm.
+struct PreAgentsLocked<'a> {
+    plane: &'a TestPlane,
+    domains: &'a TestDomains,
+}
+
+impl Governance for PreAgentsLocked<'_> {
+    async fn open(&self, mut order: GenesisOrder) -> Result<GenesisOpened, Unavailable> {
+        order.ct3_delay_s = Some(3600);
+        order.acceptances.retain(|a| {
+            access_kernel::claim::Gate::of(a)
+                .is_ok_and(|g| !g.classes.iter().any(|c| c == "attestation_runtime"))
+        });
+        let fields = access_authority_core::genesis::realm(&order, &mut OsSalts)
+            .map_err(|e| Unavailable(e.to_string()))?;
+        let now = Instances::now(self.plane).await?;
+        let domain = self
+            .domains
+            .create(order.tenant, fields, now)
+            .await
+            .unwrap();
+        Ok(GenesisOpened { domain })
+    }
+}
+
+impl Instances for PreAgentsLocked<'_> {
+    async fn register(&self, r: Registration) -> Result<RegistrationVerdict, Unavailable> {
+        Instances::register(self.plane, r).await
+    }
+
+    async fn now(&self) -> Result<u64, Unavailable> {
+        Instances::now(self.plane).await
+    }
+}
+
+// §13.7.3, OP-154 m.11 (d), OP-152 m.8 (a)
+#[tokio::test]
+async fn an_agent_acceptance_upgrade_waits_out_the_time_lock_on_the_same_exercise() {
+    let w = World::new("agents-upgrade-lock").await;
+    let governance = PreAgentsLocked {
+        plane: &w.plane,
+        domains: &w.domains,
+    };
+    realm_with(&w, &governance, "locked").await;
+    let first = w.run(&old_plan("locked")).await;
+    let pending: Vec<_> = upgraded(&first, "locked")
+        .iter()
+        .map(|c| (c.namespace.clone(), c.state, c.after.is_some()))
+        .collect();
+    assert_eq!(
+        pending,
+        vec![(String::from("access.attestation_runtime"), "pending", true)]
+    );
+    let second = w.run(&old_plan("locked")).await;
+    assert_eq!(upgraded(&second, "locked"), upgraded(&first, "locked"));
 }

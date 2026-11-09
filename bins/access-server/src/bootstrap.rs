@@ -1380,6 +1380,11 @@ where
                 self.upgrade_org_members((tenant, realm), domain, &root, party)
                     .await?,
             );
+            // OP-154 m.9 (f), m.11 (d)
+            upgraded.extend(
+                self.upgrade_agents((tenant, realm), domain, &root, party)
+                    .await?,
+            );
             // OP-151 m.12 (b)
             if let Some(origin) = self.console {
                 self.console_client(&admin, (tenant, realm), domain, &root, origin)

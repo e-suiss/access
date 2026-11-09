@@ -35,6 +35,9 @@ const RECOVERY_LABEL: &[u8] = b"access-bootstrap/recovery:1";
 /// What the root signs to derive the nonce prefix of the `org_member` upgrade step.
 const ORG_MEMBER_LABEL: &[u8] = b"access-bootstrap/org-member:1";
 
+/// What the root signs to derive the nonce prefix of an agent or workload upgrade step.
+const AGENTS_LABEL: &[u8] = b"access-bootstrap/agents:1";
+
 /// Length of the nonce prefix: a SHA-256.
 const PREFIX_LEN: usize = 32;
 
@@ -235,7 +238,16 @@ where
         let Some(issuer) = issuer else {
             return Ok(Vec::new());
         };
-        if self.selects_org_members(domain, issuer).await? {
+        let class = access_kernel::claim::body::Class::OrgMember.name();
+        if self
+            .issuer_accepts(
+                domain,
+                issuer,
+                access_kernel::claim::SUBJECT_SELECTION,
+                &[class],
+            )
+            .await?
+        {
             return Ok(Vec::new());
         }
         self.lead(domain).await?;
@@ -256,11 +268,83 @@ where
         ])
     }
 
-    /// Whether `issuer` has a live subject-selection Acceptance of `org_member` in `domain`.
-    async fn selects_org_members(
+    /// Makes a domain opened before the agent and workload Acceptances take them (OP-154 m.9
+    /// (f), m.11 (d)): the realm issuer's `operated_by`, `sponsored_by` and `agent_kind` as
+    /// predicate input, its `operated_by` for subject selection, its
+    /// `identity_binding_workload` for actor binding and its `attestation_runtime` as predicate
+    /// input. The founding root establishes each one the domain lacks, a CT3 widening behind the
+    /// time-lock; a live Acceptance of the issuer with that use and those classes already has it.
+    ///
+    /// # Errors
+    /// [`BootstrapError`]; a refusal stops the run.
+    pub(crate) async fn upgrade_agents(
+        &self,
+        (tenant, realm): (
+            access_store::identity::TenantId,
+            access_store::identity::RealmId,
+        ),
+        domain: Digest,
+        root: &HsmSigner,
+        party: Id,
+    ) -> Result<Vec<CatalogOut>, BootstrapError> {
+        use access_identity_admin::app::{agents, workloads};
+        let issuer = {
+            let mut t = access_store::identity::TenantTx::begin(self.app, tenant, realm).await?;
+            let i = access_store::issuer::realm_issuer(&mut t).await?;
+            t.commit().await?;
+            i.map(Id)
+        };
+        let Some(issuer) = issuer else {
+            return Ok(Vec::new());
+        };
+        let steps = [
+            ("access.agent_claims", agents::agent_claims(issuer)),
+            ("access.agent_selection", agents::agent_selection(issuer)),
+            (
+                "access.workload_binding",
+                workloads::workload_binding(issuer),
+            ),
+            (
+                "access.attestation_runtime",
+                workloads::runtime_attestation(issuer),
+            ),
+        ];
+        let mut out = Vec::new();
+        for (name, content) in steps {
+            let gate = access_kernel::claim::Gate::of(&content)
+                .map_err(|_| BootstrapError::Refused(String::from("acceptance")))?;
+            if self
+                .issuer_accepts(domain, issuer, &gate.use_, &gate.classes)
+                .await?
+            {
+                continue;
+            }
+            self.lead(domain).await?;
+            let mut label = AGENTS_LABEL.to_vec();
+            label.extend_from_slice(&domain.0);
+            label.extend_from_slice(name.as_bytes());
+            out.push(
+                self.time_locked(
+                    domain,
+                    root,
+                    party,
+                    &label,
+                    Payload::AcceptanceEstablish(content),
+                    String::from(name),
+                )
+                .await?,
+            );
+        }
+        Ok(out)
+    }
+
+    /// Whether `issuer` has a live Acceptance in `domain` for `use_` that covers `classes`.
+    async fn issuer_accepts(
         &self,
         domain: Digest,
         issuer: Id,
+        use_: &str,
+        classes: &[String],
     ) -> Result<bool, BootstrapError> {
         let d = DomainId::from_bytes(domain.0);
         let index = state_of(self.app, &d, &[meta::key(meta::kind::ACCEPTANCES, &issuer)]).await?;
@@ -276,7 +360,6 @@ where
             .filter_map(|v| Id::from_value(v).ok())
             .map(|id| meta::key(meta::kind::ACCEPTANCE, &id))
             .collect();
-        let class = access_kernel::claim::body::Class::OrgMember.name();
         Ok(state_of(self.app, &d, &keys)
             .await?
             .iter()
@@ -285,9 +368,7 @@ where
             .filter_map(|v| meta::ContentState::from_value(&v).ok())
             .filter(|a| a.ended.is_none())
             .filter_map(|a| access_kernel::claim::Gate::of(&a.content).ok())
-            .any(|g| {
-                g.use_ == access_kernel::claim::SUBJECT_SELECTION && g.classes.contains(&class)
-            }))
+            .any(|g| g.use_ == use_ && classes.iter().all(|c| g.classes.contains(c))))
     }
 
     /// One root-signed meta-Exercise behind the CT3 time-lock, idempotent across runs: the
