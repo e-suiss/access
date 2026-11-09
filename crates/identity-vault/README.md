@@ -35,7 +35,7 @@ five minutes before they expire, under a lease; a refused refresh marks the conn
 - the Exercise's basis still standing (a revoked Grant ends every later release);
 - the Exercise acting for the person who owns the connection: holding a token is never a reason;
 - the Exercise's action mapped by the Resource;
-- one release per Exercise, and a token used no longer than the decision's horizon.
+- a single release for each Exercise, and a token used no longer than the decision's horizon.
 
 The token stays with the executor, which makes the call itself (broker as PEP), for every action of
 consequence tier CT2 or above and for every action without an accepted schema. Only at CT0–CT1, with

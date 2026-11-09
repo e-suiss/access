@@ -141,8 +141,7 @@ impl Case {
     }
 }
 
-// U66, G59, EI-26, AGI-2, AG-40 (3), Ek B 4407, 4548: every release path (the executor's, path (b)
-// and the release that refreshed first) runs the same check, and each missing condition refuses
+// U66, G59, EI-26, AGI-2, AG-40 (3), Ek B 4407, 4548
 #[test]
 fn every_release_path_runs_the_same_check() {
     let r = resource(true);
@@ -230,7 +229,7 @@ fn every_release_path_runs_the_same_check() {
     }
 }
 
-// AG-40 (3): an executor the Resource does not register gets nothing, even as the PEP
+// AG-40 (3)
 #[test]
 fn an_unregistered_executor_gets_nothing() {
     let mut r = resource(true);
@@ -241,9 +240,7 @@ fn an_unregistered_executor_gets_nothing() {
     assert_eq!(Case::executor().run(&r), Err(Refusal::ActionNotMapped));
 }
 
-// U65, AG-40 (4), (6), MD-8, Ek B 4408, 4409, 4411, 4628: path (b) only at CT0–CT1 with the mode
-// open, a known expiry within the horizon, and one hour or an upstream revocation endpoint;
-// anything else is path (a), and an unclassified action is CT2
+// U65, AG-40 (4), (6), MD-8, Ek B 4408, 4409, 4411, 4628
 #[test]
 fn path_b_needs_every_condition_and_falls_back_to_the_executor() {
     let r = resource(true);
@@ -295,7 +292,7 @@ fn path_b_needs_every_condition_and_falls_back_to_the_executor() {
     assert_eq!(unclassified.run(&r).unwrap().tier, Tier::Ct2);
 }
 
-// U65, AG-32: a token is never used past the decision's horizon, on either path
+// U65, AG-32
 #[test]
 fn a_release_never_outlives_the_horizon() {
     let r = resource(false);

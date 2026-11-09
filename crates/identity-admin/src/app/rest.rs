@@ -627,19 +627,29 @@ fn vault_change(
     let bad = |e: Bad| match e {
         Bad::Resource | Bad::Upstream => Invalid::VaultResource,
     };
+    if !matches!(
+        op,
+        Op::PutVaultResource | Op::DisableVaultResource | Op::PutVaultReleaseMode
+    ) {
+        return Ok(None);
+    }
+    let mut own = obj(body)?.clone();
+    own.remove(VALIDITY);
+    own.remove("ais");
+    let body = Json::Object(own);
     Ok(Some(match op {
         Op::PutVaultResource => {
             let catalog = Catalog::get_shipped().ok_or(Invalid::VaultResource)?;
-            VaultChange::put(key_of(key)?, body, catalog).map_err(bad)?
+            VaultChange::put(key_of(key)?, &body, catalog).map_err(bad)?
         }
         Op::DisableVaultResource => {
-            if obj(body)?.is_empty() {
+            if obj(&body)?.is_empty() {
                 VaultChange::Disable(String::from(key_of(key)?))
             } else {
                 return Err(Invalid::Body);
             }
         }
-        Op::PutVaultReleaseMode => VaultChange::release_mode(body).map_err(bad)?,
+        Op::PutVaultReleaseMode => VaultChange::release_mode(&body).map_err(bad)?,
         _ => return Ok(None),
     }))
 }

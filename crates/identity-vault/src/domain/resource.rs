@@ -305,9 +305,9 @@ impl Resource {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VaultChange {
     /// `idp.vault.resource_enable` (CT2): a catalog upstream, enabled or changed.
-    Enable(Resource),
+    Enable(Box<Resource>),
     /// `idp.vault.resource_register` (reserved, CT3): the realm's own upstream.
-    Register(Resource),
+    Register(Box<Resource>),
     /// `idp.vault.resource_disable` (CT1): no new connection or release under it.
     Disable(String),
     /// `idp.vault.release_mode_open` (CT2, `true`) or `release_mode_close` (CT1, `false`).
@@ -323,8 +323,8 @@ impl VaultChange {
     pub fn put(name: &str, body: &Json, catalog: &Catalog) -> Result<Self, Invalid> {
         let r = Resource::from_json(name, body, catalog)?;
         Ok(match r.origin {
-            Origin::Catalog => Self::Enable(r),
-            Origin::Realm => Self::Register(r),
+            Origin::Catalog => Self::Enable(Box::new(r)),
+            Origin::Realm => Self::Register(Box::new(r)),
         })
     }
 
@@ -427,7 +427,7 @@ mod tests {
         let VaultChange::Enable(r) = &ch else {
             panic!()
         };
-        assert_eq!(Resource::from_bytes(&r.to_bytes().unwrap()).unwrap(), *r);
+        assert_eq!(Resource::from_bytes(&r.to_bytes().unwrap()).unwrap(), **r);
         assert!(r.view().get("client_secret").is_none());
 
         let mut own = body();
@@ -446,8 +446,7 @@ mod tests {
         assert!(VaultChange::put("other", &own, &c).is_err());
     }
 
-    // AGI-2, §9.9.6: scope_mapping names only scopes the Resource holds and never a core or idp
-    // action; it produces no authority
+    // AGI-2, §9.9.6
     #[test]
     fn a_resource_outside_the_rules_is_refused() {
         let c = Catalog::shipped().unwrap();

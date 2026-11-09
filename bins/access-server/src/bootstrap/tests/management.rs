@@ -1160,5 +1160,6 @@ mod accounts;
 mod agents;
 mod organizations;
 mod settings;
+mod vault;
 mod workloads;
 mod writes;

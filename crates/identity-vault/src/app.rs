@@ -361,9 +361,8 @@ impl<H: ProviderHttp, S: SocialSecrets, X: Exercises, R: Random> Vault<H, S, X, 
                 party: c.party,
                 resource: read.resource.as_ref(),
             };
-            let row = read.token.as_ref().ok_or(Refusal::NotConnected)?;
             let facts = TokenFacts {
-                expires_at: row.access_expires_ms,
+                expires_at: read.token.as_ref().and_then(|r| r.access_expires_ms),
                 revocable: read
                     .resource
                     .as_ref()
@@ -371,6 +370,7 @@ impl<H: ProviderHttp, S: SocialSecrets, X: Exercises, R: Random> Vault<H, S, X, 
             };
             // U66
             let admitted = admit(&asked, allowed.as_ref(), &held, (read.open, facts), now)?;
+            let row = read.token.as_ref().ok_or(Refusal::NotConnected)?;
             if !refreshed && row.refreshable && refresh_first(row.access_expires_ms, now) {
                 self.refresh(db, keys, req.connection, now).await?;
                 refreshed = true;

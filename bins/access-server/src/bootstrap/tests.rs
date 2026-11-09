@@ -2491,3 +2491,4 @@ mod mcp;
 mod privacy;
 mod recovery;
 mod recovery_authority;
+mod vault;

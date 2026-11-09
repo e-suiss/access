@@ -324,7 +324,7 @@ mod tests {
         }
     }
 
-    // AGI-3, AG-40 (7), Ek B 4415: a TokenSet never prints its tokens
+    // AGI-3, AG-40 (7), Ek B 4415
     #[test]
     fn a_token_set_never_prints_its_tokens() {
         let a = br#"{"access_token":"top-secret-at","refresh_token":"top-secret-rt"}"#;
