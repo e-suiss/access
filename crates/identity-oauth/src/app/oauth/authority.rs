@@ -578,7 +578,8 @@ mod tests {
             ],
             relied_on: Vec::new(),
         };
-        let Reply::Json { status, body, .. } = required(&d, &Digest([1; 32]), &[2; 16]) else {
+        let nonce = access_crypto::random::bytes::<16>().unwrap();
+        let Reply::Json { status, body, .. } = required(&d, &Digest([1; 32]), &nonce) else {
             panic!("json");
         };
         assert_eq!(status, 400);
