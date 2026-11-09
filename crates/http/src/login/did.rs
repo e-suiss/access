@@ -23,6 +23,8 @@ struct Svc<D, K, KI, C, M, P> {
     keys: P,
 }
 
+type St<D, K, KI, C, M, P> = State<Arc<Svc<D, K, KI, C, M, P>>>;
+
 /// The `did:web` routes of lane L3.
 pub fn router<D, K, KI, C, M, P>(
     discovery: Discovery<D, K>,
@@ -57,7 +59,7 @@ where
 
 /// `GET /u/{party}/did.json`.
 async fn document<D, K, KI, C, M, P>(
-    State(s): State<Arc<Svc<D, K, KI, C, M, P>>>,
+    State(s): St<D, K, KI, C, M, P>,
     Path(p): Path<HashMap<String, String>>,
     uri: Uri,
     headers: HeaderMap,

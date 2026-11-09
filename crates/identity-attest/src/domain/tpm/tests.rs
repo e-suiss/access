@@ -156,7 +156,7 @@ fn tpm_key_attestation_follows_its_checklist() {
 fn the_p256_point_of_an_ecc_area_is_read_and_nothing_else() {
     let mut area = ALG_ECC.to_be_bytes().to_vec();
     area.extend(ALG_SHA256.to_be_bytes());
-    area.extend(0x0007_2u32.to_be_bytes());
+    area.extend(0x0000_0072_u32.to_be_bytes());
     area.extend([0, 0]);
     area.extend(ALG_NULL.to_be_bytes());
     area.extend([0x00, 0x18, 0x00, 0x0b]);

@@ -911,7 +911,7 @@ impl<H: ProviderHttp, S: SocialSecrets, X: Exercises, R: Random> Vault<H, S, X, 
                 }
             }
         }
-        used.sort_by(|a, b| b.2.cmp(&a.2));
+        used.sort_by_key(|a| core::cmp::Reverse(a.2));
         let mut parties: Vec<[u8; 16]> = sponsored.clone();
         parties.extend(used.iter().map(|u| u.0));
         parties.sort_unstable();

@@ -34,6 +34,8 @@ struct Svc<D, K, KI, C, M, W> {
     roots: AttestRoots,
 }
 
+type St<D, K, KI, C, M, W> = State<Arc<Svc<D, K, KI, C, M, W>>>;
+
 /// The workload routes of lane L4; attestations verify against `roots`.
 pub fn router<D, K, KI, C, M, W>(
     discovery: Discovery<D, K>,
@@ -74,7 +76,7 @@ where
 
 /// `POST /v1/workloads/instances`.
 async fn open<D, K, KI, C, M, W>(
-    State(s): State<Arc<Svc<D, K, KI, C, M, W>>>,
+    State(s): St<D, K, KI, C, M, W>,
     Path(p): Path<HashMap<String, String>>,
     uri: Uri,
     headers: HeaderMap,
@@ -112,7 +114,7 @@ where
 
 /// `POST /v1/workloads/attestations`.
 async fn attest<D, K, KI, C, M, W>(
-    State(s): State<Arc<Svc<D, K, KI, C, M, W>>>,
+    State(s): St<D, K, KI, C, M, W>,
     Path(p): Path<HashMap<String, String>>,
     uri: Uri,
     headers: HeaderMap,

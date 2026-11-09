@@ -1120,8 +1120,8 @@ fn attestation_ca() -> (rcgen::Issuer<'static, rcgen::KeyPair>, Vec<u8>) {
     (rcgen::Issuer::new(params, key), root)
 }
 
-// §5.9, §10.1.2, §12.2.1, L21, AG-31, U20, OP-154 m.3 (s), m.11 (l), OP-153 m.3 (gg),
-// Ek B 4125, 4262, 4524
+// §5.9, §10.1.2, §12.2.1, L21, AG-31, U20, Ek B 4125, 4262, 4524
+// OP-154 m.3 (s), m.11 (l), OP-153 m.3 (gg)
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn hardware_evidence_of_an_instance_key_becomes_its_runtime_attestation() {
     let (runtime, pkcs8) = SoftSigner::generate_p256().unwrap();

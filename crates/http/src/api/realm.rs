@@ -894,7 +894,11 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "retireAgent" | "assignAgentSponsor" | "removeAgentSponsor" => (Agents, w(false)),
         "listAgentSponsors" => (AgentSponsors, Shape::List(&["account_id"])),
         // OP-154 m.3 (g), (j), (p)
-        "defineAgentTemplate" | "putDcrPolicy" | "putDeviceCode" => (Settings, w(false)),
+        "defineAgentTemplate"
+        | "putDcrPolicy"
+        | "putDeviceCode"
+        | "createCrossAppConnection"
+        | "retireCrossAppConnection" => (Settings, w(false)),
         "revokeAllAgentInstances" => (Agents, Shape::RevokeAll),
         // OP-154 m.3 (t)
         "listVaultResources" => (
@@ -909,8 +913,6 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
             Shape::List(&["resource", "display_name"]),
         ),
         "registerProtectedResource" => (ProtectedResources, CREATE),
-        // OP-154 m.3 (n)
-        "createCrossAppConnection" | "retireCrossAppConnection" => (Settings, w(false)),
         o if declared(o) => (Settings, Shape::Planned("WriteResult")),
         "listClients" => (
             Clients,
