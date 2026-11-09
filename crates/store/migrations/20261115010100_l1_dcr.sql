@@ -34,7 +34,7 @@ CREATE TABLE access.oauth_dcr_clients (
   tenant_id uuid NOT NULL,
   realm_id uuid NOT NULL,
   client_uuid uuid NOT NULL DEFAULT uuidv7(),
-  client_id text NOT NULL UNIQUE CHECK (client_id ~ '^dcr_[A-Za-z0-9_-]{43}$'),
+  client_id text NOT NULL CHECK (client_id ~ '^dcr_[A-Za-z0-9_-]{43}$'),
   metadata bytea NOT NULL CHECK (octet_length(metadata) BETWEEN 2 AND 5120),
   issuer text NOT NULL CHECK (issuer ~ '^https://'),
   token bytea NOT NULL CHECK (octet_length(token) = 32),
@@ -45,6 +45,7 @@ CREATE TABLE access.oauth_dcr_clients (
   retire_reason text CHECK (retire_reason IN ('unused', 'policy')),
   CHECK ((retired_ms IS NULL) = (retire_reason IS NULL)),
   PRIMARY KEY (tenant_id, realm_id, client_uuid),
+  UNIQUE (tenant_id, realm_id, client_id),
   FOREIGN KEY (tenant_id, realm_id) REFERENCES access.realms (tenant_id, realm_id)
 );
 CREATE INDEX oauth_dcr_clients_ip ON access.oauth_dcr_clients (tenant_id, realm_id, ip_prefix, registered_ms);
