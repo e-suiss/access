@@ -184,6 +184,25 @@ const SQL: &str = "sql-only-in-store";
 /// The only crate that talks to PostgreSQL (OP-66).
 const STORE_DIR: &str = "crates/store/";
 
+/// The Access Executor's own SQL module over its own database (OP-154 m.3 (u)): the only other
+/// place SQL is written.
+const EXECUTOR_SQL: &[&str] = &[
+    "services/executor/src/store.rs",
+    "services/executor/src/testing.rs",
+    "services/executor/tests/store.rs",
+    "services/executor/migrations/",
+];
+
+/// The packages outside `crates/store` that may depend on a database driver.
+const SQL_PACKAGES: &[&str] = &["services/executor"];
+
+fn sql_allowed(rel_path: &str) -> bool {
+    rel_path.starts_with(STORE_DIR)
+        || EXECUTOR_SQL
+            .iter()
+            .any(|p| rel_path == *p || (p.ends_with('/') && rel_path.starts_with(p)))
+}
+
 /// Code tokens that reach the database.
 const SQL_TOKENS: &[&str] = &[
     "sqlx::",
@@ -262,7 +281,7 @@ pub(crate) fn check_sql(root: &Path) -> Result<Vec<Violation>, String> {
     let mut out = Vec::new();
     for path in walk(root)? {
         let rel_path = rel(root, &path);
-        if rel_path.starts_with(STORE_DIR) || RULE_DEFINITION_FILES.contains(&rel_path.as_str()) {
+        if sql_allowed(&rel_path) || RULE_DEFINITION_FILES.contains(&rel_path.as_str()) {
             continue;
         }
         match path.extension().and_then(|e| e.to_str()) {
@@ -278,7 +297,8 @@ pub(crate) fn check_sql(root: &Path) -> Result<Vec<Violation>, String> {
     }
     let md = crate::supply_chain::metadata::load(root)?;
     for pkg in md.members() {
-        if rel(root, pkg.dir()) == STORE_DIR.trim_end_matches('/') {
+        let dir = rel(root, pkg.dir());
+        if dir == STORE_DIR.trim_end_matches('/') || SQL_PACKAGES.contains(&dir.as_str()) {
             continue;
         }
         for dep in pkg.deps.iter().filter(|d| d.kind != DepKind::Dev) {

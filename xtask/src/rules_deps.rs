@@ -129,8 +129,8 @@ fn allowed_targets(from: Class) -> Option<&'static [Class]> {
 
 /// May a crate of class `from` depend on a crate of class `to`?
 pub(crate) fn allowed(from: Class, to: Class) -> bool {
-    // OP-93
-    if to == Class::Testkit {
+    // OP-93; B21, OP-154 m.3 (u)
+    if matches!(to, Class::Testkit | Class::Service) {
         return false;
     }
     // OP-76
@@ -322,6 +322,28 @@ mod tests {
             member("services/executor", &[("crates/store", None)]),
         ]);
         assert_eq!(v.len(), 1);
+    }
+
+    // B21, OP-154 m.3 (u), Ek B 4597
+    #[test]
+    fn no_access_crate_or_binary_depends_on_a_service() {
+        for from in [
+            "bins/access-server",
+            "crates/http",
+            "crates/authority-core",
+            "services/experience",
+        ] {
+            let bad = run(&[
+                member("services/executor", &[]),
+                member(from, &[("services/executor", None)]),
+            ]);
+            assert_eq!(bad.len(), 1, "{from}");
+        }
+        let tested = run(&[
+            member("services/executor", &[]),
+            member("bins/access-server", &[("services/executor", Some("dev"))]),
+        ]);
+        assert!(tested.is_empty());
     }
 
     #[test]
