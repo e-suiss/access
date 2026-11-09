@@ -46,6 +46,7 @@ mod audit;
 mod binding;
 mod projection;
 mod reconcile;
+mod workload;
 pub use audit::{
     AUDIT_EVENT_EXPORT, AUDIT_EVENT_READ, AUDIT_EVENT_REJECTED, audit_text, is_rejection, txn,
 };

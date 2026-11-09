@@ -704,8 +704,16 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 key,
             )
         } else if bootstrap {
-            let Some((party, key)) = self.binding.bound(&kid) else {
-                return Ok(None);
+            let (party, key) = match (self.binding.bound(&kid), &req.payload) {
+                (Some(bound), _) => bound,
+                // OP-154 m.3 (d)
+                (None, Some(Payload::InstanceCreate { party, key, .. }))
+                    if access_kernel::verify::key_scope::thumbprint(key) == kid
+                        && self.workload_bound(party, &kid, now).await? =>
+                {
+                    (*party, key.clone())
+                }
+                (None, _) => return Ok(None),
             };
             let exercise = meta::exercise_id(&req.domain, &req.nonce)
                 .map_err(|_| CoreError::Protocol("nonce"))?;
@@ -2050,6 +2058,7 @@ pub mod recovery;
 mod regime;
 pub mod roles;
 pub mod sources;
+mod workload;
 
 pub use ingest::Ingested;
 pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};
