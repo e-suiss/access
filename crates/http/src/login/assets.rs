@@ -158,6 +158,25 @@ impl Assets {
         self.files.get(INDEX).map(|f| Self::respond(f, "no-cache"))
     }
 
+    /// The app's page served under `base`, its asset references moved there with it.
+    #[must_use]
+    pub fn page_at(&self, base: &str) -> Option<Response> {
+        let file = self.files.get(INDEX)?;
+        if base.is_empty() {
+            return Some(Self::respond(file, "no-cache"));
+        }
+        let html = std::str::from_utf8(&file.body).ok()?;
+        let moved = File {
+            body: html
+                .replace("\"/assets/", &format!("\"{base}/assets/"))
+                .replace("=/assets/", &format!("={base}/assets/"))
+                .into_bytes()
+                .into(),
+            content_type: file.content_type,
+        };
+        Some(Self::respond(&moved, "no-cache"))
+    }
+
     /// A built asset under `assets/`; content-hashed, so cached for good.
     #[must_use]
     pub fn asset(&self, path: &str) -> Option<Response> {
@@ -177,5 +196,40 @@ impl Assets {
 pub fn secure(h: &mut axum::http::HeaderMap) {
     for (name, value) in SECURITY_HEADERS {
         h.insert(name, HeaderValue::from_static(value));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn body(r: Response) -> String {
+        let b = axum::body::to_bytes(r.into_body(), usize::MAX)
+            .await
+            .unwrap_or_default();
+        String::from_utf8_lossy(&b).into_owned()
+    }
+
+    // OP-153 m.2, m.23 (f)
+    #[tokio::test]
+    async fn a_page_under_a_realm_path_loads_its_assets_from_there() {
+        let dir = std::env::temp_dir().join(format!("access-login-page-at-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("assets")).unwrap_or_default();
+        std::fs::write(
+            dir.join("index.html"),
+            "<script type=\"module\" src=\"/assets/a.js\"></script><link href=/assets/a.css>",
+        )
+        .unwrap_or_default();
+        std::fs::write(dir.join("assets/a.js"), "export {};").unwrap_or_default();
+        let assets = Assets::load(&dir).unwrap_or_else(|_| Assets {
+            files: HashMap::new(),
+        });
+        let moved = body(assets.page_at("/realms/acme").unwrap_or_default()).await;
+        assert_eq!(
+            moved,
+            "<script type=\"module\" src=\"/realms/acme/assets/a.js\"></script><link href=/realms/acme/assets/a.css>"
+        );
+        let root = body(assets.page_at("").unwrap_or_default()).await;
+        assert!(root.contains("src=\"/assets/a.js\""));
     }
 }

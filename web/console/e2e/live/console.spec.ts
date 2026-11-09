@@ -55,14 +55,14 @@ async function signIn(page: Page): Promise<void> {
   }
   expect(done["step"]).toBe("complete");
   await page.goto(authorize);
-  await page.waitForURL(/\/console\//);
+  await page.waitForURL(/\/console(?:[?#]|$)/);
 }
 
 test.describe("@live console", () => {
   test("@live the shell is served with its headers and the BFF answers nothing without a session", async ({
     page,
   }) => {
-    const r = await page.goto("/console/");
+    const r = await page.goto("/console");
     expect(r?.status()).toBe(200);
     const csp = r?.headers()["content-security-policy"] ?? "";
     expect(csp).toContain("frame-ancestors 'none'");

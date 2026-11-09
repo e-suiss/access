@@ -823,9 +823,9 @@ where
         Ok(e) => e,
         Err(r) => return r,
     };
-    let Some(mut page) = s.assets.as_ref().and_then(assets::Assets::page) else {
+    if s.assets.is_none() {
         return not_found();
-    };
+    }
     // TN-106, IDP-36, OP-153 m.3 (t)
     let (Ok(theme), Ok(base)) = (
         s.hosted.theme(&entry).await,
@@ -836,6 +836,9 @@ where
             "unavailable",
             "Service Unavailable",
         );
+    };
+    let Some(mut page) = s.assets.as_ref().and_then(|a| a.page_at(&base)) else {
+        return not_found();
     };
     let (enforced, report_only) = theme.csp(&base);
     let h = page.headers_mut();
