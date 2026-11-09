@@ -1,9 +1,9 @@
 # AG-39: HubSpot; refresh tokens are revoked through their own API, not RFC 7009.
-# Source: developers.hubspot.com/docs/api/oauth-quickstart-guide
+# Source: developers.hubspot.com/docs/api-reference/legacy/authentication/manage-oauth-tokens
 id = "hubspot"
 display_name = "HubSpot"
 authorization_endpoint = "https://app.hubspot.com/oauth/authorize"
-token_endpoint = "https://api.hubapi.com/oauth/v1/token"
+token_endpoint = "https://api.hubapi.com/oauth/v3/token"
 lifetime_s = 1800
 refresh = "reusable"
 pkce = false

@@ -1,4 +1,5 @@
-# AG-39: Zoom user-level OAuth apps. Source: developers.zoom.us/docs/integrations/oauth
+# AG-39: Zoom user-level OAuth apps with granular scopes.
+# Source: developers.zoom.us/docs/integrations/oauth
 id = "zoom"
 display_name = "Zoom"
 authorization_endpoint = "https://zoom.us/oauth/authorize"
@@ -8,13 +9,21 @@ lifetime_s = 3600
 refresh = "rotating"
 
 [[scopes]]
-name = "user:read"
+name = "user:read:user"
 description = "Read the person's profile"
 
 [[scopes]]
-name = "meeting:read"
-description = "Read meetings"
+name = "meeting:read:list_meetings"
+description = "List meetings"
 
 [[scopes]]
-name = "meeting:write"
-description = "Create and edit meetings"
+name = "meeting:read:meeting"
+description = "Read a meeting"
+
+[[scopes]]
+name = "meeting:write:meeting"
+description = "Create meetings"
+
+[[scopes]]
+name = "meeting:update:meeting"
+description = "Edit meetings"

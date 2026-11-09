@@ -1,5 +1,5 @@
 # AG-39: Figma; refreshes go to their own endpoint.
-# Source: developers.figma.com/docs/rest-api/authentication
+# Source: developers.figma.com/docs/rest-api/oauth-apps
 id = "figma"
 display_name = "Figma"
 authorization_endpoint = "https://www.figma.com/oauth"

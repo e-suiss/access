@@ -1,4 +1,5 @@
-# AG-39: Calendly. Source: developer.calendly.com/api-docs/oauth
+# AG-39: Calendly; refresh tokens are single use.
+# Source: developer.calendly.com/api-docs/calendly-o-auth/o-auth/post-oauth-refresh-token
 id = "calendly"
 display_name = "Calendly"
 authorization_endpoint = "https://auth.calendly.com/oauth/authorize"
@@ -6,3 +7,19 @@ token_endpoint = "https://auth.calendly.com/oauth/token"
 revocation_endpoint = "https://auth.calendly.com/oauth/revoke"
 lifetime_s = 7200
 refresh = "rotating"
+
+[[scopes]]
+name = "users:read"
+description = "Read the person's profile"
+
+[[scopes]]
+name = "event_types:read"
+description = "Read event types"
+
+[[scopes]]
+name = "scheduled_events:read"
+description = "Read scheduled events"
+
+[[scopes]]
+name = "scheduled_events:write"
+description = "Create and cancel scheduled events"

@@ -1,10 +1,11 @@
-# AG-39: monday.com; tokens do not expire. Source: developer.monday.com/apps/docs/oauth
+# AG-39: monday.com OAuth 2.1 flow; PKCE is required and refresh tokens are single use.
+# Source: developer.monday.com/apps/docs/migrating-to-the-new-oauth-flow
 id = "monday"
 display_name = "monday.com"
 authorization_endpoint = "https://auth.monday.com/oauth2/authorize"
-token_endpoint = "https://auth.monday.com/oauth2/token"
-refresh = "none"
-pkce = false
+token_endpoint = "https://auth.monday.com/oauth_ms/oauth/token"
+revocation_endpoint = "https://auth.monday.com/oauth_ms/oauth/revoke"
+refresh = "rotating"
 
 [[scopes]]
 name = "me:read"

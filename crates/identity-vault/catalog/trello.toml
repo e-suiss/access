@@ -1,5 +1,5 @@
-# AG-39: Trello through Atlassian OAuth 2.0 (3LO); no RFC 7009 endpoint.
-# Source: developer.atlassian.com/cloud/trello/guides/rest-api/authorization
+# AG-39: Trello through Atlassian OAuth 2.0 (3LO); PKCE is required and no RFC 7009 endpoint.
+# Source: developer.atlassian.com/cloud/trello/guides/rest-api/oauth-2-confidential-client-usage
 id = "trello"
 display_name = "Trello"
 authorization_endpoint = "https://auth.atlassian.com/authorize"
@@ -8,7 +8,6 @@ lifetime_s = 3600
 refresh = "rotating"
 
 [authorize_params]
-audience = "api.atlassian.com"
 prompt = "consent"
 
 [[scopes]]
@@ -16,9 +15,17 @@ name = "offline_access"
 description = "Keep access while the person is away (refresh)"
 
 [[scopes]]
-name = "read:board:trello"
-description = "Read boards"
+name = "read:member:trello"
+description = "Read the person's profile and memberships"
 
 [[scopes]]
-name = "write:card:trello"
-description = "Create and edit cards"
+name = "read:board:trello"
+description = "Read cards, lists and comments on boards"
+
+[[scopes]]
+name = "write:board:trello"
+description = "Create and edit cards, lists and comments on boards"
+
+[[scopes]]
+name = "read:organization:trello"
+description = "Read workspaces"

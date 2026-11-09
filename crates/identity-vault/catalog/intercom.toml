@@ -1,5 +1,5 @@
 # AG-39: Intercom; permissions are set on the app and tokens do not expire.
-# Source: developers.intercom.com/docs/build-an-integration/learn-more/authentication
+# Source: developers.intercom.com/docs/build-an-integration/learn-more/authentication/setting-up-oauth
 id = "intercom"
 display_name = "Intercom"
 authorization_endpoint = "https://app.intercom.com/oauth"

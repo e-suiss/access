@@ -1,4 +1,4 @@
-# AG-39: Box. Source: developer.box.com/guides/authentication/oauth2
+# AG-39: Box. Source: developer.box.com/reference/get-authorize
 id = "box"
 display_name = "Box"
 authorization_endpoint = "https://account.box.com/api/oauth2/authorize"

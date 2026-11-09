@@ -12,9 +12,9 @@ name = "identify"
 description = "Read the person's profile"
 
 [[scopes]]
-name = "guilds"
-description = "List the person's servers"
+name = "email"
+description = "Read the person's email address"
 
 [[scopes]]
-name = "messages.read"
-description = "Read messages"
+name = "guilds"
+description = "List the person's servers"

@@ -1,10 +1,10 @@
-# AG-39: Shopify, per shop; offline tokens do not expire.
-# Source: shopify.dev/docs/apps/build/authentication-authorization
+# AG-39: Shopify, per shop; expiring offline tokens come with single-use refresh tokens.
+# Source: shopify.dev/docs/apps/build/authentication-authorization/access-tokens/authorization-code-grant
 id = "shopify"
 display_name = "Shopify"
 authorization_endpoint = "https://{shop}.myshopify.com/admin/oauth/authorize"
 token_endpoint = "https://{shop}.myshopify.com/admin/oauth/access_token"
-refresh = "none"
+refresh = "rotating"
 pkce = false
 scope_separator = ","
 placeholders = ["shop"]

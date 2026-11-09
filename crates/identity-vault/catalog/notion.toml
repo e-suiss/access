@@ -4,7 +4,8 @@ id = "notion"
 display_name = "Notion"
 authorization_endpoint = "https://api.notion.com/v1/oauth/authorize"
 token_endpoint = "https://api.notion.com/v1/oauth/token"
-refresh = "none"
+revocation_endpoint = "https://api.notion.com/v1/oauth/revoke"
+refresh = "rotating"
 pkce = false
 
 [authorize_params]

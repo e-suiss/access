@@ -1,5 +1,5 @@
 # AG-39: Dropbox short-lived tokens with offline refresh; revocation is its own API, not
-# RFC 7009. Source: developers.dropbox.com/oauth-guide
+# RFC 7009. Source: docs.dropboxapi.com/dropbox-api/docs/oauth
 id = "dropbox"
 display_name = "Dropbox"
 authorization_endpoint = "https://www.dropbox.com/oauth2/authorize"
