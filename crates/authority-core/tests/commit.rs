@@ -6,6 +6,9 @@
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
+#[path = "commit/agents.rs"]
+mod agents;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
@@ -1808,8 +1811,8 @@ fn approval_act(
     expires_at: u64,
 ) -> ApprovalAct {
     ApprovalAct {
-        evidence: None,
-        surface_class: None,
+        evidence: Some(access_kernel::aas::EvidenceLevel::PhishingResistant),
+        surface_class: Some(access_kernel::aas::SurfaceClass::Desktop),
         act: Act::Contribution("approve".to_owned()),
         instance: alice_instance(d),
         party: ALICE,
@@ -8433,8 +8436,8 @@ fn contribution_of(
     (target, render): (Digest, Digest),
 ) -> Request {
     let act = ApprovalAct {
-        evidence: None,
-        surface_class: None,
+        evidence: Some(access_kernel::aas::EvidenceLevel::PhishingResistant),
+        surface_class: Some(access_kernel::aas::SurfaceClass::Desktop),
         act: Act::Contribution(class.to_owned()),
         instance,
         party,

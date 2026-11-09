@@ -78,16 +78,41 @@ fn denied(d: &Decision) -> Reply {
     )
 }
 
+/// The remediation code of an unmet term (§8.18.1, §8.18.3): a term the actor cannot meet is
+/// `not-satisfiable-by-actor` and never `interaction_required` (AGI-4, §9.9.5 rule 1).
+fn unmet_remediation(u: &access_kernel::combinator::Unmet) -> &'static str {
+    use access_kernel::model::ProofKind;
+    if !u.satisfiable_by_actor {
+        return "not-satisfiable-by-actor";
+    }
+    match u.term.proof_kind {
+        ProofKind::Contribution | ProofKind::ForeignAuthority => "route-to-coordinator",
+        ProofKind::Claim
+            if u.term.class != access_kernel::claim::body::Class::Authentication.name() =>
+        {
+            "refresh-claim"
+        }
+        ProofKind::Claim | ProofKind::Authentication => "self-authenticate",
+    }
+}
+
 /// §9.9.5: a required action with its remediation codes and the nonce to answer it with.
 fn required(d: &Decision, domain: &Digest, nonce: &[u8]) -> Reply {
     let v = decision_value(d);
+    let mut remediation = texts(v.get("blockers"), "remediation");
+    for u in &d.unmet {
+        let code = Value::from(unmet_remediation(u));
+        if !remediation.contains(&code) {
+            remediation.push(code);
+        }
+    }
     Reply::json(
         400,
         &json!({
             "error": "insufficient_authorization",
             "error_description": "the authority decision requires an action",
             "authorization_remediation": {
-                "remediation": texts(v.get("blockers"), "remediation"),
+                "remediation": remediation,
                 "exercise_ref": { "domain": b64url_encode(&domain.0), "nonce": b64url_encode(nonce) },
             },
         }),
@@ -509,5 +534,64 @@ pub(crate) fn error_of(r: &Reply) -> Option<String> {
             .ok()
             .and_then(|v| v.get("error").and_then(Value::as_str).map(String::from)),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use access_kernel::combinator::{Outcome, Position, Unmet};
+    use access_kernel::model::{Binding, Consumption, Independence, ProofKind, RequirementTerm};
+
+    use super::*;
+
+    fn unmet(kind: ProofKind, class: &str, satisfiable_by_actor: bool) -> Unmet {
+        Unmet {
+            term: RequirementTerm {
+                proof_kind: kind,
+                class: class.to_owned(),
+                count: 1,
+                binding: Binding::ActorInstance,
+                freshness_ms: None,
+                independence: Independence::None,
+                consumption: Consumption::Reusable,
+                source: None,
+                assurance: BTreeMap::from([("human_presence".to_owned(), 1)]),
+            },
+            missing: 1,
+            position: Position::ActorSide,
+            satisfiable_by_actor,
+        }
+    }
+
+    // AGI-4, §9.9.5 rule 1, §11.16.3, Ek B 4363
+    #[test]
+    fn a_term_the_agent_cannot_meet_is_never_interaction_required() {
+        let d = Decision {
+            outcome: Outcome::RequireAction,
+            blockers: Vec::new(),
+            unmet: vec![
+                unmet(ProofKind::Authentication, "presence", false),
+                unmet(ProofKind::Contribution, "approve", true),
+                unmet(ProofKind::Claim, "sponsored_by", true),
+            ],
+            relied_on: Vec::new(),
+        };
+        let Reply::Json { status, body, .. } = required(&d, &Digest([1; 32]), &[2; 16]) else {
+            panic!("json");
+        };
+        assert_eq!(status, 400);
+        assert!(!body.contains("interaction_required"), "{body}");
+        let v: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(v["error"], "insufficient_authorization");
+        assert_eq!(
+            v["authorization_remediation"]["remediation"],
+            json!([
+                "not-satisfiable-by-actor",
+                "route-to-coordinator",
+                "refresh-claim"
+            ])
+        );
     }
 }

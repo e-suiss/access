@@ -902,9 +902,10 @@ fn statement_of(
     tier: Tier,
     now: u64,
 ) -> ApprovalAct {
+    // E49 (1)
     ApprovalAct {
-        evidence: None,
-        surface_class: None,
+        evidence: Some(aas::EvidenceLevel::PhishingResistant),
+        surface_class: Some(aas::SurfaceClass::Desktop),
         act: Act::Contribution(env.class.clone()),
         instance: approver.instance,
         party: approver.party,

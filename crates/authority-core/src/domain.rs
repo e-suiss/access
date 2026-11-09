@@ -1788,7 +1788,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
     if !missing.is_empty() {
         return Pass::Need(missing);
     }
-    let restrictions = match crate::restrict::results(
+    let mut restrictions = match crate::restrict::results(
         &applicable,
         &req.intent,
         actor.as_ref(),
@@ -1827,6 +1827,8 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         expansion,
         schema.as_deref(),
     );
+    // E49, OP-154 m.3 (x)
+    let floors = crate::requirements::ceiling(tier, schema.as_deref(), mandate.is_some());
     let terms = bases
         .iter_mut()
         .flat_map(|b| b.hops.iter_mut())
@@ -1838,8 +1840,23 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
     for t in terms {
         *t = core::mem::take(t)
             .into_iter()
-            .map(|term| with_tier_floors(term, tier))
+            .map(|term| crate::requirements::with_ceiling(with_tier_floors(term, tier), &floors))
             .collect();
+    }
+    for r in &mut restrictions {
+        if let access_kernel::restriction::RestrictionOutcome::Require(t) = &mut r.outcome {
+            *t = core::mem::take(t)
+                .into_iter()
+                .map(|term| crate::requirements::with_ceiling(term, &floors))
+                .collect();
+        }
+    }
+    // AGI-4, AGI-8
+    let proofs =
+        crate::requirements::admissible(proofs, actor.as_ref(), actor_is_agent, tier, snapshot);
+    let missing = snapshot.missing();
+    if !missing.is_empty() {
+        return Pass::Need(missing);
     }
     let input = EvaluationInput {
         mode: req.mode,
@@ -1852,7 +1869,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         capacity: req.capacity,
         bases: &bases,
         restrictions: &restrictions,
-        proofs,
+        proofs: &proofs,
         catalog,
     };
     match evaluate(&input, &mut Fuel(FUEL)) {

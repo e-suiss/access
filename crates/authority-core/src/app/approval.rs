@@ -332,9 +332,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             evaluation.releases.clear();
             return Ok(());
         }
+        // E49 (1), (3)
         let approved = Approved {
             statement: h,
-            assurance: bound.assurance.clone(),
+            assurance: crate::requirements::contribution_assurance(&bound.assurance, &act),
             auth_time: bound.time,
         };
         let key = meta::exercise_key(kind::CONTRIBUTION, exercise);

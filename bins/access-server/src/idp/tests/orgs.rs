@@ -1768,8 +1768,8 @@ async fn accept_root(
     );
     let nonce = vec![0x93; 16];
     let act = access_kernel::aas::ApprovalAct {
-        evidence: None,
-        surface_class: None,
+        evidence: Some(access_kernel::aas::EvidenceLevel::PhishingResistant),
+        surface_class: Some(access_kernel::aas::SurfaceClass::Desktop),
         act: access_kernel::aas::Act::Contribution(String::from(meta::ACCEPT_ROOT)),
         instance,
         party,
