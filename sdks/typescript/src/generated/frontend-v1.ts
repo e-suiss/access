@@ -1070,6 +1070,161 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/device": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The RFC 8628 verification page, a trusted surface of its own: the person enters the code a device shows (OP-154 m.3 (p)). */
+        get: operations["deviceVerificationPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/device/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What a user code asks for: the client's name, the scope, and the IP prefix and country the request came from; five wrong codes wait 15 minutes (OP-154 m.3 (p)). */
+        post: operations["previewDeviceCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/device/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approves or declines a user code with the person's AAS; the token it releases is DPoP-bound (OP-154 m.3 (p)). */
+        post: operations["approveDeviceCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/agent-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The person's agents and what each is connected to: sponsor, status, authority and connected accounts (OP-154 m.3 (e), (t)). */
+        get: operations["listAgentConnections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/vault/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The person's connected accounts for agents, each with its upstream, scopes and state; never a token (OP-154 m.3 (t)). */
+        get: operations["listVaultConnections"];
+        put?: never;
+        /** Starts connecting an upstream account after the person's AAS for that client (AS-M15, OP-154 m.3 (t)). */
+        post: operations["startVaultConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/vault/connections/{connection}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One connected account: upstream, scopes, state (`active` or `needs_reconnect`); never a token. */
+        get: operations["getVaultConnection"];
+        put?: never;
+        post?: never;
+        /** Disconnects an account: the TokenSet ends and is revoked upstream where it can be; nothing is deleted (OP-73). */
+        delete: operations["disconnectVaultConnection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/vault/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Releases an upstream token only for an allowed Exercise whose PEP is the calling registered executor Instance, once per step, expiring by the horizon (G59, EI-26, OP-154 m.3 (t)). */
+        post: operations["releaseVaultToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/.well-known/http-message-signatures-directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Web Bot Auth key directory: the Ed25519 keys bound to live agent Instances; revoking an Instance removes its key (RFC 9421, OP-154 m.3 (u)). */
+        get: operations["webBotAuthDirectory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/u/{party}/did.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The did:web document of a person or agent: verification keys and service endpoints; an identifier, never authority (OP-154 m.3 (aa)). */
+        get: operations["didWebDocument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2868,6 +3023,171 @@ export interface operations {
                     "application/json": Record<string, never>;
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    deviceVerificationPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    previewDeviceCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    approveDeviceCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAgentConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listVaultConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    startVaultConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getVaultConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    disconnectVaultConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                connection: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    releaseVaultToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    webBotAuthDirectory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    didWebDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                party: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
             default: components["responses"]["Problem"];
         };
     };

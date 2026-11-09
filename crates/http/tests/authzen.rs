@@ -676,6 +676,22 @@ async fn search_pages_through_results() {
     assert_eq!(body["code"], "search");
 }
 
+// OP-154 m.4
+#[tokio::test]
+async fn a_reserved_search_kind_is_not_yet_served() {
+    for kind in access_authority_core::query::RESERVED_KINDS {
+        let (status, _, body) = post_to(
+            app(Ok(Outcome::Allow), Some("pep-1")),
+            &format!("/access/v1/search/{kind}"),
+            search_body("{}", ""),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_IMPLEMENTED, "{kind}");
+        assert_eq!(body["code"], "not-yet-served", "{kind}");
+    }
+}
+
 // §13.7.4, OP-35, OP-141 m.23
 #[tokio::test]
 async fn a_rate_limit_is_429() {

@@ -51,6 +51,14 @@ pub enum Owner {
     N5,
     /// Privacy and data-subject rights.
     N7,
+    /// Stage 9 L2: device code (OP-154 m.2).
+    L2,
+    /// Stage 9 L3: agent identity and `did:web`.
+    L3,
+    /// Stage 9 L5: token vault.
+    L5,
+    /// Stage 9 L6: Access Executor and Web Bot Auth.
+    L6,
 }
 
 /// One route.
@@ -634,6 +642,83 @@ pub const ROUTES: &[Route] = &[
         "/v1/account/data-requests",
         "requestExport",
         "Asks for the person's export: idp.account.export (OP-153 m.3 (cc)).",
+    ),
+    planned(
+        Owner::L2,
+        Verb::Get,
+        "/device",
+        "deviceVerificationPage",
+        "The RFC 8628 verification page, a trusted surface of its own: the person enters the code a device shows (OP-154 m.3 (p)).",
+    ),
+    planned(
+        Owner::L2,
+        Verb::Post,
+        "/v1/device/preview",
+        "previewDeviceCode",
+        "What a user code asks for: the client's name, the scope, and the IP prefix and country the request came from; five wrong codes wait 15 minutes (OP-154 m.3 (p)).",
+    ),
+    planned(
+        Owner::L2,
+        Verb::Post,
+        "/v1/device/approval",
+        "approveDeviceCode",
+        "Approves or declines a user code with the person's AAS; the token it releases is DPoP-bound (OP-154 m.3 (p)).",
+    ),
+    planned(
+        Owner::L3,
+        Verb::Get,
+        "/v1/account/agent-connections",
+        "listAgentConnections",
+        "The person's agents and what each is connected to: sponsor, status, authority and connected accounts (OP-154 m.3 (e), (t)).",
+    ),
+    planned(
+        Owner::L5,
+        Verb::Get,
+        "/v1/account/vault/connections",
+        "listVaultConnections",
+        "The person's connected accounts for agents, each with its upstream, scopes and state; never a token (OP-154 m.3 (t)).",
+    ),
+    planned(
+        Owner::L5,
+        Verb::Post,
+        "/v1/account/vault/connections",
+        "startVaultConnection",
+        "Starts connecting an upstream account after the person's AAS for that client (AS-M15, OP-154 m.3 (t)).",
+    ),
+    planned(
+        Owner::L5,
+        Verb::Get,
+        "/v1/account/vault/connections/{connection}",
+        "getVaultConnection",
+        "One connected account: upstream, scopes, state (`active` or `needs_reconnect`); never a token.",
+    ),
+    planned(
+        Owner::L5,
+        Verb::Delete,
+        "/v1/account/vault/connections/{connection}",
+        "disconnectVaultConnection",
+        "Disconnects an account: the TokenSet ends and is revoked upstream where it can be; nothing is deleted (OP-73).",
+    ),
+    planned(
+        Owner::L5,
+        Verb::Post,
+        "/v1/vault/releases",
+        "releaseVaultToken",
+        "Releases an upstream token only for an allowed Exercise whose PEP is the calling registered executor Instance, once per step, expiring by the horizon (G59, EI-26, OP-154 m.3 (t)).",
+    ),
+    planned(
+        Owner::L6,
+        Verb::Get,
+        "/.well-known/http-message-signatures-directory",
+        "webBotAuthDirectory",
+        "The Web Bot Auth key directory: the Ed25519 keys bound to live agent Instances; revoking an Instance removes its key (RFC 9421, OP-154 m.3 (u)).",
+    ),
+    planned(
+        Owner::L3,
+        Verb::Get,
+        "/u/{party}/did.json",
+        "didWebDocument",
+        "The did:web document of a person or agent: verification keys and service endpoints; an identifier, never authority (OP-154 m.3 (aa)).",
     ),
 ];
 

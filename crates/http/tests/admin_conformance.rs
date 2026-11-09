@@ -139,7 +139,8 @@ fn every_realm_write_is_an_idp_exercise() {
         .filter(|r| r.surface == Surface::Realm && r.changes_state())
     {
         assert_eq!(row.access, Access::Write, "{}", row.operation_id);
-        if row.operation_id == "createJob" {
+        // OP-154 m.4
+        if row.operation_id == "createJob" || access_http::api::realm::planned(row.operation_id) {
             continue;
         }
         assert!(

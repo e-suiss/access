@@ -113,6 +113,7 @@ pub async fn serve<E: Env>(
         Shape::Write { .. } => commit(&ctx, kind, shape, key, &headers, &body).await,
         Shape::Audit => audit(&ctx, &uri).await,
         Shape::AuditProof => audit_proof(&ctx, key).await,
+        Shape::Planned(_) => Err(&codes::NOT_YET_SERVED),
     };
     answer.unwrap_or_else(problem)
 }

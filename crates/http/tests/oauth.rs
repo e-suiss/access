@@ -276,3 +276,31 @@ async fn a_browser_sees_the_error_page_with_owner_and_reference() {
     .await;
     assert_eq!(api.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
+
+// OP-154 m.3 (p), m.4
+#[tokio::test]
+async fn the_device_authorization_endpoint_is_declared_and_not_yet_served() {
+    for (path, host) in [
+        ("/device_authorization", "acme.id.test"),
+        ("/realms/beta/device_authorization", "id.test"),
+    ] {
+        let r = send(
+            Request::post(path)
+                .header(header::HOST, host)
+                .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                .body(Body::from("client_id=cli_x"))
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(r.status(), StatusCode::NOT_IMPLEMENTED, "{path}");
+    }
+    let elsewhere = send(
+        Request::post("/device_authorization")
+            .header(header::HOST, "evil.test")
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body(Body::from("client_id=cli_x"))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(elsewhere.status(), StatusCode::NOT_FOUND);
+}

@@ -94,6 +94,14 @@ async fn every_realm_write_without_its_actor_proof_changes_nothing() {
             continue;
         }
         let signed = ais(&own, realm_domain(), nonce, h.now());
+        // OP-154 m.4
+        if access_http::api::realm::planned(op) {
+            let (r, body) = send(&router, write(row, nonce, Some(&signed), "{}")).await;
+            assert_eq!(r.status(), StatusCode::NOT_IMPLEMENTED, "{op}: {body}");
+            assert_eq!(body["code"], "not-yet-served", "{op}");
+            assert_eq!(h.position(), before, "{op}: nothing written");
+            continue;
+        }
         let (r, body) = send(&router, write(row, nonce, Some(&signed), "{}")).await;
         assert!(r.status().is_success(), "{op}: {} {body}", r.status());
         assert_eq!(h.position(), before + 1, "{op}: one Exercise");
@@ -124,6 +132,32 @@ async fn every_realm_write_without_its_actor_proof_changes_nothing() {
             r.status()
         );
         assert_eq!(h.position(), before + 1, "{op}");
+    }
+}
+
+// OP-154 m.4
+#[tokio::test]
+async fn a_planned_realm_read_answers_not_yet_served_behind_its_permission() {
+    let h = Harness::new();
+    let router = h.router();
+    let token = h.token("p", "access-admin:realm:acme", &["realm.read"], 600_000);
+    let planned: Vec<&Route> = MANIFEST
+        .iter()
+        .filter(|r| access_http::api::realm::planned(r.operation_id) && r.access != Access::Write)
+        .collect();
+    assert_eq!(planned.len(), 5);
+    for row in planned {
+        let (r, body) = send(&router, read(&path_of(row), &token)).await;
+        assert_eq!(
+            r.status(),
+            StatusCode::NOT_IMPLEMENTED,
+            "{}",
+            row.operation_id
+        );
+        assert_eq!(body["code"], "not-yet-served", "{}", row.operation_id);
+        let other = h.token("q", "access-admin:realm:other", &["realm.read"], 600_000);
+        let (r, _) = send(&router, read(&path_of(row), &other)).await;
+        assert_eq!(r.status(), StatusCode::UNAUTHORIZED, "{}", row.operation_id);
     }
 }
 

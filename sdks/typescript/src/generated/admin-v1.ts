@@ -1198,6 +1198,282 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/realms/{slug}/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The realm's agents: kind, operator, sponsors and status (OP-154 m.3 (c), (e)). */
+        get: operations["listAgents"];
+        put?: never;
+        /** Registers an agent bound to one self-registered agent Party: idp.agent.register (OP-154 m.3 (c)). */
+        post: operations["registerAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/agents/{agent}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One agent: kind, operator, sponsors, status, authority, connected accounts and last run. */
+        get: operations["getAgent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Changes an agent's name and description by JSON Merge Patch: idp.agent.update. */
+        patch: operations["patchAgent"];
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/agents/{agent}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retires an agent: idp.agent.retire; nothing is deleted (OP-73). */
+        post: operations["retireAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/agents/{agent}/revoke-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ends every Instance of the agent as a bulk job of the caller's signed instance_terminate items (OP-154 m.3 (f), P59). */
+        post: operations["revokeAllAgentInstances"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/agents/{agent}/sponsors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The agent's human sponsors (AG-41). */
+        get: operations["listAgentSponsors"];
+        put?: never;
+        /** Assigns a human sponsor: idp.agent.sponsor_assign (OP-154 m.3 (e)). */
+        post: operations["assignAgentSponsor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/agents/{agent}/sponsors/{sponsor}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Removes a sponsor: idp.agent.sponsor_remove; the last one leaving suspends the agent (OP-154 m.3 (e)). */
+        post: operations["removeAgentSponsor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/agent-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Defines an agent Grant template; one without a budget is refused (OP-154 m.3 (g)). */
+        post: operations["defineAgentTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The realm's protected resources and MCP servers, by canonical URI. */
+        get: operations["listProtectedResources"];
+        put?: never;
+        /** Registers a protected resource or MCP server for `resource` validation: idp.client.resource_register. */
+        post: operations["registerProtectedResource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/settings/dcr-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Sets the dynamic client registration profile: idp.client.dcr_policy, or dcr_policy_tighten when it only narrows (OP-154 m.3 (j)). */
+        put: operations["putDcrPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/cross-app-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Records a cross-app connection for ID-JAG: idp.client.cross_app_connection (OP-154 m.3 (n)). */
+        post: operations["createCrossAppConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/cross-app-connections/{connection}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retires a cross-app connection: idp.client.cross_app_connection_retire. */
+        post: operations["retireCrossAppConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/settings/device-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Turns the device authorization grant on (idp.realm.device_code) or off (device_code_close) (OP-154 m.3 (p)). */
+        put: operations["putDeviceCode"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/vault/resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The realm's vault Resources: the catalog upstreams it enabled and its own (OP-154 m.3 (t)). */
+        get: operations["listVaultResources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/vault/resources/{resource}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Enables a catalog upstream (idp.vault.resource_enable) or registers the realm's own (resource_register, reserved). */
+        put: operations["putVaultResource"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/vault/resources/{resource}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disables a vault Resource: idp.vault.resource_disable. */
+        post: operations["disableVaultResource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/settings/vault-release-mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Opens release path (b) for CT0-CT1 classes (idp.vault.release_mode_open) or closes it (release_mode_close) (OP-154 m.3 (t)). */
+        put: operations["putVaultReleaseMode"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/platform/intents": {
         parameters: {
             query?: never;
@@ -1420,6 +1696,25 @@ export interface components {
             /** @enum {string} */
             status?: "staged" | "pending_user_action" | "active" | "locked" | "suspended" | "deactivated" | "tombstone" | "purging";
             status_at?: components["schemas"]["Time"];
+            created_at?: components["schemas"]["Time"];
+        };
+        /** @description An agent of the realm (OP-154 m.3 (c), (e)): its own agent Party, the operator it runs for, its human sponsors and what it is connected to. It is exported to the authority plane only as `agent_kind`, `operated_by` and `sponsored_by` Claims; it holds no authority of its own (AG-19). */
+        Agent: {
+            /** @description Opaque id of the agent Party. */
+            agent?: string;
+            /** @description Name shown to people; attacker input, rendered as text. */
+            display_name?: string;
+            /** @enum {string} */
+            agent_kind?: "cloud" | "local" | "enterprise" | "robot";
+            /** @description The operator Party: an organization or a person. */
+            operator?: string;
+            /** @description The human sponsors' account ids; at least one while the agent is active. */
+            sponsors?: string[];
+            /** @enum {string} */
+            readonly status?: "active" | "suspended" | "retired";
+            /** @description Connected accounts for agents, by connection id; never a token. */
+            connections?: string[];
+            last_run_at?: components["schemas"]["Time"] | null;
             created_at?: components["schemas"]["Time"];
         };
         /** @description An upstream identity provider's registration (OP-150 m.11 (j)); its client secret only by `secret://` reference. */
@@ -1876,6 +2171,18 @@ export interface components {
                 "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
                 RateLimit: components["headers"]["RateLimit"];
                 "Retry-After": components["headers"]["Retry-After"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-154 m.4). */
+        NotYetServed: {
+            headers: {
+                "Request-Id": components["headers"]["Request-Id"];
+                "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                RateLimit: components["headers"]["RateLimit"];
                 [name: string]: unknown;
             };
             content: {
@@ -5768,6 +6075,901 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listAgents: {
+        parameters: {
+            query?: {
+                "page[size]"?: components["parameters"]["PageSize"];
+                /** @description Opaque; from the `Link` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description SCIM filter subset: eq, ne, co, sw, pr, and, or, parentheses; an attribute the endpoint does not name is 400 (TN-112). */
+                filter?: components["parameters"]["Filter"];
+            };
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    Link: components["headers"]["Link"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    registerAgent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getAgent: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                agent: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    patchAgent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                agent: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    retireAgent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                agent: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    revokeAllAgentInstances: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                agent: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listAgentSponsors: {
+        parameters: {
+            query?: {
+                "page[size]"?: components["parameters"]["PageSize"];
+                /** @description Opaque; from the `Link` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description SCIM filter subset: eq, ne, co, sw, pr, and, or, parentheses; an attribute the endpoint does not name is 400 (TN-112). */
+                filter?: components["parameters"]["Filter"];
+            };
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                agent: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    Link: components["headers"]["Link"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    assignAgentSponsor: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                agent: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    removeAgentSponsor: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                agent: string;
+                /** @description The resource's natural key. */
+                sponsor: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    defineAgentTemplate: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listProtectedResources: {
+        parameters: {
+            query?: {
+                "page[size]"?: components["parameters"]["PageSize"];
+                /** @description Opaque; from the `Link` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description SCIM filter subset: eq, ne, co, sw, pr, and, or, parentheses; an attribute the endpoint does not name is 400 (TN-112). */
+                filter?: components["parameters"]["Filter"];
+            };
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    Link: components["headers"]["Link"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    registerProtectedResource: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    putDcrPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    createCrossAppConnection: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    retireCrossAppConnection: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                connection: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    putDeviceCode: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listVaultResources: {
+        parameters: {
+            query?: {
+                "page[size]"?: components["parameters"]["PageSize"];
+                /** @description Opaque; from the `Link` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description SCIM filter subset: eq, ne, co, sw, pr, and, or, parentheses; an attribute the endpoint does not name is 400 (TN-112). */
+                filter?: components["parameters"]["Filter"];
+            };
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    Link: components["headers"]["Link"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    putVaultResource: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                resource: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    disableVaultResource: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                resource: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    putVaultReleaseMode: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };

@@ -88,14 +88,165 @@ const fn secret(verb: Verb, path: &'static str, id: &'static str, summary: &'sta
     }
 }
 
+const AG: &str = "/admin/v1/realms/{slug}/agents";
+const AGK: &str = "/admin/v1/realms/{slug}/agents/{agent}";
 const C: &str = "/admin/v1/realms/{slug}/clients";
 const G: &str = "/admin/v1/realms/{slug}/groups";
 const H: &str = "/admin/v1/realms/{slug}/hooks";
 const W: &str = "/admin/v1/realms/{slug}/webhooks";
 const WK: &str = "/admin/v1/realms/{slug}/webhooks/{webhook_id}";
 
+/// The Stage 9 realm routes, declared before their lanes serve them (OP-154 m.4): each answers
+/// `501 not-yet-served` behind its permission until its lane fills the handler.
+const STAGE9: [Route; 20] = [
+    list(
+        AG,
+        "listAgents",
+        "The realm's agents: kind, operator, sponsors and status (OP-154 m.3 (c), (e)).",
+    ),
+    write(
+        Verb::Post,
+        AG,
+        "registerAgent",
+        "Registers an agent bound to one self-registered agent Party: idp.agent.register (OP-154 m.3 (c)).",
+    ),
+    read(
+        AGK,
+        "getAgent",
+        "One agent: kind, operator, sponsors, status, authority, connected accounts and last run.",
+    ),
+    write(
+        Verb::Patch,
+        AGK,
+        "patchAgent",
+        "Changes an agent's name and description by JSON Merge Patch: idp.agent.update.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/agents/{agent}/retire",
+        "retireAgent",
+        "Retires an agent: idp.agent.retire; nothing is deleted (OP-73).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/agents/{agent}/revoke-all",
+        "revokeAllAgentInstances",
+        "Ends every Instance of the agent as a bulk job of the caller's signed instance_terminate items (OP-154 m.3 (f), P59).",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/agents/{agent}/sponsors",
+        "listAgentSponsors",
+        "The agent's human sponsors (AG-41).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/agents/{agent}/sponsors",
+        "assignAgentSponsor",
+        "Assigns a human sponsor: idp.agent.sponsor_assign (OP-154 m.3 (e)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/agents/{agent}/sponsors/{sponsor}/remove",
+        "removeAgentSponsor",
+        "Removes a sponsor: idp.agent.sponsor_remove; the last one leaving suspends the agent (OP-154 m.3 (e)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/agent-templates",
+        "defineAgentTemplate",
+        "Defines an agent Grant template; one without a budget is refused (OP-154 m.3 (g)).",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/resources",
+        "listProtectedResources",
+        "The realm's protected resources and MCP servers, by canonical URI.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/resources",
+        "registerProtectedResource",
+        "Registers a protected resource or MCP server for `resource` validation: idp.client.resource_register.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/dcr-policy",
+        "putDcrPolicy",
+        "Sets the dynamic client registration profile: idp.client.dcr_policy, or dcr_policy_tighten when it only narrows (OP-154 m.3 (j)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/cross-app-connections",
+        "createCrossAppConnection",
+        "Records a cross-app connection for ID-JAG: idp.client.cross_app_connection (OP-154 m.3 (n)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/cross-app-connections/{connection}/retire",
+        "retireCrossAppConnection",
+        "Retires a cross-app connection: idp.client.cross_app_connection_retire.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/device-code",
+        "putDeviceCode",
+        "Turns the device authorization grant on (idp.realm.device_code) or off (device_code_close) (OP-154 m.3 (p)).",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/vault/resources",
+        "listVaultResources",
+        "The realm's vault Resources: the catalog upstreams it enabled and its own (OP-154 m.3 (t)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/vault/resources/{resource}",
+        "putVaultResource",
+        "Enables a catalog upstream (idp.vault.resource_enable) or registers the realm's own (resource_register, reserved).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/vault/resources/{resource}/disable",
+        "disableVaultResource",
+        "Disables a vault Resource: idp.vault.resource_disable.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/vault-release-mode",
+        "putVaultReleaseMode",
+        "Opens release path (b) for CT0-CT1 classes (idp.vault.release_mode_open) or closes it (release_mode_close) (OP-154 m.3 (t)).",
+    ),
+];
+
 /// Every realm resource route, in contract order.
-pub const ROWS: &[Route] = &[
+pub const ROWS: &[Route] = &ALL_ROWS;
+
+const BASE_LEN: usize = BASE.len();
+
+#[expect(
+    clippy::indexing_slicing,
+    reason = "evaluated at compile time; an out-of-range index fails the build"
+)]
+const ALL_ROWS: [Route; BASE_LEN + STAGE9.len()] = {
+    let mut out = [BASE[0]; BASE_LEN + STAGE9.len()];
+    let mut i = 0;
+    while i < BASE_LEN {
+        out[i] = BASE[i];
+        i += 1;
+    }
+    let mut j = 0;
+    while j < STAGE9.len() {
+        out[BASE_LEN + j] = STAGE9[j];
+        j += 1;
+    }
+    out
+};
+
+/// Whether a realm row is declared and not served yet (OP-154 m.4).
+#[must_use]
+pub fn planned(operation_id: &str) -> bool {
+    STAGE9.iter().any(|r| r.operation_id == operation_id)
+}
+
+const BASE: &[Route] = &[
     Route {
         verb: Verb::Post,
         ..read(
@@ -617,6 +768,9 @@ pub enum Shape {
     Audit,
     /// One audit event's inclusion proof in the realm's own tree (OP-152 m.7 (d)).
     AuditProof,
+    /// A declared route its lane does not serve yet: `501 not-yet-served` behind its
+    /// permission (OP-154 m.4); the response schema it will answer with.
+    Planned(&'static str),
 }
 
 const CLIENT_PATCH: &[&str] = &[
@@ -716,6 +870,11 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
     };
     Some(match operation_id {
         "draftIntent" => (Settings, Shape::Draft),
+        "listAgents" | "listAgentSponsors" | "listProtectedResources" | "listVaultResources" => {
+            (Settings, Shape::Planned("Page"))
+        }
+        "getAgent" => (Settings, Shape::Planned("Agent")),
+        o if planned(o) => (Settings, Shape::Planned("WriteResult")),
         "listClients" => (
             Clients,
             Shape::List(&["client_id", "display_name", "status"]),

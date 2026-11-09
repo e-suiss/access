@@ -2177,6 +2177,233 @@
           }
         }
       }
+    },
+    "/device": {
+      "get": {
+        "operationId": "deviceVerificationPage",
+        "summary": "The RFC 8628 verification page, a trusted surface of its own: the person enters the code a device shows (OP-154 m.3 (p)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/device/preview": {
+      "post": {
+        "operationId": "previewDeviceCode",
+        "summary": "What a user code asks for: the client's name, the scope, and the IP prefix and country the request came from; five wrong codes wait 15 minutes (OP-154 m.3 (p)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/device/approval": {
+      "post": {
+        "operationId": "approveDeviceCode",
+        "summary": "Approves or declines a user code with the person's AAS; the token it releases is DPoP-bound (OP-154 m.3 (p)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/agent-connections": {
+      "get": {
+        "operationId": "listAgentConnections",
+        "summary": "The person's agents and what each is connected to: sponsor, status, authority and connected accounts (OP-154 m.3 (e), (t)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/vault/connections": {
+      "get": {
+        "operationId": "listVaultConnections",
+        "summary": "The person's connected accounts for agents, each with its upstream, scopes and state; never a token (OP-154 m.3 (t)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      },
+      "post": {
+        "operationId": "startVaultConnection",
+        "summary": "Starts connecting an upstream account after the person's AAS for that client (AS-M15, OP-154 m.3 (t)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/vault/connections/{connection}": {
+      "get": {
+        "operationId": "getVaultConnection",
+        "summary": "One connected account: upstream, scopes, state (`active` or `needs_reconnect`); never a token.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      },
+      "delete": {
+        "operationId": "disconnectVaultConnection",
+        "summary": "Disconnects an account: the TokenSet ends and is revoked upstream where it can be; nothing is deleted (OP-73).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/vault/releases": {
+      "post": {
+        "operationId": "releaseVaultToken",
+        "summary": "Releases an upstream token only for an allowed Exercise whose PEP is the calling registered executor Instance, once per step, expiring by the horizon (G59, EI-26, OP-154 m.3 (t)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/.well-known/http-message-signatures-directory": {
+      "get": {
+        "operationId": "webBotAuthDirectory",
+        "summary": "The Web Bot Auth key directory: the Ed25519 keys bound to live agent Instances; revoking an Instance removes its key (RFC 9421, OP-154 m.3 (u)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/u/{party}/did.json": {
+      "get": {
+        "operationId": "didWebDocument",
+        "summary": "The did:web document of a person or agent: verification keys and service endpoints; an identifier, never authority (OP-154 m.3 (aa)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "party",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      }
     }
   },
   "components": {

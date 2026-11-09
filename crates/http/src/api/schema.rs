@@ -142,6 +142,22 @@ fn schemas() -> Value {
                 "created_at": r("schemas", "Time"),
             },
         },
+        "Agent": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "An agent of the realm (OP-154 m.3 (c), (e)): its own agent Party, the operator it runs for, its human sponsors and what it is connected to. It is exported to the authority plane only as `agent_kind`, `operated_by` and `sponsored_by` Claims; it holds no authority of its own (AG-19).",
+            "properties": {
+                "agent": text("Opaque id of the agent Party."),
+                "display_name": text("Name shown to people; attacker input, rendered as text."),
+                "agent_kind": { "type": "string", "enum": ["cloud", "local", "enterprise", "robot"] },
+                "operator": text("The operator Party: an organization or a person."),
+                "sponsors": { "type": "array", "items": { "type": "string" }, "description": "The human sponsors' account ids; at least one while the agent is active." },
+                "status": { "type": "string", "enum": ["active", "suspended", "retired"], "readOnly": true },
+                "connections": { "type": "array", "items": { "type": "string" }, "description": "Connected accounts for agents, by connection id; never a token." },
+                "last_run_at": { "anyOf": [r("schemas", "Time"), { "type": "null" }] },
+                "created_at": r("schemas", "Time"),
+            },
+        },
         "UpstreamIdp": {
             "type": "object",
             "additionalProperties": false,
@@ -574,6 +590,7 @@ fn responses() -> Value {
         "Unprocessable": problem("idempotency-key-reused.", &[]),
         "PreconditionRequired": problem("precondition-required.", &[]),
         "TooManyRequests": problem("rate-limited.", &["Retry-After"]),
+        "NotYetServed": problem("not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-154 m.4).", &[]),
         "Unavailable": problem("A dependency is unavailable; nothing changed.", &[]),
     })
 }
@@ -596,6 +613,7 @@ fn body_of(row: &Route) -> &'static str {
     }
     match (row.operation_id, spec(row.operation_id)) {
         ("getPlatformSurface" | "getRealmSurface", _) => "SurfaceRoot",
+        (_, Some((_, Shape::Planned(name)))) => name,
         (_, Some((_, Shape::List(_)))) => "Page",
         (_, Some((_, Shape::Draft))) => "IntentDraft",
         (_, Some((_, Shape::Write { .. }))) => "WriteResult",
@@ -690,6 +708,10 @@ fn operation(row: &Route) -> Value {
     if write {
         errors.extend([("409", "Conflict"), ("422", "Unprocessable")]);
     }
+    // OP-154 m.4
+    if super::realm::planned(row.operation_id) {
+        errors.push(("501", "NotYetServed"));
+    }
     for (status, name) in errors {
         responses.insert(status.to_owned(), r("responses", name));
     }
@@ -704,6 +726,7 @@ fn operation(row: &Route) -> Value {
         (Some((_, super::realm::Shape::Draft)), _)
         | (_, Some((_, super::platform::Shape::Draft))) => Some("DraftRequest"),
         (Some((_, super::realm::Shape::Write { .. })), _) => Some("WriteBody"),
+        (Some((_, super::realm::Shape::Planned(_))), _) if write => Some("WriteBody"),
         (_, Some((super::ports::PlatformKind::Tenants, super::platform::Shape::Create))) => {
             Some("TenantCreate")
         }

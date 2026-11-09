@@ -154,6 +154,12 @@ async fn search<P: Pdp>(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
+    // OP-154 m.4
+    if access_authority_core::query::RESERVED_KINDS.contains(&kind.as_str()) {
+        return crate::problem::codes::NOT_YET_SERVED
+            .problem()
+            .into_response();
+    }
     let (pep, requester) = caller((pep, requester));
     let reply = shared.service.search(&kind, &body, pep, requester).await;
     respond(reply, &headers)

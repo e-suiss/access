@@ -26,6 +26,9 @@ pub enum Endpoint {
     Introspect,
     /// `GET`/`POST /end-session` (OIDC RP-Initiated Logout 1.0).
     EndSession,
+    /// `POST /device_authorization` (RFC 8628), turned on per realm by
+    /// `idp.realm.device_code` (OP-154 m.3 (p)).
+    DeviceAuthorization,
 }
 
 impl Endpoint {
@@ -40,6 +43,7 @@ impl Endpoint {
             Self::Revoke => "/revoke",
             Self::Introspect => "/introspect",
             Self::EndSession => "/end-session",
+            Self::DeviceAuthorization => "/device_authorization",
         }
     }
 }
@@ -57,7 +61,18 @@ pub enum Feature {
     /// RFC 9396 `authorization_details` for authority token projections, with client
     /// credentials for them (OP-150 m.2, §10.4.1).
     AuthorizationDetails,
+    /// RFC 8693 token exchange (OP-154 m.3 (m)).
+    TokenExchange,
+    /// RFC 7523 JWT bearer assertions, ID-JAG and cloud workload OIDC (OP-154 m.3 (q)).
+    JwtBearer,
 }
+
+/// Grant type of RFC 8628.
+pub const DEVICE_CODE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
+/// Grant type of RFC 8693.
+pub const TOKEN_EXCHANGE_GRANT: &str = "urn:ietf:params:oauth:grant-type:token-exchange";
+/// Grant type of RFC 7523.
+pub const JWT_BEARER_GRANT: &str = "urn:ietf:params:oauth:grant-type:jwt-bearer";
 
 /// What the realm's authorization server serves; the metadata declares nothing else (§10.4.6).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -208,12 +223,21 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
             "token_endpoint".into(),
             issuer.endpoint(Endpoint::Token.path()).into(),
         );
-        let grants = if served.feature(Feature::AuthorizationDetails) {
-            json!(["authorization_code", "refresh_token", "client_credentials"])
-        } else {
-            json!(["authorization_code", "refresh_token"])
-        };
-        m.insert("grant_types_supported".into(), grants);
+        let mut grants = vec!["authorization_code", "refresh_token"];
+        if served.feature(Feature::AuthorizationDetails) {
+            grants.push("client_credentials");
+        }
+        // OP-154 m.4
+        if served.has(Endpoint::DeviceAuthorization) {
+            grants.push(DEVICE_CODE_GRANT);
+        }
+        if served.feature(Feature::TokenExchange) {
+            grants.push(TOKEN_EXCHANGE_GRANT);
+        }
+        if served.feature(Feature::JwtBearer) {
+            grants.push(JWT_BEARER_GRANT);
+        }
+        m.insert("grant_types_supported".into(), json!(grants));
         m.insert(
             "token_endpoint_auth_methods_supported".into(),
             json!(["none", "private_key_jwt", "client_secret_basic"]),
@@ -238,6 +262,10 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
         (Endpoint::Revoke, "revocation_endpoint"),
         (Endpoint::Introspect, "introspection_endpoint"),
         (Endpoint::EndSession, "end_session_endpoint"),
+        (
+            Endpoint::DeviceAuthorization,
+            "device_authorization_endpoint",
+        ),
     ] {
         if served.has(e) {
             m.insert(key.into(), issuer.endpoint(e.path()).into());

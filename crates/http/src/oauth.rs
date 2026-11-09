@@ -46,6 +46,7 @@ pub fn router<E: Env>(service: OAuth<E>) -> Router {
         Endpoint::Revoke,
         Endpoint::Introspect,
         Endpoint::EndSession,
+        Endpoint::DeviceAuthorization,
     ] {
         let root = move |s: Shared<E>, m: Method, u: Uri, h: HeaderMap, b: Bytes| {
             handle(s, e, incoming(m, u, h, b, None))
@@ -161,6 +162,12 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
         Ok(None) => return crate::not_found_problem().into_response(),
         Err(_) => return render(Reply::Unavailable),
     };
+    // OP-154 m.4
+    if !access_identity_oauth::domain::metadata::SERVED.has(endpoint) {
+        return crate::problem::codes::NOT_YET_SERVED
+            .problem()
+            .into_response();
+    }
     let authorization = header_text(&req.headers, header::AUTHORIZATION.as_str());
     if endpoint == Endpoint::Userinfo {
         let proofs: Vec<&str> = req

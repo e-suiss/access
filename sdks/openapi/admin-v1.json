@@ -7989,6 +7989,1881 @@
         "x-access-visibility": "hidden"
       }
     },
+    "/admin/v1/realms/{slug}/agents": {
+      "get": {
+        "operationId": "listAgents",
+        "summary": "The realm's agents: kind, operator, sponsors and status (OP-154 m.3 (c), (e)).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "realm.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Filter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": "realm.read",
+        "x-access-visibility": "hidden"
+      },
+      "post": {
+        "operationId": "registerAgent",
+        "summary": "Registers an agent bound to one self-registered agent Party: idp.agent.register (OP-154 m.3 (c)).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/realms/{slug}/agents/{agent}": {
+      "get": {
+        "operationId": "getAgent",
+        "summary": "One agent: kind, operator, sponsors, status, authority, connected accounts and last run.",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "realm.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agent"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": "realm.read",
+        "x-access-visibility": "hidden"
+      },
+      "patch": {
+        "operationId": "patchAgent",
+        "summary": "Changes an agent's name and description by JSON Merge Patch: idp.agent.update.",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/realms/{slug}/agents/{agent}/retire": {
+      "post": {
+        "operationId": "retireAgent",
+        "summary": "Retires an agent: idp.agent.retire; nothing is deleted (OP-73).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/realms/{slug}/agents/{agent}/revoke-all": {
+      "post": {
+        "operationId": "revokeAllAgentInstances",
+        "summary": "Ends every Instance of the agent as a bulk job of the caller's signed instance_terminate items (OP-154 m.3 (f), P59).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/realms/{slug}/agents/{agent}/sponsors": {
+      "get": {
+        "operationId": "listAgentSponsors",
+        "summary": "The agent's human sponsors (AG-41).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "realm.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Filter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": "realm.read",
+        "x-access-visibility": "hidden"
+      },
+      "post": {
+        "operationId": "assignAgentSponsor",
+        "summary": "Assigns a human sponsor: idp.agent.sponsor_assign (OP-154 m.3 (e)).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/realms/{slug}/agents/{agent}/sponsors/{sponsor}/remove": {
+      "post": {
+        "operationId": "removeAgentSponsor",
+        "summary": "Removes a sponsor: idp.agent.sponsor_remove; the last one leaving suspends the agent (OP-154 m.3 (e)).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "name": "sponsor",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/realms/{slug}/agent-templates": {
+      "post": {
+        "operationId": "defineAgentTemplate",
+        "summary": "Defines an agent Grant template; one without a budget is refused (OP-154 m.3 (g)).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/realms/{slug}/resources": {
+      "get": {
+        "operationId": "listProtectedResources",
+        "summary": "The realm's protected resources and MCP servers, by canonical URI.",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "realm.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Filter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": "realm.read",
+        "x-access-visibility": "hidden"
+      },
+      "post": {
+        "operationId": "registerProtectedResource",
+        "summary": "Registers a protected resource or MCP server for `resource` validation: idp.client.resource_register.",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/realms/{slug}/settings/dcr-policy": {
+      "put": {
+        "operationId": "putDcrPolicy",
+        "summary": "Sets the dynamic client registration profile: idp.client.dcr_policy, or dcr_policy_tighten when it only narrows (OP-154 m.3 (j)).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/realms/{slug}/cross-app-connections": {
+      "post": {
+        "operationId": "createCrossAppConnection",
+        "summary": "Records a cross-app connection for ID-JAG: idp.client.cross_app_connection (OP-154 m.3 (n)).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/realms/{slug}/cross-app-connections/{connection}/retire": {
+      "post": {
+        "operationId": "retireCrossAppConnection",
+        "summary": "Retires a cross-app connection: idp.client.cross_app_connection_retire.",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/realms/{slug}/settings/device-code": {
+      "put": {
+        "operationId": "putDeviceCode",
+        "summary": "Turns the device authorization grant on (idp.realm.device_code) or off (device_code_close) (OP-154 m.3 (p)).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/realms/{slug}/vault/resources": {
+      "get": {
+        "operationId": "listVaultResources",
+        "summary": "The realm's vault Resources: the catalog upstreams it enabled and its own (OP-154 m.3 (t)).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "realm.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Filter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": "realm.read",
+        "x-access-visibility": "hidden"
+      }
+    },
+    "/admin/v1/realms/{slug}/vault/resources/{resource}": {
+      "put": {
+        "operationId": "putVaultResource",
+        "summary": "Enables a catalog upstream (idp.vault.resource_enable) or registers the realm's own (resource_register, reserved).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "name": "resource",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/realms/{slug}/vault/resources/{resource}/disable": {
+      "post": {
+        "operationId": "disableVaultResource",
+        "summary": "Disables a vault Resource: idp.vault.resource_disable.",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "name": "resource",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/realms/{slug}/settings/vault-release-mode": {
+      "put": {
+        "operationId": "putVaultReleaseMode",
+        "summary": "Opens release path (b) for CT0-CT1 classes (idp.vault.release_mode_open) or closes it (release_mode_close) (OP-154 m.3 (t)).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/v1/platform/intents": {
       "post": {
         "operationId": "draftPlatformIntent",
@@ -9104,6 +10979,70 @@
           },
           "status_at": {
             "$ref": "#/components/schemas/Time"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/Time"
+          }
+        }
+      },
+      "Agent": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "An agent of the realm (OP-154 m.3 (c), (e)): its own agent Party, the operator it runs for, its human sponsors and what it is connected to. It is exported to the authority plane only as `agent_kind`, `operated_by` and `sponsored_by` Claims; it holds no authority of its own (AG-19).",
+        "properties": {
+          "agent": {
+            "type": "string",
+            "description": "Opaque id of the agent Party."
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Name shown to people; attacker input, rendered as text."
+          },
+          "agent_kind": {
+            "type": "string",
+            "enum": [
+              "cloud",
+              "local",
+              "enterprise",
+              "robot"
+            ]
+          },
+          "operator": {
+            "type": "string",
+            "description": "The operator Party: an organization or a person."
+          },
+          "sponsors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The human sponsors' account ids; at least one while the agent is active."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "suspended",
+              "retired"
+            ],
+            "readOnly": true
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Connected accounts for agents, by connection id; never a token."
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Time"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "created_at": {
             "$ref": "#/components/schemas/Time"
@@ -10435,6 +12374,27 @@
           },
           "Retry-After": {
             "$ref": "#/components/headers/Retry-After"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "NotYetServed": {
+        "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-154 m.4).",
+        "headers": {
+          "Request-Id": {
+            "$ref": "#/components/headers/Request-Id"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          },
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
           }
         },
         "content": {

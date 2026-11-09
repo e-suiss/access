@@ -167,6 +167,12 @@ pub enum Report {
     Sources(Sources),
 }
 
+/// Search kinds declared for Stage 9 and not served yet, each owned by its lane: `discovery`
+/// (L3, auditor-only and advisory, OP-154 m.3 (z)), `outcome` (L6, the effect attestations of an
+/// Exercise, never a rewrite of its decision, EI-10) and `agent-status` (L8, an agent's own
+/// summary, A-11). A search of one answers `501 not-yet-served` (OP-154 m.4).
+pub const RESERVED_KINDS: [&str; 3] = ["discovery", "outcome", "agent-status"];
+
 impl Query {
     /// The path segment of the search intent's resource.
     #[must_use]

@@ -158,7 +158,9 @@ async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
                 }
                 assert_eq!(
                     code_of(router, read_as(row, &path, &good)).await.0,
-                    if row.verb == Verb::Get {
+                    if access_http::api::realm::planned(op) {
+                        StatusCode::NOT_IMPLEMENTED
+                    } else if row.verb == Verb::Get {
                         StatusCode::OK
                     } else {
                         StatusCode::BAD_REQUEST
