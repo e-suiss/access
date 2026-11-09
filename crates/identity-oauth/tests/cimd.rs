@@ -15,7 +15,8 @@
 #[path = "support/mod.rs"]
 mod support;
 
-use access_identity_oauth::app::oauth::Reply;
+use access_identity_oauth::app::oauth::{NotApproved, Reply};
+use access_identity_oauth::ports::oauth::IssuedGrant;
 use access_store::clients::NewConsentRecord;
 use access_store::identity::TenantTx;
 use support::{At, CHALLENGE, Cluster, VERIFIER, body, claims, location, now, query, query_opt};
@@ -88,7 +89,7 @@ async fn consent(a: &At<'_>, scopes: &[&str]) -> [u8; 16] {
     a.c.oauth
         .env()
         .standing
-        .0
+        .live
         .lock()
         .unwrap()
         .push((a.f.domain, GRANT));
@@ -234,7 +235,7 @@ async fn a_cimd_client_waits_on_a_consent_record_whose_grant_stands() {
         "approve",
         "the record covers its scopes only"
     );
-    a.c.oauth.env().standing.0.lock().unwrap().clear();
+    a.c.oauth.env().standing.live.lock().unwrap().clear();
     let lapsed = location(&ask(&a, APP, &[]).await);
     assert_eq!(query(&lapsed, "reason"), "approve", "no standing Grant, no code");
     assert!(!live_record(&a, client).await, "the record ends with its Grant");
@@ -386,4 +387,133 @@ async fn claude_codes_published_document_signs_in_on_any_loopback_port() {
         )
         .await;
     assert_eq!(problem(&wrong), "invalid-redirect-uri");
+}
+
+const PARTY: [u8; 16] = [0x50; 16];
+
+async fn bind_party(a: &At<'_>) {
+    let mut tx = TenantTx::begin(&a.c.db.app, a.f.realm.tenant, a.f.realm.realm)
+        .await
+        .unwrap();
+    access_store::idp::bind_subject_party(&mut tx, &a.f.subject, &PARTY)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+}
+
+fn return_to_of(asked: &str) -> String {
+    query(asked, "return_to")
+}
+
+// EI-18, §11.6, P58, Ek B 4246, 4251, 4541, 4542
+#[tokio::test]
+async fn only_the_persons_own_allowed_grant_issue_records_a_consent() {
+    let c = mcp_realm("cimd-approve").await;
+    let a = c.at(0);
+    bind_party(&a).await;
+    c.oauth.env().documents.serve(APP, 200, None, &doc(""));
+    let asked = location(&ask(&a, APP, &[]).await);
+    let back = return_to_of(&asked);
+    let realm = a.realm();
+    let exercise = [0x33; 32];
+    // EI-18
+    let none = c
+        .oauth
+        .approve(realm, Some(&a.f.cookie), &back, a.f.domain, exercise)
+        .await
+        .unwrap();
+    assert_eq!(none, Err(NotApproved::NoGrant), "consent without an AAS Grant");
+    let standing = &c.oauth.env().standing;
+    standing.live.lock().unwrap().push((a.f.domain, GRANT));
+    standing.issued.lock().unwrap().push((
+        a.f.domain,
+        exercise,
+        IssuedGrant {
+            grant: GRANT,
+            holder: [0x51; 16],
+            signer: PARTY,
+        },
+    ));
+    let other = c
+        .oauth
+        .approve(realm, Some(&a.f.cookie), &back, a.f.domain, exercise)
+        .await
+        .unwrap();
+    assert_eq!(other, Err(NotApproved::NoGrant), "held by someone else");
+    // §11.6 rule 5
+    let anonymous = c
+        .oauth
+        .approve(realm, None, &back, a.f.domain, exercise)
+        .await
+        .unwrap();
+    assert_eq!(anonymous, Err(NotApproved::SignIn));
+    standing.issued.lock().unwrap()[0].2.holder = PARTY;
+    let client = cimd_uuid(&a, APP).await.unwrap();
+    assert!(!live_record(&a, client).await);
+    let ok = c
+        .oauth
+        .approve(realm, Some(&a.f.cookie), &back, a.f.domain, exercise)
+        .await
+        .unwrap();
+    assert_eq!(ok.as_deref(), Ok(back.as_str()));
+    assert!(live_record(&a, client).await);
+    let p = access_identity_oauth::domain::request::Params::parse(back.split_once('?').unwrap().1)
+        .unwrap();
+    let pairs: Vec<(&str, &str)> = [("client_id", APP), ("request_uri", p.get("request_uri").unwrap())]
+        .into_iter()
+        .collect();
+    let code = a.authorize(&pairs, Some(&a.f.cookie)).await;
+    let to = location(&code);
+    assert!(to.starts_with(CB) && query_opt(&to, "code").is_some(), "{to}");
+}
+
+// AS-M14, AG-6, §11.3, OP-154 m.3 (i), Ek B 4247, 4248, 4249, 4250
+#[tokio::test]
+async fn the_consent_screen_shows_hostnames_and_the_clients_claims_as_claims() {
+    let c = mcp_realm("cimd-view").await;
+    let a = c.at(0);
+    a.cimd_policy(true, &["app.example", "claude.ai"]).await;
+    let url = "https://claude.ai/oauth/claude-code-client-metadata";
+    c.oauth.env().documents.serve(
+        url,
+        200,
+        None,
+        include_str!("fixtures/cimd/claude-code.json"),
+    );
+    let asked = location(
+        &a.authorize(
+            &[
+                ("client_id", url),
+                ("redirect_uri", "http://localhost:4242/callback"),
+                ("resource", MCP),
+            ],
+            Some(&a.f.cookie),
+        )
+        .await,
+    );
+    let v = c
+        .oauth
+        .approval_view(a.realm(), Some(&a.f.cookie), &return_to_of(&asked))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(v.client_host, "claude.ai");
+    assert_eq!(v.client_says, "Claude Code");
+    assert_eq!(v.redirect_hosts, vec!["127.0.0.1", "localhost"]);
+    assert!(v.loopback_only, "AG-6: the extra warning");
+    assert!(v.new_app);
+    assert!(!v.visual_changed);
+    assert_eq!(v.resource, MCP);
+    let signed_out = c
+        .oauth
+        .approval_view(a.realm(), None, &return_to_of(&asked))
+        .await
+        .unwrap();
+    assert_eq!(signed_out, Err(NotApproved::SignIn));
+    let elsewhere = c
+        .oauth
+        .approval_view(a.realm(), Some(&a.f.cookie), "/authorize?client_id=x")
+        .await
+        .unwrap();
+    assert_eq!(elsewhere, Err(NotApproved::NoRequest));
 }

@@ -42,7 +42,7 @@ use access_identity_oauth::ports::Unavailable;
 use access_identity_oauth::ports::dpop::{Clock, ClockUnavailable};
 use access_identity_oauth::ports::oauth::{
     ClientDocuments, ClientKeys, Fetch, FetchRefused, Fetched, GrantStanding, Held,
-    ManagementHolders,
+    IssuedGrant, ManagementHolders,
 };
 use access_identity_session::domain::assurance::{Factor, vector};
 use access_identity_session::domain::session::cookie_digest;
@@ -262,14 +262,29 @@ impl ClientDocuments for FixtureDocs {
     }
 }
 
-/// The Grants that stand, by (domain, grant).
+/// The Grants that stand, by (domain, grant), and what each `grant.issue` Exercise issued.
 #[derive(Clone, Default)]
-pub struct ScriptedStanding(pub Arc<Mutex<Vec<([u8; 32], [u8; 16])>>>);
+pub struct ScriptedStanding {
+    pub live: Arc<Mutex<Vec<([u8; 32], [u8; 16])>>>,
+    pub issued: Arc<Mutex<Vec<([u8; 32], [u8; 32], IssuedGrant)>>>,
+}
 
 impl GrantStanding for ScriptedStanding {
     fn live(&self, domain: [u8; 32], grant: [u8; 16]) -> Held<'_, bool> {
-        let live = self.0.lock().unwrap().contains(&(domain, grant));
+        let live = self.live.lock().unwrap().contains(&(domain, grant));
         Box::pin(async move { Ok(live) })
+    }
+
+    fn issued(&self, domain: [u8; 32], exercise: [u8; 32]) -> Held<'_, Option<IssuedGrant>> {
+        let found = self
+            .issued
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|(d, e, _)| *d == domain && *e == exercise)
+            .map(|(_, _, g)| *g)
+            .filter(|g| self.live.lock().unwrap().contains(&(domain, g.grant)));
+        Box::pin(async move { Ok(found) })
     }
 }
 

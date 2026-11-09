@@ -260,6 +260,21 @@ pub trait OAuthTx: Send {
         reason: &str,
         now_ms: u64,
     ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
+    /// The Party a subject's device Instances belong to (OP-149 m.16 (a)).
+    fn subject_party(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<Option<[u8; 16]>, Unavailable>> + Send;
+    /// The live CIMD client with internal id `uuid`: its URL.
+    fn cimd_client_by_uuid(
+        &mut self,
+        uuid: [u8; 16],
+    ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
+    /// Keeps a consent record (P58).
+    fn put_consent_record(
+        &mut self,
+        c: &access_store::clients::NewConsentRecord<'_>,
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send;
     /// Ends every live consent record of `client`.
     fn end_client_consents(
         &mut self,
@@ -548,10 +563,25 @@ impl ClientDocuments for NoDocuments {
     }
 }
 
-/// Whether a Grant a consent record names still stands in its domain (§11.6 rule 1, P58).
+/// A Grant a `grant.issue` Exercise created, as its domain recorded it (EI-18).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IssuedGrant {
+    /// The Grant.
+    pub grant: [u8; 16],
+    /// The Party that holds it.
+    pub holder: [u8; 16],
+    /// The Party whose Instance signed the Exercise.
+    pub signer: [u8; 16],
+}
+
+/// The authority plane's Grants as consent reads them (§11.6 rule 1, P58, EI-18).
 pub trait GrantStanding: Send + Sync {
     /// Whether Grant `grant` of `domain` is live now: issued, not revoked, not lapsed.
     fn live(&self, domain: [u8; 32], grant: [u8; 16]) -> Held<'_, bool>;
+
+    /// The live Grant the ALLOWed `grant.issue` Exercise `exercise` of `domain` created; `None`
+    /// for any other Exercise, a refused one, or a Grant that no longer stands.
+    fn issued(&self, domain: [u8; 32], exercise: [u8; 32]) -> Held<'_, Option<IssuedGrant>>;
 }
 
 /// No authority plane: no Grant stands, so every consent is asked for again (MD-8).
@@ -561,5 +591,9 @@ pub struct NoStanding;
 impl GrantStanding for NoStanding {
     fn live(&self, _: [u8; 32], _: [u8; 16]) -> Held<'_, bool> {
         Box::pin(async { Ok(false) })
+    }
+
+    fn issued(&self, _: [u8; 32], _: [u8; 32]) -> Held<'_, Option<IssuedGrant>> {
+        Box::pin(async { Ok(None) })
     }
 }

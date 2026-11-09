@@ -394,6 +394,21 @@ impl OAuthTx for PgOAuthTx {
             .map_err(down)
     }
 
+    async fn subject_party(&mut self, subject: [u8; 16]) -> Result<Option<[u8; 16]>, Unavailable> {
+        idp::subject_party(&mut self.0, &subject).await.map_err(down)
+    }
+
+    async fn cimd_client_by_uuid(&mut self, uuid: [u8; 16]) -> Result<Option<String>, Unavailable> {
+        self.0.cimd_client_by_uuid(uuid).await.map_err(down)
+    }
+
+    async fn put_consent_record(
+        &mut self,
+        c: &access_store::clients::NewConsentRecord<'_>,
+    ) -> Result<(), Unavailable> {
+        self.0.put_consent_record(c).await.map_err(down)
+    }
+
     async fn end_client_consents(
         &mut self,
         client: [u8; 16],

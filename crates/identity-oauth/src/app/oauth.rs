@@ -5,6 +5,7 @@
 //! `503 + Retry-After`, never `invalid_grant` (G50, EP-2), except introspection, which answers
 //! `active: false` (MD-8).
 
+mod approval;
 mod authority;
 mod authorize;
 pub mod clients;
@@ -48,6 +49,7 @@ use crate::ports::{Directory, RealmEntry, Unavailable};
 use access_identity_hooks::domain::{Call, Outcome, TokenIssuance, with_claims};
 use access_identity_hooks::ports::{HookCaller, NoHooks};
 
+pub use crate::app::oauth::approval::{ApprovalView, NotApproved};
 pub use crate::app::oauth::authorize::{REQUEST_CONTEXT, consent_resource};
 pub use crate::app::oauth::token::TokenHttp;
 
