@@ -3,7 +3,9 @@
 //! CR-18 to CR-27, OP-143 m.1 E7), and the `COSE_Sign1` of identity plane artifacts such as
 //! `auth_context` (OP-149 m.8); the cell's `audit-checkpoint` key, which signs the identity
 //! audit log's checkpoints (OP-150 m.3 (h)); and each realm's Claim issuer key, which signs the
-//! identity plane's Claims (§10.1.7).
+//! identity plane's Claims (§10.1.7). Each key serves one purpose ([`purpose`]): the SAML,
+//! OpenID Federation, JWE decryption and RS256 keys of the enterprise protocols are apart from
+//! these and from every authority key (OP-155 m.1 (b)).
 
 pub mod adapters;
 pub mod app;
@@ -12,6 +14,7 @@ pub mod domain;
 pub mod issuer;
 pub mod ports;
 pub mod protocol;
+pub mod purpose;
 pub mod service;
 
 /// Why the signer refused.
