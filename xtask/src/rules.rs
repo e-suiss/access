@@ -1,5 +1,5 @@
 //! Architecture and code rules (OP-62, OP-63, OP-64, OP-66, OP-73, TI-9, R-2,
-//! SA-21, CR-3, CR-11, CR-13, SA-32, U48, TI-10, INV-26, INV-36, §9.7A.7, OP-150 (e), TN-113, OP-47, OP-67, MUST-NEVER-6). Each check lives in a `rules_*` module.
+//! SA-21, CR-3, CR-11, CR-13, SA-32, U48, TI-10, INV-26, INV-36, §9.7A.7, OP-150 (e), TN-113, OP-47, OP-67, MUST-NEVER-6, IDI-11). Each check lives in a `rules_*` module.
 
 #[path = "rules_comments.rs"]
 mod comments;
@@ -9,6 +9,8 @@ mod crypto;
 mod custody;
 #[path = "rules_deps.rs"]
 pub(crate) mod deps;
+#[path = "rules_edge.rs"]
+mod edge;
 #[path = "rules_files.rs"]
 pub(crate) mod files;
 #[path = "rules_fluent.rs"]
@@ -56,6 +58,10 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "dependency-direction",
             run: planes,
+        },
+        Check {
+            name: "edge-isolation",
+            run: edge::check,
         },
         Check {
             name: "kernel-purity",

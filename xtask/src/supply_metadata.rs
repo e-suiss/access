@@ -52,6 +52,8 @@ pub(crate) struct Metadata {
     pub(crate) workspace_members: Vec<String>,
     /// Enabled features per package id, over all platforms.
     pub(crate) features: BTreeMap<String, Vec<String>>,
+    /// Resolved normal (linked) dependencies per package id, over all platforms.
+    pub(crate) linked: BTreeMap<String, Vec<String>>,
 }
 
 impl Metadata {
@@ -68,6 +70,23 @@ fn str_field(v: &Value, key: &str) -> String {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_owned()
+}
+
+/// The package ids a resolve node depends on as a normal (linked) dependency.
+fn linked(node: &Value) -> Vec<String> {
+    node.get("deps")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|d| {
+            d.get("dep_kinds")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .any(|k| k.get("kind").is_none_or(Value::is_null))
+        })
+        .map(|d| str_field(d, "pkg"))
+        .collect()
 }
 
 /// Parses `cargo metadata --format-version 1` output.
@@ -156,6 +175,7 @@ pub(crate) fn parse(json: &str) -> Result<Metadata, String> {
             .filter_map(Value::as_str)
             .map(str::to_owned)
             .collect();
+        md.linked.insert(str_field(node, "id"), linked(node));
         md.features.insert(str_field(node, "id"), features);
     }
     Ok(md)

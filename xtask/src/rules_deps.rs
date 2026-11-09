@@ -24,6 +24,8 @@ pub(crate) enum Class {
     Authority,
     Identity,
     Http,
+    /// `edge-core`: the gateways' edge layers; no store and no plane crate (OP-155 m.3 (c)).
+    Edge,
     Telemetry,
     Sandbox,
     /// `restriction-analysis`: control-plane SMT analysis with an external solver (OP-105).
@@ -47,6 +49,7 @@ pub(crate) fn classify(dir: &str) -> Option<Class> {
         ("crates", "store") => Class::Store,
         ("crates", "internal-api") => Class::InternalApi,
         ("crates", "http") => Class::Http,
+        ("crates", "edge-core") => Class::Edge,
         ("crates", "telemetry") => Class::Telemetry,
         ("crates", "suiss-sandbox") => Class::Sandbox,
         ("crates", "restriction-analysis") => Class::RestrictionAnalysis,
@@ -69,7 +72,7 @@ pub(crate) fn classify(dir: &str) -> Option<Class> {
 /// `None` means every class.
 fn allowed_targets(from: Class) -> Option<&'static [Class]> {
     use Class::{
-        Authority, Bin, Bindings, Crypto, Http, Identity, InternalApi, Kernel, Parse, Proto,
+        Authority, Bin, Bindings, Crypto, Edge, Http, Identity, InternalApi, Kernel, Parse, Proto,
         RestrictionAnalysis, Sandbox, Sdk, Service, Store, Suiss, SuissLedger, Telemetry, Testkit,
         Tooling,
     };
@@ -110,6 +113,8 @@ fn allowed_targets(from: Class) -> Option<&'static [Class]> {
             SuissLedger,
             Identity,
         ],
+        // OP-155 m.3 (c), IDI-11
+        Edge => &[Kernel, Proto, Parse, Crypto, InternalApi, Telemetry],
         // B21, B22, E24
         Service => &[Kernel, Proto, Sdk, Bindings],
         Sdk => &[Kernel, Proto, Bindings, Sdk],
