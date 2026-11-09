@@ -1,0 +1,41 @@
+[package]
+name = "access-edge-core"
+description = "The edge core of Access protocol gateways (OP-155 m.3 (c), MD-1): realm, subject, Claim, keys, audit, governor and health layers, the mTLS edge channel, and the parser worker pool."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+default = ["channel"]
+# The mTLS edge channel and the layers over it; the parser worker links the pool only
+channel = ["dep:httparse", "dep:rustls", "dep:rustls-pki-types", "dep:serde_json", "dep:tokio-rustls"]
+
+[dependencies]
+access-internal-api = { workspace = true }
+suiss-crypto = { workspace = true }
+httparse = { workspace = true, features = ["std"], optional = true }
+rustls = { workspace = true, features = ["aws_lc_rs", "prefer-post-quantum", "std"], optional = true }
+rustls-pki-types = { workspace = true, features = ["std"], optional = true }
+serde_json = { workspace = true, features = ["std"], optional = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["net", "io-util", "time"] }
+tokio-rustls = { workspace = true, features = ["aws_lc_rs"], optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { workspace = true, features = ["std", "net"] }
+
+[dev-dependencies]
+access-http = { workspace = true }
+access-identity-account = { workspace = true, features = ["testing"] }
+access-identity-edge = { workspace = true }
+access-crypto = { workspace = true, features = ["testing"] }
+access-store = { workspace = true, features = ["testing"] }
+axum = { workspace = true }
+rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "io-util", "net", "time"] }
+
+[lints]
+workspace = true
