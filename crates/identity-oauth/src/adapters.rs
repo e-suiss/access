@@ -95,11 +95,13 @@ impl Directory for PgDirectory {
             .await
             .map_err(|_| Unavailable)?
             .is_some_and(|s| s.cimd_enabled);
+        let dcr = t.dcr_policy().await.map_err(|_| Unavailable)?.enabled;
         t.commit().await.map_err(|_| Unavailable)?;
         Ok(Facts {
             public_sub_clients,
             domain,
             cimd,
+            dcr,
         })
     }
 }

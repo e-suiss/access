@@ -1,0 +1,102 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT client_uuid, client_id, metadata, issuer, token, registered_ms, last_used_ms\n               FROM access.oauth_dcr_clients\n              WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND retired_ms IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "client_uuid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_dcr_clients",
+            "name": "client_uuid"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_dcr_clients",
+            "name": "client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "metadata",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_dcr_clients",
+            "name": "metadata"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "issuer",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_dcr_clients",
+            "name": "issuer"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "token",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_dcr_clients",
+            "name": "token"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "registered_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_dcr_clients",
+            "name": "registered_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "last_used_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_dcr_clients",
+            "name": "last_used_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e0b64b2bcb5a94a8fb921c8b619a4bb79f933bbf79325ce3a8f7c57fd42a07dc"
+}

@@ -9,6 +9,7 @@ use access_crypto::jose::JwsAlg;
 use access_crypto::opaque_id::IdKey;
 use access_store::backchannel::LogoutUndelivered;
 use access_store::clients::{CimdRow, CimdSnapshot, ConsentRecordRow};
+use access_store::dcr::{DcrClientRow, DcrPolicyRow, NewDcrClient};
 use access_store::identity::{Cursor, OutboxEvent, RealmId, TenantId};
 use access_store::idp::{ClientRow, PlatformClient};
 use access_store::oauth::{
@@ -277,6 +278,44 @@ pub trait OAuthTx: Send {
         &mut self,
         uuid: [u8; 16],
     ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
+    /// The realm's DCR policy (`idp.client.dcr_policy`, OP-154 m.3 (j)); off when never decided.
+    fn dcr_policy(&mut self) -> impl Future<Output = Result<DcrPolicyRow, Unavailable>> + Send;
+    /// The live DCR client of `client_id`.
+    fn dcr_client(
+        &mut self,
+        client_id: &str,
+    ) -> impl Future<Output = Result<Option<DcrClientRow>, Unavailable>> + Send;
+    /// The live DCR client with internal id `uuid`: its `client_id`.
+    fn dcr_client_by_uuid(
+        &mut self,
+        uuid: [u8; 16],
+    ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
+    /// Registrations from `ip_prefix` since `since_ms`, the realm's since `day_ms`, and its live
+    /// DCR clients.
+    fn dcr_counts(
+        &mut self,
+        ip_prefix: &str,
+        since_ms: u64,
+        day_ms: u64,
+    ) -> impl Future<Output = Result<(u64, u64, u64), Unavailable>> + Send;
+    /// Keeps a registration.
+    fn insert_dcr_client(
+        &mut self,
+        c: &NewDcrClient<'_>,
+    ) -> impl Future<Output = Result<[u8; 16], Unavailable>> + Send;
+    /// Notes that a DCR client was used.
+    fn touch_dcr_client(
+        &mut self,
+        uuid: [u8; 16],
+        now_ms: u64,
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send;
+    /// Retires a live DCR client: its consent records end and its identity grants are revoked.
+    fn retire_dcr_client(
+        &mut self,
+        uuid: [u8; 16],
+        reason: &str,
+        now_ms: u64,
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
     /// Keeps a consent record (P58).
     fn put_consent_record(
         &mut self,

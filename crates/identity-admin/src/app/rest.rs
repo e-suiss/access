@@ -168,6 +168,8 @@ pub enum Op {
     PutVaultReleaseMode,
     /// `registerProtectedResource`: `idp.client.resource_register` (AG-8).
     RegisterProtectedResource,
+    /// `putDcrPolicy`: `idp.client.dcr_policy`, or `dcr_policy_tighten` (OP-154 m.3 (j)).
+    PutDcrPolicy,
 }
 
 impl Op {
@@ -236,6 +238,7 @@ impl Op {
             "disableVaultResource" => Self::DisableVaultResource,
             "putVaultReleaseMode" => Self::PutVaultReleaseMode,
             "registerProtectedResource" => Self::RegisterProtectedResource,
+            "putDcrPolicy" => Self::PutDcrPolicy,
             _ => return None,
         })
     }
@@ -1151,6 +1154,26 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             only(m, &["alg"])?;
             Change::JoseAlg(JoseAlg::from_name(text(m, "alg")?).ok_or(Invalid::JoseAlg)?)
         }
+        // OP-154 m.3 (j)
+        Op::PutDcrPolicy => {
+            only(m, &["enabled", "domains", "initial_access_tokens"])?;
+            let mut tokens = std::collections::BTreeSet::new();
+            for t in texts(m, "initial_access_tokens")? {
+                let d = access_kernel::json::b64url_decode(t)
+                    .ok()
+                    .and_then(|b| <[u8; 32]>::try_from(b).ok())
+                    .ok_or(Invalid::DcrPolicy)?;
+                tokens.insert(d);
+            }
+            Change::DcrPolicy {
+                policy: access_identity_oauth::domain::dcr::DcrPolicy {
+                    enabled: flag(m, "enabled")?,
+                    domains: texts(m, "domains")?.into_iter().map(String::from).collect(),
+                    tokens,
+                },
+                loosens: true,
+            }
+        }
         // AG-8, OP-154 m.3 (a)
         Op::RegisterProtectedResource => {
             only(m, &["resource", "display_name"])?;
@@ -1763,6 +1786,15 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 Change::ProtectionMode {
                     mode,
                     loosens: tier == access_identity_risk::domain::mode::Tier::Ct2,
+                }
+            }
+            // OP-154 m.3 (j)
+            Change::DcrPolicy { policy, .. } => {
+                let current =
+                    access_identity_oauth::app::oauth::dcr::policy_of(&t.dcr_policy().await?);
+                Change::DcrPolicy {
+                    loosens: !policy.narrows(&current),
+                    policy,
                 }
             }
             // OP-153 m.22 (g), m.25 (b)

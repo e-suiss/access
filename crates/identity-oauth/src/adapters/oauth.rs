@@ -412,6 +412,56 @@ impl OAuthTx for PgOAuthTx {
         self.0.cimd_client_by_uuid(uuid).await.map_err(down)
     }
 
+    async fn dcr_policy(&mut self) -> Result<access_store::dcr::DcrPolicyRow, Unavailable> {
+        self.0.dcr_policy().await.map_err(down)
+    }
+
+    async fn dcr_client(
+        &mut self,
+        client_id: &str,
+    ) -> Result<Option<access_store::dcr::DcrClientRow>, Unavailable> {
+        self.0.dcr_client(client_id).await.map_err(down)
+    }
+
+    async fn dcr_client_by_uuid(&mut self, uuid: [u8; 16]) -> Result<Option<String>, Unavailable> {
+        self.0.dcr_client_by_uuid(uuid).await.map_err(down)
+    }
+
+    async fn dcr_counts(
+        &mut self,
+        ip_prefix: &str,
+        since_ms: u64,
+        day_ms: u64,
+    ) -> Result<(u64, u64, u64), Unavailable> {
+        self.0
+            .dcr_counts(ip_prefix, since_ms, day_ms)
+            .await
+            .map_err(down)
+    }
+
+    async fn insert_dcr_client(
+        &mut self,
+        c: &access_store::dcr::NewDcrClient<'_>,
+    ) -> Result<[u8; 16], Unavailable> {
+        self.0.insert_dcr_client(c).await.map_err(down)
+    }
+
+    async fn touch_dcr_client(&mut self, uuid: [u8; 16], now_ms: u64) -> Result<(), Unavailable> {
+        self.0.touch_dcr_client(uuid, now_ms).await.map_err(down)
+    }
+
+    async fn retire_dcr_client(
+        &mut self,
+        uuid: [u8; 16],
+        reason: &str,
+        now_ms: u64,
+    ) -> Result<bool, Unavailable> {
+        self.0
+            .retire_dcr_client(uuid, reason, now_ms)
+            .await
+            .map_err(down)
+    }
+
     async fn put_consent_record(
         &mut self,
         c: &access_store::clients::NewConsentRecord<'_>,

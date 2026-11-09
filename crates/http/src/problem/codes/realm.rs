@@ -378,6 +378,13 @@ pub const INVALID_PROTECTED_RESOURCE: Code = code(
     "Bad Request",
     "A protected resource is a canonical https URI without query, fragment or trailing slash, and a display name of 1 to 128 printable characters (AG-8, RFC 8707 §2).",
 );
+/// A DCR policy outside OP-154 m.3 (j).
+pub const INVALID_DCR_POLICY: Code = code(
+    "invalid-dcr-policy",
+    400,
+    "Bad Request",
+    "A DCR policy names whether registration is open, at most 64 redirect domains and at most 16 initial access tokens as unpadded base64url SHA-256 digests; an open policy names at least one (OP-154 m.3 (j)).",
+);
 /// A vault Resource outside OP-154 m.3 (t), or an upstream the catalog does not have.
 pub const INVALID_VAULT_RESOURCE: Code = code(
     "invalid-vault-resource",

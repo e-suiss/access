@@ -10,6 +10,7 @@ mod authority;
 mod authorize;
 mod client_auth;
 pub mod clients;
+pub mod dcr;
 mod exchange;
 mod logout;
 mod management;

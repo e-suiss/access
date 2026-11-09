@@ -63,6 +63,8 @@ pub struct Facts {
     pub domain: Option<[u8; 32]>,
     /// Whether the realm accepts CIMD clients (`idp.client.cimd_policy`, AG-3).
     pub cimd: bool,
+    /// Whether the realm's DCR profile is open (`idp.client.dcr_policy`, OP-154 m.3 (j)).
+    pub dcr: bool,
 }
 
 /// The realm keys the identity signer holds (CMP-22b, OP-143 m.9).

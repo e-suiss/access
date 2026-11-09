@@ -20,6 +20,7 @@ pub mod clients;
 pub mod connect;
 pub mod consents;
 pub mod console;
+pub mod dcr;
 pub mod derived;
 pub mod dpop;
 pub mod ephemeral;

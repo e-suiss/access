@@ -206,6 +206,10 @@ impl<E: Env> OAuth<E> {
         client_id: &str,
     ) -> Result<Option<Client>, Unavailable> {
         match ClientIdKind::of(client_id) {
+            // IDI-10, OP-154 m.3 (j)
+            ClientIdKind::Local if client_id.starts_with(crate::domain::dcr::CLIENT_PREFIX) => {
+                self.dcr_client_of(tx, client_id).await
+            }
             ClientIdKind::Local => Ok(tx.client(client_id).await?.and_then(Client::from_row)),
             ClientIdKind::Url => {
                 if client_id_url(client_id).is_err() {

@@ -444,6 +444,14 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Agent(a) => agents::current(t, a).await?,
             // OP-154 m.3 (t)
             Change::Vault(v) => vault::current(t, v).await?,
+            // OP-154 m.3 (j)
+            Change::DcrPolicy { policy, loosens } => {
+                let current =
+                    access_identity_oauth::app::oauth::dcr::policy_of(&t.dcr_policy().await?);
+                if policy.narrows(&current) == *loosens {
+                    return Err(AdminError::Conflict);
+                }
+            }
             // AG-8
             Change::ResourceRegister(r) => {
                 if t.protected_resource(&r.resource).await?.is_some() {
@@ -1570,6 +1578,30 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::AccountTapIssue(_) => true,
             // OP-154 m.3 (t)
             Change::Vault(v) => vault::write(t, bound, v).await?,
+            Change::DcrPolicy { policy, .. } => {
+                t.put_dcr_policy(
+                    bound,
+                    &access_store::dcr::DcrPolicyRow {
+                        enabled: policy.enabled,
+                        domains: policy.domains.iter().cloned().collect(),
+                        tokens: policy.tokens.iter().copied().collect(),
+                    },
+                )
+                .await?;
+                // §11.4.5 #35
+                let now = t.db_now_ms().await?;
+                for c in t.dcr_clients().await? {
+                    let hosts = access_identity_oauth::app::oauth::dcr::of_dcr(&c)
+                        .map(|cl| {
+                            access_identity_oauth::domain::cimd::redirect_hosts(&cl.redirect_uris)
+                        })
+                        .unwrap_or_default();
+                    if !policy.admits(&c.token, &hosts) {
+                        t.retire_dcr_client(c.client_uuid, "policy", now).await?;
+                    }
+                }
+                true
+            }
             Change::ResourceRegister(r) => {
                 access_store::clients::insert_protected_resource(
                     t,

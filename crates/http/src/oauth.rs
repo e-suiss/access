@@ -19,6 +19,7 @@ use axum::routing::{get, post};
 use crate::Problem;
 
 pub mod approval;
+mod register;
 
 /// The session cookie of the hosted login (TN-17).
 pub const SESSION_COOKIE: &str = "__Host-access-session";
@@ -73,7 +74,9 @@ pub fn router<E: Env>(service: OAuth<E>) -> Router {
         r = r.route(path, a).route(&slugged, b);
     }
     // §11.6, OP-154 m.3 (k)
-    r.merge(approval::routes::<E>()).with_state(shared)
+    r.merge(approval::routes::<E>())
+        .merge(register::routes::<E>())
+        .with_state(shared)
 }
 
 /// The X.509-SVID chain the TLS layer found on the connection (OP-154 m.3 (r)).

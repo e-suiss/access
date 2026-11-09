@@ -151,7 +151,11 @@ impl<E: Env> OAuth<E> {
         let Ok(request) = serde_json::from_slice::<AuthRequest>(&row.params) else {
             return Err(Unavailable);
         };
-        let Some(url) = tx.cimd_client_by_uuid(row.client).await? else {
+        let url = match tx.cimd_client_by_uuid(row.client).await? {
+            Some(u) => Some(u),
+            None => tx.dcr_client_by_uuid(row.client).await?,
+        };
+        let Some(url) = url else {
             return Ok(Err(NotApproved::NoRequest));
         };
         let Some(client) = self

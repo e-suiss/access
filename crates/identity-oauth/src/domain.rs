@@ -4,6 +4,7 @@ pub mod authority;
 pub mod cimd;
 pub mod claims_request;
 pub mod client;
+pub mod dcr;
 pub mod dpop;
 pub mod exchange;
 pub mod issuer;

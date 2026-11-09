@@ -156,6 +156,7 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
                     public_sub: facts.public_sub_clients > 0,
                     domain_metadata,
                     cimd: facts.cimd,
+                    dcr: facts.dcr,
                 };
                 Reply::Metadata(metadata::authorization_server_of(
                     &realm.issuer,

@@ -173,6 +173,23 @@ pub struct RealmFacts {
     /// The realm accepts CIMD clients (`idp.client.cimd_policy`); without it the member is
     /// absent, which reads as unsupported (§11.3.3).
     pub cimd: bool,
+    /// The realm's DCR profile is open (`idp.client.dcr_policy`); without it no
+    /// `registration_endpoint` is declared (§10.1.2, OP-154 m.3 (j)).
+    pub dcr: bool,
+}
+
+/// The RFC 7591 registration endpoint under the issuer.
+pub const REGISTER_PATH: &str = "/register";
+
+/// The endpoints a realm turns on itself: `/register` while its DCR profile is open (§10.1.2,
+/// OP-154 m.3 (j)).
+fn realm_endpoints(m: &mut Map<String, Value>, issuer: &Issuer, facts: &RealmFacts) {
+    if facts.dcr {
+        m.insert(
+            "registration_endpoint".into(),
+            issuer.endpoint(REGISTER_PATH).into(),
+        );
+    }
 }
 
 /// The AS metadata member that names the governing domain's Domain Metadata: the AS metadata
@@ -320,6 +337,7 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
             json!(SIGNING_ALGS),
         );
     }
+    realm_endpoints(&mut m, issuer, facts);
     // §11.3.3, AG-3
     if served.feature(Feature::ClientIdMetadataDocument) && facts.cimd {
         m.insert(

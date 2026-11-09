@@ -208,6 +208,10 @@ pub enum Invalid {
     /// The protected resource is registered already.
     #[error("protected resource exists")]
     ResourceExists,
+    /// A DCR policy outside OP-154 m.3 (j): an open one without an initial access token, a token
+    /// that is not a SHA-256 digest, or a domain that is not a DNS name.
+    #[error("invalid dcr policy")]
+    DcrPolicy,
     /// A platform product client outside the platform tenant (OP-149 m.4).
     #[error("platform clients belong to the platform tenant")]
     PlatformTenant,
@@ -498,6 +502,7 @@ impl Invalid {
             Self::NoClient => "no-such-client",
             Self::ClientExists => "client-exists",
             Self::ProtectedResource => "invalid-protected-resource",
+            Self::DcrPolicy => "invalid-dcr-policy",
             Self::ResourceExists => "protected-resource-exists",
             Self::PlatformTenant => "platform-tenant-only",
             Self::PlatformAuth => "platform-requires-private-key-jwt",
@@ -1659,6 +1664,14 @@ pub enum Change {
     Vault(access_identity_vault::domain::resource::VaultChange),
     /// `idp.client.resource_register` (AG-8, OP-154 m.3 (a)).
     ResourceRegister(ProtectedResource),
+    /// `idp.client.dcr_policy`, or `dcr_policy_tighten` when it only narrows (OP-154 m.3 (j));
+    /// `loosens` is resolved against the realm's current policy before the decision.
+    DcrPolicy {
+        /// The policy.
+        policy: access_identity_oauth::domain::dcr::DcrPolicy,
+        /// Whether it admits anything the current one does not.
+        loosens: bool,
+    },
     /// `idp.org.member_remove` (OP-153 m.3 (p)).
     OrgMemberRemove(OrgMember),
     /// `idp.org.invite` (TN-89, OP-153 m.3 (o)).
@@ -1999,6 +2012,8 @@ impl Change {
             Self::Agent(a) => a.action(),
             Self::Vault(v) => v.action(),
             Self::ResourceRegister(_) => IdpAction::ClientResourceRegister,
+            Self::DcrPolicy { loosens: true, .. } => IdpAction::ClientDcrPolicy,
+            Self::DcrPolicy { loosens: false, .. } => IdpAction::ClientDcrPolicyTighten,
             Self::CspMode { loosens: false, .. } => IdpAction::RealmCspMode,
             Self::CspMode { loosens: true, .. } => IdpAction::RealmCspModeLoosen,
         }
@@ -2055,6 +2070,13 @@ impl Change {
             Self::Agent(a) => a.check(),
             Self::Vault(v) => v.check().map_err(|_| Invalid::VaultResource),
             Self::ResourceRegister(r) => r.check(),
+            Self::DcrPolicy { policy, .. } => {
+                if policy.check() {
+                    Ok(())
+                } else {
+                    Err(Invalid::DcrPolicy)
+                }
+            }
             Self::AccountBind(_)
             | Self::CspMode { .. }
             | Self::OrgInviteRevoke { .. }
@@ -2183,6 +2205,23 @@ impl Change {
             Self::GuardianshipRecord(g) => g.to_value(),
             Self::Agent(a) => a.body(),
             Self::Vault(v) => v.body(),
+            Self::DcrPolicy { policy, .. } => Value::Map(vec![
+                (Value::text("enabled"), Value::Bool(policy.enabled)),
+                (
+                    Value::text("domains"),
+                    Value::Array(policy.domains.iter().map(|d| Value::text(d)).collect()),
+                ),
+                (
+                    Value::text("initial_access_tokens"),
+                    Value::Array(
+                        policy
+                            .tokens
+                            .iter()
+                            .map(|t| Value::Bytes(t.to_vec()))
+                            .collect(),
+                    ),
+                ),
+            ]),
             Self::ResourceRegister(r) => Value::Map(vec![
                 (Value::text("resource"), Value::text(r.resource.as_str())),
                 (
@@ -2293,6 +2332,7 @@ impl Change {
             Self::ResourceRegister(r) => {
                 path.extend([String::from("resource"), r.resource.clone()]);
             }
+            Self::DcrPolicy { .. } => path.push(String::from("realm")),
         }
         ResourceRef {
             namespace: String::from(RESOURCE_NAMESPACE),

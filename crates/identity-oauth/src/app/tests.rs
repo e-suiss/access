@@ -45,6 +45,7 @@ impl Directory for Rows {
             public_sub_clients: u64::from(n == 3),
             domain: Some([n; 32]),
             cimd: n == 3,
+            dcr: false,
         })
     }
 }

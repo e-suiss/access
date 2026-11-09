@@ -893,7 +893,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "patchAgent" => (Agents, patch(AGENT_PATCH, None)),
         "retireAgent" | "assignAgentSponsor" | "removeAgentSponsor" => (Agents, w(false)),
         "listAgentSponsors" => (AgentSponsors, Shape::List(&["account_id"])),
-        "defineAgentTemplate" => (Settings, w(false)),
+        // OP-154 m.3 (g), (j)
+        "defineAgentTemplate" | "putDcrPolicy" => (Settings, w(false)),
         "revokeAllAgentInstances" => (Agents, Shape::RevokeAll),
         // OP-154 m.3 (t)
         "listVaultResources" => (
@@ -1050,6 +1051,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::SigninPolicy => &r::INVALID_SIGNIN_POLICY,
             Invalid::SessionPolicy => &r::INVALID_SESSION_POLICY,
             Invalid::ProtectedResource => &r::INVALID_PROTECTED_RESOURCE,
+            Invalid::DcrPolicy => &r::INVALID_DCR_POLICY,
             Invalid::ClientExists
             | Invalid::GroupExists
             | Invalid::UpstreamExists

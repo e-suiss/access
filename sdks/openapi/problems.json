@@ -655,6 +655,13 @@
       "description": "A protected resource is a canonical https URI without query, fragment or trailing slash, and a display name of 1 to 128 printable characters (AG-8, RFC 8707 §2)."
     },
     {
+      "code": "invalid-dcr-policy",
+      "type": "urn:suiss:access:problem:invalid-dcr-policy",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A DCR policy names whether registration is open, at most 64 redirect domains and at most 16 initial access tokens as unpadded base64url SHA-256 digests; an open policy names at least one (OP-154 m.3 (j))."
+    },
+    {
       "code": "invalid-recovery-policy",
       "type": "urn:suiss:access:problem:invalid-recovery-policy",
       "status": 400,

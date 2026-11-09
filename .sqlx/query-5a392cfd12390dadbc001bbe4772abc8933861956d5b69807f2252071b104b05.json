@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n                 count(*) FILTER (WHERE ip_prefix = $3 AND registered_ms >= $4) AS \"ip!\",\n                 count(*) FILTER (WHERE registered_ms >= $5) AS \"day!\",\n                 count(*) FILTER (WHERE retired_ms IS NULL) AS \"live!\"\n               FROM access.oauth_dcr_clients WHERE tenant_id = $1 AND realm_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ip!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "day!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "live!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "5a392cfd12390dadbc001bbe4772abc8933861956d5b69807f2252071b104b05"
+}
