@@ -2052,6 +2052,7 @@ mod ingest;
 mod issuers;
 pub mod lab;
 pub mod management;
+pub mod outcome;
 pub mod projection;
 mod proofs;
 pub mod publishing;

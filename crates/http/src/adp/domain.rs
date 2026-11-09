@@ -693,6 +693,14 @@ pub fn decode_search(
         },
         // A-11, E26
         "agent-status" => Query::AgentStatus,
+        // L6, OP-154 m.3 (u)
+        "outcome" => Query::Outcome {
+            exercise: Digest(fixed(q.req("exercise", "query")?, "query")?),
+            envelope: Box::new(
+                IntentEnvelope::from_bytes(&bytes(q.req("intent", "query")?, "query")?)
+                    .map_err(|_| AdpError("query"))?,
+            ),
+        },
         _ => return Err(AdpError("search")),
     };
     q.done()?;

@@ -52,6 +52,7 @@ pub fn encode(report: &Report) -> Out {
         Report::Bulk(b) => bulk(b),
         Report::Sources(s) => sources(s),
         Report::AgentStatus(s) => agent_status(s),
+        Report::Outcome(o) => outcome(o),
     }
 }
 
@@ -110,6 +111,43 @@ fn agent_status(s: &access_authority_core::app::agent_status::AgentStatus) -> Ou
     out.insert(String::from("holdings"), Out::Array(holdings));
     out.insert(String::from("advisory"), Out::Bool(true));
     Out::Object(out)
+}
+
+/// L6, OP-154 m.3 (u), E64, EI-10: the reports about one Exercise; the decision is only read.
+fn outcome(o: &access_authority_core::app::outcome::Outcome) -> Out {
+    let attested: Vec<Out> = o
+        .attested
+        .iter()
+        .map(|a| {
+            json!({
+                "position": a.position,
+                "claim": id(&a.claim),
+                "reporter": id(&a.issuer),
+                "executor": id(&a.executor),
+                "disposition": a.disposition,
+                "step": digest(&a.step),
+                "idempotency_key": digest(&a.idempotency_key),
+                "outcome": a.outcome,
+                "evidence": a.evidence,
+                "at": a.at,
+                "conformance": a.conformance.word(),
+            })
+        })
+        .collect();
+    let control: Vec<Out> = o
+        .control
+        .iter()
+        .map(|c| json!({ "position": c.position, "state": c.state, "reporter": id(&c.issuer) }))
+        .collect();
+    json!({
+        "type": "outcome",
+        "exercise": digest(&o.exercise),
+        "allowed_at": o.allowed_at,
+        "status": o.status(),
+        "attested": attested,
+        "control": control,
+        "advisory": true,
+    })
 }
 
 fn kernel_json(v: Result<Out, crate::adp::payload::PayloadError>) -> Out {

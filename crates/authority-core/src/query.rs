@@ -7,7 +7,8 @@ use std::collections::BTreeSet;
 use access_authority_sequencer::ports::DomainLog;
 use access_kernel::algebra::{Catalog, resource_le};
 use access_kernel::combinator::HopStatus;
-use access_kernel::intent::intent_digest;
+use access_kernel::digest::Digest;
+use access_kernel::intent::{IntentEnvelope, intent_digest};
 use access_kernel::meta::{self, Actor, ExerciseBasis, GrantState, View, kind};
 use access_kernel::model::{ActionRef, Id, ResourceRef, ResourceSelector, SubjectSelector, Window};
 
@@ -117,6 +118,13 @@ pub enum Query {
     },
     /// An agent Instance's own summary (A-11, L8).
     AgentStatus,
+    /// L6: what executors reported about one Exercise (OP-154 m.3 (u), EI-10).
+    Outcome {
+        /// The Exercise.
+        exercise: Digest,
+        /// The intent the viewer holds; it must be the Exercise's.
+        envelope: Box<IntentEnvelope>,
+    },
 }
 
 /// The change a `change-impact` search previews.
@@ -169,13 +177,14 @@ pub enum Report {
     Sources(Sources),
     /// An agent Instance's own summary (A-11, L8).
     AgentStatus(crate::app::agent_status::AgentStatus),
+    /// L6: an Exercise's reported outcome.
+    Outcome(Box<crate::app::outcome::Outcome>),
 }
 
 /// Search kinds declared for Stage 9 and not served yet, each owned by its lane: `discovery`
-/// (L3, auditor-only and advisory, OP-154 m.3 (z)) and `outcome` (L6, the effect attestations
-/// of an Exercise, never a rewrite of its decision, EI-10). A search of one answers
+/// (L3, auditor-only and advisory, OP-154 m.3 (z)). A search of one answers
 /// `501 not-yet-served` (OP-154 m.4).
-pub const RESERVED_KINDS: [&str; 2] = ["discovery", "outcome"];
+pub const RESERVED_KINDS: [&str; 1] = ["discovery"];
 
 impl Query {
     /// The path segment of the search intent's resource.
@@ -199,6 +208,7 @@ impl Query {
             Self::Inventory { .. } => "inventory",
             Self::Activity { .. } => "activity",
             Self::AgentStatus => "agent-status",
+            Self::Outcome { .. } => "outcome",
         }
     }
 
@@ -384,6 +394,9 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 });
             }
             Query::Activity { .. } => return self.activity(&actor, after, now).await,
+            Query::Outcome { exercise, envelope } => {
+                return self.outcome(actor.party, *exercise, envelope, now).await;
+            }
             _ => {}
         }
         let candidates = match query {
