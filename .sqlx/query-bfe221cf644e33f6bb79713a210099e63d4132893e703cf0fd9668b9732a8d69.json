@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.vault_connections\n                SET status = $4, scopes = COALESCE($5, scopes), status_ms = greatest(status_ms, $6),\n                    refresh_lease_ms = NULL\n              WHERE tenant_id = $1 AND realm_id = $2 AND connection_id = $3\n                AND status <> 'disconnected'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "TextArray",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bfe221cf644e33f6bb79713a210099e63d4132893e703cf0fd9668b9732a8d69"
+}

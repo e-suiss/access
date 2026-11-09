@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.vault_token_sets\n                SET superseded_ms = $4, shredded_ms = $4, wrapped_dek = NULL, nonce = NULL,\n                    ciphertext = NULL\n              WHERE tenant_id = $1 AND realm_id = $2 AND connection_id = $3\n                AND superseded_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "62ba5b92b0123f89129e13f398f073fe29032522e3f28b21771d883535f98464"
+}

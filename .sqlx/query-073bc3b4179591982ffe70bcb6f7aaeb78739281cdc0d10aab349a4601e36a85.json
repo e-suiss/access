@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.vault_release_modes\n               (tenant_id, realm_id, version, mode, domain_id, decision_pos)\n             SELECT $1, $2,\n                    COALESCE((SELECT max(version) FROM access.vault_release_modes\n                               WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,\n                    $3, $4, $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "073bc3b4179591982ffe70bcb6f7aaeb78739281cdc0d10aab349a4601e36a85"
+}

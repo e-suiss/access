@@ -1,0 +1,114 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT version, kek_id, wrapped_dek, nonce, ciphertext, access_expires_ms, refreshable,\n                    created_ms\n               FROM access.vault_token_sets\n              WHERE tenant_id = $1 AND realm_id = $2 AND connection_id = $3\n                AND superseded_ms IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.vault_token_sets",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kek_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.vault_token_sets",
+            "name": "kek_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "wrapped_dek",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.vault_token_sets",
+            "name": "wrapped_dek"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "nonce",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.vault_token_sets",
+            "name": "nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "ciphertext",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.vault_token_sets",
+            "name": "ciphertext"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "access_expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.vault_token_sets",
+            "name": "access_expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "refreshable",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.vault_token_sets",
+            "name": "refreshable"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "created_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.vault_token_sets",
+            "name": "created_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "bd467cbb433c5452eb810a7075142c0d1262a6370ff88d018e77e51bdc6092e7"
+}

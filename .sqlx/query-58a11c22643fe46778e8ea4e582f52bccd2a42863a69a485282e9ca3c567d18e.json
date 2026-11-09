@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.vault_releases\n               (tenant_id, realm_id, domain_id, exercise, decision_pos, intent_digest, actor,\n                connection_id, token_set_version, pep, path, tier, use_until_ms, released_ms)\n             VALUES ($1, $2, $3, $4, $5, $6, $14, $7, $8, $9, $10, $11, $12, $13)\n             ON CONFLICT (tenant_id, realm_id, domain_id, exercise) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Bytea",
+        "Uuid",
+        "Int8",
+        "Text",
+        "Text",
+        "Int2",
+        "Int8",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "58a11c22643fe46778e8ea4e582f52bccd2a42863a69a485282e9ca3c567d18e"
+}

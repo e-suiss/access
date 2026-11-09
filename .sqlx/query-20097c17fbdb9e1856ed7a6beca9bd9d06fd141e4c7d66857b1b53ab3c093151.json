@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.connection_id\n               FROM access.vault_token_sets s\n               JOIN access.vault_connections c\n                 ON c.tenant_id = s.tenant_id AND c.realm_id = s.realm_id\n                AND c.connection_id = s.connection_id\n              WHERE s.tenant_id = $1 AND s.realm_id = $2 AND s.superseded_ms IS NULL\n                AND s.refreshable AND s.access_expires_ms < $3 AND c.status = 'active'\n              ORDER BY s.access_expires_ms LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "connection_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.vault_token_sets",
+            "name": "connection_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "20097c17fbdb9e1856ed7a6beca9bd9d06fd141e4c7d66857b1b53ab3c093151"
+}

@@ -1,0 +1,43 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.grant_domain, r.grant_ref FROM access.oauth_consent_records r\n              WHERE r.tenant_id = $1 AND r.realm_id = $2 AND r.subject_id = $3\n                AND r.ended_ms IS NULL\n                AND r.client_uuid IN (\n                      SELECT c.client_uuid FROM access.idp_clients c\n                       WHERE c.tenant_id = $1 AND c.realm_id = $2 AND c.client_id = $4\n                      UNION ALL\n                      SELECT m.client_uuid FROM access.oauth_cimd_clients m\n                       WHERE m.tenant_id = $1 AND m.realm_id = $2 AND m.client_id = $4\n                         AND m.retired_ms IS NULL)\n              ORDER BY r.created_ms DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "grant_domain",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_consent_records",
+            "name": "grant_domain"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "grant_ref",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_consent_records",
+            "name": "grant_ref"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "d3f65c66d6b4297e4edb1e839f210ef4858fbbfcc9d32c6aac50b140a60671cc"
+}

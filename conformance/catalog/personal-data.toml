@@ -165,3 +165,12 @@ basis = "contract"
 portable = "derived"
 export = false
 note = "Keyed blind index of the provider's address."
+
+[[field]]
+column = "access.vault_token_sets.ciphertext"
+vault = "credential"
+retention = "profile"
+basis = "contract"
+portable = "observed"
+export = false
+note = "Upstream access and refresh tokens of a connected account; never exported or shown (OP-154 m.3 (t), TN-79)."

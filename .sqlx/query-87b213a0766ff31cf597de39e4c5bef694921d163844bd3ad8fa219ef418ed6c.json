@@ -1,0 +1,91 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT exercise, actor, pep, path, tier, released_ms FROM access.vault_releases\n              WHERE tenant_id = $1 AND realm_id = $2 AND connection_id = $3\n              ORDER BY released_ms DESC, release_id DESC LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exercise",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.vault_releases",
+            "name": "exercise"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "actor",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.vault_releases",
+            "name": "actor"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "pep",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.vault_releases",
+            "name": "pep"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "path",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.vault_releases",
+            "name": "path"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "tier",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "access.vault_releases",
+            "name": "tier"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "released_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.vault_releases",
+            "name": "released_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "87b213a0766ff31cf597de39e4c5bef694921d163844bd3ad8fa219ef418ed6c"
+}

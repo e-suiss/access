@@ -1,0 +1,138 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT connection_id, subject_id, party, resource, resource_version, client_id, scopes,\n                    status, created_ms, status_ms\n               FROM access.vault_connections\n              WHERE tenant_id = $1 AND realm_id = $2 AND connection_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "connection_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.vault_connections",
+            "name": "connection_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.vault_connections",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "party",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.vault_connections",
+            "name": "party"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "resource",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.vault_connections",
+            "name": "resource"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "resource_version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.vault_connections",
+            "name": "resource_version"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.vault_connections",
+            "name": "client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "scopes",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.vault_connections",
+            "name": "scopes"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.vault_connections",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "created_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.vault_connections",
+            "name": "created_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "status_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.vault_connections",
+            "name": "status_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "efa07ecd66282770a6de08c422f228b6bdefa0e61609aaa1dd98803d583b4198"
+}

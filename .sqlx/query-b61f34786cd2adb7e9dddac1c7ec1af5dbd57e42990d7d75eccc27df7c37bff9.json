@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.vault_resources\n                 (tenant_id, realm_id, name, version, upstream, origin, state, definition,\n                  domain_id, decision_pos)\n               SELECT $1, $2, $3,\n                      COALESCE((SELECT max(version) FROM access.vault_resources\n                                 WHERE tenant_id = $1 AND realm_id = $2 AND name = $3), 0) + 1,\n                      $4, $5, $6, $7, $8, $9\n               RETURNING version",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.vault_resources",
+            "name": "version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b61f34786cd2adb7e9dddac1c7ec1af5dbd57e42990d7d75eccc27df7c37bff9"
+}

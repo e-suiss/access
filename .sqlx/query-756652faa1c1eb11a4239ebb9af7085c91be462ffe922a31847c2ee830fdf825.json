@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT connection_id AS \"connection_id!\" FROM access.vault_releases\n                WHERE tenant_id = $1 AND realm_id = $2 AND actor = $3\n                GROUP BY connection_id ORDER BY min(released_ms), connection_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "connection_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.vault_releases",
+            "name": "connection_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "756652faa1c1eb11a4239ebb9af7085c91be462ffe922a31847c2ee830fdf825"
+}
