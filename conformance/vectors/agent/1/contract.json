@@ -41,6 +41,29 @@
    }
   },
   {
+   "id": "allow-naming-its-exercise",
+   "rules": [
+    "A-2"
+   ],
+   "mode": "commit",
+   "status": 200,
+   "body": {
+    "decision": true,
+    "context": {
+     "outcome": "allow",
+     "exercise": "IFOfNkqi7sGAOHYtER31j26cxJ3lyBp5g3SKtxmq4QY",
+     "versions": {
+      "core": 1,
+      "meta_schema": 1
+     }
+    }
+   },
+   "expect": {
+    "step": "proceed",
+    "task_state": "TASK_STATE_WORKING"
+   }
+  },
+  {
    "id": "allow-for-another-exercise",
    "rules": [
     "A-2"
