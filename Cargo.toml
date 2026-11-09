@@ -36,6 +36,8 @@ access-identity-hooks = { path = "crates/identity-hooks", default-features = fal
 access-identity-risk = { path = "crates/identity-risk", default-features = false }
 access-identity-federation = { path = "crates/identity-federation", default-features = false }
 access-identity-vault = { path = "crates/identity-vault", default-features = false }
+access-identity-edge = { path = "crates/identity-edge", default-features = false }
+access-edge-core = { path = "crates/edge-core", default-features = false }
 access-authority-ingest = { path = "crates/authority-ingest", default-features = false }
 access-sdk = { package = "esuiss-access-sdk", path = "sdks/rust/access", version = "=0.4.0", default-features = false }
 access-experience = { path = "services/experience", default-features = false }
@@ -111,6 +113,8 @@ divan = { version = "0.1.21", default-features = false }
 gungraun = { version = "=0.20.0", default-features = false }
 # OP-150 m.6 (d): ZLIB of Token Status Lists in the verifier SDK
 miniz_oxide = { version = "=0.9.1", default-features = false, features = ["with-alloc"] }
+# OP-155 m.3 (d), (u): XML is parsed only in the parser worker (edge-isolation)
+quick-xml = { version = "=0.42.0", default-features = false }
 # OP-83
 wasm-bindgen = { version = "=0.2.129", default-features = false }
 # OP-116

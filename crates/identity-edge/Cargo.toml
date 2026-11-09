@@ -1,0 +1,24 @@
+[package]
+name = "access-identity-edge"
+description = "The access-server side of the edge channel (OP-155 m.3 (c), IDP-26, IDI-11): the gateway registry, the realm and method scope of each gateway, and the realm issuer's Claims for edge authentications."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-identity-account = { workspace = true }
+access-internal-api = { workspace = true }
+access-kernel = { workspace = true }
+access-store = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+access-identity-account = { workspace = true, features = ["testing"] }
+access-store = { workspace = true, features = ["testing"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true
