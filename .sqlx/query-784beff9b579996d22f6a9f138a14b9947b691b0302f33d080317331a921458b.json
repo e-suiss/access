@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO executor.events (job, seq, event) VALUES ($1, $2, $3)\n             ON CONFLICT (job, seq) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "784beff9b579996d22f6a9f138a14b9947b691b0302f33d080317331a921458b"
+}

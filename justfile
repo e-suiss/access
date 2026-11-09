@@ -28,7 +28,8 @@ pg-down:
 oq-md3:
     scripts/oq-md3.sh
 
-# OP-66: refresh the committed .sqlx query metadata against a freshly migrated database
+# OP-66, OP-154 m.3 (u): refresh the committed .sqlx query metadata against a freshly migrated database
+# (the store's schema and the executor's own)
 sqlx-prepare:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -38,7 +39,8 @@ sqlx-prepare:
     psql -X -q "$url" -c "DROP DATABASE IF EXISTS $db" -c "CREATE DATABASE $db"
     psql -X -q -v ON_ERROR_STOP=1 "$base/$db" -f crates/store/bootstrap/roles.sql -f crates/store/bootstrap/database.sql
     DATABASE_URL="$base/$db" sqlx migrate run --source crates/store/migrations
-    DATABASE_URL="$base/$db" SQLX_OFFLINE=false cargo sqlx prepare --workspace -- --all-targets -p access-store --features testing
+    DATABASE_URL="$base/$db" sqlx migrate run --source services/executor/migrations --ignore-missing
+    DATABASE_URL="$base/$db" SQLX_OFFLINE=false cargo sqlx prepare --workspace -- --all-targets -p access-store -p access-executor --features testing
 
 # OP-66: the committed .sqlx query metadata matches the queries against a freshly migrated database
 sqlx-check:
@@ -51,7 +53,8 @@ sqlx-check:
     psql -X -q -v ON_ERROR_STOP=1 "$url" -c "CREATE DATABASE $db"
     psql -X -q -v ON_ERROR_STOP=1 "$base/$db" -f crates/store/bootstrap/roles.sql -f crates/store/bootstrap/database.sql
     DATABASE_URL="$base/$db" sqlx migrate run --source crates/store/migrations
-    DATABASE_URL="$base/$db" SQLX_OFFLINE=false cargo sqlx prepare --check --workspace -- --all-targets -p access-store --features testing
+    DATABASE_URL="$base/$db" sqlx migrate run --source services/executor/migrations --ignore-missing
+    DATABASE_URL="$base/$db" SQLX_OFFLINE=false cargo sqlx prepare --check --workspace -- --all-targets -p access-store -p access-executor --features testing
 
 fmt:
     cargo fmt --all

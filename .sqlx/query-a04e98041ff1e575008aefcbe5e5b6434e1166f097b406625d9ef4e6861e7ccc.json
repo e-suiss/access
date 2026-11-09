@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO executor.events (job, seq, event)\n                 SELECT $1, COALESCE(MAX(seq), -1) + 1, $2 FROM executor.events WHERE job = $1\n                 ON CONFLICT (job, seq) DO NOTHING\n                 RETURNING seq",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "executor.events",
+            "name": "seq"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a04e98041ff1e575008aefcbe5e5b6434e1166f097b406625d9ef4e6861e7ccc"
+}

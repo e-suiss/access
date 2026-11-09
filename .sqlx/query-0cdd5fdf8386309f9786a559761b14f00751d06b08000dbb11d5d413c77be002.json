@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO executor.jobs (job, domain_id, exercise, kind) VALUES ($1, $2, $3, $4)\n             ON CONFLICT (domain_id, exercise) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0cdd5fdf8386309f9786a559761b14f00751d06b08000dbb11d5d413c77be002"
+}

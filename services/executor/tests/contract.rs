@@ -1,16 +1,12 @@
 //! OP-65, OP-154 m.3 (u): the committed executor contract (`sdks/openapi/executor-v1.json`)
-//! against the code, and every route answering `501 not-yet-served` until it is served.
-//! `ACCESS_UPDATE_CONTRACTS=1` rewrites the contract.
+//! against the code. `ACCESS_UPDATE_CONTRACTS=1` rewrites the contract.
 
 #![allow(clippy::unwrap_used, clippy::panic, reason = "test code")]
 
 use std::path::PathBuf;
 
-use access_executor::contract::{ROUTES, Verb, openapi};
-use axum::body::Body;
-use axum::http::{Request, StatusCode};
+use access_executor::contract::{ROUTES, openapi};
 use serde_json::Value;
-use tower::ServiceExt as _;
 
 fn path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../sdks/openapi/executor-v1.json")
@@ -36,29 +32,20 @@ fn committed_openapi_matches_the_code() {
 }
 
 // OP-154 m.4
-#[tokio::test]
-async fn every_declared_route_answers_not_yet_served() {
+#[test]
+fn every_declared_route_is_served() {
+    let doc = openapi();
     for r in ROUTES {
-        let uri = r.path.replace('{', "x").replace('}', "");
-        let method = match r.verb {
-            Verb::Get => "GET",
-            Verb::Post => "POST",
-        };
-        let res = access_executor::router()
-            .oneshot(
-                Request::builder()
-                    .method(method)
-                    .uri(&uri)
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(res.status(), StatusCode::NOT_IMPLEMENTED, "{}", r.operation);
+        assert_eq!(
+            doc["paths"][r.path][r.verb.name()]["x-suiss-served"],
+            Value::Bool(true),
+            "{}",
+            r.operation
+        );
     }
 }
 
-// OP-154 m.3 (u), B21
+// OP-154 m.3 (u), B21, AG-40, Ek B 4600
 #[test]
 fn the_executor_reports_and_never_decides() {
     let text = openapi().to_string();

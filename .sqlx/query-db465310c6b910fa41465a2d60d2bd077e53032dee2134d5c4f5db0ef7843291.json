@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT job FROM executor.jobs ORDER BY created_at DESC, job LIMIT $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "job",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "executor.jobs",
+            "name": "job"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "db465310c6b910fa41465a2d60d2bd077e53032dee2134d5c4f5db0ef7843291"
+}

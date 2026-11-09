@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO executor.events (job, seq, event) VALUES ($1, 0, $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "583122d35e414325a1f7de606e400ba4672e2e27e266b8b82db50836f54d80b7"
+}

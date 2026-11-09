@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT job FROM executor.jobs WHERE domain_id = $1 AND exercise = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "job",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "executor.jobs",
+            "name": "job"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5e8088d1f515d8120b707fe65f321fbbe4f16c0d9c63076883cbf161d21dbe2e"
+}

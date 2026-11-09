@@ -1,16 +1,6 @@
 {
   "components": {
     "responses": {
-      "NotYetServed": {
-        "content": {
-          "application/problem+json": {
-            "schema": {
-              "$ref": "#/components/schemas/Problem"
-            }
-          }
-        },
-        "description": "not-yet-served: declared and not served yet; nothing was read or changed (OP-154 m.4)."
-      },
       "Problem": {
         "content": {
           "application/problem+json": {
@@ -34,7 +24,24 @@
             "description": "The ExerciseID the job runs.",
             "type": "string"
           },
+          "handoff_until_ms": {
+            "description": "When a job waiting for a person stops if nobody answered; silence is not approval.",
+            "type": "integer"
+          },
           "job": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "The registered executor's kind; every kind follows the same rules (E57 (1)).",
+            "enum": [
+              "cloud",
+              "customer",
+              "local"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why it stopped or waits: person, decision, horizon, envelope, silence, cancel, release, report, continuation, unknown, blocked or approval.",
             "type": "string"
           },
           "state": {
@@ -42,7 +49,8 @@
               "running",
               "paused",
               "stopped",
-              "unknown"
+              "unknown",
+              "completed"
             ],
             "type": "string"
           },
@@ -56,7 +64,10 @@
         "required": [
           "job",
           "exercise",
-          "state"
+          "kind",
+          "state",
+          "confirmed",
+          "steps"
         ],
         "type": "object"
       },
@@ -96,13 +107,78 @@
         ],
         "type": "object"
       },
+      "Resume": {
+        "additionalProperties": false,
+        "properties": {
+          "continuations": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "continuations"
+        ],
+        "type": "object"
+      },
+      "StartJob": {
+        "additionalProperties": false,
+        "properties": {
+          "ais": {
+            "description": "The actor Instance's commit statement naming this executor as PEP, base64url; the executor forwards it and is never the actor.",
+            "type": "string"
+          },
+          "connection": {
+            "description": "The vault connection the Exercise's token is released from.",
+            "type": "string"
+          },
+          "continuations": {
+            "description": "The actor's continue statements for the checkpoints ahead, base64url; a checkpoint without one pauses the job.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "intent": {
+            "description": "The intent envelope, canonical bytes, base64url.",
+            "type": "string"
+          },
+          "realm": {
+            "description": "The realm whose token vault holds the connection.",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/StepSpec"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "realm",
+          "connection",
+          "intent",
+          "ais",
+          "steps"
+        ],
+        "type": "object"
+      },
       "Step": {
         "additionalProperties": false,
         "properties": {
-          "commit_at": {
-            "description": "When an irreversible step's delayed commit sends it.",
-            "format": "date-time",
+          "claim": {
+            "description": "The ClaimID of the step's effect_attestation.",
             "type": "string"
+          },
+          "commit_at_ms": {
+            "description": "When an irreversible step's delayed commit sends it, Unix milliseconds; it can be cancelled until then.",
+            "type": "integer"
           },
           "evidence": {
             "items": {
@@ -119,8 +195,15 @@
             "description": "H(ExerciseID ‖ StepRef), forwarded upstream (E62 (2)).",
             "type": "string"
           },
+          "name": {
+            "type": "string"
+          },
           "outcome": {
             "$ref": "#/components/schemas/Outcome"
+          },
+          "report_refused": {
+            "description": "Why Claim Ingest refused the attestation; the job then stops.",
+            "type": "string"
           },
           "step": {
             "description": "The StepRef, a digest.",
@@ -129,6 +212,7 @@
         },
         "required": [
           "step",
+          "name",
           "idempotency_key"
         ],
         "type": "object"
@@ -147,11 +231,102 @@
           "items"
         ],
         "type": "object"
+      },
+      "StepSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "description": "`namespace/name`; the Exercise's action.",
+            "type": "string"
+          },
+          "call": {
+            "oneOf": [
+              {
+                "properties": {
+                  "body": {},
+                  "driver": {
+                    "const": "http"
+                  },
+                  "method": {
+                    "enum": [
+                      "GET",
+                      "POST",
+                      "PUT",
+                      "PATCH",
+                      "DELETE"
+                    ],
+                    "type": "string"
+                  },
+                  "url": {
+                    "description": "https only.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "driver",
+                  "method",
+                  "url"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "arguments": {},
+                  "driver": {
+                    "const": "mcp"
+                  },
+                  "server": {
+                    "description": "The MCP server's https endpoint.",
+                    "type": "string"
+                  },
+                  "tool": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "driver",
+                  "server",
+                  "tool"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "idempotent": {
+            "description": "Whether the upstream honours the idempotency key; only then is a request whose answer a crash lost sent again, once, with the same key (TI-6).",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "resource": {
+            "description": "`namespace:segment/segment`; one of the Exercise's resources.",
+            "type": "string"
+          },
+          "reversibility": {
+            "enum": [
+              "reversible",
+              "compensable",
+              "irreversible"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "action",
+          "resource",
+          "reversibility",
+          "call"
+        ],
+        "type": "object"
       }
     }
   },
   "info": {
-    "description": "Jobs of a registered executor (B21, AG-40): each runs one allowed Exercise of an agent Instance durably and reports its effects as Claims. The executor decides nothing. A planned route answers 501 not-yet-served.",
+    "description": "Jobs of a registered executor (B21, AG-40): each runs one allowed Exercise of an agent Instance durably and reports its effects as Claims. The executor decides nothing. Problem codes: executor-malformed, executor-ais, executor-intent, executor-nonce, executor-steps, executor-step, executor-continuation (400); executor-not-allowed (403); executor-unknown-job (404); executor-job-ended, executor-not-paused, executor-unknown-step, executor-step-sent, executor-stale (409); executor-unavailable (503).",
     "license": {
       "identifier": "Apache-2.0",
       "name": "Apache-2.0"
@@ -168,10 +343,11 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/StartJob"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -184,15 +360,12 @@
             },
             "description": "OK"
           },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
-          },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
         "summary": "Starts a job for one allowed Exercise of the calling agent Instance; the executor is an Instance of its operator Party and never decides (E62, OP-154 m.3 (u)).",
-        "x-suiss-status": "planned"
+        "x-suiss-served": true
       }
     },
     "/executor/v1/jobs/{job}": {
@@ -220,15 +393,12 @@
             },
             "description": "OK"
           },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
-          },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "One job: its Exercise, its state (running, paused, stopped, unknown), whether a pause or stop is confirmed, and its steps.",
-        "x-suiss-status": "planned"
+        "summary": "One job: its Exercise, its state (running, paused, stopped, unknown, completed), whether a pause or stop is confirmed, and its steps.",
+        "x-suiss-served": true
       }
     },
     "/executor/v1/jobs/{job}/pause": {
@@ -245,15 +415,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "content": {
@@ -265,15 +426,12 @@
             },
             "description": "OK"
           },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
-          },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
         "summary": "Pauses the job at its next step; the pause counts once an executor_control Claim confirms it (U5).",
-        "x-suiss-status": "planned"
+        "x-suiss-served": true
       }
     },
     "/executor/v1/jobs/{job}/resume": {
@@ -294,10 +452,11 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/Resume"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -310,15 +469,12 @@
             },
             "description": "OK"
           },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
-          },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "Resumes a paused job; going on is a new Access decision, never the old one (E63 (2)).",
-        "x-suiss-status": "planned"
+        "summary": "Resumes a paused job with the actor's new continue statements; going on is a new Access decision, never the old one (E63 (2)).",
+        "x-suiss-served": true
       }
     },
     "/executor/v1/jobs/{job}/steps": {
@@ -346,15 +502,12 @@
             },
             "description": "OK"
           },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
-          },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
         "summary": "The job's steps: each with its StepRef, idempotency key and reported outcome; a step whose result could not be verified is unknown and is never retried on its own (E62 (3)).",
-        "x-suiss-status": "planned"
+        "x-suiss-served": true
       }
     },
     "/executor/v1/jobs/{job}/steps/{step}/cancel": {
@@ -380,15 +533,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "content": {
@@ -400,15 +544,12 @@
             },
             "description": "OK"
           },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
-          },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "Cancels an irreversible step inside its delayed-commit window (15 s by default); silence is not approval (E47 (2)).",
-        "x-suiss-status": "planned"
+        "summary": "Cancels an irreversible step inside its delayed-commit window (15 s by default), and the job stops; silence is not approval (E47 (2)).",
+        "x-suiss-served": true
       }
     },
     "/executor/v1/jobs/{job}/stop": {
@@ -425,15 +566,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "content": {
@@ -445,15 +577,12 @@
             },
             "description": "OK"
           },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
-          },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
         "summary": "Stops the job; no further effect once the executor confirms it with an executor_control Claim (U5).",
-        "x-suiss-status": "planned"
+        "x-suiss-served": true
       }
     }
   }
