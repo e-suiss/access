@@ -931,7 +931,8 @@ async fn a_stream_carries_no_event_after_its_horizon() {
     let close = stream.listen.close_at();
     assert_eq!(close, window.until);
     assert_eq!(stream.listen.deliver(now + 1, "first"), Some("first"));
-    let half = now + (close - now) / 2;
+    let half = stream.listen.checkpoint_at().unwrap();
+    assert!(half > now && half < close);
     assert!(matches!(stream.listen.next(half + 1), Next::Checkpoint(_)));
     assert_eq!(stream.listen.deliver(half + 2, "held"), None);
     let at = At(Cell::new(wall()));

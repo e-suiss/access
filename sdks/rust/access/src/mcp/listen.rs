@@ -100,6 +100,12 @@ impl Listen {
         self.close_at
     }
 
+    /// When the stream asks `continue`, while it has not asked yet.
+    #[must_use]
+    pub const fn checkpoint_at(&self) -> Option<TrustedTime> {
+        self.checkpoint
+    }
+
     /// The Exercise the stream runs under.
     #[must_use]
     pub const fn exercise(&self) -> &Digest {
