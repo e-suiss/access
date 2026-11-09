@@ -1,0 +1,68 @@
+# AG-26, §11.10.4: the six delegation invariants of the agent delegation drafts and the Access
+# record-level invariant each one is. No new invariant is needed; this list is the conformance
+# test list. Every `tests` entry is `<file>::<test fn>`; `cargo xtask check` (agent-mappings)
+# fails when a file or a test it names is gone.
+
+[[invariant]]
+number = 1
+invariant = "One-way narrowing: child.scopes within parent.scopes"
+access = "Attenuation: a child Grant stays within the Grant above it"
+rules = ["INV-3", "G2"]
+tests = [
+    "crates/kernel/src/meta/tests.rs::root_grants_and_holders_delegate_within",
+    "crates/kernel/src/meta/tests.rs::delegation_and_amend_stay_within_the_current_holding",
+    "crates/kernel/src/algebra/tests.rs::child_within_parent_rules",
+]
+
+[[invariant]]
+number = 2
+invariant = "TTL monotonicity: child.exp no later than parent.exp"
+access = "A child Grant and a projection's ValidityContract never outlive the lineage above them"
+rules = ["INV-3", "INV-5"]
+tests = [
+    "crates/kernel/src/algebra/tests.rs::child_within_parent_validity_and_requirements",
+    "crates/kernel/src/meta/tests.rs::a_holding_projection_stays_within_its_lineage",
+    "crates/authority-core/tests/commit.rs::a_token_turns_inactive_once_its_basis_grant_ends",
+]
+
+[[invariant]]
+number = 3
+invariant = "Depth monotonicity"
+access = "DelegationTerms `depth`: the hops left, lower at every hop; an agent template defaults to at most 1 (AG-25)"
+rules = ["INV-9", "AG-25"]
+tests = [
+    "crates/kernel/src/algebra/tests.rs::child_within_parent_rules",
+    "crates/kernel/src/meta/tests.rs::root_grants_and_holders_delegate_within",
+]
+
+[[invariant]]
+number = 4
+invariant = "Chain continuity: record[i].delegator is record[i-1].delegatee"
+access = "A structural property of the lineage record: each Grant's grantor holds the Grant above it; `act` is written from the lineage only"
+rules = ["INV-4", "AGI-1"]
+tests = [
+    "crates/kernel/src/meta/tests.rs::agency_is_continuous",
+    "bins/access-server/src/bootstrap/tests/exchange.rs::an_exchange_writes_act_from_the_lineage_only",
+]
+
+[[invariant]]
+number = 5
+invariant = "Intersection: downstream authority is its own intersected with the caller's"
+access = "Effective authority is the AuthoritySet intersected with the Mandate and every lineage budget"
+rules = ["INV-3", "INV-21", "G3"]
+tests = [
+    "crates/kernel/src/meta/tests.rs::a_projection_stays_within_the_mandate",
+    "crates/authority-core/tests/commit.rs::a_budget_is_drawn_until_it_is_exhausted",
+    "crates/authority-core/tests/commit.rs::an_origin_outside_the_mandate_is_denied_on_commit",
+]
+
+[[invariant]]
+number = 6
+invariant = "Proof of possession: whoever presents the leaf token controls its private key"
+access = "`cnf` on every projection (P48, AGI-3) and the actor's own signed statement (AIS)"
+rules = ["AGI-3", "INV-11"]
+tests = [
+    "crates/authority-signer/src/app/tests.rs::a_token_is_holder_bound_and_within_the_key_publication",
+    "bins/access-server/src/bootstrap/tests/mcp.rs::a_token_for_another_audience_is_401_and_bounds_ask_for_scope",
+    "crates/authority-core/tests/commit.rs::an_unknown_key_is_not_an_actor",
+]

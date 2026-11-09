@@ -14,6 +14,8 @@ use spec::{Spec, SpecRule};
 mod claims;
 #[path = "catalog_ids.rs"]
 mod ids;
+#[path = "catalog_mappings.rs"]
+mod mappings;
 #[path = "catalog_scan.rs"]
 mod scan;
 #[path = "catalog_spec.rs"]
@@ -605,6 +607,10 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "maintainer-watchlist",
             run: watchlist::check,
+        },
+        Check {
+            name: "agent-mappings",
+            run: mappings::check,
         },
     ]
 }

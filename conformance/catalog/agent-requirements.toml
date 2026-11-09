@@ -1,0 +1,108 @@
+# AG-35, §11.18: the eight requirements CSA, NIST, OWASP and WEF share for agent identity, how
+# Access meets each and with which guarantee class, and the EU AI Act art. 50 disclosure duty.
+# `classes` uses the guarantee classes of §13 (BS, UDC); an empty list is an architectural
+# property with no guarantee class. Every `tests` entry is `<file>::<test fn>`; `cargo xtask
+# check` (agent-mappings) fails when a file or a test it names is gone.
+
+[[requirement]]
+id = "AG-35-1"
+requirement = "Every agent has a unique, separate identity; no shared service accounts"
+mechanism = "An agent is an Instance of its own agent Party (InstanceID); audit and revocation are per Instance"
+classes = ["BS"]
+guarantees = ["G14"]
+tests = [
+    "bins/access-server/src/bootstrap/tests/management/agents.rs::the_registry_lists_an_agent_and_revoke_all_ends_every_instance",
+    "bins/access-server/src/bootstrap/tests/agent.rs::an_agent_reads_its_own_status_and_takes_no_authority_from_a_task",
+]
+
+[[requirement]]
+id = "AG-35-2"
+requirement = "Credentials are short-lived, scoped and time-bound"
+mechanism = "Projections are holder-bound with one audience and a ValidityContract; an agent's bounds token defaults to a 15-minute horizon and an exact-intent token lives as long as its intent (AG-22)"
+classes = ["BS", "UDC"]
+guarantees = ["G18", "G25", "U2", "U19"]
+tests = [
+    "bins/access-server/src/bootstrap/tests/exchange.rs::an_exchange_writes_act_from_the_lineage_only",
+    "crates/authority-core/tests/commit.rs::an_exact_intent_token_carries_its_intent",
+    "crates/kernel/src/meta/tests.rs::projection_records_and_caps_the_horizon",
+]
+
+[[requirement]]
+id = "AG-35-3"
+requirement = "A trusted agent registry and verifiable credentials"
+mechanism = "Party and Instance registration plus an accepted actor-binding Claim (§11.17); a workload key opens its Instance only on the realm issuer's binding"
+classes = ["BS"]
+guarantees = ["G7", "G45"]
+tests = [
+    "bins/access-server/src/bootstrap/tests/management/workloads.rs::a_workload_presents_once_and_its_key_opens_an_instance_that_still_needs_a_grant",
+    "bins/access-server/src/bootstrap/tests/management/workloads.rs::a_trust_domain_without_acceptance_gets_no_instance",
+]
+
+[[requirement]]
+id = "AG-35-4"
+requirement = "Delegation intersects authority, never adds it up"
+mechanism = "Attenuation of every child Grant, the Mandate intersection and every lineage budget (§11.10.4 #5)"
+classes = ["BS"]
+guarantees = ["G2", "G3"]
+tests = [
+    "crates/kernel/src/meta/tests.rs::root_grants_and_holders_delegate_within",
+    "crates/kernel/src/meta/tests.rs::a_projection_stays_within_the_mandate",
+    "crates/authority-core/tests/commit.rs::a_budget_is_drawn_until_it_is_exhausted",
+]
+
+[[requirement]]
+id = "AG-35-5"
+requirement = "Re-authorization at every step; one token reused along a chain is an anti-pattern"
+mechanism = "Every effect needs its own ALLOW (INV-19); no passthrough (L24); a Txn-Token is audit context only (§11.12.3)"
+classes = ["BS"]
+guarantees = ["G18", "G12"]
+tests = [
+    "bins/access-server/src/bootstrap/tests/executor.rs::a_revoked_grant_stops_the_job_at_its_next_check_and_the_stop_is_confirmed",
+    "bins/access-server/src/bootstrap/tests/exchange.rs::transaction_tokens_are_audit_context_and_id_jags_need_a_strong_client",
+    "bins/access-server/src/bootstrap/tests/vault.rs::a_token_leaves_the_vault_only_for_an_allowed_exercise_of_its_executor",
+]
+
+[[requirement]]
+id = "AG-35-6"
+requirement = "Non-repudiation and auditability"
+mechanism = "The actor's signed Actor Intent Statement, the Decision Receipt, the Exercise record and its witness"
+classes = ["BS"]
+guarantees = ["G14", "G23"]
+tests = [
+    "crates/authority-core/tests/commit.rs::an_allow_carries_a_signed_receipt",
+    "crates/authority-core/tests/commit.rs::a_receipt_names_the_agency_chain_of_a_mandated_agent",
+    "bins/access-server/src/bootstrap/tests/executor.rs::an_executor_runs_an_allowed_exercise_and_its_reports_never_change_the_decision",
+]
+
+[[requirement]]
+id = "AG-35-7"
+requirement = "A central enforcement plane"
+mechanism = "ADP and the PEP profile: Access is the central decision record and imposes no central PEP"
+classes = []
+guarantees = []
+tests = [
+    "bins/access-server/src/bootstrap/tests/mcp.rs::lists_are_viewer_scoped_and_never_authorize_a_call",
+]
+
+[[requirement]]
+id = "AG-35-8"
+requirement = "User-initiated and agent-initiated actions are told apart"
+mechanism = "The declared capacity OWN or FOR(P) (A-1) and its `sub`/`act` mapping (§9.9.4)"
+classes = ["BS"]
+guarantees = ["G15"]
+tests = [
+    "bins/access-server/src/bootstrap/tests/agent.rs::an_agent_on_the_real_server_follows_its_contract",
+    "bins/access-server/src/bootstrap/tests/agent.rs::the_hub_shows_an_agent_as_an_agent_with_its_operator",
+]
+
+[[requirement]]
+id = "EU-AI-ACT-50"
+requirement = "EU AI Act art. 50: a person is told when they deal with an AI system (binding since 2 August 2026)"
+mechanism = "A-12: an agent discloses itself as an agent of its operator; XI-17: every surface shows an agent as an agent"
+classes = ["BS"]
+guarantees = []
+rules = ["A-12", "XI-17"]
+tests = [
+    "bins/access-server/src/bootstrap/tests/agent.rs::an_agent_reads_its_own_status_and_takes_no_authority_from_a_task",
+    "bins/access-server/src/bootstrap/tests/agent.rs::the_hub_shows_an_agent_as_an_agent_with_its_operator",
+]
