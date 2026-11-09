@@ -77,6 +77,19 @@ pub trait RealmKeys: Send + Sync {
         party: [u8; 16],
     ) -> impl Future<Output = Result<PublicKey, Unavailable>> + Send;
 
+    /// Signs the JSON `claims` as a compact JWS of `typ` with the realm's token key at `at`, Unix
+    /// ms: a realm-signed binding offer (OP-153 m.18 (e)). Without a signer nothing is offered.
+    fn sign_jws(
+        &self,
+        realm: RealmId,
+        typ: &str,
+        claims: &[u8],
+        at: u64,
+    ) -> impl Future<Output = Result<String, Unavailable>> + Send {
+        let _ = (realm, typ, claims, at);
+        std::future::ready(Err(Unavailable(String::from("identity-signer"))))
+    }
+
     /// The realm's PII vault keys, its KEK and blind index key (OP-153 m.3 (aa)); `None` when
     /// the token refuses them, and nothing personal is written then (TI-9).
     fn vault(&self, realm: RealmId) -> Option<access_identity_account::app::vault::Vault> {

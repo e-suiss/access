@@ -371,8 +371,16 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     return Err(AdminError::Conflict);
                 }
             }
+            // OP-153 m.18 (e), m.25 (b)
+            Change::AccountBind(b) => {
+                if t.realm().is_some_and(|r| *r.as_bytes() == b.peer_realm)
+                    || resources::account(t, b.subject).await?.is_none()
+                {
+                    return Err(Invalid::NoAccount.into());
+                }
+            }
             // OP-153 m.25 (b)
-            Change::AccountBind(_) | Change::GuardianshipRecord(_) => {
+            Change::GuardianshipRecord(_) => {
                 return Err(AdminError::Refused(String::from(NOT_YET_SERVED)));
             }
             // TN-18, OP-153 m.3 (u)
@@ -947,6 +955,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     /// The first application of a bound decision, in the transaction that bound it: the change
     /// must fit the realm's current configuration, which only a retry no longer matches (TN-110,
     /// EI-25); then the write, its effects and its events, committed together.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the write and each change's effects in the one transaction that binds them"
+    )]
     async fn first_application(
         &self,
         t: TenantTx,
@@ -1048,6 +1060,13 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         if let Change::OrgInvite(i) = &p.change {
             // TN-89, OP-153 m.3 (o)
             self.invite(&mut t.0, p, &g, i, exercise).await?;
+        }
+        if let Change::AccountBind(b) = &p.change {
+            // OP-153 m.18 (e), m.25 (b)
+            secret = self
+                .bind_half(&mut t, p, &g, *b, exercise)
+                .await?
+                .or(secret);
         }
         // TN-90, TN-120, OP-153 m.3 (o), (p)
         secret = org_flows::committed(&mut t.0, &p.change, p.subject, &exercise.0)
@@ -1406,7 +1425,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 idp::set_branding(t, bound, &bytes).await?;
                 true
             }
-            Change::AccountBind(_) | Change::GuardianshipRecord(_) => {
+            Change::GuardianshipRecord(_) => {
                 return Err(AdminError::Refused(String::from(NOT_YET_SERVED)));
             }
             Change::RelatedOrigins(r) => {
@@ -1497,6 +1516,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::AccountDelete(_)
             | Change::AccountImport(_)
             | Change::MigrationExport(_)
+            | Change::AccountBind(_)
             | Change::OrgCreate(_)
             | Change::OrgInvite(_)
             | Change::OrgDomainClaim(_)

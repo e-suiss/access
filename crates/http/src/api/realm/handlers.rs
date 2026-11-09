@@ -460,6 +460,8 @@ pub(super) async fn commit<E: Env>(
                 "claimOrganizationDomain" => "challenge",
                 // TN-86
                 "exportAccounts" => "bundle",
+                // OP-153 m.18 (e)
+                "bindAccount" => "offer",
                 _ => secret_member(kind),
             };
             o.insert(member.to_owned(), Value::String(s));

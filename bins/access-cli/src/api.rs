@@ -309,6 +309,7 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "putLocaleOverrides" => IdpAction::RealmLocaleOverrides,
         "importAccounts" => IdpAction::AccountImport,
         "exportAccounts" => IdpAction::AccountMigrationExport,
+        "bindAccount" => IdpAction::AccountBind,
         _ => return None,
     })
 }

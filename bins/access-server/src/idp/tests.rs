@@ -319,6 +319,27 @@ impl RealmKeys for Opened {
         )
     }
 
+    fn sign_jws(
+        &self,
+        realm: RealmId,
+        typ: &str,
+        claims: &[u8],
+        _: u64,
+    ) -> impl std::future::Future<Output = Result<String, Unavailable>> + Send {
+        let at = self.now.load(std::sync::atomic::Ordering::SeqCst);
+        std::future::ready(
+            match self.ask(SignerRequest::Sign {
+                realm: SignerRealm(*realm.as_bytes()),
+                typ: String::from(typ),
+                payload: claims.to_vec(),
+                at,
+            }) {
+                SignerResponse::Signed { token, .. } => Ok(token),
+                other => Err(Unavailable(format!("{other:?}"))),
+            },
+        )
+    }
+
     fn sign_issuer_registration(
         &self,
         realm: RealmId,

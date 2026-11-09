@@ -223,6 +223,27 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                 o.insert(member.to_owned(), Value::String(id));
             }
         }
+        // OP-153 m.18 (e)
+        if op == Op::BindAccount
+            && let Some(o) = body.as_object_mut()
+        {
+            let Some(peer) = o
+                .get("peer_realm")
+                .and_then(Value::as_str)
+                .map(String::from)
+            else {
+                return Ok(Err(problem_of(&AdminError::Invalid(Invalid::Body))));
+            };
+            match self.locate(&peer).await? {
+                Some((t, r)) if t == tenant && r != realm => {
+                    o.insert(
+                        String::from("peer_realm_id"),
+                        Value::String(access_kernel::json::b64url_encode(r.as_bytes())),
+                    );
+                }
+                _ => return Ok(Err(&codes::NOT_FOUND)),
+            }
+        }
         let validity = match rest::validity(&body) {
             Ok(v) => v,
             Err(i) => return Ok(Err(problem_of(&AdminError::Invalid(i)))),
@@ -443,7 +464,10 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
         // TN-85, TN-86, OP-153 m.19 (d)
         let mut report = None;
         let mut bundle = None;
-        let applied = if matches!(compiled.change, Change::MigrationExport(_)) {
+        let applied = if matches!(compiled.change, Change::AccountBind(_)) {
+            let offer = compiled.body.get("offer").and_then(Value::as_str);
+            Box::pin(admin.bind_account(&proposal, caller.ais, offer)).await
+        } else if matches!(compiled.change, Change::MigrationExport(_)) {
             match Box::pin(admin.export_accounts(&proposal, caller.ais)).await {
                 Ok((a, b)) => {
                     bundle = b.map(|b| access_kernel::json::b64url_encode(&b));

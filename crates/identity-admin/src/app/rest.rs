@@ -143,6 +143,8 @@ pub enum Op {
     ImportAccounts,
     /// `exportAccounts`: `idp.account.migration_export`, reserved (TN-86, OP-153 m.19 (d)).
     ExportAccounts,
+    /// `bindAccount`: `idp.account.bind` (OP-153 m.18 (e)).
+    BindAccount,
 }
 
 impl Op {
@@ -199,6 +201,7 @@ impl Op {
             "putLocaleOverrides" => Self::PutLocaleOverrides,
             "importAccounts" => Self::ImportAccounts,
             "exportAccounts" => Self::ExportAccounts,
+            "bindAccount" => Self::BindAccount,
             _ => return None,
         })
     }
@@ -755,6 +758,19 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     .and_then(Json::as_u64)
                     .and_then(|n| u32::try_from(n).ok())
                     .ok_or(Invalid::Body)?,
+            })
+        }
+        // OP-153 m.18 (e), m.25 (b)
+        Op::BindAccount => {
+            only(
+                m,
+                &["peer_realm", "peer_realm_id", "peer_account_id", "offer"],
+            )?;
+            Change::AccountBind(crate::domain::accounts::AccountBind {
+                subject: subject(ids, key_of(key)?)?,
+                peer_realm: party_of(text(m, "peer_realm_id")?, Invalid::NoAccount)?,
+                peer_subject: subject(ids, text(m, "peer_account_id")?)?,
+                offer: opt_text(m, "offer")?.map(|o| suiss_crypto::digest::sha256(o.as_bytes())),
             })
         }
         // TN-86, OP-153 m.19 (d), m.25 (b)

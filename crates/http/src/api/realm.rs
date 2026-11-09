@@ -194,6 +194,12 @@ pub const ROWS: &[Route] = &[
     ),
     secret(
         Verb::Post,
+        "/admin/v1/realms/{slug}/accounts/{account_id}/bind",
+        "bindAccount",
+        "Binds the account and `peer_account_id` of the tenant's realm `peer_realm` (its slug) as one person (idp.account.bind, CT2): the realm that binds first answers with its realm-signed `offer`, shown once; the peer realm's administrator binds the same pair sending that `offer`, which the peer realm verifies against this realm's keys.",
+    ),
+    secret(
+        Verb::Post,
         "/admin/v1/realms/{slug}/accounts/migration-export",
         "exportAccounts",
         "Exports every active account to another deployment (idp.account.migration_export, reserved, TN-86): sealed to the P-256 `recipient` key (SEC1, base64url) it names; the `bundle` (dCBOR, base64url) is shown once and holds the import lines that deployment's importAccounts takes.",
@@ -731,7 +737,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "releaseOrganizationDomain"
         | "draftOrganizationConnection"
         | "importAccounts"
-        | "exportAccounts" => (Accounts, w(false)),
+        | "exportAccounts"
+        | "bindAccount" => (Accounts, w(false)),
         "listUpstreamIdps" => (UpstreamIdps, Shape::List(&["name", "issuer", "status"])),
         "getUpstreamIdp" => (UpstreamIdps, Shape::Get),
         "putUpstreamIdp" => (UpstreamIdps, w(true)),

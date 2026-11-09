@@ -105,3 +105,26 @@ async fn a_migration_export_through_admin_rest_opens_for_its_recipient_only() {
     let other = access_crypto::migration_bundle::RecipientKey::generate().unwrap();
     assert!(access_identity_admin::app::accounts::open_bundle(&bundle, &other).is_err());
 }
+
+// OP-153 m.18 (e), m.25 (b), TN-113
+#[tokio::test]
+async fn a_binding_names_another_realm_of_the_tenant_only() {
+    let c = console("rest-bind", false).await;
+    let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
+    let account = ids
+        .encode(access_identity_account::app::SUBJECT_PREFIX, c.subject)
+        .unwrap();
+    let target = format!("/admin/v1/realms/acme/accounts/{account}/bind");
+    for peer in ["acme", "nowhere"] {
+        let w = c
+            .rest_write(
+                &Method::POST,
+                &target,
+                ("bindAccount", Some(account.as_str())),
+                serde_json::json!({ "peer_realm": peer, "peer_account_id": account }),
+                None,
+            )
+            .await;
+        assert_eq!(w.status, StatusCode::NOT_FOUND, "{peer}: {}", w.body);
+    }
+}

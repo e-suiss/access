@@ -732,6 +732,26 @@ impl RealmKeys for RealmKeyring {
             .map_err(|e| Unavailable(String::from(e.code())))
     }
 
+    // OP-153 m.18 (e)
+    async fn sign_jws(
+        &self,
+        realm: RealmId,
+        typ: &str,
+        claims: &[u8],
+        at: u64,
+    ) -> Result<String, Unavailable> {
+        access_identity_oauth::ports::oauth::TokenSigner::sign(
+            &self.signer,
+            realm,
+            JwsAlg::Es256,
+            typ,
+            claims,
+            at,
+        )
+        .await
+        .map_err(|_| Unavailable(String::from("identity-signer")))
+    }
+
     async fn jwks(&self, realm: RealmId) -> Result<String, Unavailable> {
         access_identity_oauth::ports::Keys::jwks(&self.signer, realm)
             .await

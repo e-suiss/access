@@ -5,6 +5,11 @@
 //! compares the subject digest. No account id crosses the realms, only a random binding id and
 //! the digest of the upstream subject both realms verified.
 //!
+//! An administrator's binding (`idp.account.bind`, proof [`ADMIN_EXERCISE`]) crosses the same
+//! way: the realm whose administrator bound first offers, naming instead of an upstream subject
+//! the [`pair_digest`] of the two realms and accounts, which the peer realm's administrator
+//! names again in its own Exercise.
+//!
 //! The offer is a compact JWS with `typ` [`TYP`] whose claims are [`BindingOffer::claims`].
 
 use access_kernel::json::{b64url_decode, b64url_encode};
@@ -15,6 +20,50 @@ pub const TYP: &str = "binding-offer+jwt";
 
 /// The proof a binding offer carries.
 pub const VERIFIED_IDP_SUBJECT: &str = "verified_idp_subject";
+
+/// The proof of an administrator's binding (OP-153 m.18 (e), m.25 (b)).
+pub const ADMIN_EXERCISE: &str = "admin_exercise";
+
+/// What an offer proves.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OfferProof {
+    /// Both realms verified the same upstream subject; the digest is [`subject_digest`].
+    VerifiedIdpSubject,
+    /// An administrator of each realm bound the pair; the digest is [`pair_digest`].
+    AdminExercise,
+}
+
+impl OfferProof {
+    /// The proof's name, as the halves keep it.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::VerifiedIdpSubject => VERIFIED_IDP_SUBJECT,
+            Self::AdminExercise => ADMIN_EXERCISE,
+        }
+    }
+
+    const fn member(self) -> &'static str {
+        match self {
+            Self::VerifiedIdpSubject => "idp_subject",
+            Self::AdminExercise => "pair",
+        }
+    }
+}
+
+const PAIR_CONTEXT: &[u8] = b"access/binding-offer-pair/v1\0";
+
+/// The digest both realms compute of an administrator's binding: the offering realm and
+/// account, then the accepting realm and account (OP-153 m.18 (e)). Its first 16 bytes are the
+/// binding id.
+#[must_use]
+pub fn pair_digest(offering: ([u8; 16], [u8; 16]), accepting: ([u8; 16], [u8; 16])) -> [u8; 32] {
+    let mut m = PAIR_CONTEXT.to_vec();
+    for part in [offering.0, offering.1, accepting.0, accepting.1] {
+        m.extend_from_slice(&part);
+    }
+    suiss_crypto::digest::sha256(&m)
+}
 
 /// How long an offer holds (PD, as an `invite_token` offer).
 pub const OFFER_TTL_S: u64 = 600;
@@ -40,7 +89,10 @@ pub struct BindingOffer {
     pub audience: String,
     /// The binding id both halves share.
     pub binding: [u8; 16],
-    /// [`subject_digest`] of the upstream subject realm A verified.
+    /// What it proves.
+    pub proof: OfferProof,
+    /// [`subject_digest`] of the upstream subject realm A verified, or the [`pair_digest`] of an
+    /// administrator's binding.
     pub subject: [u8; 32],
     /// Issued at, Unix seconds.
     pub issued_at: u64,
@@ -66,15 +118,21 @@ impl BindingOffer {
     /// The JWS claims.
     #[must_use]
     pub fn claims(&self) -> Value {
-        json!({
+        let mut c = json!({
             "iss": self.issuer,
             "aud": self.audience,
             "binding": b64url_encode(&self.binding),
-            "proof": VERIFIED_IDP_SUBJECT,
-            "idp_subject": b64url_encode(&self.subject),
+            "proof": self.proof.name(),
             "iat": self.issued_at,
             "exp": self.expires_at,
-        })
+        });
+        if let Some(m) = c.as_object_mut() {
+            m.insert(
+                String::from(self.proof.member()),
+                Value::String(b64url_encode(&self.subject)),
+            );
+        }
+        c
     }
 
     /// Reads the claims of an offer whose signature the caller verified against `issuer`'s
@@ -84,7 +142,12 @@ impl BindingOffer {
     /// [`OfferRefused`].
     pub fn from_claims(c: &Value, audience: &str, now_s: u64) -> Result<Self, OfferRefused> {
         let m = c.as_object().ok_or(OfferRefused::Shape)?;
-        if m.len() != 7 || m.get("proof").and_then(Value::as_str) != Some(VERIFIED_IDP_SUBJECT) {
+        let proof = match m.get("proof").and_then(Value::as_str) {
+            Some(VERIFIED_IDP_SUBJECT) => OfferProof::VerifiedIdpSubject,
+            Some(ADMIN_EXERCISE) => OfferProof::AdminExercise,
+            _ => return Err(OfferRefused::Shape),
+        };
+        if m.len() != 7 {
             return Err(OfferRefused::Shape);
         }
         let text = |k: &str| m.get(k).and_then(Value::as_str).ok_or(OfferRefused::Shape);
@@ -95,7 +158,8 @@ impl BindingOffer {
             audience: String::from(text("aud")?),
             binding: <[u8; 16]>::try_from(raw("binding")?.as_slice())
                 .map_err(|_| OfferRefused::Shape)?,
-            subject: <[u8; 32]>::try_from(raw("idp_subject")?.as_slice())
+            proof,
+            subject: <[u8; 32]>::try_from(raw(proof.member())?.as_slice())
                 .map_err(|_| OfferRefused::Shape)?,
             issued_at: num("iat")?,
             expires_at: num("exp")?,
@@ -125,6 +189,7 @@ mod tests {
             issuer: String::from("https://a.example/realms/a"),
             audience: String::from("https://a.example/realms/b"),
             binding: [1; 16],
+            proof: OfferProof::VerifiedIdpSubject,
             subject: subject_digest("https://accounts.google.com", "1234"),
             issued_at: 1_000,
             expires_at: 1_000 + OFFER_TTL_S,
@@ -163,6 +228,25 @@ mod tests {
         assert_ne!(
             subject_digest("https://accounts.google.com", "1234"),
             subject_digest("https://accounts.google.co", "m1234")
+        );
+        // OP-153 m.18 (e)
+        let mut admin = o.clone();
+        admin.proof = OfferProof::AdminExercise;
+        admin.subject = pair_digest(([1; 16], [2; 16]), ([3; 16], [4; 16]));
+        assert_eq!(
+            BindingOffer::from_claims(&admin.claims(), b, 1_001),
+            Ok(admin.clone())
+        );
+        assert!(admin.claims().get("idp_subject").is_none());
+        let mut crossed = admin.claims();
+        crossed["proof"] = json!(VERIFIED_IDP_SUBJECT);
+        assert_eq!(
+            BindingOffer::from_claims(&crossed, b, 1_001),
+            Err(OfferRefused::Shape)
+        );
+        assert_ne!(
+            pair_digest(([1; 16], [2; 16]), ([3; 16], [4; 16])),
+            pair_digest(([3; 16], [4; 16]), ([1; 16], [2; 16]))
         );
     }
 }

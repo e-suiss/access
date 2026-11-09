@@ -1931,6 +1931,7 @@ async fn the_governing_domain_accepts_the_new_account_actions() {
             subject: founder,
             peer_realm: [0x21; 16],
             peer_subject: [0x22; 16],
+            offer: None,
         }),
         Change::AccountImport(AccountImport {
             file: [0x23; 32],
@@ -1952,17 +1953,14 @@ async fn the_governing_domain_accepts_the_new_account_actions() {
             .admin()
             .prepare(&proposal(at, change.clone(), n, idp_anchor(d), 1))
             .await;
-        // TN-85, TN-86, OP-153 m.19 (d)
-        if matches!(
-            change,
-            Change::AccountImport(_) | Change::MigrationExport(_)
-        ) {
-            assert!(prepared.is_ok(), "{label}");
-        } else {
+        // TN-85, TN-86, OP-153 m.18 (e), m.19 (d)
+        if matches!(change, Change::GuardianshipRecord(_)) {
             assert!(
                 matches!(&prepared, Err(AdminError::Refused(c)) if c == NOT_YET_SERVED),
                 "{label}"
             );
+        } else {
+            assert!(prepared.is_ok(), "{label}");
         }
         let intent = change
             .intent(

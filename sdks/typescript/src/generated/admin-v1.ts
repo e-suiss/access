@@ -264,6 +264,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/realms/{slug}/accounts/{account_id}/bind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Binds the account and `peer_account_id` of the tenant's realm `peer_realm` (its slug) as one person (idp.account.bind, CT2): the realm that binds first answers with its realm-signed `offer`, shown once; the peer realm's administrator binds the same pair sending that `offer`, which the peer realm verifies against this realm's keys. */
+        post: operations["bindAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/realms/{slug}/accounts/migration-export": {
         parameters: {
             query?: never;
@@ -1548,6 +1565,8 @@ export interface components {
             client_secret?: string;
             /** @description The `whpk_` public key or `whsec_` secret a hook's or webhook's receiver verifies with; shown once, never read back. */
             verification_key?: string;
+            /** @description An administrator's binding offer, a compact JWS of type `binding-offer+jwt` signed by this realm's key, for the peer realm's `bindAccount` (OP-153 m.18 (e)); shown once. */
+            offer?: string;
             /** @description A migration export's bundle, dCBOR as unpadded base64url, sealed to the recipient key the change names (TN-86); shown once, never kept. */
             bundle?: string;
             /** @description A domain claim's challenge, published as `suiss-access-verify=<challenge>` in a DNS TXT record at `_suiss-access.<domain>` or at `https://<domain>/.well-known/suiss-access-verify`; shown once, kept only as its SHA-256 (TN-90). */
@@ -2696,6 +2715,52 @@ export interface operations {
             };
             path: {
                 slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    bindAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                account_id: string;
             };
             cookie?: never;
         };

@@ -17,8 +17,14 @@ pub const BUNDLE_VERSION: u64 = 1;
 /// The HKDF info and AEAD label of a migration bundle (TN-86).
 pub const BUNDLE_CONTEXT: &str = "access/migration-bundle/v1";
 
+/// A realm and one of its accounts.
+pub type Side = ([u8; 16], [u8; 16]);
+
 /// `idp.account.bind` (OP-153 m.18 (e)): an administrator binds `subject` of this realm and
-/// `peer_subject` of the tenant's realm `peer_realm` as one person, by `admin_exercise`.
+/// `peer_subject` of the tenant's realm `peer_realm` as one person, by `admin_exercise`. The
+/// realm that binds first offers: its answer is a realm-signed binding offer; the peer realm's
+/// administrator then binds the same pair naming the offer by its SHA-256 `offer`, and the peer
+/// realm verifies it against the offering realm's keys.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AccountBind {
     /// The account in this realm.
@@ -27,11 +33,13 @@ pub struct AccountBind {
     pub peer_realm: [u8; 16],
     /// The account there.
     pub peer_subject: [u8; 16],
+    /// SHA-256 of the peer realm's binding offer, when this half accepts it.
+    pub offer: Option<[u8; 32]>,
 }
 
 impl AccountBind {
     pub(crate) fn to_value(self) -> Value {
-        Value::Map(vec![
+        let mut m = vec![
             (Value::text("subject"), Value::Bytes(self.subject.to_vec())),
             (
                 Value::text("peer_realm"),
@@ -41,7 +49,24 @@ impl AccountBind {
                 Value::text("peer_subject"),
                 Value::Bytes(self.peer_subject.to_vec()),
             ),
-        ])
+        ];
+        if let Some(o) = self.offer {
+            m.push((Value::text("offer"), Value::Bytes(o.to_vec())));
+        }
+        Value::Map(m)
+    }
+
+    /// The offering and the accepting realm and account (OP-153 m.18 (e)): this half's when it
+    /// offers, the peer's when it accepts.
+    #[must_use]
+    pub fn sides(self, realm: [u8; 16]) -> (Side, Side) {
+        let own = (realm, self.subject);
+        let peer = (self.peer_realm, self.peer_subject);
+        if self.offer.is_some() {
+            (peer, own)
+        } else {
+            (own, peer)
+        }
     }
 }
 

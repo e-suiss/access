@@ -337,6 +337,7 @@ fn schemas() -> Value {
                 "resource": { "type": "object" },
                 "client_secret": text("Shown once; never stored or read back."),
                 "verification_key": text("The `whpk_` public key or `whsec_` secret a hook's or webhook's receiver verifies with; shown once, never read back."),
+                "offer": text("An administrator's binding offer, a compact JWS of type `binding-offer+jwt` signed by this realm's key, for the peer realm's `bindAccount` (OP-153 m.18 (e)); shown once."),
                 "bundle": text("A migration export's bundle, dCBOR as unpadded base64url, sealed to the recipient key the change names (TN-86); shown once, never kept."),
                 "challenge": text("A domain claim's challenge, published as `suiss-access-verify=<challenge>` in a DNS TXT record at `_suiss-access.<domain>` or at `https://<domain>/.well-known/suiss-access-verify`; shown once, kept only as its SHA-256 (TN-90)."),
                 "irreversible": { "type": "boolean", "description": "Set on an RP ID change: it cannot be undone and the realm's passkeys stop working (IDI-4)." },
