@@ -254,7 +254,7 @@ async fn the_provider_declarations_are_public() {
     assert_eq!(body["version"], 1);
 }
 
-// RFC 9113 §8.3.1: an HTTP/2 request's `:authority` reaches the handlers as `Host`
+// RFC 9113 §8.3.1
 #[tokio::test]
 async fn an_http2_authority_is_the_host() {
     let app = harden(
