@@ -46,6 +46,7 @@ mod audit;
 mod binding;
 mod projection;
 mod reconcile;
+mod vault;
 mod workload;
 pub use audit::{
     AUDIT_EVENT_EXPORT, AUDIT_EVENT_READ, AUDIT_EVENT_REJECTED, audit_text, is_rejection, txn,
@@ -55,6 +56,7 @@ pub use projection::{
     Token, TokenAuthority, TokenOrder,
 };
 pub use reconcile::Reconciled;
+pub use vault::ReleaseBasis;
 
 /// Reads one domain's state and nonces through the application role.
 #[derive(Clone)]

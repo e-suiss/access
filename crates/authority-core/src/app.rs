@@ -2058,6 +2058,7 @@ pub mod recovery;
 mod regime;
 pub mod roles;
 pub mod sources;
+pub mod vault;
 mod workload;
 
 pub use ingest::Ingested;
