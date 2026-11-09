@@ -293,7 +293,7 @@ pub enum IdpAction {
     GatewayKeytabPolicy,
     /// Replaces a Kerberos gateway's keytab at once: reserved, CT3.
     GatewayKeytabEmergency,
-    /// Registers a RadSec client of a RADIUS gateway (OP-155 m.3 (f)): CT2.
+    /// Registers a `RadSec` client of a RADIUS gateway (OP-155 m.3 (f)): CT2.
     GatewayRadiusClientRegister,
     /// Turns on OpenID Federation for the realm's issuer as a leaf (OP-155 m.3 (j)): CT2.
     FederationEnable,
@@ -313,7 +313,8 @@ pub enum IdpAction {
     VcVerifierEnable,
     /// Turns the OID4VP verifier off; narrowing, CT1.
     VcVerifierDisable,
-    /// Sets the trusted lists (EU LoTL or a TL) whose issuers the verifier accepts: reserved, CT3.
+    /// Sets the trusted lists (the EU `LoTL` or a TL) whose issuers the verifier accepts: reserved,
+    /// CT3.
     VcTrustedList,
     /// Turns on the OID4VCI person-attribute issuer (OP-155 m.3 (p)): CT2.
     VcIssuerEnable,
@@ -499,6 +500,10 @@ impl IdpAction {
     /// The catalog version that first declared it (OP-153 m.3 (a), OP-154 m.3 (a), OP-155
     /// m.3 (a)).
     #[must_use]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm per catalog version, listing its actions"
+    )]
     pub const fn since(self) -> u64 {
         match self {
             Self::SamlSpRegister
@@ -605,6 +610,10 @@ impl IdpAction {
 
     /// Its namespace.
     #[must_use]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm per namespace, listing its actions"
+    )]
     pub const fn namespace(self) -> &'static str {
         match self {
             Self::ClientRegister
@@ -743,6 +752,7 @@ impl IdpAction {
 
     /// Its name within the namespace.
     #[must_use]
+    #[expect(clippy::too_many_lines, reason = "one arm per action name")]
     pub const fn name(self) -> &'static str {
         match self {
             Self::ClientRegister

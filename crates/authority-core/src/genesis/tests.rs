@@ -103,6 +103,7 @@ fn intent(action: IdpAction) -> IntentEnvelope {
 // OP-141 m.34 (a), m.35 (g)
 // IDP-5, IDI-4
 #[test]
+#[expect(clippy::too_many_lines, reason = "one row per idp action and its tier")]
 fn idp_actions_carry_their_consequence_tiers() {
     // IDP-5, IDI-4, TN-95, TN-117, §13.7.1
     let tier = |a: IdpAction| of(&intent(a), None, false, Some(&a.schema()));
