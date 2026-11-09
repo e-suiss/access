@@ -442,3 +442,55 @@ fn reason_admin_exists_only_at_audit_scope() {
     assert!(requester["context"].get("reason_admin").is_none());
     assert!(requester["context"].get("lineage").is_none());
 }
+
+fn agent_body(intent_extra: &str) -> String {
+    format!(
+        r#"{{{CARRIERS}, "context": {{
+            "domain": "{d}", "mode": "commit", "nonce": "{n}",
+            "basis": {{"holding": {{"grant": "{g}", "holder": "{h}", "since": 7}}}},
+            "capacity": "own",
+            "intent": {{
+                "action": {{"namespace": "shop", "name": "read", "major": 1, "schema": "{s}"}},
+                "resources": [{{"namespace": "shop", "path": ["items", "1"], "incarnation": 0}}],
+                "params": {{"target": {{"origin": {{"origin": "https://shop.example", "access": "write"}}}}}},
+                "validity": {{"from": 0, "until": 100}}{intent_extra}
+            }}
+        }}}}"#,
+        d = b64(&[1; 32]),
+        n = b64(&[2; 16]),
+        g = b64(&[3; 16]),
+        h = b64(&[4; 16]),
+        s = b64(&[5; 32]),
+    )
+}
+
+// L1-ADP-8, L0-ENC-23a, E54
+#[test]
+fn an_agent_intent_carries_its_plan_origin_and_provenance() {
+    let extra = format!(
+        r#", "context": {{"plan": "{p}"}}, "provenance": {{"target": "untrusted-external"}}"#,
+        p = b64(&[6; 32])
+    );
+    let d = decode(agent_body(&extra).as_bytes(), MAX).unwrap();
+    let i = &d.request.intent;
+    assert_eq!(i.context.plan, Some(Digest([6; 32])));
+    assert_eq!(
+        i.params["target"],
+        ParamValue::Origin {
+            origin: String::from("https://shop.example"),
+            write: true
+        }
+    );
+    assert_eq!(
+        i.provenance_of("target"),
+        access_kernel::intent::Provenance::UntrustedExternal
+    );
+    for bad in [
+        r#", "provenance": {"other": "user"}"#,
+        r#", "provenance": {"target": "mostly-trusted"}"#,
+    ] {
+        assert!(decode(agent_body(bad).as_bytes(), MAX).is_err(), "{bad}");
+    }
+    let shouting = agent_body("").replace("https://shop.example", "https://Shop.example");
+    assert!(decode(shouting.as_bytes(), MAX).is_err());
+}

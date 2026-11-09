@@ -1103,3 +1103,22 @@ fn a_checkpoint_without_a_statement_closes_the_stream() {
     assert_eq!(s.listen.deliver(NOW + 2, ()), None);
     assert_eq!(s.listen.next(NOW + 3), Next::Closed(Closed::Denied));
 }
+
+// OP-154 m.6 (a), §11.2
+#[test]
+fn the_access_meta_members_are_the_contracts() {
+    let schema = include_bytes!("../../../../conformance/cddl/mcp-meta.schema.json");
+    let doc = json::parse(schema, 1 << 16).unwrap();
+    let Some(Json::Object(members)) = doc.get("properties") else {
+        panic!("properties");
+    };
+    let names: BTreeSet<&str> = members.iter().map(|(k, _)| k.as_str()).collect();
+    assert_eq!(
+        names,
+        BTreeSet::from([
+            access_sdk::mcp::META_AIS,
+            access_sdk::mcp::META_VALIDITY,
+            access_sdk::mcp::META_CONTINUE,
+        ])
+    );
+}

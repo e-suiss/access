@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:mcp-meta:1",
+  "title": "Access members of an MCP request's _meta",
+  "description": "The `_meta` members an MCP client sends to an MCP server that is an Access PEP (§11.2, OP-154 m.6 (a)). A `tools/call` carries the actor Instance's Actor Intent Statement and the validity window it signed; a `subscriptions/listen` carries the pre-signed `continue` statement for its checkpoint. Other members of `_meta` are not Access's and are ignored here. None of them is a capability: the server asks Access with them and decides nothing itself.",
+  "type": "object",
+  "properties": {
+    "io.suiss.access/ais": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "description": "The actor Instance's AIS over the call's intent: a COSE_Sign1 (content type application/access-ais+cbor), base64url without padding, exactly as signed."
+    },
+    "io.suiss.access/validity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "until"],
+      "properties": {
+        "from": { "type": "integer", "minimum": 0, "description": "Unix ms." },
+        "until": { "type": "integer", "minimum": 0, "description": "Unix ms." }
+      },
+      "description": "The intent validity window the AIS was signed over."
+    },
+    "io.suiss.access/continue": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "description": "The actor's pre-signed `continue` AIS for the stream's checkpoint, base64url without padding (A-8, AG-15, OP-154 m.6 (c))."
+    }
+  },
+  "dependentRequired": {
+    "io.suiss.access/ais": ["io.suiss.access/validity"]
+  }
+}
