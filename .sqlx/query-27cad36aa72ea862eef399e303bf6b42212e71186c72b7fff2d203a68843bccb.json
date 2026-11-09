@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT client_uuid, spiffe_id, bundle_endpoint, agent_party\n           FROM access.idp_client_workloads\n          WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "client_uuid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.idp_client_workloads",
+            "name": "client_uuid"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "spiffe_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_client_workloads",
+            "name": "spiffe_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "bundle_endpoint",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_client_workloads",
+            "name": "bundle_endpoint"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "agent_party",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_client_workloads",
+            "name": "agent_party"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "27cad36aa72ea862eef399e303bf6b42212e71186c72b7fff2d203a68843bccb"
+}

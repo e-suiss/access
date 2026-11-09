@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.oauth_workload_bundles (tenant_id, realm_id, trust_domain,\n                bundle_endpoint, document, fetched_ms)\n         VALUES ($1, $2, $3, $4, $5, $6)\n         ON CONFLICT (tenant_id, realm_id, trust_domain) DO UPDATE\n            SET bundle_endpoint = EXCLUDED.bundle_endpoint, document = EXCLUDED.document,\n                fetched_ms = EXCLUDED.fetched_ms",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0e2ca56857bd112e68d34260baeff3355bba8853d0b6456d20148bd7b252bf3e"
+}

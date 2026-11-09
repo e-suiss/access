@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_client_workloads (tenant_id, realm_id, client_uuid, spiffe_id,\n                bundle_endpoint, agent_party, domain_id, decision_pos)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n         ON CONFLICT (tenant_id, realm_id, client_uuid) DO UPDATE\n            SET spiffe_id = EXCLUDED.spiffe_id, bundle_endpoint = EXCLUDED.bundle_endpoint,\n                agent_party = EXCLUDED.agent_party, domain_id = EXCLUDED.domain_id,\n                decision_pos = EXCLUDED.decision_pos",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "560db6f480ac3833337b0d3ea4fe8ed205e86cfb28cb0d5894f2f17c96f88c07"
+}

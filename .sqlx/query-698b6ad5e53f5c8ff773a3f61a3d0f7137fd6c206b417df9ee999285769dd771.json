@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT bundle_endpoint, document, fetched_ms FROM access.oauth_workload_bundles\n          WHERE tenant_id = $1 AND realm_id = $2 AND trust_domain = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "bundle_endpoint",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_workload_bundles",
+            "name": "bundle_endpoint"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "document",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_workload_bundles",
+            "name": "document"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "fetched_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_workload_bundles",
+            "name": "fetched_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "698b6ad5e53f5c8ff773a3f61a3d0f7137fd6c206b417df9ee999285769dd771"
+}

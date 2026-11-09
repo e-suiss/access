@@ -56,6 +56,7 @@ pub mod ssf;
 pub mod status;
 pub mod tenancy;
 pub mod throttle;
+pub mod workloads;
 
 #[cfg(feature = "testing")]
 pub mod testing;
