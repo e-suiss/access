@@ -900,7 +900,7 @@ pub(crate) fn delegators(view: &dyn View, grant: &access_kernel::model::Id) -> O
 
 /// The counter of one budget term of a Grant for the window holding `now` (OP-141 m.26 (a)),
 /// with the window's reset time for a rolling window.
-fn budget_key(
+pub(crate) fn budget_key(
     grant: &access_kernel::model::Id,
     term: usize,
     window: BudgetWindow,

@@ -115,6 +115,8 @@ pub enum Query {
         /// The viewer.
         party: Id,
     },
+    /// An agent Instance's own summary (A-11, L8).
+    AgentStatus,
 }
 
 /// The change a `change-impact` search previews.
@@ -165,13 +167,15 @@ pub enum Report {
     Bulk(BulkImpact),
     /// The Sources report.
     Sources(Sources),
+    /// An agent Instance's own summary (A-11, L8).
+    AgentStatus(crate::app::agent_status::AgentStatus),
 }
 
 /// Search kinds declared for Stage 9 and not served yet, each owned by its lane: `discovery`
-/// (L3, auditor-only and advisory, OP-154 m.3 (z)), `outcome` (L6, the effect attestations of an
-/// Exercise, never a rewrite of its decision, EI-10) and `agent-status` (L8, an agent's own
-/// summary, A-11). A search of one answers `501 not-yet-served` (OP-154 m.4).
-pub const RESERVED_KINDS: [&str; 3] = ["discovery", "outcome", "agent-status"];
+/// (L3, auditor-only and advisory, OP-154 m.3 (z)) and `outcome` (L6, the effect attestations
+/// of an Exercise, never a rewrite of its decision, EI-10). A search of one answers
+/// `501 not-yet-served` (OP-154 m.4).
+pub const RESERVED_KINDS: [&str; 2] = ["discovery", "outcome"];
 
 impl Query {
     /// The path segment of the search intent's resource.
@@ -194,6 +198,7 @@ impl Query {
             Self::Sources => "sources",
             Self::Inventory { .. } => "inventory",
             Self::Activity { .. } => "activity",
+            Self::AgentStatus => "agent-status",
         }
     }
 
@@ -365,6 +370,19 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 return Ok(Found::default());
             }
             Query::Inventory { .. } => return self.inventory(&actor, after, now).await,
+            // A-11, E26
+            Query::AgentStatus => {
+                return Ok(Found {
+                    hits: self
+                        .agent_status(&actor, now)
+                        .await?
+                        .map(|s| Hit::Report(Box::new(Report::AgentStatus(s))))
+                        .into_iter()
+                        .collect(),
+                    next: None,
+                    audited: None,
+                });
+            }
             Query::Activity { .. } => return self.activity(&actor, after, now).await,
             _ => {}
         }

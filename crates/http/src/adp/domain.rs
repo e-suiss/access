@@ -691,6 +691,8 @@ pub fn decode_search(
         "activity" => Query::Activity {
             party: id(q.req("party", "query")?)?,
         },
+        // A-11, E26
+        "agent-status" => Query::AgentStatus,
         _ => return Err(AdpError("search")),
     };
     q.done()?;

@@ -51,7 +51,48 @@ pub fn encode(report: &Report) -> Out {
         Report::Change(c) => change(c),
         Report::Bulk(b) => bulk(b),
         Report::Sources(s) => sources(s),
+        Report::AgentStatus(s) => agent_status(s),
     }
+}
+
+/// A-11, E26
+fn agent_status(s: &access_authority_core::app::agent_status::AgentStatus) -> Out {
+    let names = |actions: &[access_kernel::model::ActionRef]| {
+        actions
+            .iter()
+            .map(|a| Out::from(format!("{}:{}", a.namespace, a.name)))
+            .collect::<Vec<_>>()
+    };
+    let holdings: Vec<Out> = s
+        .holdings
+        .iter()
+        .map(|h| {
+            json!({
+                "grant": id(&h.grant),
+                "actions": names(&h.actions),
+                "until": h.until,
+                "budgets": h.budgets.iter().map(|b| json!({
+                    "dimension": b.dimension,
+                    "capacity": b.capacity,
+                    "remaining": b.remaining,
+                })).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    let mut out = serde_json::Map::new();
+    out.insert(String::from("type"), Out::from("agent_status"));
+    out.insert(String::from("instance"), id(&s.instance));
+    out.insert(String::from("party"), id(&s.party));
+    out.insert(String::from("live"), Out::Bool(s.live));
+    if let Some((actions, until)) = &s.mandate {
+        out.insert(
+            String::from("mandate"),
+            json!({ "actions": names(actions), "until": until }),
+        );
+    }
+    out.insert(String::from("holdings"), Out::Array(holdings));
+    out.insert(String::from("advisory"), Out::Bool(true));
+    Out::Object(out)
 }
 
 fn kernel_json(v: Result<Out, crate::adp::payload::PayloadError>) -> Out {
