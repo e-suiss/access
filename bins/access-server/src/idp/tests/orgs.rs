@@ -1552,15 +1552,19 @@ async fn the_governing_domain_accepts_the_new_account_actions() {
     ];
     for (n, change) in (0xb0_u8..).zip(changes) {
         let label = change.action().label();
-        assert!(
-            matches!(
-                w.admin()
-                    .prepare(&proposal(at, change.clone(), n, idp_anchor(d), 1))
-                    .await,
-                Err(AdminError::Refused(c)) if c == NOT_YET_SERVED
-            ),
-            "{label}"
-        );
+        let prepared = w
+            .admin()
+            .prepare(&proposal(at, change.clone(), n, idp_anchor(d), 1))
+            .await;
+        // TN-85, OP-153 m.19 (d)
+        if matches!(change, Change::AccountImport(_)) {
+            assert!(prepared.is_ok(), "{label}");
+        } else {
+            assert!(
+                matches!(&prepared, Err(AdminError::Refused(c)) if c == NOT_YET_SERVED),
+                "{label}"
+            );
+        }
         let intent = change
             .intent(
                 "r1-catalog",

@@ -5,7 +5,7 @@
 //! provider, and consents are given again as Grants here (TN-84). A line that cannot be imported
 //! is reported and the rest go on.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::AccountError;
 use crate::app::accounts::{change_status, create, store_password_as};
@@ -156,4 +156,60 @@ pub async fn import_line<D: AccountDb>(
         subject,
         legacy: legacy::is_legacy(&secret.algorithm),
     })
+}
+
+/// What one import run did (TN-85).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct Report {
+    /// Accounts created.
+    pub created: u64,
+    /// ...whose password waits for its lazy migration.
+    pub legacy: u64,
+    /// Lines not imported: 1-based line number and reason. Never the line itself.
+    pub skipped: Vec<(u64, String)>,
+}
+
+/// The import lines of `text`: its non-empty lines, numbered from 1.
+pub fn lines(text: &str) -> impl Iterator<Item = (u64, &str)> {
+    (1_u64..)
+        .zip(text.lines())
+        .filter(|(_, l)| !l.trim().is_empty())
+}
+
+/// The SHA-256 of an import file and how many lines it holds: what `idp.account.import` names
+/// (TN-85, OP-153 m.19 (d)).
+#[must_use]
+pub fn file_of(text: &str) -> ([u8; 32], u64) {
+    (
+        suiss_crypto::digest::sha256(text.as_bytes()),
+        u64::try_from(lines(text).count()).unwrap_or(u64::MAX),
+    )
+}
+
+/// Imports every line of `text` into the realm, each its own account; a line that cannot be
+/// imported is reported and the rest go on (TN-85).
+///
+/// # Errors
+/// The line number and the [`AccountError`] of a storage or key failure, which stops the run;
+/// lines already imported stay.
+pub async fn import_all<D: AccountDb>(
+    db: &D,
+    realm: &Realm<'_>,
+    text: &str,
+    who: &Actor<'_>,
+) -> Result<Report, (u64, AccountError)> {
+    let mut report = Report::default();
+    for (n, line) in lines(text) {
+        match import_line(db, realm, line, who)
+            .await
+            .map_err(|e| (n, e))?
+        {
+            Imported::Created { legacy, .. } => {
+                report.created = report.created.saturating_add(1);
+                report.legacy = report.legacy.saturating_add(u64::from(legacy));
+            }
+            Imported::Skipped(why) => report.skipped.push((n, why.to_string())),
+        }
+    }
+    Ok(report)
 }

@@ -434,7 +434,24 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             statement.basis,
             statement.capacity,
         );
-        let applied = Box::pin(admin.apply(&proposal, caller.ais)).await;
+        // TN-85, OP-153 m.19 (d)
+        let mut report = None;
+        let applied = if matches!(compiled.change, Change::AccountImport(_)) {
+            let content = compiled
+                .body
+                .get("content")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            match Box::pin(admin.import_accounts(&proposal, caller.ais, content)).await {
+                Ok((a, r)) => {
+                    report = r;
+                    Ok(a)
+                }
+                Err(e) => Err(e),
+            }
+        } else {
+            Box::pin(admin.apply(&proposal, caller.ais)).await
+        };
         let (exercise_id, position, secret) = match applied {
             Ok(Applied::Written {
                 exercise,
@@ -445,7 +462,12 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             Ok(Applied::NotAllowed { .. }) => return Ok(Written::NotAllowed),
             Err(e) => return refusal(&e).map(Written::Rejected),
         };
-        let resource = self.after(&ids, &compiled, &w).await;
+        let resource = match report {
+            Some(r) => serde_json::to_value(&r)
+                .ok()
+                .map(|body| Item { body, version: 0 }),
+            None => self.after(&ids, &compiled, &w).await,
+        };
         Ok(Written::Committed {
             exercise_id,
             position,

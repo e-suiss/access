@@ -71,6 +71,28 @@ pub(crate) enum Verb {
         /// The natural key.
         key: String,
     },
+    /// Imports the accounts of a JSON Lines file (`idp.account.import`, CT2, TN-85): the change
+    /// names the file's SHA-256 and line count, and the file goes with it.
+    ImportAccounts {
+        /// The JSON Lines file, one account per line, as `access-server import-accounts` reads.
+        file: PathBuf,
+    },
+}
+
+/// The body of an import of `text` (TN-85, OP-153 m.19 (d)): its SHA-256, its non-empty line
+/// count and the text itself.
+pub(crate) fn import_body(text: &str) -> Map<String, Value> {
+    let lines = text.lines().filter(|l| !l.trim().is_empty()).count();
+    let mut m = Map::new();
+    m.insert(
+        String::from("file"),
+        Value::String(access_kernel::json::b64url_encode(
+            &suiss_crypto::digest::sha256(text.as_bytes()),
+        )),
+    );
+    m.insert(String::from("accounts"), Value::from(lines));
+    m.insert(String::from("content"), Value::String(text.to_owned()));
+    m
 }
 
 /// Why a command line names no operation.
@@ -111,6 +133,12 @@ pub(crate) fn resolve(verb: &Verb) -> Result<(&'static Operation, Option<String>
             "",
         ),
         Verb::Retire { resource, key } => (resource, Some(key.clone()), Method::Post, "/retire"),
+        Verb::ImportAccounts { .. } => {
+            return c
+                .operation("importAccounts")
+                .map(|op| (op, None))
+                .ok_or_else(|| unknown("accounts/import"));
+        }
     };
     let found = c.find(resource, method, key.is_some(), action);
     match (verb, found) {
@@ -189,6 +217,16 @@ pub(crate) async fn run(args: AdminArgs) -> Code {
             write(&client, op, key.as_deref(), &body, &path).await
         }
         Verb::Retire { .. } => write(&client, op, key.as_deref(), &Map::new(), &path).await,
+        Verb::ImportAccounts { file } => {
+            let text = match std::fs::read_to_string(file) {
+                Ok(t) => t,
+                Err(e) => {
+                    note(&format!("access-cli: {}: {e}", file.display()));
+                    return exit::CONFIG;
+                }
+            };
+            write(&client, op, None, &import_body(&text), &path).await
+        }
     }
 }
 

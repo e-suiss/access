@@ -188,6 +188,12 @@ pub const ROWS: &[Route] = &[
     ),
     write(
         Verb::Post,
+        "/admin/v1/realms/{slug}/accounts/import",
+        "importAccounts",
+        "Imports accounts from another identity provider (idp.account.import, TN-85): `content` is the JSON Lines file of `access-server import-accounts`, `file` its SHA-256 and `accounts` its line count, which the signed change names; each line becomes its own account or is reported as skipped, never echoed.",
+    ),
+    write(
+        Verb::Post,
         "/admin/v1/realms/{slug}/accounts/{account_id}/suspend",
         "suspendAccount",
         "Suspends an account and ends its sessions.",
@@ -717,7 +723,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "patchOrganization"
         | "claimOrganizationDomain"
         | "releaseOrganizationDomain"
-        | "draftOrganizationConnection" => (Accounts, w(false)),
+        | "draftOrganizationConnection"
+        | "importAccounts" => (Accounts, w(false)),
         "listUpstreamIdps" => (UpstreamIdps, Shape::List(&["name", "issuer", "status"])),
         "getUpstreamIdp" => (UpstreamIdps, Shape::Get),
         "putUpstreamIdp" => (UpstreamIdps, w(true)),

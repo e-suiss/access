@@ -212,6 +212,43 @@ mod management {
         assert!(Cli::try_parse_from(a).is_err());
     }
 
+    // TN-85, OP-153 m.19 (d), m.25 (b)
+    #[test]
+    fn an_import_names_its_file_as_the_server_compiles_it() {
+        let cli = Cli::try_parse_from(args(&[
+            "--key-file",
+            "k.pem",
+            "import-accounts",
+            "users.jsonl",
+        ]))
+        .unwrap();
+        let crate::Command::Admin(a) = cli.command else {
+            panic!("admin");
+        };
+        let (op, key) = crate::commands::admin::resolve(&a.verb).unwrap();
+        assert_eq!((op.id.as_str(), key), ("importAccounts", None));
+        assert!(!crate::api::reserved(&op.id, false), "CT2, not reserved");
+        let text = "{\"email\":\"a@example.com\",\"legacy_idp_reference\":\"1\"}\n\n{}\n";
+        let body = serde_json::Value::Object(crate::commands::admin::import_body(text));
+        let ids = access_crypto::opaque_id::IdKey::new(access_crypto::Secret::new([7; 32]));
+        let change = access_identity_admin::app::rest::compile(
+            access_identity_admin::app::rest::Op::ImportAccounts,
+            None,
+            &body,
+            &ids,
+        )
+        .unwrap();
+        assert_eq!(
+            change,
+            access_identity_admin::domain::Change::AccountImport(
+                access_identity_admin::domain::accounts::AccountImport {
+                    file: suiss_crypto::digest::sha256(text.as_bytes()),
+                    accounts: 2,
+                }
+            )
+        );
+    }
+
     #[test]
     fn release_is_an_apply_option_that_excludes_a_document() {
         let mut a = vec!["access-cli".to_owned(), "apply".to_owned()];

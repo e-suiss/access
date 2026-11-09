@@ -303,6 +303,11 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "createResetIntent" => IdpAction::AccountResetIntent,
         "createTemporaryAccessPass" => IdpAction::AccountTapIssue,
         "putRecoveryPolicy" => IdpAction::AccountRecoveryPolicyLoosen,
+        // OP-153 m.22 (g), (k), m.25 (b)
+        "putCspMode" => IdpAction::RealmCspModeLoosen,
+        "putRelatedOrigins" => IdpAction::RealmRelatedOrigins,
+        "putLocaleOverrides" => IdpAction::RealmLocaleOverrides,
+        "importAccounts" => IdpAction::AccountImport,
         _ => return None,
     })
 }

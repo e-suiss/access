@@ -1024,6 +1024,7 @@ async fn the_audit_stream_is_served_in_three_renderings_and_each_read_is_audited
     assert!(reads.iter().all(|r| r.domain == Some(domain.0)));
 }
 
+mod accounts;
 mod organizations;
 mod settings;
 mod writes;

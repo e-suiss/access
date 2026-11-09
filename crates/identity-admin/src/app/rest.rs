@@ -139,6 +139,8 @@ pub enum Op {
     PutRelatedOrigins,
     /// `putLocaleOverrides`: `idp.realm.locale_overrides` (X35, OP-153 m.22 (k)).
     PutLocaleOverrides,
+    /// `importAccounts`: `idp.account.import` over a file the body carries (TN-85, OP-153 m.19 (d)).
+    ImportAccounts,
 }
 
 impl Op {
@@ -193,6 +195,7 @@ impl Op {
             "putCspMode" => Self::PutCspMode,
             "putRelatedOrigins" => Self::PutRelatedOrigins,
             "putLocaleOverrides" => Self::PutLocaleOverrides,
+            "importAccounts" => Self::ImportAccounts,
             _ => return None,
         })
     }
@@ -734,6 +737,21 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     .into_iter()
                     .map(String::from)
                     .collect(),
+            })
+        }
+        // TN-85, OP-153 m.19 (d), m.25 (b)
+        Op::ImportAccounts => {
+            only(m, &["file", "accounts", "content"])?;
+            Change::AccountImport(crate::domain::accounts::AccountImport {
+                file: b64url_decode(text(m, "file")?)
+                    .ok()
+                    .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+                    .ok_or(Invalid::Body)?,
+                accounts: m
+                    .get("accounts")
+                    .and_then(Json::as_u64)
+                    .and_then(|n| u32::try_from(n).ok())
+                    .ok_or(Invalid::Body)?,
             })
         }
         // OP-153 m.22 (g), m.25 (b)

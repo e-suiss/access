@@ -4,12 +4,11 @@
 
 use std::sync::Arc;
 
-use access_identity_account::app::import::{Imported, import_line};
+use access_identity_account::app::import::{Report, import_all};
 use access_identity_account::app::{Actor, Realm};
 use access_identity_account::ports::{LegacyIdp, LegacyIdpFuture, LegacyIdpUnavailable};
 use access_identity_oauth::adapters::outbound::Outbound;
 use access_store::Pool;
-use serde::Serialize;
 
 /// The largest answer read from the previous provider.
 const MAX_ANSWER: usize = 4096;
@@ -76,17 +75,6 @@ pub(crate) fn legacy_idp(url: Option<&str>, http: Outbound) -> Option<Arc<dyn Le
     url.map(|u| Arc::new(OutboundLegacyIdp::new(http, u.to_owned())) as Arc<dyn LegacyIdp>)
 }
 
-/// What an import run did, printed as JSON.
-#[derive(Debug, Default, Serialize)]
-pub(crate) struct Report {
-    /// Accounts created.
-    pub(crate) created: u64,
-    /// ...whose password waits for its lazy migration.
-    pub(crate) legacy: u64,
-    /// Lines not imported: 1-based line number and reason. Never the line itself.
-    pub(crate) skipped: Vec<(u64, String)>,
-}
-
 /// Imports every non-empty line of `text` into the realm.
 ///
 /// # Errors
@@ -98,22 +86,9 @@ pub(crate) async fn import(
     text: &str,
 ) -> Result<Report, String> {
     let db = access_identity_account::adapters::pg::PgAccounts::sealed(app.clone(), vault);
-    let mut report = Report::default();
-    for (n, line) in (1_u64..).zip(text.lines()) {
-        if line.trim().is_empty() {
-            continue;
-        }
-        match import_line(&db, realm, line, &IMPORTER)
-            .await
-            .map_err(|e| format!("line {n}: {e}"))?
-        {
-            Imported::Created { legacy, .. } => {
-                report.created = report.created.saturating_add(1);
-                report.legacy = report.legacy.saturating_add(u64::from(legacy));
-            }
-            Imported::Skipped(why) => report.skipped.push((n, why.to_string())),
-        }
-    }
+    let report = import_all(&db, realm, text, &IMPORTER)
+        .await
+        .map_err(|(n, e)| format!("line {n}: {e}"))?;
     tracing::info!(
         event = "accounts.imported",
         created = report.created,
