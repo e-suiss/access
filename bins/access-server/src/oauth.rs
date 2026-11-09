@@ -91,6 +91,10 @@ pub(crate) struct ServerEnv<P> {
     pub(crate) documents: HttpClientDocuments,
     /// The authority plane's accepted assertion issuers (OP-154 m.3 (m), (q)).
     pub(crate) issuers: Arc<dyn access_identity_oauth::ports::oauth::AssertionIssuers + Sync>,
+    /// The realms' SPIFFE bundles behind the SSRF guard (OP-154 m.3 (r)).
+    pub(crate) bundles: Arc<dyn access_identity_attest::ports::Bundles + Sync>,
+    /// Which trust domains the authority plane accepts (OP-154 m.3 (r)).
+    pub(crate) workload_trust: Arc<dyn access_identity_oauth::ports::oauth::WorkloadTrust + Sync>,
 }
 
 impl<P: Projections + 'static> Env for ServerEnv<P> {
@@ -166,6 +170,12 @@ impl<P: Projections + 'static> Env for ServerEnv<P> {
     }
     fn issuers(&self) -> &(dyn access_identity_oauth::ports::oauth::AssertionIssuers + Sync) {
         &*self.issuers
+    }
+    fn bundles(&self) -> &(dyn access_identity_attest::ports::Bundles + Sync) {
+        &*self.bundles
+    }
+    fn workload_trust(&self) -> &(dyn access_identity_oauth::ports::oauth::WorkloadTrust + Sync) {
+        &*self.workload_trust
     }
 }
 

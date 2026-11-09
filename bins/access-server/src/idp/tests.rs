@@ -60,6 +60,7 @@ mod platform;
 mod records;
 mod resources;
 mod social;
+mod workloads;
 
 const NOW: u64 = 10_000;
 const ROOT: Id = Id([1; 16]);

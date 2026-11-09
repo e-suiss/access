@@ -1157,6 +1157,7 @@ where
     P: access_internal_api::projections::Projections
         + admin::realm::LiveKeys
         + access_identity_oauth::ports::oauth::AssertionIssuers
+        + access_identity_oauth::ports::oauth::WorkloadTrust
         + Clone
         + 'static,
 {
@@ -1171,7 +1172,15 @@ where
         db: PgOAuth::with_reader(app.clone(), reader),
         signer: SignerKeys::new(identity.signer.clone()),
         client_keys: HttpClientKeys::new(outbound.clone(), CachePolicy::default()),
-        documents: access_identity_oauth::adapters::cimd::HttpClientDocuments::new(outbound),
+        documents: access_identity_oauth::adapters::cimd::HttpClientDocuments::new(
+            outbound.clone(),
+        ),
+        // OP-154 m.3 (r)
+        bundles: Arc::new(access_identity_oauth::adapters::bundles::PgBundles::new(
+            app.clone(),
+            outbound,
+        )),
+        workload_trust: Arc::new(projections.clone()),
         directory: PgDirectory::new(router),
         app,
         nonces: oauth::HsmNonces::new(nonce_keys),

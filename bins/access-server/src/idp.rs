@@ -206,6 +206,39 @@ where
     }
 }
 
+// OP-154 m.3 (r), AG-30
+impl<K, B, S, C> access_identity_oauth::ports::oauth::WorkloadTrust for Plane<K, B, S, C>
+where
+    K: Keys + Send + Sync + 'static,
+    B: Binding + Clone + Send + Sync + 'static,
+    S: Salts + Clone + Send + Sync + 'static,
+    C: Clock + Clone + Send + Sync + 'static,
+{
+    fn accepted(
+        &self,
+        domain: [u8; 32],
+        issuer: [u8; 16],
+    ) -> access_identity_oauth::ports::oauth::Held<'_, bool> {
+        Box::pin(async move {
+            let class = access_kernel::claim::body::Class::IdentityBinding(
+                access_kernel::claim::body::BindingKind::Workload,
+            )
+            .name();
+            self.domains
+                .issuer_accepted(
+                    Digest(domain),
+                    Id(issuer),
+                    (access_kernel::claim::ACTOR_BINDING, &class),
+                )
+                .await
+                .map_err(|e| {
+                    tracing::warn!(event = "oauth.workload_trust.unavailable", outcome = "error", error = %e, "trust domain acceptance unavailable");
+                    access_identity_oauth::ports::Unavailable
+                })
+        })
+    }
+}
+
 impl<K, B, S, C> crate::admin::realm::LiveKeys for Plane<K, B, S, C>
 where
     K: Keys + Send + Sync + 'static,
@@ -523,6 +556,30 @@ where
                 code: String::from("denied"),
             },
         })
+    }
+
+    async fn register_workload(
+        &self,
+        r: access_identity_admin::ports::WorkloadInstance,
+    ) -> Result<RegistrationVerdict, Unavailable> {
+        // OP-154 m.3 (d), L0-META-7
+        let Some(instance) = r.instance() else {
+            return Ok(RegistrationVerdict::Refused {
+                code: String::from("protocol"),
+            });
+        };
+        let verdict = self
+            .self_signed_in((r.domain, r.party), &r.create, r.payload(), (r.pep, None))
+            .await?;
+        match verdict {
+            Verdict::Committed(c) => Ok(RegistrationVerdict::Registered(Registered {
+                party: r.party,
+                instance,
+                kid: thumbprint(&r.key),
+                replayed: c.replayed,
+            })),
+            other => not_registered(other),
+        }
     }
 
     async fn instances(&self, domain: Digest, party: Id) -> Result<Vec<Id>, Unavailable> {

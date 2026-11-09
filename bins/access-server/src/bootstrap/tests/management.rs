@@ -180,6 +180,124 @@ pub(super) struct Console {
     pub(super) root: access_kernel::model::Id,
     pub(super) route: access_store::tenancy::RealmRoute,
     pub(super) subject: [u8; 16],
+    /// The realm authorization server's routes.
+    pub(super) oauth: axum::Router,
+    /// The SPIFFE bundles the authorization server reaches (OP-154 m.3 (r)).
+    pub(super) bundles: Arc<ServedBundles>,
+    /// Which trust domains the authorization server takes as accepted (OP-154 m.3 (r)).
+    pub(super) trust: Arc<TrustDomains>,
+}
+
+/// The authority plane's trust domain Acceptances, or every trust domain once `scripted`: a
+/// root-established Acceptance waits out the CT3 time lock, which this realm keeps.
+pub(super) struct TrustDomains {
+    plane: TestPlane,
+    /// Whether every trust domain is taken as accepted.
+    pub(super) scripted: std::sync::atomic::AtomicBool,
+}
+
+impl access_identity_oauth::ports::oauth::WorkloadTrust for TrustDomains {
+    fn accepted(
+        &self,
+        domain: [u8; 32],
+        issuer: [u8; 16],
+    ) -> access_identity_oauth::ports::oauth::Held<'_, bool> {
+        if self.scripted.load(std::sync::atomic::Ordering::SeqCst) {
+            return Box::pin(async { Ok(true) });
+        }
+        self.plane.accepted(domain, issuer)
+    }
+}
+
+/// SPIFFE bundles kept in the realm's rows, Bundle Endpoints served in process (OP-154 m.3
+/// (r)): the guarded outbound fetch is the one part not on the wire.
+pub(super) struct ServedBundles {
+    app: access_store::Pool,
+    served: std::sync::Mutex<std::collections::HashMap<String, Vec<u8>>>,
+}
+
+impl ServedBundles {
+    fn new(app: access_store::Pool) -> Self {
+        Self {
+            app,
+            served: std::sync::Mutex::default(),
+        }
+    }
+
+    /// Serves `document` at `endpoint`.
+    pub(super) fn serve(&self, endpoint: &str, document: &str) {
+        self.served
+            .lock()
+            .unwrap()
+            .insert(String::from(endpoint), document.as_bytes().to_vec());
+    }
+
+    async fn begin(
+        &self,
+        s: access_identity_attest::ports::Scope,
+    ) -> Result<TenantTx, access_identity_attest::ports::Unavailable> {
+        TenantTx::begin(
+            &self.app,
+            access_store::identity::TenantId::from_bytes(s.tenant),
+            access_store::identity::RealmId::from_bytes(s.realm),
+        )
+        .await
+        .map_err(|_| access_identity_attest::ports::Unavailable)
+    }
+}
+
+impl access_identity_attest::ports::Bundles for ServedBundles {
+    fn kept<'a>(
+        &'a self,
+        realm: access_identity_attest::ports::Scope,
+        trust_domain: &'a str,
+    ) -> access_identity_attest::ports::Pending<'a, Option<access_identity_attest::ports::Kept>>
+    {
+        Box::pin(async move {
+            let mut t = self.begin(realm).await?;
+            let k = access_store::workloads::kept_bundle(&mut t, trust_domain)
+                .await
+                .unwrap();
+            t.commit().await.unwrap();
+            Ok(k.map(|k| access_identity_attest::ports::Kept {
+                endpoint: k.bundle_endpoint,
+                document: k.document,
+                fetched_ms: k.fetched_ms,
+            }))
+        })
+    }
+
+    fn keep<'a>(
+        &'a self,
+        realm: access_identity_attest::ports::Scope,
+        trust_domain: &'a str,
+        kept: access_identity_attest::ports::Kept,
+    ) -> access_identity_attest::ports::Pending<'a, ()> {
+        Box::pin(async move {
+            let mut t = self.begin(realm).await?;
+            access_store::workloads::keep_bundle(
+                &mut t,
+                trust_domain,
+                &access_store::workloads::KeptBundle {
+                    bundle_endpoint: kept.endpoint,
+                    document: kept.document,
+                    fetched_ms: kept.fetched_ms,
+                },
+            )
+            .await
+            .unwrap();
+            t.commit().await.unwrap();
+            Ok(())
+        })
+    }
+
+    fn fetch<'a>(
+        &'a self,
+        endpoint: &'a str,
+    ) -> access_identity_attest::ports::Pending<'a, Option<Vec<u8>>> {
+        let d = self.served.lock().unwrap().get(endpoint).cloned();
+        Box::pin(async move { Ok(d) })
+    }
 }
 
 /// A bootstrapped realm `acme` whose founder signed in to the console at the realm's own
@@ -240,6 +358,11 @@ pub(super) async fn console_with(label: &str, with_adp: bool, plan: &Plan) -> Co
     t.commit().await.unwrap();
 
     let ids = Arc::new(crate::ids::CellIds::new(w.keys.clone()));
+    let bundles = Arc::new(ServedBundles::new(w.db.app.clone()));
+    let trust = Arc::new(TrustDomains {
+        plane: w.plane.clone(),
+        scripted: std::sync::atomic::AtomicBool::new(false),
+    });
     let oauth = access_http::oauth::router(OAuth::new(crate::oauth::ServerEnv {
         db: PgOAuth::with_reader(w.db.app.clone(), w.db.reader.clone()),
         signer: SignerKeys::new(w.identity_signer.clone()),
@@ -250,6 +373,8 @@ pub(super) async fn console_with(label: &str, with_adp: bool, plan: &Plan) -> Co
         documents: access_identity_oauth::adapters::cimd::HttpClientDocuments::new(
             Outbound::disabled(Duration::from_secs(5)),
         ),
+        bundles: bundles.clone(),
+        workload_trust: trust.clone(),
         directory: PgDirectory::new(w.db.router.clone()),
         app: w.db.app.clone(),
         nonces: crate::oauth::HsmNonces::new(w.keys.clone()),
@@ -477,6 +602,9 @@ pub(super) async fn console_with(label: &str, with_adp: bool, plan: &Plan) -> Co
         root,
         route,
         subject,
+        oauth,
+        bundles,
+        trust,
     }
 }
 
@@ -1032,4 +1160,5 @@ mod accounts;
 mod agents;
 mod organizations;
 mod settings;
+mod workloads;
 mod writes;
