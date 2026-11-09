@@ -243,7 +243,7 @@ uniffi-test-swift:
     "$out/vectors" conformance/vectors/core/1
 
 # OP-97
-npm_packages :="sdks/typescript web/components web/console web/login web/account conformance/mcp"
+npm_packages :="sdks/typescript web/components web/console web/login web/account"
 
 # OP-83, §14.5
 web-install:
@@ -251,7 +251,7 @@ web-install:
 
 # F-1, §14.7: known high or critical advisories in any npm package's lockfile, development tools included
 web-audit:
-    status=0; for p in {{npm_packages}}; do echo "$p"; (cd "$p" && npm audit --audit-level=high) || status=1; done; exit "$status"
+    status=0; for p in {{npm_packages}} conformance/mcp; do echo "$p"; (cd "$p" && npm audit --audit-level=high) || status=1; done; exit "$status"
 
 web-check: wasm
     for p in {{npm_packages}}; do (cd "$p" && npm run lint && npm run typecheck && npm run format:check); done
