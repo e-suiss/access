@@ -39,3 +39,8 @@ harness = false
 [[bench]]
 name = "kernel_instructions"
 harness = false
+
+# OP-72, AG-22
+[[bench]]
+name = "agent_tokens"
+harness = false

@@ -403,13 +403,27 @@ jobs:
           else
             echo "HAVE_BASELINE=false" >> "$GITHUB_ENV"
           fi
+          # AG-22: the agent token bench has a baseline only once the base has it
+          if [[ -f crates/kernel/benches/agent_tokens.rs ]]; then
+            echo "HAVE_AGENT_BASELINE=true" >> "$GITHUB_ENV"
+          else
+            echo "HAVE_AGENT_BASELINE=false" >> "$GITHUB_ENV"
+          fi
           git checkout --quiet "$head"
       - name: Kernel regression gate (fails above 5 %)
         run: |
           if [[ "$HAVE_BASELINE" == true ]]; then
-            just bench-instructions --baseline=base --callgrind-limits='ir=5%'
+            just bench-instructions-one kernel_instructions --baseline=base --callgrind-limits='ir=5%'
           else
-            just bench-instructions
+            just bench-instructions-one kernel_instructions
+          fi
+      # AG-22, §11.9.4: the pure cost of an agent's 15-minute token refresh
+      - name: Agent token regression gate (fails above 5 %)
+        run: |
+          if [[ "$HAVE_BASELINE" == true && "$HAVE_AGENT_BASELINE" == true ]]; then
+            just bench-instructions-one agent_tokens --baseline=base --callgrind-limits='ir=5%'
+          else
+            just bench-instructions-one agent_tokens
           fi
 
   web:

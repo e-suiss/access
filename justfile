@@ -543,9 +543,13 @@ audit:
 bench *args:
     cargo bench --locked -p esuiss-access-kernel --bench kernel_wallclock -- {{args}}
 
-# OP-72
+# OP-72, AG-22: the Kernel's hot paths and an agent token refresh
 bench-instructions *args:
-    cargo bench --locked -p esuiss-access-kernel --bench kernel_instructions -- {{args}}
+    cargo bench --locked -p esuiss-access-kernel --bench kernel_instructions --bench agent_tokens -- {{args}}
+
+# OP-72: one instruction-count bench
+bench-instructions-one bench *args:
+    cargo bench --locked -p esuiss-access-kernel --bench {{bench}} -- {{args}}
 
 # OQ-MD4, OP-150 m.1 (c): Kernel call cost direct, on wasm32-wasip1, on Node and through uniffi; informational, not a gate
 bench-ffi iters="5000":
