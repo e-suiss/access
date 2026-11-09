@@ -223,6 +223,17 @@ fn agent_members(m: &mut Map<String, Value>, served: &Served) {
     }
 }
 
+/// The token endpoint's client authentication methods; the SPIFFE ones once served (OP-154
+/// m.3 (r)).
+fn auth_methods(served: &Served) -> Vec<&'static str> {
+    let mut methods = vec!["none", "private_key_jwt", "client_secret_basic"];
+    if served.feature(Feature::SpiffeClientAuth) {
+        methods.push(crate::domain::client::SPIFFE_JWT);
+        methods.push(crate::domain::client::SPIFFE_X509);
+    }
+    methods
+}
+
 /// The AS metadata of the realm `issuer` with what is known about the realm (`facts`).
 #[must_use]
 pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFacts) -> String {
@@ -269,15 +280,9 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
             issuer.endpoint(Endpoint::Token.path()).into(),
         );
         m.insert("grant_types_supported".into(), json!(grant_types(served)));
-        let mut methods = vec!["none", "private_key_jwt", "client_secret_basic"];
-        // OP-154 m.3 (r)
-        if served.feature(Feature::SpiffeClientAuth) {
-            methods.push(crate::domain::client::SPIFFE_JWT);
-            methods.push(crate::domain::client::SPIFFE_X509);
-        }
         m.insert(
             "token_endpoint_auth_methods_supported".into(),
-            json!(methods),
+            json!(auth_methods(served)),
         );
         m.insert(
             "token_endpoint_auth_signing_alg_values_supported".into(),
