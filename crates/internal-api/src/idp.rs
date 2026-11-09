@@ -14,12 +14,13 @@ use access_kernel::schema::{ActionSchema, EffectClass, Spp, action_digest};
 /// The resource namespace every `idp.*` action addresses: `[slug, kind, …]` paths.
 pub const RESOURCE_NAMESPACE: &str = "idp";
 
-/// Version of every `idp.*` catalog (OP-153 m.3 (a), m.25 (b)).
-pub const CATALOG_VERSION: u64 = 3;
+/// Version of every `idp.*` catalog (OP-153 m.3 (a), m.25 (b), OP-154 m.3 (a)).
+pub const CATALOG_VERSION: u64 = 4;
 
-/// The `idp.*` action namespaces, one SPP each (OP-141 m.35, OP-153 m.3 (a)).
-pub const NAMESPACES: [&str; 10] = [
+/// The `idp.*` action namespaces, one SPP each (OP-141 m.35, OP-153 m.3 (a), OP-154 m.3 (a)).
+pub const NAMESPACES: [&str; 12] = [
     "idp.account",
+    "idp.agent",
     "idp.client",
     "idp.group",
     "idp.hook",
@@ -28,6 +29,7 @@ pub const NAMESPACES: [&str; 10] = [
     "idp.realm",
     "idp.social",
     "idp.upstream",
+    "idp.vault",
     "idp.webhook",
 ];
 
@@ -217,11 +219,49 @@ pub enum IdpAction {
     /// Changes the realm's hosted-page CSP mode so that it loosens: enforce to report-only
     /// (OP-153 m.22 (g), m.25 (b)): CT2.
     RealmCspModeLoosen,
+    /// Registers an agent: its record, operator and kind, bound to one self-registered agent
+    /// Party (OP-154 m.3 (c)): CT2.
+    AgentRegister,
+    /// Changes an agent's name and description: CT1.
+    AgentUpdate,
+    /// Assigns a human sponsor to an agent (AG-41, OP-154 m.3 (e)): CT2.
+    AgentSponsorAssign,
+    /// Removes a sponsor; the last one leaving suspends the agent (OP-154 m.3 (e)): CT1.
+    AgentSponsorRemove,
+    /// Retires an agent; narrowing, CT1.
+    AgentRetire,
+    /// Defines an agent Grant template with its mandatory budget (OP-154 m.3 (g)): CT2.
+    AgentTemplateDefine,
+    /// Enables an upstream of the catalog as a vault Resource (OP-154 m.3 (t)): CT2.
+    VaultResourceEnable,
+    /// Disables a vault Resource; narrowing, CT1.
+    VaultResourceDisable,
+    /// Registers a tenant's own upstream as a vault Resource: reserved, CT3.
+    VaultResourceRegister,
+    /// Opens release path (b) for CT0–CT1 classes; a loosening (OP-154 m.3 (t)): CT2.
+    VaultReleaseModeOpen,
+    /// Closes release path (b); narrowing, CT1.
+    VaultReleaseModeClose,
+    /// Registers a protected resource or MCP server for `resource` validation (OP-154 m.3
+    /// (a)): CT2.
+    ClientResourceRegister,
+    /// Turns on or widens the dynamic client registration profile (OP-154 m.3 (j)): CT2.
+    ClientDcrPolicy,
+    /// Tightens the dynamic client registration profile; narrowing, CT1.
+    ClientDcrPolicyTighten,
+    /// Records a cross-app connection for ID-JAG (OP-154 m.3 (n)): CT2.
+    ClientCrossAppConnection,
+    /// Retires a cross-app connection; narrowing, CT1.
+    ClientCrossAppConnectionRetire,
+    /// Turns on the device authorization grant (RFC 8628, OP-154 m.3 (p)): CT2.
+    RealmDeviceCode,
+    /// Turns off the device authorization grant; narrowing, CT1.
+    RealmDeviceCodeClose,
 }
 
 impl IdpAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 73] = [
+    pub const ALL: [Self; 91] = [
         Self::ClientRegister,
         Self::ClientUpdate,
         Self::ClientRetire,
@@ -295,12 +335,48 @@ impl IdpAction {
         Self::AccountGuardianshipRecord,
         Self::RealmCspMode,
         Self::RealmCspModeLoosen,
+        Self::AgentRegister,
+        Self::AgentUpdate,
+        Self::AgentSponsorAssign,
+        Self::AgentSponsorRemove,
+        Self::AgentRetire,
+        Self::AgentTemplateDefine,
+        Self::VaultResourceEnable,
+        Self::VaultResourceDisable,
+        Self::VaultResourceRegister,
+        Self::VaultReleaseModeOpen,
+        Self::VaultReleaseModeClose,
+        Self::ClientResourceRegister,
+        Self::ClientDcrPolicy,
+        Self::ClientDcrPolicyTighten,
+        Self::ClientCrossAppConnection,
+        Self::ClientCrossAppConnectionRetire,
+        Self::RealmDeviceCode,
+        Self::RealmDeviceCodeClose,
     ];
 
-    /// The catalog version that first declared it (OP-153 m.3 (a)).
+    /// The catalog version that first declared it (OP-153 m.3 (a), OP-154 m.3 (a)).
     #[must_use]
     pub const fn since(self) -> u64 {
         match self {
+            Self::AgentRegister
+            | Self::AgentUpdate
+            | Self::AgentSponsorAssign
+            | Self::AgentSponsorRemove
+            | Self::AgentRetire
+            | Self::AgentTemplateDefine
+            | Self::VaultResourceEnable
+            | Self::VaultResourceDisable
+            | Self::VaultResourceRegister
+            | Self::VaultReleaseModeOpen
+            | Self::VaultReleaseModeClose
+            | Self::ClientResourceRegister
+            | Self::ClientDcrPolicy
+            | Self::ClientDcrPolicyTighten
+            | Self::ClientCrossAppConnection
+            | Self::ClientCrossAppConnectionRetire
+            | Self::RealmDeviceCode
+            | Self::RealmDeviceCodeClose => 4,
             Self::AccountBind
             | Self::AccountImport
             | Self::AccountGuardianshipRecord
@@ -348,7 +424,23 @@ impl IdpAction {
             | Self::ClientUpdate
             | Self::ClientRetire
             | Self::CimdPolicy
-            | Self::ClientSecretRotate => "idp.client",
+            | Self::ClientSecretRotate
+            | Self::ClientResourceRegister
+            | Self::ClientDcrPolicy
+            | Self::ClientDcrPolicyTighten
+            | Self::ClientCrossAppConnection
+            | Self::ClientCrossAppConnectionRetire => "idp.client",
+            Self::AgentRegister
+            | Self::AgentUpdate
+            | Self::AgentSponsorAssign
+            | Self::AgentSponsorRemove
+            | Self::AgentRetire
+            | Self::AgentTemplateDefine => "idp.agent",
+            Self::VaultResourceEnable
+            | Self::VaultResourceDisable
+            | Self::VaultResourceRegister
+            | Self::VaultReleaseModeOpen
+            | Self::VaultReleaseModeClose => "idp.vault",
             Self::GroupCreate
             | Self::GroupUpdate
             | Self::GroupRetire
@@ -378,7 +470,9 @@ impl IdpAction {
             | Self::RealmRetentionHoldPlace
             | Self::RealmRetentionHoldLift
             | Self::RealmCspMode
-            | Self::RealmCspModeLoosen => "idp.realm",
+            | Self::RealmCspModeLoosen
+            | Self::RealmDeviceCode
+            | Self::RealmDeviceCodeClose => "idp.realm",
             Self::OrgCreate
             | Self::OrgUpdate
             | Self::OrgDomainClaim
@@ -422,18 +516,35 @@ impl IdpAction {
             Self::ClientRegister
             | Self::UpstreamRegister
             | Self::HookRegister
-            | Self::WebhookRegister => "register",
+            | Self::WebhookRegister
+            | Self::AgentRegister => "register",
             Self::ClientUpdate
             | Self::GroupUpdate
             | Self::UpstreamUpdate
             | Self::WebhookUpdate
             | Self::OrgUpdate
-            | Self::SocialUpdate => "update",
+            | Self::SocialUpdate
+            | Self::AgentUpdate => "update",
             Self::ClientRetire
             | Self::GroupRetire
             | Self::UpstreamRetire
             | Self::HookRetire
-            | Self::WebhookRetire => "retire",
+            | Self::WebhookRetire
+            | Self::AgentRetire => "retire",
+            Self::AgentSponsorAssign => "sponsor_assign",
+            Self::AgentSponsorRemove => "sponsor_remove",
+            Self::AgentTemplateDefine => "template_define",
+            Self::VaultResourceEnable => "resource_enable",
+            Self::VaultResourceDisable => "resource_disable",
+            Self::VaultResourceRegister | Self::ClientResourceRegister => "resource_register",
+            Self::VaultReleaseModeOpen => "release_mode_open",
+            Self::VaultReleaseModeClose => "release_mode_close",
+            Self::ClientDcrPolicy => "dcr_policy",
+            Self::ClientDcrPolicyTighten => "dcr_policy_tighten",
+            Self::ClientCrossAppConnection => "cross_app_connection",
+            Self::ClientCrossAppConnectionRetire => "cross_app_connection_retire",
+            Self::RealmDeviceCode => "device_code",
+            Self::RealmDeviceCodeClose => "device_code_close",
             Self::RealmExtensionPolicy => "extension_policy",
             Self::ClientSecretRotate => "secret_rotate",
             Self::GroupCreate | Self::OrgCreate => "create",
@@ -530,7 +641,15 @@ impl IdpAction {
             | Self::AccountRead
             | Self::AccountProfileUpdate
             | Self::RealmRetentionHoldPlace
-            | Self::RealmCspMode => EffectClass::Reversible,
+            | Self::RealmCspMode
+            | Self::AgentUpdate
+            | Self::AgentSponsorRemove
+            | Self::AgentRetire
+            | Self::VaultResourceDisable
+            | Self::VaultReleaseModeClose
+            | Self::ClientDcrPolicyTighten
+            | Self::ClientCrossAppConnectionRetire
+            | Self::RealmDeviceCodeClose => EffectClass::Reversible,
             _ => EffectClass::Irreversible,
         }
     }
@@ -551,6 +670,7 @@ impl IdpAction {
                 | Self::AccountRecoveryPolicyLoosen
                 | Self::AccountMigrationExport
                 | Self::RealmCustomDomain
+                | Self::VaultResourceRegister
         )
     }
 

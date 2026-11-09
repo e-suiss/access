@@ -148,6 +148,25 @@ fn idp_actions_carry_their_consequence_tiers() {
         (IdpAction::AccountGuardianshipRecord, Tier::Ct2),
         (IdpAction::RealmCspMode, Tier::Ct1),
         (IdpAction::RealmCspModeLoosen, Tier::Ct2),
+        // OP-154 m.3 (a)
+        (IdpAction::AgentRegister, Tier::Ct2),
+        (IdpAction::AgentUpdate, Tier::Ct1),
+        (IdpAction::AgentSponsorAssign, Tier::Ct2),
+        (IdpAction::AgentSponsorRemove, Tier::Ct1),
+        (IdpAction::AgentRetire, Tier::Ct1),
+        (IdpAction::AgentTemplateDefine, Tier::Ct2),
+        (IdpAction::VaultResourceEnable, Tier::Ct2),
+        (IdpAction::VaultResourceDisable, Tier::Ct1),
+        (IdpAction::VaultResourceRegister, Tier::Ct3),
+        (IdpAction::VaultReleaseModeOpen, Tier::Ct2),
+        (IdpAction::VaultReleaseModeClose, Tier::Ct1),
+        (IdpAction::ClientResourceRegister, Tier::Ct2),
+        (IdpAction::ClientDcrPolicy, Tier::Ct2),
+        (IdpAction::ClientDcrPolicyTighten, Tier::Ct1),
+        (IdpAction::ClientCrossAppConnection, Tier::Ct2),
+        (IdpAction::ClientCrossAppConnectionRetire, Tier::Ct1),
+        (IdpAction::RealmDeviceCode, Tier::Ct2),
+        (IdpAction::RealmDeviceCodeClose, Tier::Ct1),
     ] {
         assert_eq!(tier(a), t, "{}", a.label());
     }

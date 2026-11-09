@@ -185,11 +185,13 @@ async fn the_upgrade_waits_out_the_time_lock_and_reuses_its_open_attempt() {
     assert!(!accepts(&w, domain, IdpAction::HookRegister).await);
 }
 
-/// Opens Genesis as `idp.*` catalog 1 declared it: no `idp.org`, no `idp.social`, and no
-/// version 2 action in the other namespaces; the CT3 time-lock is zero.
+/// Opens Genesis as `idp.*` catalog `version` declared it: catalog 1 has no `idp.org` and no
+/// `idp.social`, catalog 3 no `idp.agent` and no `idp.vault`, and neither a later action in the
+/// other namespaces; the CT3 time-lock is zero.
 struct FirstCatalog<'a> {
     plane: &'a TestPlane,
     domains: &'a TestDomains,
+    version: u64,
 }
 
 fn spp_namespace(acceptance: &Value) -> Option<String> {
@@ -215,8 +217,8 @@ impl Governance for FirstCatalog<'_> {
         items.extend(
             NAMESPACES
                 .iter()
-                .filter(|ns| !spp_at(ns, founder, 1).actions.is_empty())
-                .map(|ns| access_authority_core::genesis::schemas_at(ns, founder, 1)),
+                .filter(|ns| !spp_at(ns, founder, self.version).actions.is_empty())
+                .map(|ns| access_authority_core::genesis::schemas_at(ns, founder, self.version)),
         );
         items.sort_by_key(|v| {
             suiss_crypto::dcbor::encode(v, suiss_crypto::dcbor::Limits::CEILING).unwrap()
@@ -308,6 +310,7 @@ async fn a_catalog_1_realm_refuses_the_version_2_actions_until_its_upgrade_commi
     let governance = FirstCatalog {
         plane: &w.plane,
         domains: &w.domains,
+        version: 1,
     };
     let (tenant, created) = realm_with(&w, &governance, "first").await;
     let domain = created.domain;
@@ -348,9 +351,12 @@ async fn a_catalog_1_realm_refuses_the_version_2_actions_until_its_upgrade_commi
         namespaces,
         vec![
             ("idp.account", "accepted"),
+            ("idp.agent", "accepted"),
+            ("idp.client", "accepted"),
             ("idp.org", "accepted"),
             ("idp.realm", "accepted"),
             ("idp.social", "accepted"),
+            ("idp.vault", "accepted"),
         ]
     );
     for action in IdpAction::ALL {
@@ -371,6 +377,76 @@ async fn a_catalog_1_realm_refuses_the_version_2_actions_until_its_upgrade_commi
         exercise(&w, domain, "first", IdpAction::OrgCreate, "org").await,
         Verdict::Committed(_)
     ));
+}
+
+#[tokio::test]
+async fn a_catalog_3_realm_refuses_the_version_4_actions_until_its_upgrade_commits() {
+    // OP-154 m.3 (a), OP-153 m.3 (a)
+    let w = World::new("catalog-v4").await;
+    let governance = FirstCatalog {
+        plane: &w.plane,
+        domains: &w.domains,
+        version: 3,
+    };
+    let (tenant, created) = realm_with(&w, &governance, "third").await;
+    let domain = created.domain;
+    assert!(accepts(&w, domain, IdpAction::AccountBind).await);
+    assert!(accepts(&w, domain, IdpAction::RealmCspModeLoosen).await);
+    for action in IdpAction::ALL.into_iter().filter(|a| a.since() == 4) {
+        assert!(!accepts(&w, domain, action).await, "{action:?}");
+    }
+
+    let declared = DeclaredTargets::default();
+    let b = bootstrap(&w, &declared);
+    let root = root_key(&w.keys).unwrap();
+    let party = root_party(&root.public_key());
+    b.onboard(tenant, created.realm, domain, &root, party)
+        .await
+        .unwrap();
+    w.domains.release().await;
+    for (action, kind) in [
+        (IdpAction::AgentRegister, "agent"),
+        (IdpAction::RealmDeviceCode, "realm"),
+        (IdpAction::ClientDcrPolicy, "client"),
+    ] {
+        let Verdict::NotAllowed { decision, .. } =
+            exercise(&w, domain, "third", action, kind).await
+        else {
+            panic!("{action:?} before the upgrade");
+        };
+        assert!(catalog_upgrade_required(&decision), "{action:?}");
+    }
+
+    let summary = w.run(&old_plan("third")).await;
+    let mut namespaces: Vec<_> = upgraded(&summary, "third")
+        .iter()
+        .map(|c| (c.namespace.as_str(), c.state))
+        .collect();
+    namespaces.sort_unstable();
+    assert_eq!(
+        namespaces,
+        vec![
+            ("idp.agent", "accepted"),
+            ("idp.client", "accepted"),
+            ("idp.realm", "accepted"),
+            ("idp.vault", "accepted"),
+        ]
+    );
+    for action in IdpAction::ALL {
+        assert!(accepts(&w, domain, action).await, "{action:?}");
+    }
+    for (action, kind) in [
+        (IdpAction::AgentRegister, "agent"),
+        (IdpAction::RealmDeviceCode, "realm"),
+    ] {
+        assert!(
+            matches!(
+                exercise(&w, domain, "third", action, kind).await,
+                Verdict::Committed(_)
+            ),
+            "{action:?}"
+        );
+    }
 }
 
 #[tokio::test]
