@@ -5862,6 +5862,101 @@ fn alice_order(
     }
 }
 
+// INV-5, §9.9 table, OP-154 m.3 (m), Ek B 4151
+#[tokio::test]
+async fn a_token_turns_inactive_once_its_basis_grant_ends() {
+    use access_authority_core::adapters::Projected;
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    let (socket, service) = start_signer("token-basis");
+    let a = signing_process(&db, d, &socket);
+    onboard_signed(&a, d, &service).await;
+    let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
+    for (nonce, payload) in [
+        (
+            3,
+            Payload::PartyRegister {
+                party: ALICE,
+                root: Root::Sole(ALICE),
+                actor_kind: ActorKind::Human,
+            },
+        ),
+        (
+            4,
+            Payload::InstanceCreate {
+                party: ALICE,
+                key: public(ALICE_KEY),
+                mandate: None,
+            },
+        ),
+    ] {
+        allowed(
+            &a.exercise(&incoming(
+                meta_request(d, nonce, public_basis, payload),
+                ALICE_KEY,
+            ))
+            .await
+            .unwrap(),
+        );
+    }
+    let shop = meta::object_id(&d, kind::ANCHOR, 1);
+    let issued = a
+        .exercise(&incoming(
+            meta_request(
+                d,
+                6,
+                ExerciseBasis::Anchor(shop),
+                Payload::GrantIssue(GrantContent {
+                    basis: GrantBasis::Anchor(shop),
+                    holder: SubjectSelector::Party(ALICE),
+                    authority: authority_of(vec![action("shop", "read")]),
+                    agency: BTreeSet::from([Capacity::Own]),
+                    named: None,
+                }),
+            ),
+            ROOT_KEY,
+        ))
+        .await
+        .unwrap();
+    allowed(&issued);
+    let grant = meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0);
+    let holding = ExerciseBasis::Holding(HoldingRef {
+        grant,
+        holder: ALICE,
+        since: issued.record.unwrap(),
+    });
+    let Projected::Issued(t) = a
+        .project(&alice_order(d, 20, holding, selector("shop")))
+        .await
+        .unwrap()
+    else {
+        panic!("not issued");
+    };
+    assert!(a.introspect(d, &t.jws, NOW).await.unwrap().0);
+    allowed(
+        &a.exercise(&incoming(
+            meta_request(
+                d,
+                7,
+                ExerciseBasis::Anchor(shop),
+                Payload::GrantRevoke { grant },
+            ),
+            ROOT_KEY,
+        ))
+        .await
+        .unwrap(),
+    );
+    assert!(!a.introspect(d, &t.jws, NOW).await.unwrap().0);
+    let mut refresh = alice_order(d, 21, holding, selector("shop"));
+    refresh.family = Some(t.family);
+    assert!(!matches!(
+        a.project(&refresh).await.unwrap(),
+        Projected::Issued(_)
+    ));
+}
+
 // §5.3, §5.17, INV-33, S-1, OP-141 m.32, OP-148
 #[tokio::test]
 #[allow(

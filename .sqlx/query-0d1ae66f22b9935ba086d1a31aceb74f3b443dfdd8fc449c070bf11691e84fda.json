@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT basis FROM access.projection_basis WHERE domain_id = $1 AND family_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "basis",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.projection_basis",
+            "name": "basis"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0d1ae66f22b9935ba086d1a31aceb74f3b443dfdd8fc449c070bf11691e84fda"
+}

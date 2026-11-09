@@ -473,6 +473,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         self.party_ref(&party)
     }
 
+    /// Whether `basis` still stands at the head this core reads (INV-5).
+    pub(crate) async fn basis_live(&self, basis: &ExerciseBasis) -> Result<bool, CoreError> {
+        self.settled(|snap| crate::domain::basis_live(snap, basis))
+            .await
+    }
+
     /// The Party of `instance`.
     pub(crate) async fn instance_party(&self, instance: &Id) -> Result<Id, CoreError> {
         self.settled(|snap| {

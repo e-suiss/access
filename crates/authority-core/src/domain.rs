@@ -846,6 +846,20 @@ fn chain_ids(
     }
 }
 
+/// Whether `basis` still stands: its Anchor, or every Grant and the Anchor of its lineage, has
+/// not ended (INV-5). A record that cannot be read does not stand.
+pub(crate) fn basis_live(view: &dyn View, basis: &ExerciseBasis) -> bool {
+    let grant = match basis {
+        ExerciseBasis::Anchor(a) => {
+            return read::<AnchorState>(view, kind::ANCHOR, a).is_some_and(|s| s.ended.is_none());
+        }
+        ExerciseBasis::Holding(h) => h.grant,
+        ExerciseBasis::Public(g) => *g,
+    };
+    lineage_hops(view, &grant)
+        .is_some_and(|(hops, _)| hops.iter().all(|h| h.status == HopStatus::Active))
+}
+
 /// Who delegated down a lineage and to whom its basis Grant may pass (§9.9.4, AGI-1).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Delegators {

@@ -933,7 +933,22 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             )
         } else {
             match open_family(&self.setup.sequencer, &self.setup.api_base, domain, &fresh).await? {
-                Some(entry) => (Some(entry), true),
+                Some(entry) => {
+                    // INV-5
+                    let basis = suiss_crypto::dcbor::encode(
+                        &access_kernel::meta::basis_value(&req.basis),
+                        suiss_crypto::dcbor::Limits::CEILING,
+                    )
+                    .map_err(|_| CoreError::Protocol("basis"))?;
+                    access_store::projections::keep_basis(
+                        &self.setup.sequencer,
+                        &id,
+                        &family,
+                        &basis,
+                    )
+                    .await?;
+                    (Some(entry), true)
+                }
                 None => (
                     read_family(&self.setup.app, &id, &family)
                         .await?

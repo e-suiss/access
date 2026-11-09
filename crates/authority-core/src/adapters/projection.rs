@@ -507,10 +507,38 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             .family(domain, family)
             .await?
             .is_none_or(|f| f.revoked_pos.is_some());
-        if revoked {
+        if revoked || !self.family_basis_live(domain, &family).await? {
             return Ok((false, None, head));
         }
         Ok((true, String::from_utf8(v.payload).ok(), head))
+    }
+
+    /// Whether the basis the family `family` was decided on still stands (INV-5, §9.9 table):
+    /// a family without a kept basis, or one whose basis cannot be read, does not.
+    ///
+    /// # Errors
+    /// [`CoreError`] as [`Domains::exercise`].
+    pub async fn family_basis_live(
+        &self,
+        domain: Digest,
+        family: &[u8; 16],
+    ) -> Result<bool, CoreError> {
+        let id = DomainId::from_bytes(domain.0);
+        let Some(bytes) = access_store::projections::basis_of(&self.setup.app, &id, family).await?
+        else {
+            return Ok(false);
+        };
+        let Ok(basis) = suiss_crypto::dcbor::decode(&bytes, suiss_crypto::dcbor::Limits::CEILING)
+            .map_err(|_| ())
+            .and_then(|v| access_kernel::meta::exercise_basis(&v).map_err(|_| ()))
+        else {
+            return Ok(false);
+        };
+        let mut guard = self.leading(domain).await?;
+        let Some(led) = guard.as_mut() else {
+            return Err(CoreError::Unavailable("leader"));
+        };
+        led.core.basis_live(&basis).await
     }
 
     /// The domain's latest committed position and its `recorded_at` (G51).

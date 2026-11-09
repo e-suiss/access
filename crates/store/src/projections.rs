@@ -86,6 +86,52 @@ pub async fn revoke_family(
     Ok(done.rows_affected() == 1)
 }
 
+/// Keeps the basis `basis` (deterministic CBOR of the `ExerciseBasis`) a family was decided
+/// on (sequencer role, INV-5): `true` the first time; a family keeps its first basis.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn keep_basis(
+    sequencer: &PgPool,
+    domain: &DomainId,
+    family: &[u8; 16],
+    basis: &[u8],
+) -> Result<bool, StoreError> {
+    let mut t = DomainTx::begin(sequencer, domain).await?;
+    let done = sqlx::query!(
+        "INSERT INTO access.projection_basis (domain_id, family_id, basis) VALUES ($1, $2, $3)
+         ON CONFLICT (domain_id, family_id) DO NOTHING",
+        domain.as_bytes().as_slice(),
+        family.as_slice(),
+        basis,
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    Ok(done.rows_affected() == 1)
+}
+
+/// The basis the family `family` was decided on (INV-5).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn basis_of(
+    pool: &PgPool,
+    domain: &DomainId,
+    family: &[u8; 16],
+) -> Result<Option<Vec<u8>>, StoreError> {
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let row = sqlx::query_scalar!(
+        "SELECT basis FROM access.projection_basis WHERE domain_id = $1 AND family_id = $2",
+        domain.as_bytes().as_slice(),
+        family.as_slice(),
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    Ok(row)
+}
+
 /// The family `family`.
 ///
 /// # Errors
