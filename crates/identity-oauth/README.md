@@ -107,7 +107,8 @@ nothing, so a Bundle Endpoint that stays down eventually stops every SVID of its
 
 A verified workload with a DPoP proof is the workload's first presentation: the realm issuer
 issues an `identity_binding_workload` Claim about the agent naming the workload URI and the DPoP
-key. That key can then open its own Instance of the agent with a self-signed `instance_create`.
+key. That key can then open its own Instance of the agent with a self-signed `instance_create`,
+sent to `POST /v1/workloads/instances` on the realm; a key without a live binding gets `403`.
 Authentication is all this gives: the Instance acts only through a Grant.
 
 ## Client interop notes (2026-11-09)

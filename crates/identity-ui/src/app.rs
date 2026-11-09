@@ -25,6 +25,7 @@ pub mod shell;
 pub mod signup;
 pub mod social;
 pub mod vault;
+pub mod workloads;
 
 pub use me::Devices;
 

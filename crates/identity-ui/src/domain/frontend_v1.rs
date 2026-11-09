@@ -61,6 +61,8 @@ pub enum Owner {
     L6,
     /// Stage 9 L1b: the hosted consent of clients the realm did not register.
     L1,
+    /// Stage 9 L4: workload Instances and runtime attestation.
+    L4,
 }
 
 /// One route.
@@ -742,6 +744,13 @@ pub const ROUTES: &[Route] = &[
         "/u/{party}/did.json",
         "didWebDocument",
         "The did:web document of a person or agent: verification keys and service endpoints; an identifier, never authority (OP-154 m.3 (aa)).",
+    ),
+    live(
+        Owner::L4,
+        Verb::Post,
+        "/v1/workloads/instances",
+        "openWorkloadInstance",
+        "A workload's key opens its own Instance of its agent with a self-signed instance_create; it stands only on the realm issuer's identity_binding_workload Claim about that key and still needs a Grant to act (OP-154 m.3 (d)).",
     ),
 ];
 

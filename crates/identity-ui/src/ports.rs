@@ -150,6 +150,31 @@ pub trait PartyKeys: Send + Sync {
     > + Send;
 }
 
+/// A workload's first Instance (OP-154 m.3 (d)): its key's self-signed `instance_create`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WorkloadOpen {
+    /// The realm's governing domain.
+    pub domain: Digest,
+    /// The agent Party.
+    pub party: access_kernel::model::Id,
+    /// The workload's key.
+    pub key: access_kernel::verify::cose::PublicKey,
+    /// The self-signed `instance_create`.
+    pub create: access_internal_api::instances::SelfSigned,
+    /// The identity plane as PEP.
+    pub pep: String,
+}
+
+/// The authority plane's workload Instances, reached only through `internal-api` (OP-62).
+pub trait WorkloadInstances: Send + Sync {
+    /// Commits `open` with no actor binding held: the actor comes from the realm issuer's
+    /// `identity_binding_workload` Claim that names the key.
+    fn open_workload(
+        &self,
+        open: WorkloadOpen,
+    ) -> impl Future<Output = Result<RegistrationVerdict, InstancesUnavailable>> + Send;
+}
+
 /// The authority plane behind the Approval Surface, reached only through `internal-api`
 /// (OP-62, §9.14.1 A, OP-150 L6).
 pub trait Approvals: Send + Sync {

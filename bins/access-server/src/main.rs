@@ -879,6 +879,7 @@ where
         + access_identity_ui::ports::Approvals
         + access_identity_vault::ports::Exercises
         + access_identity_ui::ports::PartyKeys
+        + access_identity_ui::ports::WorkloadInstances
         + Clone
         + 'static,
     Q: access_identity_ui::ports::ApprovalClaims + 'static,
@@ -911,6 +912,15 @@ where
         hosted.clone(),
         plane.clone(),
     );
+    // OP-154 m.3 (d)
+    let workloads = access_http::login::workloads_router(
+        RealmDiscovery::new(
+            PgDirectory::new(router.clone()),
+            SignerKeys::new(identity.signer.clone()),
+        ),
+        hosted.clone(),
+        plane.clone(),
+    );
     // IDP-31, OP-153 m.3 (l)
     let social = access_http::login::social_router(
         RealmDiscovery::new(
@@ -934,7 +944,7 @@ where
             pep: String::from(IDENTITY_PEP),
         },
     );
-    let me = me.merge(social).merge(vault).merge(did);
+    let me = me.merge(social).merge(vault).merge(did).merge(workloads);
     // OP-65, OP-67 m.1
     Ok(me.layer(axum::middleware::from_fn_with_state(
         RequestIds::new(Arc::new(admin::OsEntropy)),

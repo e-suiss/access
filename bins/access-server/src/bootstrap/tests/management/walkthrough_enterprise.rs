@@ -5,7 +5,6 @@
 //! ADP; and deprovisioning the agent withdraws its Claims, after which the same request fails
 //! closed at ingest.
 
-use access_internal_api::instances::RegistrationVerdict;
 use access_kernel::claim::body::Class;
 use access_kernel::claim::{ClaimState, member_prefix};
 use access_kernel::intent::{ContextRefs, IntentEnvelope};
@@ -97,10 +96,8 @@ async fn an_enterprise_workload_acts_on_a_rule_shaped_grant_until_it_is_deprovis
     let (status, body, _) = present(&c, &|| svid(&td.key, WORKLOAD), &runtime.key).await;
     assert_ne!(status, StatusCode::UNAUTHORIZED, "{body}");
     issued(&c, &runtime.key.public_key()).await;
-    let RegistrationVerdict::Registered(done) = open(&c, &runtime).await else {
-        panic!("not registered");
-    };
-    assert_eq!(done.party, AGENT);
+    let (_, done) = open(&c, &runtime).await.unwrap();
+    assert_eq!(done["party"], b64url_encode(&AGENT.0));
 
     // C15
     let action = sample_plan().sample.unwrap().action_ref();

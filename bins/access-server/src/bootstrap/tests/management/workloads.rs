@@ -9,8 +9,8 @@ use access_identity_account::domain::claims::workload_line;
 use access_identity_admin::ports::{AgentRegistration, WorkloadInstance};
 use access_internal_api::idp::{Submission, Verdict};
 use access_internal_api::instances::{
-    RegistrationVerdict, SelfSigned, bootstrap_basis, register_nonce, self_signed_intent,
-    terminate_intent, terminate_payload,
+    SelfSigned, bootstrap_basis, register_nonce, self_signed_intent, terminate_intent,
+    terminate_payload,
 };
 use access_kernel::meta::{ActorKind, Payload, Root};
 use access_kernel::model::{Id, Window};
@@ -262,31 +262,68 @@ pub(super) async fn issued(c: &Console, key: &PublicKey) {
     }
 }
 
-/// The key `by` opens its own Instance of AGENT (OP-154 m.3 (d)).
-pub(super) async fn open(c: &Console, by: &Browser) -> RegistrationVerdict {
-    let challenge = access_crypto::random::bytes::<32>().unwrap().to_vec();
+/// The key `by` opens its own Instance of AGENT through `POST /v1/workloads/instances`
+/// (OP-154 m.3 (d)): the Instance, or the refusal's status and code.
+pub(super) async fn open(c: &Console, by: &Browser) -> Result<(Id, serde_json::Value), (StatusCode, String)> {
+    let nonce = access_crypto::random::bytes::<32>().unwrap().to_vec();
     let validity = window();
-    let mut r = WorkloadInstance {
+    let r = WorkloadInstance {
         domain: c.domain,
         party: AGENT,
         key: by.key.public_key(),
         create: SelfSigned {
-            nonce: challenge.clone(),
+            nonce: nonce.clone(),
             validity,
             ais: Vec::new(),
         },
         pep: String::from(access_identity_ui::domain::frontend::IDENTITY_PEP),
     };
     let intent = self_signed_intent(&r.payload(), AGENT, validity).unwrap();
-    r.create.ais = b64url_decode(&by.ais(
+    let ais = by.ais(
         c.domain,
-        &challenge,
+        &nonce,
         intent_digest(&intent).unwrap(),
         Mode::Commit,
         bootstrap_basis(&c.domain),
-    ))
-    .unwrap();
-    c.w.plane.register_workload(r).await.unwrap()
+    );
+    let router = access_http::login::workloads_router(
+        access_identity_oauth::app::Discovery::new(
+            access_identity_oauth::adapters::PgDirectory::new(c.w.db.router.clone()),
+            access_identity_oauth::adapters::SignerKeys::new(c.w.identity_signer.clone()),
+        ),
+        super::super::vault::Lab::hosted(&c.w),
+        c.w.plane.clone(),
+    );
+    let rfc = access_identity_ui::domain::frontend::rfc3339;
+    let body = serde_json::json!({
+        "party": b64url_encode(&AGENT.0),
+        "key": b64url_encode(&access_internal_api::instances::cose_key(&by.key.public_key())),
+        "nonce": b64url_encode(&nonce),
+        "valid_from": rfc(validity.from),
+        "valid_until": rfc(validity.until),
+        "ais": ais,
+    });
+    let (resp, bytes) = send(
+        &router,
+        Request::post("/realms/acme/v1/workloads/instances")
+            .header(header::HOST, HOST)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap(),
+    )
+    .await;
+    let answer: serde_json::Value = serde_json::from_slice(&bytes).unwrap_or_default();
+    if resp.status() != StatusCode::CREATED {
+        return Err((
+            resp.status(),
+            answer["code"].as_str().unwrap_or_default().to_owned(),
+        ));
+    }
+    let instance = Id(<[u8; 16]>::try_from(
+        b64url_decode(answer["instance"].as_str().unwrap()).unwrap(),
+    )
+    .unwrap());
+    Ok((instance, answer))
 }
 
 // U20, OP-154 m.3 (d), (r), AG-30, L25, L21, §11.21.1, OP-153 m.3 (gg), Ek B 4133, 4183, 4200, 4325, 4326, 4489, 4546
@@ -319,16 +356,18 @@ async fn a_workload_presents_once_and_its_key_opens_an_instance_that_still_needs
 
     // OP-154 m.3 (d)
     let stranger = signer();
-    assert!(matches!(
-        open(&c, &stranger).await,
-        RegistrationVerdict::Refused { .. }
-    ));
-    let RegistrationVerdict::Registered(done) = open(&c, &runtime).await else {
-        panic!("not registered");
-    };
-    assert_eq!(done.party, AGENT);
+    assert_eq!(
+        open(&c, &stranger).await.unwrap_err(),
+        (StatusCode::FORBIDDEN, String::from("workload-not-bound"))
+    );
+    let (instance, answer) = open(&c, &runtime).await.unwrap();
+    assert_eq!(answer["party"], b64url_encode(&AGENT.0));
+    assert_eq!(
+        answer["kid"],
+        b64url_encode(&thumbprint(&runtime.key.public_key()))
+    );
     let live = c.w.plane.instances(c.domain, AGENT).await.unwrap();
-    assert_eq!(live, vec![done.instance]);
+    assert_eq!(live, vec![instance]);
 
     // §11.21.1, OP-154 m.3 (d)
     let root_instances = c.w.plane.instances(c.domain, c.root).await.unwrap();
@@ -397,10 +436,10 @@ async fn a_trust_domain_without_acceptance_gets_no_instance() {
     assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
     assert_eq!(body["error"], "invalid_client");
     assert!(!bound(&c, &runtime.key.public_key()).await);
-    assert!(matches!(
-        open(&c, &runtime).await,
-        RegistrationVerdict::Refused { .. }
-    ));
+    assert_eq!(
+        open(&c, &runtime).await.unwrap_err(),
+        (StatusCode::FORBIDDEN, String::from("workload-not-bound"))
+    );
     assert_eq!(
         c.w.plane.instances(c.domain, AGENT).await.unwrap(),
         Vec::<Id>::new()
@@ -538,10 +577,7 @@ async fn an_x509_svid_over_mutual_tls_presents_the_workload() {
         String::from_utf8_lossy(&body)
     );
     issued(&c, &runtime.key.public_key()).await;
-    assert!(matches!(
-        open(&c, &runtime).await,
-        RegistrationVerdict::Registered(_)
-    ));
+    assert!(open(&c, &runtime).await.is_ok());
     // RFC 8705 §2.1
     let (r, _) = send(&c.oauth, mtls("spiffe://acme.example/agent/mail/w2", nonce)).await;
     assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
