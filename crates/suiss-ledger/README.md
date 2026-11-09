@@ -13,7 +13,7 @@ The engine behind Suiss's append-only logs: a single writer that orders records 
 
 ```toml
 [dependencies]
-esuiss-ledger = "=0.3.2"
+esuiss-ledger = "=0.4.0"
 ```
 
 | Module | Contents |
