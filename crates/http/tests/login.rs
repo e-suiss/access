@@ -1153,6 +1153,29 @@ async fn a_planned_frontend_route_answers_not_yet_served_only_for_a_known_realm(
     assert_eq!(a.status, StatusCode::NOT_FOUND);
 }
 
+// EI-18, §11.4.5 #28, OP-154 m.3 (k), Ek B 4538
+#[tokio::test]
+async fn only_the_consent_screen_may_compile_the_kernel_and_no_page_is_framed() {
+    let e = env(59, "lg-approve", AuthPolicy::DEFAULT).await;
+    let mut b = e.browser("b");
+    let consent = b.get("/login?reason=approve&return_to=%2Fauthorize").await;
+    assert_eq!(consent.status, StatusCode::OK);
+    let csp = consent.headers["content-security-policy"].to_str().unwrap();
+    assert!(
+        csp.contains("script-src 'self' 'wasm-unsafe-eval';"),
+        "{csp}"
+    );
+    assert!(csp.contains("frame-ancestors 'none'"), "{csp}");
+    assert!(!csp.contains("unsafe-inline"), "{csp}");
+    assert!(consent.headers.get(header::SET_COOKIE).is_none());
+    for path in ["/login", "/login?reason=share"] {
+        let page = b.get(path).await;
+        let csp = page.headers["content-security-policy"].to_str().unwrap();
+        assert!(csp.contains("script-src 'self';"), "{path}: {csp}");
+        assert!(!csp.contains("wasm-unsafe-eval"), "{path}: {csp}");
+    }
+}
+
 // OP-146 m.12 (f), TN-18
 #[tokio::test]
 async fn the_login_app_carries_its_security_headers() {

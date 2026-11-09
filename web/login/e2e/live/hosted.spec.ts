@@ -32,6 +32,30 @@ test.describe("@live hosted pages", () => {
     }
   });
 
+  // §11.6, §11.4.5 #28, EI-18, OP-154 m.3 (k), Ek B 4538, 4541
+  test("@live the consent screen is never framed, may compile only the Kernel and needs a sign-in", async ({
+    page,
+  }) => {
+    const back = `${REALM}/authorize?client_id=${encodeURIComponent("https://app.example/c.json")}&request_uri=x`;
+    const r = await page.goto(
+      `${REALM}/login?reason=approve&return_to=${encodeURIComponent(back)}`,
+    );
+    expect(r?.status()).toBe(200);
+    const csp = r?.headers()["content-security-policy"] ?? "";
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval'");
+    expect(csp).not.toContain("unsafe-inline");
+    expect(r?.headers()["set-cookie"]).toBeUndefined();
+    await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
+    const preview = await page.request.post(`${REALM}/v1/login/approval/preview`, {
+      data: { return_to: back },
+      headers: { origin: new URL(page.url()).origin },
+    });
+    expect(preview.status()).toBe(401);
+    expect(preview.headers()["x-frame-options"]).toBe("DENY");
+    await clean(page);
+  });
+
   test("@live the sign-up page opens a registration flow and passes axe", async ({ page }) => {
     await page.goto(`${REALM}/login?reason=create`);
     await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();

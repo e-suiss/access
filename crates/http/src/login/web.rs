@@ -813,6 +813,23 @@ where
         .into_response()
 }
 
+/// Whether the page at `uri` has the person's device Instance sign with the Kernel (Wasm): the
+/// consent screen of a client the realm did not register (EI-18, OP-154 m.3 (k)).
+fn signs(uri: &Uri) -> bool {
+    uri.query()
+        .and_then(|q| access_identity_oauth::domain::request::Params::parse(q).ok())
+        .is_some_and(|p| p.get("reason") == Some("approve"))
+}
+
+/// `policy` with WebAssembly compilation allowed to this origin's scripts, and nothing else.
+fn with_wasm(policy: &str) -> String {
+    policy.replacen(
+        "script-src 'self';",
+        "script-src 'self' 'wasm-unsafe-eval';",
+        1,
+    )
+}
+
 /// The login app's page.
 pub(super) async fn page<D, K, KI, C, M>(
     State(s): St<D, K, KI, C, M>,
@@ -848,7 +865,12 @@ where
     let Some(mut page) = s.assets.as_ref().and_then(|a| a.page_at(&base)) else {
         return not_found();
     };
-    let (enforced, report_only) = theme.csp(&base);
+    let (mut enforced, mut report_only) = theme.csp(&base);
+    // EI-18, OP-154 m.3 (k)
+    if signs(&uri) {
+        enforced = with_wasm(&enforced);
+        report_only = report_only.map(|r| with_wasm(&r));
+    }
     let h = page.headers_mut();
     if let Ok(v) = HeaderValue::from_str(&enforced) {
         h.insert(header::CONTENT_SECURITY_POLICY, v);

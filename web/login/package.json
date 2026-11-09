@@ -16,6 +16,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@esuiss/access": "file:../../sdks/typescript",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

@@ -1,5 +1,6 @@
 // CMP-15.6, TN-133, X40: the realm's hosted pages under /login, drawn from the node contract and
 // the realm's Frontend API; the realm's own branding, no Suiss shell.
+import { Approval } from "./Approval.js";
 import { Branding } from "./Branding.js";
 import { Consent } from "./Consent.js";
 import { ErrorPage } from "./ErrorPage.js";
@@ -9,7 +10,8 @@ import { Recovery } from "./Recovery.js";
 import { SignIn } from "./SignIn.js";
 
 /** The page a location draws. */
-export type Page = "sign_in" | "sign_up" | "consent" | "recovery" | "invitation" | "link" | "error";
+export type Page =
+  "sign_in" | "sign_up" | "consent" | "approval" | "recovery" | "invitation" | "link" | "error";
 
 export function pageOf(path: string, search: string): Page {
   const rest = path.replace(/^(\/realms\/[a-z0-9-]+)?\/login/, "").replace(/\/+$/, "");
@@ -20,6 +22,8 @@ export function pageOf(path: string, search: string): Page {
   const reason = new URLSearchParams(search).get("reason");
   // OP-153 m.3 (z)
   if (reason === "share") return "consent";
+  // §11.6, OP-154 m.3 (k)
+  if (reason === "approve") return "approval";
   // §10.4.6, Ek B 4098
   if (reason === "create") return "sign_up";
   return "sign_in";
@@ -33,6 +37,8 @@ function Body({ page }: { readonly page: Page }) {
       return <SignIn kind="registration" />;
     case "consent":
       return <Consent />;
+    case "approval":
+      return <Approval />;
     case "recovery":
       return <Recovery />;
     case "invitation":
