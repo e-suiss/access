@@ -159,7 +159,7 @@ describe("Kernel vectors through the Wasm binding", () => {
         "decision" in c ? { ok: field(c, "decision") } : { error: field(c, "rejection") };
       expect(got, c.id).toEqual(want);
     }
-    expect(v.cases).toHaveLength(151);
+    expect(v.cases).toHaveLength(157);
   });
 
   it("cve-regressions.json", async () => {

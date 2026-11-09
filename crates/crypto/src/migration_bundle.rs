@@ -70,7 +70,7 @@ impl Sealer {
             .map_err(|_| BundleError::Key)?
             .as_ref()
             .to_vec();
-        let mut nonce = [0; NONCE_LEN];
+        let mut nonce = <[u8; NONCE_LEN]>::default();
         rand::fill(&mut nonce).map_err(|_| BundleError::Random)?;
         let key = agreement::agree_ephemeral(
             ephemeral,
@@ -185,7 +185,8 @@ mod tests {
         let r = RecipientKey::generate().unwrap();
         let public = r.public().unwrap();
         assert_eq!(public.len(), KEY_LEN);
-        let salt = [7; 32];
+        let mut salt = <[u8; 32]>::default();
+        rand::fill(&mut salt).unwrap();
         let s = Sealer::new(&public, &salt).unwrap();
         let (epk, nonce) = (s.epk().to_vec(), s.nonce());
         let ct = s.seal(b"aad", b"lines").unwrap();
