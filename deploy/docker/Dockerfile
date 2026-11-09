@@ -53,6 +53,7 @@ COPY web/console web/console
 COPY web/login web/login
 COPY web/account web/account
 COPY locales locales
+COPY conformance/catalog/protected-messages.toml conformance/catalog/protected-messages.toml
 RUN cd sdks/typescript && npm ci --ignore-scripts \
  && cd /src/web/components && npm ci --ignore-scripts \
  && cd /src/web/console && npm ci --ignore-scripts && npm run build \
