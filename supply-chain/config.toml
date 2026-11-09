@@ -925,8 +925,16 @@ criteria = "safe-to-deploy"
 version = "0.14.4"
 criteria = "safe-to-deploy"
 
+[[exemptions.psl-types]]
+version = "2.0.11"
+criteria = "safe-to-deploy"
+
 [[exemptions.psm]]
 version = "0.1.32"
+criteria = "safe-to-deploy"
+
+[[exemptions.publicsuffix]]
+version = "2.3.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.r-efi]]

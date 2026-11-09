@@ -17,6 +17,7 @@ access-identity-hooks = { workspace = true }
 access-identity-oauth = { workspace = true }
 access-identity-risk = { workspace = true }
 access-identity-signer = { path = "../identity-signer" }
+access-identity-webauthn = { workspace = true }
 access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 access-store = { workspace = true }

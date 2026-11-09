@@ -17,6 +17,7 @@ serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 rustls-webpki = { workspace = true, features = ["aws-lc-rs", "std"] }
 rustls-pki-types = { workspace = true, features = ["std"] }
+publicsuffix = { workspace = true, features = ["punycode"] }
 
 [dev-dependencies]
 access-crypto = { workspace = true, features = ["testing"] }

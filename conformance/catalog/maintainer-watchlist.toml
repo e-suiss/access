@@ -44,3 +44,9 @@ name = "concread"
 repository = "https://github.com/kanidm/concread"
 sources = ["T42", "RR-19"]
 reason = "Correlated maintainers with webauthn-rs and ldap3_proto (same team)"
+
+[[crate]]
+name = "publicsuffix"
+repository = "https://github.com/rushmorem/publicsuffix"
+sources = ["OP-89", "OP-153"]
+reason = "Single owner on crates.io; personal repository; Public Suffix List lookup for Related Origins labels (the list itself is pinned in the repository)"

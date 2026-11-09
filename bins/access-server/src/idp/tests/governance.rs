@@ -335,7 +335,7 @@ async fn a_rotation_and_a_policy_are_decided() {
     assert_eq!(actions, ["idp.realm.key_rotate", "idp.realm.key_policy"]);
 }
 
-// TN-18, IDP-5, OP-153 m.3 (u)
+// TN-18, IDP-5, OP-153 m.3 (u), m.22 (j), m.25 (f)
 #[tokio::test]
 async fn related_origins_hold_five_labels_under_verified_domains() {
     use access_identity_admin::domain::RelatedOrigins;
@@ -400,6 +400,60 @@ async fn related_origins_hold_five_labels_under_verified_domains() {
     assert_eq!(
         access_store::idp::related_origins(&mut t).await.unwrap(),
         Vec::<String>::new()
+    );
+    t.commit().await.unwrap();
+
+    // OP-153 m.25 (f)
+    let six_under_one_suffix = proposal(
+        (tenant, realm),
+        Change::RelatedOrigins(list(&[
+            "a.one.co.uk",
+            "b.two.co.uk",
+            "c.three.co.uk",
+            "d.four.co.uk",
+            "e.five.co.uk",
+            "f.six.co.uk",
+        ])),
+        5,
+        idp_anchor(d),
+        1,
+    );
+    assert!(matches!(
+        w.admin().prepare(&six_under_one_suffix).await,
+        Err(AdminError::Invalid(Invalid::RelatedOrigins))
+    ));
+    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let org = t.insert_org([0x0b; 16], "Acme", &[0x0b; 32]).await.unwrap();
+    for (n, domain) in ["acme.co.uk", "acme-brand.example"].into_iter().enumerate() {
+        let n = u8::try_from(n).unwrap();
+        let claim = t
+            .insert_domain_claim(org, domain, "dns_txt", &[n; 32])
+            .await
+            .unwrap();
+        assert!(
+            t.verify_domain(claim, 86_400, &[2; 32], &[3; 32])
+                .await
+                .unwrap()
+        );
+    }
+    t.commit().await.unwrap();
+    let brands = list(&[
+        "shop.acme.co.uk",
+        "www.acme.co.uk",
+        "shop.acme-brand.example",
+    ]);
+    let stored = proposal(
+        (tenant, realm),
+        Change::RelatedOrigins(brands.clone()),
+        6,
+        idp_anchor(d),
+        1,
+    );
+    written(&exercise(&w, &stored, ROOT_KEY).await.unwrap());
+    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    assert_eq!(
+        access_store::idp::related_origins(&mut t).await.unwrap(),
+        brands.origins.into_iter().collect::<Vec<_>>()
     );
     t.commit().await.unwrap();
 }

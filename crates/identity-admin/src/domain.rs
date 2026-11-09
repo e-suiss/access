@@ -1254,11 +1254,12 @@ pub const MAX_RELATED_LABELS: usize = 5;
 /// N5: most related origins.
 const MAX_RELATED_ORIGINS: usize = 16;
 
-/// N5: the registrable label of a host, the label before its last (OP-153 m.3 (u)):
-/// `shop.acme.example` is `acme`.
+/// N5: the registrable label of a host, the first label of its registrable domain by the
+/// embedded Public Suffix List (OP-153 m.3 (u), m.25 (f)): `shop.acme.example` and
+/// `www.acme.co.uk` are `acme`; a public suffix itself has none.
 #[must_use]
 pub fn registrable_label(host: &str) -> Option<&str> {
-    host.rsplit('.').nth(1)
+    access_identity_webauthn::domain::psl::Psl::label(host)
 }
 
 /// N5: a realm's Related Origins (`idp.realm.related_origins`, TN-18, IDP-5, OP-153 m.3 (u)):

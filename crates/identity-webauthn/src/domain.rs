@@ -13,6 +13,7 @@ pub mod mds;
 pub mod options;
 pub mod policy;
 pub mod prf;
+pub mod psl;
 pub mod rejection;
 pub mod rp;
 pub mod software;

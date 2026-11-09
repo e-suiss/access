@@ -153,26 +153,11 @@ impl RelyingParty {
     }
 }
 
-/// The registrable domain of a host (eTLD+1). Supplied by the caller; the default treats the
-/// last label as the public suffix.
+/// The registrable domain of a host (eTLD+1); [`super::psl::Psl`] answers it from the embedded
+/// Public Suffix List (OP-153 m.25 (f)).
 pub trait PublicSuffix {
     /// The registrable domain of `host`, if it has one.
     fn registrable<'h>(&self, host: &'h str) -> Option<&'h str>;
-}
-
-/// Treats the last label as the public suffix.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct LastLabel;
-
-impl PublicSuffix for LastLabel {
-    fn registrable<'h>(&self, host: &'h str) -> Option<&'h str> {
-        let mut dots = host.rmatch_indices('.');
-        let _ = dots.next()?;
-        match dots.next() {
-            Some((i, _)) => host.get(i.checked_add(1)?..),
-            None => Some(host),
-        }
-    }
 }
 
 /// Why a Related Origin Requests document cannot be built.
@@ -261,8 +246,11 @@ mod tests {
     // TN-18
     #[test]
     fn related_origins_document_caps_labels() {
-        let doc =
-            related_origins_document(&rp(&["https://acme-shop.example"]), &LastLabel).unwrap();
+        let doc = related_origins_document(
+            &rp(&["https://acme-shop.example"]),
+            &crate::domain::psl::Psl,
+        )
+        .unwrap();
         assert_eq!(
             doc,
             r#"{"origins":["https://acme.example","https://acme-shop.example"]}"#
@@ -274,7 +262,7 @@ mod tests {
             "https://www.c.example",
             "https://d.example",
         ]);
-        assert!(related_origins_document(&five, &LastLabel).is_ok());
+        assert!(related_origins_document(&five, &crate::domain::psl::Psl).is_ok());
         let six = rp(&[
             "https://a.example",
             "https://b.example",
@@ -283,11 +271,11 @@ mod tests {
             "https://e.example",
         ]);
         assert_eq!(
-            related_origins_document(&six, &LastLabel),
+            related_origins_document(&six, &crate::domain::psl::Psl),
             Err(RelatedOriginsError::TooManyLabels)
         );
         assert_eq!(
-            related_origins_document(&rp(&["http://x.localhost"]), &LastLabel),
+            related_origins_document(&rp(&["http://x.localhost"]), &crate::domain::psl::Psl),
             Err(RelatedOriginsError::Origin)
         );
     }

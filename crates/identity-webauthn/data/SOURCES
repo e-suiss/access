@@ -1,0 +1,1 @@
+publicsuffix/list 7a21dc3491d43db036124fdd6a3a77d1cc44ad8a public_suffix_list.dat (VERSION 2026-11-08_13-21-08_UTC, MPL-2.0), fetched from https://publicsuffix.org/list/public_suffix_list.dat; embedded unmodified by src/domain/psl.rs, checked against SHA256SUMS by its test

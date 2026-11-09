@@ -89,6 +89,8 @@ httparse = { version = "1.10.1", default-features = false }
 rustls-webpki = { version = "0.103.16", default-features = false }
 rcgen = { version = "0.14.7", default-features = false }
 tower = { version = "0.5.3", default-features = false }
+# OP-153 m.25 (f), TN-18: registrable domains from the embedded Public Suffix List
+publicsuffix = { version = "2.3.0", default-features = false }
 # OP-153 m.3 (v): the experience SSE stream
 futures-util = { version = "0.3.34", default-features = false }
 tower-http = { version = "0.7.1", default-features = false }

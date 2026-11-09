@@ -46,7 +46,8 @@ use access_identity_session::domain::assurance::{Aal, MethodClass};
 use access_identity_session::domain::requirement::MfaPolicy;
 use access_identity_session::domain::session::{clear_cookie, set_cookie};
 use access_identity_session::ports::Clock;
-use access_identity_webauthn::domain::rp::{LastLabel, related_origins_document};
+use access_identity_webauthn::domain::psl::Psl;
+use access_identity_webauthn::domain::rp::related_origins_document;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_store::Pool;
 use serde_json::{Value, json};
@@ -504,7 +505,7 @@ where
     /// The reply to send instead: no kit, or a list browsers would cut.
     pub async fn related_origins(&self, entry: &RealmEntry) -> Result<String, Reply> {
         let kit = self.kit(entry).await?;
-        related_origins_document(&kit.rp, &LastLabel)
+        related_origins_document(&kit.rp, &Psl)
             .map_err(|_| Reply::problem(SessionError::Corrupt.problem()))
     }
 
