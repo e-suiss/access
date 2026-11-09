@@ -51,6 +51,10 @@ pub const STATUS_CLAIM: &str = "status";
 /// Offline Exercise Report names its contract by (L2-RPT-1).
 pub const CONTRACT_LABEL: &str = "access/validity/v1";
 
+/// The claim that names the digest of a token's `ValidityContract` (OP-150 m.7 (f)); a JWT
+/// authority token without it is refused by every resource server (OP-150 m.9 (c)).
+pub(crate) const CONTRACT_CLAIM: &str = "access_contract";
+
 /// What the token carries (§9.9.1).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TokenAuthority {
@@ -350,6 +354,16 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         claims.push((
             String::from(FAMILY_CLAIM),
             Json::Str(b64url_encode(&family)),
+        ));
+        // OP-150 m.7 (f), m.9 (c)
+        let Ok(contract) = pap.validity.to_bytes() else {
+            return Ok(Err("projection-authority"));
+        };
+        claims.push((
+            String::from(CONTRACT_CLAIM),
+            Json::Str(access_kernel::verify::projection::digest_text(&Digest(
+                suiss_crypto::digest::context_digest(CONTRACT_LABEL, &contract).0,
+            ))),
         ));
         // INV-33, S-1, §5.17
         let roles = led
