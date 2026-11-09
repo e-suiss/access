@@ -65,7 +65,7 @@ test("every row says whose record it is, when it was read, and in whose name", a
   }
   await expect(page.getByTestId("your-authority")).toContainText("as yourself");
   await expect(shared.locator('[data-grant="g-lapsed"]')).toContainText(
-    "Needs refresh — not removed",
+    "Not current — may have ended",
   );
   await expect(shared.locator('[data-grant="g-not-mine"]')).toContainText(
     "Who can: the person who gave it",
