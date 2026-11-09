@@ -1151,8 +1151,9 @@ impl TenantTx {
         let (tenant, realm) = self.org_scope()?;
         let id = sqlx::query_scalar!(
             r#"INSERT INTO access.parent_consents
-                 (tenant_id, realm_id, guardianship_id, purpose_digest, expires_at)
-               VALUES ($1, $2, $3, $4, clock_timestamp() + make_interval(secs => $5))
+                 (tenant_id, realm_id, guardianship_id, purpose_digest, requested_at, expires_at)
+               SELECT $1, $2, $3, $4, now.at, now.at + make_interval(secs => $5)
+                 FROM (SELECT clock_timestamp() AS at) AS now
                RETURNING consent_id"#,
             tenant,
             realm,

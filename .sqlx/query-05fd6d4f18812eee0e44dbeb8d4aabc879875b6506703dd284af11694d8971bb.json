@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO access.parent_consents\n                 (tenant_id, realm_id, guardianship_id, purpose_digest, expires_at)\n               VALUES ($1, $2, $3, $4, clock_timestamp() + make_interval(secs => $5))\n               RETURNING consent_id",
+  "query": "INSERT INTO access.parent_consents\n                 (tenant_id, realm_id, guardianship_id, purpose_digest, requested_at, expires_at)\n               SELECT $1, $2, $3, $4, now.at, now.at + make_interval(secs => $5)\n                 FROM (SELECT clock_timestamp() AS at) AS now\n               RETURNING consent_id",
   "describe": {
     "columns": [
       {
@@ -28,5 +28,5 @@
       false
     ]
   },
-  "hash": "e41406d22f27b958e0a534c4e428fe9d10f25b27c999711f05e16b9200904aa6"
+  "hash": "05fd6d4f18812eee0e44dbeb8d4aabc879875b6506703dd284af11694d8971bb"
 }

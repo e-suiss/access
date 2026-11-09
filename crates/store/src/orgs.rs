@@ -536,9 +536,10 @@ impl TenantTx {
         let id = sqlx::query_scalar!(
             r#"INSERT INTO access.org_invitations
                  (tenant_id, realm_id, org_id, token_hash, code_hash, invitee_index, invitee_domain,
-                  inviter_party, role_name, role_version, created_exercise, expires_at)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-                       clock_timestamp() + make_interval(secs => $12))
+                  inviter_party, role_name, role_version, created_exercise, created_at, expires_at)
+               SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+                      now.at, now.at + make_interval(secs => $12)
+                 FROM (SELECT clock_timestamp() AS at) AS now
                RETURNING invitation_id"#,
             tenant,
             realm,
