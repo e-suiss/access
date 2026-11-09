@@ -79,6 +79,37 @@ and its `jti` is used once; without the replay store nothing is accepted. The as
 grants anything: without the caller's Exercise there is no token, and without a Grant behind it
 the answer is `invalid_grant`. An `email` in an assertion is never kept.
 
+## Workload clients (SPIFFE)
+
+A workload authenticates with its SPIFFE credential instead of a secret
+(`draft-ietf-oauth-spiffe-client-auth-02`, `spiffe_jwt` and `spiffe_x509`):
+
+- a **JWT-SVID** as `client_assertion` with `client_assertion_type`
+  `urn:ietf:params:oauth:client-assertion-type:jwt-spiffe`. Its `sub` is the SPIFFE ID, `aud` is
+  the realm's issuer and nothing else, `exp` is at most five minutes ahead, and the signature is
+  ES256 under a `jwt-svid` key of the trust domain's bundle. Each JWT-SVID is used once;
+- an **X.509-SVID** over mutual TLS, with `client_id` the SPIFFE ID in the certificate's URI SAN.
+  The chain must verify to the bundle's `x509-svid` roots; the leaf is not a CA and has
+  `digitalSignature`. Such a certificate is never a PEP certificate.
+
+The realm registers a workload client with `idp.client.register`: its SPIFFE ID or a
+whole-segment prefix written `spiffe://acme.example/agent/finance/*`, the trust domain's Bundle
+Endpoint and the agent the workloads act as. A wildcard anywhere else selects nothing. The
+trust domain itself must also be accepted: the governing domain's root establishes an
+actor-binding Acceptance of the trust domain's issuer id. A trust domain is never an authority
+domain.
+
+The Bundle Endpoint is fetched through the same SSRF-guarded outbound client as CIMD documents
+(port 443, public addresses, no redirects, 5 s, `Suiss-Access-SPIFFE/1`). The bundle is kept
+per trust domain and refreshed after its `spiffe_refresh_hint`, kept within 5 minutes and
+24 hours; its sequence never goes back. A bundle older than twice its refresh interval verifies
+nothing, so a Bundle Endpoint that stays down eventually stops every SVID of its trust domain.
+
+A verified workload with a DPoP proof is the workload's first presentation: the realm issuer
+issues an `identity_binding_workload` Claim about the agent naming the workload URI and the DPoP
+key. That key can then open its own Instance of the agent with a self-signed `instance_create`.
+Authentication is all this gives: the Instance acts only through a Grant.
+
 ## Client interop notes (2026-11-09)
 
 These notes describe what two widely used clients do today. They are not part of the profile;
