@@ -264,7 +264,10 @@ pub(super) async fn issued(c: &Console, key: &PublicKey) {
 
 /// The key `by` opens its own Instance of AGENT through `POST /v1/workloads/instances`
 /// (OP-154 m.3 (d)): the Instance, or the refusal's status and code.
-pub(super) async fn open(c: &Console, by: &Browser) -> Result<(Id, serde_json::Value), (StatusCode, String)> {
+pub(super) async fn open(
+    c: &Console,
+    by: &Browser,
+) -> Result<(Id, serde_json::Value), (StatusCode, String)> {
     let nonce = access_crypto::random::bytes::<32>().unwrap().to_vec();
     let validity = window();
     let r = WorkloadInstance {

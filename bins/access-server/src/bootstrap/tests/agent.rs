@@ -182,7 +182,13 @@ pub(super) async fn enrol_for(
     operator: Id,
     subject: Option<[u8; 16]>,
 ) -> (Runtime, Id) {
-    enrol_for_with(w, domain, (operator, subject), SoftSigner::generate_p256().unwrap().0).await
+    enrol_for_with(
+        w,
+        domain,
+        (operator, subject),
+        SoftSigner::generate_p256().unwrap().0,
+    )
+    .await
 }
 
 /// [`enrol_for`] with `runtime` as the Instance's key.
