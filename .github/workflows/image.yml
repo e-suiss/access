@@ -354,19 +354,20 @@ jobs:
           ACCESS_APPROVAL="$MCP_ISSUER/approve" \
           ACCESS_CA="$dir/ca.crt" MCP_CERT="$dir/pep.crt" MCP_KEY="$dir/pep.key" \
             nohup target/debug/examples/mcp_reference > "$dir/rs.log" 2>&1 &
+          ready=0
           for _ in $(seq 1 30); do
             if curl -fsS --max-time 5 -o /dev/null \
               "http://127.0.0.1:$MCP_PORT/.well-known/oauth-protected-resource/mcp"; then
-              exit 0
+              ready=1
+              break
             fi
             sleep 1
           done
-          cat "$dir/rs.log"
-          exit 1
-      # RS-M1, RS-M3, RS-M15, §11.5.2, §11.5.6 #20, #25
-      - name: Reference MCP resource server
-        run: |
-          dir="$RUNNER_TEMP/mcp"
+          if [ "$ready" != 1 ]; then
+            cat "$dir/rs.log"
+            exit 1
+          fi
+          # RS-M1, RS-M3, RS-M15, §11.5.2, §11.5.6 #20, #25
           base="http://127.0.0.1:$MCP_PORT"
           rpc='{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
           curl -fsS --max-time 5 -o "$dir/prm.json" "$base/.well-known/oauth-protected-resource/mcp"
