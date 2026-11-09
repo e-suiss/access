@@ -3,6 +3,7 @@
 
 pub mod accounts;
 pub mod admin_jobs;
+pub mod agents;
 pub mod analytics;
 pub mod api_idempotency;
 pub mod approvals;

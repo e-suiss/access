@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.agent_sponsors\n                 (tenant_id, realm_id, agent, subject_id, assigned_exercise)\n               VALUES ($1, $2, $3, $4, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e8f5a7c7f89896f1ea6a6d7dfdf9e969691729433994b5c2b5697156baece170"
+}

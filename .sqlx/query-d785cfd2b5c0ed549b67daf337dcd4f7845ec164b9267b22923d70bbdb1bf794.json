@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.agent_sponsors\n               SET ended_at = clock_timestamp(), ended_by = $5, ended_exercise = $6\n               WHERE tenant_id = $1 AND realm_id = $2 AND agent = $3 AND subject_id = $4\n                 AND ended_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Uuid",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d785cfd2b5c0ed549b67daf337dcd4f7845ec164b9267b22923d70bbdb1bf794"
+}

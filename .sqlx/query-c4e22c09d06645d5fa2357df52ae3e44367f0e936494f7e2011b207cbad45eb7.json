@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT agent FROM access.agent_sponsors\n               WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND ended_at IS NULL\n               ORDER BY agent",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "agent",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.agent_sponsors",
+            "name": "agent"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c4e22c09d06645d5fa2357df52ae3e44367f0e936494f7e2011b207cbad45eb7"
+}

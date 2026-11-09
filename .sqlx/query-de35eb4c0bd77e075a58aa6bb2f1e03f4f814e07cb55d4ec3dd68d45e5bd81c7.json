@@ -1,0 +1,116 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT party, operator, agent_kind, display_name, description, status,\n                      registered_exercise,\n                      (extract(epoch FROM created_at) * 1000)::bigint AS \"created_ms!\",\n                      (extract(epoch FROM status_at) * 1000)::bigint AS \"status_ms!\"\n               FROM access.agents\n               WHERE tenant_id = $1 AND realm_id = $2 AND party = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "party",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.agents",
+            "name": "party"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "operator",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.agents",
+            "name": "operator"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "agent_kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.agents",
+            "name": "agent_kind"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "display_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.agents",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.agents",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.agents",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "registered_exercise",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.agents",
+            "name": "registered_exercise"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "created_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "status_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "de35eb4c0bd77e075a58aa6bb2f1e03f4f814e07cb55d4ec3dd68d45e5bd81c7"
+}

@@ -1,0 +1,80 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT subject_id, assigned_exercise,\n                      (extract(epoch FROM assigned_at) * 1000)::bigint AS \"assigned_ms!\",\n                      (extract(epoch FROM ended_at) * 1000)::bigint AS ended_ms, ended_by,\n                      ended_exercise\n               FROM access.agent_sponsors\n               WHERE tenant_id = $1 AND realm_id = $2 AND agent = $3\n               ORDER BY assigned_at, sponsorship_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.agent_sponsors",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "assigned_exercise",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.agent_sponsors",
+            "name": "assigned_exercise"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "assigned_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "ended_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "ended_by",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.agent_sponsors",
+            "name": "ended_by"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "ended_exercise",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.agent_sponsors",
+            "name": "ended_exercise"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      true,
+      true
+    ]
+  },
+  "hash": "f101465919c4b1618723a7f906540aae72b1640d59d461888a31a379a3664e11"
+}
