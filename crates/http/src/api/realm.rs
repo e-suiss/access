@@ -361,6 +361,24 @@ pub const ROWS: &[Route] = &[
     ),
     write(
         Verb::Put,
+        "/admin/v1/realms/{slug}/settings/csp-mode",
+        "putCspMode",
+        "Sets the hosted pages' CSP mode: `enforce`, or `report_only`, which loosens the page and is a higher tier (OP-153 m.22 (g)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/related-origins",
+        "putRelatedOrigins",
+        "Sets the realm's Related Origins: https origins under the organizations' verified domains, at most five registrable labels with the RP ID's (TN-18).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/locale-overrides",
+        "putLocaleOverrides",
+        "Sets the realm's texts for the hosted pages by locale and message key: plain text, known keys only, never a protected one (X35).",
+    ),
+    write(
+        Verb::Put,
         "/admin/v1/realms/{slug}/settings/rp-id",
         "putRpId",
         "Pins or changes the WebAuthn RP ID: irreversible, reserved.",
@@ -599,11 +617,14 @@ const UPSTREAM_PATCH: &[&str] = &[
 ];
 const SOCIAL_PATCH: &[&str] = &["client_id", "client_secret_ref"];
 const SIGNIN_PATCH: &[&str] = &[
+    "dbsc",
     "methods",
     "required_fields",
     "mfa_required",
     "domain_allow",
     "domain_deny",
+    "enumeration",
+    "email_keep_days",
 ];
 const SESSION_PATCH: &[&str] = &["absolute_ms", "idle_ms", "binding"];
 const CIMD_PATCH: &[&str] = &["enabled", "domains"];
@@ -720,6 +741,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "putBranding" => (Settings, put("branding")),
         "patchBranding" => (Settings, patch(BRANDING_PATCH, Some("branding"))),
         "putRpId" => (Settings, put("rp_id")),
+        "putCspMode" => (Settings, put("csp_mode")),
+        "putRelatedOrigins" => (Settings, put("related_origins")),
+        "putLocaleOverrides" => (Settings, put("locale_overrides")),
         "putMapper" => (Settings, put("mappers")),
         "putJoseAlg" => (Settings, put("jose_alg")),
         "putCimdPolicy" => (Settings, put("cimd")),

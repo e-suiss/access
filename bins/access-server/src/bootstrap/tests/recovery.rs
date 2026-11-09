@@ -42,7 +42,7 @@ const WHO: Actor<'static> = Actor {
     correlation: "test",
 };
 
-const PW: &str = "correct horse battery staple";
+pub(super) const PW: &str = "correct horse battery staple";
 
 /// One message the realm would hand Relay.
 #[derive(Clone, Debug)]
@@ -280,6 +280,7 @@ pub(super) struct Got {
     pub(super) status: StatusCode,
     pub(super) retry_after: Option<u64>,
     pub(super) json: serde_json::Value,
+    pub(super) headers: axum::http::HeaderMap,
 }
 
 impl Page {
@@ -332,6 +333,7 @@ impl Page {
                 .and_then(|v| v.to_str().ok())
                 .and_then(|v| v.parse().ok()),
             json: serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+            headers: r.headers().clone(),
         }
     }
 }

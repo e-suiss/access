@@ -133,6 +133,12 @@ pub enum Op {
     ReleaseOrganizationDomain,
     /// `draftOrganizationConnection`: `idp.org.sso_draft` (TN-120).
     DraftOrganizationConnection,
+    /// `putCspMode`: `idp.realm.csp_mode`, or `csp_mode_loosen` when it loosens (OP-153 m.22 (g)).
+    PutCspMode,
+    /// `putRelatedOrigins`: `idp.realm.related_origins` (TN-18, OP-153 m.22 (k)).
+    PutRelatedOrigins,
+    /// `putLocaleOverrides`: `idp.realm.locale_overrides` (X35, OP-153 m.22 (k)).
+    PutLocaleOverrides,
 }
 
 impl Op {
@@ -184,6 +190,9 @@ impl Op {
             "claimOrganizationDomain" => Self::ClaimOrganizationDomain,
             "releaseOrganizationDomain" => Self::ReleaseOrganizationDomain,
             "draftOrganizationConnection" => Self::DraftOrganizationConnection,
+            "putCspMode" => Self::PutCspMode,
+            "putRelatedOrigins" => Self::PutRelatedOrigins,
+            "putLocaleOverrides" => Self::PutLocaleOverrides,
             _ => return None,
         })
     }
@@ -726,6 +735,43 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     .map(String::from)
                     .collect(),
             })
+        }
+        // OP-153 m.22 (g), m.25 (b)
+        Op::PutCspMode => {
+            only(m, &["csp_mode"])?;
+            Change::CspMode {
+                mode: crate::domain::accounts::CspMode::parse(text(m, "csp_mode")?)
+                    .ok_or(Invalid::Branding)?,
+                loosens: false,
+            }
+        }
+        // TN-18, OP-153 m.22 (k), m.25 (b)
+        Op::PutRelatedOrigins => {
+            only(m, &["origins"])?;
+            Change::RelatedOrigins(crate::domain::RelatedOrigins {
+                origins: texts(m, "origins")?.into_iter().map(String::from).collect(),
+            })
+        }
+        // X35, OP-153 m.22 (k), m.25 (b)
+        Op::PutLocaleOverrides => {
+            only(m, &["overrides"])?;
+            let mut by_locale = std::collections::BTreeMap::new();
+            match m.get("overrides") {
+                None | Some(Json::Null) => {}
+                Some(Json::Object(locales)) => {
+                    for (locale, keys) in locales {
+                        let keys = keys.as_object().ok_or(Invalid::LocaleOverrides)?;
+                        let mut by_key = std::collections::BTreeMap::new();
+                        for (k, v) in keys {
+                            let v = v.as_str().ok_or(Invalid::LocaleOverrides)?;
+                            by_key.insert(k.clone(), String::from(v));
+                        }
+                        by_locale.insert(locale.to_ascii_lowercase(), by_key);
+                    }
+                }
+                Some(_) => return Err(Invalid::LocaleOverrides),
+            }
+            Change::LocaleOverrides(crate::domain::LocaleOverrides { texts: by_locale })
         }
         Op::PutRpId => {
             only(m, &["rp_id", "acknowledge_passkey_loss"])?;
@@ -1654,6 +1700,15 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 let p = resources::policies(t).await?;
                 let branding = idp::branding(t).await?;
                 let mappers = idp::mappers(t).await?;
+                // OP-153 m.22 (g), (k), m.25 (b)
+                let csp_mode = crate::domain::accounts::CspMode::of(
+                    branding
+                        .as_deref()
+                        .and_then(|b| dcbor::decode(b, Limits::CEILING).ok())
+                        .as_ref(),
+                );
+                let related = idp::related_origins(t).await?;
+                let overrides = idp::locale_overrides(t).await?;
                 let protection = access_identity_risk::app::settings::mode(t)
                     .await
                     .map_err(|_| AdminError::Unavailable(String::from("risk")))?;
@@ -1673,6 +1728,9 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     "mappers": mappers.iter().map(|(c, s)| json!({"claim": c, "source": s}))
                         .collect::<Vec<_>>(),
                     "protection_mode": protection_view(&protection),
+                    "csp_mode": csp_mode.name(),
+                    "related_origins": related,
+                    "locale_overrides": stored(overrides.as_deref(), &Value::Map(Vec::new())),
                     // TN-124, OP-151 m.17 (d)
                     "managed": [],
                 });
