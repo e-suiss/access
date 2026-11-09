@@ -19,8 +19,9 @@ pub use access_identity_oauth::ports::oauth::TENANT_PREFIX;
 /// Prefix of the identity outbox kinds this crate reads.
 pub const OUTBOX_PREFIX: &str = "event.";
 
-/// Every event name, authority events first; the identity events of OP-151 m.3 (i) last.
-pub const NAMES: [&str; 29] = [
+/// Every event name, authority events first; the identity events of OP-151 m.3 (i) last, then
+/// the agent events of OP-154 (appended).
+pub const NAMES: [&str; 30] = [
     "authority-revoked",
     "authority-narrowed",
     "authority-expired",
@@ -50,6 +51,16 @@ pub const NAMES: [&str; 29] = [
     "document.accepted",
     "agent.suspended",
     "login.failed_surge",
+    "agent.sponsor_assigned",
+];
+
+/// The Access semantic events that close CAEP's agent gap: an agent is an Instance, so these
+/// four need no further type (§9.16.2 k.5, P59, OP-154 m.2 L0).
+pub const AGENT_EVENTS: [&str; 4] = [
+    "instance-terminated",
+    "mandate-ended",
+    "authority-narrowed",
+    "projection-invalidated",
 ];
 
 /// The type URN of `name`.
@@ -58,11 +69,12 @@ pub fn urn(name: &str) -> String {
     format!("{URN_PREFIX}{name}")
 }
 
-/// Catalog events nothing produces yet: agent suspension arrives with agent connections. A
-/// subscription cannot name it until a producer exists (TN-136, §12.4.2). Preferences and
-/// document acceptances are produced by the preference center (IDP-37), organizations and their
-/// memberships by `idp.org.*` and invitation acceptance (OP-153 m.4).
-pub const UNPRODUCED: [&str; 1] = ["agent.suspended"];
+/// Catalog events nothing produces yet: agent suspension and sponsor assignment arrive with the
+/// agent registry (OP-154 m.3 (e)). A subscription cannot name them until a producer exists
+/// (TN-136, §12.4.2). Preferences and document acceptances are produced by the preference
+/// center (IDP-37), organizations and their memberships by `idp.org.*` and invitation
+/// acceptance (OP-153 m.4).
+pub const UNPRODUCED: [&str; 2] = ["agent.suspended", "agent.sponsor_assigned"];
 
 /// Whether a webhook or stream may subscribe to `name`: a catalog event with a producer.
 #[must_use]
@@ -116,10 +128,12 @@ pub enum IdentityKind {
     AgentSuspended,
     /// `login.failed_surge`; its producer arrives with the risk signals.
     LoginFailedSurge,
+    /// `agent.sponsor_assigned`; its producer arrives with the agent registry (OP-154 m.3 (e)).
+    AgentSponsorAssigned,
 }
 
 impl IdentityKind {
-    const ALL: [Self; 14] = [
+    const ALL: [Self; 15] = [
         Self::TenantCreated,
         Self::OrganizationCreated,
         Self::OrganizationUpdated,
@@ -134,6 +148,7 @@ impl IdentityKind {
         Self::DocumentAccepted,
         Self::AgentSuspended,
         Self::LoginFailedSurge,
+        Self::AgentSponsorAssigned,
     ];
 
     /// The event name.
@@ -155,6 +170,7 @@ impl IdentityKind {
             Self::DocumentAccepted => "document.accepted",
             Self::AgentSuspended => "agent.suspended",
             Self::LoginFailedSurge => "login.failed_surge",
+            Self::AgentSponsorAssigned => "agent.sponsor_assigned",
         }
     }
 
@@ -177,6 +193,7 @@ impl IdentityKind {
             Self::DocumentAccepted => "event.document.accepted",
             Self::AgentSuspended => "event.agent.suspended",
             Self::LoginFailedSurge => "event.login.failed_surge",
+            Self::AgentSponsorAssigned => "event.agent.sponsor_assigned",
         }
     }
 
@@ -375,6 +392,28 @@ impl IdentityEvent {
             kind: IdentityKind::AgentSuspended,
             id,
             payload: json!({"realm": uuid(realm), "agent": b64url_encode(agent), "at": at}),
+        }
+    }
+
+    /// `agent.sponsor_assigned`: the person Party `sponsor` became a sponsor of the agent Party
+    /// `agent` (OP-154 m.3 (e), SI-21).
+    #[must_use]
+    pub fn agent_sponsor_assigned(
+        id: [u8; 32],
+        realm: &[u8; 16],
+        agent: &[u8; 16],
+        sponsor: &[u8; 16],
+        at: u64,
+    ) -> Self {
+        Self {
+            kind: IdentityKind::AgentSponsorAssigned,
+            id,
+            payload: json!({
+                "realm": uuid(realm),
+                "agent": b64url_encode(agent),
+                "sponsor": b64url_encode(sponsor),
+                "at": at,
+            }),
         }
     }
 

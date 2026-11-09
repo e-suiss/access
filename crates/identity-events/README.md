@@ -147,12 +147,13 @@ profile is used by Relay, so one verifier accepts both products. Test vectors:
 | `preference.changed` | an account's preferences change (topics only, never values) |
 | `document.accepted` | an account accepts a version of a document |
 | `agent.suspended` | an agent is suspended |
+| `agent.sponsor_assigned` | a person becomes an agent's sponsor |
 | `login.failed_surge` | failed sign-ins in a realm rise above the surge threshold |
 
 The tenant, organization and API client events of the catalogue (`tenant.created`,
 `organization.*`, `api_client.*`) and the authority events reach subscribers through streams.
 
 `organization.created` and `membership.*` are raised by organization creation, membership
-removal and invitation acceptance. `agent.suspended` has a schema but no producer yet; a webhook
-or stream that names it is refused (`invalid-webhook-events`, `unsupported-event`) until the
-domain that raises it exists.
+removal and invitation acceptance. `agent.suspended` and `agent.sponsor_assigned` have a schema
+but no producer yet; a webhook or stream that names them is refused (`invalid-webhook-events`,
+`unsupported-event`) until the agent registry raises them.

@@ -181,6 +181,7 @@ fn identity_events() -> Vec<IdentityEvent> {
         IdentityEvent::preference_changed([15; 32], &realm, ACCOUNT, &["marketing.email"], 5),
         IdentityEvent::document_accepted([16; 32], &realm, ACCOUNT, "terms", "2026-11-01", 5),
         IdentityEvent::agent_suspended([17; 32], &realm, &[5; 16], 5),
+        IdentityEvent::agent_sponsor_assigned([19; 32], &realm, &[5; 16], &[6; 16], 5),
         IdentityEvent::login_failed_surge([18; 32], &realm, 250, 300_000, 5),
     ];
     for (i, (from, to)) in [

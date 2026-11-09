@@ -57,8 +57,8 @@ pub struct Row {
     pub approximate: bool,
 }
 
-/// The table of §12.2.2, row by row.
-pub const TABLE: [Row; 9] = [
+/// The table of §12.2.2, row by row; the agent rows of §9.16.2 k.5 last (OP-154 m.2 L0).
+pub const TABLE: [Row; 11] = [
     Row {
         source: Source::Access("instance-terminated"),
         standard: Some(SignalKind::SessionRevoked),
@@ -102,6 +102,16 @@ pub const TABLE: [Row; 9] = [
     Row {
         source: Source::Identity(SignalKind::AccountPurged),
         standard: Some(SignalKind::AccountPurged),
+        approximate: false,
+    },
+    Row {
+        source: Source::Access("mandate-ended"),
+        standard: None,
+        approximate: false,
+    },
+    Row {
+        source: Source::Access("projection-invalidated"),
+        standard: None,
         approximate: false,
     },
 ];
@@ -234,6 +244,8 @@ mod tests {
                 Source::Identity(SignalKind::AccountPurged),
                 Some(SignalKind::AccountPurged),
             ),
+            (Source::Access("mandate-ended"), None),
+            (Source::Access("projection-invalidated"), None),
         ];
         assert_eq!(TABLE.len(), expect.len());
         for (source, standard) in expect {
@@ -244,6 +256,24 @@ mod tests {
         for k in [SignalKind::AccountDisabled, SignalKind::AccountPurged] {
             assert_eq!(k.family(), Family::Risc);
         }
+    }
+
+    // §9.16.2 k.5, P59, OP-154 m.2
+    #[test]
+    fn every_agent_event_is_an_access_event_with_a_mapping_row() {
+        for name in crate::domain::catalog::AGENT_EVENTS {
+            assert!(crate::domain::catalog::NAMES.contains(&name), "{name}");
+            assert!(
+                TABLE.iter().any(|r| r.source == Source::Access(name)),
+                "{name}"
+            );
+        }
+        assert_eq!(counterpart("mandate-ended"), None);
+        assert_eq!(counterpart("projection-invalidated"), None);
+        assert_eq!(
+            counterpart("instance-terminated"),
+            Some(SignalKind::SessionRevoked)
+        );
     }
 
     // TN-41, §9.16
