@@ -2484,6 +2484,7 @@ mod provision {
 
 mod account;
 mod catalog;
+mod exchange;
 mod experience;
 mod management;
 mod mcp;

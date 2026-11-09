@@ -114,6 +114,8 @@ pub const SERVED: Served = Served {
         Feature::ClientIdMetadataDocument,
         Feature::BackchannelLogout,
         Feature::AuthorizationDetails,
+        Feature::TokenExchange,
+        Feature::JwtBearer,
     ],
 };
 
@@ -200,6 +202,23 @@ fn grant_types(served: &Served) -> Vec<&'static str> {
     grants
 }
 
+/// The agent members of the AS metadata (§11.11.1, §11.21.5): ID-JAG as an identity chaining
+/// token type once token exchange is served, and the ID-JAG grant profile once JWT bearer is.
+fn agent_members(m: &mut Map<String, Value>, served: &Served) {
+    if served.feature(Feature::TokenExchange) {
+        m.insert(
+            "identity_chaining_requested_token_types_supported".into(),
+            json!([crate::domain::exchange::ID_JAG]),
+        );
+    }
+    if served.feature(Feature::JwtBearer) {
+        m.insert(
+            "authorization_grant_profiles_supported".into(),
+            json!([crate::domain::exchange::ID_JAG_PROFILE]),
+        );
+    }
+}
+
 /// The AS metadata of the realm `issuer` with what is known about the realm (`facts`).
 #[must_use]
 pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFacts) -> String {
@@ -254,6 +273,7 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
             "token_endpoint_auth_signing_alg_values_supported".into(),
             json!(CLIENT_ASSERTION_ALGS),
         );
+        agent_members(&mut m, served);
     }
     if served.has(Endpoint::Par) {
         m.insert(

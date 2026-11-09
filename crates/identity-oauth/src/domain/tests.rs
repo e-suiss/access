@@ -147,9 +147,24 @@ fn the_served_core_is_declared() {
     );
     // OP-148
     assert_eq!(m["claims_parameter_supported"], true);
+    // OP-154 m.3 (m), (q), §11.21.5
     assert_eq!(
         m["grant_types_supported"],
-        serde_json::json!(["authorization_code", "refresh_token", "client_credentials"])
+        serde_json::json!([
+            "authorization_code",
+            "refresh_token",
+            "client_credentials",
+            "urn:ietf:params:oauth:grant-type:token-exchange",
+            "urn:ietf:params:oauth:grant-type:jwt-bearer"
+        ])
+    );
+    assert_eq!(
+        m["identity_chaining_requested_token_types_supported"],
+        serde_json::json!(["urn:ietf:params:oauth:token-type:id-jag"])
+    );
+    assert_eq!(
+        m["authorization_grant_profiles_supported"],
+        serde_json::json!(["urn:ietf:params:oauth:grant-profile:id-jag"])
     );
     assert!(!m.contains_key("client_id_metadata_document_supported"));
 }

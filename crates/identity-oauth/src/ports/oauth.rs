@@ -584,6 +584,34 @@ pub trait GrantStanding: Send + Sync {
     fn issued(&self, domain: [u8; 32], exercise: [u8; 32]) -> Held<'_, Option<IssuedGrant>>;
 }
 
+/// An issuer the governing domain accepted for `actor-binding` with a pinned key set (§9.13,
+/// AG-29): its assertions may enter as Claim input, never as authority (L25, MD-18).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AcceptedIssuer {
+    /// The issuer Party.
+    pub party: [u8; 16],
+    /// The audience its carriers name for this domain.
+    pub aud: String,
+    /// Its pinned keys.
+    pub keys: Vec<access_kernel::verify::cose::PublicKey>,
+}
+
+/// The authority plane's accepted assertion issuers (OP-154 m.3 (m), (q)).
+pub trait AssertionIssuers: Send + Sync {
+    /// The live `actor-binding` Acceptances of `domain` whose pinned key set names `iss`.
+    fn accepted(&self, domain: [u8; 32], iss: String) -> Held<'_, Vec<AcceptedIssuer>>;
+}
+
+/// No authority plane: no issuer is accepted, so every assertion is refused.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoIssuers;
+
+impl AssertionIssuers for NoIssuers {
+    fn accepted(&self, _: [u8; 32], _: String) -> Held<'_, Vec<AcceptedIssuer>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+}
+
 /// No authority plane: no Grant stands, so every consent is asked for again (MD-8).
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NoStanding;

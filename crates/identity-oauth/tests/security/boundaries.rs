@@ -25,7 +25,13 @@ fn metadata_offers_no_forbidden_surface() {
     );
     assert_eq!(
         m["grant_types_supported"],
-        serde_json::json!(["authorization_code", "refresh_token", "client_credentials"])
+        serde_json::json!([
+            "authorization_code",
+            "refresh_token",
+            "client_credentials",
+            "urn:ietf:params:oauth:grant-type:token-exchange",
+            "urn:ietf:params:oauth:grant-type:jwt-bearer"
+        ])
     );
     for key in [
         "check_session_iframe",

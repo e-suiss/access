@@ -9,6 +9,7 @@ mod approval;
 mod authority;
 mod authorize;
 pub mod clients;
+mod exchange;
 mod logout;
 mod management;
 mod resource;
@@ -132,6 +133,11 @@ pub trait Env: Send + Sync + 'static {
     /// authority plane, so consent is always asked for again.
     fn standing(&self) -> &(dyn crate::ports::oauth::GrantStanding + Sync) {
         &crate::ports::oauth::NoStanding
+    }
+    /// The issuers whose assertions the token endpoint takes as Claim input (OP-154 m.3 (m),
+    /// (q)); none unless the server wires the authority plane, so every assertion is refused.
+    fn issuers(&self) -> &(dyn crate::ports::oauth::AssertionIssuers + Sync) {
+        &crate::ports::oauth::NoIssuers
     }
 }
 

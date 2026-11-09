@@ -23,7 +23,7 @@ use crate::domain::client::Client;
 use crate::domain::dpop::{
     BindingError, Failure, Jkt, check_code_exchange, check_refresh, refresh_binding,
 };
-use crate::domain::metadata::Endpoint;
+use crate::domain::metadata::{Endpoint, Feature, JWT_BEARER_GRANT, SERVED, TOKEN_EXCHANGE_GRANT};
 use crate::domain::request::Params;
 use crate::domain::scope;
 use crate::domain::tokens::{CodeDetails, GrantDetails};
@@ -103,6 +103,33 @@ async fn withhold_offline<T: OAuthTx>(
     Ok(())
 }
 
+/// Whether the token endpoint serves `grant_type`, and whether it is an agent grant: token
+/// exchange or JWT bearer once served (OP-154 m.3 (m), (q)); otherwise the RFC 6749 §5.2
+/// refusal.
+fn admitted(grant_type: Option<&str>) -> Result<bool, Reply> {
+    let agent = match grant_type {
+        Some(TOKEN_EXCHANGE_GRANT) => SERVED.feature(Feature::TokenExchange),
+        Some(JWT_BEARER_GRANT) => SERVED.feature(Feature::JwtBearer),
+        _ => false,
+    };
+    if agent
+        || matches!(
+            grant_type,
+            Some("authorization_code" | "refresh_token" | "client_credentials")
+        )
+    {
+        return Ok(agent);
+    }
+    Err(match grant_type {
+        None => Reply::oauth_error(400, "invalid_request", "grant_type is required"),
+        Some(_) => Reply::oauth_error(
+            400,
+            "unsupported_grant_type",
+            "the grant type is not supported",
+        ),
+    })
+}
+
 fn verifier_ok(v: &str) -> bool {
     (43..=128).contains(&v.len())
         && v.bytes()
@@ -150,22 +177,15 @@ impl<E: Env> OAuth<E> {
     ) -> Result<Reply, Unavailable> {
         let grant_type = params.get("grant_type");
         // TN-130, OP-151 m.3 (c)
-        if grant_type == Some(crate::domain::management::TOKEN_EXCHANGE) {
+        if grant_type == Some(crate::domain::management::TOKEN_EXCHANGE)
+            && params.get("subject_token_type") == Some(crate::domain::management::AIS_TOKEN_TYPE)
+        {
             return self.exchange_read(realm, params, http).await;
         }
-        if !matches!(
-            grant_type,
-            Some("authorization_code" | "refresh_token" | "client_credentials")
-        ) {
-            return Ok(match grant_type {
-                None => Reply::oauth_error(400, "invalid_request", "grant_type is required"),
-                Some(_) => Reply::oauth_error(
-                    400,
-                    "unsupported_grant_type",
-                    "the grant type is not supported",
-                ),
-            });
-        }
+        let agent = match admitted(grant_type) {
+            Ok(a) => a,
+            Err(r) => return Ok(r),
+        };
         // IDP-1, AG-4
         if self.prepare_client(realm, params).await?.is_err() {
             return Ok(Reply::oauth_error(
@@ -225,6 +245,10 @@ impl<E: Env> OAuth<E> {
                 return Ok(reply.with_nonce(nonce));
             }
         };
+        if agent {
+            let reply = self.agent_grant(realm, &client, params, proof.jkt, now);
+            return Ok(reply.await?.with_nonce(Some(proof.nonce)));
+        }
         if grant_type == Some("client_credentials") {
             // OP-149 m.31 (a), m.34 (b)
             let reply = match self.service_target(realm, &client, params).await? {

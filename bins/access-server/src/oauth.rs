@@ -89,6 +89,8 @@ pub(crate) struct ServerEnv<P> {
     pub(crate) claims: Arc<dyn ClaimSource + Sync>,
     /// CIMD documents and logos behind the SSRF guard (OP-154 m.3 (i)).
     pub(crate) documents: HttpClientDocuments,
+    /// The authority plane's accepted assertion issuers (OP-154 m.3 (m), (q)).
+    pub(crate) issuers: Arc<dyn access_identity_oauth::ports::oauth::AssertionIssuers + Sync>,
 }
 
 impl<P: Projections + 'static> Env for ServerEnv<P> {
@@ -161,6 +163,9 @@ impl<P: Projections + 'static> Env for ServerEnv<P> {
     }
     fn documents(&self) -> &(dyn ClientDocuments + Sync) {
         &self.documents
+    }
+    fn issuers(&self) -> &(dyn access_identity_oauth::ports::oauth::AssertionIssuers + Sync) {
+        &*self.issuers
     }
 }
 

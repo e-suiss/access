@@ -1154,7 +1154,11 @@ fn authorization<P>(
     claims: Arc<dyn access_identity_oauth::ports::oauth::ClaimSource + Sync>,
 ) -> Result<axum::Router, String>
 where
-    P: access_internal_api::projections::Projections + admin::realm::LiveKeys + Clone + 'static,
+    P: access_internal_api::projections::Projections
+        + admin::realm::LiveKeys
+        + access_identity_oauth::ports::oauth::AssertionIssuers
+        + Clone
+        + 'static,
 {
     let identity = config.identity.as_ref().ok_or("no identity section")?;
     // TN-130
@@ -1172,6 +1176,7 @@ where
         app,
         nonces: oauth::HsmNonces::new(nonce_keys),
         dpop: DpopProfile::default(),
+        issuers: Arc::new(projections.clone()),
         projections,
         tenant_ids,
         hooks,

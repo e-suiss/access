@@ -160,6 +160,43 @@ where
     }
 }
 
+/// The domain's `actor-binding` issuers with a pinned key set, for the token endpoint's
+/// assertions (OP-154 m.3 (m), (q), AG-29).
+impl<K, B, S, C> access_identity_oauth::ports::oauth::AssertionIssuers for Plane<K, B, S, C>
+where
+    K: Keys + Send + Sync + 'static,
+    B: Binding + Clone + Send + Sync + 'static,
+    S: Salts + Clone + Send + Sync + 'static,
+    C: Clock + Clone + Send + Sync + 'static,
+{
+    fn accepted(
+        &self,
+        domain: [u8; 32],
+        iss: String,
+    ) -> access_identity_oauth::ports::oauth::Held<
+        '_,
+        Vec<access_identity_oauth::ports::oauth::AcceptedIssuer>,
+    > {
+        Box::pin(async move {
+            let found = self
+                .domains
+                .assertion_issuers(Digest(domain), &iss)
+                .await
+                .map_err(|_| access_identity_oauth::ports::Unavailable)?;
+            Ok(found
+                .into_iter()
+                .map(
+                    |(party, pinned)| access_identity_oauth::ports::oauth::AcceptedIssuer {
+                        party: party.0,
+                        aud: pinned.aud,
+                        keys: pinned.keys,
+                    },
+                )
+                .collect())
+        })
+    }
+}
+
 impl<K, B, S, C> Epochs for Plane<K, B, S, C>
 where
     K: Keys + Send + Sync + 'static,

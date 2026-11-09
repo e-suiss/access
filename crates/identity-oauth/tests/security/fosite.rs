@@ -338,11 +338,12 @@ async fn code_exchange_downgrades_are_refused() {
         ("implicit", "unsupported_grant_type"),
         // §10.4.1
         ("client_credentials", "unauthorized_client"),
+        // OP-154 m.3 (q)
         (
             "urn:ietf:params:oauth:grant-type:jwt-bearer",
-            "unsupported_grant_type",
+            "invalid_request",
         ),
-        // TN-130
+        // TN-130, OP-154 m.3 (m)
         (
             "urn:ietf:params:oauth:grant-type:token-exchange",
             "invalid_request",
