@@ -149,6 +149,9 @@ profile is used by Relay, so one verifier accepts both products. Test vectors:
 | `agent.suspended` | an agent is suspended |
 | `agent.sponsor_assigned` | a person becomes an agent's sponsor |
 | `login.failed_surge` | failed sign-ins in a realm rise above the surge threshold |
+| `scim.provisioned` | a SCIM client creates, changes or reactivates a user, group or device |
+| `scim.deprovisioned` | a SCIM client deletes or deactivates one; the account is kept as a tombstone |
+| `org.sso_enforced` | an organization starts signing in only through its own identity provider |
 
 The tenant, organization and API client events of the catalogue (`tenant.created`,
 `organization.*`, `api_client.*`) and the authority events reach subscribers through streams.
@@ -157,3 +160,6 @@ The tenant, organization and API client events of the catalogue (`tenant.created
 removal and invitation acceptance. `agent.suspended` and `agent.sponsor_assigned` have a schema
 but no producer yet; a webhook or stream that names them is refused (`invalid-webhook-events`,
 `unsupported-event`) until the agent registry raises them.
+
+`scim.provisioned`, `scim.deprovisioned` and `org.sso_enforced` are catalogued and refused the
+same way until the SCIM server and SSO enforcement raise them.

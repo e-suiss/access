@@ -16,7 +16,8 @@ use access_identity_account::domain::signal::{
     ChangeType, CredentialType, Initiator, RiskLevel, Signal, SignalKind,
 };
 use access_identity_events::domain::catalog::{
-    ClientChange, IdentityEvent, IdentityKind, NAMES, PlatformProduct, authority_ready, urn,
+    ClientChange, IdentityEvent, IdentityKind, InvitationFate, NAMES, PlatformProduct,
+    ScimResource, authority_ready, urn,
 };
 use access_identity_events::domain::mapping::{
     Profile, counterpart, counterpart_body, forms, signal_uri,
@@ -183,6 +184,35 @@ fn identity_events() -> Vec<IdentityEvent> {
         IdentityEvent::agent_suspended([17; 32], &realm, &[5; 16], 5),
         IdentityEvent::agent_sponsor_assigned([19; 32], &realm, &[5; 16], &[6; 16], 5),
         IdentityEvent::login_failed_surge([18; 32], &realm, 250, 300_000, 5),
+        IdentityEvent::scim(
+            IdentityKind::ScimProvisioned,
+            [40; 32],
+            &realm,
+            (
+                "scim_01jd8x7k2m3n4p5q6r7s8t9v0w",
+                ScimResource::User,
+                "usr_01jd8x7k2m3n4p5q6r7s8t9v0x",
+            ),
+            5,
+        ),
+        IdentityEvent::scim(
+            IdentityKind::ScimDeprovisioned,
+            [41; 32],
+            &realm,
+            (
+                "scim_01jd8x7k2m3n4p5q6r7s8t9v0w",
+                ScimResource::Group,
+                "grp_x",
+            ),
+            5,
+        ),
+        IdentityEvent::org_sso_enforced(
+            [42; 32],
+            &realm,
+            &[4; 16],
+            ("acme-entra", InvitationFate::Cancel),
+            5,
+        ),
     ];
     for (i, (from, to)) in [
         (AccountStatus::Locked, AccountStatus::Active),

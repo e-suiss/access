@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:event:scim.provisioned:1",
+  "title": "An inbound SCIM client created, changed or reactivated a resource (OP-155 m.3 (g))",
+  "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:scim.provisioned`. A notification, never an authority source: provisioning is not a Grant (IDP-23).",
+  "type": "object",
+  "required": [
+    "realm",
+    "scim_client",
+    "resource_type",
+    "resource",
+    "at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "realm": {
+      "$ref": "#/$defs/uuid"
+    },
+    "scim_client": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "The inbound SCIM client's opaque id."
+    },
+    "resource_type": {
+      "type": "string",
+      "enum": [
+        "User",
+        "Group",
+        "Device"
+      ]
+    },
+    "resource": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "The resource's opaque id Access assigned; never a userName, an email address or an externalId."
+    },
+    "at": {
+      "$ref": "#/$defs/ms"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix time, milliseconds."
+    }
+  }
+}

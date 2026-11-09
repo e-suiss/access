@@ -20,8 +20,8 @@ pub use access_identity_oauth::ports::oauth::TENANT_PREFIX;
 pub const OUTBOX_PREFIX: &str = "event.";
 
 /// Every event name, authority events first; the identity events of OP-151 m.3 (i) last, then
-/// the agent events of OP-154 (appended).
-pub const NAMES: [&str; 30] = [
+/// the agent events of OP-154 and the enterprise events of OP-155 (appended).
+pub const NAMES: [&str; 33] = [
     "authority-revoked",
     "authority-narrowed",
     "authority-expired",
@@ -52,6 +52,9 @@ pub const NAMES: [&str; 30] = [
     "agent.suspended",
     "login.failed_surge",
     "agent.sponsor_assigned",
+    "scim.provisioned",
+    "scim.deprovisioned",
+    "org.sso_enforced",
 ];
 
 /// The Access semantic events that close CAEP's agent gap: an agent is an Instance, so these
@@ -73,8 +76,9 @@ pub fn urn(name: &str) -> String {
 /// (TN-136, §12.4.2). Every catalog event has one now: preferences and document acceptances
 /// the preference center (IDP-37), organizations and their memberships `idp.org.*` and
 /// invitation acceptance (OP-153 m.4), agent suspension and sponsor assignment the agent
-/// registry's `idp.agent.*` (OP-154 m.3 (e), SI-21).
-pub const UNPRODUCED: [&str; 0] = [];
+/// registry's `idp.agent.*` (OP-154 m.3 (e), SI-21). The SCIM events wait for the SCIM server and
+/// `org.sso_enforced` for `idp.org.sso_enforce` (OP-155 m.3 (g), (i)).
+pub const UNPRODUCED: [&str; 3] = ["scim.provisioned", "scim.deprovisioned", "org.sso_enforced"];
 
 /// Whether a webhook or stream may subscribe to `name`: a catalog event with a producer.
 #[must_use]
@@ -130,10 +134,18 @@ pub enum IdentityKind {
     LoginFailedSurge,
     /// `agent.sponsor_assigned`; its producer arrives with the agent registry (OP-154 m.3 (e)).
     AgentSponsorAssigned,
+    /// `scim.provisioned`: an inbound SCIM client created, changed or reactivated a resource
+    /// (OP-155 m.3 (g)).
+    ScimProvisioned,
+    /// `scim.deprovisioned`: an inbound SCIM client deleted or deactivated a resource; the
+    /// account is soft-deleted, never erased (INV-32, OP-73).
+    ScimDeprovisioned,
+    /// `org.sso_enforced`: an organization's SSO enforcement committed (OP-155 m.3 (i)).
+    OrgSsoEnforced,
 }
 
 impl IdentityKind {
-    const ALL: [Self; 15] = [
+    const ALL: [Self; 18] = [
         Self::TenantCreated,
         Self::OrganizationCreated,
         Self::OrganizationUpdated,
@@ -149,6 +161,9 @@ impl IdentityKind {
         Self::AgentSuspended,
         Self::LoginFailedSurge,
         Self::AgentSponsorAssigned,
+        Self::ScimProvisioned,
+        Self::ScimDeprovisioned,
+        Self::OrgSsoEnforced,
     ];
 
     /// The event name.
@@ -171,6 +186,9 @@ impl IdentityKind {
             Self::AgentSuspended => "agent.suspended",
             Self::LoginFailedSurge => "login.failed_surge",
             Self::AgentSponsorAssigned => "agent.sponsor_assigned",
+            Self::ScimProvisioned => "scim.provisioned",
+            Self::ScimDeprovisioned => "scim.deprovisioned",
+            Self::OrgSsoEnforced => "org.sso_enforced",
         }
     }
 
@@ -194,6 +212,9 @@ impl IdentityKind {
             Self::AgentSuspended => "event.agent.suspended",
             Self::LoginFailedSurge => "event.login.failed_surge",
             Self::AgentSponsorAssigned => "event.agent.sponsor_assigned",
+            Self::ScimProvisioned => "event.scim.provisioned",
+            Self::ScimDeprovisioned => "event.scim.deprovisioned",
+            Self::OrgSsoEnforced => "event.org.sso_enforced",
         }
     }
 
@@ -214,6 +235,50 @@ impl IdentityKind {
             .into_iter()
             .chain(AccountEvent::ALL.into_iter().map(Self::Account))
             .find(|k| k.name() == name)
+    }
+}
+
+/// The SCIM resource type a `scim.*` event names.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScimResource {
+    /// `User`.
+    User,
+    /// `Group`.
+    Group,
+    /// `Device` (the SCIM device schema).
+    Device,
+}
+
+impl ScimResource {
+    /// The SCIM resource type name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::User => "User",
+            Self::Group => "Group",
+            Self::Device => "Device",
+        }
+    }
+}
+
+/// What SSO enforcement did with an organization's pending invitations; chosen explicitly,
+/// there is no default (OP-155 m.3 (i)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InvitationFate {
+    /// They were cancelled.
+    Cancel,
+    /// Accepting one now goes through the organization's SSO.
+    RedirectToSso,
+}
+
+impl InvitationFate {
+    /// The wire name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Cancel => "cancel",
+            Self::RedirectToSso => "redirect_to_sso",
+        }
     }
 }
 
@@ -412,6 +477,54 @@ impl IdentityEvent {
                 "realm": uuid(realm),
                 "agent": b64url_encode(agent),
                 "sponsor": b64url_encode(sponsor),
+                "at": at,
+            }),
+        }
+    }
+
+    /// `scim.provisioned` or `scim.deprovisioned` (`kind`): the inbound SCIM client
+    /// `scim_client` changed the resource `resource` of type `resource_type`, both opaque ids
+    /// Access assigned (OP-155 m.3 (g)).
+    #[must_use]
+    pub fn scim(
+        kind: IdentityKind,
+        id: [u8; 32],
+        realm: &[u8; 16],
+        (scim_client, resource_type, resource): (&str, ScimResource, &str),
+        at: u64,
+    ) -> Self {
+        Self {
+            kind,
+            id,
+            payload: json!({
+                "realm": uuid(realm),
+                "scim_client": scim_client,
+                "resource_type": resource_type.name(),
+                "resource": resource,
+                "at": at,
+            }),
+        }
+    }
+
+    /// `org.sso_enforced`: the organization `organization` now signs in only through the
+    /// upstream connection `connection`, and its pending invitations met `invitations`
+    /// (OP-155 m.3 (i)).
+    #[must_use]
+    pub fn org_sso_enforced(
+        id: [u8; 32],
+        realm: &[u8; 16],
+        organization: &[u8; 16],
+        (connection, invitations): (&str, InvitationFate),
+        at: u64,
+    ) -> Self {
+        Self {
+            kind: IdentityKind::OrgSsoEnforced,
+            id,
+            payload: json!({
+                "realm": uuid(realm),
+                "organization": uuid(organization),
+                "connection": connection,
+                "invitations": invitations.name(),
                 "at": at,
             }),
         }
