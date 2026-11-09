@@ -9,7 +9,7 @@
 use crate::domain::bundle::{Bundle, refresh_due};
 use crate::domain::svid::{self, Freshness, SvidError, Verified};
 use crate::domain::workload::WorkloadId;
-use crate::ports::{Bundles, Kept, Unavailable};
+use crate::ports::{Bundles, Kept, Scope, Unavailable};
 
 /// A workload credential.
 #[derive(Clone, Copy, Debug)]
@@ -40,7 +40,7 @@ impl Credential<'_> {
 /// [`Unavailable`].
 pub async fn current_bundle<B: Bundles + ?Sized>(
     bundles: &B,
-    realm: [u8; 16],
+    realm: Scope,
     (trust_domain, endpoint): (&str, &str),
     now_ms: u64,
 ) -> Result<Option<(Bundle, u64)>, Unavailable> {
@@ -90,7 +90,7 @@ pub async fn current_bundle<B: Bundles + ?Sized>(
 /// [`Unavailable`]; a refusal is the inner [`SvidError`].
 pub async fn verify<B: Bundles + ?Sized>(
     bundles: &B,
-    realm: [u8; 16],
+    realm: Scope,
     endpoint: &str,
     (credential, issuer): (Credential<'_>, &str),
     now_ms: u64,
@@ -133,12 +133,12 @@ mod tests {
     }
 
     impl Bundles for Memory {
-        fn kept<'a>(&'a self, _: [u8; 16], td: &'a str) -> Pending<'a, Option<Kept>> {
+        fn kept<'a>(&'a self, _: Scope, td: &'a str) -> Pending<'a, Option<Kept>> {
             let k = self.kept.lock().unwrap().get(td).cloned();
             Box::pin(async move { Ok(k) })
         }
 
-        fn keep<'a>(&'a self, _: [u8; 16], td: &'a str, kept: Kept) -> Pending<'a, ()> {
+        fn keep<'a>(&'a self, _: Scope, td: &'a str, kept: Kept) -> Pending<'a, ()> {
             self.kept.lock().unwrap().insert(String::from(td), kept);
             Box::pin(async { Ok(()) })
         }
@@ -151,6 +151,10 @@ mod tests {
     }
 
     const EP: &str = "https://bundle.acme.example/bundle.json";
+    const S: Scope = Scope {
+        tenant: [1; 16],
+        realm: [2; 16],
+    };
 
     fn doc(seq: u64) -> Vec<u8> {
         format!(r#"{{"keys":[],"spiffe_sequence":{seq},"spiffe_refresh_hint":300}}"#).into_bytes()
@@ -169,47 +173,42 @@ mod tests {
         block(async {
             let m = Memory::default();
             *m.served.lock().unwrap() = Some(doc(2));
-            let (b, at) = current_bundle(&m, [1; 16], ("acme.example", EP), 1_000)
+            let (b, at) = current_bundle(&m, S, ("acme.example", EP), 1_000)
                 .await
                 .unwrap()
                 .unwrap();
             assert_eq!((b.sequence, at), (Some(2), 1_000));
             assert!(
-                current_bundle(&m, [1; 16], ("acme.example", EP), 200_000)
+                current_bundle(&m, S, ("acme.example", EP), 200_000)
                     .await
                     .unwrap()
                     .is_some()
             );
             assert_eq!(*m.fetches.lock().unwrap(), 1);
             *m.served.lock().unwrap() = None;
-            let (_, at) = current_bundle(&m, [1; 16], ("acme.example", EP), 400_000)
+            let (_, at) = current_bundle(&m, S, ("acme.example", EP), 400_000)
                 .await
                 .unwrap()
                 .unwrap();
             assert_eq!(at, 1_000);
             *m.served.lock().unwrap() = Some(doc(1));
-            let (b, _) = current_bundle(&m, [1; 16], ("acme.example", EP), 500_000)
+            let (b, _) = current_bundle(&m, S, ("acme.example", EP), 500_000)
                 .await
                 .unwrap()
                 .unwrap();
             assert_eq!(b.sequence, Some(2));
             *m.served.lock().unwrap() = Some(doc(3));
-            let (b, at) = current_bundle(&m, [1; 16], ("acme.example", EP), 600_000)
+            let (b, at) = current_bundle(&m, S, ("acme.example", EP), 600_000)
                 .await
                 .unwrap()
                 .unwrap();
             assert_eq!((b.sequence, at), (Some(3), 600_000));
             *m.served.lock().unwrap() = None;
             assert!(
-                current_bundle(
-                    &m,
-                    [1; 16],
-                    ("acme.example", "https://other.example/b"),
-                    600_000
-                )
-                .await
-                .unwrap()
-                .is_none()
+                current_bundle(&m, S, ("acme.example", "https://other.example/b"), 600_000)
+                    .await
+                    .unwrap()
+                    .is_none()
             );
         });
     }
@@ -221,7 +220,7 @@ mod tests {
             let token = "eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJzcGlmZmU6Ly9hY21lLmV4YW1wbGUvYSJ9.AA";
             let r = verify(
                 &crate::ports::NoBundles,
-                [1; 16],
+                S,
                 EP,
                 (Credential::Jwt(token), "https://acme.id.test"),
                 1_000,

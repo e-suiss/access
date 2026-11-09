@@ -260,6 +260,13 @@ pub trait OAuthTx: Send {
         reason: &str,
         now_ms: u64,
     ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
+    /// The realm's active workload clients (OP-154 m.3 (r)); none unless the store serves them.
+    fn workload_clients(
+        &mut self,
+    ) -> impl Future<Output = Result<Vec<access_store::workloads::WorkloadClient>, Unavailable>> + Send
+    {
+        async { Ok(Vec::new()) }
+    }
     /// The Party a subject's device Instances belong to (OP-149 m.16 (a)).
     fn subject_party(
         &mut self,
@@ -623,5 +630,24 @@ impl GrantStanding for NoStanding {
 
     fn issued(&self, _: [u8; 32], _: [u8; 32]) -> Held<'_, Option<IssuedGrant>> {
         Box::pin(async { Ok(None) })
+    }
+}
+
+/// Whether the authority plane accepts a SPIFFE or WIMSE trust domain (OP-154 m.3 (r), AG-30):
+/// a live actor-binding Acceptance of the trust domain's issuer id for
+/// `identity_binding_workload`, which the domain root establishes. A trust domain is never an
+/// `AuthorityDomain`.
+pub trait WorkloadTrust: Send + Sync {
+    /// Whether `domain` accepts the trust domain whose issuer id is `issuer`.
+    fn accepted(&self, domain: [u8; 32], issuer: [u8; 16]) -> Held<'_, bool>;
+}
+
+/// No authority plane: no trust domain is accepted, so every workload client is refused (MD-8).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoWorkloadTrust;
+
+impl WorkloadTrust for NoWorkloadTrust {
+    fn accepted(&self, _: [u8; 32], _: [u8; 16]) -> Held<'_, bool> {
+        Box::pin(async { Ok(false) })
     }
 }

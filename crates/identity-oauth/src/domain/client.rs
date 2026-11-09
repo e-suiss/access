@@ -27,7 +27,37 @@ pub enum ClientAuth {
         /// The secret's digest.
         digest: [u8; 32],
     },
+    /// `spiffe_jwt` or `spiffe_x509`: a workload client (`draft-ietf-oauth-spiffe-client-auth`
+    /// §4, OP-154 m.3 (r)).
+    Workload(WorkloadClient),
 }
+
+/// A workload client's authentication (AG-30): its method, and once its SVID verified, the
+/// workload it named. The workload is an actor-binding input, never authority (L25).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WorkloadClient {
+    /// `spiffe_x509` (mutual TLS) rather than `spiffe_jwt`.
+    pub x509: bool,
+    /// The verified workload, after authentication.
+    pub verified: Option<VerifiedWorkload>,
+}
+
+/// What a verified SVID showed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VerifiedWorkload {
+    /// The workload URI.
+    pub uri: String,
+    /// The agent Party the registration names.
+    pub agent: [u8; 16],
+    /// The digest of the credential it presented.
+    pub evidence: [u8; 32],
+}
+
+/// The `token_endpoint_auth_method` of a JWT-SVID client.
+pub const SPIFFE_JWT: &str = "spiffe_jwt";
+
+/// The `token_endpoint_auth_method` of an X.509-SVID client.
+pub const SPIFFE_X509: &str = "spiffe_x509";
 
 /// Where a client's registration comes from (IDP-1): a policy input only, never authority.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -149,6 +179,11 @@ impl Client {
             }
             ("private_key_jwt", None, Some(jwks), None) => ClientAuth::PrivateKeyJwtKey { jwks },
             ("client_secret_basic", None, None, Some(digest)) => ClientAuth::SecretBasic { digest },
+            // OP-154 m.3 (r)
+            (SPIFFE_JWT | SPIFFE_X509, None, None, None) => ClientAuth::Workload(WorkloadClient {
+                x509: row.auth_method == SPIFFE_X509,
+                verified: None,
+            }),
             _ => return None,
         };
         Some(Self {

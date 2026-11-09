@@ -8,6 +8,7 @@
 mod approval;
 mod authority;
 mod authorize;
+mod client_auth;
 pub mod clients;
 mod exchange;
 mod logout;
@@ -138,6 +139,16 @@ pub trait Env: Send + Sync + 'static {
     /// (q)); none unless the server wires the authority plane, so every assertion is refused.
     fn issuers(&self) -> &(dyn crate::ports::oauth::AssertionIssuers + Sync) {
         &crate::ports::oauth::NoIssuers
+    }
+    /// The realm's SPIFFE bundles (OP-154 m.3 (r)); none unless the server wires the store and
+    /// the guarded outbound client, so every SVID is refused.
+    fn bundles(&self) -> &(dyn access_identity_attest::ports::Bundles + Sync) {
+        &access_identity_attest::ports::NoBundles
+    }
+    /// Which trust domains the authority plane accepts (OP-154 m.3 (r)); none unless the server
+    /// wires it, so every workload client is refused.
+    fn workload_trust(&self) -> &(dyn crate::ports::oauth::WorkloadTrust + Sync) {
+        &crate::ports::oauth::NoWorkloadTrust
     }
 }
 
@@ -386,6 +397,10 @@ impl<E: Env> OAuth<E> {
         req: &ClientRequest<'_>,
         now: u64,
     ) -> Result<Result<Client, ClientAuthError>, Unavailable> {
+        // OP-154 m.3 (r), AG-30
+        if let Some(answer) = self.workload_client(tx, realm, req, now).await? {
+            return Ok(answer);
+        }
         let p = req.params;
         let presented = match presented(
             req.authorization,
@@ -426,7 +441,7 @@ impl<E: Env> OAuth<E> {
                     self.env.client_keys().fetch(jwks_uri).await?
                 }
                 ClientAuth::PrivateKeyJwtKey { jwks } => jwks.clone().into_bytes(),
-                ClientAuth::None | ClientAuth::SecretBasic { .. } => {
+                ClientAuth::None | ClientAuth::SecretBasic { .. } | ClientAuth::Workload(_) => {
                     return Ok(Err(ClientAuthError::Method));
                 }
             };

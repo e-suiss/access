@@ -65,6 +65,9 @@ pub enum Feature {
     TokenExchange,
     /// RFC 7523 JWT bearer assertions, ID-JAG and cloud workload OIDC (OP-154 m.3 (q)).
     JwtBearer,
+    /// JWT-SVID client authentication, `spiffe_jwt` (`draft-ietf-oauth-spiffe-client-auth` §4,
+    /// OP-154 m.3 (r)).
+    SpiffeClientAuth,
 }
 
 /// Grant type of RFC 8628.
@@ -116,6 +119,7 @@ pub const SERVED: Served = Served {
         Feature::AuthorizationDetails,
         Feature::TokenExchange,
         Feature::JwtBearer,
+        Feature::SpiffeClientAuth,
     ],
 };
 
@@ -265,9 +269,14 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
             issuer.endpoint(Endpoint::Token.path()).into(),
         );
         m.insert("grant_types_supported".into(), json!(grant_types(served)));
+        let mut methods = vec!["none", "private_key_jwt", "client_secret_basic"];
+        // OP-154 m.3 (r)
+        if served.feature(Feature::SpiffeClientAuth) {
+            methods.push(crate::domain::client::SPIFFE_JWT);
+        }
         m.insert(
             "token_endpoint_auth_methods_supported".into(),
-            json!(["none", "private_key_jwt", "client_secret_basic"]),
+            json!(methods),
         );
         m.insert(
             "token_endpoint_auth_signing_alg_values_supported".into(),

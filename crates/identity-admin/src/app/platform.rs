@@ -280,7 +280,9 @@ where
                 .await
                 .map_err(|_| PlatformError::Unavailable)?,
             ClientAuth::PrivateKeyJwtKey { jwks } => jwks.clone().into_bytes(),
-            ClientAuth::None | ClientAuth::SecretBasic { .. } => return Err(NO),
+            ClientAuth::None | ClientAuth::SecretBasic { .. } | ClientAuth::Workload(_) => {
+                return Err(NO);
+            }
         };
         let keys = parse_jwks(&doc).map_err(|_| NO)?;
         let now = self.now()?;

@@ -301,6 +301,8 @@ impl<E: Env> OAuth<E> {
                 "client credentials need a confidential client",
             ));
         }
+        // OP-154 m.3 (d)
+        self.first_presentation(realm, client, jkt, now).await?;
         let asked = Asked {
             params,
             authorized: None,

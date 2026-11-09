@@ -216,6 +216,7 @@ version = "0.4.0"
 dependencies = [
  "access-crypto",
  "access-identity-account",
+ "access-identity-attest",
  "access-identity-events",
  "access-identity-federation",
  "access-identity-hooks",
@@ -330,6 +331,7 @@ version = "0.4.0"
 dependencies = [
  "access-crypto",
  "access-identity-account",
+ "access-identity-attest",
  "access-identity-hooks",
  "access-identity-session",
  "access-identity-signer",
@@ -563,6 +565,7 @@ dependencies = [
  "access-http",
  "access-identity-account",
  "access-identity-admin",
+ "access-identity-attest",
  "access-identity-audit",
  "access-identity-events",
  "access-identity-federation",

@@ -12,6 +12,15 @@ pub struct Unavailable;
 /// A boxed future of the ports.
 pub type Pending<'a, T> = Pin<Box<dyn Future<Output = Result<T, Unavailable>> + Send + 'a>>;
 
+/// The realm a bundle is kept for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Scope {
+    /// The tenant.
+    pub tenant: [u8; 16],
+    /// The realm.
+    pub realm: [u8; 16],
+}
+
 /// A bundle as the realm keeps it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Kept {
@@ -27,10 +36,10 @@ pub struct Kept {
 /// (`draft-ietf-oauth-spiffe-client-auth` §6).
 pub trait Bundles: Send + Sync {
     /// The bundle `realm` keeps for `trust_domain`, if any.
-    fn kept<'a>(&'a self, realm: [u8; 16], trust_domain: &'a str) -> Pending<'a, Option<Kept>>;
+    fn kept<'a>(&'a self, realm: Scope, trust_domain: &'a str) -> Pending<'a, Option<Kept>>;
 
     /// Keeps `kept` as `realm`'s bundle of `trust_domain`.
-    fn keep<'a>(&'a self, realm: [u8; 16], trust_domain: &'a str, kept: Kept) -> Pending<'a, ()>;
+    fn keep<'a>(&'a self, realm: Scope, trust_domain: &'a str, kept: Kept) -> Pending<'a, ()>;
 
     /// Fetches `endpoint` over the SSRF-guarded outbound client; `None` when the fetch is
     /// refused or fails, which keeps the bundle the realm has.
@@ -42,11 +51,11 @@ pub trait Bundles: Send + Sync {
 pub struct NoBundles;
 
 impl Bundles for NoBundles {
-    fn kept<'a>(&'a self, _: [u8; 16], _: &'a str) -> Pending<'a, Option<Kept>> {
+    fn kept<'a>(&'a self, _: Scope, _: &'a str) -> Pending<'a, Option<Kept>> {
         Box::pin(async { Ok(None) })
     }
 
-    fn keep<'a>(&'a self, _: [u8; 16], _: &'a str, _: Kept) -> Pending<'a, ()> {
+    fn keep<'a>(&'a self, _: Scope, _: &'a str, _: Kept) -> Pending<'a, ()> {
         Box::pin(async { Ok(()) })
     }
 

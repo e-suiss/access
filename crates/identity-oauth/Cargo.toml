@@ -12,6 +12,7 @@ publish = false
 access-crypto = { workspace = true }
 access-identity-hooks = { workspace = true }
 access-identity-account = { workspace = true }
+access-identity-attest = { workspace = true }
 access-identity-session = { workspace = true }
 access-identity-signer = { path = "../identity-signer" }
 access-internal-api = { workspace = true }

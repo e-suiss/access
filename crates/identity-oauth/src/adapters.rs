@@ -1,6 +1,7 @@
 //! Adapters of the realm ports: the router role's view of the realm rows (OP-132 m.3) and the
 //! identity signer over its Unix socket (CMP-22b).
 
+pub mod bundles;
 pub mod cimd;
 pub mod clients;
 pub mod dpop;

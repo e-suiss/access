@@ -79,6 +79,14 @@ impl OAuthDb for PgOAuth {
 }
 
 impl OAuthTx for PgOAuthTx {
+    async fn workload_clients(
+        &mut self,
+    ) -> Result<Vec<access_store::workloads::WorkloadClient>, Unavailable> {
+        access_store::workloads::workload_clients(&mut self.0)
+            .await
+            .map_err(down)
+    }
+
     async fn client(&mut self, client_id: &str) -> Result<Option<ClientRow>, Unavailable> {
         idp::client(&mut self.0, client_id).await.map_err(down)
     }
