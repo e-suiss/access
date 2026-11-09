@@ -14,22 +14,28 @@ use access_kernel::schema::{ActionSchema, EffectClass, Spp, action_digest};
 /// The resource namespace every `idp.*` action addresses: `[slug, kind, …]` paths.
 pub const RESOURCE_NAMESPACE: &str = "idp";
 
-/// Version of every `idp.*` catalog (OP-153 m.3 (a), m.25 (b), OP-154 m.3 (a)).
-pub const CATALOG_VERSION: u64 = 4;
+/// Version of every `idp.*` catalog (OP-153 m.3 (a), m.25 (b), OP-154 m.3 (a), OP-155 m.3 (a)).
+pub const CATALOG_VERSION: u64 = 5;
 
-/// The `idp.*` action namespaces, one SPP each (OP-141 m.35, OP-153 m.3 (a), OP-154 m.3 (a)).
-pub const NAMESPACES: [&str; 12] = [
+/// The `idp.*` action namespaces, one SPP each (OP-141 m.35, OP-153 m.3 (a), OP-154 m.3 (a),
+/// OP-155 m.3 (a)).
+pub const NAMESPACES: [&str; 17] = [
     "idp.account",
     "idp.agent",
     "idp.client",
+    "idp.federation",
+    "idp.gateway",
     "idp.group",
     "idp.hook",
     "idp.mapper",
     "idp.org",
     "idp.realm",
+    "idp.saml",
+    "idp.scim",
     "idp.social",
     "idp.upstream",
     "idp.vault",
+    "idp.vc",
     "idp.webhook",
 ];
 
@@ -257,11 +263,101 @@ pub enum IdpAction {
     RealmDeviceCode,
     /// Turns off the device authorization grant; narrowing, CT1.
     RealmDeviceCodeClose,
+    /// Registers a SAML service provider from its metadata or catalog template (OP-155 m.3 (a), (e)): CT2.
+    SamlSpRegister,
+    /// Registers or changes an SP whose template maps a Claim that selects authority (L6): reserved, CT3.
+    SamlSpMapping,
+    /// Replaces a SAML service provider's registration: CT2.
+    SamlSpUpdate,
+    /// Retires a SAML service provider; narrowing, CT1.
+    SamlSpRetire,
+    /// Sets the SAML signing certificate rotation policy (OP-155 m.3 (e)): CT2.
+    SamlCertPolicy,
+    /// Replaces the SAML signing certificate at once, outside the policy: reserved, CT3.
+    SamlCertEmergency,
+    /// Registers an inbound SCIM client; its opaque token is shown once (OP-155 m.3 (g)): CT2.
+    ScimClientRegister,
+    /// Replaces an inbound SCIM client's token: CT2.
+    ScimTokenRotate,
+    /// Retires an inbound SCIM client; narrowing, CT1.
+    ScimClientRetire,
+    /// Registers an outbound SCIM target with its sealed secret: CT2.
+    ScimOutboundRegister,
+    /// Retires an outbound SCIM target; narrowing, CT1.
+    ScimOutboundRetire,
+    /// Registers an edge gateway and its internal mTLS identity `urn:suiss:access:gw:<kind>:<name>` (OP-155 m.3 (c)): CT2.
+    GatewayRegister,
+    /// Retires an edge gateway; its identity is never reused; narrowing, CT1.
+    GatewayRetire,
+    /// Sets a Kerberos gateway's keytab rotation policy (OP-155 m.3 (o)): CT2.
+    GatewayKeytabPolicy,
+    /// Replaces a Kerberos gateway's keytab at once: reserved, CT3.
+    GatewayKeytabEmergency,
+    /// Registers a RadSec client of a RADIUS gateway (OP-155 m.3 (f)): CT2.
+    GatewayRadiusClientRegister,
+    /// Turns on OpenID Federation for the realm's issuer as a leaf (OP-155 m.3 (j)): CT2.
+    FederationEnable,
+    /// Turns OpenID Federation off; narrowing, CT1.
+    FederationDisable,
+    /// Trusts a federation's trust anchor: reserved, CT3.
+    FederationTrustAnchorAdd,
+    /// Stops trusting a trust anchor; narrowing, CT1.
+    FederationTrustAnchorRemove,
+    /// Turns on the intermediate or trust anchor role, off by default (OP-155 m.3 (j)): CT2.
+    FederationTaEnable,
+    /// Opens automatic or explicit OIDF client registration: CT2.
+    FederationRegistrationOpen,
+    /// Closes OIDF client registration; narrowing, CT1.
+    FederationRegistrationClose,
+    /// Turns on the OID4VP verifier for the realm (OP-155 m.3 (p)): CT2.
+    VcVerifierEnable,
+    /// Turns the OID4VP verifier off; narrowing, CT1.
+    VcVerifierDisable,
+    /// Sets the trusted lists (EU LoTL or a TL) whose issuers the verifier accepts: reserved, CT3.
+    VcTrustedList,
+    /// Turns on the OID4VCI person-attribute issuer (OP-155 m.3 (p)): CT2.
+    VcIssuerEnable,
+    /// Turns the person-attribute issuer off; narrowing, CT1.
+    VcIssuerDisable,
+    /// Puts a client under the FAPI 2.0 profile (OP-155 m.3 (k)); tightening, CT1.
+    ClientProfile,
+    /// Takes a client out of the FAPI 2.0 profile; a loosening, CT2.
+    ClientProfileLoosen,
+    /// Allows a client `client_secret_post` or `client_secret_jwt` (OP-155 m.3 (k)): CT2.
+    ClientAuthMethodLegacy,
+    /// Lets a client take RS256 identity assertions; the realm's `rsa-id` key is made on first use (MD-6): CT2.
+    ClientAlgRs256,
+    /// Turns on JWE for a client's ID tokens, userinfo or JARM (OP-155 m.3 (k)); tightening, CT1.
+    ClientEncryption,
+    /// Allows a client the SAML 2.0 bearer grant (RFC 7522) from an accepted SAML upstream: CT2.
+    ClientSamlBearer,
+    /// Grants a client the legacy bearer exception: identity plane protocol tokens only, never advertised (OP-155 m.3 (k)): CT2.
+    ClientLegacyBearer,
+    /// Turns on CIBA poll and ping (OP-155 m.3 (l)): CT2.
+    RealmCiba,
+    /// Turns CIBA off; narrowing, CT1.
+    RealmCibaClose,
+    /// Turns on certificate, PIV and CAC sign-in (OP-155 m.3 (m)): CT2.
+    RealmCertificateLogin,
+    /// Publishes `mtls_endpoint_aliases` on the mTLS listener (OP-155 m.3 (m)): CT2.
+    RealmMtlsAliases,
+    /// Turns on home realm discovery, confirmed on an interstitial (OP-155 m.3 (h)): CT2.
+    RealmHrd,
+    /// Turns home realm discovery off; narrowing, CT1.
+    RealmHrdClose,
+    /// Lets the realm's clients opt in to front-channel logout (OP-155 m.3 (k)): CT2.
+    RealmFrontchannelLogout,
+    /// Enforces SSO on an organization: its members' passwords, API tokens, sign-ins and refresh families end, and pending invitations follow the chosen fate (OP-155 m.3 (i)); narrowing, CT1.
+    OrgSsoEnforce,
+    /// Lifts an organization's SSO enforcement; a loosening, CT2.
+    OrgSsoEnforceLift,
+    /// Maps an upstream's `acr`, `amr` or `AuthnContextClassRef` onto assurance (OP-155 m.3 (h)): reserved, CT3.
+    UpstreamAssuranceMap,
 }
 
 impl IdpAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 91] = [
+    pub const ALL: [Self; 136] = [
         Self::ClientRegister,
         Self::ClientUpdate,
         Self::ClientRetire,
@@ -353,12 +449,103 @@ impl IdpAction {
         Self::ClientCrossAppConnectionRetire,
         Self::RealmDeviceCode,
         Self::RealmDeviceCodeClose,
+        Self::SamlSpRegister,
+        Self::SamlSpMapping,
+        Self::SamlSpUpdate,
+        Self::SamlSpRetire,
+        Self::SamlCertPolicy,
+        Self::SamlCertEmergency,
+        Self::ScimClientRegister,
+        Self::ScimTokenRotate,
+        Self::ScimClientRetire,
+        Self::ScimOutboundRegister,
+        Self::ScimOutboundRetire,
+        Self::GatewayRegister,
+        Self::GatewayRetire,
+        Self::GatewayKeytabPolicy,
+        Self::GatewayKeytabEmergency,
+        Self::GatewayRadiusClientRegister,
+        Self::FederationEnable,
+        Self::FederationDisable,
+        Self::FederationTrustAnchorAdd,
+        Self::FederationTrustAnchorRemove,
+        Self::FederationTaEnable,
+        Self::FederationRegistrationOpen,
+        Self::FederationRegistrationClose,
+        Self::VcVerifierEnable,
+        Self::VcVerifierDisable,
+        Self::VcTrustedList,
+        Self::VcIssuerEnable,
+        Self::VcIssuerDisable,
+        Self::ClientProfile,
+        Self::ClientProfileLoosen,
+        Self::ClientAuthMethodLegacy,
+        Self::ClientAlgRs256,
+        Self::ClientEncryption,
+        Self::ClientSamlBearer,
+        Self::ClientLegacyBearer,
+        Self::RealmCiba,
+        Self::RealmCibaClose,
+        Self::RealmCertificateLogin,
+        Self::RealmMtlsAliases,
+        Self::RealmHrd,
+        Self::RealmHrdClose,
+        Self::RealmFrontchannelLogout,
+        Self::OrgSsoEnforce,
+        Self::OrgSsoEnforceLift,
+        Self::UpstreamAssuranceMap,
     ];
 
-    /// The catalog version that first declared it (OP-153 m.3 (a), OP-154 m.3 (a)).
+    /// The catalog version that first declared it (OP-153 m.3 (a), OP-154 m.3 (a), OP-155
+    /// m.3 (a)).
     #[must_use]
     pub const fn since(self) -> u64 {
         match self {
+            Self::SamlSpRegister
+            | Self::SamlSpMapping
+            | Self::SamlSpUpdate
+            | Self::SamlSpRetire
+            | Self::SamlCertPolicy
+            | Self::SamlCertEmergency
+            | Self::ScimClientRegister
+            | Self::ScimTokenRotate
+            | Self::ScimClientRetire
+            | Self::ScimOutboundRegister
+            | Self::ScimOutboundRetire
+            | Self::GatewayRegister
+            | Self::GatewayRetire
+            | Self::GatewayKeytabPolicy
+            | Self::GatewayKeytabEmergency
+            | Self::GatewayRadiusClientRegister
+            | Self::FederationEnable
+            | Self::FederationDisable
+            | Self::FederationTrustAnchorAdd
+            | Self::FederationTrustAnchorRemove
+            | Self::FederationTaEnable
+            | Self::FederationRegistrationOpen
+            | Self::FederationRegistrationClose
+            | Self::VcVerifierEnable
+            | Self::VcVerifierDisable
+            | Self::VcTrustedList
+            | Self::VcIssuerEnable
+            | Self::VcIssuerDisable
+            | Self::ClientProfile
+            | Self::ClientProfileLoosen
+            | Self::ClientAuthMethodLegacy
+            | Self::ClientAlgRs256
+            | Self::ClientEncryption
+            | Self::ClientSamlBearer
+            | Self::ClientLegacyBearer
+            | Self::RealmCiba
+            | Self::RealmCibaClose
+            | Self::RealmCertificateLogin
+            | Self::RealmMtlsAliases
+            | Self::RealmHrd
+            | Self::RealmHrdClose
+            | Self::RealmFrontchannelLogout
+            | Self::OrgSsoEnforce
+            | Self::OrgSsoEnforceLift
+            | Self::UpstreamAssuranceMap => 5,
             Self::AgentRegister
             | Self::AgentUpdate
             | Self::AgentSponsorAssign
@@ -429,7 +616,14 @@ impl IdpAction {
             | Self::ClientDcrPolicy
             | Self::ClientDcrPolicyTighten
             | Self::ClientCrossAppConnection
-            | Self::ClientCrossAppConnectionRetire => "idp.client",
+            | Self::ClientCrossAppConnectionRetire
+            | Self::ClientProfile
+            | Self::ClientProfileLoosen
+            | Self::ClientAuthMethodLegacy
+            | Self::ClientAlgRs256
+            | Self::ClientEncryption
+            | Self::ClientSamlBearer
+            | Self::ClientLegacyBearer => "idp.client",
             Self::AgentRegister
             | Self::AgentUpdate
             | Self::AgentSponsorAssign
@@ -472,7 +666,14 @@ impl IdpAction {
             | Self::RealmCspMode
             | Self::RealmCspModeLoosen
             | Self::RealmDeviceCode
-            | Self::RealmDeviceCodeClose => "idp.realm",
+            | Self::RealmDeviceCodeClose
+            | Self::RealmCiba
+            | Self::RealmCibaClose
+            | Self::RealmCertificateLogin
+            | Self::RealmMtlsAliases
+            | Self::RealmHrd
+            | Self::RealmHrdClose
+            | Self::RealmFrontchannelLogout => "idp.realm",
             Self::OrgCreate
             | Self::OrgUpdate
             | Self::OrgDomainClaim
@@ -481,7 +682,37 @@ impl IdpAction {
             | Self::OrgDomainRelease
             | Self::OrgInviteRevoke
             | Self::OrgMemberRemove
-            | Self::OrgSsoDraft => "idp.org",
+            | Self::OrgSsoDraft
+            | Self::OrgSsoEnforce
+            | Self::OrgSsoEnforceLift => "idp.org",
+            Self::SamlSpRegister
+            | Self::SamlSpMapping
+            | Self::SamlSpUpdate
+            | Self::SamlSpRetire
+            | Self::SamlCertPolicy
+            | Self::SamlCertEmergency => "idp.saml",
+            Self::ScimClientRegister
+            | Self::ScimTokenRotate
+            | Self::ScimClientRetire
+            | Self::ScimOutboundRegister
+            | Self::ScimOutboundRetire => "idp.scim",
+            Self::GatewayRegister
+            | Self::GatewayRetire
+            | Self::GatewayKeytabPolicy
+            | Self::GatewayKeytabEmergency
+            | Self::GatewayRadiusClientRegister => "idp.gateway",
+            Self::FederationEnable
+            | Self::FederationDisable
+            | Self::FederationTrustAnchorAdd
+            | Self::FederationTrustAnchorRemove
+            | Self::FederationTaEnable
+            | Self::FederationRegistrationOpen
+            | Self::FederationRegistrationClose => "idp.federation",
+            Self::VcVerifierEnable
+            | Self::VcVerifierDisable
+            | Self::VcTrustedList
+            | Self::VcIssuerEnable
+            | Self::VcIssuerDisable => "idp.vc",
             Self::SocialEnable | Self::SocialUpdate | Self::SocialDisable => "idp.social",
             Self::HookRegister | Self::HookRetire => "idp.hook",
             Self::WebhookRegister | Self::WebhookUpdate | Self::WebhookRetire => "idp.webhook",
@@ -489,7 +720,8 @@ impl IdpAction {
             | Self::UpstreamMapping
             | Self::UpstreamUpdate
             | Self::UpstreamRetire
-            | Self::UpstreamLink => "idp.upstream",
+            | Self::UpstreamLink
+            | Self::UpstreamAssuranceMap => "idp.upstream",
             Self::AccountDelete
             | Self::AccountSuspend
             | Self::AccountReactivate
@@ -517,7 +749,8 @@ impl IdpAction {
             | Self::UpstreamRegister
             | Self::HookRegister
             | Self::WebhookRegister
-            | Self::AgentRegister => "register",
+            | Self::AgentRegister
+            | Self::GatewayRegister => "register",
             Self::ClientUpdate
             | Self::GroupUpdate
             | Self::UpstreamUpdate
@@ -530,7 +763,8 @@ impl IdpAction {
             | Self::UpstreamRetire
             | Self::HookRetire
             | Self::WebhookRetire
-            | Self::AgentRetire => "retire",
+            | Self::AgentRetire
+            | Self::GatewayRetire => "retire",
             Self::AgentSponsorAssign => "sponsor_assign",
             Self::AgentSponsorRemove => "sponsor_remove",
             Self::AgentTemplateDefine => "template_define",
@@ -583,8 +817,8 @@ impl IdpAction {
             Self::OrgInviteRevoke => "invite_revoke",
             Self::OrgMemberRemove => "member_remove",
             Self::OrgSsoDraft => "sso_draft",
-            Self::SocialEnable => "enable",
-            Self::SocialDisable => "disable",
+            Self::SocialEnable | Self::FederationEnable => "enable",
+            Self::SocialDisable | Self::FederationDisable => "disable",
             Self::RealmRelatedOrigins => "related_origins",
             Self::RealmLocaleOverrides => "locale_overrides",
             Self::RealmConsentDocuments => "consent_documents",
@@ -602,6 +836,47 @@ impl IdpAction {
             Self::AccountGuardianshipRecord => "guardianship_record",
             Self::RealmCspMode => "csp_mode",
             Self::RealmCspModeLoosen => "csp_mode_loosen",
+            Self::SamlSpRegister => "sp_register",
+            Self::SamlSpMapping => "sp_mapping",
+            Self::SamlSpUpdate => "sp_update",
+            Self::SamlSpRetire => "sp_retire",
+            Self::SamlCertPolicy => "cert_policy",
+            Self::SamlCertEmergency => "cert_emergency",
+            Self::ScimClientRegister => "client_register",
+            Self::ScimTokenRotate => "token_rotate",
+            Self::ScimClientRetire => "client_retire",
+            Self::ScimOutboundRegister => "outbound_register",
+            Self::ScimOutboundRetire => "outbound_retire",
+            Self::GatewayKeytabPolicy => "keytab_policy",
+            Self::GatewayKeytabEmergency => "keytab_emergency",
+            Self::GatewayRadiusClientRegister => "radius_client_register",
+            Self::FederationTrustAnchorAdd => "trust_anchor_add",
+            Self::FederationTrustAnchorRemove => "trust_anchor_remove",
+            Self::FederationTaEnable => "ta_enable",
+            Self::FederationRegistrationOpen => "registration_open",
+            Self::FederationRegistrationClose => "registration_close",
+            Self::VcVerifierEnable => "verifier_enable",
+            Self::VcVerifierDisable => "verifier_disable",
+            Self::VcTrustedList => "trusted_list",
+            Self::VcIssuerEnable => "issuer_enable",
+            Self::VcIssuerDisable => "issuer_disable",
+            Self::ClientProfile => "profile",
+            Self::ClientProfileLoosen => "profile_loosen",
+            Self::ClientAuthMethodLegacy => "auth_method_legacy",
+            Self::ClientAlgRs256 => "alg_rs256",
+            Self::ClientEncryption => "encryption",
+            Self::ClientSamlBearer => "saml_bearer",
+            Self::ClientLegacyBearer => "legacy_bearer",
+            Self::RealmCiba => "ciba",
+            Self::RealmCibaClose => "ciba_close",
+            Self::RealmCertificateLogin => "certificate_login",
+            Self::RealmMtlsAliases => "mtls_aliases",
+            Self::RealmHrd => "hrd",
+            Self::RealmHrdClose => "hrd_close",
+            Self::RealmFrontchannelLogout => "frontchannel_logout",
+            Self::OrgSsoEnforce => "sso_enforce",
+            Self::OrgSsoEnforceLift => "sso_enforce_lift",
+            Self::UpstreamAssuranceMap => "assurance_map",
         }
     }
 
@@ -649,7 +924,21 @@ impl IdpAction {
             | Self::VaultReleaseModeClose
             | Self::ClientDcrPolicyTighten
             | Self::ClientCrossAppConnectionRetire
-            | Self::RealmDeviceCodeClose => EffectClass::Reversible,
+            | Self::RealmDeviceCodeClose
+            | Self::SamlSpRetire
+            | Self::ScimClientRetire
+            | Self::ScimOutboundRetire
+            | Self::GatewayRetire
+            | Self::FederationDisable
+            | Self::FederationTrustAnchorRemove
+            | Self::FederationRegistrationClose
+            | Self::VcVerifierDisable
+            | Self::VcIssuerDisable
+            | Self::ClientProfile
+            | Self::ClientEncryption
+            | Self::RealmCibaClose
+            | Self::RealmHrdClose
+            | Self::OrgSsoEnforce => EffectClass::Reversible,
             _ => EffectClass::Irreversible,
         }
     }
@@ -671,6 +960,12 @@ impl IdpAction {
                 | Self::AccountMigrationExport
                 | Self::RealmCustomDomain
                 | Self::VaultResourceRegister
+                | Self::SamlSpMapping
+                | Self::SamlCertEmergency
+                | Self::GatewayKeytabEmergency
+                | Self::FederationTrustAnchorAdd
+                | Self::VcTrustedList
+                | Self::UpstreamAssuranceMap
         )
     }
 

@@ -112,6 +112,9 @@ mod tests {
         for e in ScimEvent::ALL {
             assert_eq!(ScimEvent::of_uri(&e.uri()), Some(e));
         }
-        assert_eq!(ScimEvent::of_uri("urn:ietf:params:SCIM:event:prov:merge"), None);
+        assert_eq!(
+            ScimEvent::of_uri("urn:ietf:params:SCIM:event:prov:merge"),
+            None
+        );
     }
 }
