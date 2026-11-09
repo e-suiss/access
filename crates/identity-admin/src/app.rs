@@ -444,6 +444,12 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Agent(a) => agents::current(t, a).await?,
             // OP-154 m.3 (t)
             Change::Vault(v) => vault::current(t, v).await?,
+            // AG-8
+            Change::ResourceRegister(r) => {
+                if t.protected_resource(&r.resource).await?.is_some() {
+                    return Err(Invalid::ResourceExists.into());
+                }
+            }
             Change::OrgInvite(i) => orgs::invite_current(t, i).await?,
             Change::OrgUpdate(u) => orgs::update_current(t, u).await?,
             Change::OrgInviteRevoke { org, invitation } => {
@@ -1564,6 +1570,16 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::AccountTapIssue(_) => true,
             // OP-154 m.3 (t)
             Change::Vault(v) => vault::write(t, bound, v).await?,
+            Change::ResourceRegister(r) => {
+                access_store::clients::insert_protected_resource(
+                    t,
+                    bound,
+                    &r.resource,
+                    &r.display_name,
+                )
+                .await?;
+                true
+            }
             Change::OrgInviteRevoke { invitation, .. } => t.revoke_invitation(*invitation).await?,
             Change::OrgDomainRelease { org, claim } => {
                 org_flows::release_domain(t, *org, *claim).await?

@@ -191,6 +191,8 @@ pub enum ResourceKind {
     AgentSponsors,
     /// Vault Resources, by name (OP-154 m.3 (t)).
     VaultResources,
+    /// Protected resources and MCP servers, by canonical URI (AG-8).
+    ProtectedResources,
 }
 
 impl ResourceKind {
@@ -213,6 +215,7 @@ impl ResourceKind {
             Self::Agents => "agents",
             Self::AgentSponsors => "agent-sponsors",
             Self::VaultResources => "vault-resources",
+            Self::ProtectedResources => "protected-resources",
         }
     }
 }

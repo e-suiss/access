@@ -648,6 +648,13 @@
       "description": "The vault Resource is malformed: an upstream the catalog does not have or an own upstream outside the catalog format, a client secret that is not a secret:// reference, a scope the upstream does not offer, a mapped action outside the Resource's scopes or in the access or idp namespaces, or an executor that is not a certificate thumbprint (OP-154 m.3 (t))."
     },
     {
+      "code": "invalid-protected-resource",
+      "type": "urn:suiss:access:problem:invalid-protected-resource",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A protected resource is a canonical https URI without query, fragment or trailing slash, and a display name of 1 to 128 printable characters (AG-8, RFC 8707 §2)."
+    },
+    {
       "code": "invalid-recovery-policy",
       "type": "urn:suiss:access:problem:invalid-recovery-policy",
       "status": 400,

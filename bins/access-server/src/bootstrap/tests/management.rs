@@ -375,6 +375,7 @@ pub(super) async fn console_with(label: &str, with_adp: bool, plan: &Plan) -> Co
         ),
         bundles: bundles.clone(),
         workload_trust: trust.clone(),
+        standing: Arc::new(w.plane.clone()),
         directory: PgDirectory::new(w.db.router.clone()),
         app: w.db.app.clone(),
         nonces: crate::oauth::HsmNonces::new(w.keys.clone()),
@@ -1159,6 +1160,7 @@ async fn the_audit_stream_is_served_in_three_renderings_and_each_read_is_audited
 mod accounts;
 mod agents;
 mod organizations;
+mod resources;
 mod settings;
 mod vault;
 mod workloads;

@@ -166,6 +166,8 @@ pub enum Op {
     DisableVaultResource,
     /// `putVaultReleaseMode`: `idp.vault.release_mode_open` or `release_mode_close`.
     PutVaultReleaseMode,
+    /// `registerProtectedResource`: `idp.client.resource_register` (AG-8).
+    RegisterProtectedResource,
 }
 
 impl Op {
@@ -233,6 +235,7 @@ impl Op {
             "putVaultResource" => Self::PutVaultResource,
             "disableVaultResource" => Self::DisableVaultResource,
             "putVaultReleaseMode" => Self::PutVaultReleaseMode,
+            "registerProtectedResource" => Self::RegisterProtectedResource,
             _ => return None,
         })
     }
@@ -1148,6 +1151,14 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             only(m, &["alg"])?;
             Change::JoseAlg(JoseAlg::from_name(text(m, "alg")?).ok_or(Invalid::JoseAlg)?)
         }
+        // AG-8, OP-154 m.3 (a)
+        Op::RegisterProtectedResource => {
+            only(m, &["resource", "display_name"])?;
+            Change::ResourceRegister(crate::domain::ProtectedResource {
+                resource: String::from(text(m, "resource")?),
+                display_name: String::from(text(m, "display_name")?),
+            })
+        }
         Op::PutCimdPolicy => {
             only(m, &["enabled", "domains"])?;
             Change::CimdPolicy(CimdPolicy {
@@ -1541,6 +1552,8 @@ pub enum Kind {
     AgentSponsors,
     /// The vault Resources by name (OP-154 m.3 (t)): never a client secret.
     VaultResources,
+    /// The protected resources by canonical URI (AG-8).
+    ProtectedResources,
 }
 
 /// How many days the analytics read covers, today included (PD).
@@ -1875,6 +1888,25 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                         .collect(),
                 }
             }
+            // AG-8
+            (Kind::ProtectedResources, _) => Read {
+                items: t
+                    .protected_resources()
+                    .await?
+                    .into_iter()
+                    .filter(|r| key.is_none_or(|k| k == r.resource))
+                    .map(|r| {
+                        (
+                            serde_json::json!({
+                                "resource": r.resource,
+                                "display_name": r.display_name,
+                            }),
+                            0,
+                        )
+                    })
+                    .collect(),
+                last: None,
+            },
             // OP-154 m.3 (t)
             (Kind::VaultResources, _) => Read {
                 items: super::vault::list(t, key).await?,

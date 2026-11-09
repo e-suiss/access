@@ -370,6 +370,14 @@ pub const INVALID_WORKLOAD_CLIENT: Code = code(
     "Bad Request",
     "A workload client names a SPIFFE ID or a whole-segment prefix ending in /*, an https Bundle Endpoint and its agent, and no redirect URI (OP-154 m.3 (r), §11.12.1).",
 );
+/// A protected resource that is not a canonical `https` URI, or a display name outside 1–128
+/// printable characters (AG-8, RFC 8707 §2).
+pub const INVALID_PROTECTED_RESOURCE: Code = code(
+    "invalid-protected-resource",
+    400,
+    "Bad Request",
+    "A protected resource is a canonical https URI without query, fragment or trailing slash, and a display name of 1 to 128 printable characters (AG-8, RFC 8707 §2).",
+);
 /// A vault Resource outside OP-154 m.3 (t), or an upstream the catalog does not have.
 pub const INVALID_VAULT_RESOURCE: Code = code(
     "invalid-vault-resource",

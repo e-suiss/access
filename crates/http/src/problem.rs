@@ -450,6 +450,7 @@ pub const CODES: &[Code] = &[
     codes::realm::INVALID_AGENT_TEMPLATE,
     codes::realm::INVALID_WORKLOAD_CLIENT,
     codes::realm::INVALID_VAULT_RESOURCE,
+    codes::realm::INVALID_PROTECTED_RESOURCE,
     codes::realm::INVALID_RECOVERY_POLICY,
     codes::realm::RECOVERY_OPTION_OFF,
     codes::realm::SELF_ISSUE_REFUSED,

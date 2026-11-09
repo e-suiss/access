@@ -872,7 +872,8 @@ const fn put(section: &'static str) -> Shape {
 pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
     use ResourceKind::{
         Accounts, AgentSponsors, Agents, Analytics, Clients, Deliveries, Groups, Hooks,
-        Organizations, Settings, Signals, SocialProviders, UpstreamIdps, VaultResources, Webhooks,
+        Organizations, ProtectedResources, Settings, Signals, SocialProviders, UpstreamIdps,
+        VaultResources, Webhooks,
     };
     const CREATE: Shape = Shape::Write {
         patch: None,
@@ -901,7 +902,12 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         ),
         "putVaultResource" => (VaultResources, w(true)),
         "disableVaultResource" | "putVaultReleaseMode" => (VaultResources, w(false)),
-        "listProtectedResources" => (Settings, Shape::Planned("Page")),
+        // AG-8, OP-154 m.3 (a)
+        "listProtectedResources" => (
+            ProtectedResources,
+            Shape::List(&["resource", "display_name"]),
+        ),
+        "registerProtectedResource" => (ProtectedResources, CREATE),
         o if declared(o) => (Settings, Shape::Planned("WriteResult")),
         "listClients" => (
             Clients,
@@ -1011,6 +1017,10 @@ pub fn register<G: Guard, E: super::ports::Env>(
 /// The problem an identity plane refusal answers with (OP-64: a refused write is a problem; a
 /// missing resource is `not-found` like a hidden one, TN-113).
 #[must_use]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one match over the identity plane refusals, each arm one problem"
+)]
 pub fn problem_of(e: &AdminError) -> &'static Code {
     use codes::realm as r;
     match e {
@@ -1039,9 +1049,13 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::UpstreamSubjectLinked => &r::UPSTREAM_SUBJECT_LINKED,
             Invalid::SigninPolicy => &r::INVALID_SIGNIN_POLICY,
             Invalid::SessionPolicy => &r::INVALID_SESSION_POLICY,
-            Invalid::ClientExists | Invalid::GroupExists | Invalid::UpstreamExists => {
-                &r::RESOURCE_EXISTS
-            }
+            Invalid::ProtectedResource => &r::INVALID_PROTECTED_RESOURCE,
+            Invalid::ClientExists
+            | Invalid::GroupExists
+            | Invalid::UpstreamExists
+            | Invalid::OrgExists
+            | Invalid::SocialExists
+            | Invalid::ResourceExists => &r::RESOURCE_EXISTS,
             Invalid::UpstreamMembership => &r::MEMBERSHIP_ISSUED_UPSTREAM,
             Invalid::AccountState => &r::ACCOUNT_STATE_CONFLICT,
             Invalid::NoSecret => &r::CLIENT_HAS_NO_SECRET,
@@ -1060,7 +1074,6 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::ExtensionPolicy => &r::INVALID_EXTENSION_POLICY,
             Invalid::HookPointTaken => &r::HOOK_POINT_TAKEN,
             Invalid::CatalogUpgradeRequired => &r::CATALOG_UPGRADE_REQUIRED,
-            Invalid::OrgExists | Invalid::SocialExists => &r::RESOURCE_EXISTS,
             Invalid::LastOwner => &r::LAST_OWNER,
             Invalid::RecoveryPolicy => &r::INVALID_RECOVERY_POLICY,
             Invalid::RecoveryOption => &r::RECOVERY_OPTION_OFF,

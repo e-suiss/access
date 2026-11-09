@@ -201,6 +201,13 @@ pub enum Invalid {
     /// The client exists already.
     #[error("client exists")]
     ClientExists,
+    /// A protected resource that is not a canonical `https` URI or has no display name
+    /// (AG-8, §11.4.3).
+    #[error("invalid protected resource")]
+    ProtectedResource,
+    /// The protected resource is registered already.
+    #[error("protected resource exists")]
+    ResourceExists,
     /// A platform product client outside the platform tenant (OP-149 m.4).
     #[error("platform clients belong to the platform tenant")]
     PlatformTenant,
@@ -490,6 +497,8 @@ impl Invalid {
             Self::RpId => "invalid-rp-id",
             Self::NoClient => "no-such-client",
             Self::ClientExists => "client-exists",
+            Self::ProtectedResource => "invalid-protected-resource",
+            Self::ResourceExists => "protected-resource-exists",
             Self::PlatformTenant => "platform-tenant-only",
             Self::PlatformAuth => "platform-requires-private-key-jwt",
             Self::PublicKey => "invalid-public-key",
@@ -1186,6 +1195,38 @@ impl RpId {
     }
 }
 
+/// A protected resource or MCP server the realm's tokens may name as audience (AG-8, §11.4.3),
+/// by its canonical URI.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProtectedResource {
+    /// The canonical `https` URI.
+    pub resource: String,
+    /// What administrators and the consent screen call it.
+    pub display_name: String,
+}
+
+impl ProtectedResource {
+    /// Checks the URI is canonical (RFC 8707 §2, AG-8) and the name is one to 128 printable
+    /// characters.
+    ///
+    /// # Errors
+    /// [`Invalid::ProtectedResource`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        let canonical = access_identity_oauth::domain::client::canonical_resource(&self.resource);
+        let name = self.display_name.chars().count();
+        if canonical.as_deref() != Some(self.resource.as_str())
+            || !self.resource.starts_with("https://")
+            || self.resource.ends_with('/')
+            || self.resource.len() > 2048
+            || !(1..=128).contains(&name)
+            || self.display_name.chars().any(char::is_control)
+        {
+            return Err(Invalid::ProtectedResource);
+        }
+        Ok(())
+    }
+}
+
 /// The realm's client and CIMD acceptance policy (§11.3, AG-4): off by default.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CimdPolicy {
@@ -1616,6 +1657,8 @@ pub enum Change {
     Agent(agent::AgentChange),
     /// `idp.vault.*` (OP-154 m.3 (a), (t)).
     Vault(access_identity_vault::domain::resource::VaultChange),
+    /// `idp.client.resource_register` (AG-8, OP-154 m.3 (a)).
+    ResourceRegister(ProtectedResource),
     /// `idp.org.member_remove` (OP-153 m.3 (p)).
     OrgMemberRemove(OrgMember),
     /// `idp.org.invite` (TN-89, OP-153 m.3 (o)).
@@ -1955,6 +1998,7 @@ impl Change {
             Self::GuardianshipRecord(_) => IdpAction::AccountGuardianshipRecord,
             Self::Agent(a) => a.action(),
             Self::Vault(v) => v.action(),
+            Self::ResourceRegister(_) => IdpAction::ClientResourceRegister,
             Self::CspMode { loosens: false, .. } => IdpAction::RealmCspMode,
             Self::CspMode { loosens: true, .. } => IdpAction::RealmCspModeLoosen,
         }
@@ -2010,6 +2054,7 @@ impl Change {
             Self::GuardianshipRecord(g) => g.check(),
             Self::Agent(a) => a.check(),
             Self::Vault(v) => v.check().map_err(|_| Invalid::VaultResource),
+            Self::ResourceRegister(r) => r.check(),
             Self::AccountBind(_)
             | Self::CspMode { .. }
             | Self::OrgInviteRevoke { .. }
@@ -2138,6 +2183,13 @@ impl Change {
             Self::GuardianshipRecord(g) => g.to_value(),
             Self::Agent(a) => a.body(),
             Self::Vault(v) => v.body(),
+            Self::ResourceRegister(r) => Value::Map(vec![
+                (Value::text("resource"), Value::text(r.resource.as_str())),
+                (
+                    Value::text("display_name"),
+                    Value::text(r.display_name.as_str()),
+                ),
+            ]),
             Self::CspMode { mode, .. } => {
                 Value::Map(vec![(Value::text("csp_mode"), Value::text(mode.name()))])
             }
@@ -2238,6 +2290,9 @@ impl Change {
             }
             Self::Agent(a) => path.extend(a.path()),
             Self::Vault(v) => path.extend(v.path()),
+            Self::ResourceRegister(r) => {
+                path.extend([String::from("resource"), r.resource.clone()]);
+            }
         }
         ResourceRef {
             namespace: String::from(RESOURCE_NAMESPACE),
