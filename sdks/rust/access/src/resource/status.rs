@@ -61,15 +61,20 @@ fn cwt(response: &Response, keys: &ListKeys<'_>) -> Result<(ListToken, Vec<u8>),
         .iat
         .checked_mul(1000)
         .ok_or(Denied::StatusMalformed)?;
-    let key = operational_key(
-        &PureBackend,
-        metadata,
-        &metadata.domain,
-        excerpt,
-        KeyUsage::StatusList,
-        iat,
-    )
-    .map_err(|_| Denied::StatusKey)?;
+    // §9.10 step 1, OP-154 m.3 (v)
+    let resolve = |at| {
+        operational_key(
+            &PureBackend,
+            metadata,
+            &metadata.domain,
+            excerpt,
+            KeyUsage::StatusList,
+            at,
+        )
+    };
+    let key = resolve(iat)
+        .or_else(|_| resolve(iat.saturating_add(999)))
+        .map_err(|_| Denied::StatusKey)?;
     let verified = verify_sign1(
         &PureBackend,
         &response.body,
