@@ -1,8 +1,10 @@
-//! Organization ownership transfer (TN-91, TN-92, OP-153 m.3 (p)): the organization Anchor's
-//! `anchor_transfer`, CT3. An owner proposes it with the Exercise its own client signed; every
-//! owner and the recipient are told; the recipient contributes; any owner or the recipient may
-//! cancel until it commits; it is submitted only once the recipient contributed and at least
-//! 24 hours passed since the proposal, and then the domain's own CT3 time-lock still holds it.
+//! Organization ownership transfer (TN-91, TN-92, OP-153 m.3 (p), m.17 (b), m.25 (a)): the
+//! organization Anchor's `anchor_transfer`, CT3. An owner proposes it with the Exercise its own
+//! client signed, and the proposal opens it at the domain, where it waits for the recipient's
+//! `accept_root` contribution (L0-META-20) and the CT3 time-lock; every owner and the recipient
+//! are told; the recipient contributes with its own `contribute` Exercise; any owner or the
+//! recipient may cancel until it commits; it completes only once the recipient contributed and
+//! at least 24 hours passed since the proposal, presenting that contribution as its proof.
 //! Ownership is root standing over the Anchor, never billing; a DNS ownership recovery exists
 //! only when the Genesis root terms declare it.
 
@@ -105,6 +107,12 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             return Err(AdminError::Refused(String::from(OWNER_ONLY)));
         }
         let digest = payload_digest(w)?;
+        // L0-META-20, OP-153 m.25 (a)
+        if let Applied::Written { .. } | Applied::AlreadyWritten { .. } =
+            Box::pin(self.meta((tenant, realm), w.clone())).await?
+        {
+            return Err(AdminError::Refused(String::from(NOT_THE_TRANSFER)));
+        }
         let now = access_store::authority::server_time(self.app).await?;
         let effective_ms = now.saturating_add(TRANSFER_DELAY_MS);
         let mut t = TenantTx::begin(self.app, tenant, realm).await?;
@@ -229,7 +237,9 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         Ok((found, tr))
     }
 
-    /// Records the recipient's contribution (TN-91): only the recipient's own session gives it.
+    /// Records the recipient's contribution (TN-91, L0-META-20): only the recipient's own
+    /// session gives it, naming the `ExerciseID` of the `accept_root` contribute Exercise its
+    /// own device signed. The domain checks it when the transfer completes.
     ///
     /// # Errors
     /// [`AdminError`].
@@ -238,14 +248,14 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         (tenant, realm): (TenantId, RealmId),
         org: [u8; 16],
         id: [u8; 16],
-        by: [u8; 16],
+        (by, acceptance): ([u8; 16], [u8; 32]),
     ) -> Result<(), AdminError> {
         let mut t = TenantTx::begin(self.app, tenant, realm).await?;
         let (_, tr) = self.open_transfer(&mut t, org, id).await?;
         if tr.to != by {
             return Err(AdminError::Refused(String::from(NOT_THE_TRANSFER)));
         }
-        if !t.contribute_transfer(id).await? {
+        if !t.contribute_transfer(id, &acceptance).await? {
             return Err(AdminError::Conflict);
         }
         t.commit().await?;
@@ -292,7 +302,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         (tenant, realm): (TenantId, RealmId),
         org: [u8; 16],
         id: [u8; 16],
-        w: Submission,
+        mut w: Submission,
     ) -> Result<Applied, AdminError> {
         let mut t = TenantTx::begin(self.app, tenant, realm).await?;
         let (found, tr) = self.open_transfer(&mut t, org, id).await?;
@@ -301,7 +311,13 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             .ok_or(Invalid::NoMember)?;
         let now = i64::try_from(t.server_time().await?).unwrap_or(i64::MAX);
         t.commit().await?;
-        if tr.state != TransferState::Contributed || now < tr.effective_ms {
+        let Some(acceptance) = tr
+            .acceptance
+            .filter(|_| tr.state == TransferState::Contributed)
+        else {
+            return Err(AdminError::Refused(String::from(TRANSFER_WAITING)));
+        };
+        if now < tr.effective_ms {
             return Err(AdminError::Refused(String::from(TRANSFER_WAITING)));
         }
         if w.nonce != tr.nonce || payload_digest(&w)? != tr.payload_digest {
@@ -310,6 +326,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         if !self.signer_is(&w, from_party).await? {
             return Err(AdminError::Refused(String::from(OWNER_ONLY)));
         }
+        // L1-ADP-12, L0-META-20
+        w.contributions = vec![access_kernel::digest::Digest(acceptance)];
         let applied = Box::pin(self.meta((tenant, realm), w)).await?;
         if let Applied::Written { exercise, .. } | Applied::AlreadyWritten { exercise, .. } =
             &applied

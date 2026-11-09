@@ -110,6 +110,8 @@ pub struct Transfer {
     pub dns_recovery: bool,
     /// Where it stands.
     pub state: TransferState,
+    /// The `ExerciseID` of the recipient's `accept_root` contribution, once given.
+    pub acceptance: Option<[u8; 32]>,
 }
 
 /// Where a transfer stands (TN-91).
@@ -772,7 +774,7 @@ impl TenantTx {
                       (extract(epoch FROM effective_at) * 1000)::bigint AS "effective_ms!",
                       dns_recovery, contributed_at IS NOT NULL AS "contributed!",
                       cancelled_at IS NOT NULL AS "cancelled!",
-                      completed_at IS NOT NULL AS "completed!"
+                      completed_at IS NOT NULL AS "completed!", acceptance
                  FROM access.org_transfers
                 WHERE tenant_id = $1 AND realm_id = $2 AND transfer_id = $3"#,
             tenant,
@@ -801,6 +803,7 @@ impl TenantTx {
                 } else {
                     TransferState::Proposed
                 },
+                acceptance: r.acceptance.map(id32).transpose()?,
             })
         })
         .transpose()
@@ -831,19 +834,26 @@ impl TenantTx {
         Ok(out)
     }
 
-    /// Records the recipient's contribution to an open transfer, once.
+    /// Records the recipient's contribution to an open transfer, once: the `ExerciseID` of its
+    /// `accept_root` contribute Exercise (TN-91, L0-META-20).
     ///
     /// # Errors
     /// [`StoreError`].
-    pub async fn contribute_transfer(&mut self, id: [u8; 16]) -> Result<bool, StoreError> {
+    pub async fn contribute_transfer(
+        &mut self,
+        id: [u8; 16],
+        acceptance: &[u8; 32],
+    ) -> Result<bool, StoreError> {
         let (tenant, realm) = self.org_scope()?;
         let done = sqlx::query!(
-            r#"UPDATE access.org_transfers SET contributed_at = clock_timestamp()
+            r#"UPDATE access.org_transfers
+                  SET contributed_at = clock_timestamp(), acceptance = $4
                 WHERE tenant_id = $1 AND realm_id = $2 AND transfer_id = $3
                   AND contributed_at IS NULL AND cancelled_at IS NULL AND completed_at IS NULL"#,
             tenant,
             realm,
             uuid(id),
+            acceptance.as_slice(),
         )
         .execute(&mut *self.tx)
         .await?;

@@ -1020,9 +1020,14 @@ handler! {
 handler! {
     /// `POST /v1/organizations/{organization}/handovers/{handover}/contribution` (TN-91).
     contribute_handover(s, entry, b, p, bytes, headers) true {
-        let _ = &bytes;
+        let req: access_identity_ui::app::household::HandoverAcceptance = body(&bytes)?;
         Ok(s.hosted
-            .contribute_handover(&entry, &b, param(&p, "organization"), param(&p, "handover"))
+            .contribute_handover(
+                &entry,
+                &b,
+                (param(&p, "organization"), param(&p, "handover")),
+                &req,
+            )
             .await)
     }
 }

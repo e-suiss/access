@@ -213,6 +213,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 basis: order.basis,
                 capacity: order.capacity,
                 ais,
+                contributions: Vec::new(),
                 pep: String::from(self.pep),
             })
             .await

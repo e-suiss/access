@@ -290,6 +290,7 @@ async fn exercise(w: &World, domain: Digest, slug: &str, action: IdpAction, kind
             basis,
             capacity: Capacity::Own,
             ais,
+            contributions: Vec::new(),
             pep: String::from(IDENTITY_PEP),
         },
     )

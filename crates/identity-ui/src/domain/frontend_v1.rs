@@ -423,7 +423,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Post,
         "/v1/organizations/{organization}/handovers/{handover}/contribution",
         "contributeHandover",
-        "The recipient's own contribution to an ownership handover; it still waits for its delay and the owner's signed completion (TN-91).",
+        "The recipient's own contribution to an ownership handover: the ExerciseID of its accept_root contribute Exercise; it still waits for its delay and the owner's signed completion (TN-91, L0-META-20).",
     ),
     live(
         Owner::N3,

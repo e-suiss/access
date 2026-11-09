@@ -264,7 +264,12 @@ where
             payload: s.payload.map(|p| *p),
             basis: s.basis,
             capacity: s.capacity,
-            proofs: Vec::new(),
+            // L1-ADP-12, TN-91
+            proofs: s
+                .contributions
+                .into_iter()
+                .map(access_authority_core::domain::ProofRef::Contribution)
+                .collect(),
             exercise: None,
             consistency: None,
         };

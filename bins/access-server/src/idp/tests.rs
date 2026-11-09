@@ -821,6 +821,7 @@ async fn only_the_governing_domain_commits_a_realm_change() {
             capacity: p.capacity,
             ais: sign(&statement(other, &p.nonce, digest, p.basis), ROOT_KEY),
             payload: None,
+            contributions: Vec::new(),
             pep: String::from(PEP),
             actor: None,
         },

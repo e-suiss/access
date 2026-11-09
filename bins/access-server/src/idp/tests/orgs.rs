@@ -712,6 +712,7 @@ fn meta_write(
         payload: Some(Box::new(payload)),
         basis,
         capacity: Capacity::Own,
+        contributions: Vec::new(),
         pep: String::from(PEP),
         actor: None,
     }
@@ -1243,6 +1244,22 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
         .unwrap();
     // TN-91, OP-153 m.17 (f)
     realm_events(&w, at.1, "relay.message.ownership_handover.v1", 2).await;
+    // L0-META-20, OP-153 m.17 (b), m.25 (a)
+    let Applied::NotAllowed { decision, .. } = Box::pin(
+        w.admin()
+            .meta(at, handover(d, anchor, ALICE, 0x90, ROOT_KEY)),
+    )
+    .await
+    .unwrap() else {
+        panic!("the handover waits for its recipient");
+    };
+    assert!(
+        decision
+            .unmet
+            .iter()
+            .any(|u| u.term == access_kernel::meta::accept_root(ALICE)),
+        "{decision:?}"
+    );
     refusal(
         Box::pin(w.admin().complete_transfer(
             at,
@@ -1255,12 +1272,12 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
     );
     refusal(
         w.admin()
-            .contribute_transfer(at, ORG, first.transfer, founder)
+            .contribute_transfer(at, ORG, first.transfer, (founder, [0x77; 32]))
             .await,
         NOT_THE_TRANSFER,
     );
     w.admin()
-        .contribute_transfer(at, ORG, first.transfer, bob)
+        .contribute_transfer(at, ORG, first.transfer, (bob, [0x77; 32]))
         .await
         .unwrap();
     // TN-91
@@ -1281,7 +1298,7 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
         .unwrap();
     assert!(matches!(
         w.admin()
-            .contribute_transfer(at, ORG, first.transfer, bob)
+            .contribute_transfer(at, ORG, first.transfer, (bob, [0x77; 32]))
             .await,
         Err(AdminError::Invalid(Invalid::NoMember))
     ));
@@ -1307,18 +1324,22 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
         .unwrap();
     t.commit().await.unwrap();
     w.admin()
-        .contribute_transfer(at, ORG, id, bob)
+        .contribute_transfer(at, ORG, id, (bob, [0x78; 32]))
         .await
         .unwrap();
-    written(
-        &Box::pin(w.admin().complete_transfer(at, ORG, id, second))
-            .await
-            .unwrap(),
+    // L0-META-20, OP-153 m.25 (a): an acceptance the domain does not hold completes nothing
+    let unaccepted = Box::pin(w.admin().complete_transfer(at, ORG, id, second)).await;
+    assert!(
+        !matches!(
+            unaccepted,
+            Ok(Applied::Written { .. } | Applied::AlreadyWritten { .. })
+        ),
+        "{unaccepted:?}"
     );
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     let members = t.members(org).await.unwrap();
-    assert!(members.iter().any(|m| m.subject == bob && m.owner));
-    assert!(!members.iter().any(|m| m.subject == founder && m.owner));
+    assert!(!members.iter().any(|m| m.subject == bob && m.owner));
+    assert!(members.iter().any(|m| m.subject == founder && m.owner));
     // TN-92
     assert!(
         t.transfers(org)

@@ -3973,17 +3973,23 @@ async fn a_handovers_recipient_contributes_and_an_owner_or_the_recipient_cancels
         b64url_encode(&first)
     );
 
+    // L0-META-20, OP-153 m.25 (a)
+    let acceptance = json!({ "acceptance": b64url_encode(&[0x7e; 32]) });
     let mut eve = e.browser("eve");
     assert_eq!(eve.sign_in("eve@acme.example").await.step(), "complete");
     // TN-91
     assert_eq!(
-        eve.post(&format!("{base}/contribution"), None).await.status,
+        eve.post(&format!("{base}/contribution"), Some(acceptance.clone()))
+            .await
+            .status,
         StatusCode::FORBIDDEN
     );
     let mut o = e.browser("o");
     assert_eq!(o.sign_in("owner@acme.example").await.step(), "complete");
     assert_eq!(
-        o.post(&format!("{base}/contribution"), None).await.status,
+        o.post(&format!("{base}/contribution"), Some(acceptance.clone()))
+            .await
+            .status,
         StatusCode::FORBIDDEN
     );
     let mut b = e.browser("b");
@@ -3995,9 +4001,24 @@ async fn a_handovers_recipient_contributes_and_an_owner_or_the_recipient_cancels
         o.get("/v1/account/handovers").await.json()["items"][0]["as"],
         "owner"
     );
-    let c = b.post(&format!("{base}/contribution"), None).await;
+    let short = json!({ "acceptance": b64url_encode(&[0x7e; 16]) });
+    assert_eq!(
+        b.post(&format!("{base}/contribution"), Some(short))
+            .await
+            .status,
+        StatusCode::BAD_REQUEST
+    );
+    let c = b
+        .post(&format!("{base}/contribution"), Some(acceptance))
+        .await;
     assert_eq!(c.status, StatusCode::OK, "{:?}", c.json());
     assert_eq!(c.json()["state"], "contributed");
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    assert_eq!(
+        t.transfer(first).await.unwrap().unwrap().acceptance,
+        Some([0x7e; 32])
+    );
+    t.commit().await.unwrap();
     // TN-91
     let key = o.key();
     let x = o.send("DELETE", &base, Some(json!({})), Some(&key)).await;

@@ -853,6 +853,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 basis: p.basis,
                 capacity: p.capacity,
                 ais,
+                contributions: Vec::new(),
                 pep: String::from(self.pep),
             })
             .await

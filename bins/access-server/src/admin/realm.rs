@@ -358,6 +358,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             basis: r.basis,
             capacity: r.capacity,
             ais: caller.ais,
+            contributions: Vec::new(),
             pep: IDENTITY_PEP.to_owned(),
             actor: None,
         };

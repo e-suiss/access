@@ -99,6 +99,15 @@ pub struct ConsentDecision {
     pub approve: bool,
 }
 
+/// `POST /v1/organizations/{organization}/handovers/{handover}/contribution`.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HandoverAcceptance {
+    /// The `ExerciseID` of the recipient's `accept_root` contribution, base64url (L0-META-20):
+    /// the contribute Exercise its own device signed and the Approval Surface committed.
+    pub acceptance: String,
+}
+
 fn failed(e: &StoreError) -> Reply {
     tracing::warn!(error = %e, "household step failed");
     Reply::problem(UNAVAILABLE)
@@ -281,14 +290,21 @@ where
     }
 
     /// `POST /v1/organizations/{organization}/handovers/{handover}/contribution` (TN-91,
-    /// OP-153 m.17 (b)): the recipient's own contribution, once.
+    /// L0-META-20, OP-153 m.17 (b), m.25 (a)): the recipient's own `accept_root` contribution,
+    /// once; the domain checks it when the owner completes the handover.
     pub async fn contribute_handover(
         &self,
         entry: &RealmEntry,
         b: &Browser<'_>,
-        org: &str,
-        handover: &str,
+        (org, handover): (&str, &str),
+        req: &HandoverAcceptance,
     ) -> Reply {
+        let Some(acceptance) = b64url_decode(&req.acceptance)
+            .ok()
+            .and_then(|v| <[u8; 32]>::try_from(v.as_slice()).ok())
+        else {
+            return Reply::problem(INVALID);
+        };
         let (kit, me) = match self.me(entry, b).await {
             Ok(m) => m,
             Err(r) => return r,
@@ -304,7 +320,7 @@ where
         if h.to != me {
             return Reply::problem(NOT_YOURS);
         }
-        match t.contribute_transfer(h.id).await {
+        match t.contribute_transfer(h.id, &acceptance).await {
             Ok(true) => {}
             Ok(false) => return Reply::problem(NO_HANDOVER),
             Err(e) => return failed(&e),

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT transfer_id, org_id, from_subject, to_subject, to_party, nonce, payload_digest,\n                      (extract(epoch FROM effective_at) * 1000)::bigint AS \"effective_ms!\",\n                      dns_recovery, contributed_at IS NOT NULL AS \"contributed!\",\n                      cancelled_at IS NOT NULL AS \"cancelled!\",\n                      completed_at IS NOT NULL AS \"completed!\"\n                 FROM access.org_transfers\n                WHERE tenant_id = $1 AND realm_id = $2 AND transfer_id = $3",
+  "query": "SELECT transfer_id, org_id, from_subject, to_subject, to_party, nonce, payload_digest,\n                      (extract(epoch FROM effective_at) * 1000)::bigint AS \"effective_ms!\",\n                      dns_recovery, contributed_at IS NOT NULL AS \"contributed!\",\n                      cancelled_at IS NOT NULL AS \"cancelled!\",\n                      completed_at IS NOT NULL AS \"completed!\", acceptance\n                 FROM access.org_transfers\n                WHERE tenant_id = $1 AND realm_id = $2 AND transfer_id = $3",
   "describe": {
     "columns": [
       {
@@ -114,6 +114,17 @@
         "name": "completed!",
         "type_info": "Bool",
         "origin": "Expression"
+      },
+      {
+        "ordinal": 12,
+        "name": "acceptance",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.org_transfers",
+            "name": "acceptance"
+          }
+        }
       }
     ],
     "parameters": {
@@ -135,8 +146,9 @@
       false,
       null,
       null,
-      null
+      null,
+      true
     ]
   },
-  "hash": "8c06e7f568ee27284a646af2ee70fb75daf5e85ed571070355301ec39f25cb8e"
+  "hash": "480cf55b9ec0c80cf8e6b6210a69e751c068f7fe1ff60e765e3d1d94895f9c01"
 }

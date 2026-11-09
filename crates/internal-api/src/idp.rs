@@ -590,6 +590,9 @@ pub struct Submission {
     pub capacity: Capacity,
     /// The actor's AIS over the intent.
     pub ais: Vec<u8>,
+    /// The `ExerciseID`s of allowed contributions the Exercise presents as proofs (L1-ADP-12),
+    /// such as a recipient's `accept_root` to an ownership handover (TN-91).
+    pub contributions: Vec<Digest>,
     /// The identity plane as PEP.
     pub pep: String,
     /// The Party the identity plane bound the requesting session's subject to (§13.4 G54,
