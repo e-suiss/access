@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 
 use access_authority_sequencer::ports::Clock;
 use access_crypto::projection::{
-    AccessTokenProjection, Authority as RarAuthority, PartyPseudonym, PartyRefs,
+    AccessTokenProjection, Authority as RarAuthority, Lineage, PartyPseudonym, PartyRefs,
     access_token_claims,
 };
 use access_internal_api::projections::{MAX_TOKEN_BYTES, SIGNER_UNAVAILABLE, TOKEN_TOO_LARGE};
@@ -81,6 +81,8 @@ pub struct TokenOrder {
     pub authority: TokenAuthority,
     /// The family of a refresh.
     pub family: Option<[u8; 16]>,
+    /// The optional members the client opted in to.
+    pub profile: access_internal_api::projections::TokenProfile,
 }
 
 /// A signed token.
@@ -331,6 +333,13 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             TokenAuthority::Intent(i) => Refs(led.core.intent_refs(i)?),
             TokenAuthority::Bounds => Refs(BTreeMap::new()),
         };
+        // AGI-1, P53, §9.9.4
+        let party = led.core.instance_party(&pap.holder.instance).await?;
+        let lineage = led
+            .core
+            .token_lineage(&order.incoming.request.basis, &party, pap.capacity)
+            .await?;
+        let instance = pap.holder.instance;
         let projection = AccessTokenProjection {
             issuer: &order.issuer,
             domain: &domain,
@@ -346,6 +355,15 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             client_id: &order.client_id,
             confirmation: order.confirmation,
             iat: pap.iat,
+            lineage: Lineage {
+                prior: &lineage.prior,
+                may_act: lineage.may_act.as_ref(),
+                instance: order.profile.agent_instance_id.then_some(&instance),
+                chain: order
+                    .profile
+                    .delegation_chain
+                    .then_some(lineage.chain.as_slice()),
+            },
         };
         let Ok(Json::Object(mut claims)) = access_token_claims(&projection, &refs) else {
             return Ok(Err("projection-authority"));

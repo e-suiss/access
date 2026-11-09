@@ -54,6 +54,7 @@ fn request(
         confirmation: Confirmation::DpopJkt([4; 32]),
         resources,
         family: None,
+        profile: access_internal_api::projections::TokenProfile::default(),
     }
 }
 

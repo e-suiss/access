@@ -225,6 +225,7 @@ impl<E: Env> OAuth<E> {
             confirmation: Confirmation::DpopJkt(jkt.0),
             resources: vec![String::from(r.resource)],
             family: asked.family,
+            profile: access_internal_api::projections::TokenProfile::default(),
         };
         // K17, G50
         let answer = self

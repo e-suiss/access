@@ -496,6 +496,7 @@ impl Mcp {
                 confirmation: Confirmation::DpopJkt(dpop.jkt()),
                 resources: vec![audience.to_owned()],
                 family: None,
+                profile: access_internal_api::projections::TokenProfile::default(),
             })
             .await
             .unwrap();

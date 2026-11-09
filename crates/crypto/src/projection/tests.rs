@@ -30,12 +30,16 @@ fn d(n: u8) -> Digest {
 const ACTOR: Id = Id([0xa1; 16]);
 const PRINCIPAL: Id = Id([0xa2; 16]);
 const RECIPIENT: Id = Id([0xa3; 16]);
+const DELEGATOR: Id = Id([0xa4; 16]);
+const FIRST: Id = Id([0xa5; 16]);
 
 fn parties() -> BTreeMap<Id, PartyPseudonym> {
     BTreeMap::from([
         (ACTOR, PartyPseudonym::new("pw-actor").unwrap()),
         (PRINCIPAL, PartyPseudonym::new("pw-principal").unwrap()),
         (RECIPIENT, PartyPseudonym::new("pw-recipient").unwrap()),
+        (DELEGATOR, PartyPseudonym::new("pw-delegator").unwrap()),
+        (FIRST, PartyPseudonym::new("pw-first").unwrap()),
     ])
 }
 
@@ -363,6 +367,7 @@ fn projection<'a>(f: &'a Fixture, authority: Authority<'a>) -> AccessTokenProjec
         client_id: "client-1",
         confirmation: Confirmation::Jkt(thumbprint(&f.holder.key)),
         iat: IAT,
+        lineage: Lineage::default(),
     }
 }
 
@@ -563,5 +568,89 @@ fn support_names_the_subject_and_the_operator() {
             .claims;
         assert_eq!(c.get("sub").and_then(Json::as_str), Some("pw-actor"));
         assert!(c.get("act").is_none());
+    }
+}
+
+fn levels(act: &Json) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut at = Some(act);
+    while let Some(a) = at {
+        out.extend(a.get("sub").and_then(Json::as_str).map(String::from));
+        at = a.get("act");
+    }
+    out
+}
+
+// AGI-1, P53, AG-25, §9.9.4, §11.21.4, Ek B 4211, 4212, 4213, 4214, 4303, 4323
+#[test]
+fn nested_act_may_act_and_the_chain_come_from_the_lineage_given() {
+    let f = fixture(false);
+    let prior = [DELEGATOR, FIRST];
+    let chain = [PRINCIPAL, FIRST, DELEGATOR, ACTOR];
+    let instance = Id([0x77; 16]);
+    for signer in signers() {
+        let mut p = projection(&f, Authority::Bounds);
+        p.lineage = Lineage {
+            prior: &prior,
+            may_act: Some(&RECIPIENT),
+            instance: Some(&instance),
+            chain: Some(&chain),
+        };
+        let token = access_token(&signer, &p, &parties()).unwrap();
+        let c = verify_token(&token, &signer, &p.confirmation)
+            .unwrap()
+            .claims;
+        let act = c.get("act").unwrap();
+        assert_eq!(levels(act), ["pw-actor", "pw-delegator", "pw-first"]);
+        assert_eq!(
+            act.get(AGENT_INSTANCE_CLAIM).and_then(Json::as_str),
+            Some(b64url_encode(&instance.0).as_str())
+        );
+        assert!(act.get("act").unwrap().get(AGENT_INSTANCE_CLAIM).is_none());
+        assert_eq!(
+            c.get("may_act")
+                .and_then(|m| m.get("sub"))
+                .and_then(Json::as_str),
+            Some("pw-recipient")
+        );
+        let Some(Json::Array(links)) = c.get(DELEGATION_CHAIN_CLAIM) else {
+            panic!("no chain");
+        };
+        assert_eq!(links.len(), 4);
+        assert_no_party_ids(&payload_of(&token));
+
+        p.capacity = Capacity::Own;
+        p.lineage = Lineage {
+            instance: Some(&instance),
+            ..Lineage::default()
+        };
+        let token = access_token(&signer, &p, &parties()).unwrap();
+        let c = verify_token(&token, &signer, &p.confirmation)
+            .unwrap()
+            .claims;
+        assert!(c.get("act").is_none() && c.get("may_act").is_none());
+        assert!(c.get(AGENT_INSTANCE_CLAIM).is_some());
+        assert!(c.get(DELEGATION_CHAIN_CLAIM).is_none());
+
+        let deep = [DELEGATOR; MAX_ACT_DEPTH];
+        p.capacity = Capacity::For(PRINCIPAL);
+        p.lineage = Lineage {
+            prior: &deep,
+            ..Lineage::default()
+        };
+        assert_eq!(
+            access_token(&signer, &p, &parties()).err(),
+            Some(ProjectionError::Authority)
+        );
+        let three = [DELEGATOR, FIRST, DELEGATOR];
+        p.lineage = Lineage {
+            prior: &three,
+            ..Lineage::default()
+        };
+        let token = access_token(&signer, &p, &parties()).unwrap();
+        let c = verify_token(&token, &signer, &p.confirmation)
+            .unwrap()
+            .claims;
+        assert_eq!(levels(c.get("act").unwrap()).len(), 4);
     }
 }

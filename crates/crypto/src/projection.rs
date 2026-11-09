@@ -267,6 +267,33 @@ pub enum Authority<'a> {
     Bounds,
 }
 
+/// Longest `act` nesting an access token carries, the actor included (§9.9.4, AG-25: at least
+/// four levels; the lineage's own ceiling is lower).
+pub const MAX_ACT_DEPTH: usize = 16;
+
+/// The `agent_instance_id` member (§11.17).
+pub const AGENT_INSTANCE_CLAIM: &str = "agent_instance_id";
+
+/// The `delegation_chain` member (AG-24).
+pub const DELEGATION_CHAIN_CLAIM: &str = "delegation_chain";
+
+/// What an access token projects of its basis lineage besides the capacity (§9.9.4, §11.21.4).
+/// Every member comes from the domain's lineage record, never from a presented token (AGI-1).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Lineage<'a> {
+    /// The earlier actors of a `for(P)` chain, nearest first: the Party that delegated to the
+    /// actor, then the one that delegated to it, up to P's first delegate. The nested `act`.
+    pub prior: &'a [Id],
+    /// The one Party the basis Grant lets a delegated holding pass to, as the `may_act` hint
+    /// (§9.9.4); it grants nothing.
+    pub may_act: Option<&'a Id>,
+    /// The actor Instance, as `agent_instance_id` when the client opted in (§11.17).
+    pub instance: Option<&'a Id>,
+    /// The holders of the lineage, root first, as `delegation_chain` when the client opted in
+    /// (AG-24, PROFILE): an excerpt the domain's key signs with the token (P51).
+    pub chain: Option<&'a [Id]>,
+}
+
 /// What an access token projects (§9.9, §9.9.4, RFC 9068).
 #[derive(Clone, Copy, Debug)]
 pub struct AccessTokenProjection<'a> {
@@ -292,6 +319,37 @@ pub struct AccessTokenProjection<'a> {
     pub confirmation: Confirmation,
     /// Signing time.
     pub iat: TrustedTime,
+    /// What it projects of the lineage.
+    pub lineage: Lineage<'a>,
+}
+
+/// The `act` of a `for(P)` token (§9.9.4, AGI-1, P53): the actor outermost, with its Instance
+/// when opted in, and each earlier actor of the lineage nested inside the one it delegated to.
+fn act(
+    p: &AccessTokenProjection<'_>,
+    actor: &PartyPseudonym,
+    instance: Option<(String, Json)>,
+    pseudonym: &dyn Fn(&Id) -> Result<PartyPseudonym, ProjectionError>,
+) -> Result<Json, ProjectionError> {
+    if p.lineage.prior.len() >= MAX_ACT_DEPTH {
+        return Err(ProjectionError::Authority);
+    }
+    let mut inner: Option<Json> = None;
+    for party in p.lineage.prior.iter().rev() {
+        let mut level = vec![
+            member("sub", text(pseudonym(party)?.as_str())),
+            member("iss", text(p.issuer)),
+        ];
+        level.extend(inner.take().map(|i| member("act", i)));
+        inner = Some(Json::Object(level));
+    }
+    let mut outer = vec![
+        member("sub", text(actor.as_str())),
+        member("iss", text(p.issuer)),
+    ];
+    outer.extend(instance);
+    outer.extend(inner.map(|i| member("act", i)));
+    Ok(Json::Object(outer))
 }
 
 /// The RAR `type` of an action: `<namespace>:<name>:<major>`; the schema digest is the
@@ -370,7 +428,8 @@ fn authorization_details(
 
 /// The claims of an access token projection, in this order: `iss`, `sub` (the principal's
 /// pseudonym: the actor's party for `own`, P for `for(P)`), `act` (for `for(P)` only:
-/// `{sub: actor's pseudonym, iss}`), `aud`, `exp` (the contract's horizon) and `iat` in seconds
+/// `{sub: actor's pseudonym, iss}`, the lineage's earlier actors nested inside), the
+/// [`Lineage`] members asked for, `aud`, `exp` (the contract's horizon) and `iat` in seconds
 /// rounded down, `jti` (the projection exercise in text form), `client_id`, `cnf` and
 /// `authorization_details` (§9.9.4, §9.13.5).
 ///
@@ -392,19 +451,44 @@ pub fn access_token_claims(
     }
     let pseudonym = |party: &Id| parties.pseudonym(party).ok_or(ProjectionError::Pseudonym);
     let actor = pseudonym(p.actor_party)?;
+    let instance = p
+        .lineage
+        .instance
+        .map(|i| member(AGENT_INSTANCE_CLAIM, Json::Str(b64url_encode(&i.0))));
     let mut claims = vec![member("iss", text(p.issuer))];
     match p.capacity {
-        Capacity::Own => claims.push(member("sub", text(actor.as_str()))),
+        // §9.9.4, §11.21.4
+        Capacity::Own => {
+            claims.push(member("sub", text(actor.as_str())));
+            claims.extend(instance);
+        }
         Capacity::For(principal) => {
             claims.push(member("sub", text(pseudonym(&principal)?.as_str())));
-            claims.push(member(
-                "act",
-                Json::Object(vec![
-                    member("sub", text(actor.as_str())),
-                    member("iss", text(p.issuer)),
-                ]),
-            ));
+            claims.push(member("act", act(p, &actor, instance, &pseudonym)?));
         }
+    }
+    // §9.9.4
+    if let Some(m) = p.lineage.may_act {
+        claims.push(member(
+            "may_act",
+            Json::Object(vec![
+                member("sub", text(pseudonym(m)?.as_str())),
+                member("iss", text(p.issuer)),
+            ]),
+        ));
+    }
+    // AG-24, P51
+    if let Some(chain) = p.lineage.chain {
+        let links = chain
+            .iter()
+            .map(|h| {
+                Ok(Json::Object(vec![member(
+                    "sub",
+                    text(pseudonym(h)?.as_str()),
+                )]))
+            })
+            .collect::<Result<Vec<_>, ProjectionError>>()?;
+        claims.push(member(DELEGATION_CHAIN_CLAIM, Json::Array(links)));
     }
     claims.extend([
         member("aud", text(p.audience)),

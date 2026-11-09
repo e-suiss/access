@@ -45,6 +45,16 @@ pub enum Confirmation {
     MtlsX5t([u8; 32]),
 }
 
+/// The optional agent token members a client opted in to (§11.21.4, §11.17, AG-24); both are
+/// projections of the lineage record, never authority.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct TokenProfile {
+    /// `agent_instance_id`: the actor Instance.
+    pub agent_instance_id: bool,
+    /// `delegation_chain`: the lineage's holders, signed with the token (PROFILE).
+    pub delegation_chain: bool,
+}
+
 /// A token projection the authorization server asks for: the signed `projection.issue`
 /// Exercise of the actor and the OAuth facts the token must carry.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -79,6 +89,8 @@ pub struct TokenProjectionRequest {
     pub resources: Vec<String>,
     /// Whether this is a refresh: a new decision for the same family (§9.9.3).
     pub family: Option<[u8; 16]>,
+    /// The optional members the client opted in to.
+    pub profile: TokenProfile,
 }
 
 /// A token the authority plane signed. `Debug` shows everything but the token itself.
@@ -262,6 +274,7 @@ mod tests {
             confirmation: Confirmation::DpopJkt([4; 32]),
             resources: vec![String::from("https://rs.example")],
             family: None,
+            profile: TokenProfile::default(),
         };
         assert_eq!(
             crate::block_on(Unserved.issue(request)),

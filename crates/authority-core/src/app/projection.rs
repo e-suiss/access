@@ -30,6 +30,17 @@ use crate::app::Authority;
 use crate::domain::{Evaluation, Request};
 use crate::ports::{Binding, Reader, Salts};
 
+/// What a token projects of its basis lineage, as domain-pairwise references (§9.9.4).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TokenLineage {
+    /// The earlier actors of a `for(P)` chain, nearest first.
+    pub prior: Vec<Id>,
+    /// The one Party the basis Grant lets a delegated holding pass to.
+    pub may_act: Option<Id>,
+    /// The lineage's holders, root first, the actor's Party last.
+    pub chain: Vec<Id>,
+}
+
 /// `projection.issue` per Instance and action class per hour (§13.7.4, PD).
 pub const ISSUE_PER_HOUR: u64 = 30;
 /// Open offline PAPs per Instance (§13.7.4, PD).
@@ -458,14 +469,66 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
 
     /// The domain-pairwise reference of the Party of `instance` (P52, MD-10).
     pub(crate) async fn instance_ref(&self, instance: &Id) -> Result<Id, CoreError> {
-        let party = self
-            .settled(|snap| {
-                crate::domain::read::<InstanceState>(snap, kind::INSTANCE, instance)
-                    .map(|i| i.party)
-            })
-            .await?
-            .ok_or(CoreError::Protocol("instance"))?;
+        let party = self.instance_party(instance).await?;
         self.party_ref(&party)
+    }
+
+    /// The Party of `instance`.
+    pub(crate) async fn instance_party(&self, instance: &Id) -> Result<Id, CoreError> {
+        self.settled(|snap| {
+            crate::domain::read::<InstanceState>(snap, kind::INSTANCE, instance).map(|i| i.party)
+        })
+        .await?
+        .ok_or(CoreError::Protocol("instance"))
+    }
+
+    /// What a token projects of the lineage of `basis` held by `actor` in `capacity`, every
+    /// Party as its domain-pairwise reference (§9.9.4, AGI-1, P53, MD-10): for `for(P)`, the
+    /// Parties that delegated down to the actor, nearest first, stopping at P; the one Party the
+    /// basis Grant's delegation terms name, as the `may_act` hint; and the lineage's holders,
+    /// root first. Nothing comes from a presented token.
+    pub(crate) async fn token_lineage(
+        &self,
+        basis: &ExerciseBasis,
+        actor: &Id,
+        capacity: access_kernel::combinator::Capacity,
+    ) -> Result<TokenLineage, CoreError> {
+        let ExerciseBasis::Holding(h) = basis else {
+            return Ok(TokenLineage::default());
+        };
+        let walked = self
+            .settled(|snap| crate::domain::delegators(snap, &h.grant))
+            .await?
+            .ok_or(CoreError::Protocol("lineage"))?;
+        let principal = match capacity {
+            access_kernel::combinator::Capacity::For(p) => Some(p),
+            access_kernel::combinator::Capacity::Own => None,
+        };
+        let mut prior = Vec::new();
+        if principal.is_some() {
+            for d in &walked.delegators {
+                if Some(*d) == principal {
+                    break;
+                }
+                if d != actor {
+                    prior.push(self.party_ref(d)?);
+                }
+            }
+        }
+        let mut chain = Vec::with_capacity(walked.delegators.len().saturating_add(1));
+        for d in walked.delegators.iter().rev() {
+            chain.push(self.party_ref(d)?);
+        }
+        chain.push(self.party_ref(&h.holder)?);
+        let may_act = match walked.may_pass_to {
+            Some(p) => Some(self.party_ref(&p)?),
+            None => None,
+        };
+        Ok(TokenLineage {
+            prior,
+            may_act,
+            chain,
+        })
     }
 
     /// Every Party `intent` names, with its domain-pairwise reference (P52, MD-10).

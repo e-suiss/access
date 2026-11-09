@@ -276,6 +276,7 @@ impl Upstream {
             client_id: CLIENT,
             confirmation: Confirmation::Jkt(thumbprint(&self.fixture.holder().public_key())),
             iat: self.fixture.now.saturating_sub(60_000),
+            lineage: access_crypto::projection::Lineage::default(),
         };
         let Json::Object(mut claims) =
             access_token_claims(&projection, &Parties).map_err(sign_err)?

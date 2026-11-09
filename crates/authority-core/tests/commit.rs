@@ -5366,6 +5366,7 @@ fn token_order(
         ))),
         authority,
         family,
+        profile: access_internal_api::projections::TokenProfile::default(),
     }
 }
 
@@ -5857,6 +5858,7 @@ fn alice_order(
         ))),
         authority: access_authority_core::adapters::TokenAuthority::Bounds,
         family: None,
+        profile: access_internal_api::projections::TokenProfile::default(),
     }
 }
 

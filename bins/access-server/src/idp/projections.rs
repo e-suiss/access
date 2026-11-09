@@ -69,6 +69,7 @@ pub(crate) fn order(r: TokenProjectionRequest) -> Result<TokenOrder, &'static st
         },
         authority,
         family: r.family,
+        profile: r.profile,
     })
 }
 

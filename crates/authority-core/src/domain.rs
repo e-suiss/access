@@ -846,6 +846,44 @@ fn chain_ids(
     }
 }
 
+/// Who delegated down a lineage and to whom its basis Grant may pass (§9.9.4, AGI-1).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Delegators {
+    /// The holder of each Grant above `grant` that a delegation derived from, nearest first.
+    pub(crate) delegators: Vec<access_kernel::model::Id>,
+    /// The one Party `grant`'s delegation terms let it pass to, while depth remains.
+    pub(crate) may_pass_to: Option<access_kernel::model::Id>,
+}
+
+/// The [`Delegators`] of the lineage of `grant`, from the recorded Grants only; `None` when a
+/// Grant is missing or the lineage is deeper than the Kernel walks.
+pub(crate) fn delegators(view: &dyn View, grant: &access_kernel::model::Id) -> Option<Delegators> {
+    let first: GrantState = read(view, kind::GRANT, grant)?;
+    let terms = &first.content.authority.delegation;
+    let may_pass_to = match (&terms.downstream_holder_class, terms.depth) {
+        (Some(access_kernel::model::SubjectSelector::Party(p)), d) if d > 0 => Some(*p),
+        _ => None,
+    };
+    let mut out = Delegators {
+        delegators: Vec::new(),
+        may_pass_to,
+    };
+    let mut basis = first.content.basis;
+    loop {
+        if out.delegators.len() >= meta::MAX_LINEAGE {
+            return None;
+        }
+        match basis {
+            GrantBasis::Anchor(_) => return Some(out),
+            GrantBasis::Holding(h) => {
+                out.delegators.push(h.holder);
+                let g: GrantState = read(view, kind::GRANT, &h.grant)?;
+                basis = g.content.basis;
+            }
+        }
+    }
+}
+
 /// The counter of one budget term of a Grant for the window holding `now` (OP-141 m.26 (a)),
 /// with the window's reset time for a rolling window.
 fn budget_key(
