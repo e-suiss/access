@@ -53,6 +53,28 @@ where
         }))
     }
 
+    /// The issuers `domain` accepts for `actor-binding` whose pinned key set names `iss`, at
+    /// the leader's trusted time (§11.11.3 step 1, AG-29, OP-154 m.3 (q)).
+    ///
+    /// # Errors
+    /// [`CoreError`].
+    pub async fn assertion_issuers(
+        &self,
+        domain: Digest,
+        iss: &str,
+    ) -> Result<Vec<(Id, claim::Pinned)>, CoreError> {
+        let mut guard = self.leading(domain).await?;
+        let Some(led) = guard.as_mut() else {
+            return Err(CoreError::Unavailable("leader"));
+        };
+        let now = led
+            .clock
+            .now()
+            .await
+            .map_err(|_| CoreError::Unavailable("time"))?;
+        led.core.assertion_issuers(iss, now).await
+    }
+
     /// Ingests `sub` on its domain's leader (CMP-8).
     ///
     /// # Errors

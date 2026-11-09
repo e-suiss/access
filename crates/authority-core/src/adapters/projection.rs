@@ -337,7 +337,11 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         let party = led.core.instance_party(&pap.holder.instance).await?;
         let lineage = led
             .core
-            .token_lineage(&order.incoming.request.basis, &party, pap.capacity)
+            .token_lineage(
+                &order.incoming.request.basis,
+                &party,
+                order.incoming.request.capacity,
+            )
             .await?;
         let instance = pap.holder.instance;
         let projection = AccessTokenProjection {

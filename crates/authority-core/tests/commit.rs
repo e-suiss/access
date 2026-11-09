@@ -5862,7 +5862,7 @@ fn alice_order(
     }
 }
 
-// INV-5, §9.9 table, OP-154 m.3 (m), Ek B 4151
+// INV-5, §9.9, OP-154 m.3 (m), Ek B 4151
 #[tokio::test]
 async fn a_token_turns_inactive_once_its_basis_grant_ends() {
     use access_authority_core::adapters::Projected;
