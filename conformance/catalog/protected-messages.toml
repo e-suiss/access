@@ -67,6 +67,8 @@ keys = [
   "status-stale",
   "status-ended",
   "status-ended_undated",
+  "selection-because",
+  "selection-no_longer",
   "root-sole_confirm",
   "hub-owner",
   "aftermath-recorded_at",

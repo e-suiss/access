@@ -1943,6 +1943,7 @@ async fn the_hub_tells_stale_from_ended_and_a_rejoin_from_a_restore() {
         p.selection, None,
         "never selected: neither stale nor removed"
     );
+    assert_eq!(p.said, None);
     assert_eq!(p.groups, [Group::SharedFromYou]);
 
     let joined = staff_claim(d, true, None);
@@ -1953,6 +1954,10 @@ async fn the_hub_tells_stale_from_ended_and_a_rejoin_from_a_restore() {
     let Some(Selection::Current { since: first }) = p.selection else {
         panic!("{p:?}");
     };
+    // XI-15, §8.17.5.7, Ek B 3704
+    let said = p.said.expect("the selecting statement");
+    assert_eq!(said.issuer, ALICE);
+    assert_eq!(said.at, NOW);
     assert!(p.groups.contains(&Group::YourAuthority));
     assert_eq!(
         row_of(&rows, fresh_only).selection,
@@ -1983,6 +1988,7 @@ async fn the_hub_tells_stale_from_ended_and_a_rejoin_from_a_restore() {
         panic!("{p:?}");
     };
     assert!(removed > first);
+    assert_eq!(p.said.map(|s| s.issuer), Some(ALICE));
     assert_eq!(row_of(&rows, fresh_only).selection, p.selection);
     assert!(p.groups.contains(&Group::YourAuthority));
 

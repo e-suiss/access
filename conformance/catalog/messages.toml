@@ -1331,6 +1331,20 @@ owner = "access"
 protected = true
 
 [[message]]
+key = "selection-because"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "selection-no_longer"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
 key = "capacity-own_use"
 surface = "hub"
 class = "label"

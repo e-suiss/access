@@ -77,7 +77,13 @@ fn holding(h: &Holding) -> Out {
     m.insert("since".into(), Out::from(h.since));
     m.insert("revision".into(), Out::from(h.revision));
     if let Some(s) = h.selection {
-        m.insert("selection".into(), selection(s));
+        let mut out = selection(s);
+        // XI-15, §8.17.5.7
+        if let (Some(said), Out::Object(o)) = (h.said, &mut out) {
+            o.insert("by".into(), Out::from(b64url_encode(&said.issuer.0)));
+            o.insert("stated_at".into(), Out::from(said.at));
+        }
+        m.insert("selection".into(), out);
     }
     Out::Object(m)
 }

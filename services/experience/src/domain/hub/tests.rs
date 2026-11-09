@@ -138,10 +138,10 @@ fn stale_is_not_removed_and_a_rejoin_is_a_new_episode() {
         )
     };
     let rows = vec![
-        rule(json!({ "state": "stale", "since": 4 })),
-        rule(json!({ "state": "ended", "pos": 9, "at": 1_700 })),
+        rule(json!({ "state": "stale", "since": 4, "by": "hr", "stated_at": 3 })),
+        rule(json!({ "state": "ended", "pos": 9, "at": 1_700, "by": "hr", "stated_at": 8 })),
         rule(json!({ "state": "ended" })),
-        rule(json!({ "state": "current", "since": 12 })),
+        rule(json!({ "state": "current", "since": 12, "by": "hr", "stated_at": 11 })),
     ];
     let hub = assemble(ME, Depth::Default, 10, &one(rows));
     let [stale, ended, undated, rejoined] = &hub.your_authority[..] else {
@@ -150,20 +150,47 @@ fn stale_is_not_removed_and_a_rejoin_is_a_new_episode() {
     assert_eq!(stale.status, texts::STATUS_STALE);
     assert_eq!(stale.freshness, Freshness::Current);
     assert_eq!(
-        stale.selection.map(|s| (s.state, s.since)),
+        stale.selection.as_ref().map(|s| (s.state, s.since)),
         Some((SelectionState::Stale, Some(4)))
+    );
+    // XI-15, §8.17.5.7, Ek B 3704
+    let said = |r: &crate::contract::Row| {
+        r.selection
+            .as_ref()
+            .map(|s| (s.by.clone(), s.stated_at, s.reason.clone()))
+    };
+    let because = Some(String::from(texts::SELECTION_BECAUSE));
+    assert_eq!(
+        said(stale),
+        Some((Some(String::from("hr")), Some(3), because.clone()))
+    );
+    assert_eq!(
+        said(ended),
+        Some((
+            Some(String::from("hr")),
+            Some(8),
+            Some(String::from(texts::SELECTION_NO_LONGER))
+        ))
+    );
+    assert_eq!(said(undated), Some((None, None, None)));
+    assert_eq!(
+        said(rejoined),
+        Some((Some(String::from("hr")), Some(11), because))
     );
     assert_eq!(stale.who.classes, ["employee"]);
     assert_eq!(ended.status, texts::STATUS_ENDED);
     assert_eq!(
-        ended.selection.map(|s| (s.state, s.pos, s.at, s.since)),
+        ended
+            .selection
+            .as_ref()
+            .map(|s| (s.state, s.pos, s.at, s.since)),
         Some((SelectionState::Ended, Some(9), Some(1_700), None))
     );
     assert_eq!(undated.status, texts::STATUS_ENDED_UNDATED);
     assert_ne!(stale.status, ended.status);
     assert_eq!(rejoined.status, texts::STATUS_CURRENT);
     assert_eq!(
-        rejoined.selection.map(|s| (s.state, s.since)),
+        rejoined.selection.as_ref().map(|s| (s.state, s.since)),
         Some((SelectionState::Current, Some(12)))
     );
 }

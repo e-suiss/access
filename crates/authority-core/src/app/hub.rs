@@ -115,6 +115,18 @@ pub struct Holding {
     /// Where the viewer stands in a rule-shaped holder group; `None` when the holder is not a
     /// group or the viewer was never selected by it (XI-15).
     pub selection: Option<Selection>,
+    /// Who says so: the statement that selects the viewer, or the last one that did when the
+    /// selection ended (XI-15's second part, §8.17.5.7).
+    pub said: Option<Said>,
+}
+
+/// The Claim behind a selection (XI-15, INV-16, §8.17.5.7): its issuer and when it was stated.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Said {
+    /// The issuer Party.
+    pub issuer: Id,
+    /// When the issuer stated it, Unix ms.
+    pub at: u64,
 }
 
 /// The viewer's selection by a rule-shaped holder, from its membership episode (C13, INV-31,
@@ -367,14 +379,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     ) -> Result<Option<Holding>, CoreError> {
         let viewer = actor.party;
         let c = &state.content;
-        let (holder, selection) = match &c.holder {
-            SubjectSelector::Party(p) => (Holder::Party(*p), None),
-            SubjectSelector::Public => (Holder::Public, None),
+        let (holder, (selection, said)) = match &c.holder {
+            SubjectSelector::Party(p) => (Holder::Party(*p), (None, None)),
+            SubjectSelector::Public => (Holder::Public, (None, None)),
             SubjectSelector::Pred(conj) => (
                 Holder::Group(conj.iter().map(|t| t.claim_class.clone()).collect()),
                 self.selection(state, conj, &viewer, now).await?,
             ),
-            SubjectSelector::Foreign { .. } => (Holder::Foreign, None),
+            SubjectSelector::Foreign { .. } => (Holder::Foreign, (None, None)),
         };
         let for_viewer = c.agency.contains(&Capacity::For(viewer));
         let from_viewer = match c.basis {
@@ -424,6 +436,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             since: state.since,
             revision: state.revision,
             selection,
+            said,
         }))
     }
 
@@ -437,18 +450,22 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         conjuncts: &BTreeSet<Conjunct>,
         party: &Id,
         now: u64,
-    ) -> Result<Option<Selection>, CoreError> {
+    ) -> Result<(Option<Selection>, Option<Said>), CoreError> {
         let mut snap = Snapshot::default();
         if let Some(since) = self.episode(&mut snap, conjuncts, party, now).await? {
             // C13
             let refresh = self.stale(&mut snap, state, conjuncts, party, now).await?;
-            return Ok(Some(if refresh {
-                Selection::Stale { since }
-            } else {
-                Selection::Current { since }
-            }));
+            let said = self.selecting(&mut snap, conjuncts, party, now).await?;
+            return Ok((
+                Some(if refresh {
+                    Selection::Stale { since }
+                } else {
+                    Selection::Current { since }
+                }),
+                said,
+            ));
         }
-        let mut closed: Option<End> = None;
+        let mut closed: Option<(End, Said)> = None;
         for c in conjuncts {
             let latest = self
                 .members(&mut snap, c, party)
@@ -457,17 +474,54 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 .filter(|(_, s)| s.statement.validity.from <= now)
                 .max_by_key(|(_, s)| s.since);
             let Some((id, s)) = latest else {
-                return Ok(None);
+                return Ok((None, None));
             };
             let last = self.claim_end(&mut snap, &id, &s, now).await?;
-            if closed.is_none_or(|e| last.key() < e.key()) {
-                closed = Some(last);
+            if closed.is_none_or(|(e, _)| last.key() < e.key()) {
+                let said = Said {
+                    issuer: s.statement.issuer,
+                    at: s.statement.issued_at,
+                };
+                closed = Some((last, said));
             }
         }
-        Ok(closed.map(|e| Selection::Ended {
-            pos: e.pos,
-            at: e.at,
+        Ok(closed.map_or((None, None), |(e, said)| {
+            (
+                Some(Selection::Ended {
+                    pos: e.pos,
+                    at: e.at,
+                }),
+                Some(said),
+            )
         }))
+    }
+
+    /// The statement that selects `party` now (XI-15, INV-16): of the first conjunct, the
+    /// latest-stated Claim that meets it and stands in its issuer line.
+    async fn selecting(
+        &self,
+        snap: &mut Snapshot,
+        conjuncts: &BTreeSet<Conjunct>,
+        party: &Id,
+        now: u64,
+    ) -> Result<Option<Said>, CoreError> {
+        let Some(c) = conjuncts.iter().next() else {
+            return Ok(None);
+        };
+        let mut best: Option<Said> = None;
+        for (id, s) in self.members(snap, c, party).await? {
+            if !claim::satisfies(c, &s, now) || !self.in_line(snap, &id, &s.statement, now).await? {
+                continue;
+            }
+            let said = Said {
+                issuer: s.statement.issuer,
+                at: s.statement.issued_at,
+            };
+            if best.is_none_or(|b| said.at > b.at) {
+                best = Some(said);
+            }
+        }
+        Ok(best)
     }
 
     /// The recorded Claims about `party` whose class and value meet `c`, ended or not.

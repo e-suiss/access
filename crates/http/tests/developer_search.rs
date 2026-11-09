@@ -256,6 +256,7 @@ fn hub_entries_carry_capacity_and_no_action() {
         since: 5,
         revision: 0,
         selection: None,
+        said: None,
     };
     let change = access_authority_core::app::management::Change {
         position: 7,
@@ -295,12 +296,12 @@ fn hub_entries_carry_capacity_and_no_action() {
     }
 }
 
-// XI-15, OP-153 m.25 (d)
+// XI-15, OP-153 m.25 (d), (h), Ek B 3704
 #[test]
 fn a_rule_shaped_row_carries_its_selection_state() {
-    use access_authority_core::app::hub::{Entry, Group, Holder, Holding, Selection, Source};
+    use access_authority_core::app::hub::{Entry, Group, Holder, Holding, Said, Selection, Source};
     use access_kernel::model::{ResourceSelector, Structural};
-    let row = |selection| {
+    let row = |selection: Option<Selection>| {
         Hit::Entry(Box::new(Entry::Holding(Box::new(Holding {
             grant: Id([1; 16]),
             groups: vec![Group::YourAuthority],
@@ -320,6 +321,10 @@ fn a_rule_shaped_row_carries_its_selection_state() {
             named: None,
             since: 5,
             revision: 0,
+            said: selection.map(|_| Said {
+                issuer: Id([9; 16]),
+                at: 70,
+            }),
             selection,
         }))))
     };
@@ -340,15 +345,19 @@ fn a_rule_shaped_row_carries_its_selection_state() {
         true,
     );
     let r = &out["results"];
+    let by = b64url_encode(&[9; 16]);
     assert_eq!(
         r[0]["selection"],
-        serde_json::json!({ "state": "stale", "since": 4 })
+        serde_json::json!({ "state": "stale", "since": 4, "by": by, "stated_at": 70 })
     );
     assert_eq!(
         r[1]["selection"],
-        serde_json::json!({ "state": "ended", "pos": 8, "at": 80 })
+        serde_json::json!({ "state": "ended", "pos": 8, "at": 80, "by": by, "stated_at": 70 })
     );
-    assert_eq!(r[2]["selection"], serde_json::json!({ "state": "ended" }));
+    assert_eq!(
+        r[2]["selection"],
+        serde_json::json!({ "state": "ended", "by": by, "stated_at": 70 })
+    );
     assert!(r[3].get("selection").is_none());
     assert!(r[0].get("member").is_none());
 }

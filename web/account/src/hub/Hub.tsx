@@ -228,6 +228,18 @@ function Rows({
                 {r.selection?.at === undefined
                   ? t(r.status)
                   : t(r.status, { time: at(r.selection.at) })}
+                {/* XI-15, §8.17.5.7 */}
+                {r.selection?.by !== undefined && (
+                  <span data-testid="selection-said">
+                    {" · "}
+                    {r.selection.state === "ended"
+                      ? t("selection.no_longer", { issuer: r.selection.by })
+                      : t("selection.because", {
+                          issuer: r.selection.by,
+                          time: r.selection.statedAt === undefined ? "" : at(r.selection.statedAt),
+                        })}
+                  </span>
+                )}
                 {r.validUntil !== undefined && (
                   <> · {t("validity.valid_until", { time: at(r.validUntil) })}</>
                 )}

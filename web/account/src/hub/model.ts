@@ -43,6 +43,10 @@ export interface Selection {
   readonly since?: number;
   readonly pos?: number;
   readonly at?: number;
+  /** Who says so: the issuer of the statement behind it (XI-15's second part, §8.17.5.7). */
+  readonly by?: string;
+  /** When that statement was made. */
+  readonly statedAt?: number;
 }
 
 export interface Row {
@@ -143,17 +147,28 @@ function selection(v: Json): [Selection | undefined, Row["status"]] {
   if (state !== "current" && state !== "stale" && state !== "ended") {
     return [undefined, "status.current"];
   }
+  const by = str(s["by"]);
+  const statedAt = num(s["stated_at"]);
+  const said = {
+    ...(by === undefined ? {} : { by }),
+    ...(by === undefined || statedAt === undefined ? {} : { statedAt }),
+  };
   if (state === "ended") {
     const pos = num(s["pos"]);
     const at = num(s["at"]);
     return [
-      { state, ...(pos === undefined ? {} : { pos }), ...(at === undefined ? {} : { at }) },
+      {
+        state,
+        ...(pos === undefined ? {} : { pos }),
+        ...(at === undefined ? {} : { at }),
+        ...said,
+      },
       at === undefined ? "status.ended_undated" : "status.ended",
     ];
   }
   const since = num(s["since"]);
   return [
-    { state, ...(since === undefined ? {} : { since }) },
+    { state, ...(since === undefined ? {} : { since }), ...said },
     state === "stale" ? "status.stale" : "status.current",
   ];
 }

@@ -290,8 +290,15 @@ export interface components {
         Selection: {
             /** @description When the episode closed, Unix ms. */
             at?: number;
+            /** @description Who says so: the issuer Party of the selecting statement, or of the last one when ended (XI-15). */
+            by?: string;
             /** @description The closing record's position. */
             pos?: number;
+            /**
+             * @description The second part of the explanation (XI-15, §8.17.5.7).
+             * @enum {string}
+             */
+            reason?: "selection.because" | "selection.no_longer";
             /** @description The open episode's first position. */
             since?: number;
             /**
@@ -299,6 +306,8 @@ export interface components {
              * @enum {string}
              */
             state: "current" | "stale" | "ended";
+            /** @description When that statement was made, Unix ms. */
+            stated_at?: number;
         };
         Signal: {
             /** @description Read again; the answer reflects at least this position. */

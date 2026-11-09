@@ -19,6 +19,11 @@ pub const STATUS_STALE: &str = "status.stale";
 pub const STATUS_ENDED: &str = "status.ended";
 /// "Removed": the episode closed at a time the domain did not say.
 pub const STATUS_ENDED_UNDATED: &str = "status.ended_undated";
+/// "Included because *HR* says so (statement of …)": the second part of a rule-shaped row
+/// (XI-15, INV-16, §8.17.5.7).
+pub const SELECTION_BECAUSE: &str = "selection.because";
+/// "*HR* says you're no longer included": who closed the episode (XI-15, INV-31).
+pub const SELECTION_NO_LONGER: &str = "selection.no_longer";
 /// "for their own use".
 pub const CAPACITY_OWN_USE: &str = "capacity.own_use";
 /// "on behalf of *Acme*".
@@ -69,7 +74,7 @@ pub const OUTCOME_BUSY: &str = "outcome.busy_retry";
 pub const OUTCOME_TIME: &str = "outcome.unavailable_time_check";
 
 /// Every key, for the catalogue check.
-pub const ALL: [&str; 29] = [
+pub const ALL: [&str; 31] = [
     NOT_SHOWN,
     SOME_UNKNOWN,
     DOMAIN_CURRENT,
@@ -78,6 +83,8 @@ pub const ALL: [&str; 29] = [
     STATUS_STALE,
     STATUS_ENDED,
     STATUS_ENDED_UNDATED,
+    SELECTION_BECAUSE,
+    SELECTION_NO_LONGER,
     CAPACITY_OWN_USE,
     CAPACITY_ON_BEHALF,
     CAPACITY_AS_YOURSELF,

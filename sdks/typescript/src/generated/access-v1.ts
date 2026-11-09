@@ -1327,7 +1327,7 @@ export interface components {
             since: number;
             /** @description Revision, 0 at issue. */
             revision: number;
-            /** @description For a rule-shaped holder the reader was ever selected by, from the membership episode (XI-15, C13, INV-31): `current` and `stale` (the episode is open; an exercise asks for a fresher statement, never "removed") carry the episode's first position `since`, so a rejoin shows its new episode; `ended` (a cutoff, a disqualifying statement or an expired membership Claim) carries the closing position `pos` and time `at` when known. */
+            /** @description For a rule-shaped holder the reader was ever selected by, from the membership episode (XI-15, C13, INV-31): `current` and `stale` (the episode is open; an exercise asks for a fresher statement, never "removed") carry the episode's first position `since`, so a rejoin shows its new episode; `ended` (a cutoff, a disqualifying statement or an expired membership Claim) carries the closing position `pos` and time `at` when known. `by` and `stated_at` name the statement behind it, the explanation's second part. */
             selection?: {
                 /** @enum {string} */
                 state: "current" | "stale" | "ended";
@@ -1337,6 +1337,10 @@ export interface components {
                 pos?: number;
                 /** @description When it closed, Unix ms (`ended`). */
                 at?: number;
+                /** @description Who says so (XI-15, §8.17.5.7): the issuer Party of the statement that selects the reader, or of the last one that did when `ended`. */
+                by?: string;
+                /** @description When that statement was made, Unix ms. */
+                stated_at?: number;
             };
         };
         HubRoot: {

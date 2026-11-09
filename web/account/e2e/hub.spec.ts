@@ -22,12 +22,18 @@ test.beforeEach(async ({ bff, context, baseURL }) => {
     holding("g-stale", {
       groups: ["your_authority"],
       holder: { group: ["staff"] },
-      selection: { state: "stale", since: 4 },
+      selection: { state: "stale", since: 4, by: "acme-hr", stated_at: 1_699_000_000_000 },
     }),
     holding("g-removed", {
       groups: ["your_authority"],
       holder: { group: ["staff"] },
-      selection: { state: "ended", pos: 9, at: 1_700_000_000_000 },
+      selection: {
+        state: "ended",
+        pos: 9,
+        at: 1_700_000_000_000,
+        by: "acme-hr",
+        stated_at: 1_699_500_000_000,
+      },
     }),
     holding("g-rejoined", {
       groups: ["your_authority"],
@@ -106,6 +112,14 @@ test("a stale selection is not removed, an ended one is, and a rejoin reads curr
   const rejoined = yours.locator('[data-grant="g-rejoined"]');
   await expect(rejoined).toContainText("Current");
   await expect(rejoined).not.toContainText("Removed");
+  // XI-15, §8.17.5.7, Ek B 3704
+  await expect(stale.getByTestId("selection-said")).toContainText(
+    "Included because acme-hr says so (statement of",
+  );
+  await expect(removed.getByTestId("selection-said")).toContainText(
+    "acme-hr says you're no longer included",
+  );
+  await expect(rejoined.getByTestId("selection-said")).toHaveCount(0);
 });
 
 test("Why? says where a holding comes from, as recorded, with details on request", async ({

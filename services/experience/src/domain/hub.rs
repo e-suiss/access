@@ -163,21 +163,33 @@ fn selection(v: &Value) -> (Option<Selection>, &'static str) {
         _ => return (None, texts::STATUS_CURRENT),
     };
     let at = s["at"].as_u64();
-    let text = match state {
+    let status = match state {
         SelectionState::Current => texts::STATUS_CURRENT,
         SelectionState::Stale => texts::STATUS_STALE,
         SelectionState::Ended if at.is_some() => texts::STATUS_ENDED,
         SelectionState::Ended => texts::STATUS_ENDED_UNDATED,
     };
     let ended = state == SelectionState::Ended;
+    let by = text(&s["by"]);
+    // XI-15, §8.17.5.7
+    let reason = by.as_ref().map(|_| {
+        String::from(if ended {
+            texts::SELECTION_NO_LONGER
+        } else {
+            texts::SELECTION_BECAUSE
+        })
+    });
     (
         Some(Selection {
             state,
             since: s["since"].as_u64().filter(|_| !ended),
             pos: s["pos"].as_u64().filter(|_| ended),
             at: at.filter(|_| ended),
+            stated_at: s["stated_at"].as_u64().filter(|_| by.is_some()),
+            by,
+            reason,
         }),
-        text,
+        status,
     )
 }
 

@@ -186,7 +186,7 @@ pub enum SelectionState {
 }
 
 /// The reader's selection by a rule-shaped holder (XI-15).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Selection {
     /// Current, stale or ended.
     pub state: SelectionState,
@@ -199,6 +199,16 @@ pub struct Selection {
     /// When the episode closed, Unix ms, when known.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at: Option<u64>,
+    /// Who says so: the issuer Party of the selecting statement, or of the last one when ended
+    /// (XI-15, §8.17.5.7).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub by: Option<String>,
+    /// When that statement was made, Unix ms.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stated_at: Option<u64>,
+    /// The second part's text key: `selection.because`, or `selection.no_longer` when ended.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 /// A domain as this answer saw it.
@@ -560,6 +570,9 @@ fn rows() -> Map<String, Value> {
             "since": uint("The open episode's first position."),
             "pos": uint("The closing record's position."),
             "at": uint("When the episode closed, Unix ms."),
+            "by": text("Who says so: the issuer Party of the selecting statement, or of the last one when ended (XI-15)."),
+            "stated_at": uint("When that statement was made, Unix ms."),
+            "reason": { "type": "string", "enum": ["selection.because", "selection.no_longer"], "description": "The second part of the explanation (XI-15, §8.17.5.7)." },
         }),
         &["state"],
     );

@@ -340,12 +340,14 @@ fn hub() -> Value {
                 "revision": uint("Revision, 0 at issue."),
                 "selection": {
                     "type": "object",
-                    "description": "For a rule-shaped holder the reader was ever selected by, from the membership episode (XI-15, C13, INV-31): `current` and `stale` (the episode is open; an exercise asks for a fresher statement, never \"removed\") carry the episode's first position `since`, so a rejoin shows its new episode; `ended` (a cutoff, a disqualifying statement or an expired membership Claim) carries the closing position `pos` and time `at` when known.",
+                    "description": "For a rule-shaped holder the reader was ever selected by, from the membership episode (XI-15, C13, INV-31): `current` and `stale` (the episode is open; an exercise asks for a fresher statement, never \"removed\") carry the episode's first position `since`, so a rejoin shows its new episode; `ended` (a cutoff, a disqualifying statement or an expired membership Claim) carries the closing position `pos` and time `at` when known. `by` and `stated_at` name the statement behind it, the explanation's second part.",
                     "properties": {
                         "state": { "type": "string", "enum": ["current", "stale", "ended"] },
                         "since": uint("The episode's first position (`current`, `stale`)."),
                         "pos": uint("The closing record's position (`ended`)."),
                         "at": uint("When it closed, Unix ms (`ended`)."),
+                        "by": { "type": "string", "description": "Who says so (XI-15, §8.17.5.7): the issuer Party of the statement that selects the reader, or of the last one that did when `ended`." },
+                        "stated_at": uint("When that statement was made, Unix ms."),
                     },
                     "required": ["state"],
                     "additionalProperties": false,
