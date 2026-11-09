@@ -199,6 +199,37 @@ pub(crate) fn op_3_findings(ci: &str, nightly: &str) -> Vec<String> {
     out
 }
 
+/// AG-17: the MCP conformance suite runs on the deployed image against its authorization server
+/// and the reference MCP resource server, beside the OIDF suite and the Access vectors.
+pub(crate) fn ag_17_findings(image: &str) -> Vec<String> {
+    let Some(j) = job(image, "mcp-conformance") else {
+        return vec!["image.yml has no `mcp-conformance` job (AG-17)".to_owned()];
+    };
+    let mut out = Vec::new();
+    if !needs(&j, "image") {
+        out.push("`mcp-conformance` must run on the pushed local image (AG-17)".to_owned());
+    }
+    for (text, what) in [
+        (
+            "npm ci --ignore-scripts",
+            "install the pinned suite from its lockfile",
+        ),
+        (
+            "conformance authorization",
+            "run the suite against the authorization server",
+        ),
+        (
+            "examples/mcp_reference",
+            "run the reference MCP resource server",
+        ),
+    ] {
+        if !j.contains(text) {
+            out.push(format!("`mcp-conformance` must {what} (AG-17)"));
+        }
+    }
+    out
+}
+
 fn read(root: &Path, file: &str) -> Result<String, String> {
     std::fs::read_to_string(root.join(file)).map_err(|e| format!("{file}: {e}"))
 }
@@ -213,6 +244,7 @@ fn ci_gates(root: &Path) -> Result<Vec<Violation>, String> {
             semantics_release_findings(&wf("semantics-release.yml")?),
         ),
         ("image.yml", image_findings(&wf("image.yml")?, &ci)),
+        ("image.yml", ag_17_findings(&wf("image.yml")?)),
         (
             "deploy/docker/Dockerfile",
             dockerfile_findings(
@@ -287,6 +319,22 @@ mod tests {
         let no_vet = ci.replace("run: just vet", "run: just audit");
         assert_eq!(op_3_findings(&no_vet, nightly).len(), 1);
         assert_eq!(op_3_findings("jobs:\n", "jobs:\n").len(), 3);
+    }
+
+    // AG-17, OP-154 m.3 (gg)
+    #[test]
+    fn the_mcp_suite_runs_on_the_image_beside_the_others() {
+        let image = "jobs:\n  mcp-conformance:\n    needs: image\n    steps:\n      - run: npm ci --ignore-scripts\n      - run: cargo build --example mcp_reference && target/debug/examples/mcp_reference\n      - run: npx --no-install conformance authorization --url x\n";
+        assert_eq!(ag_17_findings(image), Vec::<String>::new());
+        assert_eq!(ag_17_findings("jobs:\n").len(), 1);
+        assert_eq!(
+            ag_17_findings(&image.replace("needs: image", "needs: other")).len(),
+            1
+        );
+        assert_eq!(
+            ag_17_findings(&image.replace("conformance authorization", "conformance server")).len(),
+            1
+        );
     }
 
     // T-10, T-17, OP-3-G3

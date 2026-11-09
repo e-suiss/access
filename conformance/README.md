@@ -34,6 +34,16 @@ Each case has a `name`, its inputs and the expected result. Byte strings are low
 
 The Kernel and F0 are also compared every night on random inputs (`just f0-random <count> <seed>`). Any difference fails the run.
 
+## External suites in CI
+
+Three suites run side by side, and none stands in for another: the Access vectors test Access semantics, the others test wire formats.
+
+| Suite | Runs against | Where |
+|---|---|---|
+| Access vectors | every Kernel binding and F0 | every pull request |
+| [OpenID Foundation conformance suite](oidf) | a seeded realm (Basic OP, Config OP, FAPI 2.0) | every night |
+| [MCP conformance suite](mcp), pinned in its lockfile | the local deployment's authorization server, and the Rust SDK's reference MCP resource server on the same deployment | every image built from `main` (`mcp-conformance`) |
+
 ## Claiming conformance
 
 An implementation conforms to a track version when it produces the expected result for every case of every operation it implements in that version ([L0-GEN-5](../protocol/l0/README.md)). A claim names the track, the version and the operations covered. Vectors are only added to a published version, never changed; a fix to an expected result is a new version.

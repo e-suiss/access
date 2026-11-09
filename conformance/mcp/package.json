@@ -1,0 +1,10 @@
+{
+  "name": "@esuiss/access-mcp-conformance",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "The pinned MCP conformance suite the mcp-conformance CI job runs against the local deployment.",
+  "devDependencies": {
+    "@modelcontextprotocol/conformance": "0.2.0-alpha.12"
+  }
+}
