@@ -27,13 +27,18 @@ async function step(page: Page, path: string, body?: unknown): Promise<Record<st
   return (await r.json()) as Record<string, unknown>;
 }
 
-/** The console's sign-in: the realm's authorize, its hosted login's JSON steps, then back. */
+/** The console's sign-in: the realm's authorize (`prompt=login` sends it to the hosted login), the
+ * login's JSON steps after that request, then the authorize request again. */
 async function signIn(page: Page): Promise<void> {
   const totpStep = SEED === "" ? 0 : await nextStep();
   const start = await page.request.get("/console/api/sign-in?realm=acme", { maxRedirects: 0 });
   expect(start.status()).toBe(303);
   const authorize = start.headers()["location"] ?? "";
   expect(authorize).toContain("/realms/acme/authorize?");
+  await page.goto(authorize);
+  await page.waitForURL(/\/realms\/acme\/login\?/);
+  const returnTo = new URL(page.url()).searchParams.get("return_to") ?? "";
+  expect(returnTo).toContain("/realms/acme/authorize?");
   const started = await step(page, "/realms/acme/v1/login/flows");
   const identified = await step(page, `/realms/acme${String(started["action"])}`, {
     method: "identifier",
@@ -54,7 +59,7 @@ async function signIn(page: Page): Promise<void> {
     });
   }
   expect(done["step"]).toBe("complete");
-  await page.goto(authorize);
+  await page.goto(`${REALM_ORIGIN}${returnTo}`);
   await page.waitForURL(/\/console(?:[?#]|$)/);
 }
 
