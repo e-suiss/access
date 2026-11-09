@@ -7,13 +7,14 @@ use std::sync::{Arc, Mutex};
 
 use access_crypto::dpop::{NonceKey, NoncePolicy, NonceRing, Role, label};
 use access_identity_hooks::ports::HookCaller;
+use access_identity_oauth::adapters::cimd::HttpClientDocuments;
 use access_identity_oauth::adapters::clients::HttpClientKeys;
 use access_identity_oauth::adapters::dpop::{PgReplayCache, SystemClock};
 use access_identity_oauth::adapters::oauth::{HostedPages, OsRandom, PgOAuth};
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
 use access_identity_oauth::app::oauth::Env;
 use access_identity_oauth::domain::dpop::DpopProfile;
-use access_identity_oauth::ports::oauth::{ClaimSource, Held, ManagementHolders};
+use access_identity_oauth::ports::oauth::{ClaimSource, ClientDocuments, Held, ManagementHolders};
 use access_internal_api::projections::Projections;
 use access_store::Pool;
 use access_store::identity::{RealmId, TenantId};
@@ -86,6 +87,8 @@ pub(crate) struct ServerEnv<P> {
     pub(crate) management: Arc<dyn ManagementHolders + Sync>,
     /// What accounts hold to release as identity claims, under the realms' PII vaults.
     pub(crate) claims: Arc<dyn ClaimSource + Sync>,
+    /// CIMD documents and logos behind the SSRF guard (OP-154 m.3 (i)).
+    pub(crate) documents: HttpClientDocuments,
 }
 
 impl<P: Projections + 'static> Env for ServerEnv<P> {
@@ -155,6 +158,9 @@ impl<P: Projections + 'static> Env for ServerEnv<P> {
     }
     fn claims(&self) -> &(dyn ClaimSource + Sync) {
         &*self.claims
+    }
+    fn documents(&self) -> &(dyn ClientDocuments + Sync) {
+        &self.documents
     }
 }
 

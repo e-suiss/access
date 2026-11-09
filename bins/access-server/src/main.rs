@@ -1166,7 +1166,8 @@ where
         // OP-149 m.26 (a)
         db: PgOAuth::with_reader(app.clone(), reader),
         signer: SignerKeys::new(identity.signer.clone()),
-        client_keys: HttpClientKeys::new(outbound, CachePolicy::default()),
+        client_keys: HttpClientKeys::new(outbound.clone(), CachePolicy::default()),
+        documents: access_identity_oauth::adapters::cimd::HttpClientDocuments::new(outbound),
         directory: PgDirectory::new(router),
         app,
         nonces: oauth::HsmNonces::new(nonce_keys),

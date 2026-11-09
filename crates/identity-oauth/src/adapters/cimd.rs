@@ -67,16 +67,17 @@ pub struct HttpClientDocuments {
 }
 
 impl HttpClientDocuments {
-    /// Over the operator's trust anchors, with the declared deadlines.
+    /// Over the operator's outbound client, with the declared deadlines (OP-154 m.3 (i)).
     #[must_use]
-    pub fn new(tls: std::sync::Arc<rustls::ClientConfig>) -> Self {
+    pub fn new(outbound: Outbound) -> Self {
         Self::over(
-            Outbound::new(tls, Duration::from_millis(FETCH_TIMEOUT_MS))
+            outbound
+                .within(Duration::from_millis(FETCH_TIMEOUT_MS))
                 .connecting_within(Duration::from_millis(CONNECT_TIMEOUT_MS)),
         )
     }
 
-    /// Over `outbound`.
+    /// Over `outbound` as it is.
     #[must_use]
     pub fn over(outbound: Outbound) -> Self {
         Self {

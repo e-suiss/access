@@ -247,6 +247,9 @@ pub(super) async fn console_with(label: &str, with_adp: bool, plan: &Plan) -> Co
             Outbound::disabled(Duration::from_secs(5)),
             CachePolicy::default(),
         ),
+        documents: access_identity_oauth::adapters::cimd::HttpClientDocuments::new(
+            Outbound::disabled(Duration::from_secs(5)),
+        ),
         directory: PgDirectory::new(w.db.router.clone()),
         app: w.db.app.clone(),
         nonces: crate::oauth::HsmNonces::new(w.keys.clone()),

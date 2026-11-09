@@ -606,6 +606,13 @@ impl Outbound {
         }
     }
 
+    /// This client with `timeout` for each whole exchange.
+    #[must_use]
+    pub const fn within(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
     /// This client with its own deadline for the TCP connection (OP-154 m.3 (i)).
     #[must_use]
     pub const fn connecting_within(mut self, connect: Duration) -> Self {
