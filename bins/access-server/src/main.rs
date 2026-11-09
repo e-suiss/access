@@ -920,6 +920,7 @@ where
         ),
         hosted.clone(),
         plane.clone(),
+        access_identity_ui::app::workloads::AttestRoots::embedded(),
     );
     // IDP-31, OP-153 m.3 (l)
     let social = access_http::login::social_router(

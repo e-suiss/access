@@ -293,6 +293,7 @@ pub(super) async fn open(c: &Console, by: &Browser) -> Result<(Id, serde_json::V
         ),
         super::super::vault::Lab::hosted(&c.w),
         c.w.plane.clone(),
+        access_identity_ui::app::workloads::AttestRoots::embedded(),
     );
     let rfc = access_identity_ui::domain::frontend::rfc3339;
     let body = serde_json::json!({

@@ -50,4 +50,20 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         };
         led.core.live_instance_keys_of(&party).await
     }
+
+    /// The Party and key of the live Instance `instance` in `domain` (OP-154 m.3 (s)).
+    ///
+    /// # Errors
+    /// [`CoreError`]; [`CoreError::Unavailable`] without the domain's leader.
+    pub async fn instance_key(
+        &self,
+        domain: Digest,
+        instance: Id,
+    ) -> Result<Option<(Id, access_kernel::verify::cose::PublicKey)>, CoreError> {
+        let guard = self.leading(domain).await?;
+        let Some(led) = guard.as_ref() else {
+            return Err(CoreError::Unavailable("leader"));
+        };
+        led.core.live_instance_key(&instance).await
+    }
 }

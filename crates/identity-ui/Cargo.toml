@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 access-crypto = { workspace = true }
 access-identity-account = { workspace = true }
+access-identity-attest = { workspace = true }
 access-identity-events = { workspace = true }
 access-identity-federation = { workspace = true }
 access-identity-vault = { workspace = true }

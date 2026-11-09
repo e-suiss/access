@@ -21,6 +21,25 @@ use crate::domain::android::{self, SecurityLevel};
 /// Digest context of an attested runtime class.
 pub const RUNTIME_CONTEXT: &str = "access/attestation-runtime/v1";
 
+/// Digest context of an attestation challenge.
+pub const CHALLENGE_CONTEXT: &str = "access/attestation-challenge/v1";
+
+/// How far an attestation challenge's time may be from the trusted time (OP-154 m.3 (s)).
+pub const CHALLENGE_SKEW_MS: u64 = 300_000;
+
+/// The challenge an attestation of `instance` at `at_ms` under the realm `issuer` binds
+/// (Android `attestationChallenge`, TPM `extraData`): `SHA-256(context ‖ 0x00 ‖ issuer ‖ 0x00 ‖
+/// instance ‖ at_ms)`. It is fresh while `at_ms` is within [`CHALLENGE_SKEW_MS`] of the trusted
+/// time, so no challenge is stored.
+#[must_use]
+pub fn challenge(issuer: &str, instance: &[u8; 16], at_ms: u64) -> [u8; 32] {
+    let mut input = issuer.as_bytes().to_vec();
+    input.push(0);
+    input.extend_from_slice(instance);
+    input.extend_from_slice(&at_ms.to_be_bytes());
+    context_digest(CHALLENGE_CONTEXT, &input).0
+}
+
 /// An attested runtime class: where the key lives and what the platform said about the
 /// software around it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

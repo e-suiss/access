@@ -171,5 +171,44 @@ pub fn verify(
     })
 }
 
+/// `TPM_ALG_NULL`.
+const ALG_NULL: u16 = 0x0010;
+/// `TPM_ECC_NIST_P256`.
+const ECC_NIST_P256: u16 = 0x0003;
+
+/// The P-256 public point of an ECC `pubArea` (`TPMT_PUBLIC`), SEC1 uncompressed: what an
+/// attested TPM key is compared with (L21). `None` for any other key, curve or a malformed area.
+#[must_use]
+pub fn ecc_p256_point(pub_area: &[u8]) -> Option<Vec<u8>> {
+    let mut p = Cursor(pub_area);
+    if p.u16().ok()? != ALG_ECC {
+        return None;
+    }
+    p.u16().ok()?;
+    p.u32().ok()?;
+    p.sized().ok()?;
+    if p.u16().ok()? != ALG_NULL {
+        p.take(4).ok()?;
+    }
+    if p.u16().ok()? != ALG_NULL {
+        p.take(2).ok()?;
+    }
+    if p.u16().ok()? != ECC_NIST_P256 {
+        return None;
+    }
+    if p.u16().ok()? != ALG_NULL {
+        p.take(2).ok()?;
+    }
+    let x = p.sized().ok()?;
+    let y = p.sized().ok()?;
+    if x.len() != 32 || y.len() != 32 || !p.0.is_empty() {
+        return None;
+    }
+    let mut out = vec![0x04];
+    out.extend_from_slice(x);
+    out.extend_from_slice(y);
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests;

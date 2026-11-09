@@ -40,6 +40,25 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             .collect())
     }
 
+    /// The Party and current key of the live Instance `instance` at the head; `None` for an
+    /// ended or unknown one (L21, OP-154 m.3 (s)).
+    ///
+    /// # Errors
+    /// [`CoreError`] for a failed read.
+    pub async fn live_instance_key(
+        &self,
+        instance: &Id,
+    ) -> Result<Option<(Id, PublicKey)>, CoreError> {
+        let rows = self.fetch(&[meta::key(kind::INSTANCE, instance)]).await?;
+        Ok(rows
+            .into_iter()
+            .next()
+            .and_then(|(_, v, _)| v)
+            .and_then(|v| InstanceState::from_value(&v).ok())
+            .filter(|s| s.ended.is_none())
+            .map(|s| (s.party, s.key)))
+    }
+
     async fn live_instance_states_of(
         &self,
         party: &Id,

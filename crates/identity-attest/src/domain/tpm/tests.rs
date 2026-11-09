@@ -150,3 +150,32 @@ fn tpm_key_attestation_follows_its_checklist() {
         Err(AttestError::Chain)
     );
 }
+
+// L21, Ek B 4125
+#[test]
+fn the_p256_point_of_an_ecc_area_is_read_and_nothing_else() {
+    let mut area = ALG_ECC.to_be_bytes().to_vec();
+    area.extend(ALG_SHA256.to_be_bytes());
+    area.extend(0x0007_2u32.to_be_bytes());
+    area.extend([0, 0]);
+    area.extend(ALG_NULL.to_be_bytes());
+    area.extend([0x00, 0x18, 0x00, 0x0b]);
+    area.extend(ECC_NIST_P256.to_be_bytes());
+    area.extend(ALG_NULL.to_be_bytes());
+    area.extend([0, 32]);
+    area.extend([1; 32]);
+    area.extend([0, 32]);
+    area.extend([2; 32]);
+    let point = ecc_p256_point(&area).unwrap();
+    assert_eq!(point.len(), 65);
+    assert_eq!(point[0], 4);
+    assert_eq!(&point[1..33], &[1; 32]);
+    assert_eq!(&point[33..], &[2; 32]);
+    let mut p384 = area.clone();
+    p384[16] = 0x04;
+    assert!(ecc_p256_point(&p384).is_none());
+    let mut rsa = area.clone();
+    rsa[1] = 0x01;
+    assert!(ecc_p256_point(&rsa).is_none());
+    assert!(ecc_p256_point(&area[..area.len() - 1]).is_none());
+}

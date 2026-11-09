@@ -39,3 +39,10 @@ A verified attestation names a runtime class whose digest is the `attestation_ru
 value, bound to the attested Instance. Device integrity verdicts only narrow: the strongest one
 is a compliant posture, a failed one a non-compliant posture, anything between says nothing. An
 Instance, its current key binding and its attestations are kept as three separate records.
+
+A realm takes evidence at `POST /v1/workloads/attestations`. The challenge is
+`SHA-256("access/attestation-challenge/v1" ‖ 0x00 ‖ issuer ‖ 0x00 ‖ instance ‖ at)`, where `at`
+(milliseconds) must be within five minutes of the realm's clock. The attested key must be the
+Instance's own current P-256 key. Android evidence counts only from a verified, locked device. An
+App Attest key is never an Instance's own key, so App Attest evidence is refused there. What
+passes becomes the realm issuer's `attestation_runtime` Claim, bound to the Instance.

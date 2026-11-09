@@ -148,6 +148,22 @@ pub trait PartyKeys: Send + Sync {
     ) -> impl Future<
         Output = Result<Vec<access_kernel::verify::cose::PublicKey>, InstancesUnavailable>,
     > + Send;
+
+    /// The Party and current key of the live Instance `instance` in `domain`; `None` for an
+    /// ended or unknown one (L21).
+    fn instance_key(
+        &self,
+        domain: Digest,
+        instance: [u8; 16],
+    ) -> impl Future<
+        Output = Result<
+            Option<(
+                access_kernel::model::Id,
+                access_kernel::verify::cose::PublicKey,
+            )>,
+            InstancesUnavailable,
+        >,
+    > + Send;
 }
 
 /// A workload's first Instance (OP-154 m.3 (d)): its key's self-signed `instance_create`.

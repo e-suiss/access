@@ -752,6 +752,13 @@ pub const ROUTES: &[Route] = &[
         "openWorkloadInstance",
         "A workload's key opens its own Instance of its agent with a self-signed instance_create; it stands only on the realm issuer's identity_binding_workload Claim about that key and still needs a Grant to act (OP-154 m.3 (d)).",
     ),
+    live(
+        Owner::L4,
+        Verb::Post,
+        "/v1/workloads/attestations",
+        "attestWorkload",
+        "Android key or TPM 2.0 evidence that an Instance's own key lives in hardware, for the challenge of that Instance and time; the realm issuer's attestation_runtime Claim bound to the Instance follows and grants nothing (§5.9, OP-154 m.3 (s)).",
+    ),
 ];
 
 fn parameters(path: &str) -> Vec<Value> {

@@ -165,8 +165,13 @@ fn self_signed(
 /// Registers [`AGENT`] with the root as its operator and opens an Instance for a fresh
 /// runtime key under a sponsor's session (OP-154 m.3 (c)): the runtime key and the Instance.
 pub(super) async fn enrol(w: &World, domain: Digest) -> (Runtime, Id) {
+    enrol_with(w, domain, SoftSigner::generate_p256().unwrap().0).await
+}
+
+/// [`enrol`] with `runtime` as the Instance's key.
+pub(super) async fn enrol_with(w: &World, domain: Digest, runtime: SoftSigner) -> (Runtime, Id) {
     let root_party = root_party(&root_key(&w.keys).unwrap().public_key());
-    enrol_for(w, domain, root_party, None).await
+    enrol_for_with(w, domain, (root_party, None), runtime).await
 }
 
 /// Registers [`AGENT`] with `operator` as its operator and opens an Instance for a fresh
@@ -176,6 +181,16 @@ pub(super) async fn enrol_for(
     domain: Digest,
     operator: Id,
     subject: Option<[u8; 16]>,
+) -> (Runtime, Id) {
+    enrol_for_with(w, domain, (operator, subject), SoftSigner::generate_p256().unwrap().0).await
+}
+
+/// [`enrol_for`] with `runtime` as the Instance's key.
+async fn enrol_for_with(
+    w: &World,
+    domain: Digest,
+    (operator, subject): (Id, Option<[u8; 16]>),
+    runtime: SoftSigner,
 ) -> (Runtime, Id) {
     let route = route_by_slug(&w.db.router, "acme").await.unwrap().unwrap();
     let root_party = operator;
@@ -230,7 +245,6 @@ pub(super) async fn enrol_for(
         ),
         "{registered:?}"
     );
-    let runtime = SoftSigner::generate_p256().unwrap().0;
     let challenge = access_crypto::random::bytes::<32>().unwrap().to_vec();
     let mut r = Registration {
         tenant: *route.tenant.as_bytes(),
@@ -266,6 +280,11 @@ pub(super) async fn enrol_for(
 
 impl Agents {
     async fn open(name: &str) -> Self {
+        Self::open_with(name, SoftSigner::generate_p256().unwrap().0).await
+    }
+
+    /// [`Self::open`] with `runtime` as the agent Instance's key.
+    async fn open_with(name: &str, runtime: SoftSigner) -> Self {
         let (w, signer) = World::open(name, true).await;
         let signer = signer.unwrap();
         let summary = w.run(&sample_plan()).await;
@@ -281,7 +300,7 @@ impl Agents {
         let action = sample_plan().sample.unwrap().action_ref();
         let root = root_key(&w.keys).unwrap();
         let root_party = root_party(&root.public_key());
-        let (runtime, instance) = enrol(&w, domain).await;
+        let (runtime, instance) = enrol_with(&w, domain, runtime).await;
         let live = Live {
             adp: adp_router(
                 access_http::adp::app::Service::new(w.domains.clone(), 64 * 1024),
@@ -451,6 +470,15 @@ impl Agents {
             .await
             .unwrap();
         pg.0.commit().await.unwrap();
+        self.delivered(order).await
+    }
+
+    /// Steps the realm issuer's courier until `order` is answered; the recorded Claim's id.
+    async fn delivered(&self, order: &access_identity_account::domain::claims::ClaimOrder) -> Id {
+        let route = route_by_slug(&self.w.db.router, "acme")
+            .await
+            .unwrap()
+            .unwrap();
         let w = &self.w;
         // OP-146 m.5 (f)
         let today = i32::try_from(server_time(&w.db.app).await.unwrap() / 86_400_000).unwrap();
@@ -1012,6 +1040,225 @@ async fn a_runtime_attestation_requirement_is_met_only_by_the_actors_attested_in
         )
         .await;
     ex.prove(Proof::ClaimRef(here)).unwrap();
+    let step = ex.ask(&a.live, &a.runtime, &Wall).unwrap();
+    assert!(matches!(step, Step::Proceed(_)), "{step:?}");
+    a.w.domains.release().await;
+}
+
+/// A DER TLV.
+fn tlv(tag: &[u8], content: &[u8]) -> Vec<u8> {
+    let mut out = tag.to_vec();
+    let n = content.len();
+    if n < 0x80 {
+        out.push(u8::try_from(n).unwrap());
+    } else {
+        out.extend([0x81, u8::try_from(n).unwrap()]);
+    }
+    out.extend_from_slice(content);
+    out
+}
+
+/// An Android `KeyDescription` of a TEE key generated in hardware on a verified, locked device
+/// for `challenge`.
+fn key_description(challenge: &[u8]) -> Vec<u8> {
+    let root = tlv(
+        &[0x30],
+        &[
+            tlv(&[0x04], &[7; 32]),
+            tlv(&[0x01], &[0xff]),
+            tlv(&[0x0a], &[0]),
+            tlv(&[0x04], &[8; 32]),
+        ]
+        .concat(),
+    );
+    let hardware = [
+        tlv(&[0xbf, 0x85, 0x3e], &tlv(&[0x02], &[0])),
+        tlv(&[0xbf, 0x85, 0x40], &root),
+    ]
+    .concat();
+    tlv(
+        &[0x30],
+        &[
+            tlv(&[0x02], &[0, 200]),
+            tlv(&[0x0a], &[1]),
+            tlv(&[0x02], &[0, 200]),
+            tlv(&[0x0a], &[1]),
+            tlv(&[0x04], challenge),
+            tlv(&[0x04], &[]),
+            tlv(&[0x30], &[]),
+            tlv(&[0x30], &hardware),
+        ]
+        .concat(),
+    )
+}
+
+/// An attestation CA and the Android chain it issues for `key` and `challenge`.
+fn android_chain(
+    ca: &(rcgen::Issuer<'static, rcgen::KeyPair>, Vec<u8>),
+    key: &rcgen::KeyPair,
+    challenge: &[u8],
+) -> Vec<Vec<u8>> {
+    let mut params = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+    params
+        .custom_extensions
+        .push(rcgen::CustomExtension::from_oid_content(
+            &[1, 3, 6, 1, 4, 1, 11129, 2, 1, 17],
+            key_description(challenge),
+        ));
+    let leaf = params.signed_by(key, &ca.0).unwrap().der().to_vec();
+    vec![leaf, ca.1.clone()]
+}
+
+fn attestation_ca() -> (rcgen::Issuer<'static, rcgen::KeyPair>, Vec<u8>) {
+    let key = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256).unwrap();
+    let mut params = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, "Test Attestation Root");
+    params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+    let root = params.self_signed(&key).unwrap().der().to_vec();
+    (rcgen::Issuer::new(params, key), root)
+}
+
+// §5.9, §10.1.2, §12.2.1, L21, AG-31, U20, OP-154 m.3 (s), m.11 (l), OP-153 m.3 (gg),
+// Ek B 4125, 4262, 4524
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn hardware_evidence_of_an_instance_key_becomes_its_runtime_attestation() {
+    let (runtime, pkcs8) = SoftSigner::generate_p256().unwrap();
+    let a = Agents::open_with("l4-evidence", runtime).await;
+    let leaf_key = rcgen::KeyPair::try_from(pkcs8.expose().as_slice()).unwrap();
+    let stranger = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256).unwrap();
+    let ca = attestation_ca();
+    let route = route_by_slug(&a.w.db.router, "acme")
+        .await
+        .unwrap()
+        .unwrap();
+    let router = access_http::login::workloads_router(
+        RealmDiscovery::new(
+            PgDirectory::new(a.w.db.router.clone()),
+            access_identity_oauth::adapters::SignerKeys::new(a.w.identity_signer.clone()),
+        ),
+        super::vault::Lab::hosted(&a.w),
+        a.w.plane.clone(),
+        access_identity_ui::app::workloads::AttestRoots {
+            android: vec![ca.1.clone()],
+            tpm: Vec::new(),
+        },
+    );
+    let post = |body: serde_json::Value| {
+        let router = router.clone();
+        async move {
+            let r = router
+                .oneshot(
+                    HttpRequest::post("/realms/acme/v1/workloads/attestations")
+                        .header(header::HOST, "access.test")
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let status = r.status().as_u16();
+            let out: serde_json::Value =
+                serde_json::from_slice(&to_bytes(r.into_body(), 1 << 20).await.unwrap())
+                    .unwrap_or_default();
+            (status, out)
+        }
+    };
+    let rfc = access_identity_ui::domain::frontend::rfc3339;
+    let at = server_time(&a.w.db.app).await.unwrap();
+    let challenge =
+        access_identity_attest::domain::runtime::challenge(&route.issuer, &a.instance.0, at);
+    let body = |chain: &[Vec<u8>], at: u64, format: &str| {
+        serde_json::json!({
+            "instance": b64url_encode(&a.instance.0),
+            "at": rfc(at),
+            "format": format,
+            "x5c": chain.iter().map(|c| b64url_encode(c)).collect::<Vec<_>>(),
+        })
+    };
+
+    // L21
+    let (status, r) = post(body(
+        &android_chain(&ca, &stranger, &challenge),
+        at,
+        "android-key",
+    ))
+    .await;
+    assert_eq!(
+        (status, r["code"].as_str()),
+        (400, Some("attestation-other-key")),
+        "{r}"
+    );
+    let (status, r) = post(body(
+        &android_chain(&ca, &leaf_key, &[9; 32]),
+        at,
+        "android-key",
+    ))
+    .await;
+    assert_eq!(
+        (status, r["code"].as_str()),
+        (400, Some("attestation-refused")),
+        "{r}"
+    );
+    let old = at - 600_000;
+    let (status, r) = post(body(
+        &android_chain(
+            &ca,
+            &leaf_key,
+            &access_identity_attest::domain::runtime::challenge(&route.issuer, &a.instance.0, old),
+        ),
+        old,
+        "android-key",
+    ))
+    .await;
+    assert_eq!(
+        (status, r["code"].as_str()),
+        (400, Some("attestation-stale")),
+        "{r}"
+    );
+    let (status, r) = post(body(&[vec![1]], at, "apple-app-attest")).await;
+    assert_eq!(
+        (status, r["code"].as_str()),
+        (400, Some("attestation-format-unsupported")),
+        "{r}"
+    );
+
+    // §12.2.1
+    let (status, r) = post(body(
+        &android_chain(&ca, &leaf_key, &challenge),
+        at,
+        "android-key",
+    ))
+    .await;
+    assert_eq!(status, 202, "{r}");
+    assert_eq!(r["runtime"], "android/tee/verified", "{r}");
+    let class = access_identity_attest::domain::runtime::RuntimeClass::Android {
+        level: access_identity_attest::domain::android::SecurityLevel::Tee,
+        verified_locked: true,
+    };
+    let order = access_identity_account::domain::claims::runtime_attestation(
+        AGENT.0,
+        a.instance.0,
+        class.digest(),
+        at,
+    );
+    let claim = a.delivered(&order).await;
+
+    // §5.9, Ek B 4262
+    let basis = a
+        .grant(
+            AGENT,
+            a.authority(None, BTreeSet::from([attested_runtime()])),
+            BTreeSet::from([Capacity::Own]),
+        )
+        .await;
+    let mut ex = a.exercise(a.plan("e-1", basis, Some(Capacity::Own)));
+    assert!(matches!(
+        ex.ask(&a.live, &a.runtime, &Wall).unwrap(),
+        Step::Wait(_)
+    ));
+    ex.prove(Proof::ClaimRef(claim)).unwrap();
     let step = ex.ask(&a.live, &a.runtime, &Wall).unwrap();
     assert!(matches!(step, Step::Proceed(_)), "{step:?}");
     a.w.domains.release().await;

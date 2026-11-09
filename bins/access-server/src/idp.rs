@@ -750,6 +750,18 @@ where
             .await
             .map_err(|e| unavailable(&e))
     }
+
+    async fn instance_key(
+        &self,
+        domain: Digest,
+        instance: [u8; 16],
+    ) -> Result<Option<(Id, access_kernel::verify::cose::PublicKey)>, Unavailable> {
+        // OP-154 m.3 (s), L21
+        self.domains
+            .instance_key(domain, Id(instance))
+            .await
+            .map_err(|e| unavailable(&e))
+    }
 }
 
 impl<K, B, S, C> DeviceInstances for Plane<K, B, S, C>
