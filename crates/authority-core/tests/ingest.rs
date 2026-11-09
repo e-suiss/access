@@ -77,6 +77,7 @@ fn action(name: &str) -> ActionRef {
         name: name.to_owned(),
         major: 1,
         schema: access_kernel::schema::action_digest(&access_kernel::schema::ActionSchema {
+            reversibility: None,
             name: name.to_owned(),
             major: 1,
             effect: access_kernel::schema::EffectClass::Reversible,
@@ -342,6 +343,7 @@ fn request(d: Digest, nonce: u8, basis: ExerciseBasis, payload: Payload) -> Requ
         mode: Mode::Commit,
         nonce: vec![nonce; 16],
         intent: IntentEnvelope {
+            provenance: BTreeMap::new(),
             action: action(payload.action()),
             resources: vec![ResourceRef {
                 namespace: "access.party".to_owned(),

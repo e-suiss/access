@@ -427,6 +427,7 @@ pub fn change_intent(
     validity: Window,
 ) -> Result<IntentEnvelope, dcbor::EncodeError> {
     Ok(IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: action.action_ref(),
         resources: vec![ResourceRef {
             namespace: String::from(RESOURCE_NAMESPACE),

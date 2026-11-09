@@ -903,6 +903,8 @@ fn statement_of(
     now: u64,
 ) -> ApprovalAct {
     ApprovalAct {
+        evidence: None,
+        surface_class: None,
         act: Act::Contribution(env.class.clone()),
         instance: approver.instance,
         party: approver.party,

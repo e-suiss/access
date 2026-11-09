@@ -64,6 +64,7 @@ fn incoming(home: Digest, payload: Option<Payload>) -> Incoming {
             mode: Mode::Commit,
             nonce: vec![1; 16],
             intent: IntentEnvelope {
+                provenance: BTreeMap::new(),
                 action: ActionRef {
                     namespace: String::from("access"),
                     name: String::from("acceptance_establish"),

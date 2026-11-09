@@ -319,7 +319,7 @@ fn assurance_ranges_are_the_kernels_in_both_contracts() {
         );
         accepted += usize::from(kernel);
     }
-    assert_eq!(accepted, 2 * 3 + 7 * 2);
+    assert_eq!(accepted, 2 * 3 + 7 * 2 + 3);
     let (_, empty) = assurance_explanation("aal", 1);
     let mut empty = empty;
     empty["unmet"][0]["term"]["assurance"] = serde_json::json!({});
@@ -510,7 +510,10 @@ fn body_rule(class: &str) -> &'static str {
         "authority_state_ack" => "authority-state-ack",
         "party_key_state" => "party-key-state",
         "party_recovered" => "party-recovered",
+        "identity_binding_workload" => "workload-binding",
         c if c.starts_with("identity_binding_") => "identity-binding",
+        "effect_attestation" => "effect-attestation",
+        "executor_control" => "executor-control",
         other => panic!("no body rule for {other}"),
     }
 }

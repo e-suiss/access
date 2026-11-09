@@ -143,6 +143,7 @@ pub fn action() -> ActionRef {
 
 fn envelope() -> IntentEnvelope {
     IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: action(),
         resources: vec![ResourceRef {
             namespace: "door".to_owned(),

@@ -94,6 +94,7 @@ fn exercise(actions: &[ActionRef], target: Option<IntentEnvelope>) -> TokenExerc
         domain: Digest([1; 32]),
         nonce: vec![2; 16],
         intent: IntentEnvelope {
+            provenance: BTreeMap::new(),
             action,
             resources: vec![access_kernel::model::ResourceRef {
                 namespace: String::from("access.projection"),

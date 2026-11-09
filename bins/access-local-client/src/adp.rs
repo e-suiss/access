@@ -168,6 +168,7 @@ mod tests {
     fn the_evaluation_body_carries_a_signed_commit() {
         let (device, _) = SoftSigner::generate_ed25519().unwrap();
         let intent = IntentEnvelope {
+            provenance: BTreeMap::new(),
             action: ActionRef {
                 namespace: "work".into(),
                 name: "commit".into(),

@@ -684,6 +684,7 @@ fn meta_write(
     seed: u8,
 ) -> access_internal_api::idp::Submission {
     let intent = access_kernel::intent::IntentEnvelope {
+        provenance: std::collections::BTreeMap::new(),
         action: meta::core_action(payload.action()),
         resources: vec![access_kernel::model::ResourceRef {
             namespace: String::from("access.party"),
@@ -1767,6 +1768,8 @@ async fn accept_root(
     );
     let nonce = vec![0x93; 16];
     let act = access_kernel::aas::ApprovalAct {
+        evidence: None,
+        surface_class: None,
         act: access_kernel::aas::Act::Contribution(String::from(meta::ACCEPT_ROOT)),
         instance,
         party,

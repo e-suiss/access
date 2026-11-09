@@ -2177,6 +2177,7 @@ impl Change {
         validity: Window,
     ) -> Result<IntentEnvelope, dcbor::EncodeError> {
         Ok(IntentEnvelope {
+            provenance: BTreeMap::new(),
             action: self.action().action_ref(),
             resources: vec![self.resource(slug)],
             params: BTreeMap::new(),

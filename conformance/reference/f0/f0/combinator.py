@@ -30,6 +30,29 @@ def outside_instance_limits():
     }
 
 
+def origin_outside_mandate():
+    # E54 (4), L0-EVAL-16a
+    return {
+        "class": "outside-instance-limits",
+        "subcode": "outside-instance-limits/origin",
+        "position": "instance",
+        "resolver": "actor-party",
+        "remediation": "route-to-coordinator",
+    }
+
+
+def origins_within(mandate, intent):
+    # E54 (4): a read needs the read set, a write the write set; an absent set is empty
+    sets = mandate.get("origins", {})
+    for value in intent.get("params", {}).values():
+        if isinstance(value, dict) and "origin" in value:
+            named = value["origin"]
+            allowed = sets.get("write" if named["access"] == "write" else "read", [])
+            if named["origin"] not in allowed:
+                return False
+    return True
+
+
 def restricted(policy):
     # OP-111 m.8, OP-108 m.7
     reference = base64.urlsafe_b64encode(policy).decode("ascii").rstrip("=")
@@ -205,6 +228,8 @@ def evaluate_with_context(basis, evaluation, fuel):
         # OP-111 m.2, OP-117 m.9
         if not intent_covered(mandate["authority"], evaluation["intent"], evaluation["catalog"]):
             global_blockers.append(outside_instance_limits())
+        if not origins_within(mandate, evaluation["intent"]):
+            global_blockers.append(origin_outside_mandate())
         global_requirements.extend((term, "instance") for term in mandate.get("requirements", []))
     return evaluate_candidate(basis, evaluation, global_blockers, global_requirements, fuel)
 

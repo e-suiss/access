@@ -517,6 +517,7 @@ pub fn identity_binding(subject: [u8; 16], kind: BindingKind, proof: &[u8], at: 
         ttl_ms: BINDING_TTL_MS,
         content: Content::Body {
             body: Body::IdentityBinding(IdentityBinding {
+                workload: None,
                 evidence: Digest(context_digest(BINDING_EVIDENCE_CONTEXT, proof).0),
             }),
             disclose: true,

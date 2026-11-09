@@ -25,6 +25,7 @@ fn coordinates(key: &PublicKey) -> ([u8; 32], [u8; 32]) {
 
 fn envelope() -> IntentEnvelope {
     IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: ActionRef {
             namespace: "idp.group".to_owned(),
             name: "create".to_owned(),

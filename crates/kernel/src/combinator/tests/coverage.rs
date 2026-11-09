@@ -354,6 +354,7 @@ fn hop_scenarios() -> Vec<(&'static str, World)> {
     let mut out = Vec::new();
     let mut w = World::new();
     w.mandate = Some(Mandate {
+        origins: crate::combinator::Origins::default(),
         authority: authority(),
         requirements: [approval(false)].into_iter().collect(),
     });
@@ -601,7 +602,70 @@ pub(super) fn scenarios() -> Vec<(&'static str, World)> {
     out.extend(hop_scenarios());
     out.extend(proof_scenarios());
     out.extend(fuel_scenarios());
+    out.extend(agent_scenarios());
     out
+}
+
+fn with_origins(read: &[&str], write: &[&str], named: (&str, bool)) -> World {
+    let mut w = World::new();
+    w.mandate = Some(Mandate {
+        authority: authority(),
+        requirements: BTreeSet::new(),
+        origins: Origins {
+            read: read.iter().map(|o| (*o).to_string()).collect(),
+            write: write.iter().map(|o| (*o).to_string()).collect(),
+        },
+    });
+    w.intent.params.insert(
+        "target".to_string(),
+        ParamValue::Origin {
+            origin: named.0.to_string(),
+            write: named.1,
+        },
+    );
+    w
+}
+
+fn screen_floor(surface: crate::aas::SurfaceClass) -> World {
+    let mut term = approval(true);
+    term.assurance.extend(crate::requirement::approval_ceiling(
+        2,
+        crate::schema::Reversibility::Irreversible,
+        true,
+    ));
+    let mut p = step_up_proof();
+    p.assurance = crate::aas::assurance_of(
+        Some(surface),
+        Some(crate::aas::EvidenceLevel::PhishingResistant),
+    );
+    proved(term, vec![p])
+}
+
+/// E54 (4), E49: origin sets and the minimum surface (OP-154 m.3 (b)).
+fn agent_scenarios() -> Vec<(&'static str, World)> {
+    let shop = "https://shop.example";
+    vec![
+        (
+            "allow-origin-inside-mandate",
+            with_origins(&[shop], &[], (shop, false)),
+        ),
+        (
+            "deny-origin-outside-mandate",
+            with_origins(&[shop], &[shop], ("https://mail.example", false)),
+        ),
+        (
+            "deny-origin-write-read-only",
+            with_origins(&[shop], &[], (shop, true)),
+        ),
+        (
+            "require-voice-surface-for-screen-floor",
+            screen_floor(crate::aas::SurfaceClass::Voice),
+        ),
+        (
+            "allow-screen-surface-for-screen-floor",
+            screen_floor(crate::aas::SurfaceClass::Phone),
+        ),
+    ]
 }
 
 fn with_field(input: &[u8], key: &str, value: Value) -> Vec<u8> {
@@ -627,7 +691,36 @@ pub(super) fn raw_inputs() -> Vec<(&'static str, Vec<u8>)> {
             "reject-unknown-mode",
             with_field(&base, "mode", Value::text("simulate")),
         ),
+        ("reject-provenance-unknown-param", unknown_provenance()),
     ]
+}
+
+/// An intent whose `provenance` names a parameter it does not have (L0-ENC-23a).
+fn unknown_provenance() -> Vec<u8> {
+    use crate::codec::Canonical as _;
+    let mut w = World::new();
+    w.intent
+        .params
+        .insert("amount".to_string(), ParamValue::Count(1));
+    w.intent
+        .provenance
+        .insert("amount".to_string(), crate::intent::Provenance::User);
+    let base = w.owned().to_bytes().unwrap();
+    let Ok(Value::Map(entries)) = decode(&base, Limits::CEILING) else {
+        panic!("evaluation input is a map")
+    };
+    let Some((_, Value::Map(mut fields))) = entries
+        .into_iter()
+        .find(|(k, _)| *k == Value::text("intent"))
+    else {
+        panic!("intent is a map")
+    };
+    for (k, v) in &mut fields {
+        if *k == Value::text("provenance") {
+            *v = Value::Map(vec![(Value::text("other"), Value::text("user"))]);
+        }
+    }
+    with_field(&base, "intent", Value::Map(fields))
 }
 
 /// Delegation cases added for rule coverage.
@@ -787,6 +880,13 @@ pub(super) fn decision_rules(id: &str) -> &'static [&'static str] {
         return r;
     }
     match id {
+        "allow-origin-inside-mandate"
+        | "deny-origin-outside-mandate"
+        | "deny-origin-write-read-only" => &["L0-EVAL-16a", "L0-EVAL-40"],
+        "require-voice-surface-for-screen-floor" | "allow-screen-surface-for-screen-floor" => {
+            &["L0-ALG-60", "L0-ALG-60c"]
+        }
+        "reject-provenance-unknown-param" => &["L0-ENC-23a"],
         "allow" => &[
             "L0-ALG-2",
             "L0-ALG-33",

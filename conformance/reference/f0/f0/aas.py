@@ -11,6 +11,7 @@ from .codec import (
     check_ident,
     check_list,
     check_map,
+    check_text_in,
     check_tstr,
     check_uint,
     decode_canonical,
@@ -43,7 +44,11 @@ def check_surface(value):
         check_tstr(v)
         if not 1 <= len(v.encode("utf-8")) <= 255:
             fail("profile")
-    check_map(value, {"profile": profile, "version": check_uint})
+    # E49 (1): the declared class and the evidence the act reached
+    check_map(value, {"profile": profile, "version": check_uint}, {
+        "class": check_text_in("voice", "watch", "phone", "desktop"),
+        "evidence": check_text_in("presence", "user_verified", "phishing_resistant"),
+    })
 
 
 def check_statement(value):

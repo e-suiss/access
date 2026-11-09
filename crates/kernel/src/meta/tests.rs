@@ -1440,6 +1440,7 @@ fn meta_vectors_match() {
         &create,
     );
     let envelope = MandateEnvelope {
+        origins: crate::combinator::Origins::default(),
         authority: authority(&["eu"], 0, 10).authority,
         constraints: authority(&["eu"], 0, 10).constraints,
         requirements: BTreeSet::new(),
@@ -1785,6 +1786,7 @@ fn meta_vectors_match() {
             namespace: namespace.to_string(),
             catalog_version: 1,
             actions: alloc::vec![crate::schema::ActionSchema {
+                reversibility: None,
                 name: "refund".to_string(),
                 major: 1,
                 effect: crate::schema::EffectClass::Irreversible,
@@ -2148,6 +2150,7 @@ fn meta_vectors_match() {
                 party: BOB,
                 key: key_of(9),
                 mandate: Some(MandateEnvelope {
+                    origins: crate::combinator::Origins::default(),
                     authority: authority(&["eu", "fr"], 0, 10_000_000).authority,
                     constraints: authority(&["eu", "fr"], 0, 10_000_000).constraints,
                     requirements: BTreeSet::new(),
@@ -2452,6 +2455,79 @@ fn meta_vectors_match() {
             root_terms: None,
         },
     );
+    // L0-META-24a, E54 (4)
+    let runner = Id([0x35; 16]);
+    r.step(
+        "register-an-agent",
+        &["L0-META-22"],
+        (runner, runner),
+        public,
+        &Payload::PartyRegister {
+            party: runner,
+            root: Root::Sole(runner),
+            actor_kind: ActorKind::Agent,
+        },
+    );
+    let tasked = object_id(
+        &exercise_id(&DOMAIN, &r.run.pos.to_be_bytes().repeat(2)).unwrap(),
+        kind::INSTANCE,
+        0,
+    );
+    r.step(
+        "instance-create-for-a-task",
+        &["L0-META-23"],
+        (runner, tasked),
+        public,
+        &Payload::InstanceCreate {
+            party: runner,
+            key: PublicKey::Ed25519(
+                ed25519_dalek::SigningKey::from_bytes(&[6; 32])
+                    .verifying_key()
+                    .to_bytes(),
+            ),
+            mandate: None,
+        },
+    );
+    let with_origins = |write: &[&str]| MandateEnvelope {
+        origins: crate::combinator::Origins {
+            read: BTreeSet::from([String::from("https://shop.example")]),
+            write: write.iter().map(|o| String::from(*o)).collect(),
+        },
+        ..self::envelope(&["eu"], BTreeSet::new(), None)
+    };
+    let bound = r
+        .step(
+            "mandate-bind-origins",
+            &["L0-META-24", "L0-META-24a"],
+            (runner, tasked),
+            public,
+            &Payload::MandateBind {
+                instance: tasked,
+                envelope: with_origins(&[]),
+            },
+        )
+        .unwrap();
+    let task_mandate = object_id(&bound, kind::MANDATE, 0);
+    r.step(
+        "mandate-rebind-widen-origins",
+        &["L0-META-24a", "L0-META-28"],
+        (runner, tasked),
+        public,
+        &Payload::MandateRebind {
+            mandate: task_mandate,
+            envelope: with_origins(&["https://shop.example"]),
+        },
+    );
+    r.step(
+        "mandate-rebind-narrow-origins",
+        &["L0-META-24a", "L0-META-28"],
+        (runner, tasked),
+        public,
+        &Payload::MandateRebind {
+            mandate: task_mandate,
+            envelope: with_origins(&[]),
+        },
+    );
     let json = format!(
         "{{\n \"rule\": \"OP-141\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"meta.apply\",\n {},\n \"cases\": [\n{}\n ]\n}}\n",
         field(&["L0-META-1", "L0-META-2"]),
@@ -2475,6 +2551,7 @@ fn envelope(
 ) -> MandateEnvelope {
     let a = authority(prefix, 0, 1_000_000);
     MandateEnvelope {
+        origins: crate::combinator::Origins::default(),
         authority: a.authority,
         constraints: a.constraints,
         requirements,

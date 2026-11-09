@@ -553,6 +553,7 @@ mod tests {
     #[test]
     fn requests_and_renders_follow_the_intent() {
         let intent = IntentEnvelope {
+            provenance: BTreeMap::new(),
             action: ActionRef {
                 namespace: "work".into(),
                 name: "commit".into(),

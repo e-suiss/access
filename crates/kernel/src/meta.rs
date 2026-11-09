@@ -40,6 +40,7 @@ pub const MAX_LINEAGE: usize = 16;
 #[must_use]
 pub fn core_action(name: &str) -> ActionRef {
     let schema = ActionSchema {
+        reversibility: None,
         name: String::from(name),
         major: 1,
         effect: EffectClass::Reversible,
@@ -139,6 +140,8 @@ pub struct MandateEnvelope {
     pub requirements: BTreeSet<RequirementTerm>,
     /// The holding it is pinned to.
     pub pin: Option<HoldingRef>,
+    /// The origins the task may read and write (E54 (4)).
+    pub origins: crate::combinator::Origins,
 }
 
 /// What happens to a dependent Grant (C10, E6).
@@ -717,6 +720,10 @@ impl Canonical for MandateEnvelope {
             ("constraints", Some(self.constraints.to_value())),
             ("requirements", requirements_value(&self.requirements)),
             ("pin", self.pin.as_ref().map(holding_value)),
+            (
+                "origins",
+                (!self.origins.is_empty()).then(|| self.origins.to_value()),
+            ),
         ])
     }
 
@@ -727,6 +734,11 @@ impl Canonical for MandateEnvelope {
             constraints: ConstraintSet::from_value(f.req("constraints")?)?,
             requirements: requirements(f.opt("requirements"))?,
             pin: f.opt("pin").map(holding).transpose()?,
+            origins: f
+                .opt("origins")
+                .map(crate::combinator::Origins::from_value)
+                .transpose()?
+                .unwrap_or_default(),
         };
         f.done()?;
         Ok(m)
@@ -2822,7 +2834,11 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             m = live(m.ended, m.clone())?;
             own_instance(view, &m.instance, &actor)?;
             pin_ok(view, envelope.pin.as_ref(), &actor.party)?;
-            out.expansion = !subsumes(&envelope.authority, &m.envelope.authority, ctx.catalog);
+            // E54 (4)
+            let origins_within = envelope.origins.read.is_subset(&m.envelope.origins.read)
+                && envelope.origins.write.is_subset(&m.envelope.origins.write);
+            out.expansion = !subsumes(&envelope.authority, &m.envelope.authority, ctx.catalog)
+                || !origins_within;
             m.envelope = envelope.clone();
             m.since = ctx.pos;
             set(&mut out, kind::MANDATE, mandate, m.to_value());

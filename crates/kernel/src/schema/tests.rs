@@ -4,6 +4,7 @@ use super::*;
 
 pub(crate) fn refund() -> ActionSchema {
     ActionSchema {
+        reversibility: None,
         name: "refund".to_string(),
         major: 1,
         effect: EffectClass::Irreversible,
@@ -44,4 +45,27 @@ fn digests_pin_schemas_and_catalogs() {
         m.push((Value::text("actions"), Value::Array(alloc::vec![])));
     }
     assert!(Spp::from_value(&bad).is_err());
+}
+
+// E47 (1), OP-154 m.3 (b)
+#[test]
+fn an_undeclared_reversibility_is_irreversible_and_keeps_the_digest() {
+    let plain = refund();
+    assert_eq!(plain.reversibility(), Reversibility::Irreversible);
+    let mut declared = refund();
+    declared.reversibility = Some(Reversibility::Compensable);
+    assert_ne!(action_digest(&declared), action_digest(&plain));
+    assert_eq!(
+        ActionSchema::from_value(&declared.to_value()).unwrap(),
+        declared
+    );
+    assert_eq!(declared.reversibility(), Reversibility::Compensable);
+    assert!(!Reversibility::Compensable.offers_undo());
+    assert!(Reversibility::Reversible.offers_undo());
+    let mut unknown = plain.to_value();
+    if let Value::Map(m) = &mut unknown {
+        m.push((Value::text("reversibility"), Value::text("maybe")));
+        m.sort_by_key(|(k, _)| dcbor::encode(k, Limits::CEILING).unwrap());
+    }
+    assert!(ActionSchema::from_value(&unknown).is_err());
 }

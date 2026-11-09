@@ -29,7 +29,52 @@ const EFFECTS: [(&str, EffectClass); 3] = [
     ("irreversible", EffectClass::Irreversible),
 ];
 
-const PARAM_TYPES: [&str; 7] = ["amount", "int", "text", "bool", "bytes", "id", "opaque"];
+/// Whether an action's effect can be taken back, independent of its Consequence Tier (E47 (1)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Reversibility {
+    /// It can be undone: the surface may offer "Undo".
+    Reversible,
+    /// It can be offset, with time and cost: the surface says so honestly ("Request a refund").
+    Compensable,
+    /// It cannot be undone.
+    Irreversible,
+}
+
+const REVERSIBILITIES: [(&str, Reversibility); 3] = [
+    ("reversible", Reversibility::Reversible),
+    ("compensable", Reversibility::Compensable),
+    ("irreversible", Reversibility::Irreversible),
+];
+
+impl Reversibility {
+    /// The wire name.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        REVERSIBILITIES
+            .iter()
+            .find(|(_, r)| *r == self)
+            .map_or("irreversible", |(w, _)| w)
+    }
+
+    /// The value of a wire name.
+    #[must_use]
+    pub fn of_name(name: &str) -> Option<Self> {
+        REVERSIBILITIES
+            .iter()
+            .find(|(w, _)| *w == name)
+            .map(|(_, r)| *r)
+    }
+
+    /// Whether a surface may offer "Undo": only for a reversible action (E47 (2)).
+    #[must_use]
+    pub fn offers_undo(self) -> bool {
+        self == Self::Reversible
+    }
+}
+
+const PARAM_TYPES: [&str; 8] = [
+    "amount", "int", "text", "bool", "bytes", "id", "opaque", "origin",
+];
 
 /// One Action Schema (OP-141 m.35 (b)).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -50,6 +95,17 @@ pub struct ActionSchema {
     pub resource_types: BTreeSet<String>,
     /// Render template.
     pub render: Option<String>,
+    /// Whether the effect can be taken back (E47 (1)); see [`ActionSchema::reversibility`].
+    pub reversibility: Option<Reversibility>,
+}
+
+impl ActionSchema {
+    /// The reversibility a decision and an approval policy use: the declared one, or
+    /// `irreversible` when the schema declares none (E47 (1), OP-154 m.3 (b)).
+    #[must_use]
+    pub fn reversibility(&self) -> Reversibility {
+        self.reversibility.unwrap_or(Reversibility::Irreversible)
+    }
 }
 
 impl Canonical for ActionSchema {
@@ -87,6 +143,10 @@ impl Canonical for ActionSchema {
                 }),
             ),
             ("render", self.render.as_deref().map(Value::text)),
+            (
+                "reversibility",
+                self.reversibility.map(|r| Value::text(r.name())),
+            ),
         ])
     }
 
@@ -134,6 +194,10 @@ impl Canonical for ActionSchema {
             render: f
                 .opt("render")
                 .map(|r| text(r).map(String::from))
+                .transpose()?,
+            reversibility: f
+                .opt("reversibility")
+                .map(|r| Reversibility::of_name(text(r)?).ok_or(ModelError::Unknown))
                 .transpose()?,
         };
         f.done()?;

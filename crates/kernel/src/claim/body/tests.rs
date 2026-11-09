@@ -298,9 +298,72 @@ fn bodies() -> Vec<(&'static str, Class, Body)> {
         (
             "identity-binding-person",
             Class::IdentityBinding(BindingKind::Person),
-            Body::IdentityBinding(IdentityBinding { evidence: d(35) }),
+            Body::IdentityBinding(IdentityBinding {
+                evidence: d(35),
+                workload: None,
+            }),
+        ),
+        (
+            "identity-binding-workload",
+            Class::IdentityBinding(BindingKind::Workload),
+            Body::IdentityBinding(IdentityBinding {
+                evidence: d(36),
+                workload: Some(Workload {
+                    uri: "spiffe://prod.example/ns/billing/sa/agent".to_string(),
+                    thumbprint: [0x37; 32],
+                }),
+            }),
+        ),
+        (
+            "effect-attestation-done",
+            Class::EffectAttestation,
+            Body::EffectAttestation(effect(EffectOutcome::Done)),
+        ),
+        (
+            "effect-attestation-unknown",
+            Class::EffectAttestation,
+            Body::EffectAttestation(EffectAttestation {
+                evidence: BTreeSet::new(),
+                refs: BTreeSet::new(),
+                environment: None,
+                ..effect(EffectOutcome::Unknown)
+            }),
+        ),
+        (
+            "executor-control-stopped",
+            Class::ExecutorControl,
+            Body::ExecutorControl(ExecutorControl {
+                state: ControlState::StoppedConfirmed,
+                exercise: d(40),
+                at: 1_000,
+            }),
         ),
     ]
+}
+
+/// An executor's report of one effect (E64).
+fn effect(outcome: EffectOutcome) -> EffectAttestation {
+    EffectAttestation {
+        exercise: d(40),
+        step: d(41),
+        idempotency_key: d(42),
+        action: crate::model::ActionRef {
+            namespace: "shop".to_string(),
+            name: "order".to_string(),
+            major: 1,
+            schema: d(43),
+        },
+        params: d(44),
+        outcome,
+        evidence: BTreeSet::from([EvidenceKind::UpstreamConfirmation]),
+        refs: BTreeSet::from([EvidenceRef {
+            digest: d(45),
+            reference: Some("order/8812".to_string()),
+        }]),
+        at: 1_000,
+        executor: Id([0x46; 16]),
+        environment: Some(d(47)),
+    }
 }
 
 fn enc(v: &Value) -> Vec<u8> {
@@ -373,6 +436,44 @@ fn cases() -> Vec<(String, Case)> {
             },
         ));
     }
+    let done_bare = EffectAttestation {
+        evidence: BTreeSet::new(),
+        ..effect(EffectOutcome::Done)
+    }
+    .to_value();
+    out.push((
+        "effect-attestation-done-without-evidence".to_string(),
+        Case {
+            rules: &["L2-CLB-3"],
+            class: "effect_attestation".to_string(),
+            value: Some(EqValue::Bytes(
+                body_digest(Class::EffectAttestation, &done_bare)
+                    .unwrap()
+                    .to_vec(),
+            )),
+            body: Some(enc(&done_bare)),
+        },
+    ));
+    let person_workload = IdentityBinding {
+        evidence: d(36),
+        workload: Some(Workload {
+            uri: "spiffe://prod.example/x".to_string(),
+            thumbprint: [0x37; 32],
+        }),
+    }
+    .to_value();
+    let person = Class::IdentityBinding(BindingKind::Person);
+    out.push((
+        "identity-binding-person-with-workload".to_string(),
+        Case {
+            rules: &["L2-CLB-3"],
+            class: person.name(),
+            value: Some(EqValue::Bytes(
+                body_digest(person, &person_workload).unwrap().to_vec(),
+            )),
+            body: Some(enc(&person_workload)),
+        },
+    ));
     let auth = Body::Authentication(authentication());
     out.push((
         "body-withheld".to_string(),
@@ -442,7 +543,7 @@ fn cases() -> Vec<(String, Case)> {
             body: None,
         },
     ));
-    let scalar: [(&str, &str, Option<EqValue>, bool); 14] = [
+    let scalar: [(&str, &str, Option<EqValue>, bool); 16] = [
         (
             "account-status-suspended",
             "account_status",
@@ -517,6 +618,18 @@ fn cases() -> Vec<(String, Case)> {
             true,
         ),
         (
+            "attestation-runtime",
+            "attestation_runtime",
+            Some(EqValue::Bytes(vec![0x48; 32])),
+            true,
+        ),
+        (
+            "attestation-runtime-short",
+            "attestation_runtime",
+            Some(EqValue::Bytes(vec![0x48; 16])),
+            false,
+        ),
+        (
             "class-outside-the-table",
             "kyc",
             Some(EqValue::Bool(true)),
@@ -567,6 +680,21 @@ fn values_and_bodies_are_checked() {
     assert_eq!(got["party-terminated-missing"], Err("claim-value"));
     assert_eq!(got["controller-of-short"], Err("claim-value"));
     assert_eq!(got["class-outside-the-table"], Ok(false));
+    // E64 (2), OP-154 m.3 (b), (d)
+    assert_eq!(got["effect-attestation-done"], Ok(true));
+    assert_eq!(got["effect-attestation-unknown"], Ok(true));
+    assert_eq!(
+        got["effect-attestation-done-without-evidence"],
+        Err("claim-body")
+    );
+    assert_eq!(got["identity-binding-workload"], Ok(true));
+    assert_eq!(
+        got["identity-binding-person-with-workload"],
+        Err("claim-body")
+    );
+    assert_eq!(got["executor-control-stopped"], Ok(true));
+    assert_eq!(got["attestation-runtime"], Ok(false));
+    assert_eq!(got["attestation-runtime-short"], Err("claim-value"));
 }
 
 // L2-CLB-1 to L2-CLB-3

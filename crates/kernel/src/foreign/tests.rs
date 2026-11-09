@@ -177,6 +177,7 @@ fn pap(namespace: &str) -> Pap {
 
 fn intent(namespace: &str) -> IntentEnvelope {
     IntentEnvelope {
+        provenance: alloc::collections::BTreeMap::new(),
         action: action(namespace),
         resources: vec![ResourceRef {
             namespace: "shop".to_string(),

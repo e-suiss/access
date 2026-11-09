@@ -9,7 +9,7 @@ use suiss_crypto::dcbor::Value;
 
 use super::{
     Basis, Blocker, BlockerClass, BudgetState, Capacity, Decision, EvaluationInput, Hop, HopStatus,
-    Mandate, Mode, Outcome, PolicyResult, Position, Remediation, Resolver, Unmet,
+    Mandate, Mode, Origins, Outcome, PolicyResult, Position, Remediation, Resolver, Unmet,
 };
 use crate::algebra::Catalog;
 use crate::codec::{
@@ -261,11 +261,42 @@ impl Canonical for Basis {
     }
 }
 
+impl Canonical for Origins {
+    fn to_value(&self) -> Value {
+        let set = |s: &BTreeSet<String>| {
+            (!s.is_empty()).then(|| set_value(s.iter().map(|o| Value::text(o))))
+        };
+        map([("read", set(&self.read)), ("write", set(&self.write))])
+    }
+
+    fn from_value(v: &Value) -> Result<Self, ModelError> {
+        let mut f = Fields::of(v)?;
+        let read = |x: Option<&Value>| {
+            x.map(|s| set_of(s, true, crate::intent::origin))
+                .transpose()
+                .map(Option::unwrap_or_default)
+        };
+        let o = Origins {
+            read: read(f.opt("read"))?,
+            write: read(f.opt("write"))?,
+        };
+        f.done()?;
+        if o.is_empty() {
+            return Err(ModelError::Range);
+        }
+        Ok(o)
+    }
+}
+
 impl Canonical for Mandate {
     fn to_value(&self) -> Value {
         map([
             ("authority", Some(self.authority.to_value())),
             ("requirements", terms_value(&self.requirements)),
+            (
+                "origins",
+                (!self.origins.is_empty()).then(|| self.origins.to_value()),
+            ),
         ])
     }
 
@@ -274,6 +305,11 @@ impl Canonical for Mandate {
         let m = Mandate {
             authority: AuthoritySet::from_value(f.req("authority")?)?,
             requirements: terms(f.opt("requirements"))?,
+            origins: f
+                .opt("origins")
+                .map(Origins::from_value)
+                .transpose()?
+                .unwrap_or_default(),
         };
         f.done()?;
         Ok(m)

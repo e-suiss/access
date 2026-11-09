@@ -201,6 +201,7 @@ fn cases() -> Vec<(&'static str, Payload)> {
             Payload::MandateBind {
                 instance: id(6),
                 envelope: MandateEnvelope {
+                    origins: access_kernel::combinator::Origins::default(),
                     authority: role,
                     constraints: canonical().constraints,
                     requirements: BTreeSet::new(),

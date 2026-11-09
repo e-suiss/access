@@ -18,8 +18,12 @@ pub const HUMAN_PRESENCE: &str = "human_presence";
 /// Assurance dimension where the lower level is the stronger one (OP-118 m.3).
 pub const SYNCED: &str = "synced";
 
+/// Assurance dimension of the Approval Surface an approval came from: voice 0, watch 1, a full
+/// screen (phone or desktop) 2. A term's floor on it is its minimum surface (E49 (1)).
+pub const SURFACE: &str = "surface";
+
 /// The closed assurance dimensions with their lowest and highest level (§10.1.6, OP-118 m.3).
-pub const ASSURANCE_DIMENSIONS: [(&str, u64, u64); 9] = [
+pub const ASSURANCE_DIMENSIONS: [(&str, u64, u64); 10] = [
     ("aal", 1, 3),
     ("app_controlled_factor", 0, 1),
     ("hardware_bound", 0, 1),
@@ -27,6 +31,7 @@ pub const ASSURANCE_DIMENSIONS: [(&str, u64, u64); 9] = [
     ("loa_eidas", 1, 3),
     ("non_custodial", 0, 1),
     ("phishing_resistant", 0, 1),
+    (SURFACE, 0, 2),
     (SYNCED, 0, 1),
     ("uv", 0, 1),
 ];
@@ -47,6 +52,27 @@ pub fn check_assurance(levels: &BTreeMap<alloc::string::String, u64>) -> Result<
         }
     }
     Ok(())
+}
+
+/// The assurance floors the default approval ceiling sets on an approval of an action of tier
+/// `ct` (E49 (2), OP-154 m.3 (x)): a voice or watch surface approves only CT0–CT1, a reversible
+/// or compensable action, inside the Mandate and the budget; anything else needs a full screen
+/// and a phishing-resistant authentication. The ceiling only tightens; a domain may ask more.
+#[must_use]
+pub fn approval_ceiling(
+    ct: u8,
+    reversibility: crate::schema::Reversibility,
+    within_mandate_and_budget: bool,
+) -> BTreeMap<alloc::string::String, u64> {
+    let mut out = BTreeMap::new();
+    let low = ct <= 1
+        && reversibility != crate::schema::Reversibility::Irreversible
+        && within_mandate_and_budget;
+    if !low {
+        out.insert(alloc::string::String::from(SURFACE), crate::aas::SCREEN);
+        out.insert(alloc::string::String::from("phishing_resistant"), 1);
+    }
+    out
 }
 
 // OP-118 m.3

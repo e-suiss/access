@@ -28,6 +28,7 @@ fn order(id: &str) -> ResourceRef {
 
 fn intent() -> IntentEnvelope {
     IntentEnvelope {
+        provenance: alloc::collections::BTreeMap::new(),
         action: action("refund"),
         resources: vec![order("o1")],
         params: [(
@@ -179,4 +180,92 @@ fn coverage_rules() {
         .collect(),
     ));
     assert!(!covers(&pred, &intent(), &cat));
+}
+
+// E54 (1), L0-ENC-23a
+#[test]
+fn provenance_is_inside_the_digest_and_the_worst_label_wins() {
+    use crate::codec::{Canonical as _, ModelError};
+    let mut labelled = intent();
+    labelled
+        .provenance
+        .insert("amount".to_string(), Provenance::User);
+    assert_ne!(intent_digest(&labelled), intent_digest(&intent()));
+    assert_eq!(
+        IntentEnvelope::from_bytes(&labelled.to_bytes().unwrap()),
+        Ok(labelled.clone())
+    );
+    assert_eq!(labelled.provenance_of("amount"), Provenance::User);
+    assert_eq!(
+        intent().provenance_of("amount"),
+        Provenance::UntrustedExternal
+    );
+    assert_eq!(
+        Provenance::User.merge(Provenance::UntrustedExternal),
+        Provenance::UntrustedExternal
+    );
+    assert_eq!(
+        Provenance::Trusted.merge(Provenance::User),
+        Provenance::Trusted
+    );
+    let mut stray = labelled;
+    stray
+        .provenance
+        .insert("other".to_string(), Provenance::User);
+    assert_eq!(
+        IntentEnvelope::from_bytes(&stray.to_bytes().unwrap()),
+        Err(ModelError::Range)
+    );
+}
+
+// MUST-NEVER-6, F10, L0-ENC-23a
+#[test]
+fn a_plan_reference_is_an_opaque_digest_and_absent_keeps_the_digest() {
+    use crate::codec::Canonical as _;
+    let mut planned = intent();
+    planned.context.plan = Some(d(0x42));
+    assert_ne!(intent_digest(&planned), intent_digest(&intent()));
+    let back = IntentEnvelope::from_bytes(&planned.to_bytes().unwrap()).unwrap();
+    assert_eq!(back.context.plan, Some(d(0x42)));
+    let mut none = planned;
+    none.context.plan = None;
+    assert_eq!(intent_digest(&none), intent_digest(&intent()));
+}
+
+// E54 (4)
+#[test]
+fn origins_are_lowercase_serialized_web_origins() {
+    use crate::codec::Canonical as _;
+    for ok in [
+        "https://shop.example",
+        "http://127.0.0.1:8080",
+        "https://a-b.example:443",
+    ] {
+        assert!(is_origin(ok), "{ok}");
+    }
+    for bad in [
+        "https://Shop.example",
+        "https://shop.example/",
+        "https://shop.example:",
+        "https://:443",
+        "ftp://shop.example",
+        "https://",
+        "https://shop.example:123456",
+        "https://user@shop.example",
+    ] {
+        assert!(!is_origin(bad), "{bad}");
+    }
+    let mut w = intent();
+    w.params.insert(
+        "target".to_string(),
+        ParamValue::Origin {
+            origin: "https://shop.example".to_string(),
+            write: true,
+        },
+    );
+    let back = IntentEnvelope::from_bytes(&w.to_bytes().unwrap()).unwrap();
+    assert_eq!(
+        back.origins().collect::<Vec<_>>(),
+        vec![("https://shop.example", true)]
+    );
 }

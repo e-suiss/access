@@ -17,6 +17,7 @@ use super::*;
 
 fn intent() -> IntentEnvelope {
     IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: core_action("projection_issue"),
         resources: Vec::new(),
         params: BTreeMap::new(),

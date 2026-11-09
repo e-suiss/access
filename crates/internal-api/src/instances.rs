@@ -239,6 +239,7 @@ pub fn self_signed_intent(
 ) -> Option<IntentEnvelope> {
     let digest = payload.digest().ok()?;
     Some(IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: core_action(payload.action()),
         resources: vec![ResourceRef {
             namespace: String::from(PARTY_NAMESPACE),
@@ -369,6 +370,7 @@ fn hex(id: &Id) -> String {
 pub fn terminate_intent(instance: Id, validity: Window) -> Option<IntentEnvelope> {
     let payload = terminate_payload(instance).digest().ok()?;
     Some(IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: core_action("instance_terminate"),
         resources: vec![ResourceRef {
             namespace: String::from(INSTANCE_NAMESPACE),

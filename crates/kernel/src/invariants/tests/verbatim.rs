@@ -203,6 +203,7 @@ fn sd_jwt_digests_are_recomputed_from_the_presented_disclosure() {
 
 fn envelope() -> IntentEnvelope {
     IntentEnvelope {
+        provenance: alloc::collections::BTreeMap::new(),
         action: ActionRef {
             namespace: String::from("pay"),
             name: String::from("refund"),

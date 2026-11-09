@@ -306,6 +306,7 @@ fn a_party_without_pseudonym_is_refused() {
 
 fn intent() -> IntentEnvelope {
     IntentEnvelope {
+        provenance: std::collections::BTreeMap::new(),
         action: action("refund"),
         resources: vec![ResourceRef {
             namespace: String::from("shop"),

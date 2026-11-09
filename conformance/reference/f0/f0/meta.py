@@ -29,6 +29,7 @@ from .codec import (
     check_assurance,
     check_authority_set,
     check_constraint_set,
+    check_origin_sets,
     decode_canonical,
     encode,
     same,
@@ -127,6 +128,7 @@ def check_mandate_envelope(value):
     check_map(value, {"authority": check_authority_set, "constraints": check_constraint_set}, {
         "requirements": check_requirement_set,
         "pin": check_holding,
+        "origins": check_origin_sets,
     })
 
 
@@ -149,6 +151,8 @@ def check_spp(value):
             "reserved": check_true, "consumption_bearing": check_true,
             "params": check_params, "resource_types": check_list(check_ident, nonempty=True, is_set=True),
             "render": check_tstr,
+            # E47 (1)
+            "reversibility": check_text_in("reversible", "compensable", "irreversible"),
         })
     check_map(value, {"publisher": check_id, "namespace": check_namespace, "catalog_version": check_uint,
                       "actions": check_list(action, nonempty=True)}, {
@@ -165,7 +169,7 @@ def check_params(value):
         refuse("meta-malformed")
     for k, t in value.items():
         check_ident(k)
-        check_text_in("amount", "int", "text", "bool", "bytes", "id", "opaque")(t)
+        check_text_in("amount", "int", "text", "bool", "bytes", "id", "opaque", "origin")(t)
 
 
 def check_acceptance_content(value):
@@ -728,6 +732,9 @@ class Apply:
             and window_within(new["constraints"]["validity"], old["constraints"]["validity"])
             and is_subset(old["constraints"].get("while", []), new["constraints"].get("while", []))
             and is_subset(old.get("requirements", []), new.get("requirements", []))
+            # L0-META-24a
+            and is_subset(new.get("origins", {}).get("read", []), old.get("origins", {}).get("read", []))
+            and is_subset(new.get("origins", {}).get("write", []), old.get("origins", {}).get("write", []))
         )
         self.write("mandate", body["mandate"], dict(mandate, envelope=new, since=self.pos))
         return not narrows

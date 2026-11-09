@@ -42,6 +42,102 @@ pub enum ParamValue {
     Purpose(PurposeRef),
     /// Flag.
     Flag(bool),
+    /// A web origin the intent reads or writes (E54 (4)): `scheme://host[:port]`, lowercase.
+    Origin {
+        /// The serialized origin.
+        origin: String,
+        /// Whether the intent writes to it; otherwise it reads.
+        write: bool,
+    },
+}
+
+/// Where an authority-relevant parameter's value came from (E54 (1), §9.4), from the most to
+/// the least trusted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Provenance {
+    /// The user's own direct input.
+    User,
+    /// Access or a domain record.
+    Trusted,
+    /// The web, mail, a document, a calendar invite, another agent or a tool description.
+    UntrustedExternal,
+}
+
+const PROVENANCES: [(&str, Provenance); 3] = [
+    ("user", Provenance::User),
+    ("trusted", Provenance::Trusted),
+    ("untrusted-external", Provenance::UntrustedExternal),
+];
+
+impl Provenance {
+    /// The label of a value merged from `self` and `other`: the worst one (E54 (1)).
+    #[must_use]
+    pub fn merge(self, other: Self) -> Self {
+        self.max(other)
+    }
+
+    /// The wire label.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        PROVENANCES
+            .iter()
+            .find(|(_, p)| *p == self)
+            .map_or("untrusted-external", |(w, _)| w)
+    }
+
+    /// The label of a wire name.
+    #[must_use]
+    pub fn of_label(label: &str) -> Option<Self> {
+        PROVENANCES
+            .iter()
+            .find(|(w, _)| *w == label)
+            .map(|(_, p)| *p)
+    }
+}
+
+impl Canonical for Provenance {
+    fn to_value(&self) -> Value {
+        Value::text(self.label())
+    }
+
+    fn from_value(v: &Value) -> Result<Self, ModelError> {
+        Self::of_label(text(v)?).ok_or(ModelError::Unknown)
+    }
+}
+
+/// Longest origin text (E54 (4)).
+pub const MAX_ORIGIN: usize = 255;
+
+/// Whether `s` is a serialized web origin in its lowercase form: `https://` or `http://`, a
+/// host of lowercase letters, digits, dots and hyphens, an optional port of one to five digits,
+/// and nothing after (E54 (4)).
+#[must_use]
+pub fn is_origin(s: &str) -> bool {
+    let Some(rest) = s
+        .strip_prefix("https://")
+        .or_else(|| s.strip_prefix("http://"))
+    else {
+        return false;
+    };
+    let (host, port) = match rest.split_once(':') {
+        Some((h, p)) => (h, Some(p)),
+        None => (rest, None),
+    };
+    s.len() <= MAX_ORIGIN
+        && !host.is_empty()
+        && host
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '-'))
+        && port.is_none_or(|p| (1..=5).contains(&p.len()) && p.chars().all(|c| c.is_ascii_digit()))
+}
+
+pub(crate) fn origin(v: &Value) -> Result<String, ModelError> {
+    let s = text(v)?;
+    if is_origin(s) {
+        Ok(String::from(s))
+    } else {
+        Err(ModelError::Range)
+    }
 }
 
 /// Opaque context references (OP-108 m.13).
@@ -55,6 +151,8 @@ pub struct ContextRefs {
     pub step: Option<Digest>,
     /// Upstream `ExerciseID`.
     pub upstream_exercise: Option<Digest>,
+    /// `PlanRef`: opaque; Access keeps no plan or progress state (MUST-NEVER-6, F10).
+    pub plan: Option<Digest>,
 }
 
 /// Intent envelope; the nonce is outside it (OP-108 m.12).
@@ -74,8 +172,31 @@ pub struct IntentEnvelope {
     pub purpose: Option<PurposeRef>,
     /// Context references.
     pub context: ContextRefs,
+    /// Where each typed parameter came from, by parameter name; a parameter without a label is
+    /// `untrusted-external` (E54 (1)).
+    pub provenance: BTreeMap<String, Provenance>,
     /// Validity window.
     pub validity: Window,
+}
+
+impl IntentEnvelope {
+    /// The provenance of parameter `name`: its label, or `untrusted-external` without one
+    /// (E54 (1)).
+    #[must_use]
+    pub fn provenance_of(&self, name: &str) -> Provenance {
+        self.provenance
+            .get(name)
+            .copied()
+            .unwrap_or(Provenance::UntrustedExternal)
+    }
+
+    /// The origins the intent names, each with whether it writes to it (E54 (4)).
+    pub fn origins(&self) -> impl Iterator<Item = (&str, bool)> {
+        self.params.values().filter_map(|v| match v {
+            ParamValue::Origin { origin, write } => Some((origin.as_str(), *write)),
+            _ => None,
+        })
+    }
 }
 
 fn tagged(key: &'static str, v: Value) -> Value {
@@ -100,6 +221,16 @@ impl Canonical for ParamValue {
             Self::Subject(id) => tagged("subject", id.to_value()),
             Self::Purpose(p) => tagged("purpose", p.to_value()),
             Self::Flag(b) => tagged("flag", Value::Bool(*b)),
+            Self::Origin { origin, write } => tagged(
+                "origin",
+                map([
+                    ("origin", Some(Value::text(origin))),
+                    (
+                        "access",
+                        Some(Value::text(if *write { "write" } else { "read" })),
+                    ),
+                ]),
+            ),
         }
     }
 
@@ -128,6 +259,19 @@ impl Canonical for ParamValue {
             "subject" => Self::Subject(Id::from_value(inner)?),
             "purpose" => Self::Purpose(PurposeRef::from_value(inner)?),
             "flag" => Self::Flag(boolean(inner)?),
+            "origin" => {
+                let mut f = Fields::of(inner)?;
+                let o = Self::Origin {
+                    origin: origin(f.req("origin")?)?,
+                    write: match text(f.req("access")?)? {
+                        "read" => false,
+                        "write" => true,
+                        _ => return Err(ModelError::Unknown),
+                    },
+                };
+                f.done()?;
+                o
+            }
             _ => return Err(ModelError::Unknown),
         })
     }
@@ -143,6 +287,7 @@ impl Canonical for ContextRefs {
                 "upstream_exercise",
                 self.upstream_exercise.as_ref().map(Digest::to_value),
             ),
+            ("plan", self.plan.as_ref().map(Digest::to_value)),
         ])
     }
 
@@ -154,6 +299,7 @@ impl Canonical for ContextRefs {
             commitment: read(f.opt("commitment"))?,
             step: read(f.opt("step"))?,
             upstream_exercise: read(f.opt("upstream_exercise"))?,
+            plan: read(f.opt("plan"))?,
         };
         f.done()?;
         if c == ContextRefs::default() {
@@ -184,6 +330,10 @@ impl Canonical for IntentEnvelope {
                 "context",
                 (self.context != ContextRefs::default()).then(|| self.context.to_value()),
             ),
+            (
+                "provenance",
+                map_value(&self.provenance, Canonical::to_value),
+            ),
             ("validity", Some(self.validity.to_value())),
         ])
     }
@@ -211,9 +361,14 @@ impl Canonical for IntentEnvelope {
                 .map(ContextRefs::from_value)
                 .transpose()?
                 .unwrap_or_default(),
+            provenance: opt_param_map(f.opt("provenance"), Provenance::from_value)?,
             validity: Window::from_value(f.req("validity")?)?,
         };
         f.done()?;
+        // E54 (1)
+        if e.provenance.keys().any(|k| !e.params.contains_key(k)) {
+            return Err(ModelError::Range);
+        }
         Ok(e)
     }
 }

@@ -58,6 +58,8 @@ fn sign(payload: &[u8], seed: u8, ct: &str) -> Vec<u8> {
 
 fn statement() -> ApprovalAct {
     ApprovalAct {
+        evidence: None,
+        surface_class: None,
         act: Act::Contribution("approve".to_string()),
         instance: INSTANCE,
         party: Id([1; 16]),
@@ -194,7 +196,42 @@ fn cases() -> Vec<(&'static str, &'static [&'static str], Vec<u8>, u64)> {
             NOW,
         ),
         ("contribution-without-class", &["L2-AAS-1"], no_class, NOW),
+        (
+            "contribution-declared-surface",
+            &["L2-AAS-1", "L2-AAS-2", "L2-AAS-3"],
+            with(|a| {
+                a.surface_class = Some(SurfaceClass::Watch);
+                a.evidence = Some(EvidenceLevel::UserVerified);
+            }),
+            NOW,
+        ),
     ]
+}
+
+// E49 (1), (3), OP-154 m.3 (b), (x)
+#[test]
+fn a_declared_surface_and_evidence_become_assurance() {
+    let a = assurance_of(Some(SurfaceClass::Voice), Some(EvidenceLevel::Presence));
+    assert_eq!(a.get(crate::requirement::SURFACE), Some(&0));
+    assert_eq!(a.get("phishing_resistant"), Some(&0));
+    assert_eq!(a.get("uv"), Some(&0));
+    let a = assurance_of(
+        Some(SurfaceClass::Desktop),
+        Some(EvidenceLevel::PhishingResistant),
+    );
+    assert_eq!(a.get(crate::requirement::SURFACE), Some(&SCREEN));
+    assert_eq!(a.get("phishing_resistant"), Some(&1));
+    assert_eq!(a.get("uv"), Some(&1));
+    assert!(assurance_of(None, None).is_empty());
+    assert!(crate::requirement::check_assurance(&a).is_ok());
+    let mut w = statement();
+    w.surface_class = Some(SurfaceClass::Watch);
+    w.evidence = Some(EvidenceLevel::UserVerified);
+    assert_eq!(
+        ApprovalAct::from_bytes(&w.to_bytes().unwrap()),
+        Ok(w.clone())
+    );
+    assert_ne!(digest(&w).unwrap(), digest(&statement()).unwrap());
 }
 
 fn run(sign1: &[u8], now: u64) -> Result<Digest, AasError> {

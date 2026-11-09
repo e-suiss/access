@@ -6,6 +6,7 @@ from .claim import FIELDS, REQUIRED
 from .codec import (
     IDENT,
     Rejection,
+    check_action_ref,
     check_amount,
     check_bytes,
     check_digest,
@@ -196,7 +197,56 @@ def check_identity_binding(value):
     check_map(value, {"evidence": check_digest})
 
 
+def check_workload_binding(value):
+    # OP-154 m.3 (d): only the workload kind names the workload and its key
+    check_map(value, {"evidence": check_digest}, {
+        "workload": lambda w: check_map(w, {
+            "uri": check_sized_text(2048),
+            "thumbprint": check_bytes(32),
+        }),
+    })
+
+
+EVIDENCE_KINDS = ("upstream-confirmation", "independent-recheck", "browser-observation")
+
+
+def check_evidence_ref(value):
+    check_map(value, {"digest": check_digest}, {"ref": check_sized_text(2048)})
+
+
+def check_effect_attestation(value):
+    # E64
+    check_map(value, {
+        "exercise": check_digest,
+        "step": check_digest,
+        "idempotency_key": check_digest,
+        "action": check_action_ref,
+        "params": check_digest,
+        "outcome": check_text_in("done", "not-done", "unknown"),
+        "at": check_uint,
+        "executor": check_id,
+    }, {
+        "evidence": check_list(check_text_in(*EVIDENCE_KINDS), nonempty=True, is_set=True),
+        "refs": check_list(check_evidence_ref, nonempty=True, is_set=True),
+        "environment": check_digest,
+    })
+    # E64 (2): `done` needs evidence
+    if value["outcome"] == "done" and "evidence" not in value:
+        fail("done without evidence")
+
+
+def check_executor_control(value):
+    # U5
+    check_map(value, {
+        "state": check_text_in("paused", "stopped_confirmed"),
+        "exercise": check_digest,
+        "at": check_uint,
+    })
+
+
 BODIES = {
+    "effect_attestation": check_effect_attestation,
+    "executor_control": check_executor_control,
     "authentication": check_authentication,
     "authenticator_binding": check_authenticator_binding,
     "posture_device": check_device_posture,
@@ -222,12 +272,17 @@ SCALARS = {
     "operated_by": lambda v: isinstance(v, bytes) and len(v) == 16,
     "sponsored_by": lambda v: isinstance(v, bytes) and len(v) == 16,
     "org_member": lambda v: isinstance(v, bytes) and len(v) == 16,
+    # AG-31: the attested runtime class's digest
+    "attestation_runtime": lambda v: isinstance(v, bytes) and len(v) == 32,
 }
 
 
 def body_check_of(name):
     if name.startswith("identity_binding_"):
-        if name[len("identity_binding_"):] in BINDING_KINDS:
+        kind = name[len("identity_binding_"):]
+        if kind == "workload":
+            return check_workload_binding
+        if kind in BINDING_KINDS:
             return check_identity_binding
         return None
     return BODIES.get(name)

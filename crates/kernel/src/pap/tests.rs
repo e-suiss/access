@@ -223,6 +223,7 @@ fn pap() -> Pap {
 
 fn intent(namespace: &str, amount: i64) -> IntentEnvelope {
     IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: action(namespace, "refund"),
         resources: vec![ResourceRef {
             namespace: "shop".to_string(),

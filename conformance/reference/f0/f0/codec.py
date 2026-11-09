@@ -319,6 +319,33 @@ def check_amount_value(value):
     check_map(value, {"value": check_amount, "unit": check_unit})
 
 
+def is_web_origin(value):
+    # E54 (4): "https://" or "http://", a host of [a-z0-9.-], an optional port of 1-5 digits
+    if not isinstance(value, str) or len(value.encode("utf-8")) > 255:
+        return False
+    for scheme in ("https://", "http://"):
+        if value.startswith(scheme):
+            rest = value[len(scheme):]
+            break
+    else:
+        return False
+    host, colon, port = rest.partition(":")
+    if not host or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789.-" for c in host):
+        return False
+    if colon and not (1 <= len(port) <= 5 and all(c in "0123456789" for c in port)):
+        return False
+    return True
+
+
+def check_web_origin(value):
+    if not is_web_origin(value):
+        fail("not a web origin")
+
+
+def check_origin_param(value):
+    check_map(value, {"origin": check_web_origin, "access": check_text_in("read", "write")})
+
+
 def check_param_value(value):
     check_choice(value, {
         "enum": check_tstr,
@@ -330,6 +357,7 @@ def check_param_value(value):
         "subject": check_id,
         "purpose": check_purpose_ref,
         "flag": check_bool,
+        "origin": check_origin_param,
     })
 
 
@@ -418,6 +446,8 @@ ASSURANCE_LEVELS = {
     "human_presence": (0, 1),
     "app_controlled_factor": (0, 1),
     "synced": (0, 1),
+    # E49: voice 0, watch 1, a full screen 2
+    "surface": (0, 2),
 }
 
 
@@ -472,6 +502,8 @@ def check_intent_context(value):
         "commitment": check_digest,
         "step": check_digest,
         "upstream_exercise": check_digest,
+        # MUST-NEVER-6: an opaque PlanRef
+        "plan": check_digest,
     })
 
 
@@ -486,7 +518,12 @@ def check_intent_envelope(value):
         "recipient": check_id,
         "purpose": check_purpose_ref,
         "context": check_intent_context,
+        "provenance": check_ident_map(check_text_in("user", "trusted", "untrusted-external")),
     })
+    # E54 (1): every label names a typed parameter
+    for name in value.get("provenance", {}):
+        if name not in value.get("params", {}):
+            fail("provenance names no parameter")
 
 
 def check_restriction_deny(value):
@@ -546,8 +583,21 @@ def check_basis(value):
         fail("lineage too deep")
 
 
+def check_origin_sets(value):
+    # E54 (4)
+    check_map(value, {}, {
+        "read": check_list(check_web_origin, nonempty=True, is_set=True),
+        "write": check_list(check_web_origin, nonempty=True, is_set=True),
+    })
+    if not value:
+        fail("empty origin sets")
+
+
 def check_mandate(value):
-    check_map(value, {"authority": check_authority_set}, {"requirements": check_requirement_list})
+    check_map(value, {"authority": check_authority_set}, {
+        "requirements": check_requirement_list,
+        "origins": check_origin_sets,
+    })
 
 
 def check_proof(value):

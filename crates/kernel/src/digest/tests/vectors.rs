@@ -17,6 +17,7 @@ use crate::vector_rules::hex;
 
 fn minimal() -> IntentEnvelope {
     IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: ActionRef {
             namespace: "pay".to_string(),
             name: "refund".to_string(),
@@ -56,15 +57,47 @@ fn full() -> IntentEnvelope {
     i
 }
 
-// L0-ENC-22, L0-ENC-23, L0-ENC-29a, OP-126 m.2
+/// An agent's intent: a plan and step reference, a web origin and labelled provenance
+/// (L0-ENC-23a, E54, MUST-NEVER-6).
+fn agent() -> IntentEnvelope {
+    use crate::intent::Provenance;
+    let mut i = full();
+    i.context.step = Some(Digest([0x41; 32]));
+    i.context.plan = Some(Digest([0x42; 32]));
+    i.params.insert(
+        "target".to_string(),
+        ParamValue::Origin {
+            origin: "https://shop.example".to_string(),
+            write: true,
+        },
+    );
+    i.provenance.insert("amount".to_string(), Provenance::User);
+    i.provenance
+        .insert("target".to_string(), Provenance::UntrustedExternal);
+    i
+}
+
+// L0-ENC-22, L0-ENC-23, L0-ENC-23a, L0-ENC-29a, OP-126 m.2
 #[test]
 fn digest_vectors_match() {
     let mut lines = Vec::new();
-    for (id, intent) in [("intent-minimal", minimal()), ("intent-full", full())] {
+    for (id, intent, rules) in [
+        (
+            "intent-minimal",
+            minimal(),
+            &["L0-ENC-20", "L0-ENC-22", "L0-ENC-23"][..],
+        ),
+        (
+            "intent-full",
+            full(),
+            &["L0-ENC-20", "L0-ENC-22", "L0-ENC-23"],
+        ),
+        ("intent-agent", agent(), &["L0-ENC-23", "L0-ENC-23a"]),
+    ] {
         let d = intent_digest(&intent).unwrap();
         lines.push(format!(
             "  {{\"id\": \"{id}\", {}, \"operation\": \"digest.intent\", \"intent\": \"{}\", \"digest\": \"{}\"}}",
-            crate::vector_rules::field(&["L0-ENC-20", "L0-ENC-22", "L0-ENC-23"]),
+            crate::vector_rules::field(rules),
             hex(&intent.to_bytes().unwrap()),
             hex(&d.to_bytes().unwrap()),
         ));

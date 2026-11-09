@@ -558,6 +558,7 @@ impl IdpAction {
     #[must_use]
     pub fn schema(self) -> ActionSchema {
         ActionSchema {
+            reversibility: None,
             name: String::from(self.name()),
             major: 1,
             effect: self.effect(),

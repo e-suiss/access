@@ -72,6 +72,7 @@ fn public(seed: u8) -> PublicKey {
 /// The Action Schema the test catalog publishes for `name` (OP-141 m.35).
 fn schema_of(name: &str) -> access_kernel::schema::ActionSchema {
     access_kernel::schema::ActionSchema {
+        reversibility: None,
         name: name.to_owned(),
         major: 1,
         effect: access_kernel::schema::EffectClass::Reversible,
@@ -306,6 +307,7 @@ fn sign(s: &Statement, seed: u8) -> Vec<u8> {
 
 fn intent(act: ActionRef, resource: (&str, &str), payload: Option<&Payload>) -> IntentEnvelope {
     IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: act,
         resources: vec![ResourceRef {
             namespace: resource.0.to_owned(),

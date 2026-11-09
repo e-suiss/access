@@ -171,6 +171,7 @@ async fn hub(c: &Console, app: &axum::Router, domains: &[(&str, &str)], depth: &
 fn revoke_body(c: &Console, grant: access_kernel::model::Id, nonce: &[u8], now: u64) -> Vec<u8> {
     let payload = Payload::GrantRevoke { grant };
     let intent = IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: core_action("grant_revoke"),
         resources: vec![ResourceRef {
             namespace: String::from("access.party"),

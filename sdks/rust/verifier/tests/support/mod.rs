@@ -300,6 +300,7 @@ pub(crate) fn signed(p: &Pap) -> Vec<u8> {
 
 pub(crate) fn intent(amount: i64, unit: &str) -> IntentEnvelope {
     IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: action("pay", "refund"),
         resources: vec![ResourceRef {
             namespace: "shop".to_owned(),
@@ -343,6 +344,7 @@ pub(crate) fn present(
 /// An Action Schema for `pay/refund` with this effect class.
 pub(crate) fn schema(effect: EffectClass, reserved: bool) -> ActionSchema {
     ActionSchema {
+        reversibility: None,
         name: "refund".to_owned(),
         major: 1,
         effect,

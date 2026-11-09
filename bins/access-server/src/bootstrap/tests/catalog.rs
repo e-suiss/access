@@ -262,6 +262,7 @@ async fn exercise(w: &World, domain: Digest, slug: &str, action: IdpAction, kind
     let root = root_key(&w.keys).unwrap();
     let at = Moment::at(server_time(&w.db.app).await.unwrap());
     let intent = IntentEnvelope {
+        provenance: std::collections::BTreeMap::new(),
         action: action.action_ref(),
         resources: vec![ResourceRef {
             namespace: String::from(access_internal_api::idp::RESOURCE_NAMESPACE),

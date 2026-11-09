@@ -295,6 +295,7 @@ impl World {
 
 fn intent(recipient: bool) -> IntentEnvelope {
     IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: action(),
         resources: vec![ResourceRef {
             namespace: "shop".to_string(),
@@ -357,6 +358,7 @@ fn world_with(check: bool) -> impl Strategy<Value = World> {
                         .map(|((c, t, a, p), n)| proof(n, *c, *t, *a, *p))
                         .collect(),
                     mandate: mandate.map(|cover| Mandate {
+                        origins: crate::combinator::Origins::default(),
                         authority: authority(cover),
                         requirements: BTreeSet::new(),
                     }),

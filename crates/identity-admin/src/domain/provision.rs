@@ -63,6 +63,7 @@ impl PlatformAction {
     #[must_use]
     pub fn schema(self) -> ActionSchema {
         ActionSchema {
+            reversibility: None,
             name: String::from(self.name()),
             major: 1,
             effect: EffectClass::Irreversible,
@@ -444,6 +445,7 @@ impl PlatformChange {
         validity: Window,
     ) -> Result<IntentEnvelope, dcbor::EncodeError> {
         Ok(IntentEnvelope {
+            provenance: BTreeMap::new(),
             action: self.action().action_ref(),
             resources: vec![self.resource(platform)],
             params: BTreeMap::new(),

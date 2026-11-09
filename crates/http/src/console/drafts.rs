@@ -495,6 +495,7 @@ pub fn draft_with(
         .transpose()?;
     let opaque = opaque_of(family, mode, o, payload.as_ref())?;
     let envelope = IntentEnvelope {
+        provenance: BTreeMap::new(),
         action,
         resources,
         params,

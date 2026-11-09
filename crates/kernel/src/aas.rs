@@ -33,6 +33,85 @@ pub enum Act {
     AuthorityAct,
 }
 
+/// The class of an Approval Surface, as its conformance profile declares it (E49 (1)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SurfaceClass {
+    /// A voice surface: a car, glasses, a speaker.
+    Voice,
+    /// A watch.
+    Watch,
+    /// A phone.
+    Phone,
+    /// A desktop or laptop.
+    Desktop,
+}
+
+const SURFACES: [(&str, SurfaceClass); 4] = [
+    ("voice", SurfaceClass::Voice),
+    ("watch", SurfaceClass::Watch),
+    ("phone", SurfaceClass::Phone),
+    ("desktop", SurfaceClass::Desktop),
+];
+
+impl SurfaceClass {
+    /// Its level on the `surface` assurance dimension: voice 0, watch 1, a full screen (phone or
+    /// desktop) 2, the only surfaces that render an exact intent faithfully (E49 (2)).
+    #[must_use]
+    pub const fn level(self) -> u64 {
+        match self {
+            Self::Voice => 0,
+            Self::Watch => 1,
+            Self::Phone | Self::Desktop => 2,
+        }
+    }
+}
+
+/// The evidence an approval act reached on its surface (E49 (1), (3)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum EvidenceLevel {
+    /// A person was present.
+    Presence,
+    /// The device verified the user (biometrics or PIN).
+    UserVerified,
+    /// A phishing-resistant authentication: a passkey opened with biometrics or PIN.
+    PhishingResistant,
+}
+
+const EVIDENCE: [(&str, EvidenceLevel); 3] = [
+    ("presence", EvidenceLevel::Presence),
+    ("user_verified", EvidenceLevel::UserVerified),
+    ("phishing_resistant", EvidenceLevel::PhishingResistant),
+];
+
+/// Level of the `surface` assurance dimension that only a full screen reaches (E49 (2)).
+pub const SCREEN: u64 = 2;
+
+/// The assurance an approval from `surface` with `evidence` carries into a decision: the
+/// `surface` level, and `human_presence`, `uv` and `phishing_resistant` as far as the evidence
+/// reaches (E49 (1), (3)). Nothing is claimed for an undeclared surface or evidence.
+#[must_use]
+pub fn assurance_of(
+    surface: Option<SurfaceClass>,
+    evidence: Option<EvidenceLevel>,
+) -> alloc::collections::BTreeMap<String, u64> {
+    let mut out = alloc::collections::BTreeMap::new();
+    if let Some(s) = surface {
+        out.insert(String::from(crate::requirement::SURFACE), s.level());
+    }
+    if let Some(e) = evidence {
+        out.insert(String::from(crate::requirement::HUMAN_PRESENCE), 1);
+        out.insert(
+            String::from("uv"),
+            u64::from(e >= EvidenceLevel::UserVerified),
+        );
+        out.insert(
+            String::from("phishing_resistant"),
+            u64::from(e == EvidenceLevel::PhishingResistant),
+        );
+    }
+    out
+}
+
 /// The statement (CDDL `approval-act-statement`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ApprovalAct {
@@ -56,6 +135,10 @@ pub struct ApprovalAct {
     pub surface_profile: String,
     /// Its version.
     pub surface_version: u64,
+    /// The surface's class, when the profile declares it (E49 (1)).
+    pub surface_class: Option<SurfaceClass>,
+    /// The evidence the act reached, when the surface declares it (E49 (1)).
+    pub evidence: Option<EvidenceLevel>,
     /// Digest of the render shown.
     pub render_digest: Digest,
     /// Material fields shown.
@@ -109,6 +192,16 @@ impl Canonical for ApprovalAct {
                 Some(map([
                     ("profile", Some(Value::text(&self.surface_profile))),
                     ("version", Some(Value::Unsigned(self.surface_version))),
+                    (
+                        "class",
+                        self.surface_class
+                            .map(|c| crate::validity::word_of(c, &SURFACES)),
+                    ),
+                    (
+                        "evidence",
+                        self.evidence
+                            .map(|e| crate::validity::word_of(e, &EVIDENCE)),
+                    ),
                 ])),
             ),
             ("render_digest", Some(self.render_digest.to_value())),
@@ -161,6 +254,14 @@ impl Canonical for ApprovalAct {
         }
         let surface_profile = String::from(surface_profile);
         let surface_version = uint(surface.req("version")?)?;
+        let surface_class = surface
+            .opt("class")
+            .map(|c| crate::validity::word(c, &SURFACES))
+            .transpose()?;
+        let evidence = surface
+            .opt("evidence")
+            .map(|e| crate::validity::word(e, &EVIDENCE))
+            .transpose()?;
         surface.done()?;
         let out = Self {
             act,
@@ -173,6 +274,8 @@ impl Canonical for ApprovalAct {
             work_gate,
             surface_profile,
             surface_version,
+            surface_class,
+            evidence,
             render_digest: digest_of(f.req("render_digest")?)?,
             material_fields: set_of(f.req("material_fields")?, false, ident)?,
             issued_at: uint(f.req("issued_at")?)?,

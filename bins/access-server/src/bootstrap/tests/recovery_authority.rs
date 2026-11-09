@@ -217,6 +217,7 @@ async fn bind(
     let payload = Payload::MandateBind {
         instance,
         envelope: MandateEnvelope {
+            origins: access_kernel::combinator::Origins::default(),
             authority: authority.authority,
             constraints: authority.constraints,
             requirements,
@@ -579,6 +580,7 @@ async fn a_recovered_successor_is_bound_by_its_recovery_result() {
         .exact
         .insert(access_kernel::meta::core_action("mandate_rebind"));
     let envelope = |requirements: BTreeSet<RequirementTerm>| MandateEnvelope {
+        origins: access_kernel::combinator::Origins::default(),
         authority: authority.authority.clone(),
         constraints: authority.constraints.clone(),
         requirements,

@@ -84,6 +84,10 @@ Vectors: `decision.json`: `reject-rolling-budget-without-reset`, `reject-check-b
 
 Vector: `decision.json`: `deny-outside-instance-limits`.
 
+<a id="L0-EVAL-16a"></a>**L0-EVAL-16a. Origin sets.** A typed parameter `{origin: {origin, access}}` names a web origin the intent reads (`access: "read"`) or writes (`"write"`). If the input has a `mandate`, every origin the intent names must be in the mandate's `origins.read` set when read and in its `origins.write` set when written; an absent set is empty. Otherwise the evaluation produces one `outside-instance-limits` blocker with subcode `outside-instance-limits/origin` at position `instance`. Without a mandate no origin is checked here (E54 (4)).
+
+Vectors: `decision.json`: `allow-origin-inside-mandate`, `deny-origin-outside-mandate`, `deny-origin-write-read-only`.
+
 <a id="L0-EVAL-17"></a>**L0-EVAL-17. Capacity.** The declared `capacity` MUST be one of the basis's `capacities`. If it is not, the basis produces a `capacity-mismatch` blocker at hop 0.
 
 Vectors: `decision.json`: `deny-capacity-mismatch`; `cve-regressions.json`: `impersonate-admin`.
@@ -208,6 +212,7 @@ Vector: `decision.json`: `check-deny-merges-blockers-only`.
 |---|---|---|---|---|
 | Hop does not cover the intent, or is not understood | `no-covering-authority` | `hop(k)` | `grantor_of_hop(k)` | `route-to-coordinator` |
 | Mandate does not cover the intent | `outside-instance-limits` | `instance` | `actor-party` | `route-to-coordinator` |
+| Intent names an origin outside the mandate's sets | `outside-instance-limits`, `outside-instance-limits/origin` | `instance` | `actor-party` | `route-to-coordinator` |
 | Restriction DENY | `restricted`, `restricted/policy:<ref>` | `domain-policy` | `restriction-owner` | `not-satisfiable-by-actor` |
 | Budget short, rolling window | `budget-exhausted` | `hop(k)` | `time` | `wait_until(resets_at)` |
 | Budget short, total window | `budget-exhausted` | `hop(k)` | `grantor_of_hop(k)` | `route-to-coordinator` |

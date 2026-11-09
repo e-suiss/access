@@ -55,6 +55,7 @@ impl Env for Fixed {
 
 fn envelope() -> IntentEnvelope {
     IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: ActionRef {
             namespace: "idp.realm".into(),
             name: "branding".into(),

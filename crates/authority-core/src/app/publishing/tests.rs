@@ -11,6 +11,7 @@ const PUBLISHER: Id = Id([9; 16]);
 
 fn schema(name: &str, params: &[(&str, &str)], reserved: bool) -> ActionSchema {
     ActionSchema {
+        reversibility: None,
         name: name.to_owned(),
         major: 1,
         effect: EffectClass::Irreversible,

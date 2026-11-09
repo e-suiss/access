@@ -208,6 +208,10 @@ impl Stream {
 
 /// What the host does with a request.
 #[derive(Debug)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "one value per request, moved once to the host"
+)]
 pub enum Handled {
     /// Send this answer.
     Respond(Response),
@@ -478,6 +482,7 @@ impl McpServer<'_> {
         random: &G,
     ) -> Option<bool> {
         let envelope = IntentEnvelope {
+            provenance: std::collections::BTreeMap::new(),
             action: action.clone(),
             resources: alloc::vec![resource.clone()],
             params: alloc::collections::BTreeMap::new(),

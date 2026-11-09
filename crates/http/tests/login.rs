@@ -263,6 +263,7 @@ fn refund_render(shifted: bool) -> (access_kernel::digest::Digest, Vec<u8>) {
     use access_kernel::model::{ActionRef, ResourceRef, Window};
     use access_kernel::schema::{ActionSchema, EffectClass};
     let schema = ActionSchema {
+        reversibility: None,
         name: "refund".into(),
         major: 1,
         effect: EffectClass::Irreversible,
@@ -273,6 +274,7 @@ fn refund_render(shifted: bool) -> (access_kernel::digest::Digest, Vec<u8>) {
         render: Some("Refund {amount} on {resource}".into()),
     };
     let intent = IntentEnvelope {
+        provenance: std::collections::BTreeMap::new(),
         action: ActionRef {
             namespace: "shop".into(),
             name: "refund".into(),

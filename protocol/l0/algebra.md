@@ -186,10 +186,15 @@ Vectors for [L0-ALG-42](#L0-ALG-42), [L0-ALG-46](#L0-ALG-46) and this rule: [`co
 | `human_presence` | 0 or 1 | higher |
 | `app_controlled_factor` | 0 or 1 | higher |
 | `synced` | 0 or 1 | lower: a key that is not synced is the stronger one |
+| `surface` | 0 = voice, 1 = watch, 2 = a full screen (phone or desktop) | higher |
 
 <a id="L0-ALG-60a"></a>**L0-ALG-60a. Unknown dimension or level.** A dimension that is not in the table of [L0-ALG-60](#L0-ALG-60), or a level outside the dimension's range, in a requirement term or in a proof, is not a value of the data model. In an evaluation input it is an `input` rejection ([L0-EVAL-3](evaluation.md#L0-EVAL-3)).
 
 <a id="L0-ALG-60b"></a>**L0-ALG-60b. Authentication time.** `auth_time` is not an assurance dimension. How recent a proof must be is expressed by the term's `freshness_ms` and checked against the proof's `time` ([L0-EVAL-24](evaluation.md#L0-EVAL-24)).
+
+<a id="L0-ALG-60c"></a>**L0-ALG-60c. Minimum surface.** A requirement term's floor on `surface` is the lowest Approval Surface whose approval counts as its proof; a proof without a `surface` level does not meet it. By default an approval of an action above CT1, of an `irreversible` action, or of one outside the Mandate or the budget has floors `surface` 2 and `phishing_resistant` 1; a voice or watch approval of it leaves the term unmet and the decision `require_action` (E49 (2)).
+
+Vectors: `decision.json`: `require-voice-surface-for-screen-floor`, `allow-screen-surface-for-screen-floor`.
 
 <a id="L0-ALG-61"></a>**L0-ALG-61. Requirement sets.** A requirement set `c` is at least as strict as `p` when every term of `p` appears in `c` with an identical encoding. There is no semantic ordering of terms.
 

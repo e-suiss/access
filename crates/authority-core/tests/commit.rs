@@ -67,6 +67,7 @@ fn public(seed: u8) -> PublicKey {
 /// The Action Schema the test catalog publishes for `name` (OP-141 m.35).
 fn schema_of(name: &str) -> access_kernel::schema::ActionSchema {
     access_kernel::schema::ActionSchema {
+        reversibility: None,
         name: name.to_owned(),
         major: 1,
         effect: access_kernel::schema::EffectClass::Reversible,
@@ -325,6 +326,7 @@ fn sign(s: &Statement, seed: u8) -> Vec<u8> {
 
 fn intent(act: ActionRef, resource: (&str, &str), payload: Option<&Payload>) -> IntentEnvelope {
     IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: act,
         resources: vec![ResourceRef {
             namespace: resource.0.to_owned(),
@@ -1806,6 +1808,8 @@ fn approval_act(
     expires_at: u64,
 ) -> ApprovalAct {
     ApprovalAct {
+        evidence: None,
+        surface_class: None,
         act: Act::Contribution("approve".to_owned()),
         instance: alice_instance(d),
         party: ALICE,
@@ -3891,6 +3895,7 @@ async fn a_receipt_names_the_agency_chain_of_a_mandated_agent() {
                 party: ALICE,
                 key: public(ALICE_KEY),
                 mandate: Some(meta::MandateEnvelope {
+                    origins: access_kernel::combinator::Origins::default(),
                     authority: shop_read.authority.clone(),
                     constraints: shop_read.constraints.clone(),
                     requirements: BTreeSet::new(),
@@ -8119,6 +8124,8 @@ fn root_instance(d: Digest) -> Id {
 /// ROOT's statement of its own authority act `req` (§9.14.1 B step 2).
 fn authority_act(d: Digest, req: &Request, render: Digest, act: Act) -> ApprovalAct {
     ApprovalAct {
+        evidence: None,
+        surface_class: None,
         act,
         instance: root_instance(d),
         party: ROOT,
@@ -8329,6 +8336,8 @@ fn contribution_of(
     (target, render): (Digest, Digest),
 ) -> Request {
     let act = ApprovalAct {
+        evidence: None,
+        surface_class: None,
         act: Act::Contribution(class.to_owned()),
         instance,
         party,
@@ -8737,5 +8746,124 @@ async fn an_organizations_rule_shaped_grant_selects_only_its_own_members() {
         .await
         .unwrap(),
     );
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
+// E54 (4), L0-EVAL-16a, OP-154 m.3 (b)
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "an agent, its task Mandate, a Grant and three commits"
+)]
+async fn an_origin_outside_the_mandate_is_denied_on_commit() {
+    use access_kernel::combinator::{BlockerClass, ORIGIN_SUBCODE, Origins};
+    use access_kernel::intent::ParamValue;
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(&db).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
+    allowed(
+        &send(
+            &mut core,
+            meta_request(
+                d,
+                3,
+                public_basis,
+                Payload::PartyRegister {
+                    party: ALICE,
+                    root: Root::Sole(ALICE),
+                    actor_kind: ActorKind::Agent,
+                },
+            ),
+            ALICE_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    let shop_read = authority(vec![action("shop", "read")], selector("shop"));
+    let shop = "https://shop.example";
+    allowed(
+        &send(
+            &mut core,
+            meta_request(
+                d,
+                4,
+                public_basis,
+                Payload::InstanceCreate {
+                    party: ALICE,
+                    key: public(ALICE_KEY),
+                    mandate: Some(meta::MandateEnvelope {
+                        origins: Origins {
+                            read: BTreeSet::from([shop.to_owned()]),
+                            write: BTreeSet::new(),
+                        },
+                        authority: shop_read.authority.clone(),
+                        constraints: shop_read.constraints.clone(),
+                        requirements: BTreeSet::new(),
+                        pin: None,
+                    }),
+                },
+            ),
+            ALICE_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    let anchor = meta::object_id(&d, kind::ANCHOR, 1);
+    let issued = send(
+        &mut core,
+        meta_request(
+            d,
+            5,
+            ExerciseBasis::Anchor(anchor),
+            Payload::GrantIssue(GrantContent {
+                basis: GrantBasis::Anchor(anchor),
+                holder: SubjectSelector::Party(ALICE),
+                authority: shop_read,
+                agency: BTreeSet::from([Capacity::Own]),
+                named: None,
+            }),
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&issued);
+    let holding = ExerciseBasis::Holding(HoldingRef {
+        grant: meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0),
+        holder: ALICE,
+        since: issued.record.unwrap(),
+    });
+    let at = |nonce, origin: &str, write| {
+        let mut r = shop_request(d, nonce, Mode::Commit, holding);
+        r.intent.params.insert(
+            "target".to_owned(),
+            ParamValue::Origin {
+                origin: origin.to_owned(),
+                write,
+            },
+        );
+        r
+    };
+    allowed(
+        &send(&mut core, at(6, shop, false), ALICE_KEY)
+            .await
+            .unwrap(),
+    );
+    for (nonce, origin, write) in [(7, "https://mail.example", false), (8, shop, true)] {
+        let r = send(&mut core, at(nonce, origin, write), ALICE_KEY)
+            .await
+            .unwrap();
+        assert_eq!(r.decision.outcome, Outcome::Deny, "{origin} {write}: {r:?}");
+        assert!(r.exercise.is_none());
+        assert!(
+            r.decision
+                .blockers
+                .iter()
+                .any(|b| b.class == BlockerClass::OutsideInstanceLimits
+                    && b.subcode.as_deref() == Some(ORIGIN_SUBCODE)),
+            "{r:?}"
+        );
+    }
     fold_check(&db.sequencer, d).await.unwrap();
 }

@@ -27,6 +27,7 @@ pub const VALID_FOR_MS: u64 = 5 * 60_000;
 #[must_use]
 pub fn intent(kind: Kind, now: u64) -> IntentEnvelope {
     IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: core_action("read"),
         resources: vec![ResourceRef {
             namespace: String::from(SEARCH_NAMESPACE),

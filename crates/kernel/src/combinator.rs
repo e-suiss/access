@@ -113,6 +113,33 @@ pub struct Basis {
     pub capacities: BTreeSet<Capacity>,
 }
 
+/// The origins one task may read and write (E54 (4)); empty sets name no origin.
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Origins {
+    /// Origins it may read.
+    pub read: BTreeSet<String>,
+    /// Origins it may write.
+    pub write: BTreeSet<String>,
+}
+
+impl Origins {
+    /// Whether an intent that reads (`write` false) or writes `origin` stays inside the sets.
+    #[must_use]
+    pub fn allows(&self, origin: &str, write: bool) -> bool {
+        if write {
+            self.write.contains(origin)
+        } else {
+            self.read.contains(origin)
+        }
+    }
+
+    /// Whether both sets are empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.read.is_empty() && self.write.is_empty()
+    }
+}
+
 /// Actor instance limits.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Mandate {
@@ -120,7 +147,13 @@ pub struct Mandate {
     pub authority: AuthoritySet,
     /// What it must present.
     pub requirements: BTreeSet<RequirementTerm>,
+    /// The origins the task may read and write; an intent naming any other is outside the
+    /// instance limits (E54 (4)).
+    pub origins: Origins,
 }
+
+/// Subcode of an intent naming an origin outside its Mandate's sets (E54 (4)).
+pub const ORIGIN_SUBCODE: &str = "outside-instance-limits/origin";
 
 /// One restriction policy's outcome.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -412,6 +445,20 @@ fn mandate_and_restrictions(
             blockers.push(blocker(
                 BlockerClass::OutsideInstanceLimits,
                 None,
+                Position::Instance,
+                Resolver::ActorParty,
+                Remediation::RouteToCoordinator,
+            ));
+        }
+        // E54 (4)
+        if input
+            .intent
+            .origins()
+            .any(|(origin, write)| !m.origins.allows(origin, write))
+        {
+            blockers.push(blocker(
+                BlockerClass::OutsideInstanceLimits,
+                Some(ORIGIN_SUBCODE),
                 Position::Instance,
                 Resolver::ActorParty,
                 Remediation::RouteToCoordinator,

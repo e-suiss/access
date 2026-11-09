@@ -86,9 +86,18 @@ pub enum Class {
     /// `org_member`: Party value, the organization whose member the subject is, so a `Pred`
     /// holder selects one organization's members (OP-153 m.17 (c), m.25 (a)).
     OrgMember,
+    /// `attestation_runtime`: 32-byte value, the digest of the attested runtime class; a
+    /// narrowing input only (AG-31, OP-154 m.3 (s)).
+    AttestationRuntime,
+    /// `effect_attestation`: body [`EffectAttestation`], an executor's report of one effect
+    /// (E64, OP-154 m.3 (u)).
+    EffectAttestation,
+    /// `executor_control`: body [`ExecutorControl`], an executor's confirmation that an
+    /// Exercise's job is paused or stopped (U5, OP-154 m.3 (u)).
+    ExecutorControl,
 }
 
-const SIMPLE: [(&str, Class); 17] = [
+const SIMPLE: [(&str, Class); 20] = [
     ("authentication", Class::Authentication),
     ("authenticator_binding", Class::AuthenticatorBinding),
     ("posture_device", Class::PostureDevice),
@@ -106,6 +115,9 @@ const SIMPLE: [(&str, Class); 17] = [
     ("sponsored_by", Class::SponsoredBy),
     ("agent_kind", Class::AgentKind),
     ("org_member", Class::OrgMember),
+    ("attestation_runtime", Class::AttestationRuntime),
+    ("effect_attestation", Class::EffectAttestation),
+    ("executor_control", Class::ExecutorControl),
 ];
 
 const IDENTITY_BINDING: &str = "identity_binding_";
@@ -162,6 +174,8 @@ impl Class {
                 | Self::PartyKeyState
                 | Self::PartyRecovered
                 | Self::IdentityBinding(_)
+                | Self::EffectAttestation
+                | Self::ExecutorControl
         )
     }
 }
@@ -473,10 +487,119 @@ pub struct PartyRecovered {
 }
 
 /// Body of an `identity_binding_<kind>` Claim.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IdentityBinding {
     /// Digest of the evidence.
     pub evidence: Digest,
+    /// For `identity_binding_workload`: the verified workload and the key it presented
+    /// (OP-154 m.3 (d)); absent for every other kind.
+    pub workload: Option<Workload>,
+}
+
+/// The workload an `identity_binding_workload` Claim binds (OP-154 m.3 (d), §11.12).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Workload {
+    /// The workload URI (`spiffe://…`, `wimse://…` or a cloud workload subject), at most 2048
+    /// bytes.
+    pub uri: String,
+    /// RFC 7638 thumbprint of the DPoP key the workload presented.
+    pub thumbprint: [u8; 32],
+}
+
+/// What an executor reports an effect came to (E64 (1)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum EffectOutcome {
+    /// It happened, with at least one kind of evidence.
+    Done,
+    /// It did not happen.
+    NotDone,
+    /// It could not be verified (E62 (3)).
+    Unknown,
+}
+
+const EFFECT_OUTCOMES: [(&str, EffectOutcome); 3] = [
+    ("done", EffectOutcome::Done),
+    ("not-done", EffectOutcome::NotDone),
+    ("unknown", EffectOutcome::Unknown),
+];
+
+/// The closed list of evidence kinds, strongest first (E64 (2)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum EvidenceKind {
+    /// The upstream API's structured answer: an order number, a transaction id.
+    UpstreamConfirmation,
+    /// A separate later read: an account page, a confirmation mail, an API query.
+    IndependentRecheck,
+    /// Only a page observation.
+    BrowserObservation,
+}
+
+const EVIDENCE_KINDS: [(&str, EvidenceKind); 3] = [
+    ("upstream-confirmation", EvidenceKind::UpstreamConfirmation),
+    ("independent-recheck", EvidenceKind::IndependentRecheck),
+    ("browser-observation", EvidenceKind::BrowserObservation),
+];
+
+/// One evidence reference: the digest of a body that never enters Access, and an opaque
+/// reference to it (E64 (3)).
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct EvidenceRef {
+    /// Digest of the evidence body.
+    pub digest: Digest,
+    /// Opaque reference, at most 2048 bytes.
+    pub reference: Option<String>,
+}
+
+/// Body of an `effect_attestation` Claim (E64): a Claim, never truth.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EffectAttestation {
+    /// The Exercise the effect belongs to.
+    pub exercise: Digest,
+    /// Its step.
+    pub step: Digest,
+    /// The idempotency key, `H(ExerciseID ‖ StepRef)` (E62 (2)).
+    pub idempotency_key: Digest,
+    /// The action.
+    pub action: crate::model::ActionRef,
+    /// Digest of the typed parameters actually applied.
+    pub params: Digest,
+    /// What it came to.
+    pub outcome: EffectOutcome,
+    /// The evidence kinds; `done` names at least one.
+    pub evidence: BTreeSet<EvidenceKind>,
+    /// The evidence references.
+    pub refs: BTreeSet<EvidenceRef>,
+    /// When, trusted milliseconds.
+    pub at: u64,
+    /// The executor Instance.
+    pub executor: Id,
+    /// Digest of the execution environment's measurement (E61), when it has one.
+    pub environment: Option<Digest>,
+}
+
+/// What an executor confirms about an Exercise's job (U5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ControlState {
+    /// Paused: no further effect until it resumes under a new decision.
+    Paused,
+    /// Stopped, confirmed: no further effect.
+    StoppedConfirmed,
+}
+
+const CONTROL_STATES: [(&str, ControlState); 2] = [
+    ("paused", ControlState::Paused),
+    ("stopped_confirmed", ControlState::StoppedConfirmed),
+];
+
+/// Body of an `executor_control` Claim (U5).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExecutorControl {
+    /// The state.
+    pub state: ControlState,
+    /// The Exercise whose job it is.
+    pub exercise: Digest,
+    /// When, trusted milliseconds.
+    pub at: u64,
 }
 
 /// A decoded Claim body.
@@ -501,6 +624,10 @@ pub enum Body {
     PartyRecovered(PartyRecovered),
     /// `identity_binding_<kind>`.
     IdentityBinding(IdentityBinding),
+    /// `effect_attestation`.
+    EffectAttestation(EffectAttestation),
+    /// `executor_control`.
+    ExecutorControl(ExecutorControl),
 }
 
 /// Why a Claim's value or body is refused (L2-CLB-2, L2-CLB-3).
@@ -1057,16 +1184,147 @@ impl Canonical for PartyRecovered {
 
 impl Canonical for IdentityBinding {
     fn to_value(&self) -> Value {
-        map([("evidence", Some(self.evidence.to_value()))])
+        map([
+            ("evidence", Some(self.evidence.to_value())),
+            (
+                "workload",
+                self.workload.as_ref().map(|w| {
+                    map([
+                        ("uri", Some(Value::text(&w.uri))),
+                        ("thumbprint", Some(Value::Bytes(w.thumbprint.to_vec()))),
+                    ])
+                }),
+            ),
+        ])
     }
 
     fn from_value(v: &Value) -> Result<Self, ModelError> {
         let mut f = Fields::of(v)?;
+        let workload = match f.opt("workload") {
+            None => None,
+            Some(w) => {
+                let mut wf = Fields::of(w)?;
+                let out = Workload {
+                    uri: sized_text(wf.req("uri")?, 2048)?,
+                    thumbprint: bytes32(wf.req("thumbprint")?)?,
+                };
+                wf.done()?;
+                Some(out)
+            }
+        };
         let b = Self {
             evidence: digest(f.req("evidence")?)?,
+            workload,
         };
         f.done()?;
         Ok(b)
+    }
+}
+
+fn bytes32(v: &Value) -> Result<[u8; 32], ModelError> {
+    match v {
+        Value::Bytes(b) => <[u8; 32]>::try_from(b.as_slice()).map_err(|_| ModelError::Range),
+        _ => Err(ModelError::Shape),
+    }
+}
+
+impl Canonical for EvidenceRef {
+    fn to_value(&self) -> Value {
+        map([
+            ("digest", Some(self.digest.to_value())),
+            ("ref", self.reference.as_ref().map(|r| Value::text(r))),
+        ])
+    }
+
+    fn from_value(v: &Value) -> Result<Self, ModelError> {
+        let mut f = Fields::of(v)?;
+        let r = Self {
+            digest: digest(f.req("digest")?)?,
+            reference: f.opt("ref").map(|r| sized_text(r, 2048)).transpose()?,
+        };
+        f.done()?;
+        Ok(r)
+    }
+}
+
+impl Canonical for EffectAttestation {
+    fn to_value(&self) -> Value {
+        map([
+            ("exercise", Some(self.exercise.to_value())),
+            ("step", Some(self.step.to_value())),
+            ("idempotency_key", Some(self.idempotency_key.to_value())),
+            ("action", Some(self.action.to_value())),
+            ("params", Some(self.params.to_value())),
+            ("outcome", Some(word_of(self.outcome, &EFFECT_OUTCOMES))),
+            (
+                "evidence",
+                (!self.evidence.is_empty())
+                    .then(|| set_value(self.evidence.iter().map(|e| word_of(*e, &EVIDENCE_KINDS)))),
+            ),
+            (
+                "refs",
+                (!self.refs.is_empty())
+                    .then(|| set_value(self.refs.iter().map(Canonical::to_value))),
+            ),
+            ("at", Some(Value::Unsigned(self.at))),
+            ("executor", Some(self.executor.to_value())),
+            (
+                "environment",
+                self.environment.as_ref().map(Canonical::to_value),
+            ),
+        ])
+    }
+
+    fn from_value(v: &Value) -> Result<Self, ModelError> {
+        let mut f = Fields::of(v)?;
+        let a = Self {
+            exercise: digest(f.req("exercise")?)?,
+            step: digest(f.req("step")?)?,
+            idempotency_key: digest(f.req("idempotency_key")?)?,
+            action: crate::model::ActionRef::from_value(f.req("action")?)?,
+            params: digest(f.req("params")?)?,
+            outcome: word(f.req("outcome")?, &EFFECT_OUTCOMES)?,
+            evidence: f
+                .opt("evidence")
+                .map(|e| set_of(e, true, |w| word(w, &EVIDENCE_KINDS)))
+                .transpose()?
+                .unwrap_or_default(),
+            refs: f
+                .opt("refs")
+                .map(|r| set_of(r, true, EvidenceRef::from_value))
+                .transpose()?
+                .unwrap_or_default(),
+            at: uint(f.req("at")?)?,
+            executor: Id::from_value(f.req("executor")?)?,
+            environment: opt_digest(&mut f, "environment")?,
+        };
+        f.done()?;
+        // E64 (2)
+        if a.outcome == EffectOutcome::Done && a.evidence.is_empty() {
+            return Err(ModelError::Range);
+        }
+        Ok(a)
+    }
+}
+
+impl Canonical for ExecutorControl {
+    fn to_value(&self) -> Value {
+        map([
+            ("state", Some(word_of(self.state, &CONTROL_STATES))),
+            ("exercise", Some(self.exercise.to_value())),
+            ("at", Some(Value::Unsigned(self.at))),
+        ])
+    }
+
+    fn from_value(v: &Value) -> Result<Self, ModelError> {
+        let mut f = Fields::of(v)?;
+        let c = Self {
+            state: word(f.req("state")?, &CONTROL_STATES)?,
+            exercise: digest(f.req("exercise")?)?,
+            at: uint(f.req("at")?)?,
+        };
+        f.done()?;
+        Ok(c)
     }
 }
 
@@ -1084,6 +1342,8 @@ impl Body {
             Self::PartyKeyState(b) => b.to_value(),
             Self::PartyRecovered(b) => b.to_value(),
             Self::IdentityBinding(b) => b.to_value(),
+            Self::EffectAttestation(b) => b.to_value(),
+            Self::ExecutorControl(b) => b.to_value(),
         }
     }
 
@@ -1103,7 +1363,16 @@ impl Body {
             Class::AuthorityStateAck => Self::AuthorityStateAck(AuthorityStateAck::from_value(v)?),
             Class::PartyKeyState => Self::PartyKeyState(PartyKeyState::from_value(v)?),
             Class::PartyRecovered => Self::PartyRecovered(PartyRecovered::from_value(v)?),
-            Class::IdentityBinding(_) => Self::IdentityBinding(IdentityBinding::from_value(v)?),
+            Class::IdentityBinding(kind) => {
+                let b = IdentityBinding::from_value(v)?;
+                // OP-154 m.3 (d)
+                if b.workload.is_some() && kind != BindingKind::Workload {
+                    return Err(ModelError::Range);
+                }
+                Self::IdentityBinding(b)
+            }
+            Class::EffectAttestation => Self::EffectAttestation(EffectAttestation::from_value(v)?),
+            Class::ExecutorControl => Self::ExecutorControl(ExecutorControl::from_value(v)?),
             _ => return Err(ModelError::Range),
         })
     }
@@ -1133,6 +1402,7 @@ fn scalar_ok(class: Class, value: Option<&EqValue>) -> bool {
             Class::ControllerOf | Class::OperatedBy | Class::SponsoredBy | Class::OrgMember,
             Some(EqValue::Bytes(b)),
         ) => b.len() == 16,
+        (Class::AttestationRuntime, Some(EqValue::Bytes(b))) => b.len() == 32,
         _ => false,
     }
 }

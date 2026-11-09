@@ -783,6 +783,16 @@ impl Out {
                 self.key("flag");
                 self.0.push_str(if *b { "true" } else { "false" });
             }
+            ParamValue::Origin { origin, write } => {
+                self.key("origin");
+                self.0.push('{');
+                self.key("origin");
+                self.text(origin);
+                self.0.push(',');
+                self.key("access");
+                self.text(if *write { "write" } else { "read" });
+                self.0.push('}');
+            }
         }
         self.0.push('}');
     }
@@ -845,11 +855,7 @@ impl Out {
             self.purpose(p);
         }
         let c = &e.context;
-        if c.work.is_some()
-            || c.commitment.is_some()
-            || c.step.is_some()
-            || c.upstream_exercise.is_some()
-        {
+        if *c != access_kernel::intent::ContextRefs::default() {
             self.0.push(',');
             self.key("context");
             self.0.push('{');
@@ -859,12 +865,25 @@ impl Out {
                 ("commitment", &c.commitment),
                 ("step", &c.step),
                 ("upstream_exercise", &c.upstream_exercise),
+                ("plan", &c.plan),
             ] {
                 if let Some(d) = d {
                     self.comma(&mut first);
                     self.key(k);
                     self.digest(d);
                 }
+            }
+            self.0.push('}');
+        }
+        if !e.provenance.is_empty() {
+            self.0.push(',');
+            self.key("provenance");
+            self.0.push('{');
+            let mut first = true;
+            for (k, p) in &e.provenance {
+                self.comma(&mut first);
+                self.key(k);
+                self.text(p.label());
             }
             self.0.push('}');
         }

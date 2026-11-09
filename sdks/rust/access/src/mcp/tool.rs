@@ -133,6 +133,7 @@ pub fn intent(
         Some(_) => return Err(ToolError::Arguments),
     }
     Ok(IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: tool.action.clone(),
         resources: alloc::vec![tool.resource.clone()],
         params,

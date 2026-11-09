@@ -244,8 +244,27 @@ fn param(v: &Json) -> R<ParamValue> {
             Json::Bool(b) => ParamValue::Flag(*b),
             _ => return Err(AdpError("param")),
         },
+        "origin" => {
+            let mut o = Obj::of(inner, "param")?;
+            let origin = text(o.req("origin", "param")?, "param")?;
+            if !access_kernel::intent::is_origin(&origin) {
+                return Err(AdpError("param"));
+            }
+            let write = match text(o.req("access", "param")?, "param")?.as_str() {
+                "read" => false,
+                "write" => true,
+                _ => return Err(AdpError("param")),
+            };
+            o.done()?;
+            ParamValue::Origin { origin, write }
+        }
         _ => return Err(AdpError("param")),
     })
+}
+
+/// E54 (1), L0-ENC-23a.
+fn provenance(v: &Json) -> R<access_kernel::intent::Provenance> {
+    access_kernel::intent::Provenance::of_label(&text(v, "intent")?).ok_or(AdpError("intent"))
 }
 
 fn named<T>(
@@ -267,6 +286,7 @@ fn context_refs(v: &Json) -> R<ContextRefs> {
         commitment: o.opt("commitment").map(digest).transpose()?,
         step: o.opt("step").map(digest).transpose()?,
         upstream_exercise: o.opt("upstream_exercise").map(digest).transpose()?,
+        plan: o.opt("plan").map(digest).transpose()?,
     };
     o.done()?;
     Ok(c)
@@ -293,9 +313,14 @@ fn intent(v: &Json) -> R<IntentEnvelope> {
             .map(context_refs)
             .transpose()?
             .unwrap_or_default(),
+        provenance: named(o.opt("provenance"), provenance, "intent")?,
         validity: window(o.req("validity", "intent")?)?,
     };
     o.done()?;
+    // L0-ENC-23a
+    if e.provenance.keys().any(|k| !e.params.contains_key(k)) {
+        return Err(AdpError("intent"));
+    }
     Ok(e)
 }
 

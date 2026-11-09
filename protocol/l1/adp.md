@@ -83,11 +83,12 @@ A request without `ais` has an anonymous actor and can only use Public Grants. A
 |---|---|
 | `action` | `{"namespace": text, "name": text, "major": uint, "schema": digest}` |
 | `resources` | array of `{"namespace": text, "path": [text], "incarnation": uint}`, at least one |
-| `params` | object of typed values: `{"enum": text}`, `{"eq": eq}`, `{"amount": {"value": int, "unit": text}}`, `{"count": uint}`, `{"interval": window}`, `{"resource": resource}`, `{"subject": id}`, `{"purpose": purpose}`, `{"flag": bool}`; `eq` is a string, an integer, a boolean or `{"bytes": bytes}` |
+| `params` | object of typed values: `{"enum": text}`, `{"eq": eq}`, `{"amount": {"value": int, "unit": text}}`, `{"count": uint}`, `{"interval": window}`, `{"resource": resource}`, `{"subject": id}`, `{"purpose": purpose}`, `{"flag": bool}`, `{"origin": {"origin": text, "access": "read" or "write"}}`; `eq` is a string, an integer, a boolean or `{"bytes": bytes}` |
 | `opaque` | object of digests |
 | `recipient` | id |
 | `purpose` | `{"code": text}`, `{"work": digest}` or `{"aim": digest}` |
-| `context` | `{"work"?, "commitment"?, "step"?, "upstream_exercise"?}`, each a digest |
+| `context` | `{"work"?, "commitment"?, "step"?, "upstream_exercise"?, "plan"?}`, each a digest |
+| `provenance` | object naming members of `params`, each `"user"`, `"trusted"` or `"untrusted-external"` ([L0-ENC-23a](../l0/encoding.md#L0-ENC-23a)) |
 | `validity` | window `{"from": uint, "until": uint}` |
 
 Access computes the intent digest from the decoded envelope ([L0-ENC-23](../l0/encoding.md#L0-ENC-23)); a caller never supplies it.

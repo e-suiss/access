@@ -1056,6 +1056,7 @@ fn mandate(view: &dyn View, actor: Option<&Actor>) -> Option<(Id, Mandate)> {
         m.ended.is_none().then_some((
             id,
             Mandate {
+                origins: m.envelope.origins,
                 authority: m.envelope.authority,
                 requirements: m.envelope.requirements,
             },

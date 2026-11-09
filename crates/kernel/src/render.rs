@@ -16,7 +16,7 @@ use crate::codec::{Fields, ModelError, text};
 use crate::digest::Digest;
 use crate::intent::{IntentEnvelope, ParamValue, intent_digest};
 use crate::model::{EqValue, PurposeRef, ResourceRef};
-use crate::schema::{ActionSchema, EffectClass};
+use crate::schema::{ActionSchema, EffectClass, Reversibility};
 
 /// Digest context of a render.
 pub const CONTEXT: &str = "access/render/v1";
@@ -58,6 +58,9 @@ pub struct Render {
     pub template: Option<String>,
     /// The fields, in display order: action, resource, parameters by name, recipient, validity.
     pub fields: Vec<Field>,
+    /// The schema's declared reversibility, so the surface offers "Undo" only for a reversible
+    /// action and labels a compensable one honestly (E47 (1), (2)); absent when undeclared.
+    pub reversibility: Option<Reversibility>,
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -133,6 +136,11 @@ pub fn param_text(v: &ParamValue) -> String {
         ParamValue::Subject(id) => hex(&id.0),
         ParamValue::Purpose(p) => purpose_text(p),
         ParamValue::Flag(b) => String::from(if *b { "true" } else { "false" }),
+        ParamValue::Origin { origin, write } => {
+            let mut out = String::from(if *write { "write " } else { "read " });
+            out.push_str(origin);
+            out
+        }
     }
 }
 
@@ -204,6 +212,7 @@ pub fn of(
         locale: String::from(locale),
         template: schema.and_then(|s| s.render.clone()),
         fields,
+        reversibility: schema.and_then(|s| s.reversibility),
     })
 }
 
@@ -240,6 +249,9 @@ fn value(r: &Render) -> Value {
     ];
     if let Some(t) = &r.template {
         entries.push((Value::text("template"), Value::text(t)));
+    }
+    if let Some(rev) = r.reversibility {
+        entries.push((Value::text("reversibility"), Value::text(rev.name())));
     }
     Value::Map(entries)
 }
@@ -284,6 +296,10 @@ pub fn decode(bytes: &[u8]) -> Result<Render, ModelError> {
         .opt("template")
         .map(|t| text(t).map(String::from))
         .transpose()?;
+    let reversibility = f
+        .opt("reversibility")
+        .map(|r| Reversibility::of_name(text(r)?).ok_or(ModelError::Unknown))
+        .transpose()?;
     f.done()?;
     Ok(Render {
         schema,
@@ -291,6 +307,7 @@ pub fn decode(bytes: &[u8]) -> Result<Render, ModelError> {
         locale,
         template,
         fields,
+        reversibility,
     })
 }
 

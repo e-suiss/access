@@ -762,6 +762,7 @@ mod tests {
             grant: access_kernel::model::Id(payload_grant),
         };
         let intent = access_kernel::intent::IntentEnvelope {
+            provenance: std::collections::BTreeMap::new(),
             action: access_kernel::meta::core_action(action),
             resources: vec![access_kernel::model::ResourceRef {
                 namespace: String::from("access.grant"),

@@ -110,6 +110,15 @@ param-value =
   / { subject: party-ref }
   / { purpose: purpose-ref }
   / { flag: bool }
+  ; E54 (4): a web origin the intent reads or writes, checked against the Mandate's origins.
+  / { origin: { origin: web-origin, access: "read" / "write" } }
+
+; A serialized web origin, lowercase: "https://" or "http://", a host, an optional port.
+web-origin = tstr .regexp "https?://[a-z0-9.-]+(:[0-9]{1,5})?"
+
+; E54 (1): where a typed parameter's value came from; unlabelled is "untrusted-external", and a
+; merged value takes the worst label.
+provenance = "user" / "trusted" / "untrusted-external"
 
 ; ---------------------------------------------------------------- authority
 
@@ -160,10 +169,12 @@ requirement-term = {
 }
 
 ; The closed assurance dimensions of §10.1.6 (OP-118 m.3). For `synced` the lower level is the
-; stronger one.
+; stronger one. `surface` is the Approval Surface's class (E49): voice 0, watch 1, a full screen
+; (phone or desktop) 2; a term's floor on it is its minimum surface (OP-154 m.3 (b)).
 assurance-flag = "phishing_resistant" / "hardware_bound" / "non_custodial" / "uv"
                / "human_presence" / "app_controlled_factor" / "synced"
-assurance = { + ( "aal" => 1..3 // "loa_eidas" => 1..3 // assurance-flag => 0..1 ) }
+assurance = { + ( "aal" => 1..3 // "loa_eidas" => 1..3 // "surface" => 0..2
+                // assurance-flag => 0..1 ) }
 
 requirement-set = [* requirement-term]
 
@@ -188,7 +199,11 @@ intent-envelope = {
     ? commitment: digest,
     ? step: digest,
     ? upstream_exercise: digest,
+    ; PlanRef: opaque; Access keeps no plan or progress state (MUST-NEVER-6).
+    ? plan: digest,
   },
+  ; E54 (1): each key names a member of `params`.
+  ? provenance: { + ident => provenance },
   validity: time-window,
 }
 
@@ -274,7 +289,13 @@ basis = {
 mandate = {
   authority: authority-set,
   ? requirements: [+ requirement-term],
+  ? origins: origin-sets,
 }
+
+; E54 (4): the origins one task may read and write; an intent naming another origin is
+; `outside-instance-limits` with subcode "outside-instance-limits/origin". Absent sets name
+; no origin; at least one set is present.
+origin-sets = { ? read: [+ web-origin], ? write: [+ web-origin] }
 
 policy-result = {
   policy: policy-ref,
@@ -589,7 +610,15 @@ approval-act-fields = (
   ; Present when a Work Gate waits on the approval: the Gate and the Work Declaration content.
   ? work_gate: { gate: digest, declaration: digest },
   ; The Approval Surface conformance profile the approval was given on.
-  surface: { profile: tstr .size (1..255), version: uint },
+  ; E49 (1): the surface's declared class and the evidence the act reached; the decision point
+  ; turns them into the `surface`, `human_presence`, `uv` and `phishing_resistant` assurance of
+  ; the approval's proof (OP-154 m.3 (b), (x)).
+  surface: {
+    profile: tstr .size (1..255),
+    version: uint,
+    ? class: "voice" / "watch" / "phone" / "desktop",
+    ? evidence: "presence" / "user_verified" / "phishing_resistant",
+  },
   ; Digest of the render shown to the approver, produced from the action schema's render.
   render_digest: digest,
   ; The material fields the render showed, sorted, without repeats.
@@ -620,6 +649,8 @@ mandate-envelope = {
   constraints: constraint-set,
   ? requirements: requirement-set,
   ? pin: [grant: id, holder: party-ref, since: uint],
+  ; E54 (4); a rebind that widens either set is an expansion.
+  ? origins: origin-sets,
 }
 
 ; OP-143 m.13 (a): a foreign issuer is a foreign domain with its pinned binding keys; it goes
@@ -665,9 +696,13 @@ action-schema = {
   effect_class: "none" / "reversible" / "irreversible",
   ? reserved: true,
   ? consumption_bearing: true,
-  ? params: { + ident => "amount" / "int" / "text" / "bool" / "bytes" / "id" / "opaque" },
+  ? params: { + ident => "amount" / "int" / "text" / "bool" / "bytes" / "id" / "opaque"
+                        / "origin" },
   ? resource_types: [+ ident],
   ? render: tstr,
+  ; E47 (1): independent of the Consequence Tier; absent counts as "irreversible" for a decision
+  ; and an approval policy (OP-154 m.3 (b)). A render carries it when the schema declares it.
+  ? reversibility: "reversible" / "compensable" / "irreversible",
 }
 
 ; OP-141 m.27: Cedar source against Access's published schema; `requirements` resolves the
@@ -900,6 +935,8 @@ pap-presentation = {
 ;   agent_kind               ident: the kind of agent
 ;   org_member               party-ref: the organization whose member the subject is, so a
 ;                            `pred` holder selects one organization's members (OP-153 m.17 (c))
+;   attestation_runtime      bstr .size 32: the digest of the attested runtime class; a
+;                            narrowing input only (AG-31, OP-154 m.3 (s))
 ; Every other Stage 6 class has a body: its `value` is the 32-byte digest of the
 ; claim-body-binding, and the body travels beside the Claim. A withheld body leaves a
 ; digest-valued Claim (E26).
@@ -907,7 +944,7 @@ claim-body-binding = [class: ident, body: claim-body]
 
 claim-body = authentication / authenticator-binding / device-posture / verifier-profile
            / offline-exercise-report / authority-state-ack / party-key-state / party-recovered
-           / identity-binding
+           / identity-binding / workload-binding / effect-attestation / executor-control
 
 auth-method = "webauthn" / "password" / "totp" / "device-key" / "oidc" / "saml" / "ldap-bind"
             / "kerberos" / "x509"
@@ -1023,6 +1060,38 @@ party-recovered = { previous: digest, next: digest }
 ; Classes "identity_binding_<kind>", kind person, organization, workload, agent or
 ; legal_representative: the digest of the evidence of the external identity.
 identity-binding = { evidence: digest }
+
+; Class "identity_binding_workload" may also carry `workload`: the verified workload URI and the
+; RFC 7638 thumbprint of the DPoP key it presented (OP-154 m.3 (d)); no other kind carries it.
+workload-binding = {
+  evidence: digest,
+  ? workload: { uri: tstr .size (1..2048), thumbprint: bstr .size 32 },
+}
+
+; Class "effect_attestation" (E64): an executor's report of one effect, a Claim and never
+; truth. `done` names at least one evidence kind; the evidence bodies never enter Access.
+effect-attestation = {
+  exercise: digest,
+  step: digest,
+  idempotency_key: digest,
+  action: action-ref,
+  params: digest,
+  ( outcome: "done", evidence: [+ evidence-kind]
+  // outcome: "not-done" / "unknown", ? evidence: [+ evidence-kind] ),
+  ? refs: [+ { digest: digest, ? ref: tstr .size (1..2048) }],
+  at: uint,
+  executor: instance-ref,
+  ? environment: digest,
+}
+
+evidence-kind = "upstream-confirmation" / "independent-recheck" / "browser-observation"
+
+; Class "executor_control" (U5): the executor confirms an Exercise's job is paused or stopped.
+executor-control = {
+  state: "paused" / "stopped_confirmed",
+  exercise: digest,
+  at: uint,
+}
 
 ; ---------------------------------------------------------------- unsigned Claims (§9.13 rule 2, OP-142)
 

@@ -411,6 +411,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
 
 fn bare(action: &ActionRef) -> IntentEnvelope {
     IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: action.clone(),
         resources: Vec::new(),
         params: BTreeMap::new(),

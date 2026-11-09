@@ -11,6 +11,7 @@ fn d(n: u8) -> Digest {
 
 fn schema(effect: EffectClass, render: Option<&str>) -> ActionSchema {
     ActionSchema {
+        reversibility: None,
         name: "refund".to_string(),
         major: 1,
         effect,
@@ -24,6 +25,7 @@ fn schema(effect: EffectClass, render: Option<&str>) -> ActionSchema {
 
 fn intent() -> IntentEnvelope {
     IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: ActionRef {
             namespace: "pay".to_string(),
             name: "refund".to_string(),
@@ -189,4 +191,24 @@ fn a_render_round_trips_through_its_bytes() {
     assert_eq!(digest(&back).unwrap(), digest(&r).unwrap());
     assert!(decode(&bytes[..bytes.len() / 2]).is_err());
     assert!(decode(b"\xa0").is_err());
+}
+
+// E47 (1), (2)
+#[test]
+fn a_declared_reversibility_travels_in_the_render_and_an_undeclared_one_keeps_the_digest() {
+    let plain = schema(EffectClass::Irreversible, None);
+    let before = of(Some(&plain), &intent(), DEFAULT_LOCALE).unwrap();
+    assert_eq!(before.reversibility, None);
+    let mut declared = plain;
+    declared.reversibility = Some(Reversibility::Compensable);
+    let after = of(Some(&declared), &intent(), DEFAULT_LOCALE).unwrap();
+    assert_eq!(after.reversibility, Some(Reversibility::Compensable));
+    assert_eq!(decode(&encode(&after).unwrap()).unwrap(), after);
+    assert_ne!(digest(&after).unwrap(), digest(&before).unwrap());
+    assert!(
+        !after
+            .reversibility
+            .unwrap_or(Reversibility::Irreversible)
+            .offers_undo()
+    );
 }

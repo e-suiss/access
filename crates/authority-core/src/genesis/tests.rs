@@ -84,6 +84,7 @@ fn a_joint_root_and_a_time_lock_are_carried() {
 
 fn intent(action: IdpAction) -> IntentEnvelope {
     IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: action.action_ref(),
         resources: vec![ResourceRef {
             namespace: String::from("idp"),
@@ -161,6 +162,7 @@ fn catalog(publisher: Id, namespace: &str) -> access_kernel::schema::Spp {
         namespace: String::from(namespace),
         catalog_version: 1,
         actions: vec![access_kernel::schema::ActionSchema {
+            reversibility: None,
             name: String::from("approve"),
             major: 1,
             effect: access_kernel::schema::EffectClass::Reversible,

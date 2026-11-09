@@ -530,6 +530,7 @@ impl SamplePlan {
     /// The Action Schema of `name`: version 1, reversible (CT1), with `params`.
     fn schema_of(name: &str, params: &[(&str, &str)]) -> ActionSchema {
         ActionSchema {
+            reversibility: None,
             name: String::from(name),
             major: 1,
             effect: EffectClass::Reversible,

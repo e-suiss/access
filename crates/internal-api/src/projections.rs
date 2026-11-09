@@ -240,6 +240,7 @@ mod tests {
             domain: Digest([1; 32]),
             nonce: vec![7; 16],
             intent: IntentEnvelope {
+                provenance: BTreeMap::new(),
                 action: core_action("projection_issue"),
                 resources: Vec::new(),
                 params: BTreeMap::new(),

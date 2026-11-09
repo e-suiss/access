@@ -16,6 +16,7 @@ fn intent(amount: Option<(i64, &str)>) -> IntentEnvelope {
         );
     }
     IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: ActionRef {
             namespace: "shop".to_string(),
             name: "refund".to_string(),

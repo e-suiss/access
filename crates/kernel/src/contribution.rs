@@ -18,6 +18,26 @@ pub const NAMESPACE: &str = "access.contribution";
 /// The name of the `contribute` meta-action.
 pub const ACTION: &str = "contribute";
 
+/// Core class `approve` (§7.9.3.1).
+pub const APPROVE: &str = "approve";
+/// Core class `disclose`: a cross-domain consent to disclose data the target intent names
+/// (§7.9.3.1, §7.9.15).
+pub const DISCLOSE: &str = "disclose";
+/// Core class `declassify`: a cross-domain consent to lower the label of data the target intent
+/// names (§7.9.3.1).
+pub const DECLASSIFY: &str = "declassify";
+
+/// The core cross-domain contribution classes the Access Core Semantic Spec publishes; protocol
+/// governance is their publisher, and a Grant authorizes each like any contribution class
+/// (§7.9.3.1, §9.13).
+pub const CORE_CLASSES: [&str; 3] = [APPROVE, DISCLOSE, DECLASSIFY];
+
+/// Whether `class` is a core cross-domain contribution class (§7.9.3.1).
+#[must_use]
+pub fn is_core_class(class: &str) -> bool {
+    CORE_CLASSES.contains(&class)
+}
+
 /// The `contribute` payload for `target`.
 #[must_use]
 pub fn contribute_payload(target: Digest, class: &str) -> Payload {
@@ -43,6 +63,7 @@ pub fn self_authorized(class: &str, scope: &AnchorScope, party: &Id) -> bool {
 pub fn contribute_intent(target: Digest, class: &str, validity: Window) -> Option<IntentEnvelope> {
     let digest = contribute_payload(target, class).digest().ok()?;
     Some(IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: meta::core_action(ACTION),
         resources: vec![ResourceRef {
             namespace: String::from(NAMESPACE),
@@ -96,5 +117,25 @@ mod tests {
             &AnchorScope::Domain,
             &p
         ));
+    }
+
+    // §7.9.3.1, OP-154 m.3 (b)
+    #[test]
+    fn disclose_and_declassify_are_core_classes_and_never_self_authorized() {
+        let p = Id([2; 16]);
+        let w = Window { from: 1, until: 2 };
+        for class in [DISCLOSE, DECLASSIFY] {
+            assert!(is_core_class(class));
+            assert!(!self_authorized(class, &AnchorScope::Party(p), &p));
+            let i = contribute_intent(Digest([4; 32]), class, w).unwrap();
+            assert_eq!(i.resources[0].namespace, NAMESPACE);
+            assert_eq!(i.resources[0].path, [class]);
+        }
+        assert!(is_core_class(APPROVE));
+        assert!(!is_core_class("witness"));
+        assert_ne!(
+            contribute_intent(Digest([4; 32]), DISCLOSE, w),
+            contribute_intent(Digest([4; 32]), DECLASSIFY, w)
+        );
     }
 }

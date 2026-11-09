@@ -178,6 +178,7 @@ pub fn parse(v: &Value) -> Result<IntentEnvelope, ClientError> {
     let context = match v.get("context") {
         None => ContextRefs::default(),
         Some(c) => ContextRefs {
+            plan: None,
             work: c.get("work").map(|d| digest(d, "work")).transpose()?,
             commitment: c
                 .get("commitment")
@@ -191,6 +192,7 @@ pub fn parse(v: &Value) -> Result<IntentEnvelope, ClientError> {
         },
     };
     Ok(IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: action(v.get("action").ok_or_else(|| bad("action"))?)?,
         resources,
         params: named(v.get("params"), param, "params")?,

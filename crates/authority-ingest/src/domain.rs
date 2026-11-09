@@ -181,7 +181,11 @@ pub fn subject_digest(iss: &str, sub: &str) -> Digest {
 /// The `value` of the `identity_binding_person` Claim whose evidence is `subject`.
 #[must_use]
 pub fn binding_value(subject: &Digest) -> Option<EqValue> {
-    let b = Body::IdentityBinding(IdentityBinding { evidence: *subject }).to_value();
+    let b = Body::IdentityBinding(IdentityBinding {
+        evidence: *subject,
+        workload: None,
+    })
+    .to_value();
     body::body_digest(Class::IdentityBinding(body::BindingKind::Person), &b)
         .ok()
         .map(|d| EqValue::Bytes(d.to_vec()))

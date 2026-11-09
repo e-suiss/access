@@ -150,6 +150,7 @@ fn exercise(
         offline_slice: None,
     };
     let intent = IntentEnvelope {
+        provenance: BTreeMap::new(),
         action: core_action("projection_issue"),
         resources: vec![access_kernel::model::ResourceRef {
             namespace: String::from("access.projection"),

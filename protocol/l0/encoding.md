@@ -182,6 +182,10 @@ The AIS digest is taken over the COSE_Sign1 bytes the actor sent, unchanged, bec
 
 Vectors: [`core/1/digest.json`](../../conformance/vectors/core/1/digest.json), operation `digest.intent`: each case gives the canonical `intent` and its tagged `digest`.
 
+<a id="L0-ENC-23a"></a>**L0-ENC-23a. Plan and provenance.** `context.plan` is an opaque digest naming the plan a step belongs to; nothing reads its content, and no layer keeps a plan's progress (MUST-NEVER-6). `provenance` maps parameter names to `user`, `trusted` or `untrusted-external`; each key names a member of `params`, or the envelope is not a value of the data model. A parameter without a label is `untrusted-external`, and a value merged from several takes the worst label (`untrusted-external` worse than `trusted` worse than `user`). Both are inside the intent digest and absent when empty, so an envelope without them keeps its digest (E54 (1), F10).
+
+Vectors: `digest.json`: `intent-agent`; `decision.json`: `reject-provenance-unknown-param`.
+
 <a id="L0-ENC-24"></a>**L0-ENC-24. Hash prefixes.** Hashes that are not value digests use a one-byte prefix instead of a context string:
 
 | Prefix | Use |
