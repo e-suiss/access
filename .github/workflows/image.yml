@@ -369,7 +369,7 @@ jobs:
           fi
           # RS-M1, RS-M3, RS-M15, §11.5.2, §11.5.6 #20, #25
           base="http://127.0.0.1:$MCP_PORT"
-          rpc='{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+          rpc='{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
           curl -fsS --max-time 5 -o "$dir/prm.json" "$base/.well-known/oauth-protected-resource/mcp"
           jq -e --arg issuer "$MCP_ISSUER" --arg resource "$base/mcp" \
             '.resource == $resource and .authorization_servers == [$issuer]' "$dir/prm.json"
