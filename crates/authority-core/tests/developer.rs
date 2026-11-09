@@ -1640,3 +1640,116 @@ async fn the_hub_reads_only_the_viewers_own_slice() {
     }
     assert_eq!(core.head(), head, "the hub reads write nothing");
 }
+
+// XI-26, MD-9, X37, SI-21, §8.16
+#[tokio::test]
+async fn a_support_grant_is_a_visible_delegation() {
+    use access_authority_core::app::hub::{Group, Holder};
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(&db).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, BOB, BOB_KEY, (5, 6)).await;
+    let shop_anchor = meta::object_id(&d, kind::ANCHOR, 1);
+    let shop = ExerciseBasis::Anchor(shop_anchor);
+    let own = send(
+        &mut core,
+        meta_request(
+            d,
+            10,
+            shop,
+            Payload::GrantIssue(GrantContent {
+                basis: GrantBasis::Anchor(shop_anchor),
+                holder: SubjectSelector::Party(BOB),
+                authority: authority(vec![action("shop", "read")], selector("shop")),
+                agency: BTreeSet::from([Capacity::Own]),
+                named: None,
+            }),
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&own);
+    let own_grant = meta::object_id(&own.exercise.unwrap(), kind::GRANT, 0);
+    let bob_own = ExerciseBasis::Holding(HoldingRef {
+        grant: own_grant,
+        holder: BOB,
+        since: own.record.unwrap(),
+    });
+    let for_root = |nonce: u8, basis: ExerciseBasis| {
+        let mut r = shop_request(d, nonce, Mode::Commit, basis);
+        r.capacity = Capacity::For(ROOT);
+        r
+    };
+
+    let posed = send(&mut core, for_root(11, bob_own), BOB_KEY)
+        .await
+        .unwrap();
+    assert_ne!(
+        posed.decision.outcome,
+        Outcome::Allow,
+        "without a Grant naming ROOT in its agency, BOB cannot act for ROOT"
+    );
+
+    let (support, bob_support) = for_root_grant(&mut core, d, 12).await;
+    allowed(
+        &send(&mut core, for_root(13, bob_support), BOB_KEY)
+            .await
+            .unwrap(),
+    );
+
+    let mut nonce = 40u8;
+    let mut read = |seed: u8, query: Query| {
+        nonce = nonce.wrapping_add(1);
+        let kind = query.kind();
+        (incoming(search_request(d, nonce, kind), seed), query)
+    };
+    let (inc, q) = read(ROOT_KEY, Query::Inventory { party: ROOT });
+    let rows = holdings(&core.search(&inc, &q, None, NOW).await.unwrap());
+    let row = rows.iter().find(|r| r.grant == support).unwrap();
+    assert_eq!(row.groups, [Group::ActingForYou]);
+    assert_eq!(row.holder, Holder::Party(BOB));
+    assert_eq!(row.capacities, [Capacity::For(ROOT)]);
+    let plain = rows.iter().find(|r| r.grant == own_grant).unwrap();
+    assert!(
+        !plain.groups.contains(&Group::ActingForYou),
+        "a Grant that does not name ROOT does not act for ROOT"
+    );
+    let (inc, q) = read(ROOT_KEY, Query::Activity { party: ROOT });
+    let uses = uses_of(&core.search(&inc, &q, None, NOW).await.unwrap());
+    assert!(
+        uses.iter().any(|u| !u.by_viewer
+            && u.capacity == Capacity::For(ROOT)
+            && u.basis == Basis::Grant(support)),
+        "{uses:?}"
+    );
+    assert!(
+        uses.iter().all(|u| u.basis != Basis::Grant(own_grant)),
+        "the refused attempt is not a use"
+    );
+    let (inc, q) = read(ROOT_KEY, Query::Changes { before: None });
+    let changes = changes_of(&core.search(&inc, &q, None, NOW).await.unwrap());
+    assert!(
+        changes
+            .iter()
+            .any(|c| c.changed == Changed::Object(support)),
+        "{changes:?}"
+    );
+
+    allowed(
+        &send(
+            &mut core,
+            meta_request(d, 14, shop, Payload::GrantRevoke { grant: support }),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    let ended = send(&mut core, for_root(15, bob_support), BOB_KEY)
+        .await
+        .unwrap();
+    assert_ne!(ended.decision.outcome, Outcome::Allow);
+    let (inc, q) = read(ROOT_KEY, Query::Inventory { party: ROOT });
+    let rows = holdings(&core.search(&inc, &q, None, NOW).await.unwrap());
+    assert!(rows.iter().all(|r| r.grant != support));
+}
