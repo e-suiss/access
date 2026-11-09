@@ -619,6 +619,7 @@ impl World {
                 TokenHttp {
                     authorization,
                     dpop: &[&proof],
+                    client_chain: &[],
                 },
             )
             .await
@@ -1092,6 +1093,7 @@ async fn the_exchange_checks_redirect_pkce_client_and_key() {
             TokenHttp {
                 authorization: None,
                 dpop: &[],
+                client_chain: &[],
             },
         )
         .await;
@@ -2014,6 +2016,7 @@ async fn a_platform_product_gets_a_service_token_for_another_product() {
                     TokenHttp {
                         authorization: None,
                         dpop: &[],
+                        client_chain: &[],
                     },
                 )
                 .await

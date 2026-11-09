@@ -15,6 +15,7 @@ access-identity-admin = { workspace = true }
 access-identity-events = { workspace = true }
 access-identity-federation = { workspace = true }
 access-identity-oauth = { workspace = true }
+access-identity-attest = { workspace = true }
 access-identity-session = { workspace = true }
 access-identity-ui = { workspace = true }
 access-internal-api = { workspace = true }

@@ -435,6 +435,7 @@ impl<E: Env> OAuth<E> {
             authorization,
             params,
             endpoint: Endpoint::Par.path(),
+            chain: &[],
         };
         let client = match self.authenticate(&mut tx, realm, &req, now).await? {
             Ok(c) => c,

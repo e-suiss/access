@@ -448,3 +448,101 @@ async fn a_bundle_older_than_twice_its_refresh_interval_refuses_jwt_svids() {
     let (status, body, _) = token(&c, &once, &runtime.key, nonce.as_deref()).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
 }
+
+/// The base64 of a DER certificate, as an `x5c` member holds it: its PEM body.
+fn x5c(cert: &rcgen::Certificate) -> String {
+    cert.pem()
+        .lines()
+        .filter(|l| !l.starts_with("-----"))
+        .collect::<String>()
+}
+
+// OP-154 m.3 (r), §11.15, AG-30, AG-34, OP-153 m.3 (gg), Ek B 4133, 4447
+#[tokio::test]
+async fn an_x509_svid_over_mutual_tls_presents_the_workload() {
+    let c = console("mgmt-workloads-x509", true).await;
+    agent(&c).await;
+    let ca_key = rcgen::KeyPair::generate().unwrap();
+    let mut ca = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+    ca.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+    ca.key_usages = vec![
+        rcgen::KeyUsagePurpose::KeyCertSign,
+        rcgen::KeyUsagePurpose::DigitalSignature,
+    ];
+    let root = ca.self_signed(&ca_key).unwrap();
+    let issuer = rcgen::Issuer::new(ca, ca_key);
+    c.bundles.serve(
+        BUNDLE,
+        &serde_json::json!({
+            "keys": [{ "use": "x509-svid", "kty": "EC", "crv": "P-256", "x5c": [x5c(&root)] }],
+            "spiffe_sequence": 1,
+            "spiffe_refresh_hint": 300,
+        })
+        .to_string(),
+    );
+    let w = c
+        .rest_write(
+            &Method::POST,
+            "/admin/v1/realms/acme/clients",
+            ("createClient", None),
+            serde_json::json!({
+                "display_name": "Mail worker",
+                "token_endpoint_auth_method": "spiffe_x509",
+                "spiffe_id": "spiffe://acme.example/agent/mail/*",
+                "spiffe_bundle_endpoint": BUNDLE,
+                "agent": b64url_encode(&AGENT.0),
+                "redirect_uris": [],
+            }),
+            None,
+        )
+        .await;
+    assert_eq!(w.status, StatusCode::CREATED, "{}", w.body);
+    let mut leaf = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+    leaf.subject_alt_names = vec![rcgen::SanType::URI(WORKLOAD.try_into().unwrap())];
+    leaf.key_usages = vec![rcgen::KeyUsagePurpose::DigitalSignature];
+    leaf.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ClientAuth];
+    leaf.is_ca = rcgen::IsCa::ExplicitNoCa;
+    let leaf_key = rcgen::KeyPair::generate().unwrap();
+    let chain: std::sync::Arc<[Vec<u8>]> = std::sync::Arc::from(vec![
+        leaf.signed_by(&leaf_key, &issuer).unwrap().der().to_vec(),
+    ]);
+    c.trust
+        .scripted
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let runtime = signer();
+    let mtls = |client_id: &str, nonce: Option<String>| {
+        let form = format!(
+            "grant_type=client_credentials&client_id={}",
+            client_id.replace(':', "%3A").replace('/', "%2F")
+        );
+        Request::post("/realms/acme/token")
+            .header(header::HOST, HOST)
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header("dpop", dpop(&runtime.key, nonce.as_deref()))
+            .extension(access_http::tls::ClientChain(chain.clone()))
+            .body(Body::from(form))
+            .unwrap()
+    };
+    let (r, body) = send(&c.oauth, mtls(WORKLOAD, None)).await;
+    let first: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
+    assert_ne!(r.status(), StatusCode::UNAUTHORIZED, "{first}");
+    let nonce = r
+        .headers()
+        .get("dpop-nonce")
+        .map(|h| h.to_str().unwrap().to_owned());
+    let (r, body) = send(&c.oauth, mtls(WORKLOAD, nonce.clone())).await;
+    assert_ne!(
+        r.status(),
+        StatusCode::UNAUTHORIZED,
+        "{}",
+        String::from_utf8_lossy(&body)
+    );
+    issued(&c, &runtime.key.public_key()).await;
+    assert!(matches!(
+        open(&c, &runtime).await,
+        RegistrationVerdict::Registered(_)
+    ));
+    // RFC 8705 §2.1
+    let (r, _) = send(&c.oauth, mtls("spiffe://acme.example/agent/mail/w2", nonce)).await;
+    assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
+}

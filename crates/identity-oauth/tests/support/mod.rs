@@ -1063,6 +1063,7 @@ impl At<'_> {
                 TokenHttp {
                     authorization,
                     dpop,
+                    client_chain: &[],
                 },
             )
             .await

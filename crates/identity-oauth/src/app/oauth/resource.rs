@@ -312,6 +312,7 @@ impl<E: Env> OAuth<E> {
             authorization,
             params,
             endpoint: Endpoint::Revoke.path(),
+            chain: &[],
         };
         let client = match self.authenticate(&mut tx, realm, &req, now).await? {
             Ok(c) => c,
@@ -382,6 +383,7 @@ impl<E: Env> OAuth<E> {
             authorization,
             params,
             endpoint: Endpoint::Introspect.path(),
+            chain: &[],
         };
         let client: Client = match self.authenticate(&mut tx, realm, &req, now).await? {
             Ok(c) if c.client_type() == crate::domain::dpop::ClientType::Confidential => c,

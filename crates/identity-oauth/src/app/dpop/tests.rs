@@ -306,6 +306,7 @@ fn requests_do_not_print_their_credentials() {
     let http = crate::app::oauth::TokenHttp {
         authorization: Some("Basic dGVzdC1jbGllbnQ6dGVzdC12YWx1ZQ=="),
         dpop: &proofs,
+        client_chain: &[],
     };
     let printed = format!("{request:?} {http:?}");
     for secret in [

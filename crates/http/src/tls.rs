@@ -1,6 +1,8 @@
 //! TLS 1.3 listener (CR-12, OP-36): the only protocol version, the hybrid post-quantum key
 //! exchange first, no 0-RTT, bounded concurrent handshakes and a handshake deadline. A client
-//! certificate, when one is presented, names the PEP (OP-141 m.18 (b)).
+//! certificate, when one is presented, names the PEP (OP-141 m.18 (b)); one whose leaf names a
+//! SPIFFE ID is an X.509-SVID instead, its possession proven by the handshake and its chain
+//! checked by the authorization server against its trust domain's bundle (OP-154 m.3 (r)).
 
 use std::future::Future;
 use std::io;
@@ -17,6 +19,7 @@ use rustls::RootCertStore;
 pub use rustls::ServerConfig;
 use rustls::crypto::aws_lc_rs;
 use rustls::server::WebPkiClientVerifier;
+use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls_pki_types::pem::PemObject as _;
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::net::TcpListener;
@@ -30,6 +33,69 @@ pub const HANDSHAKES: usize = 256;
 
 /// Longest a handshake may take (PD).
 pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// The client certificate chain of a connection whose leaf names a SPIFFE ID, leaf first, DER
+/// (OP-154 m.3 (r), §11.15): an X.509-SVID the authorization server verifies; never a PEP.
+#[derive(Clone, Debug)]
+pub struct ClientChain(pub Arc<[Vec<u8>]>);
+
+/// Whether `leaf` names exactly one SPIFFE ID in its subjectAltName.
+fn svid_leaf(leaf: &[u8]) -> bool {
+    access_identity_attest::domain::svid::x509_subject(leaf).is_ok()
+}
+
+/// The operator's client CA for PEPs, and the handshake proof alone for an X.509-SVID, whose
+/// chain the authorization server verifies (OP-154 m.3 (r)).
+#[derive(Debug)]
+struct PepOrSvid(Arc<dyn ClientCertVerifier>);
+
+impl ClientCertVerifier for PepOrSvid {
+    fn offer_client_auth(&self) -> bool {
+        true
+    }
+
+    fn client_auth_mandatory(&self) -> bool {
+        false
+    }
+
+    fn root_hint_subjects(&self) -> &[rustls::DistinguishedName] {
+        self.0.root_hint_subjects()
+    }
+
+    fn verify_client_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        now: rustls_pki_types::UnixTime,
+    ) -> Result<ClientCertVerified, rustls::Error> {
+        if svid_leaf(end_entity.as_ref()) {
+            return Ok(ClientCertVerified::assertion());
+        }
+        self.0.verify_client_cert(end_entity, intermediates, now)
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        self.0.verify_tls12_signature(message, cert, dss)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        self.0.verify_tls13_signature(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        self.0.supported_verify_schemes()
+    }
+}
 
 /// Why the TLS configuration was refused; the server does not start (OP-52).
 #[derive(Debug, thiserror::Error)]
@@ -87,7 +153,7 @@ pub fn server_config(
                 .allow_unauthenticated()
                 .build()
                 .map_err(|e| TlsError::ClientCa(e.to_string()))?;
-            builder.with_client_cert_verifier(verifier)
+            builder.with_client_cert_verifier(Arc::new(PepOrSvid(verifier)))
         }
     };
     let mut config = builder.with_single_cert(chain, key)?;
@@ -158,6 +224,10 @@ pub async fn serve(
             };
             drop(permit);
             let app = app.layer(Extension(crate::login::Peer(peer.ip())));
+            let app = match svid_chain(tls.get_ref().1) {
+                Some(chain) => app.layer(Extension(chain)),
+                None => app,
+            };
             let service = TowerToHyperService::new(match pep(tls.get_ref().1) {
                 Some(pep) => app.layer(Extension(pep)),
                 None => app,
@@ -173,10 +243,24 @@ pub async fn serve(
     Ok(())
 }
 
+/// The X.509-SVID chain the connection presented (OP-154 m.3 (r)).
+fn svid_chain(conn: &rustls::ServerConnection) -> Option<ClientChain> {
+    let chain = conn.peer_certificates()?;
+    if !svid_leaf(chain.first()?.as_ref()) {
+        return None;
+    }
+    Some(ClientChain(
+        chain.iter().map(|c| c.as_ref().to_vec()).collect(),
+    ))
+}
+
 /// The PEP named by the verified client certificate: the base64url SHA-256 of the leaf, as
-/// RFC 8705 `x5t#S256` (OP-141 m.18 (b)).
+/// RFC 8705 `x5t#S256` (OP-141 m.18 (b)). An X.509-SVID names no PEP.
 fn pep(conn: &rustls::ServerConnection) -> Option<Pep> {
     let leaf = conn.peer_certificates()?.first()?;
+    if svid_leaf(leaf.as_ref()) {
+        return None;
+    }
     Some(Pep(b64url_encode(&suiss_crypto::digest::sha256(
         leaf.as_ref(),
     ))))

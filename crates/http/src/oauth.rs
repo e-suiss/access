@@ -32,6 +32,7 @@ struct Incoming {
     headers: HeaderMap,
     body: Bytes,
     slug: Option<String>,
+    chain: Option<crate::tls::ClientChain>,
 }
 
 /// The authorization server routes.
@@ -48,13 +49,17 @@ pub fn router<E: Env>(service: OAuth<E>) -> Router {
         Endpoint::EndSession,
         Endpoint::DeviceAuthorization,
     ] {
-        let root = move |s: Shared<E>, m: Method, u: Uri, h: HeaderMap, b: Bytes| {
-            handle(s, e, incoming(m, u, h, b, None))
+        let root = move |s: Shared<E>, m: Method, u: Uri, h: HeaderMap, c: Chain, b: Bytes| {
+            handle(s, e, incoming(m, u, h, b, (None, c)))
         };
         let under =
-            move |s: Shared<E>, p: Path<String>, m: Method, u: Uri, h: HeaderMap, b: Bytes| {
-                handle(s, e, incoming(m, u, h, b, Some(p.0)))
-            };
+            move |s: Shared<E>,
+                  p: Path<String>,
+                  m: Method,
+                  u: Uri,
+                  h: HeaderMap,
+                  c: Chain,
+                  b: Bytes| { handle(s, e, incoming(m, u, h, b, (Some(p.0), c))) };
         let path = e.path();
         let slugged = format!("/realms/{{slug}}{path}");
         let (a, b) = match e {
@@ -68,12 +73,15 @@ pub fn router<E: Env>(service: OAuth<E>) -> Router {
     r.with_state(shared)
 }
 
+/// The X.509-SVID chain the TLS layer found on the connection (OP-154 m.3 (r)).
+type Chain = Option<axum::Extension<crate::tls::ClientChain>>;
+
 fn incoming(
     method: Method,
     uri: Uri,
     headers: HeaderMap,
     body: Bytes,
-    slug: Option<String>,
+    (slug, chain): (Option<String>, Chain),
 ) -> Incoming {
     Incoming {
         method,
@@ -81,6 +89,7 @@ fn incoming(
         headers,
         body,
         slug,
+        chain: chain.map(|axum::Extension(c)| c),
     }
 }
 
@@ -216,6 +225,7 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
                 TokenHttp {
                     authorization,
                     dpop: &proofs,
+                    client_chain: req.chain.as_ref().map_or(&[], |c| &c.0),
                 },
             )
             .await

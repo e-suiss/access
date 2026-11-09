@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use access_http::adp::adapters::Pep;
-use access_http::tls::{TlsError, serve, server_config};
+use access_http::tls::{ClientChain, TlsError, serve, server_config};
 use axum::routing::get;
 use axum::{Extension, Router};
 use rustls::pki_types::ServerName;
@@ -39,12 +39,20 @@ async fn start_with(client_ca: Option<&[u8]>) -> Server {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
-    let app = Router::new().route("/", get(|| async { "ok" })).route(
-        "/pep",
-        get(|pep: Option<Extension<Pep>>| async move {
-            pep.map_or_else(|| "none".to_owned(), |Extension(Pep(p))| p)
-        }),
-    );
+    let app = Router::new()
+        .route("/", get(|| async { "ok" }))
+        .route(
+            "/pep",
+            get(|pep: Option<Extension<Pep>>| async move {
+                pep.map_or_else(|| "none".to_owned(), |Extension(Pep(p))| p)
+            }),
+        )
+        .route(
+            "/chain",
+            get(|chain: Option<Extension<ClientChain>>| async move {
+                chain.map_or_else(|| "none".to_owned(), |Extension(c)| c.0.len().to_string())
+            }),
+        );
     tokio::spawn(serve(listener, config, app, async {
         let _ = stopped.await;
     }));
@@ -164,6 +172,14 @@ async fn get_pep(
     s: &Server,
     client: Option<(&rustls::pki_types::CertificateDer<'static>, &rcgen::KeyPair)>,
 ) -> Option<String> {
+    fetch(s, client, "/pep").await
+}
+
+async fn fetch(
+    s: &Server,
+    client: Option<(&rustls::pki_types::CertificateDer<'static>, &rcgen::KeyPair)>,
+    path: &str,
+) -> Option<String> {
     let builder = ClientConfig::builder_with_provider(Arc::new(
         rustls::crypto::aws_lc_rs::default_provider(),
     ))
@@ -184,9 +200,11 @@ async fn get_pep(
         .connect(ServerName::try_from("localhost").unwrap(), tcp)
         .await
         .ok()?;
-    tls.write_all(b"GET /pep HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
-        .await
-        .ok()?;
+    tls.write_all(
+        format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").as_bytes(),
+    )
+    .await
+    .ok()?;
     let mut response = Vec::new();
     tls.read_to_end(&mut response).await.ok()?;
     let text = String::from_utf8_lossy(&response).into_owned();
@@ -216,4 +234,56 @@ fn bad_client_ca_is_refused() {
         server_config(cert.cert.pem().as_bytes(), key.as_bytes(), Some(b"")),
         Err(TlsError::ClientCa(_))
     ));
+}
+
+fn svid(ca: &Ca, uri: &str) -> (rustls::pki_types::CertificateDer<'static>, rcgen::KeyPair) {
+    let mut params = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+    params.subject_alt_names = vec![rcgen::SanType::URI(uri.try_into().unwrap())];
+    params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ClientAuth];
+    params.key_usages = vec![rcgen::KeyUsagePurpose::DigitalSignature];
+    params.is_ca = rcgen::IsCa::ExplicitNoCa;
+    let key = rcgen::KeyPair::generate().unwrap();
+    let cert = params.signed_by(&key, &ca.issuer).unwrap();
+    (cert.der().clone(), key)
+}
+
+// OP-154 m.3 (r), §11.15, AG-30, OP-141 m.18 (b), Ek B 4133, 4447
+#[tokio::test]
+async fn an_x509_svid_reaches_the_authorization_server_and_names_no_pep() {
+    let operator = ca();
+    let s = start_with(Some(operator.pem.as_bytes())).await;
+    let trust_domain = ca();
+    let (cert, key) = svid(&trust_domain, "spiffe://acme.example/agent/mail/w1");
+    assert_eq!(
+        fetch(&s, Some((&cert, &key)), "/chain").await.as_deref(),
+        Some("1")
+    );
+    assert_eq!(
+        fetch(&s, Some((&cert, &key)), "/pep").await.as_deref(),
+        Some("none")
+    );
+    let (pep, pep_key) = client_cert(&operator);
+    assert_eq!(
+        fetch(&s, Some((&pep, &pep_key)), "/chain").await.as_deref(),
+        Some("none")
+    );
+    let (two, two_key) = {
+        let mut params = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+        params.subject_alt_names = vec![
+            rcgen::SanType::URI("spiffe://acme.example/a".try_into().unwrap()),
+            rcgen::SanType::URI("spiffe://acme.example/b".try_into().unwrap()),
+        ];
+        params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ClientAuth];
+        let k = rcgen::KeyPair::generate().unwrap();
+        (
+            params
+                .signed_by(&k, &trust_domain.issuer)
+                .unwrap()
+                .der()
+                .clone(),
+            k,
+        )
+    };
+    assert_eq!(fetch(&s, Some((&two, &two_key)), "/chain").await, None);
+    let _ = s.stop.send(());
 }

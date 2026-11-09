@@ -313,6 +313,7 @@ pub(crate) struct ClientRequest<'a> {
     pub(crate) authorization: Option<&'a str>,
     pub(crate) params: &'a Params,
     pub(crate) endpoint: &'a str,
+    pub(crate) chain: &'a [Vec<u8>],
 }
 
 impl<E: Env> OAuth<E> {

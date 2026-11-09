@@ -1,15 +1,17 @@
-//! JWT-SVID client authentication (`draft-ietf-oauth-spiffe-client-auth-02` §3.1, AG-30,
-//! OP-154 m.3 (r)).
+//! SVID client authentication (`draft-ietf-oauth-spiffe-client-auth-02` §3.1, §3.2, AG-30,
+//! OP-154 m.3 (r)): a JWT-SVID client assertion, or an X.509-SVID over mutual TLS whose URI SAN
+//! the request's `client_id` repeats (`tls_client_auth`, RFC 8705 §2.1). Over A2A mutual TLS the
+//! same SAN is the actor-binding input (§11.15).
 
 use access_identity_attest::app::{Credential, verify};
-use access_identity_attest::domain::svid::{JWT_SPIFFE, jwt_subject};
+use access_identity_attest::domain::svid::{JWT_SPIFFE, jwt_subject, x509_subject};
 use access_identity_attest::domain::workload::{Selector, WorkloadId, trust_domain_issuer};
 use access_identity_attest::ports::Scope;
 use access_store::workloads::WorkloadClient as Registration;
 
 use crate::app::oauth::{ClientRequest, Env, OAuth, Realm, day};
 use crate::domain::client::{
-    Client, ClientAuth, ClientAuthError, SPIFFE_JWT, VerifiedWorkload, WorkloadClient,
+    Client, ClientAuth, ClientAuthError, SPIFFE_JWT, SPIFFE_X509, VerifiedWorkload, WorkloadClient,
 };
 use crate::ports::Unavailable;
 use crate::ports::oauth::{OAuthDb, OAuthTx};
@@ -33,8 +35,8 @@ fn registration<'a>(
 }
 
 impl<E: Env> OAuth<E> {
-    /// AG-30, OP-154 m.3 (r): the workload client a JWT-SVID authenticates; `None` when the
-    /// request does not use one.
+    /// AG-30, OP-154 m.3 (r): the workload client a JWT-SVID or the connection's X.509-SVID
+    /// authenticates; `None` when the request uses neither.
     pub(crate) async fn workload_client(
         &self,
         tx: &mut <E::Db as OAuthDb>::Tx,
@@ -43,16 +45,32 @@ impl<E: Env> OAuth<E> {
         now: u64,
     ) -> Result<Option<Result<Client, ClientAuthError>>, Unavailable> {
         let p = req.params;
-        if p.get("client_assertion_type") != Some(JWT_SPIFFE) {
+        if p.get("client_assertion_type") == Some(JWT_SPIFFE) {
+            let Some(token) = p
+                .get("client_assertion")
+                .filter(|_| req.authorization.is_none())
+            else {
+                return Ok(Some(Err(ClientAuthError::Malformed)));
+            };
+            return Ok(Some(
+                self.svid_client(tx, realm, req, Credential::Jwt(token), now)
+                    .await?,
+            ));
+        }
+        // RFC 8705 §2.1
+        let x509 = p
+            .get("client_id")
+            .is_some_and(|c| c.starts_with("spiffe://"))
+            && !req.chain.is_empty()
+            && req.authorization.is_none()
+            && p.get("client_assertion").is_none();
+        if !x509 {
             return Ok(None);
         }
-        let Some(token) = p
-            .get("client_assertion")
-            .filter(|_| req.authorization.is_none())
-        else {
-            return Ok(Some(Err(ClientAuthError::Malformed)));
-        };
-        Ok(Some(self.svid_client(tx, realm, req, token, now).await?))
+        Ok(Some(
+            self.svid_client(tx, realm, req, Credential::X509(req.chain), now)
+                .await?,
+        ))
     }
 
     async fn svid_client(
@@ -60,21 +78,32 @@ impl<E: Env> OAuth<E> {
         tx: &mut <E::Db as OAuthDb>::Tx,
         realm: &Realm,
         req: &ClientRequest<'_>,
-        token: &str,
+        credential: Credential<'_>,
         now: u64,
     ) -> Result<Result<Client, ClientAuthError>, Unavailable> {
-        let Ok(id) = jwt_subject(token) else {
+        let (method, id) = match credential {
+            Credential::Jwt(t) => (SPIFFE_JWT, jwt_subject(t)),
+            Credential::X509(chain) => (
+                SPIFFE_X509,
+                chain.first().map_or(
+                    Err(access_identity_attest::domain::svid::SvidError::Format),
+                    |l| x509_subject(l),
+                ),
+            ),
+        };
+        let Ok(id) = id else {
             return Ok(Err(ClientAuthError::Rejected));
         };
         let clients = tx.workload_clients().await?;
-        let Some(reg) = registration(&clients, SPIFFE_JWT, &id) else {
+        let Some(reg) = registration(&clients, method, &id) else {
             return Ok(Err(ClientAuthError::Unknown));
         };
-        if req
-            .params
-            .get("client_id")
-            .is_some_and(|c| c != reg.client_id && c != id.as_str())
-        {
+        let named = req.params.get("client_id");
+        let client_id_ok = match credential {
+            Credential::Jwt(_) => named.is_none_or(|c| c == reg.client_id || c == id.as_str()),
+            Credential::X509(_) => named == Some(id.as_str()),
+        };
+        if !client_id_ok {
             return Ok(Err(ClientAuthError::Unknown));
         }
         let Some(domain) = tx.governing().await? else {
@@ -93,7 +122,7 @@ impl<E: Env> OAuth<E> {
             self.env.bundles(),
             scope,
             &reg.workload.bundle_endpoint,
-            (Credential::Jwt(token), realm.issuer.as_str()),
+            (credential, realm.issuer.as_str()),
             now,
         )
         .await
@@ -117,7 +146,12 @@ impl<E: Env> OAuth<E> {
             verified: Some(VerifiedWorkload {
                 uri: String::from(v.id.as_str()),
                 agent: reg.workload.agent,
-                evidence: suiss_crypto::digest::sha256(token.as_bytes()),
+                evidence: match credential {
+                    Credential::Jwt(t) => suiss_crypto::digest::sha256(t.as_bytes()),
+                    Credential::X509(chain) => {
+                        suiss_crypto::digest::sha256(chain.first().map_or(&[][..], Vec::as_slice))
+                    }
+                },
             }),
         });
         Ok(Ok(client))

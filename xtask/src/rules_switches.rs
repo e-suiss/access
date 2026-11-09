@@ -22,6 +22,11 @@ const ALLOWLIST: &[(&str, &str, &str)] = &[
         "FIDO MDS3 status name USER_VERIFICATION_BYPASS; it marks a model compromised (OP-146 m.4 (d))",
     ),
     (
+        "crates/http/src/tls.rs",
+        "danger",
+        "rustls names its custom verifier traits `danger`; the one verifier admits only an X.509-SVID, whose chain the authorization server verifies against its trust domain's bundle before anything is decided, and names no PEP (OP-154 m.3 (r))",
+    ),
+    (
         "xtask/src/rules_ui_terms.rs",
         "dangerously",
         "React's dangerouslySetInnerHTML, named only so `ui-text-nodes` can forbid it (TN-131)",

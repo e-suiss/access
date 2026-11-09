@@ -273,6 +273,7 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
         // OP-154 m.3 (r)
         if served.feature(Feature::SpiffeClientAuth) {
             methods.push(crate::domain::client::SPIFFE_JWT);
+            methods.push(crate::domain::client::SPIFFE_X509);
         }
         m.insert(
             "token_endpoint_auth_methods_supported".into(),

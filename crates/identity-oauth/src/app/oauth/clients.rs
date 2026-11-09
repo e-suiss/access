@@ -71,7 +71,8 @@ impl<E: Env> OAuth<E> {
         let Some(id) = params.get("client_id") else {
             return Ok(Ok(()));
         };
-        if ClientIdKind::of(id) == ClientIdKind::Local {
+        // OP-154 m.3 (r)
+        if ClientIdKind::of(id) == ClientIdKind::Local || id.starts_with("spiffe://") {
             return Ok(Ok(()));
         }
         // IDI-10, OP-154 m.3 (i)

@@ -15,8 +15,8 @@ use access_store::oauth::{GrantRow, NewGrant};
 
 use super::authority::Asked;
 use super::{
-    ClientRequest, Env, OAuth, Realm, Reply, code_digest, decode32, from_day, grant_live,
-    refresh_digest, session_live, signed, unsigned,
+    Env, OAuth, Realm, Reply, code_digest, decode32, from_day, grant_live, refresh_digest,
+    session_live, signed, unsigned,
 };
 use crate::app::dpop::DpopRequest;
 use crate::domain::client::Client;
@@ -37,6 +37,8 @@ pub struct TokenHttp<'a> {
     pub authorization: Option<&'a str>,
     /// Every `DPoP` header value.
     pub dpop: &'a [&'a str],
+    /// The X.509-SVID chain the connection presented, leaf first (OP-154 m.3 (r)).
+    pub client_chain: &'a [Vec<u8>],
 }
 
 impl core::fmt::Debug for TokenHttp<'_> {
@@ -196,11 +198,7 @@ impl<E: Env> OAuth<E> {
         }
         let now = self.now()?;
         let mut tx = self.begin(realm).await?;
-        let req = ClientRequest {
-            authorization: http.authorization,
-            params,
-            endpoint: Endpoint::Token.path(),
-        };
+        let req = http.client_request(params);
         let client = match self.authenticate(&mut tx, realm, &req, now).await? {
             Ok(c) => c,
             Err(e) => {

@@ -149,6 +149,7 @@ dependencies = [
  "access-crypto",
  "access-identity-account",
  "access-identity-admin",
+ "access-identity-attest",
  "access-identity-events",
  "access-identity-federation",
  "access-identity-hooks",

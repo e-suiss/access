@@ -11,3 +11,20 @@
 
 mod presentation;
 mod spiffe;
+
+use crate::app::oauth::{ClientRequest, TokenHttp};
+use crate::domain::metadata::Endpoint;
+use crate::domain::request::Params;
+
+impl<'a> TokenHttp<'a> {
+    /// What a token request presents to authenticate its client, the connection's X.509-SVID
+    /// chain included (OP-154 m.3 (r)).
+    pub(crate) fn client_request(&self, params: &'a Params) -> ClientRequest<'a> {
+        ClientRequest {
+            authorization: self.authorization,
+            params,
+            endpoint: Endpoint::Token.path(),
+            chain: self.client_chain,
+        }
+    }
+}
