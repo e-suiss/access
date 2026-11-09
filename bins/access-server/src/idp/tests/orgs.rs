@@ -1455,6 +1455,21 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
         .unwrap();
     // TN-91, OP-153 m.17 (f)
     realm_events(&w, at.1, "relay.message.ownership_handover.v1", 2).await;
+    // OP-153 m.25 (i) (2)
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    assert_eq!(
+        t.transfer(first.transfer)
+            .await
+            .unwrap()
+            .unwrap()
+            .intent_digest,
+        Some(
+            intent_digest(&handover(d, anchor, ALICE, 0x90, ROOT_KEY).intent)
+                .unwrap()
+                .0
+        )
+    );
+    t.commit().await.unwrap();
     // L0-META-20, OP-153 m.17 (b), m.25 (a)
     let Applied::NotAllowed { decision, .. } = Box::pin(
         w.admin()
@@ -1526,6 +1541,7 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
                 to_party: ALICE.0,
                 nonce: &second.nonce,
                 payload_digest: &digest,
+                intent_digest: None,
                 effective_ms: 0,
                 dns_recovery: false,
             },
@@ -1551,6 +1567,53 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
     let members = t.members(org).await.unwrap();
     assert!(!members.iter().any(|m| m.subject == bob && m.owner));
     assert!(members.iter().any(|m| m.subject == founder && m.owner));
+    t.commit().await.unwrap();
+    w.admin()
+        .cancel_transfer(at, ORG, id, founder)
+        .await
+        .unwrap();
+
+    // L0-META-20, L0-META-30, TN-91, §9.14.1, OP-153 m.25 (i) (2)
+    let third = handover(d, anchor, ALICE, 0x92, ROOT_KEY);
+    let target = intent_digest(&third.intent).unwrap();
+    assert!(matches!(
+        Box::pin(w.admin().meta(at, third.clone())).await.unwrap(),
+        Applied::NotAllowed { .. }
+    ));
+    let digest = third.payload.as_deref().unwrap().digest().unwrap().0;
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let id = t
+        .insert_transfer_ago(
+            &access_store::org_authority::NewTransfer {
+                org,
+                from: founder,
+                to: bob,
+                to_party: ALICE.0,
+                nonce: &third.nonce,
+                payload_digest: &digest,
+                intent_digest: Some(&target.0),
+                effective_ms: 0,
+                dns_recovery: false,
+            },
+            25 * 3_600,
+        )
+        .await
+        .unwrap();
+    t.commit().await.unwrap();
+    let exercise = Box::pin(accept_root(&w, at, d, (bob, ALICE, ALICE_KEY), target)).await;
+    w.admin()
+        .contribute_transfer(at, ORG, id, (bob, exercise.0))
+        .await
+        .unwrap();
+    written(
+        &Box::pin(w.admin().complete_transfer(at, ORG, id, third))
+            .await
+            .unwrap(),
+    );
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let members = t.members(org).await.unwrap();
+    assert!(members.iter().any(|m| m.subject == bob && m.owner));
+    assert!(!members.iter().any(|m| m.subject == founder && m.owner));
     // TN-92
     assert!(
         t.transfers(org)
@@ -1560,6 +1623,137 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
             .all(|h| !h.dns_recovery)
     );
     t.commit().await.unwrap();
+}
+
+/// The recipient's `accept_root` contribution to the handover whose `anchor_transfer` intent is
+/// `target`, as the Approval Surface commits it (§9.14.1 A, L0-META-30): its device signs the
+/// contribute intent on its Party's own self-anchor, the realm issuer states the
+/// `authentication` Claim bound to the Approval Act Statement over the render the domain kept,
+/// and the contribution goes to the domain with both as proofs.
+async fn accept_root(
+    w: &World,
+    (tenant, realm): (TenantId, RealmId),
+    d: Digest,
+    (subject, party, seed): ([u8; 16], Id, u8),
+    target: Digest,
+) -> Digest {
+    use access_identity_account::domain::claims::{AuthFacts, Bind, authentication};
+    use access_identity_ui::ports::Approvals as _;
+    use access_internal_api::approvals::Contribution;
+    access_store::claims::open_claim_ingest_day(&w.db.archive, 0)
+        .await
+        .unwrap();
+    let mut tx = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let issuer = access_store::issuer::realm_issuer(&mut tx)
+        .await
+        .unwrap()
+        .unwrap();
+    tx.commit().await.unwrap();
+    w.keys.open_issuer(realm, issuer).await.unwrap();
+    assert!(
+        w.admin()
+            .register_issuer(tenant, realm)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    let opening = w.plane.opening(d, target).await.unwrap().unwrap();
+    let shown = access_kernel::render::decode(opening.render.as_deref().unwrap()).unwrap();
+    let challenge = challenge_of(seed);
+    let instance = meta::object_id(
+        &meta::exercise_id(&d, &challenge).unwrap(),
+        kind::INSTANCE,
+        0,
+    );
+    let self_anchor = meta::object_id(
+        &meta::exercise_id(&d, &register_nonce(&challenge)).unwrap(),
+        kind::ANCHOR,
+        0,
+    );
+    let nonce = vec![0x93; 16];
+    let act = access_kernel::aas::ApprovalAct {
+        act: access_kernel::aas::Act::Contribution(String::from(meta::ACCEPT_ROOT)),
+        instance,
+        party,
+        capacity: Capacity::Own,
+        target,
+        domain: d,
+        nonce: nonce.clone(),
+        work_gate: None,
+        surface_profile: String::from(access_identity_ui::domain::approval::SURFACE_PROFILE),
+        surface_version: access_identity_ui::domain::approval::SURFACE_VERSION,
+        render_digest: opening.render_digest,
+        material_fields: access_kernel::render::material_fields(&shown),
+        issued_at: NOW - 1_000,
+        expires_at: NOW + 60_000,
+    };
+    let aas = access_kernel::aas::digest(&act).unwrap();
+    let order = authentication(AuthFacts {
+        subject,
+        method: access_kernel::claim::body::AuthMethod::Webauthn,
+        auth_time: NOW - 1_000,
+        assurance: [
+            ("aal", 3),
+            ("phishing_resistant", 1),
+            ("uv", 1),
+            ("human_presence", 1),
+            ("hardware_bound", 1),
+            ("non_custodial", 1),
+        ]
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), *v))
+        .collect(),
+        webauthn: None,
+        evidence: None,
+        bind: Bind::Statement {
+            statement: aas.0,
+            instance: instance.0,
+        },
+    });
+    let claim = match super::claims::courier(w)
+        .issue(tenant, realm, &order)
+        .await
+        .unwrap()
+    {
+        access_identity_account::app::claims::Issued::Answered {
+            claim,
+            verdict: access_internal_api::claims::ClaimVerdict::Admitted { .. },
+        } => Id(claim),
+        other => panic!("{other:?}"),
+    };
+    let validity = Window {
+        from: NOW - 1_000,
+        until: NOW + HOUR,
+    };
+    let intent =
+        access_kernel::contribution::contribute_intent(target, meta::ACCEPT_ROOT, validity)
+            .unwrap();
+    let basis = ExerciseBasis::Anchor(self_anchor);
+    let ais = sign(
+        &statement(d, &nonce, intent_digest(&intent).unwrap(), basis),
+        seed,
+    );
+    match w
+        .plane
+        .contribute(Contribution {
+            domain: d,
+            nonce,
+            target,
+            class: String::from(meta::ACCEPT_ROOT),
+            basis,
+            capacity: Capacity::Own,
+            validity,
+            ais,
+            aas: act.to_bytes().unwrap(),
+            claim,
+            pep: String::from(PEP),
+        })
+        .await
+        .unwrap()
+    {
+        access_internal_api::idp::Verdict::Committed(c) => c.exercise,
+        other => panic!("{other:?}"),
+    }
 }
 
 // OP-142, §8.17.12, C11, OP-153 m.3 (gg), Ek B 4082

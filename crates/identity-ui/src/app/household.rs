@@ -211,7 +211,11 @@ where
     }
 
     /// `GET /v1/account/handovers` (TN-91): the open ownership handovers of the person's
-    /// organizations that the person receives or, as an owner, may cancel.
+    /// organizations that the person receives or, as an owner, may cancel. A recipient's open
+    /// handover carries `accept` (L0-META-20, §9.14.1, OP-153 m.25 (i) (2)): the typed request
+    /// its client pushes to the Approval Surface with its own device's `accept_root`
+    /// contribution on its Party's self-anchor, targeting the `anchor_transfer` intent the
+    /// proposal opened; the committed contribution's `ExerciseID` then goes to `…/contribution`.
     pub async fn handovers(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
         let (kit, me) = match self.me(entry, b).await {
             Ok(m) => m,
@@ -220,6 +224,10 @@ where
         let mut t = match self.household_tx(&kit).await {
             Ok(t) => t,
             Err(r) => return r,
+        };
+        let domain = match access_store::idp::governance(&mut t).await {
+            Ok(g) => g.map(|g| *g.domain.as_bytes()),
+            Err(e) => return failed(&e),
         };
         let orgs = match t.orgs_of(me).await {
             Ok(o) => o,
@@ -237,14 +245,37 @@ where
                     TransferState::Proposed | TransferState::Contributed
                 ) && (h.to == me || m.owner)
             }) {
-                items.push(json!({
+                let mut item = json!({
                     "organization": b64url_encode(&o.party),
                     "display_name": o.display_name,
                     "handover": b64url_encode(&h.id),
                     "as": if h.to == me { "recipient" } else { "owner" },
                     "state": h.state.word(),
                     "effective_at": ms_text(h.effective_ms),
-                }));
+                });
+                // L0-META-20, §9.14.1, OP-153 m.25 (i) (2)
+                if let (true, Some(intent), Some(domain)) = (
+                    h.to == me && h.state == TransferState::Proposed,
+                    h.intent_digest,
+                    domain,
+                ) {
+                    let (anchor, from) = match (
+                        t.party_anchor(o.party).await,
+                        access_store::idp::subject_party(&mut t, &h.from).await,
+                    ) {
+                        (Ok(a), Ok(f)) => (a, f),
+                        (Err(e), _) | (_, Err(e)) => return failed(&e),
+                    };
+                    if let (Some(anchor), Some(from), Some(o)) =
+                        (anchor, from, item.as_object_mut())
+                    {
+                        o.insert(
+                            String::from("accept"),
+                            accept_request((domain, intent), &h, (anchor, from)),
+                        );
+                    }
+                }
+                items.push(item);
             }
         }
         if let Err(e) = t.commit().await {
@@ -542,6 +573,40 @@ where
             }),
         )
     }
+}
+
+/// The longest after its delay a recipient's push of a handover acceptance stays open: the
+/// Approval Surface keeps a request 72 hours at most from the proposal (§13.7.3).
+const ACCEPT_AFTER_DELAY_MS: i64 = 48 * 3_600_000;
+
+/// The Approval Surface request of a handover's recipient (§9.14.1 A, L0-META-20, OP-153 m.25
+/// (i) (2)): the `anchor_transfer` on the organization's Anchor `anchor` the owner `from`
+/// proposed, its `require_action` naming the domain, nonce and intent digest the recipient's
+/// `accept_root` contribution targets.
+fn accept_request(
+    (domain, intent): ([u8; 32], [u8; 32]),
+    h: &access_store::org_authority::Transfer,
+    (anchor, from): ([u8; 16], [u8; 16]),
+) -> serde_json::Value {
+    json!({
+        "class": access_kernel::meta::ACCEPT_ROOT,
+        "domain": b64url_encode(&domain),
+        "target": b64url_encode(&intent),
+        "request": {
+            "requester": { "party": b64url_encode(&from) },
+            "action": { "namespace": access_kernel::meta::NAMESPACE, "name": "anchor_transfer", "major": 1 },
+            "resource": { "namespace": "access.anchor", "path": [b64url_encode(&anchor)], "incarnation": 0 },
+            "params": {},
+            "capacity": "own",
+            "reason": "An owner of the organization hands its ownership to you.",
+            "require_action": {
+                "domain": b64url_encode(&domain),
+                "nonce": b64url_encode(&h.nonce),
+                "intent": b64url_encode(&intent),
+            },
+            "expires_at": h.effective_ms.saturating_add(ACCEPT_AFTER_DELAY_MS).max(0),
+        },
+    })
 }
 
 #[cfg(test)]

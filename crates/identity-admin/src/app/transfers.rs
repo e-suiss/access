@@ -107,6 +107,9 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             return Err(AdminError::Refused(String::from(OWNER_ONLY)));
         }
         let digest = payload_digest(w)?;
+        let intent = access_kernel::intent::intent_digest(&w.intent)
+            .map_err(|_| AdminError::Encode)?
+            .0;
         // L0-META-20, OP-153 m.25 (a)
         if let Applied::Written { .. } | Applied::AlreadyWritten { .. } =
             Box::pin(self.meta((tenant, realm), w.clone())).await?
@@ -124,6 +127,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 to_party,
                 nonce: &w.nonce,
                 payload_digest: &digest,
+                intent_digest: Some(&intent),
                 effective_ms,
                 dns_recovery: false,
             })

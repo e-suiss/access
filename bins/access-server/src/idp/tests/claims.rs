@@ -17,7 +17,7 @@ use access_store::issuer::{issuer_instance, realm_issuer};
 use super::*;
 use crate::ingest::PgSubmissions;
 
-struct At;
+pub(super) struct At;
 
 impl access_authority_ingest::ports::Clock for At {
     fn now(&self) -> impl Future<Output = Result<u64, Unavailable>> + Send {
@@ -31,7 +31,7 @@ impl access_identity_account::ports::Clock for At {
     }
 }
 
-struct Keyed<'a>(&'a Opened);
+pub(super) struct Keyed<'a>(&'a Opened);
 
 impl ClaimSigner for Keyed<'_> {
     fn sign(
@@ -44,9 +44,10 @@ impl ClaimSigner for Keyed<'_> {
     }
 }
 
-type Plane = Ingest<Arc<Domains<AnyKeys, ActorBindings, OsSalts, Fixed>>, PgSubmissions, At>;
+pub(super) type Plane =
+    Ingest<Arc<Domains<AnyKeys, ActorBindings, OsSalts, Fixed>>, PgSubmissions, At>;
 
-fn courier(w: &World) -> Courier<Keyed<'_>, Plane, At> {
+pub(super) fn courier(w: &World) -> Courier<Keyed<'_>, Plane, At> {
     Courier {
         app: w.db.app.clone(),
         reader: w.db.reader.clone(),

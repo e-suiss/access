@@ -112,6 +112,9 @@ pub struct Transfer {
     pub state: TransferState,
     /// The `ExerciseID` of the recipient's `accept_root` contribution, once given.
     pub acceptance: Option<[u8; 32]>,
+    /// The intent digest of the `anchor_transfer` the proposal opened: the target the
+    /// recipient's contribution names (OP-153 m.25 (i) (2)).
+    pub intent_digest: Option<[u8; 32]>,
 }
 
 /// Where a transfer stands (TN-91).
@@ -154,6 +157,8 @@ pub struct NewTransfer<'a> {
     pub nonce: &'a [u8],
     /// Digest of its payload.
     pub payload_digest: &'a [u8; 32],
+    /// The intent digest of the `anchor_transfer` the proposal opened.
+    pub intent_digest: Option<&'a [u8; 32]>,
     /// When the time-lock ends, Unix ms.
     pub effective_ms: u64,
     /// A declared DNS ownership recovery (TN-92).
@@ -706,10 +711,10 @@ impl TenantTx {
         let id = sqlx::query_scalar!(
             r#"INSERT INTO access.org_transfers
                  (tenant_id, realm_id, org_id, from_subject, to_subject, to_party, nonce,
-                  payload_digest, effective_at, dns_recovery)
+                  payload_digest, effective_at, dns_recovery, intent_digest)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
                        greatest(to_timestamp($9::bigint::float8 / 1000), clock_timestamp() + interval '24 hours'),
-                       $10)
+                       $10, $11)
                RETURNING transfer_id"#,
             tenant,
             realm,
@@ -721,6 +726,7 @@ impl TenantTx {
             t.payload_digest.as_slice(),
             effective,
             t.dns_recovery,
+            t.intent_digest.map(<[u8; 32]>::as_slice),
         )
         .fetch_one(&mut *self.tx)
         .await?;
@@ -742,10 +748,11 @@ impl TenantTx {
         let id = sqlx::query_scalar!(
             r#"INSERT INTO access.org_transfers
                  (tenant_id, realm_id, org_id, from_subject, to_subject, to_party, nonce,
-                  payload_digest, proposed_at, effective_at, dns_recovery)
+                  payload_digest, proposed_at, effective_at, dns_recovery, intent_digest)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
                        clock_timestamp() - make_interval(secs => $9),
-                       clock_timestamp() - make_interval(secs => $9) + interval '24 hours', $10)
+                       clock_timestamp() - make_interval(secs => $9) + interval '24 hours', $10,
+                       $11)
                RETURNING transfer_id"#,
             tenant,
             realm,
@@ -757,6 +764,7 @@ impl TenantTx {
             t.payload_digest.as_slice(),
             secs(ago_s)?,
             t.dns_recovery,
+            t.intent_digest.map(<[u8; 32]>::as_slice),
         )
         .fetch_one(&mut *self.tx)
         .await?;
@@ -774,7 +782,7 @@ impl TenantTx {
                       (extract(epoch FROM effective_at) * 1000)::bigint AS "effective_ms!",
                       dns_recovery, contributed_at IS NOT NULL AS "contributed!",
                       cancelled_at IS NOT NULL AS "cancelled!",
-                      completed_at IS NOT NULL AS "completed!", acceptance
+                      completed_at IS NOT NULL AS "completed!", acceptance, intent_digest
                  FROM access.org_transfers
                 WHERE tenant_id = $1 AND realm_id = $2 AND transfer_id = $3"#,
             tenant,
@@ -804,6 +812,7 @@ impl TenantTx {
                     TransferState::Proposed
                 },
                 acceptance: r.acceptance.map(id32).transpose()?,
+                intent_digest: r.intent_digest.map(id32).transpose()?,
             })
         })
         .transpose()

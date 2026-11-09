@@ -3953,6 +3953,7 @@ async fn a_handovers_recipient_contributes_and_an_owner_or_the_recipient_cancels
     t.insert_membership(org, bob, access_store::orgs::Source::Invite, false, None)
         .await
         .unwrap();
+    t.record_party_anchor([0x0a; 16], [0x0c; 16]).await.unwrap();
     let first = t
         .insert_transfer(&access_store::org_authority::NewTransfer {
             org,
@@ -3961,6 +3962,7 @@ async fn a_handovers_recipient_contributes_and_an_owner_or_the_recipient_cancels
             to_party: [0x7d; 16],
             nonce: &[1; 16],
             payload_digest: &[0; 32],
+            intent_digest: Some(&[0x55; 32]),
             effective_ms: 4_102_444_800_000,
             dns_recovery: false,
         })
@@ -3997,10 +3999,21 @@ async fn a_handovers_recipient_contributes_and_an_owner_or_the_recipient_cancels
     let listed = b.get("/v1/account/handovers").await.json();
     assert_eq!(listed["items"][0]["as"], "recipient");
     assert_eq!(listed["items"][0]["state"], "proposed");
-    assert_eq!(
-        o.get("/v1/account/handovers").await.json()["items"][0]["as"],
-        "owner"
+    // L0-META-20, §9.14.1, OP-153 m.25 (i) (2)
+    let accept = &listed["items"][0]["accept"];
+    assert_eq!(accept["class"], "accept_root");
+    assert_eq!(accept["target"], b64url_encode(&[0x55; 32]));
+    let push = &accept["request"];
+    assert_eq!(push["require_action"]["intent"], b64url_encode(&[0x55; 32]));
+    assert_eq!(push["require_action"]["nonce"], b64url_encode(&[1; 16]));
+    assert_eq!(push["resource"]["path"][0], b64url_encode(&[0x0c; 16]));
+    assert!(
+        access_identity_ui::domain::approval::pushed(push).is_ok(),
+        "{push}"
     );
+    let owners = o.get("/v1/account/handovers").await.json();
+    assert_eq!(owners["items"][0]["as"], "owner");
+    assert!(owners["items"][0].get("accept").is_none());
     let short = json!({ "acceptance": b64url_encode(&[0x7e; 16]) });
     assert_eq!(
         b.post(&format!("{base}/contribution"), Some(short))

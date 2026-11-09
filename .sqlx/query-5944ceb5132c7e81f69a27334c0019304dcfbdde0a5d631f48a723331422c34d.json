@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.org_transfers\n                 (tenant_id, realm_id, org_id, from_subject, to_subject, to_party, nonce,\n                  payload_digest, effective_at, dns_recovery, intent_digest)\n               VALUES ($1, $2, $3, $4, $5, $6, $7, $8,\n                       greatest(to_timestamp($9::bigint::float8 / 1000), clock_timestamp() + interval '24 hours'),\n                       $10, $11)\n               RETURNING transfer_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "transfer_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_transfers",
+            "name": "transfer_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Bool",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5944ceb5132c7e81f69a27334c0019304dcfbdde0a5d631f48a723331422c34d"
+}
