@@ -14,6 +14,8 @@ use access_kernel::restriction::{PolicyDeny, RestrictionOutcome};
 use suiss_crypto::dcbor::{self, Limits as Cbor, Value};
 use suiss_restriction::{Denial, Engine, Limits, Outcome, RequestJson};
 
+pub mod patterns;
+
 /// Access's restriction schema `access/restriction/v1` (OP-141 m.27 (a)).
 pub const SCHEMA: &str = r#"entity Instance = { party: String };
 entity Anonymous;
@@ -21,8 +23,27 @@ entity Resource = { namespace: String, path: String };
 action "exercise" appliesTo {
   principal: [Instance, Anonymous],
   resource: [Resource],
-  context: { now: Long, action: String, capacity: String }
+  context: {
+    now: Long,
+    action: String,
+    capacity: String,
+    untrusted: Set<String>,
+    actor: String,
+    tier: Long,
+  }
 };"#;
+
+/// What the decision path knows about a request beyond its intent (E54 (1), §11.19): whether
+/// the actor is an agent and the intent's consequence tier. The restriction context names them
+/// `actor` (`agent`, `person` or `anonymous`) and `tier` (0 to 3), beside `untrusted`, the typed
+/// parameters whose provenance is `untrusted-external`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Facts {
+    /// The actor is an agent Instance.
+    pub agent: bool,
+    /// The consequence tier, 0 to 3.
+    pub tier: u8,
+}
 
 /// Compiled policies by version; `None` marks a policy that does not compile.
 #[derive(Default)]
@@ -94,6 +115,34 @@ fn quoted(s: &str) -> String {
     serde_json::Value::from(s).to_string()
 }
 
+/// The restriction context of a request (OP-141 m.27 (a), E54 (1), §11.19).
+fn context(
+    intent: &IntentEnvelope,
+    (actor, capacity): (Option<&Actor>, Capacity),
+    facts: Facts,
+    now: u64,
+) -> String {
+    let untrusted: Vec<&String> = intent
+        .params
+        .keys()
+        .filter(|k| intent.provenance_of(k) == access_kernel::intent::Provenance::UntrustedExternal)
+        .collect();
+    let who = match (actor, facts.agent) {
+        (None, _) => "anonymous",
+        (Some(_), true) => "agent",
+        (Some(_), false) => "person",
+    };
+    serde_json::json!({
+        "now": i64::try_from(now / 1_000).unwrap_or(i64::MAX),
+        "action": format!("{}:{}", intent.action.namespace, intent.action.name),
+        "capacity": if capacity == Capacity::Own { "own" } else { "for" },
+        "untrusted": untrusted,
+        "actor": who,
+        "tier": facts.tier,
+    })
+    .to_string()
+}
+
 /// The engine's answer for each live policy that applies, as Kernel policy results
 /// (L0-EVAL-18, OP-141 m.27 (c)–(f)).
 ///
@@ -104,6 +153,28 @@ pub fn results(
     intent: &IntentEnvelope,
     actor: Option<&Actor>,
     capacity: Capacity,
+    now: u64,
+    cache: &Cache,
+) -> Result<Vec<PolicyResult>, Rejection> {
+    results_with(
+        policies,
+        intent,
+        (actor, capacity),
+        Facts::default(),
+        now,
+        cache,
+    )
+}
+
+/// [`results`] with what the decision path knows about the actor and the tier.
+///
+/// # Errors
+/// [`Rejection::Input`] when the engine refuses the input.
+pub fn results_with(
+    policies: &[(Id, ContentState)],
+    intent: &IntentEnvelope,
+    (actor, capacity): (Option<&Actor>, Capacity),
+    facts: Facts,
     now: u64,
     cache: &Cache,
 ) -> Result<Vec<PolicyResult>, Rejection> {
@@ -142,12 +213,7 @@ pub fn results(
         }
     ])
     .to_string();
-    let context = serde_json::json!({
-        "now": i64::try_from(now / 1_000).unwrap_or(i64::MAX),
-        "action": format!("{}:{}", intent.action.namespace, intent.action.name),
-        "capacity": if capacity == Capacity::Own { "own" } else { "for" },
-    })
-    .to_string();
+    let context = context(intent, (actor, capacity), facts, now);
     let request = RequestJson {
         principal: &principal,
         action: r#"Action::"exercise""#,

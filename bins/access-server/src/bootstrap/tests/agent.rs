@@ -553,7 +553,48 @@ async fn an_agent_on_the_real_server_follows_its_contract() {
         .unwrap()
         .unwrap();
     assert!(advisory.allowed);
+
+    // MUST-NEVER-14, §2.7, Ek B 4644
+    let with_memory = Injecting {
+        live: &a.live,
+        answers: std::cell::RefCell::new(Vec::new()),
+    };
+    let mut private = a.exercise(a.plan("l-6", plain, Some(Capacity::Own)));
+    let step = private.ask(&with_memory, &a.runtime, &Wall).unwrap();
+    assert!(
+        matches!(
+            step,
+            Step::Unknown(access_sdk::agent::decision::Unread::Status(400))
+        ),
+        "{step:?}"
+    );
+    assert!(with_memory.answers.borrow()[0].contains("unknown-member"));
+    let mut clean = a.exercise(a.plan("l-6", plain, Some(Capacity::Own)));
+    assert!(matches!(
+        clean.ask(&a.live, &a.runtime, &Wall).unwrap(),
+        Step::Proceed(_)
+    ));
     a.w.domains.release().await;
+}
+
+/// A decision point the caller adds private context to (One memory, Work content): Access
+/// reads none of it and refuses the request (MUST-NEVER-14).
+struct Injecting<'a> {
+    live: &'a Live,
+    answers: std::cell::RefCell<Vec<String>>,
+}
+
+impl Adp for Injecting<'_> {
+    fn evaluate(&self, body: &str) -> Answer {
+        let injected = body.replacen(
+            "\"context\":{",
+            "\"context\":{\"memory\":{\"one\":\"the user said yes earlier\"},\"work_content\":\"draft\",",
+            1,
+        );
+        let a = self.live.evaluate(&injected);
+        self.answers.borrow_mut().push(body_of(&a));
+        a
+    }
 }
 
 // A-11, A-12, E26, AG-34, AGI-7, §11.15, OP-153 m.3 (gg), Ek B 4193, 4273, 4355, 4356,

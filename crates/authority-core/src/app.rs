@@ -616,7 +616,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             compromised,
         };
         let (mut evaluation, _) = self.passes(req, &frame).await?;
-        let tier = access_kernel::tier::of(
+        let tier = crate::requirements::tier_of(
             &req.intent,
             req.payload.as_ref(),
             evaluation.expansion,
@@ -966,7 +966,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         open: bool,
         now: u64,
     ) -> Result<(), CoreError> {
-        let tier = access_kernel::tier::of(
+        let tier = crate::requirements::tier_of(
             &req.intent,
             req.payload.as_ref(),
             evaluation.expansion,
@@ -1931,7 +1931,7 @@ fn rendered(
     req: &Request,
     evaluation: &Evaluation,
 ) -> Result<(access_kernel::tier::Tier, Digest, Vec<u8>), CoreError> {
-    let tier = access_kernel::tier::of(
+    let tier = crate::requirements::tier_of(
         &req.intent,
         req.payload.as_ref(),
         evaluation.expansion,

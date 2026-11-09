@@ -22,6 +22,29 @@ use access_kernel::requirement::{self, HUMAN_PRESENCE, Proof, SURFACE};
 use access_kernel::schema::{ActionSchema, Reversibility};
 use access_kernel::tier::Tier;
 
+/// The consequence tier of an intent (§13.7.1) with the information-flow floors (SEC30, IFC
+/// Option B): a `disclose` contribution is at least CT2 and a `declassify` one CT3.
+#[must_use]
+pub fn tier_of(
+    intent: &access_kernel::intent::IntentEnvelope,
+    payload: Option<&access_kernel::meta::Payload>,
+    expansion: bool,
+    schema: Option<&ActionSchema>,
+) -> Tier {
+    use access_kernel::contribution::{DECLASSIFY, DISCLOSE};
+    let tier = access_kernel::tier::of(intent, payload, expansion, schema);
+    let floor = match payload {
+        Some(access_kernel::meta::Payload::Contribute { class, .. }) if class == DECLASSIFY => {
+            Tier::Ct3
+        }
+        Some(access_kernel::meta::Payload::Contribute { class, .. }) if class == DISCLOSE => {
+            Tier::Ct2
+        }
+        _ => Tier::Ct0,
+    };
+    tier.max(floor)
+}
+
 /// The ceiling's floors for an intent of `tier` on `schema`, with or without a Mandate the
 /// actor acts within (E49 (2)): a domain action without a declared reversibility, and every
 /// meta-action, is irreversible.
@@ -318,5 +341,72 @@ mod tests {
             ids(admissible(&attested, Some(&AGENT), true, Tier::Ct3, &view)),
             ids(vec![user, hardware, runtime])
         );
+    }
+
+    fn fields(src: &str, item: &str) -> Vec<String> {
+        let start = src.find(item).unwrap();
+        let end = start
+            .checked_add(src[start..].find("\n}").unwrap())
+            .unwrap();
+        src[start..end]
+            .lines()
+            .skip(1)
+            .filter_map(|l| l.trim().strip_prefix("pub "))
+            .filter_map(|f| f.split(':').next())
+            .map(str::to_owned)
+            .collect()
+    }
+
+    // MUST-NEVER-14, §2.7, OP-142, Ek B 4644
+    #[test]
+    fn no_decision_input_has_room_for_private_context() {
+        assert_eq!(
+            fields(include_str!("domain.rs"), "pub struct Request {"),
+            [
+                "domain",
+                "mode",
+                "nonce",
+                "intent",
+                "payload",
+                "basis",
+                "capacity",
+                "proofs",
+                "exercise",
+                "consistency"
+            ]
+        );
+        let schema = crate::restrict::SCHEMA;
+        let context = &schema[schema.find("context: {").unwrap()..];
+        let names: Vec<&str> = context
+            .lines()
+            .skip(1)
+            .filter_map(|l| l.trim().split_once(':').map(|(n, _)| n))
+            .collect();
+        assert_eq!(
+            names,
+            ["now", "action", "capacity", "untrusted", "actor", "tier"]
+        );
+        let opaque: BTreeMap<String, access_kernel::digest::Digest> = BTreeMap::new();
+        let envelope = access_kernel::intent::IntentEnvelope {
+            provenance: BTreeMap::new(),
+            action: access_kernel::meta::core_action("read"),
+            resources: Vec::new(),
+            params: BTreeMap::new(),
+            opaque,
+            recipient: None,
+            purpose: None,
+            context: access_kernel::intent::ContextRefs::default(),
+            validity: access_kernel::model::Window { from: 0, until: 1 },
+        };
+        assert!(envelope.opaque.is_empty());
+        let manifest = include_str!("../Cargo.toml");
+        for product in ["one", "work", "relay", "experience", "executor"] {
+            for prefix in ["access-", "suiss-", "esuiss-"] {
+                assert!(
+                    !manifest.contains(&format!("{prefix}{product}")),
+                    "{prefix}{product}"
+                );
+            }
+        }
     }
 }

@@ -1,6 +1,7 @@
 //! The approval ceiling by surface and who may approve an agent's request, on the real store
 //! (E49, AGI-8, OP-154 m.3 (x)).
 
+use access_authority_core::restrict::patterns::{self, Pattern};
 use access_kernel::aas::{EvidenceLevel, SurfaceClass};
 
 use super::*;
@@ -195,4 +196,201 @@ async fn an_agents_request_takes_no_contribution_from_an_agent() {
         .unwrap();
         assert_eq!(again.decision.outcome, outcome, "{contributor:?}");
     }
+}
+
+fn set_pattern(d: Digest, nonce: u8, p: &Pattern) -> Request {
+    meta_request(
+        d,
+        nonce,
+        ExerciseBasis::Anchor(meta::meta_anchor(&d)),
+        Payload::PolicySet {
+            policy: None,
+            content: patterns::content(p).unwrap(),
+        },
+    )
+}
+
+fn with_amount(mut r: Request, provenance: Option<access_kernel::intent::Provenance>) -> Request {
+    r.intent.params.insert(
+        "amount".to_owned(),
+        access_kernel::intent::ParamValue::Amount {
+            value: 4200,
+            unit: "eur_cent".to_owned(),
+        },
+    );
+    if let Some(p) = provenance {
+        r.intent.provenance.insert("amount".to_owned(), p);
+    }
+    r
+}
+
+// E54 (1), §13.7.6, OP-142, Ek B 4641
+#[tokio::test]
+async fn an_untrusted_amount_needs_an_approval_once_the_domain_opts_in() {
+    use access_kernel::intent::Provenance;
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup_with(&db, gated(&[])).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let before = send(
+        &mut core,
+        with_amount(shop_request(d, 9, Mode::Commit, shop), None),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&before);
+    let p = Pattern::Untrusted {
+        params: BTreeSet::from(["amount".to_owned(), "recipient".to_owned()]),
+        approval: patterns::contribution("approve", None),
+    };
+    allowed(
+        &send(&mut core, set_pattern(d, 10, &p), ROOT_KEY)
+            .await
+            .unwrap(),
+    );
+    for (nonce, label) in [(11, None), (12, Some(Provenance::UntrustedExternal))] {
+        let asked = send(
+            &mut core,
+            with_amount(shop_request(d, nonce, Mode::Commit, shop), label),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap();
+        assert_eq!(asked.decision.outcome, Outcome::RequireAction, "{label:?}");
+        assert_eq!(asked.decision.unmet[0].term.class, "approve");
+        assert_eq!(
+            asked.decision.unmet[0].term.assurance.get("surface"),
+            Some(&2)
+        );
+    }
+    for (nonce, label) in [(13, Provenance::User), (14, Provenance::Trusted)] {
+        let typed = send(
+            &mut core,
+            with_amount(shop_request(d, nonce, Mode::Commit, shop), Some(label)),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap();
+        allowed(&typed);
+    }
+    let plain = send(&mut core, shop_request(d, 15, Mode::Commit, shop), ROOT_KEY)
+        .await
+        .unwrap();
+    allowed(&plain);
+}
+
+// §11.19 enterprise row, Ek B 4464
+#[tokio::test]
+async fn an_enterprise_agents_high_consequence_action_waits_for_an_administrator() {
+    for (kind, outcome) in [
+        (ActorKind::Human, Outcome::Allow),
+        (ActorKind::Agent, Outcome::RequireAction),
+    ] {
+        let db = fresh().await.unwrap();
+        let (mut core, d) = setup_with(&db, gated(&[])).await;
+        onboard_as(&mut core, d, (ROOT, kind), ROOT_KEY, (1, 2)).await;
+        onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+        let admins = SubjectSelector::Party(ALICE);
+        let p = Pattern::AdminApproval {
+            min_tier: 1,
+            approvers: admins.clone(),
+        };
+        let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+        let low = Pattern::AdminApproval {
+            min_tier: 2,
+            approvers: admins.clone(),
+        };
+        allowed(
+            &send(&mut core, set_pattern(d, 10, &low), ROOT_KEY)
+                .await
+                .unwrap(),
+        );
+        allowed(
+            &send(&mut core, shop_request(d, 11, Mode::Commit, shop), ROOT_KEY)
+                .await
+                .unwrap(),
+        );
+        allowed(
+            &send(&mut core, set_pattern(d, 12, &p), ROOT_KEY)
+                .await
+                .unwrap(),
+        );
+        let target = shop_request(d, 13, Mode::Commit, shop);
+        let asked = send(&mut core, target.clone(), ROOT_KEY).await.unwrap();
+        assert_eq!(asked.decision.outcome, outcome, "{kind:?}");
+        if outcome == Outcome::Allow {
+            continue;
+        }
+        let term = &asked.decision.unmet[0].term;
+        assert_eq!(term.class, "approve");
+        assert_eq!(term.source, Some(admins));
+        let digest = access_kernel::intent::intent_digest(&target.intent).unwrap();
+        let (r, _) = approved_on(
+            d,
+            20,
+            (digest, render_of(&target)),
+            Some(SurfaceClass::Desktop),
+            Some(EvidenceLevel::PhishingResistant),
+        );
+        let given = send(&mut core, r, ALICE_KEY).await.unwrap();
+        allowed(&given);
+        let done = send(
+            &mut core,
+            with_proofs(
+                target,
+                vec![ProofRef::Contribution(given.exercise.unwrap())],
+            ),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap();
+        allowed(&done);
+    }
+}
+
+// F11, SEC30, §7.9.10.3, IFC Option B, Ek B 4642
+#[tokio::test]
+async fn disclosure_needs_the_data_owners_contribution_and_declassify_is_ct3() {
+    use access_kernel::tier::Tier;
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup_with(&db, gated(&[])).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let owner = SubjectSelector::Party(ALICE);
+    let p = Pattern::Disclosure {
+        actions: BTreeSet::from(["shop:read".to_owned()]),
+        owner: owner.clone(),
+        declassify: false,
+    };
+    allowed(
+        &send(&mut core, set_pattern(d, 10, &p), ROOT_KEY)
+            .await
+            .unwrap(),
+    );
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let asked = send(&mut core, shop_request(d, 11, Mode::Commit, shop), ROOT_KEY)
+        .await
+        .unwrap();
+    assert_eq!(asked.decision.outcome, Outcome::RequireAction);
+    let term = &asked.decision.unmet[0].term;
+    assert_eq!(term.class, access_kernel::contribution::DISCLOSE);
+    assert_eq!(term.source, Some(owner));
+    let target = access_kernel::digest::Digest([7; 32]);
+    let tier = |class: &str| {
+        let payload = Payload::Contribute {
+            target,
+            class: class.to_owned(),
+        };
+        access_authority_core::requirements::tier_of(
+            &contribute(d, 30, target).intent,
+            Some(&payload),
+            false,
+            None,
+        )
+    };
+    assert_eq!(tier(access_kernel::contribution::DISCLOSE), Tier::Ct2);
+    assert_eq!(tier(access_kernel::contribution::DECLASSIFY), Tier::Ct3);
+    assert!(tier(access_kernel::contribution::APPROVE) < Tier::Ct2);
 }

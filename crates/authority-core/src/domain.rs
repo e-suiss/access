@@ -1788,17 +1788,6 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
     if !missing.is_empty() {
         return Pass::Need(missing);
     }
-    let mut restrictions = match crate::restrict::results(
-        &applicable,
-        &req.intent,
-        actor.as_ref(),
-        req.capacity,
-        now,
-        policies,
-    ) {
-        Ok(r) => r,
-        Err(r) => return Pass::Rejected(r),
-    };
     // OP-149 m.8
     let actor_is_agent = actor
         .as_ref()
@@ -1807,6 +1796,29 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
     if !missing.is_empty() {
         return Pass::Need(missing);
     }
+    // E9, §13.7.3, N-45, SEC10, SEC26, SEC30
+    let tier = crate::requirements::tier_of(
+        &req.intent,
+        req.payload.as_ref(),
+        expansion,
+        schema.as_deref(),
+    );
+    // E54 (1), §11.19
+    let facts = crate::restrict::Facts {
+        agent: actor_is_agent,
+        tier: crate::app::approval::tier_code(tier),
+    };
+    let mut restrictions = match crate::restrict::results_with(
+        &applicable,
+        &req.intent,
+        (actor.as_ref(), req.capacity),
+        facts,
+        now,
+        policies,
+    ) {
+        Ok(r) => r,
+        Err(r) => return Pass::Rejected(r),
+    };
     // OP-152 m.5 (a)
     if bases.is_empty() && req.mode != Mode::Check {
         return Pass::Done(Evaluation {
@@ -1820,13 +1832,6 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             agency: Vec::new(),
         });
     }
-    // E9, §13.7.3, N-45, SEC10, SEC26
-    let tier = access_kernel::tier::of(
-        &req.intent,
-        req.payload.as_ref(),
-        expansion,
-        schema.as_deref(),
-    );
     // E49, OP-154 m.3 (x)
     let floors = crate::requirements::ceiling(tier, schema.as_deref(), mandate.is_some());
     let terms = bases
