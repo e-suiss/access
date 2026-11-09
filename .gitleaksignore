@@ -7,3 +7,5 @@
 # F-13: invitation tokens a test seeds into its own throwaway database
 518498146d548a1c8280e07a1cbb2f371736a65f:crates/http/tests/login.rs:generic-api-key:3241
 518498146d548a1c8280e07a1cbb2f371736a65f:crates/http/tests/login.rs:generic-api-key:3329
+# F-13: an unsigned test JWT-SVID (header and a spiffe:// subject only) a refusal test feeds the verifier
+837c3941f41e26bc9adf8f487f98082eae2d3320:crates/identity-attest/src/app.rs:generic-api-key:221
