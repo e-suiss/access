@@ -12,7 +12,7 @@ pub struct RandomError;
 /// # Errors
 /// [`RandomError`].
 pub fn bytes<const N: usize>() -> Result<[u8; N], RandomError> {
-    let mut out = [0; N];
+    let mut out: [u8; N] = core::array::from_fn(|_| 0);
     rand::fill(&mut out).map_err(|_| RandomError)?;
     Ok(out)
 }
