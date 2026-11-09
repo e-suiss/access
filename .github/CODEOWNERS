@@ -12,6 +12,7 @@
 /sdks/openapi/                  @ademceper
 /crates/identity-session/       @ademceper
 /crates/identity-webauthn/      @ademceper
+/crates/identity-attest/        @ademceper
 /crates/identity-federation/    @ademceper
 /bins/access-signer/            @ademceper
 /bins/access-gw-*/              @ademceper

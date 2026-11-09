@@ -1,0 +1,5 @@
+google/attestation-root 2026-11-09 google_hardware_attestation_root_2022.der google_key_attestation_ca1.der (the two PEM certificates of https://android.googleapis.com/attestation/root, converted to DER): Android hardware key attestation roots
+apple/app-attestation-root 2026-11-09 apple_app_attestation_root_ca.der (https://www.apple.com/certificateauthority/Apple_App_Attestation_Root_CA.pem, converted to DER): Apple App Attest root
+infineon/optiga-root 2026-11-09 infineon_optiga_rsa_root_ca.der infineon_optiga_ecc_root_ca.der (http://pki.infineon.com/OptigaRsaRootCA/OptigaRsaRootCA.crt, http://pki.infineon.com/OptigaEccRootCA/OptigaEccRootCA.crt, unmodified DER): TPM 2.0 manufacturer roots
+stmicro/tpm-ek-root 2026-11-09 stmicro_tpm_ek_root_ca.der (http://secure.globalsign.com/cacert/stmtpmekroot.crt, unmodified DER): TPM 2.0 manufacturer root
+every file is embedded unmodified by src/roots.rs and checked against SHA256SUMS by its test

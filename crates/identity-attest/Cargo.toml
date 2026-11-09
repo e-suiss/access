@@ -1,0 +1,27 @@
+[package]
+name = "access-identity-attest"
+description = "Workload identity and hardware attestation checks of the identity plane: SPIFFE, WIMSE, Android, Apple and TPM, sans I/O."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-kernel = { workspace = true }
+access-parse = { workspace = true }
+access-crypto = { workspace = true }
+suiss-crypto = { workspace = true }
+thiserror = { workspace = true }
+rustls-webpki = { workspace = true, features = ["aws-lc-rs", "std"] }
+rustls-pki-types = { workspace = true, features = ["std"] }
+
+[dev-dependencies]
+access-crypto = { workspace = true, features = ["testing"] }
+aws-lc-rs = { workspace = true }
+rcgen = { workspace = true, features = ["aws_lc_rs"] }
+tokio = { workspace = true, features = ["rt"] }
+
+[lints]
+workspace = true

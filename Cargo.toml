@@ -28,6 +28,7 @@ access-identity-oauth = { path = "crates/identity-oauth", default-features = fal
 access-identity-session = { path = "crates/identity-session", default-features = false }
 access-identity-account = { path = "crates/identity-account", default-features = false }
 access-identity-webauthn = { path = "crates/identity-webauthn", default-features = false }
+access-identity-attest = { path = "crates/identity-attest", default-features = false }
 access-identity-ui = { path = "crates/identity-ui", default-features = false }
 access-identity-admin = { path = "crates/identity-admin", default-features = false }
 access-identity-events = { path = "crates/identity-events", default-features = false }
