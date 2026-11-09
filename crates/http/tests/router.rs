@@ -253,3 +253,32 @@ async fn the_provider_declarations_are_public() {
     assert_eq!(body["custody"], "none");
     assert_eq!(body["version"], 1);
 }
+
+// RFC 9113 §8.3.1: an HTTP/2 request's `:authority` reaches the handlers as `Host`
+#[tokio::test]
+async fn an_http2_authority_is_the_host() {
+    let app = harden(
+        axum::Router::new().route(
+            "/host",
+            get(|h: axum::http::HeaderMap| async move {
+                h.get("host")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("none")
+                    .to_owned()
+            }),
+        ),
+        Limits::default(),
+    );
+    let h2 = Request::get("https://access.test:8443/host")
+        .version(axum::http::Version::HTTP_2)
+        .body(Body::empty())
+        .unwrap();
+    let r = app.clone().oneshot(h2).await.unwrap();
+    assert_eq!(body_string(r).await, "access.test:8443");
+    let h1 = Request::get("/host")
+        .header("host", "other.test")
+        .body(Body::empty())
+        .unwrap();
+    let r = app.oneshot(h1).await.unwrap();
+    assert_eq!(body_string(r).await, "other.test");
+}

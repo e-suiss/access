@@ -99,8 +99,27 @@ pub fn harden(routes: Router, limits: Limits) -> Router {
         ))
         // TN-113
         .layer(axum::middleware::from_fn(path::canonical))
+        // RFC 9113 §8.3.1
+        .layer(axum::middleware::from_fn(host_from_authority))
         // SA-21, R-3
         .layer(CatchPanicLayer::custom(problem::from_panic))
+}
+
+/// An HTTP/2 request names its host in `:authority`, which hyper keeps in the URI; the
+/// handlers read `Host`, so it is filled from the authority when the request has none.
+async fn host_from_authority(
+    mut request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    if !request.headers().contains_key(axum::http::header::HOST)
+        && let Some(v) = request
+            .uri()
+            .authority()
+            .and_then(|a| axum::http::HeaderValue::from_str(a.as_str()).ok())
+    {
+        request.headers_mut().insert(axum::http::header::HOST, v);
+    }
+    next.run(request).await
 }
 
 async fn not_found() -> Problem {
