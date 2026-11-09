@@ -1246,6 +1246,7 @@ struct Background {
     opening: tokio::task::JoinHandle<()>,
     retaining: tokio::task::JoinHandle<()>,
     watching: tokio::task::JoinHandle<()>,
+    refreshing: tokio::task::JoinHandle<()>,
     sampling: tokio::task::JoinHandle<()>,
     ready: Readiness,
     /// Every realm's JWKS loaded at start-up (OP-138, §17.9.7).
@@ -1262,6 +1263,8 @@ impl Background {
     ) -> Result<Self, String> {
         let identity = config.identity.as_ref().ok_or("no identity section")?;
         let logout = courier(config, pools, outbound.clone())?;
+        let vault_outbound = outbound.clone();
+        let keks_for_vault = keks.clone();
         // TN-90, OP-153 m.3 (o)
         let probe = orgs::WebProbe {
             outbound: outbound.clone(),
@@ -1306,6 +1309,23 @@ impl Background {
             probe,
             holder()?,
         ));
+        // OP-154 m.3 (t)
+        let refreshing = tokio::spawn(idp::vault::refresh_run(
+            pools.app.clone(),
+            pools.router.clone(),
+            keks_for_vault,
+            Arc::clone(ids),
+            access_identity_vault::app::Vault {
+                catalog: access_identity_vault::domain::catalog::Catalog::shipped()
+                    .map_err(|e| e.to_string())?,
+                http: access_identity_federation::adapters::OutboundProviders(vault_outbound),
+                secrets: access_identity_federation::adapters::FileSecrets(
+                    config.social.secrets_dir.clone(),
+                ),
+                exercises: idp::vault::NoExercises,
+                random: idp::vault::OsRandom,
+            },
+        ));
         consumers.set(true);
         Ok(Self {
             stop,
@@ -1314,6 +1334,7 @@ impl Background {
             opening,
             retaining,
             watching,
+            refreshing,
             // §17.8.2, OP-53
             sampling: tokio::spawn(sample_pools(PoolGauges::of(pools))),
             jwks: ready.flag("jwks.realms"),
@@ -1329,6 +1350,7 @@ impl Background {
         self.opening.abort();
         self.retaining.abort();
         self.watching.abort();
+        self.refreshing.abort();
         self.sampling.abort();
     }
 }
