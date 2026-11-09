@@ -128,6 +128,14 @@ pub enum Content {
     /// A body of a registry class outside the Kernel table (OP-153 m.2 N0): its digest is the
     /// value, and it always travels with the Claim.
     Registry(Value),
+    /// A scalar value about a subject Party that is no identity subject, such as an agent
+    /// (OP-154 m.3 (c)).
+    PartyScalar {
+        /// The value.
+        value: EqValue,
+        /// The subject Party.
+        party: [u8; 16],
+    },
 }
 
 /// A Claim the realm issuer is asked to issue, queued with the event that caused it.
@@ -499,6 +507,44 @@ pub fn org_member(
     }
 }
 
+/// How long an agent's `operated_by`, `agent_kind` and `sponsored_by` Claims hold before the
+/// realm issuer renews them (PD, OP-154 m.3 (c)): a year; a retraction ends one at once.
+pub const AGENT_CLAIM_TTL_MS: u64 = 365 * 24 * 3_600_000;
+
+/// The line of an agent's Claim of `class` about `about`: the agent's `operated_by` and
+/// `agent_kind` have one line each, its `sponsored_by` one per sponsor.
+#[must_use]
+pub fn agent_line(agent: &[u8; 16], class: Class, about: &[u8]) -> [u8; 32] {
+    line(&[class.name().as_bytes(), agent, about])
+}
+
+/// A realm issuer Claim of `class` about the agent Party `agent` (OP-154 m.3 (c), AG-20):
+/// `operated_by` and `sponsored_by` carry a Party, `agent_kind` its kind. With `retract` it only
+/// ends the line, as when the last sponsor leaves (OP-154 m.3 (e)).
+#[must_use]
+pub fn agent_claim(
+    agent: [u8; 16],
+    class: Class,
+    (value, line_of): (EqValue, &[u8]),
+    at: u64,
+    retract: bool,
+) -> ClaimOrder {
+    ClaimOrder {
+        subject: agent,
+        class: class.name(),
+        at,
+        ttl_ms: AGENT_CLAIM_TTL_MS,
+        line: Some(agent_line(&agent, class, line_of)),
+        content: Content::PartyScalar {
+            value,
+            party: agent,
+        },
+        assurance: BTreeMap::new(),
+        bind: Bind::None,
+        retract,
+    }
+}
+
 /// The line of a subject's identity binding of `kind`: the next binding supersedes it.
 #[must_use]
 pub fn binding_line(kind: BindingKind) -> [u8; 32] {
@@ -653,6 +699,7 @@ impl ClaimOrder {
     pub const fn party(&self) -> Option<[u8; 16]> {
         match &self.content {
             Content::About { party, .. } => *party,
+            Content::PartyScalar { party, .. } => Some(*party),
             _ => None,
         }
     }
@@ -693,7 +740,7 @@ impl ClaimOrder {
     /// [`BadOrder`] when the body cannot be encoded.
     pub fn prepare(&self, p: &Placement) -> Result<Prepared, BadOrder> {
         let (value, body) = match &self.content {
-            Content::Scalar(v) => (Some(v.clone()), None),
+            Content::Scalar(v) | Content::PartyScalar { value: v, .. } => (Some(v.clone()), None),
             Content::About { body, .. } => {
                 let class = crate::domain::claim_classes::IdentityClass::parse(&self.class)
                     .ok_or(BadOrder)?;
@@ -778,6 +825,14 @@ impl ClaimOrder {
                 Some(Value::Bool(*disclose)),
             ),
             Content::Registry(v) => (Value::Array(vec![Value::text("registry"), v.clone()]), None),
+            Content::PartyScalar { value, party } => (
+                Value::Array(vec![
+                    Value::text("party_scalar"),
+                    value.to_value(),
+                    Value::Bytes(party.to_vec()),
+                ]),
+                None,
+            ),
         };
         let bind = match self.bind {
             Bind::None => None,
@@ -883,6 +938,12 @@ fn content_of(value: Option<&Value>, class: &str, disclose: bool) -> Result<Cont
             Ok(Content::Body {
                 body: Body::from_value(parsed, inner).map_err(|_| BadOrder)?,
                 disclose,
+            })
+        }
+        [Value::Text(tag), inner, Value::Bytes(about)] if tag == "party_scalar" => {
+            Ok(Content::PartyScalar {
+                value: EqValue::from_value(inner).map_err(|_| BadOrder)?,
+                party: about.as_slice().try_into().map_err(|_| BadOrder)?,
             })
         }
         [Value::Text(tag), inner] if tag == "registry" => {

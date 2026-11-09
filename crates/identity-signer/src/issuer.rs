@@ -28,14 +28,18 @@ pub const LABEL: &str = "claim-issuer";
 
 /// The classes the identity issuer signs (§10.1.2, §10.1.5): authentication results, authenticator
 /// and identity bindings, account status, device posture and the result of a recovery (OP-153
-/// m.3 (c)). Regime classes are never its own.
-pub const CLASSES: [&str; 6] = [
+/// m.3 (c)), and the agent record's export: operator, sponsor and kind (OP-154 m.3 (c), AG-20).
+/// Regime classes are never its own.
+pub const CLASSES: [&str; 9] = [
     "authentication",
     "authenticator_binding",
     "account_status",
     "posture_device",
     "identity_binding_person",
     "recovery_result",
+    "operated_by",
+    "sponsored_by",
+    "agent_kind",
 ];
 
 /// The prefix of the identity plane's risk signal classes (§7.6 TN-O4, TN-63): signals, never
