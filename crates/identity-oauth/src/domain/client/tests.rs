@@ -213,8 +213,14 @@ fn resources_have_one_canonical_form() {
         ("https://mcp.example.com/mcp", "https://mcp.example.com/mcp"),
         ("https://mcp.example.com", "https://mcp.example.com"),
         ("https://mcp.example.com/", "https://mcp.example.com"),
-        ("https://mcp.example.com:8443", "https://mcp.example.com:8443"),
-        ("https://mcp.example.com/server/mcp", "https://mcp.example.com/server/mcp"),
+        (
+            "https://mcp.example.com:8443",
+            "https://mcp.example.com:8443",
+        ),
+        (
+            "https://mcp.example.com/server/mcp",
+            "https://mcp.example.com/server/mcp",
+        ),
         ("HTTPS://MCP.Example.com/Mcp", "https://mcp.example.com/Mcp"),
     ] {
         assert_eq!(c(given).as_deref(), Some(canonical), "{given}");
@@ -236,7 +242,10 @@ fn resources_have_one_canonical_form() {
 #[test]
 fn a_url_client_id_is_never_a_local_one() {
     use super::ClientIdKind;
-    assert_eq!(ClientIdKind::of("cli_0123456789abcdefghjkmnpqrs"), ClientIdKind::Local);
+    assert_eq!(
+        ClientIdKind::of("cli_0123456789abcdefghjkmnpqrs"),
+        ClientIdKind::Local
+    );
     for url in [
         "https://app.example/client.json",
         "http://app.example/c",

@@ -128,8 +128,10 @@ pub fn client_id_url(id: &str) -> Result<(), CimdError> {
     };
     let name = host.trim_end_matches('.').to_ascii_lowercase();
     let literal = host.starts_with('[')
-        || name.parse::<std::net::Ipv4Addr>().is_ok()
-        || name.bytes().all(|c| c.is_ascii_digit() || c == b'.');
+        || name
+            .rsplit('.')
+            .next()
+            .is_none_or(|tld| tld.bytes().next().is_none_or(|c| c.is_ascii_digit()));
     if literal
         || name == "localhost"
         || name.ends_with(".localhost")
@@ -140,10 +142,11 @@ pub fn client_id_url(id: &str) -> Result<(), CimdError> {
     {
         return Err(CimdError::Url);
     }
-    if path
-        .split('/')
-        .any(|seg| matches!(seg, "." | "..") || seg.eq_ignore_ascii_case("%2e") || seg.eq_ignore_ascii_case("%2e%2e"))
-    {
+    if path.split('/').any(|seg| {
+        matches!(seg, "." | "..")
+            || seg.eq_ignore_ascii_case("%2e")
+            || seg.eq_ignore_ascii_case("%2e%2e")
+    }) {
         return Err(CimdError::Url);
     }
     Ok(())
@@ -352,8 +355,7 @@ pub fn is_loopback(uri: &str) -> bool {
 }
 
 fn redirect_ok(uri: &str, kind: ApplicationType) -> bool {
-    if uri.len() > 2048 || uri.contains(['#', '*']) || !uri.bytes().all(|c| c.is_ascii_graphic())
-    {
+    if uri.len() > 2048 || uri.contains(['#', '*']) || !uri.bytes().all(|c| c.is_ascii_graphic()) {
         return false;
     }
     if is_loopback(uri) {
@@ -386,7 +388,9 @@ pub fn parse(bytes: &[u8], fetched_url: &str) -> Result<Document, CimdError> {
         .get("client_name")
         .and_then(Value::as_str)
         .map(str::trim)
-        .filter(|n| !n.is_empty() && n.chars().count() <= MAX_NAME && !n.chars().any(char::is_control))
+        .filter(|n| {
+            !n.is_empty() && n.chars().count() <= MAX_NAME && !n.chars().any(char::is_control)
+        })
         .ok_or(CimdError::Missing)?;
     let declared = doc.get("application_type");
     let loopbacks = matches!(doc.get("redirect_uris"), Some(Value::Array(u))

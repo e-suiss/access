@@ -395,7 +395,9 @@ impl OAuthTx for PgOAuthTx {
     }
 
     async fn subject_party(&mut self, subject: [u8; 16]) -> Result<Option<[u8; 16]>, Unavailable> {
-        idp::subject_party(&mut self.0, &subject).await.map_err(down)
+        idp::subject_party(&mut self.0, &subject)
+            .await
+            .map_err(down)
     }
 
     async fn cimd_client_by_uuid(&mut self, uuid: [u8; 16]) -> Result<Option<String>, Unavailable> {

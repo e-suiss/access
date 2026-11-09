@@ -2277,7 +2277,10 @@ fn upstream_row(u: &Upstream) -> UpstreamRow {
 
 /// AG-5, §11.3.6: a CIMD client the realm's new policy no longer admits retires now: its
 /// consent records end and its identity grants are revoked, so introspection answers inactive.
-async fn retire_cimd_outside(t: &mut TenantTx, p: &crate::domain::CimdPolicy) -> Result<(), AdminError> {
+async fn retire_cimd_outside(
+    t: &mut TenantTx,
+    p: &crate::domain::CimdPolicy,
+) -> Result<(), AdminError> {
     use access_identity_oauth::domain::cimd::{domain_admitted, host};
     let domains: Vec<String> = p.domains.iter().cloned().collect();
     let live = t.cimd_clients().await?;
@@ -2288,7 +2291,11 @@ async fn retire_cimd_outside(t: &mut TenantTx, p: &crate::domain::CimdPolicy) ->
     for (uuid, url) in live {
         let admitted = host(&url).is_some_and(|h| domain_admitted(&domains, &h));
         if !p.enabled || !admitted {
-            let reason = if p.enabled { "domain_policy" } else { "disabled" };
+            let reason = if p.enabled {
+                "domain_policy"
+            } else {
+                "disabled"
+            };
             t.retire_cimd_client(uuid, reason, now).await?;
         }
     }

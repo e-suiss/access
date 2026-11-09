@@ -1,7 +1,7 @@
 //! The Approval Surface's side of an authorization by a client the realm did not register
 //! (§11.6, P58, EI-18, OP-154 m.3 (k)): what the consent screen shows, read from the waiting
 //! request and the client's snapshot, and the consent record kept once the person's own
-//! `grant.issue` is ALLOWed. The screen is never a decision: a record names a Grant that stands,
+//! `grant.issue` is allowed. The screen is never a decision: a record names a Grant that stands,
 //! held by and signed for the signed-in person, or nothing is kept.
 
 use access_crypto::oauth::opaque_digest;
@@ -22,6 +22,10 @@ use crate::ports::oauth::{OAuthDb, OAuthTx};
 /// What the consent screen shows (AS-M14, AG-6, AG-5, §11.3): the hostnames always, the
 /// client's name and logo only as its own claim.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is one warning the screen shows"
+)]
 pub struct ApprovalView {
     /// The client's `client_id`.
     pub client_id: String,
@@ -52,7 +56,7 @@ pub enum NotApproved {
     SignIn,
     /// No open request of a client that needs the Approval Surface at that `return_to`.
     NoRequest,
-    /// No standing Grant from an ALLOWed `grant.issue` of this person (EI-18).
+    /// No standing Grant from an allowed `grant.issue` of this person (EI-18).
     NoGrant,
 }
 
@@ -155,13 +159,15 @@ impl<E: Env> OAuth<E> {
                 .as_ref()
                 .is_some_and(|f| new_app(f.first_seen_ms, now)),
             visual_changed: facts.is_some_and(|f| f.visual_changed_ms.is_some()),
-            resource: consent_resource(&w.request).map(String::from).unwrap_or_default(),
+            resource: consent_resource(&w.request)
+                .map(String::from)
+                .unwrap_or_default(),
             scopes: w.request.scope.clone(),
         }))
     }
 
     /// Keeps the consent record of the request `return_to` names (§9.14.5 k.3, P58): only when
-    /// `exercise` in `domain` is the signed-in person's own ALLOWed `grant.issue`, held by
+    /// `exercise` in `domain` is the signed-in person's own allowed `grant.issue`, held by
     /// their Party, whose Grant stands (EI-18). The browser then goes back to the request.
     ///
     /// # Errors
@@ -183,17 +189,12 @@ impl<E: Env> OAuth<E> {
         let party = tx.subject_party(w.subject).await?;
         let issued = self.env.standing().issued(domain, exercise).await?;
         // EI-18, §11.6, Ek B 4542
-        let Some(issued) = issued.filter(|g| {
-            party.is_some_and(|p| p == g.holder && p == g.signer)
-        }) else {
+        let Some(issued) = issued.filter(|g| party.is_some_and(|p| p == g.holder && p == g.signer))
+        else {
             return Ok(Err(NotApproved::NoGrant));
         };
         let resource = consent_resource(&w.request).unwrap_or_default();
-        let metadata_hash = w
-            .client
-            .cimd
-            .as_ref()
-            .map_or([0; 32], |f| f.metadata_hash);
+        let metadata_hash = w.client.cimd.as_ref().map_or([0; 32], |f| f.metadata_hash);
         tx.put_consent_record(&NewConsentRecord {
             subject: w.subject,
             client: w.client.uuid,

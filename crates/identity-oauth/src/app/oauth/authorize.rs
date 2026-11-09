@@ -153,6 +153,10 @@ impl<E: Env> OAuth<E> {
         }
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the authorization steps in the order they run"
+    )]
     async fn authorize_inner(
         &self,
         realm: &Realm,

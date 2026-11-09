@@ -41,8 +41,8 @@ use access_identity_oauth::domain::request::Params;
 use access_identity_oauth::ports::Unavailable;
 use access_identity_oauth::ports::dpop::{Clock, ClockUnavailable};
 use access_identity_oauth::ports::oauth::{
-    ClientDocuments, ClientKeys, Fetch, FetchRefused, Fetched, GrantStanding, Held,
-    IssuedGrant, ManagementHolders,
+    ClientDocuments, ClientKeys, Fetch, FetchRefused, Fetched, GrantStanding, Held, IssuedGrant,
+    ManagementHolders,
 };
 use access_identity_session::domain::assurance::{Factor, vector};
 use access_identity_session::domain::session::cookie_digest;
@@ -224,8 +224,7 @@ impl ClientDocuments for FixtureDocs {
                     Err(FetchRefused::Blocked)
                 };
             }
-            if target.port() != 443
-                || self.private_hosts.lock().unwrap().iter().any(|h| h == host)
+            if target.port() != 443 || self.private_hosts.lock().unwrap().iter().any(|h| h == host)
             {
                 return Err(FetchRefused::Blocked);
             }
@@ -262,11 +261,17 @@ impl ClientDocuments for FixtureDocs {
     }
 }
 
+/// A domain and a Grant of it that stands.
+pub type Standing = ([u8; 32], [u8; 16]);
+
+/// A `grant.issue` Exercise of a domain and the Grant it issued.
+pub type Issued = ([u8; 32], [u8; 32], IssuedGrant);
+
 /// The Grants that stand, by (domain, grant), and what each `grant.issue` Exercise issued.
 #[derive(Clone, Default)]
 pub struct ScriptedStanding {
-    pub live: Arc<Mutex<Vec<([u8; 32], [u8; 16])>>>,
-    pub issued: Arc<Mutex<Vec<([u8; 32], [u8; 32], IssuedGrant)>>>,
+    pub live: Arc<Mutex<Vec<Standing>>>,
+    pub issued: Arc<Mutex<Vec<Issued>>>,
 }
 
 impl GrantStanding for ScriptedStanding {
@@ -799,7 +804,8 @@ impl Cluster {
         };
         let oauth = OAuth::new(env);
         let mut realms = Vec::new();
-        for (_, slug, issuer, subject, secret, keyed_jwks, client_key, n, _, spare, domain) in seeded
+        for (_, slug, issuer, subject, secret, keyed_jwks, client_key, n, _, spare, domain) in
+            seeded
         {
             let host = String::from(issuer.authority());
             let realm = oauth.realm(&host, None).await.unwrap().unwrap();
@@ -902,7 +908,11 @@ impl At<'_> {
         let mut s = access_store::idp::settings(&mut tx).await.unwrap().unwrap();
         s.cimd_enabled = enabled;
         s.cimd_domains = domains.iter().map(|d| String::from(*d)).collect();
-        assert!(access_store::idp::update_settings(&mut tx, &b, &s).await.unwrap());
+        assert!(
+            access_store::idp::update_settings(&mut tx, &b, &s)
+                .await
+                .unwrap()
+        );
         tx.commit().await.unwrap();
     }
 

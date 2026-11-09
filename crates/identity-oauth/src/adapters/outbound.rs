@@ -444,7 +444,8 @@ pub async fn read_answer<S: AsyncRead + Unpin>(
                 _ => return Err(OutboundError::Malformed),
             }
         };
-        let Some((head, status, length, chunked, max_age_s, retry_after_s, content_type)) = complete
+        let Some((head, status, length, chunked, max_age_s, retry_after_s, content_type)) =
+            complete
         else {
             continue;
         };

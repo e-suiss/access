@@ -36,6 +36,8 @@ fn client_identifier_urls_follow_the_draft_rules() {
         "https://localhost/c",
         "https://app.localhost/c",
         "https://127.0.0.1/c",
+        "https://0x7f.0.0.1/c",
+        "https://2130706433/c",
         "https://[::1]/c",
         "https://intranet/c",
         "https://example.com:x/c",
@@ -72,9 +74,15 @@ fn the_document_names_its_url_its_name_and_its_redirects() {
         format!(r#"{{"client_id":"{URL}","redirect_uris":["https://app.example/cb"]}}"#),
         format!(r#"{{"client_id":"{URL}","client_name":"App"}}"#),
         format!(r#"{{"client_id":"{URL}","client_name":"App","redirect_uris":[]}}"#),
-        format!(r#"{{"client_id":"{URL}","client_name":"  ","redirect_uris":["https://a.example/cb"]}}"#),
+        format!(
+            r#"{{"client_id":"{URL}","client_name":"  ","redirect_uris":["https://a.example/cb"]}}"#
+        ),
     ] {
-        assert_eq!(parse(missing.as_bytes(), URL), Err(CimdError::Missing), "{missing}");
+        assert_eq!(
+            parse(missing.as_bytes(), URL),
+            Err(CimdError::Missing),
+            "{missing}"
+        );
     }
     assert_eq!(parse(b"[]", URL), Err(CimdError::Json));
     assert_eq!(parse(b"{", URL), Err(CimdError::Json));
@@ -84,7 +92,7 @@ fn the_document_names_its_url_its_name_and_its_redirects() {
     assert_eq!(parse(big.as_bytes(), URL), Err(CimdError::Json));
 }
 
-// §11.3.1, §11.4.5 #14, Ek B 4537, 4624
+// §11.3.1, §11.4.5, Ek B 4537, 4624
 #[test]
 fn a_document_with_a_shared_secret_is_refused() {
     for extra in [
@@ -95,7 +103,11 @@ fn a_document_with_a_shared_secret_is_refused() {
         r#","token_endpoint_auth_method":"client_secret_jwt""#,
         r#","token_endpoint_auth_method":"private_key_jwt","jwks":{"keys":[{"kty":"EC","crv":"P-256","x":"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU","y":"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0","d":"jpsQnnGQmL-YBIffH1136cLyM6h5lFwpYQjtM0dD0cc"}]}"#,
     ] {
-        assert_eq!(parse(doc(extra).as_bytes(), URL), Err(CimdError::Secret), "{extra}");
+        assert_eq!(
+            parse(doc(extra).as_bytes(), URL),
+            Err(CimdError::Secret),
+            "{extra}"
+        );
     }
     let keyed = parse(
         doc(r#","token_endpoint_auth_method":"private_key_jwt","jwks_uri":"https://app.example/jwks""#)
@@ -103,28 +115,36 @@ fn a_document_with_a_shared_secret_is_refused() {
         URL,
     )
     .unwrap();
-    assert_eq!(keyed.auth, DocumentAuth::JwksUri(String::from("https://app.example/jwks")));
+    assert_eq!(
+        keyed.auth,
+        DocumentAuth::JwksUri(String::from("https://app.example/jwks"))
+    );
     assert!(!keyed.rs256);
 }
 
-// §11.3.9, §11.4.5 #8, SEP-837, Ek B 4177
+// §11.3.9, §11.4.5, SEP-837, Ek B 4177
 #[test]
 fn application_type_is_read_from_the_document() {
-    let native = doc(r#","application_type":"native""#).replace(
-        "https://app.example/cb",
-        "http://127.0.0.1/cb",
-    );
+    let native = doc(r#","application_type":"native""#)
+        .replace("https://app.example/cb", "http://127.0.0.1/cb");
     assert_eq!(
         parse(native.as_bytes(), URL).unwrap().application_type,
         ApplicationType::Native
     );
     let web_loopback = native.replace("native", "web");
-    assert_eq!(parse(web_loopback.as_bytes(), URL), Err(CimdError::Redirect));
+    assert_eq!(
+        parse(web_loopback.as_bytes(), URL),
+        Err(CimdError::Redirect)
+    );
     assert_eq!(
         parse(doc(r#","application_type":"desktop""#).as_bytes(), URL),
         Err(CimdError::ApplicationType)
     );
-    for bad in ["https://*.app.example/cb", "javascript:alert(1)", "app://cb"] {
+    for bad in [
+        "https://*.app.example/cb",
+        "javascript:alert(1)",
+        "app://cb",
+    ] {
         let d = doc("").replace("https://app.example/cb", bad);
         assert_eq!(parse(d.as_bytes(), URL), Err(CimdError::Redirect), "{bad}");
     }
@@ -149,7 +169,11 @@ fn every_fetchable_member_is_an_https_url() {
         r#","policy_uri":"file:///etc/passwd""#,
         r#","client_uri":7"#,
     ] {
-        assert_eq!(parse(doc(extra).as_bytes(), URL), Err(CimdError::Embedded), "{extra}");
+        assert_eq!(
+            parse(doc(extra).as_bytes(), URL),
+            Err(CimdError::Embedded),
+            "{extra}"
+        );
     }
 }
 
@@ -168,7 +192,11 @@ fn authority_members_and_visual_members_change_apart() {
         r#","token_endpoint_auth_method":"none""#,
     ] {
         let moved = parse(doc(extra).as_bytes(), URL).unwrap();
-        assert_eq!(change(digests(&base), digests(&moved)), Change::Authority, "{extra}");
+        assert_eq!(
+            change(digests(&base), digests(&moved)),
+            Change::Authority,
+            "{extra}"
+        );
     }
     let more = doc("").replace(
         r#"["https://app.example/cb"]"#,
@@ -220,7 +248,11 @@ fn only_raster_logos_are_kept() {
 #[test]
 fn the_published_claude_and_chatgpt_documents_resolve() {
     let claude = include_bytes!("../../../tests/fixtures/cimd/claude-code.json");
-    let c = parse(claude, "https://claude.ai/oauth/claude-code-client-metadata").unwrap();
+    let c = parse(
+        claude,
+        "https://claude.ai/oauth/claude-code-client-metadata",
+    )
+    .unwrap();
     assert_eq!(c.application_type, ApplicationType::Native);
     assert_eq!(c.auth, DocumentAuth::None);
     assert!(loopback_only(&c.redirect_uris));

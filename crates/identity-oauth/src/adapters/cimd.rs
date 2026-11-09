@@ -112,8 +112,7 @@ impl ClientDocuments for HttpClientDocuments {
             let allowed = self
                 .rates
                 .lock()
-                .map(|mut r| r.take(realm, url, Instant::now()))
-                .unwrap_or(false);
+                .is_ok_and(|mut r| r.take(realm, url, Instant::now()));
             if !allowed {
                 return Err(FetchRefused::Limited);
             }
@@ -141,21 +140,21 @@ mod tests {
     // OP-154 m.3 (i), Ek B 4536, 4172
     #[test]
     fn fetch_rates_hold_per_url_and_per_realm() {
-        let mut r = FetchRates::default();
-        let t = Instant::now();
-        let a = RealmId::from_bytes([1; 16]);
+        let mut rates = FetchRates::default();
+        let at = Instant::now();
+        let acme = RealmId::from_bytes([1; 16]);
         for _ in 0..PER_URL_PER_MINUTE {
-            assert!(r.take(a, "https://a.example/c", t));
+            assert!(rates.take(acme, "https://a.example/c", at));
         }
-        assert!(!r.take(a, "https://a.example/c", t));
-        assert!(r.take(a, "https://a.example/d", t));
-        assert!(r.take(a, "https://a.example/c", t + WINDOW));
-        let b = RealmId::from_bytes([2; 16]);
-        let mut n = 0;
-        while r.take(b, &format!("https://b.example/{n}"), t) {
-            n += 1;
+        assert!(!rates.take(acme, "https://a.example/c", at));
+        assert!(rates.take(acme, "https://a.example/d", at));
+        assert!(rates.take(acme, "https://a.example/c", at + WINDOW));
+        let beta = RealmId::from_bytes([2; 16]);
+        let mut taken = 0;
+        while rates.take(beta, &format!("https://b.example/{taken}"), at) {
+            taken += 1;
         }
-        assert_eq!(n, PER_REALM_PER_MINUTE);
+        assert_eq!(taken, PER_REALM_PER_MINUTE);
     }
 
     // §11.3.6, RFC 6890, Ek B 4535
@@ -174,6 +173,9 @@ mod tests {
             docs.vet("https://app.example:8443/c").await,
             Err(FetchRefused::Blocked)
         );
-        assert_eq!(docs.vet("http://app.example/c").await, Err(FetchRefused::Url));
+        assert_eq!(
+            docs.vet("http://app.example/c").await,
+            Err(FetchRefused::Url)
+        );
     }
 }

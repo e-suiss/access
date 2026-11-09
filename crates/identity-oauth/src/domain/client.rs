@@ -90,6 +90,10 @@ pub struct CimdFacts {
 
 /// An active client of the realm.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is its own registered property"
+)]
 pub struct Client {
     /// Internal id; the pairwise sector (OP-146 m.5 (b)).
     pub uuid: [u8; 16],
@@ -282,8 +286,7 @@ pub fn redirect_matches(registered: &str, presented: &str) -> bool {
 /// `None` is `invalid_target`.
 #[must_use]
 pub fn canonical_resource(uri: &str) -> Option<String> {
-    if uri.len() > 2048 || !uri.bytes().all(|c| c.is_ascii_graphic()) || uri.contains(['#', '?'])
-    {
+    if uri.len() > 2048 || !uri.bytes().all(|c| c.is_ascii_graphic()) || uri.contains(['#', '?']) {
         return None;
     }
     let (scheme, rest) = uri.split_once("://")?;

@@ -8,8 +8,8 @@ use std::future::Future;
 use access_crypto::jose::JwsAlg;
 use access_crypto::opaque_id::IdKey;
 use access_store::backchannel::LogoutUndelivered;
-use access_store::identity::{Cursor, OutboxEvent, RealmId, TenantId};
 use access_store::clients::{CimdRow, CimdSnapshot, ConsentRecordRow};
+use access_store::identity::{Cursor, OutboxEvent, RealmId, TenantId};
 use access_store::idp::{ClientRow, PlatformClient};
 use access_store::oauth::{
     CodeRow, GrantRow, NewCode, NewGrant, NewRequest, RefreshRow, RequestRow,
@@ -579,7 +579,7 @@ pub trait GrantStanding: Send + Sync {
     /// Whether Grant `grant` of `domain` is live now: issued, not revoked, not lapsed.
     fn live(&self, domain: [u8; 32], grant: [u8; 16]) -> Held<'_, bool>;
 
-    /// The live Grant the ALLOWed `grant.issue` Exercise `exercise` of `domain` created; `None`
+    /// The live Grant the allowed `grant.issue` Exercise `exercise` of `domain` created; `None`
     /// for any other Exercise, a refused one, or a Grant that no longer stands.
     fn issued(&self, domain: [u8; 32], exercise: [u8; 32]) -> Held<'_, Option<IssuedGrant>>;
 }

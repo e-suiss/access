@@ -140,7 +140,8 @@ async fn a_url_client_id_resolves_only_through_its_document() {
 async fn special_purpose_addresses_cancel_the_request() {
     let c = mcp_realm("cimd-ssrf").await;
     let a = c.at(0);
-    a.cimd_policy(true, &["app.example", "internal.example"]).await;
+    a.cimd_policy(true, &["app.example", "internal.example"])
+        .await;
     let docs = &c.oauth.env().documents;
     docs.private_hosts
         .lock()
@@ -163,12 +164,16 @@ async fn special_purpose_addresses_cancel_the_request() {
                 r#","token_endpoint_auth_method":"private_key_jwt","jwks_uri":"{jwks}""#
             )),
         );
-        assert_eq!(problem(&ask(&a, APP, &[]).await), "invalid-client", "{jwks}");
+        assert_eq!(
+            problem(&ask(&a, APP, &[]).await),
+            "invalid-client",
+            "{jwks}"
+        );
         assert!(cimd_uuid(&a, APP).await.is_none(), "nothing kept: {jwks}");
     }
 }
 
-// §11.3.1, §11.4.5 #14, AG-4, Ek B 4537, 4624, 4169, 4170, 4536
+// §11.3.1, §11.4.5, AG-4, Ek B 4537, 4624, 4169, 4170, 4536
 #[tokio::test]
 async fn refused_documents_and_answers_cancel_and_are_never_cached() {
     let c = mcp_realm("cimd-bad").await;
@@ -176,7 +181,10 @@ async fn refused_documents_and_answers_cancel_and_are_never_cached() {
     let docs = &c.oauth.env().documents;
     for (status, body) in [
         (200, doc(r#","client_secret":"s3cret""#)),
-        (200, doc(r#","token_endpoint_auth_method":"client_secret_basic""#)),
+        (
+            200,
+            doc(r#","token_endpoint_auth_method":"client_secret_basic""#),
+        ),
         (200, doc("").replace(APP, "https://app.example/other.json")),
         (200, String::from("not json")),
         (302, doc("")),
@@ -185,15 +193,23 @@ async fn refused_documents_and_answers_cancel_and_are_never_cached() {
     ] {
         docs.serve(APP, status, Some(3_600), &body);
         let before = docs.fetched(APP);
-        assert_eq!(problem(&ask(&a, APP, &[]).await), "invalid-client", "{status} {body}");
+        assert_eq!(
+            problem(&ask(&a, APP, &[]).await),
+            "invalid-client",
+            "{status} {body}"
+        );
         assert_eq!(docs.fetched(APP), before + 1);
         assert!(cimd_uuid(&a, APP).await.is_none());
     }
     assert_eq!(problem(&ask(&a, APP, &[]).await), "invalid-client");
-    assert_eq!(docs.fetched(APP), 8, "a refusal is not cached: fetched again");
+    assert_eq!(
+        docs.fetched(APP),
+        8,
+        "a refusal is not cached: fetched again"
+    );
 }
 
-// §11.6, P58, EI-18, AG-7, AG-8, §11.4.5 #4, #7, #21, Ek B 4246, 4251, 4187, 4425
+// §11.6, P58, EI-18, AG-7, AG-8, §11.4.5, Ek B 4246, 4251, 4187, 4425
 #[tokio::test]
 async fn a_cimd_client_waits_on_a_consent_record_whose_grant_stands() {
     let c = mcp_realm("cimd-flow").await;
@@ -206,7 +222,11 @@ async fn a_cimd_client_waits_on_a_consent_record_whose_grant_stands() {
     let silent = location(&ask(&a, APP, &[("prompt", "none")]).await);
     assert_eq!(query(&silent, "error"), "consent_required");
     assert_eq!(query(&silent, "iss"), a.issuer(), "AG-7 on errors too");
-    assert_eq!(docs.fetched(APP), 1, "the snapshot is the cache within its bounds");
+    assert_eq!(
+        docs.fetched(APP),
+        1,
+        "the snapshot is the cache within its bounds"
+    );
     let client = consent(&a, &["openid"]).await;
     let ok = location(&ask(&a, APP, &[]).await);
     assert!(ok.starts_with(CB), "{ok}");
@@ -237,8 +257,15 @@ async fn a_cimd_client_waits_on_a_consent_record_whose_grant_stands() {
     );
     a.c.oauth.env().standing.live.lock().unwrap().clear();
     let lapsed = location(&ask(&a, APP, &[]).await);
-    assert_eq!(query(&lapsed, "reason"), "approve", "no standing Grant, no code");
-    assert!(!live_record(&a, client).await, "the record ends with its Grant");
+    assert_eq!(
+        query(&lapsed, "reason"),
+        "approve",
+        "no standing Grant, no code"
+    );
+    assert!(
+        !live_record(&a, client).await,
+        "the record ends with its Grant"
+    );
     assert!(query_opt(&lapsed, "code").is_none());
     let _ = CHALLENGE;
 }
@@ -249,7 +276,11 @@ async fn a_cimd_client_names_one_registered_resource() {
     let c = mcp_realm("cimd-res").await;
     let a = c.at(0);
     c.oauth.env().documents.serve(APP, 200, None, &doc(""));
-    for resource in ["", "https://unknown.example/mcp", "https://mcp.example/mcp#x"] {
+    for resource in [
+        "",
+        "https://unknown.example/mcp",
+        "https://mcp.example/mcp#x",
+    ] {
         let r = location(&ask(&a, APP, &[("resource", resource)]).await);
         assert_eq!(query(&r, "error"), "invalid_target", "{resource:?}");
         assert_eq!(query(&r, "iss"), a.issuer());
@@ -281,7 +312,10 @@ async fn an_authority_change_asks_again_and_a_visual_one_only_warns() {
     expire().await;
     docs.serve(APP, 200, None, &doc("").replace("\"App\"", "\"App Pro\""));
     let renamed = location(&ask(&a, APP, &[]).await);
-    assert!(query_opt(&renamed, "code").is_some(), "a new name only warns");
+    assert!(
+        query_opt(&renamed, "code").is_some(),
+        "a new name only warns"
+    );
     assert!(live_record(&a, client).await);
     expire().await;
     docs.serve(APP, 200, None, &doc(r#","scope":"openid email""#));
@@ -422,7 +456,11 @@ async fn only_the_persons_own_allowed_grant_issue_records_a_consent() {
         .approve(realm, Some(&a.f.cookie), &back, a.f.domain, exercise)
         .await
         .unwrap();
-    assert_eq!(none, Err(NotApproved::NoGrant), "consent without an AAS Grant");
+    assert_eq!(
+        none,
+        Err(NotApproved::NoGrant),
+        "consent without an AAS Grant"
+    );
     let standing = &c.oauth.env().standing;
     standing.live.lock().unwrap().push((a.f.domain, GRANT));
     standing.issued.lock().unwrap().push((
@@ -459,12 +497,18 @@ async fn only_the_persons_own_allowed_grant_issue_records_a_consent() {
     assert!(live_record(&a, client).await);
     let p = access_identity_oauth::domain::request::Params::parse(back.split_once('?').unwrap().1)
         .unwrap();
-    let pairs: Vec<(&str, &str)> = [("client_id", APP), ("request_uri", p.get("request_uri").unwrap())]
-        .into_iter()
-        .collect();
+    let pairs: Vec<(&str, &str)> = [
+        ("client_id", APP),
+        ("request_uri", p.get("request_uri").unwrap()),
+    ]
+    .into_iter()
+    .collect();
     let code = a.authorize(&pairs, Some(&a.f.cookie)).await;
     let to = location(&code);
-    assert!(to.starts_with(CB) && query_opt(&to, "code").is_some(), "{to}");
+    assert!(
+        to.starts_with(CB) && query_opt(&to, "code").is_some(),
+        "{to}"
+    );
 }
 
 // AS-M14, AG-6, §11.3, OP-154 m.3 (i), Ek B 4247, 4248, 4249, 4250
