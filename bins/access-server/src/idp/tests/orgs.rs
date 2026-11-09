@@ -921,6 +921,15 @@ async fn membership_claims_wait_for_the_autojoin_cooling() {
     assert!(issued.iter().any(|o| o.subject == carol));
     assert!(issued.iter().any(|o| o.subject == founder));
     assert!(!issued.iter().any(|o| o.subject == bob));
+    // OP-153 m.17 (c), m.25 (a)
+    let scalar = orders(&identity_events(&w.db, "claim.org_member", 2).await);
+    let org_party = access_kernel::model::EqValue::Bytes(ORG.to_vec());
+    assert!(scalar.iter().all(|o| matches!(
+        &o.content,
+        access_identity_account::domain::claims::Content::Scalar(v) if *v == org_party
+    )));
+    assert!(scalar.iter().any(|o| o.subject == carol));
+    assert!(!scalar.iter().any(|o| o.subject == bob));
 }
 
 // TN-120, OP-153 m.3 (p), (gg), OP-153 m.17 (h), Ek B 3625

@@ -471,6 +471,34 @@ pub fn account_status(subject: [u8; 16], status: &str, at: u64) -> ClaimOrder {
     }
 }
 
+/// The line of a subject's `org_member` Claim of organization `org`.
+#[must_use]
+pub fn org_member_line(org: &[u8; 16]) -> [u8; 32] {
+    line(&[b"org_member", org])
+}
+
+/// The `org_member` Claim that `subject` is a member of the organization whose Party is
+/// `org_party` (OP-153 m.17 (c), m.25 (a)): the scalar a `Pred` holder selects one
+/// organization's members by; it holds for `ttl_ms` from `at` on the organization's line.
+#[must_use]
+pub fn org_member(
+    subject: [u8; 16],
+    (org, org_party): ([u8; 16], [u8; 16]),
+    (at, ttl_ms): (u64, u64),
+) -> ClaimOrder {
+    ClaimOrder {
+        subject,
+        class: Class::OrgMember.name(),
+        at,
+        ttl_ms,
+        content: Content::Scalar(EqValue::Bytes(org_party.to_vec())),
+        assurance: BTreeMap::new(),
+        bind: Bind::None,
+        line: Some(org_member_line(&org)),
+        retract: false,
+    }
+}
+
 /// The line of a subject's identity binding of `kind`: the next binding supersedes it.
 #[must_use]
 pub fn binding_line(kind: BindingKind) -> [u8; 32] {

@@ -8609,3 +8609,129 @@ async fn a_root_change_waits_for_the_new_roots_own_acceptance() {
     assert_eq!(state.root, Root::Sole(BOB));
     fold_check(&db.sequencer, d).await.unwrap();
 }
+
+/// Genesis where ALICE is the membership issuer of `org_member` and the members of the
+/// organization `org` hold a Grant to read the shop (OP-153 m.17 (c)).
+fn org_members(org: Id) -> BTreeMap<String, Opened> {
+    let mut g = genesis();
+    let Some(Value::Array(mut grants)) = g.get("grants").map(|o| o.value.clone()) else {
+        panic!("genesis has grants");
+    };
+    let members = SubjectSelector::Pred(BTreeSet::from([access_kernel::model::Conjunct {
+        claim_class: "org_member".to_owned(),
+        value: Some(EqValue::Bytes(org.0.to_vec())),
+    }]));
+    grants.push(Value::Map(vec![
+        (Value::text("anchor"), Value::Unsigned(1)),
+        (Value::text("holder"), members.to_value()),
+        (
+            Value::text("authority"),
+            authority(vec![action("shop", "read")], selector("shop")).to_value(),
+        ),
+        (
+            Value::text("agency"),
+            Value::Array(vec![meta::capacity_value(Capacity::Own)]),
+        ),
+    ]));
+    g.insert(
+        "grants".to_owned(),
+        Opened {
+            value: Value::Array(grants),
+            salt: [3; 32],
+        },
+    );
+    let acceptance = Value::Map(vec![
+        (Value::text("issuer"), ALICE.to_value()),
+        (Value::text("use"), Value::text("subject-selection")),
+        (
+            Value::text("classes"),
+            Value::Array(vec![Value::text("org_member")]),
+        ),
+        (Value::text("subject"), SubjectSelector::Public.to_value()),
+        (
+            Value::text("validity"),
+            Value::Array(vec![Value::Unsigned(0), Value::Unsigned(1_000_000)]),
+        ),
+    ]);
+    add_acceptances(&mut g, vec![acceptance]);
+    g
+}
+
+/// ALICE's `org_member` Claim that `subject` is a member of `org`.
+fn org_member_claim(d: Digest, subject: Id, org: Id) -> Vec<u8> {
+    sign_claim(
+        &access_kernel::claim::Statement {
+            domain: d,
+            issuer: ALICE,
+            subject,
+            class: "org_member".to_owned(),
+            value: Some(EqValue::Bytes(org.0.to_vec())),
+            issued_at: NOW,
+            validity: Window {
+                from: 0,
+                until: 1_000_000,
+            },
+            assurance: BTreeMap::new(),
+            bound_intent: None,
+            bound_instance: None,
+            bound_resource: None,
+            supersedes: None,
+        },
+        ALICE_KEY,
+    )
+}
+
+// OP-153 m.17 (c), m.25 (a), L2-CLB-2, C13
+#[tokio::test]
+async fn an_organizations_rule_shaped_grant_selects_only_its_own_members() {
+    const ORG: Id = Id([0xa1; 16]);
+    const OTHER: Id = Id([0xa2; 16]);
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup_with(&db, org_members(ORG)).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    onboard(&mut core, d, BOB, BOB_KEY, (5, 6)).await;
+    let grant = meta::object_id(&d, kind::GRANT, 1);
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let mut episodes = Vec::new();
+    for (nonce, subject, org) in [(9, ROOT, ORG), (10, BOB, OTHER)] {
+        let ingested = send(
+            &mut core,
+            with_proofs(
+                shop_request(d, nonce, Mode::Commit, shop),
+                vec![ProofRef::Claim(org_member_claim(d, subject, org))],
+            ),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap();
+        allowed(&ingested);
+        episodes.push(ingested.record.unwrap() - 2);
+    }
+    let holding = |holder, since| {
+        ExerciseBasis::Holding(HoldingRef {
+            grant,
+            holder,
+            since,
+        })
+    };
+    allowed(
+        &send(
+            &mut core,
+            shop_request(d, 11, Mode::Commit, holding(ROOT, episodes[0])),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    unresolved(
+        &send(
+            &mut core,
+            shop_request(d, 12, Mode::Commit, holding(BOB, episodes[1])),
+            BOB_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    fold_check(&db.sequencer, d).await.unwrap();
+}

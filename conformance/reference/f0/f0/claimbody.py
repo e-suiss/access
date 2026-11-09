@@ -221,6 +221,7 @@ SCALARS = {
     "controller_of": lambda v: isinstance(v, bytes) and len(v) == 16,
     "operated_by": lambda v: isinstance(v, bytes) and len(v) == 16,
     "sponsored_by": lambda v: isinstance(v, bytes) and len(v) == 16,
+    "org_member": lambda v: isinstance(v, bytes) and len(v) == 16,
 }
 
 

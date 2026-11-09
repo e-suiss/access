@@ -898,6 +898,8 @@ pap-presentation = {
 ;   operated_by              party-ref: the operator
 ;   sponsored_by             party-ref: the sponsor
 ;   agent_kind               ident: the kind of agent
+;   org_member               party-ref: the organization whose member the subject is, so a
+;                            `pred` holder selects one organization's members (OP-153 m.17 (c))
 ; Every other Stage 6 class has a body: its `value` is the 32-byte digest of the
 ; claim-body-binding, and the body travels beside the Claim. A withheld body leaves a
 ; digest-valued Claim (E26).

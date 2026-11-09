@@ -31,6 +31,8 @@
   {"id": "identity-break", "rules": ["L2-CLB-2"], "class": "party_identity_break", "value": "686b65795f6c6f7373", "valid": true},
   {"id": "controller-of", "rules": ["L2-CLB-2"], "class": "controller_of", "value": "5006060606060606060606060606060606", "valid": true},
   {"id": "controller-of-short", "rules": ["L2-CLB-2"], "class": "controller_of", "value": "4f060606060606060606060606060606", "error": "claim-value"},
+  {"id": "org-member", "rules": ["L2-CLB-2"], "class": "org_member", "value": "5007070707070707070707070707070707", "valid": true},
+  {"id": "org-member-digest", "rules": ["L2-CLB-2"], "class": "org_member", "value": "58200707070707070707070707070707070707070707070707070707070707070707", "error": "claim-value"},
   {"id": "agent-kind", "rules": ["L2-CLB-2"], "class": "agent_kind", "value": "69617373697374616e74", "valid": true},
   {"id": "class-outside-the-table", "rules": ["L2-CLB-2"], "class": "kyc", "value": "f5", "valid": true}
  ]

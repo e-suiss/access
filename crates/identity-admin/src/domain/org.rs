@@ -203,6 +203,19 @@ impl SsoDraft {
     }
 }
 
+/// The holder of an organization's rule-shaped Grants, such as its autojoin role Grant (C13,
+/// TN-90): every Party with a live `org_member` Claim naming the organization's Party `org`
+/// (OP-153 m.17 (c), m.25 (a)).
+#[must_use]
+pub fn org_members(org: [u8; 16]) -> access_kernel::model::SubjectSelector {
+    access_kernel::model::SubjectSelector::Pred(std::collections::BTreeSet::from([
+        access_kernel::model::Conjunct {
+            claim_class: access_kernel::claim::body::Class::OrgMember.name(),
+            value: Some(access_kernel::model::EqValue::Bytes(org.to_vec())),
+        },
+    ]))
+}
+
 /// Days the enterprise connection manager template Grant lives (TN-120, PD).
 pub const SSO_MANAGER_DAYS: u64 = 7;
 
@@ -375,6 +388,18 @@ mod tests {
             autojoin: false,
             changed_ms: None,
         }
+    }
+
+    // OP-153 m.17 (c), m.25 (a), C13
+    #[test]
+    fn an_organizations_members_are_selected_by_its_own_party() {
+        use access_kernel::codec::Canonical as _;
+        let a = org_members([1; 16]);
+        assert_ne!(a, org_members([2; 16]));
+        assert_eq!(
+            access_kernel::model::SubjectSelector::from_value(&a.to_value()).unwrap(),
+            a
+        );
     }
 
     // TN-90, OP-153 m.1 (d), Ek B 3612, 4039

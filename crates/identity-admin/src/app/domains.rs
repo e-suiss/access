@@ -289,6 +289,13 @@ impl<P: DomainProbe> DomainWatch<'_, P> {
                         line,
                     );
                     queue(&mut t, &order).await?;
+                    // OP-153 m.17 (c), m.25 (a)
+                    let scalar = access_identity_account::domain::claims::org_member(
+                        m.subject,
+                        (org.id, org.party),
+                        (now, access_identity_account::domain::claims::BINDING_TTL_MS),
+                    );
+                    queue(&mut t, &scalar).await?;
                     t.mark_membership_claim_queued(&m.id).await?;
                     n = n.saturating_add(1);
                 }

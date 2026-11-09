@@ -83,9 +83,12 @@ pub enum Class {
     SponsoredBy,
     /// `agent_kind`: ident value.
     AgentKind,
+    /// `org_member`: Party value, the organization whose member the subject is, so a `Pred`
+    /// holder selects one organization's members (OP-153 m.17 (c), m.25 (a)).
+    OrgMember,
 }
 
-const SIMPLE: [(&str, Class); 16] = [
+const SIMPLE: [(&str, Class); 17] = [
     ("authentication", Class::Authentication),
     ("authenticator_binding", Class::AuthenticatorBinding),
     ("posture_device", Class::PostureDevice),
@@ -102,6 +105,7 @@ const SIMPLE: [(&str, Class); 16] = [
     ("operated_by", Class::OperatedBy),
     ("sponsored_by", Class::SponsoredBy),
     ("agent_kind", Class::AgentKind),
+    ("org_member", Class::OrgMember),
 ];
 
 const IDENTITY_BINDING: &str = "identity_binding_";
@@ -1125,9 +1129,10 @@ fn scalar_ok(class: Class, value: Option<&EqValue>) -> bool {
         (Class::PartyIdentityBreak | Class::AgentKind, Some(EqValue::Text(t))) => {
             ident(&Value::text(t)).is_ok()
         }
-        (Class::ControllerOf | Class::OperatedBy | Class::SponsoredBy, Some(EqValue::Bytes(b))) => {
-            b.len() == 16
-        }
+        (
+            Class::ControllerOf | Class::OperatedBy | Class::SponsoredBy | Class::OrgMember,
+            Some(EqValue::Bytes(b)),
+        ) => b.len() == 16,
         _ => false,
     }
 }
