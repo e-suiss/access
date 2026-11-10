@@ -120,7 +120,7 @@ async fn ready_with(
 // OP-153 m.3 (b), m.10 (e), C6, Ek B 4082, 3599
 #[tokio::test]
 async fn an_organization_party_is_self_registered_and_never_gets_an_instance() {
-    let (w, at, d, founder) = ready("org-party").await;
+    let (w, at, d, founder) = Box::pin(ready("org-party")).await;
     assert_eq!(
         Instances::party(&w.plane, d, Id(ORG)).await.unwrap(),
         Some(access_identity_admin::ports::PartyKind {
@@ -223,7 +223,7 @@ async fn refused(w: &World, p: &Proposal) -> Invalid {
 // TN-5, TN-3, OP-153 m.3 (b), TN-91, OP-153 m.3 (p), OP-153 m.4, Ek B 3598, 3618, 4077
 #[tokio::test]
 async fn an_organization_is_created_through_commit_and_keeps_its_last_owner() {
-    let (w, at, d, founder) = ready("orgs").await;
+    let (w, at, d, founder) = Box::pin(ready("orgs")).await;
     let create = compile(
         Op::CreateOrganization,
         None,
@@ -324,7 +324,7 @@ async fn create_org(w: &World, at: (TenantId, RealmId), d: Digest, founder: [u8;
 // TN-89, OP-153 m.3 (o), HL-39, Ek B 3606, 3607, 3829
 #[tokio::test]
 async fn an_invitation_is_committed_mailed_limited_and_revoked() {
-    let (w, at, d, founder) = ready("org-invite").await;
+    let (w, at, d, founder) = Box::pin(ready("org-invite")).await;
     let org = create_org(&w, at, d, founder).await;
     let body = json!({
         "email": "Bob@ACME.example",
@@ -406,7 +406,7 @@ async fn an_invitation_is_committed_mailed_limited_and_revoked() {
 // TN-98, §10.2.6, TN-90, OP-149 m.4, Ek B 3436, 3454, 3611
 #[tokio::test]
 async fn home_realm_discovery_needs_a_verified_uncontested_domain() {
-    let (w, at, d, founder) = ready("org-hrd").await;
+    let (w, at, d, founder) = Box::pin(ready("org-hrd")).await;
     let org = create_org(&w, at, d, founder).await;
     let patch = |body: serde_json::Value| {
         compile(
@@ -556,7 +556,7 @@ async fn age(w: &World, at: (TenantId, RealmId), checked_s: i64, changed_s: i64)
 // TN-90, TN-98, §10.2.6, OP-153 m.3 (o), (gg), Ek B 3611, 3436, 3454, 3612, 4039
 #[tokio::test]
 async fn a_domain_is_verified_by_its_challenge_watched_contested_and_lapsed() {
-    let (w, at, d, founder) = ready("org-domains").await;
+    let (w, at, d, founder) = Box::pin(ready("org-domains")).await;
     let org = create_org(&w, at, d, founder).await;
     let claim = |domain: &str| {
         compile(
@@ -781,7 +781,7 @@ async fn role(
 // TN-89, TN-5, §12.3.8, OP-153 m.3 (o), (gg), Ek B 3604, 3606
 #[tokio::test]
 async fn an_accepted_invitations_role_is_issued_by_the_inviters_current_authority() {
-    let (w, at, d, founder) = ready("org-role").await;
+    let (w, at, d, founder) = Box::pin(ready("org-role")).await;
     let org = create_org(&w, at, d, founder).await;
     onboard(&w.plane, d, ALICE, ALICE_KEY).await;
     let define = Payload::AuthoritySetDefine {
@@ -893,7 +893,7 @@ async fn an_accepted_invitations_role_is_issued_by_the_inviters_current_authorit
 // TN-109, TN-90, OP-153 m.3 (o), (p), (gg), Ek B 3613, 3604
 #[tokio::test]
 async fn membership_claims_wait_for_the_autojoin_cooling() {
-    let (w, at, d, founder) = ready("org-cool").await;
+    let (w, at, d, founder) = Box::pin(ready("org-cool")).await;
     let org = create_org(&w, at, d, founder).await;
     let bob = account(&w, at, "bob@acme.example").await;
     let carol = account(&w, at, "carol@acme.example").await;
@@ -983,7 +983,7 @@ async fn an_owner_issues_the_autojoin_role_to_the_organizations_org_member_claim
     use access_identity_admin::app::org_flows::NOT_THE_AUTOJOIN_GRANT;
     use access_identity_admin::app::transfers::OWNER_ONLY;
     use access_identity_admin::domain::org::org_members;
-    let (w, at, d, founder) = ready("org-autojoin").await;
+    let (w, at, d, founder) = Box::pin(ready("org-autojoin")).await;
     create_org(&w, at, d, founder).await;
     onboard(&w.plane, d, ALICE, ALICE_KEY).await;
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
@@ -1141,7 +1141,7 @@ async fn the_connection_manager_template_only_drafts_for_seven_days_and_never_de
     use access_identity_admin::domain::org::{
         SSO_MANAGER_ROLE, sso_manager_grant, sso_manager_set,
     };
-    let (w, at, d, founder) = ready("org-sso").await;
+    let (w, at, d, founder) = Box::pin(ready("org-sso")).await;
     let org = create_org(&w, at, d, founder).await;
     onboard(&w.plane, d, ALICE, ALICE_KEY).await;
     let bob = account(&w, at, "it@acme.example").await;
@@ -1407,7 +1407,7 @@ async fn root_signed(w: &World, p: &Proposal) -> Vec<u8> {
 async fn a_guardianship_is_recorded_under_its_decision_and_ends_at_majority_unsigned() {
     use access_identity_account::domain::claim_classes::GuardianshipBasis;
     use access_identity_admin::domain::accounts::GuardianshipRecord;
-    let (w, at, d, founder) = ready("household-record").await;
+    let (w, at, d, founder) = Box::pin(ready("household-record")).await;
     let child = account(&w, at, "kid@family.example").await;
     let grown = account(&w, at, "grown@family.example").await;
     let v = vault_of(&w, at.1);
@@ -1870,7 +1870,7 @@ async fn members_delegate_only_to_the_apps_their_role_lists() {
     };
     const APP: Id = Id([0x5a; 16]);
     const OTHER: Id = Id([0x5b; 16]);
-    let (w, at, d, founder) = ready("org-apps").await;
+    let (w, at, d, founder) = Box::pin(ready("org-apps")).await;
     let _org = create_org(&w, at, d, founder).await;
     onboard(&w.plane, d, ALICE, ALICE_KEY).await;
     let idp = meta::object_id(&d, kind::ANCHOR, IDP_ANCHOR);
@@ -1975,7 +1975,7 @@ async fn members_delegate_only_to_the_apps_their_role_lists() {
 // TN-90, §12.3.8, OP-153 m.3 (gg), Ek B 3611
 #[tokio::test]
 async fn an_idp_domain_claim_is_verified_by_an_owners_upstream_assertion() {
-    let (w, at, d, founder) = ready("org-idp").await;
+    let (w, at, d, founder) = Box::pin(ready("org-idp")).await;
     let org = create_org(&w, at, d, founder).await;
     let claim = compile(
         Op::ClaimOrganizationDomain,

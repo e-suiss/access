@@ -52,9 +52,8 @@ pub const fn id_member(kind: ResourceKind) -> &'static str {
         ResourceKind::Hooks => "hook_id",
         ResourceKind::Webhooks => "webhook_id",
         ResourceKind::Agents => "agent",
-        ResourceKind::SamlSps => "name",
-        ResourceKind::CustomDomains => "host",
         ResourceKind::SamlSps | ResourceKind::SshHostGroups => "name",
+        ResourceKind::CustomDomains => "host",
         _ => "client_id",
     }
 }
