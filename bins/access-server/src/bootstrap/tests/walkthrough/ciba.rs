@@ -195,7 +195,7 @@ fn form(pairs: &[(&str, &str)]) -> String {
 
 impl Desk {
     /// The root's `change` of the realm.
-    async fn root_change(&self, change: Change) {
+    pub(super) async fn root_change(&self, change: Change) {
         let declared = DeclaredTargets::default();
         let b = Bootstrap {
             app: &self.w.db.app,
