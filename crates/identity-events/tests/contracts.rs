@@ -146,7 +146,6 @@ const ACCOUNT: &str = "usr_0b5yq2mtzk6x4hd1e8fg3wa7rc";
 
 /// OP-151 m.3 (i): every identity event the account use cases queue and every one whose
 /// producer arrives later.
-#[expect(clippy::too_many_lines, reason = "one sample per identity event")]
 fn identity_events() -> Vec<IdentityEvent> {
     use access_identity_account::domain::events::{AccountEvent, CredentialChange, EventOrder};
     use access_identity_account::domain::status::AccountStatus;
