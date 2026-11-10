@@ -83,6 +83,7 @@ fn usage() -> ExitCode {
     eprintln!("  list               list check names");
     eprintln!("  catalog            regenerate catalogs from the local spec (OP-81)");
     eprintln!("  interop-table      regenerate conformance/interop/COMPATIBILITY.md from lab.toml");
+    eprintln!("  seam-dependencies  regenerate conformance/seams/DEPENDENCIES.md (PI-14)");
     ExitCode::FAILURE
 }
 
@@ -108,6 +109,13 @@ fn main() -> ExitCode {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
                 eprintln!("interop-table: {error}");
+                ExitCode::FAILURE
+            }
+        },
+        Some("seam-dependencies") => match rules::privileged::write(&root) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("seam-dependencies: {error}");
                 ExitCode::FAILURE
             }
         },

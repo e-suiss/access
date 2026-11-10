@@ -1,0 +1,62 @@
+# What each service still depends on beyond its crates and endpoints (PI-14, OP-156 m.2 Q1).
+# `cargo xtask seam-dependencies` renders this into DEPENDENCIES.md.
+
+[[declared]]
+service = "access-product-twin"
+dependency = "Platform client"
+why = "the platform realm's root registers its client with `idp.client.register` (OP-149 m.4); a third-party product is registered the same way"
+
+[[declared]]
+service = "access-product-twin"
+dependency = "Client certificate"
+why = "the transport authenticates it as its own PEP (L1-ADP-2) with a certificate from any CA the deployment trusts"
+
+[[declared]]
+service = "access-product-twin"
+dependency = "Domain Acceptances"
+why = "its schema and Claims take effect only through the domain's own Acceptance Exercises (§7.9.10.3, PI-3)"
+
+[[declared]]
+service = "access-product-twin"
+dependency = "Custodial key"
+why = "none: its service and client keys are its own"
+
+[[declared]]
+service = "access-executor"
+dependency = "Client certificate"
+why = "the transport authenticates it as its own PEP (L1-ADP-2); the token vault's Resource lists that PEP by thumbprint"
+
+[[declared]]
+service = "access-executor"
+dependency = "Operator Party"
+why = "it is an Instance of its operator's Party, registered by its own self-signed Exercises (AG-40, L0-META-7)"
+
+[[declared]]
+service = "access-executor"
+dependency = "Custodial key"
+why = "none: upstream tokens live in its memory for one Exercise and its Instance key is its own"
+
+[[declared]]
+service = "access-experience"
+dependency = "Caller statement"
+why = "it reads with the caller's own Actor Intent Statement and holds no authority (CMP-16)"
+
+[[declared]]
+service = "access-experience"
+dependency = "Custodial key"
+why = "none"
+
+[[declared]]
+service = "access-vc-verifier"
+dependency = "Client certificate"
+why = "the transport authenticates it as its own PEP for Claim Ingest (L1-ADP-2)"
+
+[[declared]]
+service = "access-vc-verifier"
+dependency = "Trusted lists"
+why = "the operator installs the trusted lists it checks issuers against"
+
+[[declared]]
+service = "access-vc-verifier"
+dependency = "Custodial key"
+why = "none: its request and Instance keys are its own"

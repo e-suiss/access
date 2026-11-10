@@ -25,6 +25,8 @@ mod limits;
 mod manifest;
 #[path = "rules_personal.rs"]
 mod personal;
+#[path = "rules_privileged.rs"]
+pub(crate) mod privileged;
 #[path = "rules_profile.rs"]
 mod profile;
 #[path = "rules_progress.rs"]
@@ -192,6 +194,11 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "interop-lab",
             run: interop::check_lab,
+        },
+        // PI-14, OP-156 m.2 Q1
+        Check {
+            name: "no-privileged-path",
+            run: privileged::check,
         },
     ]);
     all
