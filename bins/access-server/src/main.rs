@@ -1873,7 +1873,9 @@ async fn serve(
     let (proxy_stop, proxy_stopped) = tokio::sync::watch::channel(false);
     let proxy_watch = proxy::watch(
         forward_auth.clone(),
-        Arc::new(tokio::sync::Notify::new()),
+        doorbell
+            .as_ref()
+            .map_or_else(|| Arc::new(tokio::sync::Notify::new()), |d| d.proxy.clone()),
         proxy_stopped,
     );
     // OP-155 m.3 (q)

@@ -22,6 +22,8 @@ pub(crate) struct Doorbell {
     pub(crate) bell: Arc<dyn Bell>,
     /// What a ring wakes.
     pub(crate) wake: Arc<Notify>,
+    /// What a ring wakes for forward-auth: its decision cache is emptied (OP-156 m.3 (l)).
+    pub(crate) proxy: Arc<Notify>,
     stop: watch::Sender<bool>,
     tasks: [JoinHandle<()>; 2],
 }
@@ -94,15 +96,21 @@ impl Doorbell {
             }
         }));
         let woken = wake.clone();
+        let proxy = Arc::new(Notify::new());
+        let rung = proxy.clone();
         let listening = tokio::spawn(client::listen(
             cfg.clone(),
             stopped,
-            move |_, _| woken.notify_one(),
+            move |_, _| {
+                woken.notify_one();
+                rung.notify_one();
+            },
             |e| unavailable(&e),
         ));
         Self {
             bell: Arc::new(queue),
             wake,
+            proxy,
             stop,
             tasks: [publishing, listening],
         }
