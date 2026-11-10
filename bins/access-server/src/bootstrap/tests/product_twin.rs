@@ -29,6 +29,8 @@ use tower::ServiceExt as _;
 
 use super::*;
 
+mod critical_interrupt;
+
 /// The PEP name the twin's client certificate authenticates as (L1-ADP-2).
 const TWIN_PEP: &str = "cHJvZHVjdC10d2luLWNlcnRpZmljYXRlLXRodW1icHJpbnQ";
 

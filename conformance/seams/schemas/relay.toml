@@ -1,0 +1,16 @@
+# Suiss Relay's critical interrupt (E48, Ek B 4494): a personal agent breaks through the person's
+# quiet hours only under the person's own Grant of `relay.interrupt.critical`, scoped on the
+# person's self-anchor (for example "everything from my mother"). The agent can neither give it
+# to itself nor widen it, and Relay asks Access at delivery. No new Kernel primitive.
+product = "Suiss Relay"
+namespace = "relay.interrupt"
+catalog_version = 1
+truth = ["delivery", "quiet hours", "interrupt level"]
+
+[[actions]]
+name = "critical"
+major = 1
+effect_class = "irreversible"
+reversibility = "irreversible"
+resource_types = ["interrupt"]
+render = "Interrupt you at the critical level"
