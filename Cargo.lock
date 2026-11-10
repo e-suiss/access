@@ -78,7 +78,6 @@ dependencies = [
  "access-internal-api",
  "access-store",
  "access-telemetry",
- "aws-lc-rs",
  "clap",
  "esuiss-access-kernel",
  "esuiss-access-sdk",

@@ -3,6 +3,8 @@
 //! kept `0600` by the caller), and the `SSH2_AGENTC_ADD_ID_CONSTRAINED` message that hands the
 //! key and its certificate to `ssh-agent` with a lifetime (draft-miller-ssh-agent).
 
+use core::fmt::Write as _;
+
 use suiss_crypto::note::base64_encode;
 
 use super::cert::{CERT_TYPE, Certificate};
@@ -21,6 +23,9 @@ pub const AGENT_SUCCESS: u8 = 6;
 
 /// The magic of the private key format.
 const AUTH_MAGIC: &[u8] = b"openssh-key-v1\0";
+
+/// The PEM label of the format.
+pub const PEM_LABEL: &str = "OPENSSH PRIVATE KEY";
 
 fn private_part(seed: &[u8; 32], key: &Ed25519Public) -> Vec<u8> {
     let mut out = Vec::with_capacity(64);
@@ -62,12 +67,12 @@ pub fn private_key_file(
         .string(&key.blob())?
         .string(private.bytes())?;
     let b64 = base64_encode(w.bytes());
-    let mut out = String::from("-----BEGIN OPENSSH PRIVATE KEY-----\n");
+    let mut out = format!("-----BEGIN {PEM_LABEL}-----\n");
     for line in b64.as_bytes().chunks(70) {
         out.push_str(core::str::from_utf8(line).map_err(|_| SshError::Malformed)?);
         out.push('\n');
     }
-    out.push_str("-----END OPENSSH PRIVATE KEY-----\n");
+    let _ = writeln!(out, "-----END {PEM_LABEL}-----");
     Ok(out)
 }
 
@@ -106,8 +111,8 @@ mod tests {
     #[test]
     fn the_private_key_file_is_padded_and_armoured() {
         let file = private_key_file(&[1; 32], &Ed25519Public([2; 32]), "c", 7).unwrap();
-        assert!(file.starts_with("-----BEGIN OPENSSH PRIVATE KEY-----\n"));
-        assert!(file.ends_with("-----END OPENSSH PRIVATE KEY-----\n"));
+        assert!(file.starts_with(&format!("-----BEGIN {PEM_LABEL}-----\n")));
+        assert!(file.ends_with(&format!("-----END {PEM_LABEL}-----\n")));
         assert!(file.lines().all(|l| l.len() <= 70));
         let msg = add_identity(
             &Certificate(vec![0; 10]),

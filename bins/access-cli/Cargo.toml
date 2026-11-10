@@ -21,7 +21,6 @@ access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 access-sdk = { workspace = true, features = ["std"] }
 access-store = { workspace = true }
-aws-lc-rs = { workspace = true }
 clap = { workspace = true, features = ["std", "derive", "help", "usage", "error-context"] }
 figment = { workspace = true, features = ["env", "toml"] }
 httparse = { workspace = true, features = ["std"] }

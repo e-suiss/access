@@ -203,15 +203,22 @@ fn instance_key(k: &KeyArgs) -> Result<InstanceKey, SshError> {
     InstanceKey::load(&source).map_err(|e| SshError::Config(e.to_string()))
 }
 
-/// A fresh Ed25519 key: its seed, kept secret, and its public key.
+/// A fresh Ed25519 key: its seed, kept secret, and its public key, read back through its
+/// PKCS#8 v1 document (RFC 8410).
 fn ephemeral() -> Result<(Secret<[u8; 32]>, Ed25519Public), SshError> {
-    use aws_lc_rs::signature::KeyPair as _;
+    const PKCS8_V1: [u8; 16] = [
+        0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04,
+        0x20,
+    ];
     let seed = Secret::new(random::<32>()?);
-    let pair = aws_lc_rs::signature::Ed25519KeyPair::from_seed_unchecked(seed.expose())
+    let mut doc = PKCS8_V1.to_vec();
+    doc.extend_from_slice(seed.expose());
+    let pair = suiss_crypto::signer::SoftSigner::ed25519_from_pkcs8(&Secret::new(doc))
         .map_err(|_| SshError::Failed(String::from("ephemeral key")))?;
-    let public = <[u8; 32]>::try_from(pair.public_key().as_ref())
-        .map_err(|_| SshError::Failed(String::from("ephemeral key")))?;
-    Ok((seed, Ed25519Public(public)))
+    match suiss_crypto::signer::Signer::public_key(&pair) {
+        suiss_crypto::cose::PublicKey::Ed25519(k) => Ok((seed, Ed25519Public(k))),
+        _ => Err(SshError::Failed(String::from("ephemeral key"))),
+    }
 }
 
 struct Session<'a> {
@@ -661,5 +668,13 @@ mod tests {
         );
         assert_eq!(form_decode("a%2Fb+c").unwrap(), "a/b c");
         assert_eq!(form_decode("%zz"), None);
+    }
+
+    #[test]
+    fn a_fresh_key_reads_back_from_its_seed() {
+        let (seed, public) = ephemeral().unwrap();
+        let (again, _) = ephemeral().unwrap();
+        assert_ne!(seed.expose(), again.expose());
+        assert_ne!(public.0, [0; 32]);
     }
 }
