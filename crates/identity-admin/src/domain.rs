@@ -509,6 +509,7 @@ pub enum Invalid {
 impl Invalid {
     /// Stable reason code.
     #[must_use]
+    #[expect(clippy::too_many_lines, reason = "one arm per reason code")]
     pub const fn code(self) -> &'static str {
         match self {
             Self::ClientId => "invalid-client-id",
