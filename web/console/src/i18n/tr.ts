@@ -693,4 +693,16 @@ export const tr: Record<Key, string> = {
   ssoSetupSend: "Bağlantıyı oluştur",
   ssoSetupShown: "Bu tek kullanımlık bağlantı 72 saat çalışır ve yalnız bir kez gösterilir:",
   orgDraftSaml: "SAML · {entity}",
+  domainsTitle: "Özel alan adları",
+  domainsIntro:
+    "Girişi ve Frontend API'yi kendi alan adında sun. Access bunu 90 günde bir yeniden denetler.",
+  domainStepTxt: "1. Bu TXT kaydını _access-challenge.{host} adresinde yayımla:",
+  domainStepCname: "2. {host} adresini CNAME kaydıyla {target} adresine yönlendir.",
+  domainStepCheck: "3. Kayıtları denetle",
+  domainConfirmed: "Kayıtlar doğrulandı. Sertifika çıkarılıyor.",
+  domainCertificateReady: "{date} tarihine kadar kendi sertifikasıyla sunuluyor.",
+  domainCheckFailed:
+    "Kayıtlar henüz eşleşmiyor. DNS değişiklikleri zaman alabilir; eşleşene kadar bu alan adında hiçbir şey sunulmaz.",
+  domainRpIdNote:
+    "Geçiş anahtarları onaylanmış bir özel alan adı ister; issuer'ı ya da geçiş anahtarı alan adını ona bağlamak geri alınamaz.",
 };

@@ -31,3 +31,7 @@ mail-ciba_invite-subject = Bir uygulama bir isteği onaylamanı istiyor
 mail-sso_setup_link-subject = Kuruluşun için girişi kur
 mail-upstream_subject_conflict-subject = Kuruluşunun giriş hesabın değişti
 mail-ldap_credential_changed-subject = Hesabındaki bir uygulama parolası değişti
+mail-semantic_notice-subject = Dikkatini gerektiren bir şey var
+mail-security_authority_notice-subject = Senin adına hareket edebilenlerde bir değişiklik
+mail-passkey_setup_invite-subject = Geçiş anahtarını kur
+mail-critical_interrupt-subject = Ajanından acil bir ileti

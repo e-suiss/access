@@ -414,11 +414,86 @@ pub enum TextId {
     /// P5: ends the setup and spends the link (TN-134).
     #[serde(rename = "sso_setup.finish")]
     SsoSetupFinish,
+    /// P2: a push verification is on its way to the approver (OP-156 m.3 (d)).
+    #[serde(rename = "push.title")]
+    PushTitle,
+    /// P2: the number to type into the approver; the push itself never carries it (OP-156 m.3 (d)).
+    #[serde(rename = "push.number")]
+    PushNumber,
+    /// P2: waiting for the approver's answer, at most 120 seconds.
+    #[serde(rename = "push.waiting")]
+    PushWaiting,
+    /// P2: the push was refused; nothing was done.
+    #[serde(rename = "push.denied")]
+    PushDenied,
+    /// P2: the push expired unanswered.
+    #[serde(rename = "push.expired")]
+    PushExpired,
+    /// P2: push is held after a refusal or unanswered requests; another way is offered (OP-156 m.3 (d)).
+    #[serde(rename = "push.held")]
+    PushHeld,
+    /// P2: the person answered "This wasn't me"; a risk signal and a security notice follow (OP-156 m.3 (d)).
+    #[serde(rename = "push.not_me")]
+    PushNotMe,
+    /// P2: sends a push to the approver.
+    #[serde(rename = "action.send_push")]
+    SendPush,
+    /// P2: the SMS one-time code field (OP-156 m.3 (f)).
+    #[serde(rename = "label.sms_code")]
+    SmsLabel,
+    /// P2: sends an SMS one-time code (OP-156 m.3 (f)).
+    #[serde(rename = "action.send_sms")]
+    SendSms,
+    /// P2: an SMS code was sent to the number ending in the digits shown.
+    #[serde(rename = "sms.sent")]
+    SmsSent,
+    /// P2: an SMS method cannot be used now, the same text for a recent SIM change, a missing signal or a template (OP-156 m.3 (f)).
+    #[serde(rename = "sms.refused")]
+    SmsRefused,
+    /// P8: Secure Payment Confirmation (OP-156 m.3 (g)).
+    #[serde(rename = "spc.title")]
+    SpcTitle,
+    /// P8: the payment shown did not match the request byte for byte; nothing was approved.
+    #[serde(rename = "spc.mismatch")]
+    SpcMismatch,
+    /// P2: the app-controlled factor: the app's key together with its PIN (OP-156 m.3 (e)).
+    #[serde(rename = "app_factor.title")]
+    AppFactorTitle,
+    /// P2: the PIN is checked on the device only and never sent.
+    #[serde(rename = "app_factor.pin")]
+    AppFactorPin,
+    /// P1: the forward-auth interstitial before an application (OP-156 m.3 (l)).
+    #[serde(rename = "proxy.title")]
+    ProxyTitle,
+    /// P1: the application refused the request; the same text for every reason.
+    #[serde(rename = "proxy.refused")]
+    ProxyRefused,
+    /// P1: Access could not be reached; the request is refused (OP-156 m.3 (l)).
+    #[serde(rename = "proxy.unavailable")]
+    ProxyUnavailable,
+    /// P8: approving an SSH certificate for the terminal (OP-156 m.3 (o)).
+    #[serde(rename = "ssh.title")]
+    SshTitle,
+    /// P8: approve only if the person started it from the terminal; the code matches the terminal's.
+    #[serde(rename = "ssh.request")]
+    SshRequest,
+    /// P8: done; back to the terminal.
+    #[serde(rename = "ssh.approved")]
+    SshApproved,
+    /// P1: the Linux console sign-in waits on a device code or an approver (OP-156 m.3 (p)).
+    #[serde(rename = "linux.signin_pending")]
+    LinuxPending,
+    /// P8: a sudo step-up asks for a phishing-resistant authenticator (OP-156 m.3 (p)).
+    #[serde(rename = "linux.step_up")]
+    LinuxStepUp,
+    /// P1: Access cannot be reached and the host's saved sign-in has run out; refused (MD-8).
+    #[serde(rename = "linux.unavailable")]
+    LinuxUnavailable,
 }
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 136] = [
+    pub const ALL: [Self; 161] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -555,6 +630,31 @@ impl TextId {
         Self::SsoSetupScim,
         Self::SsoSetupSave,
         Self::SsoSetupFinish,
+        Self::PushTitle,
+        Self::PushNumber,
+        Self::PushWaiting,
+        Self::PushDenied,
+        Self::PushExpired,
+        Self::PushHeld,
+        Self::PushNotMe,
+        Self::SendPush,
+        Self::SmsLabel,
+        Self::SendSms,
+        Self::SmsSent,
+        Self::SmsRefused,
+        Self::SpcTitle,
+        Self::SpcMismatch,
+        Self::AppFactorTitle,
+        Self::AppFactorPin,
+        Self::ProxyTitle,
+        Self::ProxyRefused,
+        Self::ProxyUnavailable,
+        Self::SshTitle,
+        Self::SshRequest,
+        Self::SshApproved,
+        Self::LinuxPending,
+        Self::LinuxStepUp,
+        Self::LinuxUnavailable,
     ];
 
     /// The stable id on the wire.
@@ -698,6 +798,31 @@ impl TextId {
             Self::SsoSetupScim => "sso_setup.scim",
             Self::SsoSetupSave => "sso_setup.save",
             Self::SsoSetupFinish => "sso_setup.finish",
+            Self::PushTitle => "push.title",
+            Self::PushNumber => "push.number",
+            Self::PushWaiting => "push.waiting",
+            Self::PushDenied => "push.denied",
+            Self::PushExpired => "push.expired",
+            Self::PushHeld => "push.held",
+            Self::PushNotMe => "push.not_me",
+            Self::SendPush => "action.send_push",
+            Self::SmsLabel => "label.sms_code",
+            Self::SendSms => "action.send_sms",
+            Self::SmsSent => "sms.sent",
+            Self::SmsRefused => "sms.refused",
+            Self::SpcTitle => "spc.title",
+            Self::SpcMismatch => "spc.mismatch",
+            Self::AppFactorTitle => "app_factor.title",
+            Self::AppFactorPin => "app_factor.pin",
+            Self::ProxyTitle => "proxy.title",
+            Self::ProxyRefused => "proxy.refused",
+            Self::ProxyUnavailable => "proxy.unavailable",
+            Self::SshTitle => "ssh.title",
+            Self::SshRequest => "ssh.request",
+            Self::SshApproved => "ssh.approved",
+            Self::LinuxPending => "linux.signin_pending",
+            Self::LinuxStepUp => "linux.step_up",
+            Self::LinuxUnavailable => "linux.unavailable",
         }
     }
 
@@ -905,6 +1030,31 @@ impl TextId {
             }
             Self::SsoSetupSave => "Save the connection",
             Self::SsoSetupFinish => "Finish setup",
+            Self::PushTitle => "Approve on { $approver }",
+            Self::PushNumber => "Open { $approver } and enter this number: { $number }",
+            Self::PushWaiting => "Waiting for your answer…",
+            Self::PushDenied => "Not approved. Nothing was done.",
+            Self::PushExpired => "This request expired. Send a new one or use another way.",
+            Self::PushHeld => "Requests to your approver are on hold for a while. Use another way to sign in.",
+            Self::PushNotMe => "We stopped this sign-in. If it wasn't you, secure your account.",
+            Self::SendPush => "Send a request to my approver",
+            Self::SmsLabel => "Code from the text message",
+            Self::SendSms => "Text me a code",
+            Self::SmsSent => "We sent a code to the number ending in { $last_digits }.",
+            Self::SmsRefused => "Text message codes can't be used for this number right now. Use another way.",
+            Self::SpcTitle => "Confirm this payment",
+            Self::SpcMismatch => "The payment details didn't match. Nothing was approved.",
+            Self::AppFactorTitle => "Confirm in { $app }",
+            Self::AppFactorPin => "Enter your app PIN on your phone to approve.",
+            Self::ProxyTitle => "Sign in to continue to { $application }",
+            Self::ProxyRefused => "You can't open { $application } with this account.",
+            Self::ProxyUnavailable => "{ $application } can't be opened right now. Try again shortly.",
+            Self::SshTitle => "Approve SSH access",
+            Self::SshRequest => "Your terminal asks for SSH access to { $host_group }. Approve only if you started this and the terminal shows { $code }.",
+            Self::SshApproved => "Done. Go back to your terminal.",
+            Self::LinuxPending => "To sign in, open { $uri } and enter { $code }.",
+            Self::LinuxStepUp => "Confirm it's you with your security key to run this command.",
+            Self::LinuxUnavailable => "Access can't be reached and this computer's saved sign-in has run out. Try again when it's online.",
         }
     }
 
@@ -985,6 +1135,27 @@ impl TextId {
                 | Self::SsoEnforcePreview
                 | Self::SsoEnforceInvites
                 | Self::ConsentTrustMark
+                | Self::PushTitle
+                | Self::PushNumber
+                | Self::PushWaiting
+                | Self::PushDenied
+                | Self::PushExpired
+                | Self::PushHeld
+                | Self::PushNotMe
+                | Self::SendPush
+                | Self::SmsLabel
+                | Self::SendSms
+                | Self::SmsSent
+                | Self::SmsRefused
+                | Self::SpcTitle
+                | Self::SpcMismatch
+                | Self::AppFactorTitle
+                | Self::AppFactorPin
+                | Self::ProxyRefused
+                | Self::SshTitle
+                | Self::SshRequest
+                | Self::SshApproved
+                | Self::LinuxStepUp
         )
     }
 }

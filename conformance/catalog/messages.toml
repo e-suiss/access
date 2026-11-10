@@ -3708,3 +3708,441 @@ surface = "mail"
 class = "notice"
 owner = "identity_plane"
 protected = false
+
+[[message]]
+key = "push-title"
+text_id = "push.title"
+surface = "login"
+class = "step_up"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "push-number"
+text_id = "push.number"
+surface = "login"
+class = "step_up"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "push-waiting"
+text_id = "push.waiting"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "push-denied"
+text_id = "push.denied"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "push-expired"
+text_id = "push.expired"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "push-held"
+text_id = "push.held"
+surface = "login"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "push-not_me"
+text_id = "push.not_me"
+surface = "login"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-send_push"
+text_id = "action.send_push"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-sms_code"
+text_id = "label.sms_code"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-send_sms"
+text_id = "action.send_sms"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "sms-sent"
+text_id = "sms.sent"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "sms-refused"
+text_id = "sms.refused"
+surface = "login"
+class = "auth_failed"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "spc-title"
+text_id = "spc.title"
+surface = "login"
+class = "step_up"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "spc-mismatch"
+text_id = "spc.mismatch"
+surface = "login"
+class = "auth_failed"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "app_factor-title"
+text_id = "app_factor.title"
+surface = "login"
+class = "step_up"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "app_factor-pin"
+text_id = "app_factor.pin"
+surface = "login"
+class = "step_up"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "proxy-title"
+text_id = "proxy.title"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "proxy-refused"
+text_id = "proxy.refused"
+surface = "login"
+class = "auth_failed"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "proxy-unavailable"
+text_id = "proxy.unavailable"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "ssh-title"
+text_id = "ssh.title"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "ssh-request"
+text_id = "ssh.request"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "ssh-approved"
+text_id = "ssh.approved"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "linux-signin_pending"
+text_id = "linux.signin_pending"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "linux-step_up"
+text_id = "linux.step_up"
+surface = "login"
+class = "step_up"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "linux-unavailable"
+text_id = "linux.unavailable"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approvers-title"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approvers-intro"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approvers-add"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approvers-remove"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approvers-none"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "iys-title"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "iys-intro"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "iys-recorded"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "iys-pending"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "iys-failed"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "cloud_key-title"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "cloud_key-intro"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "cloud_key-grant"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "cloud_key-revoke"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "cloud_key-until"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "customer-title"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "merchants-title"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "merchants-limit"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "merchants-stop"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "merchants-none"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "merchants-agreement"
+surface = "account"
+class = "link"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "merchants-agent_badge"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "payment-one_time_title"
+surface = "account"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "payment-one_time_confirm"
+surface = "account"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "attention-approvals_waiting"
+surface = "hub"
+class = "link"
+owner = "access"
+protected = false
+
+[[message]]
+key = "posture-compliant_per"
+surface = "hub"
+class = "claim"
+owner = "access"
+protected = false
+
+[[message]]
+key = "status-notifications_delayed"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "status-access_unavailable"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "offline-title"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "offline-remaining"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "mail-semantic_notice-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-security_authority_notice-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-passkey_setup_invite-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-critical_interrupt-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false

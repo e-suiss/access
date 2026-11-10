@@ -685,6 +685,18 @@ export const en = {
   ssoSetupSend: "Create the link",
   ssoSetupShown: "This one-use link works for 72 hours and is shown once:",
   orgDraftSaml: "SAML · {entity}",
+  domainsTitle: "Custom domains",
+  domainsIntro:
+    "Serve sign-in and the Frontend API on your own domain. Access checks it again every 90 days.",
+  domainStepTxt: "1. Publish this TXT record at _access-challenge.{host}:",
+  domainStepCname: "2. Point {host} to {target} with a CNAME record.",
+  domainStepCheck: "3. Check the records",
+  domainConfirmed: "Records confirmed. A certificate is being issued.",
+  domainCertificateReady: "Served with its own certificate until {date}.",
+  domainCheckFailed:
+    "The records don't match yet. DNS changes can take a while; nothing is served on this domain until they do.",
+  domainRpIdNote:
+    "Passkeys need a confirmed custom domain; binding the issuer or passkey domain to it can't be reversed.",
 } as const;
 
 export type Key = keyof typeof en;

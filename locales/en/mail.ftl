@@ -31,3 +31,7 @@ mail-ciba_invite-subject = An app asks you to approve a request
 mail-sso_setup_link-subject = Set up sign-in for your organization
 mail-upstream_subject_conflict-subject = Your account at your organization's sign-in changed
 mail-ldap_credential_changed-subject = An app password on your account changed
+mail-semantic_notice-subject = Something needs your attention
+mail-security_authority_notice-subject = A change to what can act for you
+mail-passkey_setup_invite-subject = Set up your passkey
+mail-critical_interrupt-subject = An urgent message from your agent
