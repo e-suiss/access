@@ -89,8 +89,6 @@ const UNPRODUCED: &[&str] = &[
     "proxy.plain_headers_refused",
     "mcp_gateway.call",
     "mcp_gateway.tool_blocked",
-    "ssh.certificate_issued",
-    "ssh.krl_published",
     "iys.recorded",
     "iys.failed",
     "first_contact.tokens_issued",

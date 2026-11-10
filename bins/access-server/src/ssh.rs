@@ -757,10 +757,22 @@ where
         let mut t = TenantTx::begin(&self.app, realm.tenant, realm.realm)
             .await
             .map_err(|e| e.to_string())?;
+        let changed = !ended.is_empty();
         for (ca, serial) in ended {
             t.revoke_ssh_certificate(&ca, serial, "basis-ended", now)
                 .await
                 .map_err(|e| e.to_string())?;
+        }
+        // OP-41
+        if changed {
+            t.audit(&AuditEvent {
+                event_type: "ssh.krl_published",
+                actor: "ssh-ca",
+                target: &realm.slug,
+                correlation: "-",
+            })
+            .await
+            .map_err(|e| e.to_string())?;
         }
         let version = t.ssh_krl_version().await.map_err(|e| e.to_string())?;
         t.commit().await.map_err(|e| e.to_string())?;
