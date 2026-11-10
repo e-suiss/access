@@ -1,0 +1,35 @@
+[package]
+name = "access-gw-ldap"
+description = "Access LDAP gateway (§10.6.3, IDP-16, OP-155 m.3 (n)): a read-only LDAP compatibility surface that reaches access-server only over the mTLS edge channel."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-edge-core = { workspace = true, features = ["channel"] }
+access-internal-api = { workspace = true }
+bytes = { workspace = true }
+ldap3_proto = { workspace = true, features = ["strict"] }
+rustls = { workspace = true, features = ["aws_lc_rs", "prefer-post-quantum", "std"] }
+suiss-sandbox = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "time"] }
+tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }
+tokio-util = { workspace = true, features = ["codec"] }
+
+[dev-dependencies]
+access-crypto = { workspace = true, features = ["testing"] }
+access-http = { workspace = true }
+access-identity-account = { workspace = true, features = ["testing"] }
+access-identity-edge = { workspace = true }
+access-identity-x509 = { workspace = true, features = ["testing"] }
+access-store = { workspace = true, features = ["testing"] }
+axum = { workspace = true }
+rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
+suiss-crypto = { workspace = true }
+
+[lints]
+workspace = true

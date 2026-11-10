@@ -681,6 +681,14 @@ criteria = "safe-to-deploy"
 version = "1.5.1"
 criteria = "safe-to-deploy"
 
+[[exemptions.ldap3_lber]]
+version = "0.8.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.ldap3_proto]]
+version = "0.8.1"
+criteria = "safe-to-deploy"
+
 [[exemptions.libc]]
 version = "0.2.190"
 criteria = "safe-to-deploy"
@@ -835,6 +843,18 @@ criteria = "safe-to-deploy"
 
 [[exemptions.pear_codegen]]
 version = "0.2.9"
+criteria = "safe-to-deploy"
+
+[[exemptions.peg]]
+version = "0.8.6"
+criteria = "safe-to-deploy"
+
+[[exemptions.peg-macros]]
+version = "0.8.6"
+criteria = "safe-to-deploy"
+
+[[exemptions.peg-runtime]]
+version = "0.8.6"
 criteria = "safe-to-deploy"
 
 [[exemptions.pem]]

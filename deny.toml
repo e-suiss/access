@@ -40,6 +40,12 @@ allow = ["CDLA-Permissive-2.0"]
 crate = "uniffi"
 allow = ["MPL-2.0"]
 
+# F-1, OP-5, OP-155 m.3 (u): the LDAP codec is MPL-2.0 (file-level copyleft, not GPL), linked
+# unmodified by the LDAP gateway only
+[[licenses.exceptions]]
+crate = "ldap3_proto"
+allow = ["MPL-2.0"]
+
 [[licenses.exceptions]]
 crate = "uniffi_core"
 allow = ["MPL-2.0"]
@@ -162,6 +168,7 @@ deny = [
     { crate = "x509-cert", reason = "OP-155 m.3 (u): rustls-webpki and the in-house bounded DER reader" },
     { crate = "scim_v2", reason = "OP-155 m.3 (g), (u): own SCIM model" },
     { crate = "axum-negotiate-layer", reason = "OP-155 m.3 (o), (u)" },
+    { crate = "ldap3_proto", wrappers = ["access-gw-ldap"], reason = "OP-155 m.3 (n), (u): the LDAP codec is linked only by the LDAP gateway" },
 ]
 
 [[bans.features]]
