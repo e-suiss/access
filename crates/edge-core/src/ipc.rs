@@ -37,8 +37,8 @@ pub enum Op {
     /// Reads a Kerberos `Negotiate` token (SPNEGO or a raw Kerberos initial context token) into
     /// its [`crate::spnego::Token`] (OP-155 m.3 (o)); the segment of the reply is the summary.
     SpnegoRead,
-    /// P4: reads an upstream identity provider's `samlp:Response` or bare `saml:Assertion` and verifies the
-    /// assertion's enveloped signature (`crate::saml::Context`, then the message); answers
+    /// P4: reads an upstream identity provider's `samlp:Response` or bare `saml:Assertion` and
+    /// verifies the assertion's enveloped signature (`crate::saml::Context`, then the message); answers
     /// `crate::saml::AssertionFacts` (OP-155 m.3 (h), IDI-8).
     SamlAssertion,
 }
