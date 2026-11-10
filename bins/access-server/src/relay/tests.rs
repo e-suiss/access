@@ -279,7 +279,10 @@ async fn the_server_courier_delivers_to_relay_once_relay_is_confirmed() {
     assert_eq!(post.schema_errors, Vec::<String>::new());
     assert_eq!(post.event["type"], "relay.message.new_sign_in.v1");
     while w.status().await != json!({ "relay_lag_ms": null, "notifications_delayed": false }) {
-        assert!(Instant::now() < deadline, "the cursor never passed the message");
+        assert!(
+            Instant::now() < deadline,
+            "the cursor never passed the message"
+        );
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     running.stop().await;
