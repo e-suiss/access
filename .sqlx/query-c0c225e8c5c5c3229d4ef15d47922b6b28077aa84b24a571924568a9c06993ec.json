@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT pin_verified FROM access.app_factor_answers\n              WHERE tenant_id = $1 AND realm_id = $2 AND challenge_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pin_verified",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.app_factor_answers",
+            "name": "pin_verified"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c0c225e8c5c5c3229d4ef15d47922b6b28077aa84b24a571924568a9c06993ec"
+}

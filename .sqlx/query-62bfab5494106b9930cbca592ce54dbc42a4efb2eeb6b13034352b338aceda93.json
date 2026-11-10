@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.hibp_mirror_versions (directory, source_host) VALUES ($1, $2)\n         RETURNING version_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.hibp_mirror_versions",
+            "name": "version_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "62bfab5494106b9930cbca592ce54dbc42a4efb2eeb6b13034352b338aceda93"
+}

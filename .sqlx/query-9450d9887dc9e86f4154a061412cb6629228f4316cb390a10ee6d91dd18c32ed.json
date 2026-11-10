@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_device_keys\n                SET hardware_attested = true, pin_policy = 'app_pin', attested_at = clock_timestamp()\n              WHERE tenant_id = $1 AND realm_id = $2 AND device_id = $3\n                AND identity_subject_id = $4 AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9450d9887dc9e86f4154a061412cb6629228f4316cb390a10ee6d91dd18c32ed"
+}

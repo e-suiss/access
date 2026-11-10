@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.sim_change_signals\n           (domain_id, subject_id, claim_id, issuer_id, pos, last_change_ms, checked_ms)\n         VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7e6ee552f7dd835d759d90b414b868a5c84e7c1a8732a60d46b89ebe6a7c16dc"
+}

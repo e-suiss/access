@@ -1,0 +1,115 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT code_id, subject_id, purpose, code_hash, created_ms, expires_ms, attempts,\n                    used_ms\n               FROM access.sms_codes\n              WHERE tenant_id = $1 AND realm_id = $2 AND binding = $3 AND purpose = $4\n              ORDER BY created_ms DESC, code_id DESC LIMIT 1\n              FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "code_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.sms_codes",
+            "name": "code_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.sms_codes",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "purpose",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.sms_codes",
+            "name": "purpose"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "code_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.sms_codes",
+            "name": "code_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.sms_codes",
+            "name": "created_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.sms_codes",
+            "name": "expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "attempts",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "access.sms_codes",
+            "name": "attempts"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "used_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.sms_codes",
+            "name": "used_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "5f5dee6f000decf4fe003ddc19697db562979953f25f24fe46567c563976bb9c"
+}

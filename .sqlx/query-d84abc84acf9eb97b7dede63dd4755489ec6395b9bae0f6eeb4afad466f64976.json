@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.app_factor_answers (tenant_id, realm_id, challenge_id, device_id,\n                    pin_verified)\n             VALUES ($1, $2, $3, $4, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d84abc84acf9eb97b7dede63dd4755489ec6395b9bae0f6eeb4afad466f64976"
+}
