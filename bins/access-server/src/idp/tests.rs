@@ -60,6 +60,7 @@ mod orgs;
 mod platform;
 mod records;
 mod resources;
+mod scim;
 mod social;
 mod workloads;
 

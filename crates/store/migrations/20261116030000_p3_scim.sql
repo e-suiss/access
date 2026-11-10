@@ -69,7 +69,9 @@ CREATE INDEX scim_resources_page ON access.scim_resources
   (tenant_id, realm_id, client_name, kind, resource_id) WHERE deleted_at IS NULL;
 -- OP-73, INV-32: a deleted resource stays deleted
 CREATE FUNCTION access.scim_resource_guard() RETURNS trigger
-  LANGUAGE plpgsql AS $$
+  LANGUAGE plpgsql
+  SET search_path = pg_catalog
+  AS $$
 BEGIN
   IF OLD.deleted_at IS NOT NULL THEN
     RAISE EXCEPTION 'scim resource % is deleted', OLD.resource_id USING ERRCODE = 'P0001';

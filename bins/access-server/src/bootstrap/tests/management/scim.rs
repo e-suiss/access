@@ -462,21 +462,46 @@ async fn filters_pages_and_patches_hold_their_limits() {
     assert_eq!(same["meta"]["lastModified"], after["meta"]["lastModified"]);
 }
 
-// IDP-23, §10.6.2, §10.1.2 k.1, INV-16, Ek B 4821, 4926, 5059
+fn members(q: &[access_store::identity::OutboxEvent]) -> usize {
+    q.iter().filter(|e| e.kind == "scim_claim.member").count()
+}
+
+/// The identity outbox once `ready` holds; the watermark is cluster-wide, so another test's open
+/// transaction delays an entry, never loses it.
+async fn outbox_until(
+    c: &Console,
+    ready: impl Fn(&[access_store::identity::OutboxEvent]) -> bool,
+) -> Vec<access_store::identity::OutboxEvent> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    loop {
+        let queued = access_store::identity::poll(
+            &c.w.db.reader,
+            access_store::identity::Cursor::default(),
+            1000,
+        )
+        .await
+        .unwrap();
+        if ready(&queued) {
+            return queued;
+        }
+        assert!(std::time::Instant::now() < deadline, "outbox");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+// IDP-23, IDP-35, §10.6.2, §10.1.2 k.1, INV-16, Ek B 4818, 4821, 4925, 4926, 5059
 #[tokio::test]
 async fn a_group_has_one_membership_issuer_and_its_members_become_member_claims() {
     let c = console("scim-groups", true).await;
     let s = scim_router(&c);
     let entra = register(&c, "entra", Some("scim.entra")).await;
     let okta = register(&c, "okta", Some("scim.okta")).await;
+    let mut grace = user("grace@contoso.example", "g-1");
+    grace["schemas"] = serde_json::json!([USER, access_identity_scim::domain::schema::ENTERPRISE]);
+    grace[access_identity_scim::domain::schema::ENTERPRISE] =
+        serde_json::json!({ "department": "Research" });
     let (_, _, u) = s
-        .call(
-            Method::POST,
-            "/Users",
-            &entra,
-            Some(user("grace@contoso.example", "g-1")),
-            &[],
-        )
+        .call(Method::POST, "/Users", &entra, Some(grace), &[])
         .await;
     let member = u["id"].as_str().unwrap().to_owned();
     let (st, _, g) = s
@@ -493,6 +518,32 @@ async fn a_group_has_one_membership_issuer_and_its_members_become_member_claims(
         .await;
     assert_eq!(st, StatusCode::CREATED, "{g}");
     let group = g["id"].as_str().unwrap().to_owned();
+
+    // IDP-23, Ek B 4818
+    let (st, _, device) = s
+        .call(
+            Method::POST,
+            "/Devices",
+            &entra,
+            Some(serde_json::json!({
+                "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Device"],
+                "displayName": "Lab sensor 7", "active": true,
+            })),
+            &[],
+        )
+        .await;
+    assert_eq!(st, StatusCode::CREATED, "{device}");
+    assert_eq!(device["meta"]["resourceType"], "Device");
+    let (st, _, _) = s
+        .call(
+            Method::GET,
+            &format!("/Devices/{}", device["id"].as_str().unwrap()),
+            &entra,
+            None,
+            &[],
+        )
+        .await;
+    assert_eq!(st, StatusCode::OK);
 
     // §10.6.2
     let add = serde_json::json!({ "schemas": [PATCH_SCHEMA], "Operations": [
@@ -513,19 +564,15 @@ async fn a_group_has_one_membership_issuer_and_its_members_become_member_claims(
         .await;
     assert_eq!(st, StatusCode::NOT_FOUND);
 
-    let queued = access_store::identity::poll(
-        &c.w.db.reader,
-        access_store::identity::Cursor::default(),
-        1000,
-    )
-    .await
-    .unwrap();
+    let queued = outbox_until(&c, |q| members(q) >= 1).await;
     let orders: Vec<_> = queued
         .iter()
         .filter(|e| e.kind == "scim_claim.member")
         .collect();
     assert_eq!(orders.len(), 1);
     assert!(!queued.iter().any(|e| e.kind.contains("grant")));
+    // IDP-35, Ek B 4925
+    assert!(queued.iter().any(|e| e.kind == "scim_claim.hr_department"));
     let (st, _, user_view) = s
         .call(Method::GET, &format!("/Users/{member}"), &entra, None, &[])
         .await;
@@ -546,20 +593,8 @@ async fn a_group_has_one_membership_issuer_and_its_members_become_member_claims(
         .await;
     assert_eq!(st, StatusCode::OK, "{after}");
     assert!(after.get("members").is_none());
-    let queued = access_store::identity::poll(
-        &c.w.db.reader,
-        access_store::identity::Cursor::default(),
-        1000,
-    )
-    .await
-    .unwrap();
-    assert_eq!(
-        queued
-            .iter()
-            .filter(|e| e.kind == "scim_claim.member")
-            .count(),
-        2
-    );
+    let queued = outbox_until(&c, |q| members(q) >= 2).await;
+    assert_eq!(members(&queued), 2);
 }
 
 #[tokio::test]
@@ -615,4 +650,161 @@ fn form_encode(s: &str) -> String {
             }
         })
         .collect()
+}
+
+/// One push as sent: method, URL, secret and body.
+type Sent = (String, String, Vec<u8>, Option<Vec<u8>>);
+
+struct Recorder {
+    calls: std::sync::Mutex<Vec<Sent>>,
+    replies: std::sync::Mutex<Vec<access_identity_scim::app::outbound::Reply>>,
+}
+
+impl access_identity_scim::app::outbound::Sender for Recorder {
+    fn send<'a>(
+        &'a self,
+        method: &'a str,
+        url: &'a str,
+        secret: &'a [u8],
+        body: Option<&'a [u8]>,
+    ) -> access_identity_scim::app::outbound::Pending<
+        'a,
+        Option<access_identity_scim::app::outbound::Reply>,
+    > {
+        self.calls.lock().unwrap().push((
+            method.to_owned(),
+            url.to_owned(),
+            secret.to_vec(),
+            body.map(<[u8]>::to_vec),
+        ));
+        let reply = self.replies.lock().unwrap().pop();
+        Box::pin(async move { reply })
+    }
+}
+
+/// Steps `worker` until it pushed one order; the outbox watermark is cluster-wide, so another
+/// test's open transaction delays an order, never loses it.
+async fn drain<S, K, L>(worker: &access_identity_scim::app::outbound::Worker<S, K, L>)
+where
+    S: access_identity_scim::app::outbound::Sender,
+    K: access_identity_scim::app::outbound::Secrets,
+    L: access_identity_scim::app::outbound::Local,
+{
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while worker.step().await.unwrap() == 0 {
+        assert!(std::time::Instant::now() < deadline, "no push");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+// IDP-29, OP-155 m.3 (g), Ek B 4823, 5036
+#[tokio::test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one target from its registration through a push, a retry and a delete"
+)]
+async fn provisioned_users_are_pushed_to_a_registered_target_and_logged() {
+    use access_identity_scim::app::outbound::{Reply, Worker};
+    let c = console("scim-outbound", true).await;
+    let s = scim_router(&c);
+    let secret = register(&c, "entra", Some("scim.entra")).await;
+    let bearer = b64url_encode(&access_crypto::random::bytes::<24>().unwrap());
+    let w = c
+        .rest_write(
+            &Method::POST,
+            "/admin/v1/realms/acme/scim-targets",
+            ("registerScimTarget", None),
+            serde_json::json!({
+                "name": "crm",
+                "base_url": "https://crm.example/scim/v2",
+                "bearer": bearer,
+            }),
+            None,
+        )
+        .await;
+    assert_eq!(w.status, StatusCode::OK, "{}", w.body);
+    assert!(!w.body.to_string().contains(&bearer));
+    let (st, _, created) = s
+        .call(
+            Method::POST,
+            "/Users",
+            &secret,
+            Some(user("joan@contoso.example", "j-1")),
+            &[],
+        )
+        .await;
+    assert_eq!(st, StatusCode::CREATED, "{created}");
+    let local = created["id"].as_str().unwrap().to_owned();
+
+    let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
+    let keks = crate::login::RealmKeks::new(c.w.keys.clone());
+    let recorder = Recorder {
+        calls: std::sync::Mutex::new(Vec::new()),
+        replies: std::sync::Mutex::new(vec![Reply {
+            status: 201,
+            body: br#"{"id":"remote-1"}"#.to_vec(),
+        }]),
+    };
+    let worker = Worker {
+        app: c.w.db.app.clone(),
+        reader: c.w.db.reader.clone(),
+        sender: recorder,
+        secrets: crate::scim::TargetSecrets(access_identity_events::adapters::KekSealer(
+            keks.clone(),
+        )),
+        local: crate::scim::service(c.w.db.app.clone(), keks, ids).unwrap(),
+    };
+    drain(&worker).await;
+    {
+        let calls = worker.sender.calls.lock().unwrap();
+        let (method, url, used, body) = &calls[0];
+        assert_eq!(method, "POST");
+        assert_eq!(url, "https://crm.example/scim/v2/Users");
+        assert_eq!(used, bearer.as_bytes());
+        let body: serde_json::Value = serde_json::from_slice(body.as_ref().unwrap()).unwrap();
+        assert_eq!(body["userName"], "joan@contoso.example");
+        assert_eq!(body["externalId"], local);
+        assert!(body.get("id").is_none() && body.get("password").is_none());
+    }
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+        .await
+        .unwrap();
+    let pushes = access_store::scim::pushes(&mut t, "crm", 10).await.unwrap();
+    t.commit().await.unwrap();
+    assert_eq!(pushes[0].2, "create");
+    assert_eq!(pushes[0].3, Some(201));
+    assert_eq!(pushes[0].4, "done");
+
+    worker.sender.replies.lock().unwrap().push(Reply {
+        status: 503,
+        body: Vec::new(),
+    });
+    let (st, _, _) = s
+        .call(
+            Method::DELETE,
+            &format!("/Users/{local}"),
+            &secret,
+            None,
+            &[],
+        )
+        .await;
+    assert_eq!(st, StatusCode::NO_CONTENT);
+    drain(&worker).await;
+    worker.sender.replies.lock().unwrap().push(Reply {
+        status: 204,
+        body: Vec::new(),
+    });
+    drain(&worker).await;
+    let calls = worker.sender.calls.lock().unwrap().clone();
+    assert_eq!(calls.len(), 3);
+    assert_eq!(calls[1].0, "DELETE");
+    assert_eq!(calls[1].1, "https://crm.example/scim/v2/Users/remote-1");
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+        .await
+        .unwrap();
+    let pushes = access_store::scim::pushes(&mut t, "crm", 10).await.unwrap();
+    t.commit().await.unwrap();
+    assert_eq!(pushes[0].4, "done");
+    assert_eq!(pushes[0].5, 2);
+    assert_eq!(pushes[1].4, "retry");
 }
