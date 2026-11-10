@@ -1,0 +1,101 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ON (sp_id) sp_id, version, entity_id, protocol, state, definition,\n                    decision_pos\n               FROM access.saml_sps\n              WHERE tenant_id = $1 AND realm_id = $2\n              ORDER BY sp_id, version DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sp_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.saml_sps",
+            "name": "sp_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.saml_sps",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "entity_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.saml_sps",
+            "name": "entity_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "protocol",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.saml_sps",
+            "name": "protocol"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.saml_sps",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "definition",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.saml_sps",
+            "name": "definition"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.saml_sps",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ba874eb4338d43da97f22ace7de72aafd0cc53dc48b444db503a7a2ab3bf9d8b"
+}

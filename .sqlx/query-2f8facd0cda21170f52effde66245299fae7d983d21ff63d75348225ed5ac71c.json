@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.saml_request_ids (tenant_id, realm_id, entity_id, request_id, kind,\n                    seen_ms)\n             VALUES ($1, $2, $3, $4, $5, $6)\n             ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2f8facd0cda21170f52effde66245299fae7d983d21ff63d75348225ed5ac71c"
+}

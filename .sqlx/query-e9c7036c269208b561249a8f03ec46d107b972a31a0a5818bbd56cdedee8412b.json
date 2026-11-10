@@ -1,0 +1,150 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT binding, kind, params, expires_ms, session_id, subject_id, session_epoch,\n                    auth_time_ms, aal, handle_expires_ms, outcome\n               FROM access.saml_flows\n              WHERE tenant_id = $1 AND realm_id = $2 AND flow_hash = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "binding",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.saml_flows",
+            "name": "binding"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.saml_flows",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "params",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.saml_flows",
+            "name": "params"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.saml_flows",
+            "name": "expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.saml_flows",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.saml_flows",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "session_epoch",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.saml_flows",
+            "name": "session_epoch"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "auth_time_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.saml_flows",
+            "name": "auth_time_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "aal",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "access.saml_flows",
+            "name": "aal"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "handle_expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.saml_flows",
+            "name": "handle_expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "outcome",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.saml_flows",
+            "name": "outcome"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "e9c7036c269208b561249a8f03ec46d107b972a31a0a5818bbd56cdedee8412b"
+}

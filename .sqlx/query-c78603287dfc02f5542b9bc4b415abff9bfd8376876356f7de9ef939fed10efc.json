@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.saml_flows\n                SET handle_hash = $4, handle_expires_ms = $5, session_id = $6, subject_id = $7,\n                    session_epoch = $8, auth_time_ms = $9, aal = $10\n              WHERE tenant_id = $1 AND realm_id = $2 AND flow_hash = $3\n                AND decided_ms IS NULL AND expires_ms > $11",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int8",
+        "Int2",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c78603287dfc02f5542b9bc4b415abff9bfd8376876356f7de9ef939fed10efc"
+}

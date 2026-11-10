@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT rotate_days, overlap_days, alg, emergency, decision_pos\n               FROM access.saml_cert_policies\n              WHERE tenant_id = $1 AND realm_id = $2\n              ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rotate_days",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.saml_cert_policies",
+            "name": "rotate_days"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "overlap_days",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.saml_cert_policies",
+            "name": "overlap_days"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "alg",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.saml_cert_policies",
+            "name": "alg"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "emergency",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.saml_cert_policies",
+            "name": "emergency"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.saml_cert_policies",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "df81710888932b2d35961f56de772a6203e3fb4b7c6260972e72c4199ea7dd8d"
+}
