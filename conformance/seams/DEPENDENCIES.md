@@ -126,15 +126,21 @@ Declared:
 
 Crates:
 
-- none
+- `esuiss-access-kernel`
+- `esuiss-access-sdk`
+- `esuiss-crypto`
 
 Access endpoints:
 
-- none
+- `/.well-known/access-domain-metadata/{}` (public)
+- `/proxy/v1/mcp/calls` (public)
+- `/proxy/v1/mcp/tools` (public)
 
 Declared:
 
-- none
+- Client certificate: the transport names it as the proxy registered by idp.proxy.register for the MCP server's host (B22, L1-ADP-2)
+- Actor statement: every tool call is decided on the agent's own signed statement; the gateway is only its PEP and never an actor (E17, AG-42)
+- Custodial key: none: it holds no signing key and passes no token on (L24)
 
 ## `access-product-twin` (services/product-twin)
 
@@ -169,7 +175,7 @@ Crates:
 
 Access endpoints:
 
-- none
+- `/proxy/v1/check/{}` (public)
 
 Declared:
 

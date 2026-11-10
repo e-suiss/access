@@ -43,12 +43,13 @@ const ADP_BINDINGS: [&str; 6] = [
 const ADP_ROUTER: &str = "crates/http/src/adp/adapters.rs";
 
 /// The path prefixes Access serves; a service's literal under one of them is an Access endpoint.
-const ACCESS_PREFIXES: [&str; 10] = [
+const ACCESS_PREFIXES: [&str; 11] = [
     "/access/",
     "/.well-known/access-",
     "/.well-known/authzen-",
     "/.well-known/suiss-",
     "/realms/",
+    "/proxy/",
     "/ssf/",
     "/admin/",
     "/console/",
