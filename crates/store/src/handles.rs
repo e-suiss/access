@@ -39,7 +39,7 @@ pub struct HandleRow {
 
 impl TenantTx {
     /// Claims `handle` for `subject`'s `party`; the id, or `None` when the realm has seen the
-    /// handle before or, for a Suiss handle, the cell has.
+    /// handle before.
     ///
     /// # Errors
     /// [`StoreError`].

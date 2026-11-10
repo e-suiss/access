@@ -1,6 +1,7 @@
 -- OP-156 m.4 (Q20, appended), E56, Ek B 4330: handles. A claim names the person's Party, the
 -- handle and the DID it must point at; a handle is claimed once per realm and never handed to
--- anyone else, and a Suiss handle once across the cell. Verification and retirement are rows of
+-- anyone else; a Suiss handle lives under its realm's own base, so no other realm can claim it
+-- (TN-20: the only cross-tenant unique keys stay the global identifiers). Verification and retirement are rows of
 -- their own; both tables only grow (OP-73). Host resolution reads the verified Suiss handles
 -- across tenants for `/.well-known/access-handle`; nothing else.
 SET LOCAL ROLE access_migrator;
@@ -22,7 +23,7 @@ CREATE TABLE access.handles (
   FOREIGN KEY (tenant_id, realm_id, subject_id)
     REFERENCES access.identity_subjects (tenant_id, realm_id, subject_id)
 );
-CREATE UNIQUE INDEX handles_suiss ON access.handles (handle) WHERE kind = 'suiss';
+CREATE INDEX handles_suiss ON access.handles (handle) WHERE kind = 'suiss';
 CREATE INDEX handles_subject ON access.handles (tenant_id, realm_id, subject_id);
 
 CREATE TABLE access.handle_events (
