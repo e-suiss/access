@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.export_sinks (tenant_id, realm_id, name, version, sink_uuid, state,\n                adapter, preset, format, endpoint, settings, kek_id, wrapped_dek, secret_nonce,\n                secret_sealed, domain_id, decision_pos)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text::jsonb, $12, $13, $14, $15, $16, $17)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "642271278b473921c305c7036f156c3ffa81b6b188c0b0005e6efd28a5d90ccd"
+}

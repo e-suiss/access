@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.export_sinks\n            SET kek_id = NULL, wrapped_dek = NULL, secret_nonce = NULL, secret_sealed = NULL\n          WHERE tenant_id = $1 AND realm_id = $2 AND name = $3 AND version < $4\n            AND secret_sealed IS NOT NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7873ebd61d68e0258faf8abfab57c11d4d4dcc5191d49c138f5a3b2071859bb4"
+}

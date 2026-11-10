@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(max(version), 0) + 1 AS \"v!\" FROM access.export_sinks\n            WHERE tenant_id = $1 AND realm_id = $2 AND name = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "v!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "64cfcf03c61bd5b55e3410a009679fd2d21f49fee702d4d4054d287a5854da0a"
+}

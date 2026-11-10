@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.export_cursors SET notified_at = clock_timestamp()\n          WHERE tenant_id = $1 AND realm_id = $2 AND sink_uuid = $3\n            AND failed_since IS NOT NULL AND notified_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7c71bbfa1327df63457eadfd2e55ef580e5536adb0e9ca11d274cb19c910ed47"
+}

@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.export_cursors\n            SET after_xid = $4, after_id = $5, sent = sent + $6, failures = 0, failed_since = NULL,\n                last_error = NULL, notified_at = NULL, attempted_at = clock_timestamp(),\n                sent_at = clock_timestamp()\n          WHERE tenant_id = $1 AND realm_id = $2 AND sink_uuid = $3\n            AND after_xid = $7 AND after_id = $8",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b9e08e812a8f221af643973fe74511863cc924a3959767b7cd29e56421ca0734"
+}

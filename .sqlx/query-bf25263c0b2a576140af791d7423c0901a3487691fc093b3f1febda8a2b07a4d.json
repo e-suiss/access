@@ -1,0 +1,187 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ON (name) name, version, sink_uuid, state, adapter, preset, format,\n                endpoint, settings::text AS \"settings!\", kek_id, wrapped_dek, secret_nonce, secret_sealed, decision_pos,\n                extract(epoch FROM created_at)::bigint AS \"changed_s!\"\n           FROM access.export_sinks WHERE tenant_id = $1 AND realm_id = $2\n          ORDER BY name, version DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.export_sinks",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.export_sinks",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "sink_uuid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.export_sinks",
+            "name": "sink_uuid"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.export_sinks",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "adapter",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.export_sinks",
+            "name": "adapter"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "preset",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.export_sinks",
+            "name": "preset"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "format",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.export_sinks",
+            "name": "format"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "endpoint",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.export_sinks",
+            "name": "endpoint"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "settings!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "kek_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.export_sinks",
+            "name": "kek_id"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "wrapped_dek",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.export_sinks",
+            "name": "wrapped_dek"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "secret_nonce",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.export_sinks",
+            "name": "secret_nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "secret_sealed",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.export_sinks",
+            "name": "secret_sealed"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.export_sinks",
+            "name": "decision_pos"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "changed_s!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      null,
+      true,
+      true,
+      true,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "bf25263c0b2a576140af791d7423c0901a3487691fc093b3f1febda8a2b07a4d"
+}

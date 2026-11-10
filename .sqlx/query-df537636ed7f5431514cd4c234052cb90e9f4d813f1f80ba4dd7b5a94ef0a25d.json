@@ -1,0 +1,99 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT after_xid, after_id, sent, failures, last_error, notified_at IS NOT NULL AS \"notified!\",\n                (extract(epoch FROM failed_since) * 1000)::bigint AS failed_ms,\n                (extract(epoch FROM sent_at) * 1000)::bigint AS sent_ms\n           FROM access.export_cursors WHERE tenant_id = $1 AND realm_id = $2 AND sink_uuid = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "after_xid",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.export_cursors",
+            "name": "after_xid"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "after_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.export_cursors",
+            "name": "after_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "sent",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.export_cursors",
+            "name": "sent"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "failures",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.export_cursors",
+            "name": "failures"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "last_error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.export_cursors",
+            "name": "last_error"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "notified!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "failed_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "sent_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "df537636ed7f5431514cd4c234052cb90e9f4d813f1f80ba4dd7b5a94ef0a25d"
+}

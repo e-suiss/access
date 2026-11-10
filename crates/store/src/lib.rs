@@ -34,6 +34,7 @@ pub mod dpop;
 pub mod edge;
 pub mod ephemeral;
 pub mod events;
+pub mod export;
 pub mod extensions;
 pub mod federation;
 pub mod first_contact;
