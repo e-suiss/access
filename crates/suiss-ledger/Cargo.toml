@@ -7,13 +7,28 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+# OP-156 m.3 (j): the NATS JetStream doorbell and its client; needs std and tokio
+doorbell = ["dep:rustls", "dep:rustls-pki-types", "dep:serde_json", "dep:tokio", "dep:tokio-rustls"]
+# the in-process NATS twin, for tests of other crates
+testing = ["doorbell", "dep:rcgen"]
+
 [dependencies]
 suiss-crypto = { workspace = true, features = ["verify"] }
 sha2 = { workspace = true }
 thiserror = { workspace = true }
+rustls = { workspace = true, features = ["aws_lc_rs", "std"], optional = true }
+rustls-pki-types = { workspace = true, features = ["std"], optional = true }
+serde_json = { workspace = true, features = ["std"], optional = true }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt", "sync", "time"], optional = true }
+tokio-rustls = { workspace = true, features = ["aws_lc_rs"], optional = true }
+rcgen = { workspace = true, features = ["aws_lc_rs", "pem"], optional = true }
 
 [dev-dependencies]
 proptest = { workspace = true, features = ["std"] }
+
+[target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]
 workspace = true

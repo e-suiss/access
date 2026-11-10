@@ -3,13 +3,18 @@
 //! and trusted time.
 //!
 //! The engine is pure (OP-8, OP-130 m.1): no I/O, clock or randomness. A driver feeds it the
-//! trusted time and the outcome of each storage commit.
+//! trusted time and the outcome of each storage commit. The `doorbell` feature adds the one
+//! I/O part, the NATS doorbell client (OP-156 m.3 (j)).
 
 #![no_std]
 
 extern crate alloc;
+#[cfg(feature = "doorbell")]
+extern crate std;
 
 pub mod checkpoint;
+#[cfg(feature = "doorbell")]
+pub mod doorbell;
 pub mod fence;
 pub mod merkle;
 pub mod port;

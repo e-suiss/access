@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Feature `doorbell`: the NATS JetStream doorbell. `Ring` and its CBOR payload `{domain, pos, idx}`, the durability `Gate`, the `Bell` trait, and a small NATS client (`client::Publisher` with the JetStream publish acknowledgement, `client::Listener`, `publish`, `listen`) over TLS 1.3 with a client certificate. Feature `testing`: an in-process NATS twin and a test PKI.
+
 ## 0.4.0
 
 No changes; released with `esuiss-access-kernel` 0.4.0 (intent plan reference, parameter provenance and Mandate origin sets; `disclose`/`declassify` core classes; runtime and effect attestation, executor control and workload binding Claim classes; Approval Act surface class and evidence; action reversibility). The Kernel's public structs gained fields, so the minor version moves.
