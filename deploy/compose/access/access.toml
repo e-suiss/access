@@ -55,6 +55,11 @@ management_api = "https://access-server.local:9443"
 products = { work = "https://work:8443" }
 # OP-151 m.2 M2: the platform realm the bootstrap creates governs the platform-admin surface
 platform_realm = "platform"
+# E42, OP-156 m.3 (c): Access as Relay's platform tenant; init writes the credential
+[suiss.relay_platform]
+tenant = "access"
+credential_file = "/var/lib/access/secrets/relay-credential"
+ca_file = "/var/lib/access/certs/ca.crt"
 
 # SI-13, CR-22, CR-30, OP-150: SoftHSM has no quota; one token store serves every local domain
 [provider]

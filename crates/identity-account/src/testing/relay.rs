@@ -82,6 +82,7 @@ struct State {
     accepted: BTreeSet<String>,
     received: Vec<Received>,
     discovery: Option<Value>,
+    discoveries: usize,
 }
 
 /// A running Relay twin.
@@ -374,6 +375,12 @@ impl RelayTwin {
             .collect()
     }
 
+    /// How often the discovery document was read.
+    #[must_use]
+    pub fn discoveries(&self) -> usize {
+        self.state.lock().unwrap().discoveries
+    }
+
     /// Every post to the Access event receiver so far.
     #[must_use]
     pub fn received(&self) -> Vec<Received> {
@@ -383,6 +390,7 @@ impl RelayTwin {
     async fn answer(&self, req: &Request) -> Vec<u8> {
         match (req.method.as_str(), req.path.as_str()) {
             ("GET", DISCOVERY) => {
+                self.state.lock().unwrap().discoveries += 1;
                 let body = serde_json::to_vec(&self.discovery()).unwrap();
                 response(
                     200,

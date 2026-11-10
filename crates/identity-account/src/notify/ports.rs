@@ -1,6 +1,7 @@
 //! What the Relay seam needs from the outside world (OP-63).
 
 use std::future::Future;
+use std::sync::Arc;
 
 use std::time::Duration;
 
@@ -41,7 +42,7 @@ pub trait RealmKeys: Send + Sync {
         tenant: TenantId,
         realm: RealmId,
         kek_id: &str,
-    ) -> Option<&(dyn Kek + Send + Sync)>;
+    ) -> Option<Arc<dyn Kek + Send + Sync>>;
 }
 
 /// A subject's wrapped DEK as the courier finds it.

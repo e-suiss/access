@@ -124,6 +124,21 @@ Organization domain verification (DNS TXT or HTTPS challenge) and its daily MX a
 | `products` | no | Product name to base URL. |
 | `platform_realm` | no | The platform tenant's realm slug; without it the platform surface refuses every request. |
 
+### `[suiss.relay_platform]` (required)
+
+Every message to a person (codes, links, security notices, CIBA invitations) leaves through
+Relay, where Access is a platform tenant. The Relay courier runs in the server: one node at a
+time holds its lease, and messages wait in the outbox while Relay is unreachable. At start the
+server reads `<relay>/.well-known/relay-configuration` in the background; it sends only once
+that document names this Access as `access_issuer`, offers `urn:suiss:relay:events:1` and an
+`events_endpoint` on Relay's own origin.
+
+| Key | Required | Meaning |
+|---|---|---|
+| `tenant` | yes | Access's tenant id in Relay (letters, digits, `_`, `-`). |
+| `credential_file` | yes | The credential Relay accepts from Access, owner-readable only; re-read when it changes. |
+| `ca_file` | no | PEM trust anchors for Relay's certificate; the system's when not given. |
+
 ### `[provider]`
 
 What the operator declares about its key infrastructure, published as is; an undeclared fact is

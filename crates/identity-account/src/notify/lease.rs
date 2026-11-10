@@ -3,7 +3,6 @@
 //! moves only under that lease's epoch. A node whose lease ran out stops after the send in
 //! flight; another node takes over when the lease expires or is released.
 
-use core::fmt::Write as _;
 use std::time::Duration;
 
 pub use access_store::relay::CourierLease;
@@ -47,26 +46,4 @@ impl Term {
         let half = u64::try_from(ttl.as_millis() / 2).unwrap_or(u64::MAX);
         self.until_ms.saturating_sub(now_ms) < half
     }
-}
-
-/// A holder name for this process: the host's name when it is set, and a random suffix, so two
-/// processes on one host never share a lease.
-#[must_use]
-pub fn holder(host: Option<&str>, random: [u8; 8]) -> String {
-    let host: String = host
-        .unwrap_or("access")
-        .chars()
-        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '.' | '_'))
-        .take(96)
-        .collect();
-    let mut out = if host.is_empty() {
-        String::from("access")
-    } else {
-        host
-    };
-    out.push('/');
-    for b in random {
-        let _ = write!(out, "{b:02x}");
-    }
-    out
 }

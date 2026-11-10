@@ -18,6 +18,11 @@ fn config(issuer: &str, management: &str) -> Config {
             management_api: management.to_owned(),
             products: BTreeMap::new(),
             platform_realm: None,
+            relay_platform: crate::config::RelayPlatform {
+                tenant: "rtn_access".to_owned(),
+                credential_file: "/run/secrets/relay-credential".into(),
+                ca_file: None,
+            },
         }),
         ..Config::default()
     }

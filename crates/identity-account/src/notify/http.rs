@@ -39,6 +39,16 @@ fn token_char(c: char) -> bool {
 }
 
 impl RelayEndpoint {
+    /// `https://host[:port]` followed by `path`, as Access writes the Relay issuer.
+    #[must_use]
+    pub fn url(&self) -> String {
+        if self.port == 443 {
+            format!("https://{}{}", self.host, self.path)
+        } else {
+            format!("https://{}:{}{}", self.host, self.port, self.path)
+        }
+    }
+
     /// Parses `https://host[:port]/path`.
     ///
     /// # Errors
@@ -196,4 +206,77 @@ impl RelayPort for HttpRelay {
             }),
         }
     }
+}
+
+/// Largest discovery document read.
+const MAX_DISCOVERY: usize = 64 * 1024;
+
+/// Why the discovery document could not be read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("relay discovery unavailable")]
+pub struct DiscoveryUnavailable;
+
+/// Reads Relay's discovery document `GET <issuer>/.well-known/relay-configuration` (Relay E-81)
+/// over `tls`, within `timeout`.
+///
+/// # Errors
+/// [`DiscoveryUnavailable`] when Relay cannot be reached, answers other than `200` or the body
+/// is not JSON.
+pub async fn discover(
+    relay: &str,
+    tls: Arc<rustls::ClientConfig>,
+    timeout: Duration,
+) -> Result<serde_json::Value, DiscoveryUnavailable> {
+    let at = RelayEndpoint::parse(&format!(
+        "{relay}{}",
+        crate::notify::delivery::DISCOVERY_PATH
+    ))
+    .map_err(|_| DiscoveryUnavailable)?;
+    tokio::time::timeout(timeout, fetch(&at, tls))
+        .await
+        .map_err(|_| DiscoveryUnavailable)?
+}
+
+async fn fetch(
+    at: &RelayEndpoint,
+    tls: Arc<rustls::ClientConfig>,
+) -> Result<serde_json::Value, DiscoveryUnavailable> {
+    let e = |_| DiscoveryUnavailable;
+    let name = ServerName::try_from(at.host.clone()).map_err(|_| DiscoveryUnavailable)?;
+    let tcp = TcpStream::connect((at.host.as_str(), at.port))
+        .await
+        .map_err(e)?;
+    let mut s = TlsConnector::from(tls)
+        .connect(name, tcp)
+        .await
+        .map_err(e)?;
+    let head = format!(
+        "GET {} HTTP/1.1\r\nHost: {}:{}\r\nAccept: application/json\r\nConnection: close\r\n\r\n",
+        at.path, at.host, at.port
+    );
+    s.write_all(head.as_bytes()).await.map_err(e)?;
+    s.flush().await.map_err(e)?;
+    let mut buf = Vec::with_capacity(4096);
+    let mut chunk = [0_u8; 4096];
+    loop {
+        let n = s.read(&mut chunk).await.map_err(e)?;
+        if n == 0 {
+            break;
+        }
+        buf.extend_from_slice(chunk.get(..n).unwrap_or(&[]));
+        if buf.len() > MAX_DISCOVERY {
+            return Err(DiscoveryUnavailable);
+        }
+    }
+    let mut headers = [httparse::EMPTY_HEADER; 32];
+    let mut resp = httparse::Response::new(&mut headers);
+    let httparse::Status::Complete(body_at) = resp.parse(&buf).map_err(|_| DiscoveryUnavailable)?
+    else {
+        return Err(DiscoveryUnavailable);
+    };
+    if resp.code != Some(200) {
+        return Err(DiscoveryUnavailable);
+    }
+    let body = buf.get(body_at..).ok_or(DiscoveryUnavailable)?;
+    serde_json::from_slice(body).map_err(|_| DiscoveryUnavailable)
 }

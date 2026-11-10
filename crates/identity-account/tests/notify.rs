@@ -72,7 +72,7 @@ impl Clock for TestClock {
     }
 }
 
-struct Keys(SoftKek);
+struct Keys(Arc<SoftKek>);
 
 impl RealmKeys for Keys {
     fn kek(
@@ -80,8 +80,8 @@ impl RealmKeys for Keys {
         _tenant: TenantId,
         _realm: RealmId,
         kek_id: &str,
-    ) -> Option<&(dyn Kek + Send + Sync)> {
-        (self.0.id() == kek_id).then_some(&self.0 as &(dyn Kek + Send + Sync))
+    ) -> Option<Arc<dyn Kek + Send + Sync>> {
+        (self.0.id() == kek_id).then(|| self.0.clone() as Arc<dyn Kek + Send + Sync>)
     }
 }
 
@@ -235,7 +235,7 @@ async fn env(seed: u8, slug: &str) -> Env {
             fail_ack: AtomicBool::new(false),
         },
         relay.clone(),
-        Keys(SoftKek::new("realm-kek:1", [seed; 32])),
+        Keys(Arc::new(SoftKek::new("realm-kek:1", [seed; 32]))),
         clock.clone(),
         IdKey::new(Secret::new([seed.wrapping_add(1); 32])),
         Backoff::default(),
@@ -1275,7 +1275,7 @@ fn node(e: &Env, relay: FakeRelay) -> TestCourier {
             fail_ack: AtomicBool::new(false),
         },
         relay,
-        Keys(SoftKek::new("realm-kek:1", [e.seed; 32])),
+        Keys(Arc::new(SoftKek::new("realm-kek:1", [e.seed; 32]))),
         e.clock.clone(),
         IdKey::new(Secret::new([e.seed.wrapping_add(1); 32])),
         Backoff::default(),
@@ -1620,7 +1620,7 @@ async fn the_courier_delivers_to_the_twin() {
             fail_ack: AtomicBool::new(false),
         },
         twin_relay(&twin, &token, Duration::from_secs(5)),
-        Keys(SoftKek::new("realm-kek:1", [e.seed; 32])),
+        Keys(Arc::new(SoftKek::new("realm-kek:1", [e.seed; 32]))),
         e.clock.clone(),
         IdKey::new(Secret::new([e.seed.wrapping_add(1); 32])),
         Backoff::default(),

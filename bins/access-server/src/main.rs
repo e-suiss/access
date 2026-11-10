@@ -32,6 +32,7 @@ mod oauth;
 mod orgs;
 mod platform;
 mod product;
+mod relay;
 mod retention;
 mod risk;
 mod saml;
@@ -134,6 +135,8 @@ struct Prepared {
     /// OP-148: whether the TLS certificate covers the configured origins, read before the
     /// lockdown.
     tls_names: Result<(), String>,
+    /// E42, OP-156 m.3 (c): Relay's trust anchors and the checked credential file.
+    relay: Option<relay::Prepared>,
 }
 
 /// The database pools of the server's roles.
@@ -634,6 +637,7 @@ fn prepare(config: &Config, (tls, sni): TlsParts) -> Result<Prepared, String> {
         account_assets,
         outbound: outbound(config)?,
         tls_names: tls_names(config),
+        relay: Some(relay::prepare(config, &SYSTEM_ROOTS)?),
     })
 }
 
@@ -758,6 +762,15 @@ fn lockdown(config: &Config) -> Lockdown {
     declared.dedup();
     for port in declared {
         lockdown = lockdown.allow_tcp_connect(port);
+    }
+    // E42, OP-156 m.3 (c)
+    let (credentials, relay_port) = relay::lockdown_needs(config);
+    if let Some(port) = relay_port.filter(|p| *p != access_identity_oauth::adapters::outbound::PORT)
+    {
+        lockdown = lockdown.allow_tcp_connect(port);
+    }
+    if let Some(dir) = credentials {
+        lockdown = lockdown.allow_read(dir);
     }
     for file in RESOLVER.iter().filter(|f| Path::new(f).exists()) {
         lockdown = lockdown.allow_read(file);
@@ -1435,6 +1448,8 @@ struct Background {
     stop: tokio::sync::watch::Sender<bool>,
     delivering: tokio::task::JoinHandle<()>,
     events: events::Delivery,
+    /// E42, OP-156 m.3 (c)
+    relay: Option<relay::Running>,
     opening: tokio::task::JoinHandle<()>,
     retaining: tokio::task::JoinHandle<()>,
     watching: tokio::task::JoinHandle<()>,
@@ -1457,7 +1472,8 @@ impl Background {
     fn start(
         config: &Config,
         pools: &Pools,
-        (outbound, (keks, (sni, acme))): (Outbound, (login::RealmKeks, DomainServing)),
+        (outbound, relay_prepared): (Outbound, Option<relay::Prepared>),
+        (keks, (id_key, (sni, acme))): (login::RealmKeks, ([u8; 32], DomainServing)),
         ids: &Arc<ids::CellIds>,
         wake: Option<Arc<tokio::sync::Notify>>,
     ) -> Result<Self, String> {
@@ -1500,6 +1516,18 @@ impl Background {
             keks.clone(),
             &consumers,
         );
+        // E42, OP-156 m.3 (c), Ek B 5401
+        let relay = relay_prepared.map(|p| -> Result<relay::Running, String> {
+            Ok(relay::start(
+                p,
+                (pools.outbox_reader.clone(), pools.app.clone()),
+                keks.clone(),
+                id_key,
+                format!("relay/{}", holder()?),
+                &consumers,
+            ))
+        });
+        let relay = relay.transpose()?;
         let (stop, stopped) = tokio::sync::watch::channel(false);
         let ended = consumers.clone();
         let delivering = tokio::spawn(async move {
@@ -1549,6 +1577,7 @@ impl Background {
             stop,
             delivering,
             events,
+            relay,
             opening,
             retaining,
             watching,
@@ -1567,6 +1596,9 @@ impl Background {
         let _ = self.stop.send(true);
         let _ = self.delivering.await;
         self.events.stop().await;
+        if let Some(r) = self.relay {
+            r.stop().await;
+        }
         self.opening.abort();
         self.retaining.abort();
         self.watching.abort();
@@ -1673,12 +1705,14 @@ async fn serve(
         .map(doorbell::client)
         .transpose()?
         .map(|c| doorbell::Doorbell::start(&c));
+    let id_key = login::id_key_bytes(&prepared.identity_keys)?;
     let background = Background::start(
         config,
         &all,
+        (prepared.outbound.clone(), prepared.relay),
         (
-            prepared.outbound.clone(),
-            (keks.clone(), (prepared.sni.clone(), prepared.acme.clone())),
+            keks.clone(),
+            (id_key, (prepared.sni.clone(), prepared.acme.clone())),
         ),
         &cell_ids,
         doorbell.as_ref().map(|d| d.wake.clone()),
@@ -1708,6 +1742,7 @@ async fn serve(
         signer(),
         prepared.identity_keys.clone(),
     ));
+    let relay_reader = all.outbox_reader.clone();
     let Pools {
         sequencer,
         app,
@@ -1912,10 +1947,12 @@ async fn serve(
     let products = product::routes(
         config,
         domains.clone(),
-        (tenants_pool, product_app),
+        (tenants_pool, product_app.clone()),
         cell_ids,
         platform_api,
-    )?;
+    )?
+    // OP-156 m.3 (c)
+    .merge(relay::routes(relay_reader, product_app));
     let app = router(
         config.security_txt(),
         limits,

@@ -122,7 +122,8 @@ fn op_90_server_refuses_to_start_without_lockdown() {
              [hsm]\nmodule = {module:?}\ntoken = {token:?}\npin_file = {pin:?}\n\
              [login]\ndist_dir = {dist:?}\n\
              [suiss]\nregion = \"eu-central\"\nrelay = \"https://relay.example\"\n\
-             management_api = \"https://api.access.example\"\n",
+             management_api = \"https://api.access.example\"\n\
+             [suiss.relay_platform]\ntenant = \"rtn_access\"\ncredential_file = {pw:?}\n",
             crt = dir.join("tls.crt"),
             key = dir.join("tls.key"),
             pw = dir.join("db-password"),

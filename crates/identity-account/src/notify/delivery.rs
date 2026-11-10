@@ -180,3 +180,65 @@ impl Undeliverable {
         }
     }
 }
+
+/// Relay's events capability (Relay E-81).
+pub const EVENTS_CAPABILITY: &str = "urn:suiss:relay:events:1";
+
+/// The discovery document's path under the Relay issuer (Relay E-81).
+pub const DISCOVERY_PATH: &str = "/.well-known/relay-configuration";
+
+/// Why a Relay discovery document is not one Access sends to (OP-156 m.3 (c), Relay E-81).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum DiscoveryMismatch {
+    /// Not a JSON object with the fields E-81 names.
+    #[error("not a relay discovery document")]
+    Malformed,
+    /// `issuer` is not, byte for byte, the configured Relay.
+    #[error("relay issuer differs from suiss.relay")]
+    Issuer,
+    /// `access_issuer` names another Access.
+    #[error("relay belongs to another Access")]
+    AccessIssuer,
+    /// No events capability.
+    #[error("relay does not offer the events capability")]
+    NoEvents,
+    /// `events_endpoint` is not an https URL on the Relay issuer's origin.
+    #[error("relay events endpoint is not on the relay origin")]
+    Endpoint,
+}
+
+/// Checks a Relay discovery document against the configured Relay `relay` and this Access's
+/// `issuer`, and returns the event intake URL. The intake must be on the Relay issuer's origin,
+/// so the document cannot send messages elsewhere.
+///
+/// # Errors
+/// [`DiscoveryMismatch`].
+pub fn check_discovery(
+    doc: &Value,
+    relay: &str,
+    issuer: &str,
+) -> Result<String, DiscoveryMismatch> {
+    let field = |k: &str| doc.get(k).and_then(Value::as_str);
+    let relay_issuer = field("issuer").ok_or(DiscoveryMismatch::Malformed)?;
+    if relay_issuer != relay {
+        return Err(DiscoveryMismatch::Issuer);
+    }
+    if field("access_issuer").ok_or(DiscoveryMismatch::Malformed)? != issuer {
+        return Err(DiscoveryMismatch::AccessIssuer);
+    }
+    let events = doc
+        .get("capabilities")
+        .and_then(Value::as_array)
+        .is_some_and(|c| c.iter().any(|v| v.as_str() == Some(EVENTS_CAPABILITY)));
+    if !events {
+        return Err(DiscoveryMismatch::NoEvents);
+    }
+    let endpoint = field("events_endpoint").ok_or(DiscoveryMismatch::NoEvents)?;
+    let rest = endpoint
+        .strip_prefix(relay)
+        .ok_or(DiscoveryMismatch::Endpoint)?;
+    if !relay.starts_with("https://") || !rest.starts_with('/') {
+        return Err(DiscoveryMismatch::Endpoint);
+    }
+    Ok(endpoint.to_owned())
+}

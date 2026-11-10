@@ -297,6 +297,33 @@ pub(crate) struct Suiss {
     /// refuses every request.
     #[serde(default)]
     pub(crate) platform_realm: Option<String>,
+    /// Access's platform tenant in Relay and the credential it sends with (E42 (1), (2),
+    /// OP-156 m.3 (c)). Required: every message to a person leaves through Relay.
+    pub(crate) relay_platform: RelayPlatform,
+}
+
+/// Access as a platform tenant of Relay (E42 (1), (2), OP-156 m.3 (c), Ek B 5393).
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RelayPlatform {
+    /// Access's tenant id in Relay.
+    pub(crate) tenant: String,
+    /// File holding the credential Relay accepts from Access; re-read when it rotates.
+    pub(crate) credential_file: PathBuf,
+    /// PEM trust anchors for Relay's certificate; the system's when not given.
+    #[serde(default)]
+    pub(crate) ca_file: Option<PathBuf>,
+}
+
+impl RelayPlatform {
+    fn valid(&self) -> bool {
+        !self.tenant.is_empty()
+            && self.tenant.len() <= 64
+            && self
+                .tenant
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    }
 }
 
 impl Suiss {
@@ -317,6 +344,7 @@ impl Suiss {
             .is_none_or(|s| access_identity_oauth::domain::issuer::check_slug(s).is_ok());
         region
             && platform
+            && self.relay_platform.valid()
             && url(&self.relay)
             && url(&self.management_api)
             && self.products.iter().all(|(n, u)| product(n) && url(u))
@@ -634,7 +662,7 @@ pub(crate) enum ConfigError {
     )]
     CustomDomains,
     #[error(
-        "the suiss section is required: region, https base URLs without a trailing slash for relay, management_api and products (OP-149 m.3), and a realm slug as platform_realm when set (OP-151 m.2 M2)"
+        "the suiss section is required: region, https base URLs without a trailing slash for relay, management_api and products (OP-149 m.3), a realm slug as platform_realm when set (OP-151 m.2 M2), and relay_platform with Access's Relay tenant id and credential_file (E42, OP-156 m.3 (c))"
     )]
     Suiss,
     #[error(
@@ -915,6 +943,11 @@ mod tests {
                 management_api: "https://api.access.example".to_owned(),
                 products: BTreeMap::from([("work".to_owned(), "https://work.example".to_owned())]),
                 platform_realm: Some("platform".to_owned()),
+                relay_platform: RelayPlatform {
+                    tenant: "rtn_access".to_owned(),
+                    credential_file: "/run/secrets/relay-credential".into(),
+                    ca_file: None,
+                },
             }),
             ..Config::default()
         }
@@ -1155,6 +1188,9 @@ mod tests {
         assert!(bad(|s| s.region = "EU".to_owned()));
         assert!(bad(|s| s.region = "-eu".to_owned()));
         assert!(bad(|s| s.relay = "http://relay.example".to_owned()));
+        // OP-156 m.3 (c): no Relay tenant, no start
+        assert!(bad(|s| s.relay_platform.tenant = String::new()));
+        assert!(bad(|s| s.relay_platform.tenant = "a tenant".to_owned()));
         assert!(bad(|s| s.management_api = "https://api.example/".to_owned()));
         assert!(bad(|s| {
             s.products

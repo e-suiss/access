@@ -70,6 +70,8 @@ for token in access-server access-signer access-identity-signer; do
 done
 secret hsm-so
 secret postgres
+# E42, OP-156 m.3 (c): the credential Relay accepts from Access
+secret relay-credential
 
 ca
 leaf access-server "$secrets/access-server.key" serverAuth "DNS:access-server,DNS:access-server.local,DNS:localhost,IP:127.0.0.1"
