@@ -65,6 +65,8 @@ export class AccountMock {
   /** The nonces of the commits received, in order. */
   readonly nonces: string[] = [];
   preferences: Record<string, boolean> = { "email:newsletter": false, "sms:campaign": false };
+  /** OP-156 m.3 (c): the İYS state the preferences carry, when the realm records it. */
+  iys: Record<string, { consent: string; status: string; at: string | null }> | null = null;
   /** S11: the sign-in methods `GET /v1/account/methods` lists. */
   methods: S11Methods = {
     password: { set: true },
@@ -305,7 +307,13 @@ export class AccountMock {
     }
     switch (path) {
       case "/preferences":
-        return reply(200, { current: this.preferences, history: [] });
+        return reply(200, {
+          current: this.preferences,
+          history: [],
+          ...(this.iys === null
+            ? {}
+            : { iys: { recipient_type: "individual", channels: this.iys } }),
+        });
       case "/documents":
         return reply(200, { acceptances: [] });
       case "/security-history":

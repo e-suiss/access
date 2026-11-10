@@ -18,6 +18,40 @@ interface Preferences {
     readonly granted: boolean;
     readonly at: string;
   }[];
+  /** OP-156 m.3 (c): present when the realm records consent with İYS through Relay. */
+  readonly iys?: {
+    readonly channels: Readonly<
+      Record<
+        string,
+        {
+          readonly consent: "approved" | "rejected";
+          readonly status: "recorded" | "failed" | "pending";
+          readonly at: string | null;
+        }
+      >
+    >;
+  };
+}
+
+function IysView({ iys }: { readonly iys: NonNullable<Preferences["iys"]> }): ReactElement {
+  return (
+    <section aria-label={t("iys.title")} data-testid="iys">
+      <h4>{t("iys.title")}</h4>
+      <p>{t("iys.intro")}</p>
+      <ul>
+        {Object.entries(iys.channels).map(([channel, c]) => (
+          <li key={channel} data-testid={`iys-${channel}`}>
+            {t(`privacy.channel.${channel}`)} ·{" "}
+            {c.status === "recorded"
+              ? t("iys.recorded", { time: c.at ?? "" })
+              : c.status === "failed"
+                ? t("iys.failed")
+                : t("iys.pending")}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 interface Documents {
@@ -127,6 +161,7 @@ function PreferencesView(): ReactElement {
         {t("action.save")}
       </button>
       {saved && <p role="status">{t("privacy.saved")}</p>}
+      {prefs.iys !== undefined && <IysView iys={prefs.iys} />}
       <h4>{t("privacy.preference_history")}</h4>
       <ul>
         {prefs.history.map((h) => (

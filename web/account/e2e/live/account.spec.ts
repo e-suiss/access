@@ -37,6 +37,21 @@ test.describe("@live account pages", () => {
     await expect(page.getByTestId("security-history")).toBeVisible();
   });
 
+  // OP-156 m.3 (c), IDP-37 (4)
+  test("@live the İYS block follows the preferences answer", async ({ page }) => {
+    const prefs = page.waitForResponse((r) => r.url().includes("/v1/account/preferences"));
+    await page.goto(`${REALM}/account`);
+    const body = (await (await prefs).json()) as { iys?: { channels: Record<string, unknown> } };
+    await expect(page.getByTestId("preferences")).toBeVisible();
+    if (body.iys === undefined) {
+      await expect(page.getByTestId("iys")).toHaveCount(0);
+    } else {
+      await expect(page.getByTestId("iys").getByRole("listitem")).toHaveCount(
+        Object.keys(body.iys.channels).length,
+      );
+    }
+  });
+
   test("@live the cookie alone reads and changes no authority", async ({ page }) => {
     await page.goto(`${REALM}/account`);
     await expect(page.getByTestId("brand")).toBeVisible();

@@ -65,3 +65,26 @@ test("the ar-XB pseudo-locale draws the shell right to left", async ({ page }) =
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
   await expect(page.locator("html")).toHaveAttribute("lang", "ar-XB");
 });
+
+// OP-156 m.3 (c), IDP-37 (4), B23
+test("the İYS state of each commercial channel is shown as Relay reported it", async ({
+  page,
+  bff,
+  context,
+  baseURL,
+}) => {
+  await bff.signIn(context, baseURL ?? "");
+  await page.goto("/account/");
+  await expect(page.getByTestId("preferences")).toBeVisible();
+  await expect(page.getByTestId("iys")).toHaveCount(0);
+  bff.iys = {
+    sms: { consent: "approved", status: "recorded", at: "2026-11-10T09:00:00.000Z" },
+    email: { consent: "rejected", status: "failed", at: "2026-11-10T09:01:00.000Z" },
+    call: { consent: "approved", status: "pending", at: null },
+  };
+  await page.reload();
+  await expect(page.getByTestId("iys")).toContainText("İYS");
+  await expect(page.getByTestId("iys-sms")).toContainText("2026-11-10T09:00:00.000Z");
+  await expect(page.getByTestId("iys-email")).toContainText("Access will try again.");
+  await expect(page.getByTestId("iys-call")).toContainText("Being recorded with İYS");
+});
