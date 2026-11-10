@@ -741,6 +741,7 @@ pub const EXPORT_SINK_EXISTS: Code = code(
     409,
     "Conflict",
     "An export sink with this name was registered before; a retired sink keeps its name and its cursor (OP-73).",
+);
 /// A signal source that is not a name, a kind, a provider, an issuer Party and a format that
 /// carries the kind (OP-156 m.3 (r)).
 pub const INVALID_SIGNAL_SOURCE: Code = code(
