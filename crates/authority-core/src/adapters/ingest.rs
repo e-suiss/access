@@ -188,6 +188,11 @@ where
                     self.keep_termination(sub.domain, done, (*position, *claim), body)
                         .await
                 }
+                // IDP-9, OP-156 m.3 (f)
+                crate::app::sim_change::CLASS => {
+                    self.keep_sim_change(sub.domain, done, (*position, *claim), body)
+                        .await
+                }
                 _ => Ok(()),
             };
             if let Err(e) = kept {
@@ -223,6 +228,35 @@ where
             *guard = None;
         }
         result
+    }
+
+    /// Records an admitted `sim_change` Claim whose disclosed body matches its value, for the
+    /// identity plane's SIM rule; any other body records nothing.
+    async fn keep_sim_change(
+        &self,
+        domain: Digest,
+        done: &Ingested,
+        (pos, claim): (u64, Id),
+        body: &[u8],
+    ) -> Result<(), CoreError> {
+        let Some((last_change_ms, checked_ms)) =
+            crate::app::sim_change::decode(done.value.as_ref(), body)
+        else {
+            return Ok(());
+        };
+        Ok(access_store::payment::record_sim_change(
+            &self.setup.sequencer,
+            &DomainId::from_bytes(domain.0),
+            &access_store::payment::SimChange {
+                subject: done.subject.0,
+                claim: claim.0,
+                issuer: done.issuer.0,
+                pos,
+                last_change_ms,
+                checked_ms,
+            },
+        )
+        .await?)
     }
 
     /// Records an admitted `commitment_active` Claim whose disclosed body says the commitment

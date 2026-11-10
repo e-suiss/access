@@ -2077,6 +2077,7 @@ mod regime;
 pub mod resources;
 pub mod roles;
 mod signals;
+pub mod sim_change;
 pub mod sources;
 pub mod ssh;
 pub mod vault;
