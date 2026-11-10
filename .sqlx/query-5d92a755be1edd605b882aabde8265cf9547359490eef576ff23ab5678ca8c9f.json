@@ -1,0 +1,93 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_device_keys\n                  SET status = 'retired', retired_at = clock_timestamp()\n                WHERE tenant_id = $1 AND realm_id = $2 AND device_id = $3\n                  AND identity_subject_id = $4 AND status = 'active'\n            RETURNING device_id, identity_subject_id, thumbprint, public_key, name,\n                      (extract(epoch FROM created_at) * 1000)::bigint AS \"created_ms!\",\n                      (extract(epoch FROM last_seen) * 1000)::bigint AS last_seen_ms",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "device_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_device_keys",
+            "name": "device_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "identity_subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_device_keys",
+            "name": "identity_subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "thumbprint",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_device_keys",
+            "name": "thumbprint"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "public_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_device_keys",
+            "name": "public_key"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_device_keys",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "created_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "last_seen_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "5d92a755be1edd605b882aabde8265cf9547359490eef576ff23ab5678ca8c9f"
+}

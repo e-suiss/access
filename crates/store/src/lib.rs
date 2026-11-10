@@ -58,6 +58,7 @@ pub mod platform;
 pub mod privacy;
 pub mod projections;
 pub mod publications;
+pub mod push;
 pub mod realm_binding;
 pub mod recovery;
 pub mod relay;

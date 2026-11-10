@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.push_challenges SET used_ms = $4\n              WHERE tenant_id = $1 AND realm_id = $2 AND challenge_id = $3\n                AND decision = 'approve' AND used_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f7bf1427e9e3ff88bd818ad12d8badce2ff156a70029ec56cd954ed5f665f7e3"
+}

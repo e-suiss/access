@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_device_keys SET last_seen = clock_timestamp()\n              WHERE tenant_id = $1 AND realm_id = $2 AND device_id = $3 AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "77818996261653f321356353e89e71e481cf126fcb263d12d16a2ab2d1c007cb"
+}

@@ -1,0 +1,67 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT created_ms, expires_ms, decision, decided_ms FROM access.push_challenges\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND created_ms >= $4\n              ORDER BY created_ms DESC, challenge_id DESC LIMIT 64",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "created_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.push_challenges",
+            "name": "created_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.push_challenges",
+            "name": "expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "decision",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.push_challenges",
+            "name": "decision"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "decided_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.push_challenges",
+            "name": "decided_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "7d6571957529e4f9657196eda07b9449e65b2d4e140712e1e7d362b6e116dd54"
+}
