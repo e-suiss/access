@@ -32,6 +32,7 @@ Crates:
 - `esuiss-access-kernel`
 - `esuiss-access-sdk`
 - `esuiss-crypto`
+- `esuiss-ledger`
 
 Access endpoints:
 

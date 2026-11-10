@@ -1,9 +1,10 @@
-//! The stream's feed from Access's SSF poll endpoint (RFC 8936, OP-153 m.3 (v), m.8 (d)): this
-//! service polls the stream its receiver credential names, acknowledges what it took and, for
-//! every batch that brought at least one event, moves the beacon. A signal is only a hint to
-//! read again: the SET bodies are neither trusted nor forwarded, so a forged or replayed event
-//! can at most cause a read, never show anything (XI-3). Without a configured stream the beacon
-//! stays still and the stream sends keep-alives only.
+//! The stream's feeds (OP-153 m.3 (v), m.8 (d), OP-156 m.8 (d)): Access's SSF poll endpoint
+//! (RFC 8936), whose stream this service polls as its receiver, and Access's NATS doorbell,
+//! whose rings this service hears over mTLS. Each event or ring moves the beacon. A signal is
+//! only a hint to read again: neither SET bodies nor rings are trusted or forwarded, so a
+//! forged or replayed one can at most cause a read, never show anything (XI-3). Without either
+//! feed the beacon stays still and the stream sends keep-alives only; with the doorbell down the
+//! SSF poll still moves it.
 
 use std::future::Future;
 use std::time::Duration;
@@ -11,6 +12,8 @@ use std::time::Duration;
 use access_sdk::transport::Answer;
 use serde_json::{Value, json};
 use tokio::sync::watch;
+
+use suiss_ledger::doorbell::client;
 
 use crate::adapters::Beacon;
 
@@ -79,7 +82,7 @@ pub async fn step<P: Poll>(
         Some(p) if !p.jtis.is_empty() => {
             let n = u64::try_from(p.jtis.len()).unwrap_or(u64::MAX);
             let count = count.saturating_add(n);
-            beacon.notify(count);
+            beacon.advance(n);
             (p.jtis, count, p.more)
         }
         Some(p) => (Vec::new(), count, p.more),
@@ -105,6 +108,18 @@ pub async fn run<P: Poll>(poll: P, beacon: Beacon, mut stop: watch::Receiver<boo
             }
         }
     }
+}
+
+/// Moves `beacon` on every ring of Access's doorbell until `stop` turns true; while NATS is down
+/// it connects again and the other feed carries on (OP-156 m.8 (d), OP-23).
+pub async fn doorbell(cfg: client::Config, beacon: Beacon, stop: watch::Receiver<bool>) {
+    client::listen(
+        cfg,
+        stop,
+        move |_, _| beacon.advance(1),
+        |e| tracing::warn!(event = "doorbell.unavailable", error = %e, "doorbell unavailable; the stream keeps polling (OP-23)"),
+    )
+    .await;
 }
 
 #[cfg(test)]
@@ -192,6 +207,46 @@ mod tests {
         assert_eq!(sent[2]["ack"], json!(["a", "b"]));
         assert_eq!(sent[3]["ack"], json!([]));
         assert_eq!(sent[0]["maxEvents"], MAX_EVENTS);
+    }
+
+    // OP-156 m.8 (d), XI-3
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_doorbell_ring_moves_the_beacon() {
+        use suiss_ledger::doorbell::testing::{Pki, Twin};
+        use suiss_ledger::doorbell::{Bell as _, Ring};
+        use suiss_ledger::fence::Cursor;
+
+        let pki = Pki::new().unwrap();
+        let twin = Twin::start(pki.server.clone()).await.unwrap();
+        let cfg = pki.client(&twin.addr(), "experience").unwrap();
+        let beacon = Beacon::default();
+        let mut rx = beacon.watch();
+        let (stop, stopped) = watch::channel(false);
+        let listening = tokio::spawn(doorbell(cfg.clone(), beacon.clone(), stopped.clone()));
+        let (queue, rings) = client::queue(8);
+        let publishing = tokio::spawn(client::publish(cfg, rings, stopped, |_| {}));
+        let ring = Ring {
+            domain: [5; 32],
+            at: Cursor { pos: 3, idx: 0 },
+            id: [6; 32],
+        };
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                queue.ring(ring);
+                if tokio::time::timeout(Duration::from_millis(200), rx.changed())
+                    .await
+                    .is_ok()
+                {
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
+        assert!(*rx.borrow_and_update() >= 1);
+        stop.send(true).unwrap();
+        listening.await.unwrap();
+        publishing.await.unwrap();
     }
 
     #[tokio::test]

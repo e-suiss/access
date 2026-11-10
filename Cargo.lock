@@ -173,6 +173,7 @@ dependencies = [
  "esuiss-access-kernel",
  "esuiss-access-sdk",
  "esuiss-crypto",
+ "esuiss-ledger",
  "futures-util",
  "httparse",
  "rustls",

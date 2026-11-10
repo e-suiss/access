@@ -12,6 +12,10 @@
 //! - `ACCESS_EXPERIENCE_SSF_POLL`, `ACCESS_EXPERIENCE_SSF_TOKEN`: optional, together: the SSF poll
 //!   URL of this service's stream (`https://host[:port]/…/ssf/poll`) and a file holding its
 //!   bearer credential; each batch of events moves the stream's signal (OP-153 m.8 (d)).
+//! - `ACCESS_EXPERIENCE_DOORBELL`, with `ACCESS_EXPERIENCE_DOORBELL_SERVER_NAME`,
+//!   `ACCESS_EXPERIENCE_DOORBELL_CA`, `ACCESS_EXPERIENCE_DOORBELL_CERT` and
+//!   `ACCESS_EXPERIENCE_DOORBELL_KEY`: optional, Access's NATS doorbell `host:port` over mTLS (the
+//!   key file readable by its owner only); each ring moves the stream's signal (OP-156 m.8 (d)).
 
 use std::collections::BTreeMap;
 use std::process::ExitCode;
@@ -59,6 +63,60 @@ enum Startup {
 
 fn var(name: &'static str) -> Result<String, Startup> {
     std::env::var(name).map_err(|_| Startup::Config(name))
+}
+
+fn owner_only(path: &str) -> bool {
+    std::fs::metadata(path).is_ok_and(|m| {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            m.is_file() && matches!(m.permissions().mode() & 0o777, 0o400 | 0o600)
+        }
+        #[cfg(not(unix))]
+        {
+            m.is_file()
+        }
+    })
+}
+
+/// The doorbell client of the `ACCESS_EXPERIENCE_DOORBELL*` variables, or `None` without them.
+fn doorbell(
+    random: &rustls::crypto::CryptoProvider,
+) -> Result<Option<suiss_ledger::doorbell::client::Config>, Startup> {
+    const WHAT: &str = "ACCESS_EXPERIENCE_DOORBELL";
+    let Ok(addr) = std::env::var(WHAT) else {
+        return Ok(None);
+    };
+    let file = |name: &'static str| std::fs::read(var(name)?).map_err(|_| Startup::Config(name));
+    let key = var("ACCESS_EXPERIENCE_DOORBELL_KEY")?;
+    if !owner_only(&key) {
+        return Err(Startup::Config("ACCESS_EXPERIENCE_DOORBELL_KEY"));
+    }
+    let tls = suiss_ledger::doorbell::client::tls(
+        &file("ACCESS_EXPERIENCE_DOORBELL_CA")?,
+        &file("ACCESS_EXPERIENCE_DOORBELL_CERT")?,
+        &std::fs::read(&key).map_err(|_| Startup::Config("ACCESS_EXPERIENCE_DOORBELL_KEY"))?,
+    )
+    .map_err(|_| Startup::Config(WHAT))?;
+    let server_name =
+        rustls::pki_types::ServerName::try_from(var("ACCESS_EXPERIENCE_DOORBELL_SERVER_NAME")?)
+            .map_err(|_| Startup::Config("ACCESS_EXPERIENCE_DOORBELL_SERVER_NAME"))?;
+    let mut token = [0_u8; 16];
+    random
+        .secure_random
+        .fill(&mut token)
+        .map_err(|_| Startup::Config(WHAT))?;
+    Ok(Some(suiss_ledger::doorbell::client::Config {
+        addr,
+        server_name,
+        tls,
+        topic: suiss_ledger::doorbell::Topic::ACCESS,
+        inbox: token.iter().fold(String::new(), |mut s, b| {
+            let _ = std::fmt::Write::write_fmt(&mut s, format_args!("{b:02x}"));
+            s
+        }),
+        name: String::from("access-experience"),
+    }))
 }
 
 fn routes(text: &str) -> Result<BTreeMap<String, Endpoint>, Startup> {
@@ -119,20 +177,21 @@ async fn run() -> Result<(), Startup> {
             )?;
             let poll = SsfPoll::new(https, &url, &token)
                 .ok_or(Startup::Config("ACCESS_EXPERIENCE_SSF_POLL"))?;
-            Some(tokio::spawn(feed::run(poll, beacon.clone(), stopped)))
+            Some(tokio::spawn(feed::run(
+                poll,
+                beacon.clone(),
+                stopped.clone(),
+            )))
         }
         (Err(_), Err(_)) => None,
         _ => return Err(Startup::Config("ACCESS_EXPERIENCE_SSF_POLL")),
     };
+    let provider = std::sync::Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+    // OP-156 m.8 (d)
+    let _bell = doorbell(&provider)?
+        .map(|cfg| tokio::spawn(feed::doorbell(cfg, beacon.clone(), stopped.clone())));
     let upstream = Https::new(roots, chain, key, default, routes)?;
-    let experience = Experience::new(
-        upstream,
-        SystemClock,
-        SystemRandom(std::sync::Arc::new(
-            rustls::crypto::aws_lc_rs::default_provider(),
-        )),
-        pep,
-    );
+    let experience = Experience::new(upstream, SystemClock, SystemRandom(provider), pep);
     let app = router(experience, beacon);
     let listener = tokio::net::TcpListener::bind(&listen).await?;
     axum::serve(listener, app).await?;

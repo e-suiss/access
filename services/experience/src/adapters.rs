@@ -56,6 +56,18 @@ impl Beacon {
     }
 }
 
+impl Beacon {
+    /// `n` more events are known to have moved authority.
+    pub fn advance(&self, n: u64) {
+        self.0.send_if_modified(|p| {
+            let next = p.saturating_add(n);
+            let moved = next > *p;
+            *p = next;
+            moved
+        });
+    }
+}
+
 impl Signals for Beacon {
     fn watch(&self) -> watch::Receiver<u64> {
         self.0.subscribe()
