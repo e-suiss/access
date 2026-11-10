@@ -209,6 +209,10 @@ impl Upstream for Https {
         self.get(&self.default, &path).await
     }
 
+    async fn relay_status(&self) -> Answer {
+        self.get(&self.default, "/access/v1/relay-status").await
+    }
+
     async fn attention(&self, url: &str, party: &str) -> Answer {
         let Some(rest) = url.strip_prefix("https://") else {
             return Answer::Unanswered(Fault::Unreachable);

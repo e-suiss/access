@@ -513,3 +513,5 @@ async fn a_revoke_is_shown_done_only_once_recorded_and_its_retry_is_idempotent()
     assert!(after.activity.len() >= before.activity.len());
     c.w.domains.release().await;
 }
+
+mod surfaces;

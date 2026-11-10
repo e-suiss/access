@@ -6,7 +6,9 @@ use futures_util::future::join_all;
 
 use crate::contract::{DomainRef, Hub, HubRequest, Kind, Plan, PlanRequest, SignedRead};
 use crate::domain::Malformed;
-use crate::domain::hub::{DomainReads, Read, assemble, results};
+use crate::domain::hub::{
+    DomainReads, Read, assemble, delivery, place_financial, results, show_delivery,
+};
 use crate::domain::plan::{domain_of, is_read, party_of, read};
 use crate::ports::{Clock, Random, Upstream};
 
@@ -114,6 +116,15 @@ impl<U: Upstream, C: Clock, N: Random> Experience<U, C, N> {
             }
         }
         let mut hub = assemble(&req.viewer, req.depth, self.clock.now(), &domains);
+        // XI-14
+        place_financial(&mut hub, &req.financial)?;
+        // §8.13, OP-156 m.11 (e)
+        if let Some(d) = ok_json(self.upstream.relay_status().await)
+            .as_ref()
+            .and_then(delivery)
+        {
+            show_delivery(&mut hub, d);
+        }
         // OP-156 m.3 (t)
         if let Some(realm) = req.realm.as_deref() {
             hub.attention = self.attention(realm, &req.viewer).await;
@@ -132,16 +143,18 @@ impl<U: Upstream, C: Clock, N: Random> Experience<U, C, N> {
         if !slug_ok {
             return None;
         }
-        let json = |a: Answer| match a {
-            Answer::Response(r) if r.status == 200 => {
-                serde_json::from_slice::<serde_json::Value>(&r.body).ok()
-            }
-            _ => None,
-        };
-        let endpoint = crate::domain::hub::attention::coordinator_of(&json(
+        let endpoint = crate::domain::hub::attention::coordinator_of(&ok_json(
             self.upstream.discovery(realm).await,
         )?)?;
-        let answer = json(self.upstream.attention(&endpoint, viewer).await)?;
+        let answer = ok_json(self.upstream.attention(&endpoint, viewer).await)?;
         crate::domain::hub::attention::answered(&endpoint, &answer)
+    }
+}
+
+/// The JSON of a `200` answer.
+fn ok_json(a: Answer) -> Option<serde_json::Value> {
+    match a {
+        Answer::Response(r) if r.status == 200 => serde_json::from_slice(&r.body).ok(),
+        _ => None,
     }
 }

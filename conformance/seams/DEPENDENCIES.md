@@ -36,6 +36,7 @@ Crates:
 Access endpoints:
 
 - `/.well-known/suiss-configuration/realms/{}` (public)
+- `/access/v1/relay-status` (public)
 - `/access/v1/search/{}` (public)
 
 Declared:

@@ -9,10 +9,11 @@ use std::collections::BTreeSet;
 use serde_json::{Value, json};
 
 use crate::contract::{
-    ActivityRow, CapacityLabel, ChangeRow, Depth, DomainRef, DomainStatus, Expert, Freshness, Hub,
-    Kind, Limit, Offer, Owner, RootRow, Row, Selection, SelectionState, Validity, Who,
+    ActivityRow, CapacityLabel, ChangeRow, Delivery, Depth, DomainRef, DomainStatus, Expert,
+    Financial, Freshness, Hub, Kind, Limit, Offer, Owner, RootRow, Row, Selection, SelectionState,
+    SourceLabel, Validity, Who,
 };
-use crate::domain::texts;
+use crate::domain::{Malformed, texts};
 
 /// What one read of one domain came back as.
 #[derive(Clone, Debug, PartialEq)]
@@ -193,6 +194,32 @@ fn selection(v: &Value) -> (Option<Selection>, &'static str) {
     )
 }
 
+/// The HR membership classes a Suiss HR source states (SCIM HR classes, OP-155 m.9 (c)).
+pub const HR_CLASSES: [&str; 6] = [
+    "hr_department",
+    "hr_title",
+    "hr_manager",
+    "hr_start",
+    "hr_end",
+    "hr_employment_status",
+];
+
+/// "Sync from HR (*issuer*)" for a rule-shaped holder over HR classes only whose selection of
+/// the reader an issuer stated (§8.17.9.8, INV-16): the accepted source's normal effect.
+fn hr_source(holder: &Who, selection: Option<&Selection>) -> Option<SourceLabel> {
+    let hr = holder.kind == "group"
+        && !holder.classes.is_empty()
+        && holder
+            .classes
+            .iter()
+            .all(|c| HR_CLASSES.contains(&c.as_str()));
+    let issuer = selection?.by.clone()?;
+    hr.then(|| SourceLabel {
+        text: String::from(texts::SOURCE_SYNC_FROM_HR),
+        issuer,
+    })
+}
+
 /// One holding row, or `None` when the answer is not a holding about the reader.
 fn row(
     v: &Value,
@@ -212,6 +239,8 @@ fn row(
     let yours = groups.iter().any(|g| g == "your_authority");
     // XI-15
     let (selection, status) = selection(v);
+    let holder = who(&v["holder"]);
+    let source = hr_source(&holder, selection.as_ref());
     let row = Row {
         domain: String::from(domain),
         label: label.cloned(),
@@ -221,7 +250,8 @@ fn row(
         freshness: Freshness::Current,
         status: String::from(status),
         selection,
-        who: who(&v["holder"]),
+        who: holder,
+        source,
         capacity: capacities(v, yours),
         what: v["actions"]
             .as_array()
@@ -250,6 +280,7 @@ fn row(
                         kind: String::from("authority"),
                         owner: Owner::Access,
                         term: t.clone(),
+                        as_of: None,
                     })
                     .collect()
             })
@@ -377,6 +408,7 @@ pub fn assemble(viewer: &str, depth: Depth, now: u64, domains: &[DomainReads]) -
         changes: Vec::new(),
         notices: vec![String::from(texts::NOT_SHOWN)],
         attention: None,
+        delivery: None,
     };
     for d in domains {
         let label = d.domain.label.as_ref().filter(|_| show);
@@ -444,11 +476,99 @@ pub fn assemble(viewer: &str, depth: Depth, now: u64, domains: &[DomainReads]) -
     {
         hub.notices.push(String::from(texts::SOME_UNKNOWN));
     }
+    // §8.13, OP-156 m.6 (d)
+    if !hub.domains.is_empty()
+        && hub
+            .domains
+            .iter()
+            .all(|d| d.freshness == Freshness::Unknown)
+    {
+        hub.notices.push(String::from(texts::ACCESS_UNAVAILABLE));
+    }
     hub.activity
         .sort_by(|a, b| b.at.cmp(&a.at).then(b.pos.cmp(&a.pos)));
     hub.changes
         .sort_by(|a, b| b.at.cmp(&a.at).then(b.pos.cmp(&a.pos)));
     hub
+}
+
+/// Pay's `pay-limit` body (`product-seam.cddl`) as stated, or `None` when it is not one.
+#[must_use]
+pub fn pay_limit(v: &Value) -> Option<Value> {
+    let m = v.as_object()?;
+    if m.keys().any(|k| {
+        !matches!(
+            k.as_str(),
+            "currency" | "limit_minor" | "period" | "held_minor"
+        )
+    }) {
+        return None;
+    }
+    let currency = m.get("currency")?.as_str()?;
+    let ok = currency.len() == 3 && currency.bytes().all(|b| b.is_ascii_uppercase());
+    m.get("limit_minor")?.as_u64()?;
+    let period = m.get("period")?.as_str()?;
+    let held = m.get("held_minor").is_none_or(|h| h.as_u64().is_some());
+    (ok && held && matches!(period, "transaction" | "day" | "month")).then(|| v.clone())
+}
+
+/// Places Pay's financial limits beside the Grants they are about (XI-14, E21, F9): each is a
+/// Pay-owned row of its own, after the Grant's authority limits; nothing is added up, compared
+/// or derived from the other owner's figure. A limit about a Grant the hub does not show is left
+/// out.
+///
+/// # Errors
+/// [`Malformed`] when a statement is not a `pay-limit` body.
+pub fn place_financial(hub: &mut Hub, facts: &[Financial]) -> Result<(), Malformed> {
+    let mut checked = Vec::with_capacity(facts.len());
+    for f in facts {
+        checked.push((f, pay_limit(&f.pay_limit).ok_or(Malformed("financial"))?));
+    }
+    for rows in [
+        &mut hub.acting_for_you,
+        &mut hub.shared_from_you,
+        &mut hub.your_authority,
+    ] {
+        for r in rows.iter_mut() {
+            for (f, term) in &checked {
+                if f.grant == r.grant {
+                    r.limits.push(Limit {
+                        kind: String::from("financial"),
+                        owner: Owner::Pay,
+                        term: term.clone(),
+                        as_of: Some(f.as_of),
+                    });
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Relay's delivery from Access's `relay-status` answer `{relay_lag_ms, notifications_delayed}`
+/// (OP-156 m.11 (e)); `None` for anything else.
+#[must_use]
+pub fn delivery(answer: &Value) -> Option<Delivery> {
+    let lag = answer.get("relay_lag_ms")?;
+    let lag_ms = if lag.is_null() {
+        None
+    } else {
+        Some(lag.as_u64()?)
+    };
+    Some(Delivery {
+        owner: Owner::Relay,
+        delayed: answer.get("notifications_delayed")?.as_bool()?,
+        lag_ms,
+    })
+}
+
+/// Shows Relay's delivery (§8.13 "Relay delayed"): a delay adds one notice and changes no row,
+/// no change and no outcome; authority never waits on delivery (INV-24, E30).
+pub fn show_delivery(hub: &mut Hub, d: Delivery) {
+    if d.delayed {
+        hub.notices.push(String::from(texts::NOTIFICATIONS_DELAYED));
+    }
+    hub.delivery = Some(d);
 }
 
 pub mod attention;

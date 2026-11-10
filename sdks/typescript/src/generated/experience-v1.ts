@@ -138,6 +138,21 @@ export interface components {
             /** @description `domain.current` or `domain.unreachable`. */
             text: string;
         };
+        Financial: {
+            /** @description When Pay stated it, Unix ms. */
+            as_of: number;
+            /** @description The Grant the limit is shown beside. */
+            grant: string;
+            pay_limit: {
+                currency: string;
+                /** @description What Pay holds against it, minor unit. */
+                held_minor?: number;
+                /** @description The limit in the currency's minor unit. */
+                limit_minor: number;
+                /** @enum {string} */
+                period: "transaction" | "day" | "month";
+            };
+        };
         /** @enum {string} */
         Freshness: "current" | "unknown";
         Hub: {
@@ -157,11 +172,19 @@ export interface components {
             };
             /** @description Changes (IA-2). */
             changes: components["schemas"]["ChangeRow"][];
+            delivery?: {
+                /** @description More than 60 s behind (`status.notifications_delayed`); no row's status changes with it (INV-24). */
+                delayed: boolean;
+                /** @description The age of the oldest message waiting for Relay. */
+                lag_ms?: number;
+                /** @constant */
+                owner: "relay";
+            };
             /** @enum {string} */
             depth: "default" | "expert" | "audit";
             /** @description The domains as seen. */
             domains: components["schemas"]["DomainStatus"][];
-            /** @description Always includes `hub.not_shown_unconnected`. */
+            /** @description Always includes `hub.not_shown_unconnected`; `status.access_unavailable` when no domain answered, `status.notifications_delayed` when Relay is behind (§8.13). */
             notices: string[];
             /** @description Anchors the reader roots. */
             roots: components["schemas"]["RootRow"][];
@@ -179,6 +202,8 @@ export interface components {
              * @enum {string}
              */
             depth: "default" | "expert" | "audit";
+            /** @description Pay's financial limits as the reader's device read them from Pay; each becomes a Pay-owned row beside the Grant's authority limits, never merged with them (XI-14). */
+            financial?: components["schemas"]["Financial"][];
             /** @description The signed reads. */
             reads: components["schemas"]["SignedRead"][];
             /** @description The reader's realm slug: when its Suiss discovery document names a coordinator, the hub asks that coordinator's public Needs Attention endpoint for the count (OP-156 m.3 (t)). */
@@ -251,8 +276,10 @@ export interface components {
             grant: string;
             /** @description The reader's label of the domain; present only with more than one domain (IA-6). */
             label?: string;
-            /** @description One row per limit and owner (XI-14). */
+            /** @description One row per limit and owner (XI-14): an authority limit is Access's, a financial limit is Pay's; neither is derived from or added to the other. */
             limits: {
+                /** @description When its owner stated it, for a limit not read from Access. */
+                as_of?: number;
                 /** @enum {string} */
                 kind: "authority" | "financial";
                 /**
@@ -278,6 +305,12 @@ export interface components {
              */
             owner: "access" | "executor" | "verifier" | "relay" | "pay";
             selection?: components["schemas"]["Selection"];
+            source?: {
+                /** @description The issuer Party of the selecting statement. */
+                issuer: string;
+                /** @constant */
+                text: "source.sync_from_hr";
+            };
             /** @description `status.current`, `status.stale` ("Needs refresh — not removed"), `status.ended` ("Removed since …") or `status.ended_undated` (XI-15). */
             status: string;
             validity: {

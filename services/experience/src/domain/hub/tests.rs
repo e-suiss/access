@@ -320,3 +320,209 @@ fn deeper_explains_and_never_hides_capacity_or_status() {
     assert_eq!(d.status, e.status);
     assert_eq!(d.what, e.what);
 }
+
+fn financial(grant: &str, body: Value) -> Financial {
+    Financial {
+        grant: grant.to_owned(),
+        pay_limit: body,
+        as_of: 77,
+    }
+}
+
+// XI-14, E21, F9
+#[test]
+fn a_financial_limit_is_pays_own_row_and_never_derived_from_the_authority_limit() {
+    let budget = json!({ "dimension": "amount", "capacity": 50_000, "window": "transaction" });
+    let limited = holding(
+        &["shared_from_you"],
+        &json!({ "anchor": ANCHOR }),
+        &json!({ "budget": [budget] }),
+    );
+    let mut hub = assemble(ME, Depth::Default, 10, &one(vec![limited]));
+    let pay =
+        json!({ "currency": "TRY", "limit_minor": 500_000, "period": "day", "held_minor": 12_000 });
+    place_financial(
+        &mut hub,
+        &[
+            financial("Z3JhbnQ", pay.clone()),
+            financial("b3RoZXI", pay.clone()),
+        ],
+    )
+    .unwrap();
+    let limits = &hub.shared_from_you[0].limits;
+    assert_eq!(limits.len(), 2, "one row per limit and owner");
+    assert_eq!(
+        (
+            limits[0].kind.as_str(),
+            limits[0].owner,
+            &limits[0].term,
+            limits[0].as_of
+        ),
+        ("authority", Owner::Access, &budget, None)
+    );
+    assert_eq!(
+        (
+            limits[1].kind.as_str(),
+            limits[1].owner,
+            &limits[1].term,
+            limits[1].as_of
+        ),
+        ("financial", Owner::Pay, &pay, Some(77))
+    );
+
+    let mut without = assemble(
+        ME,
+        Depth::Default,
+        10,
+        &one(vec![holding(
+            &["shared_from_you"],
+            &json!({ "anchor": ANCHOR }),
+            &json!({ "budget": [budget] }),
+        )]),
+    );
+    place_financial(&mut without, &[]).unwrap();
+    assert_eq!(
+        without.shared_from_you[0].limits.len(),
+        1,
+        "no financial row is made up from the authority limit"
+    );
+    let unlimited = holding(
+        &["shared_from_you"],
+        &json!({ "anchor": ANCHOR }),
+        &json!({}),
+    );
+    let mut pay_only = assemble(ME, Depth::Default, 10, &one(vec![unlimited]));
+    place_financial(&mut pay_only, &[financial("Z3JhbnQ", pay.clone())]).unwrap();
+    assert!(
+        pay_only.shared_from_you[0]
+            .limits
+            .iter()
+            .all(|l| l.owner == Owner::Pay),
+        "no authority row is made up from Pay's figure"
+    );
+
+    for bad in [
+        json!({ "currency": "try", "limit_minor": 1, "period": "day" }),
+        json!({ "currency": "TRY", "limit_minor": -1, "period": "day" }),
+        json!({ "currency": "TRY", "limit_minor": 1, "period": "week" }),
+        json!({ "currency": "TRY", "limit_minor": 1, "period": "day", "remaining": 3 }),
+    ] {
+        let mut h = assemble(ME, Depth::Default, 10, &one(Vec::new()));
+        assert_eq!(
+            place_financial(&mut h, &[financial("Z3JhbnQ", bad)]),
+            Err(Malformed("financial"))
+        );
+    }
+}
+
+// §8.13, INV-24, E30, OP-156 m.11 (e)
+#[test]
+fn a_relay_delay_is_a_notice_and_never_makes_a_revocation_pending() {
+    let results = vec![holding(
+        &["your_authority"],
+        &json!({ "anchor": ANCHOR }),
+        &json!({}),
+    )];
+    let changes = vec![json!({
+        "type": "change", "kind": "grant", "id": "Z29uZQ", "position": "9", "ended": true, "own": true, "at": 5,
+    })];
+    let reads = vec![domain(
+        "ZA",
+        "Personal",
+        vec![
+            (Kind::Inventory, Read::Answered(results)),
+            (Kind::Activity, Read::Answered(Vec::new())),
+            (Kind::Changes, Read::Answered(changes)),
+        ],
+    )];
+    let before = assemble(ME, Depth::Default, 10, &reads);
+    let mut after = before.clone();
+    let d = delivery(&json!({ "relay_lag_ms": 61_000, "notifications_delayed": true })).unwrap();
+    assert_eq!(d.owner, Owner::Relay);
+    show_delivery(&mut after, d);
+    assert_eq!(after.your_authority, before.your_authority);
+    assert_eq!(after.changes, before.changes);
+    assert_eq!(after.changes[0].text, "change.grant_ended");
+    assert!(
+        after
+            .notices
+            .contains(&texts::NOTIFICATIONS_DELAYED.to_owned())
+    );
+    let mut on_time = before.clone();
+    show_delivery(
+        &mut on_time,
+        delivery(&json!({ "relay_lag_ms": null, "notifications_delayed": false })).unwrap(),
+    );
+    assert_eq!(on_time.notices, before.notices);
+    assert_eq!(delivery(&json!({ "relay_lag_ms": "soon" })), None);
+}
+
+// §8.13, OP-156 m.6 (d)
+#[test]
+fn access_unavailable_says_authority_cant_change_and_points_to_the_runtime() {
+    let hub = assemble(
+        ME,
+        Depth::Default,
+        1,
+        &[domain(
+            "ZA",
+            "Personal",
+            vec![(Kind::Inventory, Read::Unknown)],
+        )],
+    );
+    assert!(hub.notices.contains(&texts::ACCESS_UNAVAILABLE.to_owned()));
+    assert!(hub.your_authority.is_empty() && hub.acting_for_you.is_empty());
+    let partly = assemble(
+        ME,
+        Depth::Default,
+        1,
+        &[
+            domain("ZA", "Personal", vec![(Kind::Inventory, Read::Unknown)]),
+            domain(
+                "ZB",
+                "Acme",
+                vec![(Kind::Inventory, Read::Answered(Vec::new()))],
+            ),
+        ],
+    );
+    assert!(
+        !partly
+            .notices
+            .contains(&texts::ACCESS_UNAVAILABLE.to_owned())
+    );
+}
+
+// §8.17.9.8, INV-16, Ek B 5287
+#[test]
+fn an_hr_selection_shows_sync_from_hr_with_its_issuer() {
+    let hr = |classes: Value, by: Option<&str>| {
+        holding(
+            &["your_authority"],
+            &json!({ "anchor": ANCHOR }),
+            &json!({
+                "holder": { "group": classes },
+                "selection": { "state": "current", "since": 4, "by": by, "stated_at": 3 },
+            }),
+        )
+    };
+    let hub = assemble(
+        ME,
+        Depth::Default,
+        1,
+        &one(vec![
+            hr(json!(["hr_department"]), Some("aHI")),
+            hr(json!(["hr_department", "staff"]), Some("aHI")),
+            hr(json!(["hr_title"]), None),
+        ]),
+    );
+    let rows = &hub.your_authority;
+    assert_eq!(
+        rows[0].source,
+        Some(SourceLabel {
+            text: texts::SOURCE_SYNC_FROM_HR.to_owned(),
+            issuer: "aHI".to_owned()
+        })
+    );
+    assert_eq!(rows[1].source, None, "not only HR classes");
+    assert_eq!(rows[2].source, None, "no statement said so");
+}

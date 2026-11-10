@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 /// Version of the contract.
-pub const VERSION: &str = "1.0.0";
+pub const VERSION: &str = "1.1.0";
 
 /// The plan route: the reads to sign.
 pub const PLAN_PATH: &str = "/experience/v1/hub/plan";
@@ -164,6 +164,23 @@ pub struct HubRequest {
     /// the Needs Attention link (OP-156 m.3 (t)).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub realm: Option<String>,
+    /// Pay's own financial limits as the reader's device read them from Pay, each about one
+    /// Grant (XI-14): shown as Pay's rows beside Access's, never merged with or derived from them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub financial: Vec<Financial>,
+}
+
+/// One financial limit or hold as Pay stated it (XI-14, E21, F9): the `pay-limit` body of
+/// `product-seam.cddl` and when Pay said it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Financial {
+    /// The Grant the limit is shown beside.
+    pub grant: String,
+    /// `{currency, limit_minor, period, held_minor?}`.
+    pub pay_limit: Value,
+    /// When Pay stated it, Unix ms.
+    pub as_of: u64,
 }
 
 /// Whether what a row or domain shows is current (XI-16).
@@ -266,6 +283,19 @@ pub struct Limit {
     pub owner: Owner,
     /// The term as its owner states it.
     pub term: Value,
+    /// When its owner stated it, Unix ms, for a limit not read from Access.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub as_of: Option<u64>,
+}
+
+/// Where a rule-shaped holding's selection comes from, when it is an accepted membership source
+/// (§8.17.9.8, Ek B "Sync from HR"): its normal effect, shown on the row with its issuer.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceLabel {
+    /// The text key: `source.sync_from_hr`.
+    pub text: String,
+    /// The issuer Party of the statement.
+    pub issuer: String,
 }
 
 /// How long a holding is good for, without naming the contract (§8.8, §8.9).
@@ -328,6 +358,9 @@ pub struct Row {
     pub selection: Option<Selection>,
     /// The holder.
     pub who: Who,
+    /// The membership source selecting the reader, when it is an HR source (§8.17.9.8).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<SourceLabel>,
     /// Capacity (XI-10).
     pub capacity: Vec<CapacityLabel>,
     /// What it covers: action names.
@@ -450,6 +483,22 @@ pub struct Hub {
     /// when the realm names no coordinator or nothing waits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attention: Option<Attention>,
+    /// Relay's delivery as Access reported it (§8.13 "Relay delayed"): a delay never changes a
+    /// row's status; authority does not wait on delivery (INV-24, E30).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery: Option<Delivery>,
+}
+
+/// Whether notifications wait for Relay (OP-156 m.11 (e)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Delivery {
+    /// Owner: Relay delivers.
+    pub owner: Owner,
+    /// More than 60 s behind.
+    pub delayed: bool,
+    /// The age of the oldest message waiting, ms; absent when none waits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lag_ms: Option<u64>,
 }
 
 /// "N approvals waiting for you →": a link to the coordinator, whose count it is; Access keeps
@@ -575,8 +624,25 @@ fn requests() -> Map<String, Value> {
                 "depth": { "type": "string", "enum": ["default", "expert", "audit"], "default": "default", "description": "§8.12: each depth explains the one before; capacity and status show at every depth." },
                 "reads": list(&r("SignedRead"), "The signed reads."),
                 "realm": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,62}$", "description": "The reader's realm slug: when its Suiss discovery document names a coordinator, the hub asks that coordinator's public Needs Attention endpoint for the count (OP-156 m.3 (t))." },
+                "financial": list(&r("Financial"), "Pay's financial limits as the reader's device read them from Pay; each becomes a Pay-owned row beside the Grant's authority limits, never merged with them (XI-14)."),
             }),
             &["viewer", "reads"],
+        ),
+    );
+    m.insert(
+        "Financial".into(),
+        object(
+            &json!({
+                "grant": text("The Grant the limit is shown beside."),
+                "pay_limit": object(&json!({
+                    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+                    "limit_minor": uint("The limit in the currency's minor unit."),
+                    "period": { "type": "string", "enum": ["transaction", "day", "month"] },
+                    "held_minor": uint("What Pay holds against it, minor unit."),
+                }), &["currency", "limit_minor", "period"]),
+                "as_of": uint("When Pay stated it, Unix ms."),
+            }),
+            &["grant", "pay_limit", "as_of"],
         ),
     );
     m
@@ -642,11 +708,16 @@ fn rows() -> Map<String, Value> {
                 "capacity": list(&r("CapacityLabel"), "In whose name, apart from where it came from (XI-10); never empty."),
                 "what": list(&json!({ "type": "string" }), "`namespace:name` of each action."),
                 "validity": object(&json!({ "valid_until": uint("Unix ms."), "text": { "const": "validity.valid_until" } }), &["valid_until", "text"]),
+                "source": object(&json!({
+                    "text": { "const": "source.sync_from_hr" },
+                    "issuer": text("The issuer Party of the selecting statement."),
+                }), &["text", "issuer"]),
                 "limits": list(&object(&json!({
                     "kind": { "type": "string", "enum": ["authority", "financial"] },
                     "owner": owner(),
                     "term": { "type": "object" },
-                }), &["kind", "owner", "term"]), "One row per limit and owner (XI-14)."),
+                    "as_of": uint("When its owner stated it, for a limit not read from Access."),
+                }), &["kind", "owner", "term"]), "One row per limit and owner (XI-14): an authority limit is Access's, a financial limit is Pay's; neither is derived from or added to the other."),
                 "offers": list(&object(&json!({
                     "action": { "type": "string", "enum": ["revoke", "narrow", "suspend"] },
                     "available": { "type": "boolean" },
@@ -728,7 +799,7 @@ fn rows() -> Map<String, Value> {
                 "roots": list(&r("RootRow"), "Anchors the reader roots."),
                 "activity": list(&r("ActivityRow"), "Uses (S6)."),
                 "changes": list(&r("ChangeRow"), "Changes (IA-2)."),
-                "notices": list(&json!({ "type": "string" }), "Always includes `hub.not_shown_unconnected`."),
+                "notices": list(&json!({ "type": "string" }), "Always includes `hub.not_shown_unconnected`; `status.access_unavailable` when no domain answered, `status.notifications_delayed` when Relay is behind (§8.13)."),
                 "attention": object(
                     &json!({
                         "href": text("The coordinator's Needs Attention URL (`idp.realm.coordinator`), https."),
@@ -736,6 +807,14 @@ fn rows() -> Map<String, Value> {
                         "text": { "const": "attention.approvals_waiting" },
                     }),
                     &["href", "count", "text"],
+                ),
+                "delivery": object(
+                    &json!({
+                        "owner": { "const": "relay" },
+                        "delayed": { "type": "boolean", "description": "More than 60 s behind (`status.notifications_delayed`); no row's status changes with it (INV-24)." },
+                        "lag_ms": uint("The age of the oldest message waiting for Relay."),
+                    }),
+                    &["owner", "delayed"],
                 ),
             }),
             &["as_of", "depth", "domains", "show_domains", "acting_for_you", "shared_from_you", "your_authority", "roots", "activity", "changes", "notices"],

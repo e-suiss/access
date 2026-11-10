@@ -27,6 +27,11 @@ pub trait Upstream: Send + Sync {
         async { Answer::Unanswered(access_sdk::transport::Fault::Unreachable) }
     }
 
+    /// `GET /access/v1/relay-status` at Access (OP-156 m.11 (e)); none by default.
+    fn relay_status(&self) -> impl Future<Output = Answer> + Send {
+        async { Answer::Unanswered(access_sdk::transport::Fault::Unreachable) }
+    }
+
     /// `GET {url}?party={party}`: the coordinator's public Needs Attention count for the reader
     /// (OP-156 m.3 (t)); none by default.
     fn attention(&self, url: &str, party: &str) -> impl Future<Output = Answer> + Send {

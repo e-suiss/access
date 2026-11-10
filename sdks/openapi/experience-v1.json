@@ -225,6 +225,59 @@
         ],
         "type": "object"
       },
+      "Financial": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "description": "When Pay stated it, Unix ms.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "grant": {
+            "description": "The Grant the limit is shown beside.",
+            "type": "string"
+          },
+          "pay_limit": {
+            "additionalProperties": false,
+            "properties": {
+              "currency": {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              "held_minor": {
+                "description": "What Pay holds against it, minor unit.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "limit_minor": {
+                "description": "The limit in the currency's minor unit.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "period": {
+                "enum": [
+                  "transaction",
+                  "day",
+                  "month"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "currency",
+              "limit_minor",
+              "period"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "grant",
+          "pay_limit",
+          "as_of"
+        ],
+        "type": "object"
+      },
       "Freshness": {
         "enum": [
           "current",
@@ -284,6 +337,28 @@
             },
             "type": "array"
           },
+          "delivery": {
+            "additionalProperties": false,
+            "properties": {
+              "delayed": {
+                "description": "More than 60 s behind (`status.notifications_delayed`); no row's status changes with it (INV-24).",
+                "type": "boolean"
+              },
+              "lag_ms": {
+                "description": "The age of the oldest message waiting for Relay.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "owner": {
+                "const": "relay"
+              }
+            },
+            "required": [
+              "owner",
+              "delayed"
+            ],
+            "type": "object"
+          },
           "depth": {
             "enum": [
               "default",
@@ -300,7 +375,7 @@
             "type": "array"
           },
           "notices": {
-            "description": "Always includes `hub.not_shown_unconnected`.",
+            "description": "Always includes `hub.not_shown_unconnected`; `status.access_unavailable` when no domain answered, `status.notifications_delayed` when Relay is behind (§8.13).",
             "items": {
               "type": "string"
             },
@@ -359,6 +434,13 @@
               "audit"
             ],
             "type": "string"
+          },
+          "financial": {
+            "description": "Pay's financial limits as the reader's device read them from Pay; each becomes a Pay-owned row beside the Grant's authority limits, never merged with them (XI-14).",
+            "items": {
+              "$ref": "#/components/schemas/Financial"
+            },
+            "type": "array"
           },
           "reads": {
             "description": "The signed reads.",
@@ -578,10 +660,15 @@
             "type": "string"
           },
           "limits": {
-            "description": "One row per limit and owner (XI-14).",
+            "description": "One row per limit and owner (XI-14): an authority limit is Access's, a financial limit is Pay's; neither is derived from or added to the other.",
             "items": {
               "additionalProperties": false,
               "properties": {
+                "as_of": {
+                  "description": "When its owner stated it, for a limit not read from Access.",
+                  "minimum": 0,
+                  "type": "integer"
+                },
                 "kind": {
                   "enum": [
                     "authority",
@@ -662,6 +749,23 @@
           },
           "selection": {
             "$ref": "#/components/schemas/Selection"
+          },
+          "source": {
+            "additionalProperties": false,
+            "properties": {
+              "issuer": {
+                "description": "The issuer Party of the selecting statement.",
+                "type": "string"
+              },
+              "text": {
+                "const": "source.sync_from_hr"
+              }
+            },
+            "required": [
+              "text",
+              "issuer"
+            ],
+            "type": "object"
           },
           "status": {
             "description": "`status.current`, `status.stale` (\"Needs refresh — not removed\"), `status.ended` (\"Removed since …\") or `status.ended_undated` (XI-15).",
@@ -841,7 +945,7 @@
       "name": "Apache-2.0"
     },
     "title": "Suiss Access Experience",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "openapi": "3.1.0",
   "paths": {

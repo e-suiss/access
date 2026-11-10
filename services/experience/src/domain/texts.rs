@@ -43,6 +43,14 @@ pub const ACTIVITY_BY_YOU: &str = "activity.by_you";
 /// "Used on your behalf".
 pub const ACTIVITY_FOR_YOU: &str = "activity.for_you";
 
+/// "Authority can't be changed right now. You can still ask the runtime to stop for now (Work
+/// control), if it supports it." (§8.13, OP-156 m.6 (d)): no domain answered.
+pub const ACCESS_UNAVAILABLE: &str = "status.access_unavailable";
+/// "Notifications are delayed. What you changed still took effect." (§8.13, INV-24).
+pub const NOTIFICATIONS_DELAYED: &str = "status.notifications_delayed";
+/// "Sync from HR (*issuer*)": an accepted HR membership source selects the reader (§8.17.9.8).
+pub const SOURCE_SYNC_FROM_HR: &str = "source.sync_from_hr";
+
 /// The change text of a change kind (IA-2): information only.
 #[must_use]
 pub fn change(kind: &str, ended: bool) -> String {
@@ -74,7 +82,7 @@ pub const OUTCOME_BUSY: &str = "outcome.busy_retry";
 pub const OUTCOME_TIME: &str = "outcome.unavailable_time_check";
 
 /// Every key, for the catalogue check.
-pub const ALL: [&str; 31] = [
+pub const ALL: [&str; 34] = [
     NOT_SHOWN,
     SOME_UNKNOWN,
     DOMAIN_CURRENT,
@@ -103,6 +111,9 @@ pub const ALL: [&str; 31] = [
     OUTCOME_COULDNT_REACH,
     OUTCOME_BUSY,
     OUTCOME_TIME,
+    ACCESS_UNAVAILABLE,
+    NOTIFICATIONS_DELAYED,
+    SOURCE_SYNC_FROM_HR,
     "change.grant",
     "change.instance",
     "change.key_event",

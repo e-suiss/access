@@ -18,11 +18,13 @@ The contract is [`sdks/openapi/experience-v1.json`](../../sdks/openapi/experienc
 
 - **Owner and time.** Every row names whose record it is and when it was read. A domain that does not answer is shown as "Current status unknown", never as empty and never as pending.
 - **Capacity.** Every holding says in whose name it is used ("for their own use", "on behalf of …"), apart from where it came from. Everything the reader gave shows in at least one group.
-- **Limits.** An authority limit and a financial limit are two rows with two owners.
+- **Limits.** An authority limit and a financial limit are two rows with two owners. The authority limit is the Grant's budget as Access recorded it; the financial limit is Pay's own `pay-limit` statement, which the reader's device read from Pay and sends with the hub request. Neither is added to, compared with or derived from the other, and without Pay's statement no financial row is shown.
+- **Sources.** A role selected by an accepted HR membership source says "Sync from HR (*issuer*)".
 - **Actions.** A row shows the actions the reader can take, at most two steps away; one the reader cannot take is shown with who can.
 - **Rule-shaped holdings.** A stale selection reads "Needs refresh — not removed"; an ended one reads "Removed since …", and a rejoin is a new selection, not the old one back.
 - **Coverage.** The hub always says "Not shown: domains you haven't connected"; it never claims to be complete.
 - **Changes are information.** No change asks for an action; there is no notification centre.
+- **Degraded states.** When Relay is more than 60 s behind (Access's `relay-status`), the hub adds "Notifications are delayed" and changes no row: a revocation is never shown as pending because a notification waits. When no domain answers, it says authority can't be changed right now and that the runtime can still be asked to stop (Work control).
 
 ## Honest outcomes
 
