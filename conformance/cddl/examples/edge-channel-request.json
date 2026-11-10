@@ -1,59 +1,71 @@
 {
   "cases": [
     {
-      "cbor": "a9617601626964500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a636170706363726d6463616c6c6c61757468656e746963617465646e616d6568646e3d746f6b656e64706565726c3139322e302e322e302f3234657265616c6d6461636d65666d6574686f646f6c6461705f63726564656e7469616c6673656372657458185a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
-      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"call\": \"authenticate\", \"realm\": \"acme\", \"app\": \"crm\", \"method\": \"ldap_credential\", \"name\": \"dn=token\", \"secret\": h'5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a', \"peer\": \"192.0.2.0/24\"}",
-      "id": "authenticate-ldap-credential",
+      "cbor": "a0",
+      "edn": "{}",
+      "id": "hello",
       "valid": true
     },
     {
-      "cbor": "aa6176016261741b000001a1a3dafc00626964500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a6361616c026463616c6c6b69737375655f636c61696d65636c6173736e61757468656e7469636174696f6e657265616c6d6461636d65666d6574686f64686b65726265726f73677375626a656374500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a6865766964656e6365822f58200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
-      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"call\": \"issue_claim\", \"realm\": \"acme\", \"subject\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"class\": \"authentication\", \"method\": \"kerberos\", \"aal\": 2, \"at\": 1793750400000, \"evidence\": [-16, h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b']}",
-      "id": "issue-claim",
-      "valid": true
-    },
-    {
-      "cbor": "a86176016262796375706e626964500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a63617070781b68747470733a2f2f73702e6578616d706c652f6d657461646174616463616c6c6e7375626a6563745f6c6f6f6b7570657265616c6d6461636d656576616c7565706164614061636d652e6578616d706c656a6174747269627574657382646d61696c6b646973706c61794e616d65",
-      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"call\": \"subject_lookup\", \"realm\": \"acme\", \"app\": \"https://sp.example/metadata\", \"by\": \"upn\", \"value\": \"ada@acme.example\", \"attributes\": [\"mail\", \"displayName\"]}",
+      "cbor": "a2657265616c6d64636f72706a6964656e7469666965727061646140636f72702e6578616d706c65",
+      "edn": "{\"realm\": \"corp\", \"identifier\": \"ada@corp.example\"}",
       "id": "subject-lookup",
       "valid": true
     },
     {
-      "cbor": "a6617601626964500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a63617070781b68747470733a2f2f73702e6578616d706c652f6d657461646174616463616c6c6e73657373696f6e5f617474657374657265616c6d6461636d656668616e646c6558200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
-      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"call\": \"session_attest\", \"realm\": \"acme\", \"app\": \"https://sp.example/metadata\", \"handle\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b'}",
-      "id": "session-attest",
+      "cbor": "a5657265616c6d64636f7270666d6574686f64696c6461702d62696e64677375626a656374500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a6865766964656e636558200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b69617574685f74696d651b000001a1a3dafc00",
+      "edn": "{\"realm\": \"corp\", \"subject\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"method\": \"ldap-bind\", \"auth_time\": 1793750400000, \"evidence\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b'}",
+      "id": "issue-claim",
       "valid": true
     },
     {
-      "cbor": "ab617601626964500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a63617070636e61736462617365716f753d70656f706c652c64633d61636d656463616c6c6e6469726563746f72795f72656164657265616c6d6461636d656573636f7065637375626666696c7465728263616e6483836265716b6f626a656374436c61737366706572736f6e836673756273747262636ea263616e798067696e697469616c62416482636e6f74826770726573656e746d6e734163636f756e744c6f636b69706167655f73697a6518646a617474726962757465738262636e697569644e756d6265726a73697a655f6c696d69741901f4",
-      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"call\": \"directory_read\", \"realm\": \"acme\", \"app\": \"nas\", \"base\": \"ou=people,dc=acme\", \"scope\": \"sub\", \"filter\": [\"and\", [[\"eq\", \"objectClass\", \"person\"], [\"substr\", \"cn\", {\"initial\": \"Ad\", \"any\": []}], [\"not\", [\"present\", \"nsAccountLock\"]]]], \"attributes\": [\"cn\", \"uidNumber\"], \"size_limit\": 500, \"page_size\": 100}",
-      "id": "directory-read",
+      "cbor": "a4657265616c6d64636f7270666d6574686f64686b65726265726f73677375626a656374500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a69617574685f74696d651b000001a1a3dafc00",
+      "edn": "{\"realm\": \"corp\", \"subject\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"method\": \"kerberos\", \"auth_time\": 1793750400000}",
+      "id": "issue-claim-without-evidence",
       "valid": true
     },
     {
-      "cbor": "a86176016261741b000001a1a3dafc00626964500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a6463616c6c656175646974656576656e7474676174657761792e62696e642e72656675736564657265616c6d6461636d6566726561736f6e6772656675736564676f7574636f6d65676661696c757265",
-      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"call\": \"audit\", \"realm\": \"acme\", \"event\": \"gateway.bind.refused\", \"at\": 1793750400000, \"outcome\": \"failure\", \"reason\": \"refused\"}",
+      "cbor": "a3656576656e74696c6461702e62696e64657265616c6d64636f7270676f7574636f6d656772656675736564",
+      "edn": "{\"realm\": \"corp\", \"event\": \"ldap.bind\", \"outcome\": \"refused\"}",
       "id": "audit",
       "valid": true
     },
     {
-      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"call\": \"issue_claim\", \"realm\": \"acme\", \"subject\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"class\": \"org_member\", \"method\": \"saml\", \"aal\": 2, \"at\": 1, \"evidence\": [-16, h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b']}",
-      "id": "claim-class-other-than-authentication",
-      "valid": false
+      "cbor": "a4656576656e746d7261646975732e616363657373657265616c6d64636f7270676f7574636f6d65626f6b677375626a656374500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "edn": "{\"realm\": \"corp\", \"event\": \"radius.access\", \"outcome\": \"ok\", \"subject\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a'}",
+      "id": "audit-with-subject",
+      "valid": true
     },
     {
-      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"call\": \"audit\", \"realm\": \"acme\", \"gateway\": \"urn:suiss:access:gw:ldap:main\", \"event\": \"gateway.bind.refused\", \"at\": 1, \"outcome\": \"failure\"}",
+      "cbor": "a463617070677072696e746572646e616d6568646e3d746f6b656e657265616c6d64636f72706673656372657458185a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "edn": "{\"realm\": \"corp\", \"app\": \"printer\", \"name\": \"dn=token\", \"secret\": h'5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a'}",
+      "id": "authenticate-planned",
+      "valid": true
+    },
+    {
+      "cbor": "a76462617365716f753d70656f706c652c64633d636f7270657265616c6d64636f72706573636f7065637375626666696c7465728263616e6482836265716b6f626a656374436c61737366706572736f6e82636e6f74826770726573656e746d6e734163636f756e744c6f636b69706167655f73697a6518646a617474726962757465738162636e6a73697a655f6c696d69741901f4",
+      "edn": "{\"realm\": \"corp\", \"base\": \"ou=people,dc=corp\", \"scope\": \"sub\", \"filter\": [\"and\", [[\"eq\", \"objectClass\", \"person\"], [\"not\", [\"present\", \"nsAccountLock\"]]]], \"attributes\": [\"cn\"], \"size_limit\": 500, \"page_size\": 100}",
+      "id": "directory-read-planned",
+      "valid": true
+    },
+    {
+      "edn": "{\"realm\": \"corp\", \"gateway\": \"urn:suiss:access:gw:ldap:corp-1\", \"event\": \"ldap.bind\", \"outcome\": \"ok\"}",
       "id": "gateway-names-itself-in-the-body",
       "valid": false
     },
     {
-      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"call\": \"directory_read\", \"realm\": \"acme\", \"app\": \"nas\", \"base\": \"\", \"scope\": \"sub\", \"filter\": [\"present\", \"cn\"], \"attributes\": [], \"size_limit\": 5001, \"page_size\": 100}",
-      "id": "results-above-5000",
+      "edn": "{\"realm\": \"corp\", \"event\": \"LDAP.bind\", \"outcome\": \"ok\"}",
+      "id": "audit-code-with-capitals",
       "valid": false
     },
     {
-      "edn": "{\"v\": 1, \"id\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"call\": \"write_account\", \"realm\": \"acme\"}",
-      "id": "unknown-call",
+      "edn": "{\"realm\": \"corp\", \"subject\": h'0a0a', \"method\": \"ldap-bind\", \"auth_time\": 1}",
+      "id": "short-subject",
+      "valid": false
+    },
+    {
+      "edn": "{\"realm\": \"corp\", \"base\": \"\", \"scope\": \"sub\", \"filter\": [\"present\", \"cn\"], \"attributes\": [], \"size_limit\": 5001, \"page_size\": 100}",
+      "id": "results-above-5000",
       "valid": false
     }
   ],

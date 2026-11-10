@@ -13,5 +13,8 @@ access-kernel = { workspace = true }
 suiss-crypto = { workspace = true }
 thiserror = { workspace = true }
 
+[dev-dependencies]
+serde_json = { workspace = true, features = ["std"] }
+
 [lints]
 workspace = true

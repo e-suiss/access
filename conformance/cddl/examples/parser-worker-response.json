@@ -1,60 +1,53 @@
 {
   "cases": [
     {
-      "cbor": "a461760162696400626f6ba264726f6f74a3646e616d6582782475726e3a6f617369733a6e616d65733a74633a53414d4c3a322e303a70726f746f636f6c68526573706f6e736565617474727381828260624944635f7231686368696c6472656e81a3646e616d6582782575726e3a6f617369733a6e616d65733a74633a53414d4c3a322e303a617373657274696f6e69417373657274696f6e65617474727381828260624944635f6131686368696c6472656e816474657874667369676e656481a5626964635f613163616c676a7273612d736861323536636b657900647061746881006664696765737466736861323536626f7070786d6c2e70617273655f766572696679",
-      "edn": "{\"v\": 1, \"id\": 0, \"op\": \"xml.parse_verify\", \"ok\": {\"root\": {\"name\": [\"urn:oasis:names:tc:SAML:2.0:protocol\", \"Response\"], \"attrs\": [[[\"\", \"ID\"], \"_r1\"]], \"children\": [{\"name\": [\"urn:oasis:names:tc:SAML:2.0:assertion\", \"Assertion\"], \"attrs\": [[[\"\", \"ID\"], \"_a1\"]], \"children\": [\"text\"]}]}, \"signed\": [{\"id\": \"_a1\", \"path\": [0], \"key\": 0, \"alg\": \"rsa-sha256\", \"digest\": \"sha256\"}]}}",
-      "id": "parse-verify-ok",
+      "cbor": "a464726f6f746c417574686e526571756573746564657074680266737461747573626f6b68656c656d656e747303",
+      "edn": "{\"status\": \"ok\", \"elements\": 3, \"depth\": 2, \"root\": \"AuthnRequest\"}",
+      "id": "ok-xml",
       "valid": true
     },
     {
-      "cbor": "a461760162696401626f6ba265706861736567707265706172656b7369676e65645f696e666f4f3c64733a5369676e6564496e666f3e626f706f786d6c2e7369676e5f6c61796f7574",
-      "edn": "{\"v\": 1, \"id\": 1, \"op\": \"xml.sign_layout\", \"ok\": {\"phase\": \"prepare\", \"signed_info\": h'3c64733a5369676e6564496e666f3e'}}",
-      "id": "sign-prepared",
+      "cbor": "a464726f6f74606564657074680466737461747573626f6b68656c656d656e74730c",
+      "edn": "{\"status\": \"ok\", \"elements\": 12, \"depth\": 4, \"root\": \"\"}",
+      "id": "ok-der",
       "valid": true
     },
     {
-      "cbor": "a461760162696403626f6ba66269764c0c0c0c0c0c0c0c0c0c0c0c0c63656e636a6165733235362d67636d6a636970686572746578745820abababababababababababababababababababababababababababababababab6b6f6165705f646967657374667368613235366d656e637279707465645f6b65795820eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee6d6b65795f7472616e73706f7274687273612d6f616570626f7072786d6c2e646563727970745f6c61796f7574",
-      "edn": "{\"v\": 1, \"id\": 3, \"op\": \"xml.decrypt_layout\", \"ok\": {\"key_transport\": \"rsa-oaep\", \"oaep_digest\": \"sha256\", \"encrypted_key\": h'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', \"enc\": \"aes256-gcm\", \"iv\": h'0c0c0c0c0c0c0c0c0c0c0c0c', \"ciphertext\": h'abababababababababababababababababababababababababababababababab'}}",
-      "id": "decrypt-layout-ok",
+      "cbor": "a264636f64656b786d6c2d646f6374797065667374617475736772656675736564",
+      "edn": "{\"status\": \"refused\", \"code\": \"xml-doctype\"}",
+      "id": "refused-doctype",
       "valid": true
     },
     {
-      "cbor": "a461760162696404626f6ba3646b696e646d6f6373702e726573706f6e7365656261736963a76374627342300065636572747380677369675f616c6773312e322e3834302e31303034352e342e332e3269726573706f6e64657282686b65795f6861736854111111111111111111111111111111111111111169726573706f6e73657381a76673657269616c41016673746174757364676f6f6468686173685f616c6776322e31362e3834302e312e3130312e332e342e322e316b6e6578745f7570646174651a6aebc7006b746869735f7570646174651a6aea75806f6973737565725f6b65795f6861736858203333333333333333333333333333333333333333333333333333333333333333706973737565725f6e616d655f6861736858202222222222222222222222222222222222222222222222222222222222222222697369676e61747572654230456b70726f64756365645f61741a6aea7580667374617475736a7375636365737366756c626f70696465722e7061727365",
-      "edn": "{\"v\": 1, \"id\": 4, \"op\": \"der.parse\", \"ok\": {\"kind\": \"ocsp.response\", \"status\": \"successful\", \"basic\": {\"tbs\": h'3000', \"sig_alg\": \"1.2.840.10045.4.3.2\", \"signature\": h'3045', \"responder\": [\"key_hash\", h'1111111111111111111111111111111111111111'], \"produced_at\": 1793750400, \"responses\": [{\"hash_alg\": \"2.16.840.1.101.3.4.2.1\", \"issuer_name_hash\": h'2222222222222222222222222222222222222222222222222222222222222222', \"issuer_key_hash\": h'3333333333333333333333333333333333333333333333333333333333333333', \"serial\": h'01', \"status\": \"good\", \"this_update\": 1793750400, \"next_update\": 1793836800}], \"certs\": []}}}",
-      "id": "ocsp-good",
+      "cbor": "a264636f64656a6f702d72656675736564667374617475736772656675736564",
+      "edn": "{\"status\": \"refused\", \"code\": \"op-refused\"}",
+      "id": "refused-op",
       "valid": true
     },
     {
-      "cbor": "a461760162696408626f6bab63746273423000646b696e6470783530392e63657274696669636174656473706b694230596669737375657281818267322e352e342e336a4578616d706c652043416673657269616c417f677369675f616c6773312e322e3834302e31303034352e342e332e32677375626a65637481818267322e352e342e3363416461696e6f745f61667465721a6ccba900697369676e61747572654230456a657874656e73696f6e7381a3636f696469322e352e32392e31356576616c756542030268637269746963616cf56a6e6f745f6265666f72651a6aea7580626f70696465722e7061727365",
-      "edn": "{\"v\": 1, \"id\": 8, \"op\": \"der.parse\", \"ok\": {\"kind\": \"x509.certificate\", \"tbs\": h'3000', \"sig_alg\": \"1.2.840.10045.4.3.2\", \"signature\": h'3045', \"serial\": h'7f', \"issuer\": [[[\"2.5.4.3\", \"Example CA\"]]], \"subject\": [[[\"2.5.4.3\", \"Ada\"]]], \"not_before\": 1793750400, \"not_after\": 1825286400, \"spki\": h'3059', \"extensions\": [{\"oid\": \"2.5.29.15\", \"critical\": true, \"value\": h'0302'}]}}",
-      "id": "certificate",
+      "cbor": "a1667374617475736d776f726b65722d6661696c6564",
+      "edn": "{\"status\": \"worker-failed\"}",
+      "id": "worker-failed",
       "valid": true
     },
     {
-      "cbor": "a461760162696405626f6ba3646b696e646b73706e65676f2e696e6974646e746c6df5656d656368738176312e332e362e312e342e312e3331312e322e322e3130626f706d61736e312e6b65726265726f73",
-      "edn": "{\"v\": 1, \"id\": 5, \"op\": \"asn1.kerberos\", \"ok\": {\"kind\": \"spnego.init\", \"mechs\": [\"1.3.6.1.4.1.311.2.2.10\"], \"ntlm\": true}}",
-      "id": "spnego-offers-ntlm",
-      "valid": true
-    },
-    {
-      "cbor": "a361760162696409656572726f7267646f6374797065",
-      "edn": "{\"v\": 1, \"id\": 9, \"error\": \"doctype\"}",
-      "id": "error",
-      "valid": true
-    },
-    {
-      "edn": "{\"v\": 1, \"id\": 9, \"error\": \"doctype\", \"detail\": \"<!DOCTYPE\"}",
-      "id": "error-echoes-input",
+      "edn": "{\"status\": \"refused\", \"code\": \"xml-doctype\", \"detail\": \"<!DOCTYPE\"}",
+      "id": "refusal-echoes-input",
       "valid": false
     },
     {
-      "edn": "{\"v\": 1, \"id\": 9, \"error\": \"oops\"}",
-      "id": "unknown-error-code",
+      "edn": "{\"status\": \"refused\", \"code\": \"oops\"}",
+      "id": "unknown-refusal",
+      "valid": false
+    },
+    {
+      "edn": "{\"status\": \"ok\"}",
+      "id": "ok-without-summary",
       "valid": false
     }
   ],
   "cddl": [
     "parser-worker.cddl"
   ],
-  "contract": "parser-response"
+  "contract": "parser-reply-header"
 }

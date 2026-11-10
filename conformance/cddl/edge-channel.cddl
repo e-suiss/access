@@ -1,160 +1,143 @@
-; Access edge channel, version 1 (RFC 8610; OP-155 m.3 (c); IDP-26, IDI-11, P-ID-5).
+; Access edge channel, version 1 (RFC 8610; OP-155 m.3 (c), m.6 (e), (f), (h); IDP-26, IDI-11,
+; P-ID-5). The shapes are those of `crates/internal-api/src/edge.rs`.
 ;
-; The calls an edge gateway (`access-gw-saml`, `access-gw-ldap`, `access-gw-radius`,
-; `access-gw-kerberos`) makes to access-server. The channel is mutual TLS: the gateway's client
-; certificate carries one SAN URI `urn:suiss:access:gw:<kind>:<name>` registered with
-; `idp.gateway.register`, and that identity, never a body member, says which gateway calls. A
-; gateway is not an issuer: it writes neither store, never calls ADP, and holds no realm key.
-; The realm issuer signs every Claim inside access-server (`issue_claim`).
+; The calls a protocol gateway (`access-gw-saml`, `access-gw-ldap`, `access-gw-radius`,
+; `access-gw-kerberos`) makes to access-server, each `POST /edge/v1/<call>` on the public TLS
+; listener with the operator's client CA. That route is internal and is not in any public
+; OpenAPI document. The gateway's client certificate carries exactly one SAN URI
+; `urn:suiss:access:gw:<kind>:<name>`; access-server looks the gateway up by (kind, name,
+; certificate SHA-256) and needs one exact live match. That identity, never a body member, says
+; which gateway calls. A gateway is not an issuer: it writes neither store, never calls ADP and
+; holds no realm key. The realm issuer signs every Claim inside access-server.
 ;
-; Each frame is a big-endian u32 length and one deterministic CBOR item (RFC 8949 §4.2.1), at
-; most 256 KiB: one request, then one response with the same `id`. A request names its realm by
-; slug; a gateway registered for another realm gets `not-registered`.
+; Each body is one deterministic CBOR map (RFC 8949 §4.2.1), `application/cbor`, at most
+; 64 KiB; a map with an unknown member is refused. A refusal is an RFC 9457 problem, not a CBOR
+; body: `edge-unauthenticated`, `edge-gateway-unknown`, `edge-call-unknown`, `edge-media-type`,
+; `edge-too-large`, `edge-malformed`, `edge-call-not-served`, `edge-unavailable`, or a refusal
+; code of the call.
 ;
-; Calls each gateway kind may make (anything else is `call-not-allowed`):
-;   saml:     authenticate (ECP application credentials), issue_claim, subject_lookup,
-;             session_attest, audit
-;   ldap:     authenticate, subject_lookup, directory_read, audit
-;   radius:   authenticate, issue_claim, audit
-;   kerberos: subject_lookup, issue_claim, audit
+; `authenticate`, `session_attest` and `directory_read` are declared and answer
+; `edge-call-not-served` until their lanes serve them (P10, P2, P10); their bodies below are
+; the planned shapes, which the serving lane may refine before it serves the call.
 
-edge-request = authenticate-request / issue-claim-request / subject-lookup-request /
-  session-attest-request / directory-read-request / audit-request
+edge-request = hello-request / subject-lookup-request / issue-claim-request / audit-request /
+  authenticate-request / session-attest-request / directory-read-request
 
-edge-response = edge-ok / edge-error
+edge-answer = hello-answer / subject-lookup-answer / issue-claim-answer / audit-answer /
+  authenticate-answer / session-attest-answer / directory-read-answer
 
-edge-call = "authenticate" / "issue_claim" / "subject_lookup" / "session_attest" /
+; The path segment after /edge/v1/.
+edge-call = "hello" / "authenticate" / "issue_claim" / "subject_lookup" / "session_attest" /
   "directory_read" / "audit"
 
-gateway-kind = "saml" / "ldap" / "radius" / "kerberos"
+gateway-kind = "saml" / "ldap" / "kerberos" / "radius"
 
-; The gateway's identity as its certificate's SAN URI names it; `<kind>` is a gateway-kind.
-gateway-uri = tstr .regexp "urn:suiss:access:gw:[a-z]{3,8}:[a-z0-9][a-z0-9-]{0,62}"
+; `<kind>` is a gateway-kind; the name starts with a lower-case letter, at most 63 characters.
+gateway-uri = tstr .regexp "urn:suiss:access:gw:[a-z]{4,8}:[a-z][a-z0-9-]{0,62}"
 
-; A request id, unique per gateway; a repeated id with the same body is answered from the
-; first answer, with another body it is `malformed`.
-request-id = bstr .size 16
+; The slug of the one realm the gateway serves; every call names it and it must be its own.
+realm-slug = tstr .size (1..64)
 
-realm-slug = tstr .regexp "[a-z0-9][a-z0-9-]{0,62}"
-
-; The identity plane's opaque subject id; never an email address or a username.
+; The identity plane's opaque subject id; never an e-mail address or a user name.
 subject-id = bstr .size 16
 
-; The relying application the gateway serves: a SAML SP entity, an LDAP application, a RADIUS
-; client. Its registration says what may be released to it.
-app-ref = tstr .size (1..256)
+; --- hello: who the gateway is ------------------------------------------------------------
 
-; --- authenticate -------------------------------------------------------------------------
+hello-request = {}
 
-; A credential check. The answer never tells an unknown name from a wrong secret.
-authenticate-request = {
-  v: 1,
-  id: request-id,
-  call: "authenticate",
+hello-answer = {
+  gateway: gateway-uri,
   realm: realm-slug,
-  app: app-ref,
-  method: "ldap_credential" / "application_credential" / "radius_pap",
-  name: tstr .size (1..512),            ; the bind DN, `dn=token` form or user name
-  secret: bstr .size (1..1024),         ; secret: never logged, never stored by the gateway
-  ? peer: ip-prefix,
-}
-
-authenticate-ok = {
-  outcome: "authenticated" / "refused",
-  ? subject: subject-id,                ; present exactly when authenticated
-  ? auth: auth-facts,
-}
-
-auth-facts = {
-  methods: [+ auth-method],
-  aal: 1 / 2 / 3,
-  at: uint,                             ; Unix milliseconds
-}
-
-auth-method = "pwd" / "otp" / "hwk" / "swk" / "x509" / "saml" / "ldap" / "kerberos" /
-  "radius"
-
-; An address truncated to the prefix the audit log keeps (/24, /48).
-ip-prefix = tstr .size (1..64)
-
-; --- issue_claim --------------------------------------------------------------------------
-
-; Asks the realm issuer for an `authentication` Claim about a subject the gateway
-; authenticated. The class is fixed; the issuer checks the gateway kind may assert `method`.
-issue-claim-request = {
-  v: 1,
-  id: request-id,
-  call: "issue_claim",
-  realm: realm-slug,
-  subject: subject-id,
-  class: "authentication",
-  method: auth-method,
-  aal: 1 / 2 / 3,
-  at: uint,
-  evidence: digest,                     ; digest of what the gateway verified, e.g. a ticket or assertion
-}
-
-issue-claim-ok = {
-  claim: bstr .size (1..16384),         ; the tagged COSE_Sign1 the realm issuer signed
-  claim_id: digest,
 }
 
 ; --- subject_lookup -----------------------------------------------------------------------
 
+; The login identifier the protocol carried (user name or e-mail).
 subject-lookup-request = {
-  v: 1,
-  id: request-id,
-  call: "subject_lookup",
   realm: realm-slug,
-  app: app-ref,
-  by: "username" / "email" / "upn" / "kerberos_principal" / "certificate_sha256" / "subject",
-  value: tstr .size (1..512) / bstr .size (1..64),
-  attributes: [* attribute-name],       ; only what the application's release policy allows is answered
+  identifier: tstr .size (1..256),
 }
 
-subject-lookup-ok = {
-  found: bool,
+; An active subject, or none: a suspended or unknown identifier answers the same.
+subject-lookup-answer = {
   ? subject: subject-id,
-  ? attributes: {* attribute-name => [* attribute-value]},
 }
 
-attribute-name = tstr .regexp "[A-Za-z][A-Za-z0-9_.:-]{0,127}"
+; --- issue_claim --------------------------------------------------------------------------
 
-attribute-value = tstr .size (0..4096) / bstr .size (0..4096) / int / bool
-
-; --- session_attest -----------------------------------------------------------------------
-
-; access-server binds the browser endpoints and keeps the cookies; it forwards a request to
-; the gateway with an opaque one-use handle, and the gateway redeems it here for what the
-; session proves (OP-155 m.3 (c)).
-session-attest-request = {
-  v: 1,
-  id: request-id,
-  call: "session_attest",
+; The facts of one authentication the gateway made; the realm issuer signs the Claim. The
+; method is the Kernel's name for the gateway kind's one method (ldap: "ldap-bind", kerberos:
+; "kerberos", radius: "password"; saml authenticates nobody itself). The authentication is AAL1
+; with no assurance flags, at most 5 minutes old (3 minutes skew).
+issue-claim-request = {
   realm: realm-slug,
-  app: app-ref,
+  subject: subject-id,
+  method: tstr .size (1..32),
+  auth_time: uint,                      ; milliseconds since the epoch
+  ? evidence: bstr .size 32,            ; digest of the raw protocol evidence
+}
+
+; The Claim is queued for the realm issuer; a refusal is a problem answer.
+issue-claim-answer = {
+  queued: bool,
+}
+
+; --- audit --------------------------------------------------------------------------------
+
+; Codes only, no body and no personal data (OP-47).
+audit-request = {
+  realm: realm-slug,
+  event: audit-code-32,                 ; e.g. ldap.bind
+  outcome: audit-code-16,               ; e.g. ok, refused
+  ? subject: subject-id,
+}
+
+audit-answer = {
+  recorded: bool,
+}
+
+audit-code-32 = tstr .regexp "[a-z][a-z0-9._]{0,31}"
+
+audit-code-16 = tstr .regexp "[a-z][a-z0-9._]{0,15}"
+
+; --- authenticate (planned, P10) ----------------------------------------------------------
+
+; A legacy credential check (LDAP bind, RADIUS PAP). The answer never tells an unknown name
+; from a wrong secret.
+authenticate-request = {
+  realm: realm-slug,
+  app: tstr .size (1..256),
+  name: tstr .size (1..512),            ; the bind DN, `dn=token` form or user name
+  secret: bstr .size (1..1024),         ; secret: never logged, never stored by the gateway
+}
+
+authenticate-answer = {
+  ? subject: subject-id,                ; present exactly when the credential checked out
+}
+
+; --- session_attest (planned, P2) ---------------------------------------------------------
+
+; access-server binds the browser endpoints and keeps the cookies; it forwards a request to the
+; gateway with an opaque one-use handle, which the gateway redeems here.
+session-attest-request = {
+  realm: realm-slug,
   handle: bstr .size 32,
 }
 
-session-attest-ok = {
+session-attest-answer = {
   subject: subject-id,
   sid: bstr .size (16..64),             ; the session reference SLO names; never the session id
-  auth: auth-facts,
-  expires_at: uint,                     ; Unix milliseconds; SessionNotOnOrAfter never passes it
-  ? loa_eidas: "low" / "substantial" / "high",
+  auth_time: uint,
+  aal: 1 / 2 / 3,
+  expires_at: uint,                     ; SessionNotOnOrAfter never passes it
 }
 
-; --- directory_read -----------------------------------------------------------------------
+; --- directory_read (planned, P10) --------------------------------------------------------
 
-; A read of the realm's directory tree for the read-only LDAP gateway (IDP-16). The gateway
-; parsed and bounded the filter; access-server checks the bounds again (depth ≤ 16, results ≤
-; 5000, page ≤ 1000, 10 s).
+; A read of the realm's directory tree for the read-only LDAP gateway (IDP-16): filter depth
+; ≤ 16, results ≤ 5000, page ≤ 1000, 10 s.
 directory-read-request = {
-  v: 1,
-  id: request-id,
-  call: "directory_read",
   realm: realm-slug,
-  app: app-ref,
   base: tstr .size (0..1024),
   scope: "base" / "one" / "sub",
   filter: ldap-filter,
@@ -175,7 +158,7 @@ substr-parts = {
   ? final: tstr,
 }
 
-directory-read-ok = {
+directory-read-answer = {
   entries: [* directory-entry],
   ? cookie: bstr .size (1..256),        ; absent on the last page
 }
@@ -185,46 +168,6 @@ directory-entry = {
   attributes: {* attribute-name => [* attribute-value]},
 }
 
-; --- audit --------------------------------------------------------------------------------
+attribute-name = tstr .regexp "[A-Za-z][A-Za-z0-9_.:-]{0,127}"
 
-; An audit event the gateway saw; access-server records it in the identity audit log under the
-; gateway's identity. It carries ids, never a secret or a body.
-audit-request = {
-  v: 1,
-  id: request-id,
-  call: "audit",
-  realm: realm-slug,
-  event: tstr .regexp "[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*){1,3}",
-  at: uint,
-  outcome: "success" / "failure",
-  ? subject: subject-id,
-  ? app: app-ref,
-  ? reason: tstr .regexp "[a-z][a-z0-9-]{0,63}",
-  ? peer: ip-prefix,
-}
-
-audit-ok = {
-  recorded: true,
-}
-
-; --- responses ----------------------------------------------------------------------------
-
-edge-ok = {
-  v: 1,
-  id: request-id,
-  call: edge-call,
-  ok: authenticate-ok / issue-claim-ok / subject-lookup-ok / session-attest-ok /
-    directory-read-ok / audit-ok,
-}
-
-edge-error = {
-  v: 1,
-  id: request-id,
-  error: edge-error-code,
-  ? retry_after_s: uint .le 3600,
-}
-
-edge-error-code = "malformed" / "not-registered" / "call-not-allowed" / "realm-unknown" /
-  "app-unknown" / "limit" / "rate-limited" / "unavailable"
-
-digest = [-16, bstr .size 32]
+attribute-value = tstr .size (0..4096) / bstr .size (0..4096) / int / bool
