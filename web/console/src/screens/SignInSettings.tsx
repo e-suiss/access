@@ -9,6 +9,7 @@ import { t } from "../i18n/index.js";
 import { adminGet, adminGetTagged, change, type WriteResult } from "../lib/admin.js";
 import { Problem } from "../lib/api.js";
 import { type Ctx, at, Field, Panel, Show, useLoad, useRun } from "./parts.js";
+import { Domains } from "./Domains.js";
 import { UpstreamLink } from "./UpstreamLink.js";
 
 interface Settings {
@@ -550,6 +551,7 @@ export function SignInSettings({ ctx }: { readonly ctx: Ctx }): ReactElement {
           );
         }}
       </Show>
+      <Domains ctx={ctx} />
       <Listing ctx={ctx} path="/clients" title={t("settingsClients")} id="clients" />
       <Listing ctx={ctx} path="/upstream-idps" title={t("settingsUpstreams")} id="upstreams" />
       <SocialProviders ctx={ctx} />

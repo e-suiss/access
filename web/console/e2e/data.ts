@@ -130,6 +130,30 @@ export function seed(bff: ConsoleMock): void {
     ],
   });
   bff.admin.set("realms/acme/upstream-idps", { items: [{ name: "corp", status: "active" }] });
+  // OP-156 m.3 (i)
+  bff.admin.set("realms/acme/domains", {
+    items: [
+      {
+        host: "login.acme.example",
+        status: "pending",
+        served: false,
+        txt_name: "_access-challenge.login.acme.example",
+        txt_value: "challenge-value",
+        cname_target: "acme.access.test",
+        bound_as: null,
+      },
+      {
+        host: "id.acme.example",
+        status: "verified",
+        served: true,
+        txt_name: "_access-challenge.id.acme.example",
+        txt_value: "other-value",
+        cname_target: "acme.access.test",
+        bound_as: null,
+        certificate_expires_at: "2027-02-01T00:00:00.000Z",
+      },
+    ],
+  });
   bff.admin.set("realms/acme/social-providers", {
     items: [
       {

@@ -705,4 +705,9 @@ export const tr: Record<Key, string> = {
     "Kayıtlar henüz eşleşmiyor. DNS değişiklikleri zaman alabilir; eşleşene kadar bu alan adında hiçbir şey sunulmaz.",
   domainRpIdNote:
     "Geçiş anahtarları onaylanmış bir özel alan adı ister; issuer'ı ya da geçiş anahtarı alan adını ona bağlamak geri alınamaz.",
+  domainHost: "Ana makine adı, örneğin login.example.com",
+  domainRegister: "Alan adını ekle",
+  domainRetire: "Bu alan adını emekliye ayır",
+  domainBindRpId: "Geçiş anahtarları için kullan (geri alınamaz)",
+  domainBindIssuer: "Issuer yap (geri alınamaz)",
 };

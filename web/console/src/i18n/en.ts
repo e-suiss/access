@@ -697,6 +697,11 @@ export const en = {
     "The records don't match yet. DNS changes can take a while; nothing is served on this domain until they do.",
   domainRpIdNote:
     "Passkeys need a confirmed custom domain; binding the issuer or passkey domain to it can't be reversed.",
+  domainHost: "Host, for example login.example.com",
+  domainRegister: "Add the domain",
+  domainRetire: "Retire this domain",
+  domainBindRpId: "Use it for passkeys (can't be reversed)",
+  domainBindIssuer: "Make it the issuer (can't be reversed)",
 } as const;
 
 export type Key = keyof typeof en;

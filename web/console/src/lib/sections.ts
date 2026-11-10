@@ -70,6 +70,8 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
     idp("realm", "branding"),
     idp("client", "register"),
     idp("upstream", "register"),
+    // OP-156 m.3 (i)
+    idp("domain", "register"),
   ],
   // L1-ADP-18: any Party may publish; the screen shows where versions stand, which auditors read
   schemas: [AUDIT, meta("acceptance_amend")],
