@@ -567,6 +567,50 @@ jobs:
             web/account/playwright-report
           retention-days: 7
 
+  # OP-155 m.3 (n), (q), Ek B 4664: the edge gateways against their counterparts (OpenLDAP and its
+  # command-line clients, an MIT KDC, FreeRADIUS radclient); containers pinned by digest
+  edge-interop:
+    name: edge-interop
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336 # 18.6-trixie
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+          POSTGRES_INITDB_ARGS: --auth=scram-sha-256 --data-checksums
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://postgres:ci-only-not-a-secret@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: test
+          tools: nextest
+      - name: OpenLDAP clients
+        run: sudo apt-get install --yes --no-install-recommends ldap-utils
+      - name: OpenLDAP, MIT KDC and FreeRADIUS
+        run: scripts/ci/edge-env.sh up
+      - name: LDAP gateway against the OpenLDAP clients
+        run: cargo nextest run --locked -p access-gw-ldap --test interop --run-ignored only
+      - name: AD sync from OpenLDAP
+        run: cargo nextest run --locked -p access-identity-directory --run-ignored only
+      - name: Stop the counterparts
+        if: always()
+        run: scripts/ci/edge-env.sh down
+
   # OP-68, F-6, F-7: the main image is built, pushed and signed only after every check above passed
   image:
     name: image
@@ -580,6 +624,7 @@ jobs:
       - supply-chain
       - secrets
       - sandbox
+      - edge-interop
       - uniffi-kotlin
       - uniffi-swift
       - bench-instructions
