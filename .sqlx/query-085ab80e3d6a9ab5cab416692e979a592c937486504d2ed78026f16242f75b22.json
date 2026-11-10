@@ -1,0 +1,172 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT domain_uuid, hostname, challenge, cname_target, status, finding,\n                extract(epoch FROM registered_at)::bigint AS \"registered_s!\",\n                extract(epoch FROM checked_at)::bigint AS checked_s,\n                extract(epoch FROM verified_at)::bigint AS verified_s,\n                extract(epoch FROM reverify_by)::bigint AS reverify_s, bound_as, acme_failures,\n                extract(epoch FROM acme_next_at)::bigint AS acme_next_s, acme_error, decision_pos\n           FROM access.realm_domains WHERE tenant_id = $1 AND realm_id = $2\n          ORDER BY registered_at DESC, domain_uuid",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "domain_uuid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.realm_domains",
+            "name": "domain_uuid"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "hostname",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.realm_domains",
+            "name": "hostname"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "challenge",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.realm_domains",
+            "name": "challenge"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "cname_target",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.realm_domains",
+            "name": "cname_target"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.realm_domains",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "finding",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.realm_domains",
+            "name": "finding"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "registered_s!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "checked_s",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "verified_s",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "reverify_s",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "bound_as",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.realm_domains",
+            "name": "bound_as"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "acme_failures",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.realm_domains",
+            "name": "acme_failures"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "acme_next_s",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "acme_error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.realm_domains",
+            "name": "acme_error"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.realm_domains",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      null,
+      null,
+      null,
+      null,
+      true,
+      false,
+      null,
+      true,
+      false
+    ]
+  },
+  "hash": "085ab80e3d6a9ab5cab416692e979a592c937486504d2ed78026f16242f75b22"
+}

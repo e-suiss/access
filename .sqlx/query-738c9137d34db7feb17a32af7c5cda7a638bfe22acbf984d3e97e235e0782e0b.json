@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT hostname, alpn_digest AS \"alpn_digest!\" FROM access.acme_orders\n            WHERE status = 'challenging' AND alpn_digest IS NOT NULL ORDER BY hostname",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "hostname",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.acme_orders",
+            "name": "hostname"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "alpn_digest!",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.acme_orders",
+            "name": "alpn_digest"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "738c9137d34db7feb17a32af7c5cda7a638bfe22acbf984d3e97e235e0782e0b"
+}

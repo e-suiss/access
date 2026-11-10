@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.realm_domains\n            SET acme_failures = $4, acme_next_at = to_timestamp($5::bigint), acme_error = $6\n          WHERE tenant_id = $1 AND realm_id = $2 AND domain_uuid = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7473fab43a432ebe63b89974eccb46c01e80db096a89d10376e7df5787c66c90"
+}

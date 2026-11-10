@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.realm_domains\n            SET status = 'retired', retire_pos = $4, retired_at = clock_timestamp()\n          WHERE tenant_id = $1 AND realm_id = $2 AND domain_uuid = $3 AND domain_id = $5\n            AND status IN ('pending', 'verified', 'lapsed') AND bound_as IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b1f8587f2e4210275cb06d18e22b80a38fd88d71108bdd6a789d9cb95ed79b48"
+}

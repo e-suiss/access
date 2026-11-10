@@ -1,0 +1,127 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT cert_uuid, domain_uuid, hostname, chain_pem, kek_id AS \"kek_id!\",\n                  wrapped_dek AS \"wrapped_dek!\", key_nonce AS \"key_nonce!\",\n                  key_sealed AS \"key_sealed!\",\n                  extract(epoch FROM not_after)::bigint AS \"not_after_s!\",\n                  extract(epoch FROM renew_after)::bigint AS \"renew_after_s!\"\n             FROM access.domain_certificates\n            WHERE tenant_id = $1 AND realm_id = $2 AND status = 'active'\n            ORDER BY hostname",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cert_uuid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.domain_certificates",
+            "name": "cert_uuid"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "domain_uuid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.domain_certificates",
+            "name": "domain_uuid"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "hostname",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.domain_certificates",
+            "name": "hostname"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "chain_pem",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.domain_certificates",
+            "name": "chain_pem"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "kek_id!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.domain_certificates",
+            "name": "kek_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "wrapped_dek!",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.domain_certificates",
+            "name": "wrapped_dek"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "key_nonce!",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.domain_certificates",
+            "name": "key_nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "key_sealed!",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.domain_certificates",
+            "name": "key_sealed"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "not_after_s!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "renew_after_s!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "61661fa53cb8c6cbef3d46acaee3a49328a58fb55849c2a6d87aa1edae23f904"
+}

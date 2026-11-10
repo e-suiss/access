@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.realm_domains (tenant_id, realm_id, domain_uuid, hostname, challenge,\n                cname_target, domain_id, decision_pos)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c8d264bc012b6c8151827f2cc02c8b39d7b298f0392577e6e0484636344798a2"
+}

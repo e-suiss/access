@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT hostname FROM access.realm_domains\n          WHERE tenant_id = $1 AND realm_id = $2 AND status = 'verified'\n            AND reverify_by > clock_timestamp()\n          ORDER BY hostname",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "hostname",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.realm_domains",
+            "name": "hostname"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "897de661e1f6ab06d4b4c03062cd0af767431635fa08c22f2d2ce5adff9f12c6"
+}

@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.realm_domains\n            SET bound_as = $4, bind_pos = $5, bound_at = clock_timestamp()\n          WHERE tenant_id = $1 AND realm_id = $2 AND domain_uuid = $3 AND domain_id = $6\n            AND status = 'verified' AND reverify_by > clock_timestamp() AND bound_as IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "78287564efc91f0ed32c84ddc36987f8482e6529762a815e32333fd59d0eda53"
+}

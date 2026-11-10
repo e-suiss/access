@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.domain_certificates\n            SET status = $4, ended_at = clock_timestamp(), kek_id = NULL, wrapped_dek = NULL,\n                key_nonce = NULL, key_sealed = NULL\n          WHERE tenant_id = $1 AND realm_id = $2 AND domain_uuid = $3 AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "54b6ef36a964b0add6855b27be48df4f524ed971349b54afa78c667cce1b66ef"
+}
