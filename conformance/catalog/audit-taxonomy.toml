@@ -359,6 +359,30 @@ ocsf_activity = 2
 caep = ""
 webhook = false
 
+# SEC9, OP-155 m.3 (h): sessions opened through an upstream connection end when its Acceptance is gone.
+[[event]]
+event = "session.upstream_cutoff"
+plane = "identity"
+class = "session"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 2
+caep = ""
+webhook = false
+
+# OP-155 m.3 (h): a new upstream subject for an address a live link already holds.
+[[event]]
+event = "upstream.subject_conflict"
+plane = "identity"
+class = "account"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
 # ---------------------------------------------------------------- identity: OAuth
 
 [[event]]
