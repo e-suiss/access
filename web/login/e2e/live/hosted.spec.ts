@@ -74,6 +74,30 @@ test.describe("@live hosted pages", () => {
     await clean(page);
   });
 
+  // OP-155 m.3 (l), IDP-14, Ek B 4719
+  test("@live the CIBA approval page is never framed, may compile only the Kernel and needs a sign-in", async ({
+    page,
+  }) => {
+    const r = await page.goto(`${REALM}/login?reason=ciba&request=AAAAAAAAAAAAAAAAAAAAAA`);
+    expect(r?.status()).toBe(200);
+    const csp = r?.headers()["content-security-policy"] ?? "";
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval'");
+    expect(csp).not.toContain("unsafe-inline");
+    await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
+    const preview = await page.request.post(`${REALM}/v1/ciba/preview`, {
+      data: { request: "AAAAAAAAAAAAAAAAAAAAAA" },
+      headers: { origin: new URL(page.url()).origin },
+    });
+    expect([401, 404]).toContain(preview.status());
+    const cross = await page.request.post(`${REALM}/v1/ciba/approval`, {
+      data: { request: "AAAAAAAAAAAAAAAAAAAAAA", approve: false },
+      headers: { origin: "https://elsewhere.example" },
+    });
+    expect([403, 404]).toContain(cross.status());
+    await clean(page);
+  });
+
   test("@live the sign-up page opens a registration flow and passes axe", async ({ page }) => {
     await page.goto(`${REALM}/login?reason=create`);
     await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();

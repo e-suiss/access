@@ -864,6 +864,16 @@ pub trait GrantStanding: Send + Sync {
     fn consent_basis(&self, _domain: [u8; 32], _party: [u8; 16]) -> Held<'_, Option<ConsentBasis>> {
         Box::pin(async { Ok(None) })
     }
+
+    /// The holding `party` signs an approval on in `domain` (§9.14.1 A step 4, OP-155 m.3
+    /// (l)); `None` when it holds none, so nothing can be approved.
+    fn contribute_basis(
+        &self,
+        _domain: [u8; 32],
+        _party: [u8; 16],
+    ) -> Held<'_, Option<access_kernel::meta::HoldingRef>> {
+        Box::pin(async { Ok(None) })
+    }
 }
 
 /// What a person's consent `grant.issue` names (§11.6, EI-18): a Grant to themselves from a

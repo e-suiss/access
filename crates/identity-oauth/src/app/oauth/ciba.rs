@@ -46,6 +46,14 @@ pub struct CibaView {
     pub request: Value,
     /// A return address the client registered, for the hosted approval's call contract.
     pub redirect_uri: String,
+    /// The holding the person's device signs the contribution on; `None` when they hold none,
+    /// so nothing can be approved here.
+    pub contribution_basis: Option<access_kernel::meta::HoldingRef>,
+    /// The governing domain the contribution is committed in.
+    pub domain: [u8; 32],
+    /// The `contribute` intent the person's device signs (§9.14.1 A step 4): an `approve` of
+    /// this request's intent, valid while the request waits.
+    pub contribution_intent: access_kernel::intent::IntentEnvelope,
 }
 
 /// Why a backchannel request is not shown or answered.
@@ -420,18 +428,33 @@ impl<E: Env> OAuth<E> {
     ) -> Result<Result<CibaView, CibaRefused>, Unavailable> {
         let now = self.now()?;
         let mut tx = self.begin(realm).await?;
-        let (_, row) = match self.waiting_ciba(&mut tx, cookie, request, now).await? {
+        let (session, row) = match self.waiting_ciba(&mut tx, cookie, request, now).await? {
             Ok(w) => w,
             Err(r) => return Ok(Err(r)),
         };
         let client = tx.client_by_uuid(row.client).await?;
+        let party = tx.subject_party(session.subject).await?;
         tx.commit().await?;
+        let contribution_basis = match party {
+            Some(p) => self.env.standing().contribute_basis(row.domain, p).await?,
+            None => None,
+        };
         let Some(client) = client.filter(|c| c.active) else {
             return Ok(Err(CibaRefused::NoRequest));
         };
         let Some(redirect_uri) = client.redirect_uris.first().cloned() else {
             return Ok(Err(CibaRefused::NoRequest));
         };
+        let validity = access_kernel::model::Window {
+            from: now.saturating_sub(60_000),
+            until: row.expires_ms,
+        };
+        let contribution_intent = access_kernel::contribution::contribute_intent(
+            access_kernel::digest::Digest(row.intent),
+            access_kernel::contribution::APPROVE,
+            validity,
+        )
+        .ok_or(Unavailable)?;
         let detail: Value = serde_json::from_str::<Vec<Value>>(&row.details)
             .ok()
             .and_then(|d| d.into_iter().next())
@@ -463,6 +486,9 @@ impl<E: Env> OAuth<E> {
             expires_at_ms: row.expires_ms,
             request: pushed,
             redirect_uri,
+            contribution_basis,
+            domain: row.domain,
+            contribution_intent,
         }))
     }
 

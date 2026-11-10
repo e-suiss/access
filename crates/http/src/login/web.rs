@@ -814,11 +814,12 @@ where
 }
 
 /// Whether the page at `uri` has the person's device Instance sign with the Kernel (Wasm): the
-/// consent screen of a client the realm did not register (EI-18, OP-154 m.3 (k)).
+/// consent screen of a client the realm did not register (EI-18, OP-154 m.3 (k)) and the CIBA
+/// approval page (OP-155 m.3 (l)).
 fn signs(uri: &Uri) -> bool {
     uri.query()
         .and_then(|q| access_identity_oauth::domain::request::Params::parse(q).ok())
-        .is_some_and(|p| p.get("reason") == Some("approve"))
+        .is_some_and(|p| matches!(p.get("reason"), Some("approve" | "ciba")))
 }
 
 /// `policy` with WebAssembly compilation allowed to this origin's scripts, and nothing else.

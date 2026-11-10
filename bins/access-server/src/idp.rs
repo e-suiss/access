@@ -351,6 +351,23 @@ where
             ))
         })
     }
+
+    fn contribute_basis(
+        &self,
+        domain: [u8; 32],
+        party: [u8; 16],
+    ) -> access_identity_oauth::ports::oauth::Held<'_, Option<access_kernel::meta::HoldingRef>>
+    {
+        Box::pin(async move {
+            self.domains
+                .contribute_basis(access_kernel::digest::Digest(domain), Id(party))
+                .await
+                .map_err(|e| {
+                    tracing::warn!(event = "oauth.grant_standing.unavailable", outcome = "error", error = %e, "contribute basis unavailable");
+                    access_identity_oauth::ports::Unavailable
+                })
+        })
+    }
 }
 
 impl<K, B, S, C> crate::admin::realm::LiveKeys for Plane<K, B, S, C>

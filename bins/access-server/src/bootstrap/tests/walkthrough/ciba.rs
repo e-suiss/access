@@ -498,6 +498,7 @@ impl Desk {
 
     /// `POST /v1/ciba/preview` in P's browser.
     pub(super) async fn ciba_preview(&self, jar: &mut Jar, request: &str) -> (u16, JsonValue) {
+        self.w.domains.derive().await;
         let r = post_json(
             &self.http,
             &format!("{}/v1/ciba/preview", self.user.issuer),

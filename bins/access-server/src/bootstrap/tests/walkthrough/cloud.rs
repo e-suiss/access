@@ -89,6 +89,12 @@ async fn a_cloud_agent_waits_for_its_principals_approval_and_commits_on_the_same
     assert_eq!(status, 200, "{preview}");
     assert_eq!(preview["client"], "Mail agent");
     assert_eq!(preview["binding_message"], "Code 4F2Q");
+    assert!(preview["contribution_basis"].is_object(), "{preview}");
+    assert_eq!(
+        holding_of(&preview["contribution_basis"]),
+        holding_of(&d.allowed["contribution"]["basis"]),
+        "{preview}"
+    );
     let done = d.ciba_aas(&preview["request"], &intent).await;
     let (status, body) = d
         .ciba_answer(

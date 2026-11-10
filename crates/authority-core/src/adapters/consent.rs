@@ -73,6 +73,20 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         }))
     }
 
+    /// The holding `party` approves on in `domain` now (§9.14.1 A step 4, OP-155 m.3 (l)).
+    ///
+    /// # Errors
+    /// [`CoreError`]; [`CoreError::Unavailable`] without the domain's leader or trusted time.
+    pub async fn contribute_basis(
+        &self,
+        domain: Digest,
+        party: Id,
+    ) -> Result<Option<HoldingRef>, CoreError> {
+        let (guard, now) = self.led_now(domain).await?;
+        let led = guard.as_ref().ok_or(CoreError::Unavailable("leader"))?;
+        led.core.contribute_basis(&party, now).await
+    }
+
     /// The Grant `party` would issue to itself for a consent in `domain` now, and the holding it
     /// comes from (§11.6, EI-18); `None` when it holds nothing it may pass on.
     ///

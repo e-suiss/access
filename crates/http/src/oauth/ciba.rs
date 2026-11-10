@@ -122,6 +122,23 @@ async fn preview<E: Env>(
                     "expires_at": v.expires_at_ms,
                     "request": v.request,
                     "redirect_uri": v.redirect_uri,
+                    "contribution_basis": v.contribution_basis.map(|h| json!({
+                        "holding": {
+                            "grant": access_kernel::json::b64url_encode(&h.grant.0),
+                            "holder": access_kernel::json::b64url_encode(&h.holder.0),
+                            "since": h.since,
+                        },
+                    })),
+                    "domain": access_kernel::json::b64url_encode(&v.domain),
+                    "contribution": {
+                        "class": access_kernel::contribution::APPROVE,
+                        "envelope": access_kernel::json::b64url_encode(
+                            &access_kernel::codec::Canonical::to_bytes(&v.contribution_intent)
+                                .unwrap_or_default(),
+                        ),
+                        "valid_from": v.contribution_intent.validity.from,
+                        "valid_until": v.contribution_intent.validity.until,
+                    },
                     "csrf": csrf,
                 }),
             )

@@ -1179,6 +1179,17 @@ async fn only_the_consent_screen_may_compile_the_kernel_and_no_page_is_framed() 
     assert!(csp.contains("frame-ancestors 'none'"), "{csp}");
     assert!(!csp.contains("unsafe-inline"), "{csp}");
     assert!(consent.headers.get(header::SET_COOKIE).is_none());
+    // OP-155 m.3 (l)
+    let ciba = b
+        .get("/login?reason=ciba&request=AAAAAAAAAAAAAAAAAAAAAA")
+        .await;
+    assert_eq!(ciba.status, StatusCode::OK);
+    let csp = ciba.headers["content-security-policy"].to_str().unwrap();
+    assert!(
+        csp.contains("script-src 'self' 'wasm-unsafe-eval';"),
+        "{csp}"
+    );
+    assert!(csp.contains("frame-ancestors 'none'"), "{csp}");
     // OP-154 m.3 (p), m.7 (f)
     for path in ["/login", "/login?reason=share", "/device"] {
         let page = b.get(path).await;

@@ -132,6 +132,53 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Ok(None)
     }
 
+    /// The first Grant, by id, that `party` holds as itself at `now`, that stands and that
+    /// names the `contribute` meta-action: the basis a person's device signs an approval on
+    /// (§9.14.1 A step 4, OP-155 m.3 (l)); `None` when it holds none. The decision point still
+    /// decides whether it covers the class.
+    ///
+    /// # Errors
+    /// [`CoreError`] for a failed read.
+    pub async fn contribute_basis(
+        &self,
+        party: &Id,
+        now: u64,
+    ) -> Result<Option<HoldingRef>, CoreError> {
+        let mut ids = self.reader.grants_for(party, None, CONSENT_PAGE).await?;
+        ids.sort();
+        for g in ids {
+            let found = self
+                .settled(|snap| {
+                    let facts = stands(snap, &g, now)?;
+                    let state: GrantState = read(snap, kind::GRANT, &g)?;
+                    Some((facts, state))
+                })
+                .await?;
+            let Some((facts, state)) = found else {
+                continue;
+            };
+            let names = state
+                .content
+                .authority
+                .authority
+                .actions
+                .exact
+                .iter()
+                .any(|a| {
+                    a.namespace == access_kernel::meta::NAMESPACE
+                        && a.name == access_kernel::contribution::ACTION
+                });
+            if facts.live && facts.holder == Some(*party) && names {
+                return Ok(Some(HoldingRef {
+                    grant: g,
+                    holder: *party,
+                    since: state.since,
+                }));
+            }
+        }
+        Ok(None)
+    }
+
     /// Grant `grant` at the head at `now`; `None` when the domain has no such Grant.
     ///
     /// # Errors

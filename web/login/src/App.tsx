@@ -2,6 +2,7 @@
 // the realm's Frontend API; the realm's own branding, no Suiss shell.
 import { Approval } from "./Approval.js";
 import { Branding } from "./Branding.js";
+import { Ciba } from "./Ciba.js";
 import { Consent } from "./Consent.js";
 import { Device } from "./Device.js";
 import { ErrorPage } from "./ErrorPage.js";
@@ -16,6 +17,7 @@ export type Page =
   | "sign_up"
   | "consent"
   | "approval"
+  | "ciba"
   | "device"
   | "recovery"
   | "invitation"
@@ -35,6 +37,8 @@ export function pageOf(path: string, search: string): Page {
   if (reason === "share") return "consent";
   // §11.6, OP-154 m.3 (k)
   if (reason === "approve") return "approval";
+  // OP-155 m.3 (l)
+  if (reason === "ciba") return "ciba";
   // §10.4.6, Ek B 4098
   if (reason === "create") return "sign_up";
   return "sign_in";
@@ -50,6 +54,8 @@ function Body({ page }: { readonly page: Page }) {
       return <Consent />;
     case "approval":
       return <Approval />;
+    case "ciba":
+      return <Ciba />;
     case "device":
       return <Device />;
     case "recovery":

@@ -200,7 +200,7 @@ export class LoginMock {
       route.fulfill({ status: 200, contentType: "text/css", body: this.theme }),
     );
     await page.route(
-      /\/v1\/(recovery|invitations|account|login\/link|login\/approval|device)(\/|$)/,
+      /\/v1\/(recovery|invitations|account|login\/link|login\/approval|device|ciba)(\/|$)/,
       (route) => this.jsonRoute(route),
     );
     await page.route(/\/callback(\?|$)/, (route) =>
