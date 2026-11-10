@@ -613,6 +613,49 @@ jobs:
         if: always()
         run: scripts/ci/edge-env.sh down
 
+  # OP-155 m.3 (o), RR-28: the Kerberos gateway's own workspace (lint, tests, cargo-deny,
+  # cargo-vet), then SPNEGO end to end against an MIT KDC with the gateway and the parser worker
+  # as real processes
+  kerberos:
+    name: kerberos
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336 # 18.6-trixie
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+          POSTGRES_INITDB_ARGS: --auth=scram-sha-256 --data-checksums
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://postgres:ci-only-not-a-secret@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: kerberos
+          tools: deny vet
+      - name: MIT Kerberos headers and clients, libclang for the bindings
+        run: sudo apt-get install --yes --no-install-recommends libkrb5-dev krb5-user libclang-dev jq curl
+      - name: OpenLDAP, MIT KDC and FreeRADIUS
+        run: scripts/ci/edge-env.sh up
+      - name: Kerberos workspace and SPNEGO end to end
+        run: just kerberos
+      - name: Stop the counterparts
+        if: always()
+        run: scripts/ci/edge-env.sh down
+
   # OP-68, F-6, F-7: the main image is built, pushed and signed only after every check above passed
   image:
     name: image
@@ -627,6 +670,7 @@ jobs:
       - secrets
       - sandbox
       - edge-interop
+      - kerberos
       - uniffi-kotlin
       - uniffi-swift
       - bench-instructions

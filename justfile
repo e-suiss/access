@@ -418,6 +418,35 @@ test-sandbox:
         "$bin"
     fi
 
+# OP-155 m.3 (o): the excluded Kerberos workspace (Linux CI only): its own lint, tests and supply
+# chain, then the end-to-end run as root with the gateway and parser worker as real processes
+kerberos:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ "$(uname -s)" != Linux ]]; then
+        echo "the Kerberos gateway builds on Linux only (OP-155 m.3 (o))" >&2
+        exit 1
+    fi
+    (
+        cd bins/access-gw-kerberos
+        cargo fmt --check
+        cargo clippy --locked --all-targets -- -D warnings
+        cargo test --locked
+        cargo deny --locked --manifest-path Cargo.toml check --config ../../deny.toml
+        cargo vet --locked
+        cargo build --locked
+    )
+    cargo build --locked -p access-parser-worker
+    bin="$(cargo test --locked -p access-edge-core --test channel --no-run --message-format=json | jq -r 'select(.executable != null and .target.name == "channel") | .executable')"
+    export ACCESS_TEST_GW_KERBEROS_BIN="$PWD/bins/access-gw-kerberos/target/debug/access-gw-kerberos"
+    export ACCESS_TEST_PARSER_BIN="$PWD/target/debug/access-parser-worker"
+    if [[ "$(id -u)" != 0 ]]; then
+        sudo --preserve-env=DATABASE_URL,ACCESS_TEST_KRB5_REALM,ACCESS_TEST_KDC,ACCESS_TEST_KEYTAB_DIR,ACCESS_TEST_GW_KERBEROS_BIN,ACCESS_TEST_PARSER_BIN \
+            "$bin" --ignored --exact kerberos_gateway::spnego_signs_in_falls_back_and_never_writes_the_keytab
+    else
+        "$bin" --ignored --exact kerberos_gateway::spnego_signs_in_falls_back_and_never_writes_the_keytab
+    fi
+
 # SA-44, OP-103 criterion 6
 fuzz target seconds="60":
     cd fuzz && cargo +{{sanitizer_nightly}} fuzz run {{target}} -- -max_total_time={{seconds}} -rss_limit_mb=2048

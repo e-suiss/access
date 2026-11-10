@@ -6,6 +6,7 @@
     clippy::panic,
     clippy::indexing_slicing,
     clippy::arithmetic_side_effects,
+    clippy::too_many_lines,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
@@ -651,4 +652,283 @@ async fn only_a_kerberos_gateway_reports_kerberos_acceptances() {
     let core = EdgeCore::connect(w.channel(&chain, &key)).await.unwrap();
     let r = accept(&core, "ada@CORP.EXAMPLE", SPN, 3, krb::AES256_SHA1).await;
     assert!(r.is_err());
+}
+
+#[cfg(target_os = "linux")]
+mod kerberos_gateway {
+    //! OP-155 m.3 (o), (q), IDP-17, RR-28: the Kerberos gateway binary and the parser worker
+    //! supervisor as real processes, access-server's real edge router on a real PostgreSQL, an MIT
+    //! KDC (`scripts/ci/edge-env.sh`) and `curl --negotiate` as the browser. CI's `kerberos` job
+    //! builds the excluded gateway workspace and runs this as root (the lockdown needs it).
+
+    use std::path::{Path, PathBuf};
+    use std::process::{Child, Command, Stdio};
+    use std::time::Duration;
+
+    use super::{SPN, leaf, world};
+    use access_internal_api::edge::GatewayKind;
+
+    const LOGIN: &str = "https://corp.example/realms/corp/login";
+
+    struct Running(Vec<Child>);
+
+    impl Drop for Running {
+        fn drop(&mut self) {
+            for c in &mut self.0 {
+                let _ = c.kill();
+                let _ = c.wait();
+            }
+        }
+    }
+
+    fn env(name: &str) -> String {
+        std::env::var(name).unwrap_or_else(|_| panic!("{name} is required"))
+    }
+
+    fn write(dir: &Path, name: &str, body: &[u8]) -> PathBuf {
+        let p = dir.join(name);
+        std::fs::write(&p, body).unwrap();
+        p
+    }
+
+    fn run_as() -> (String, String) {
+        (
+            std::env::var("SUDO_UID").unwrap_or_else(|_| String::from("65534")),
+            std::env::var("SUDO_GID").unwrap_or_else(|_| String::from("65534")),
+        )
+    }
+
+    async fn listening(port: u16) {
+        for _ in 0..200 {
+            if tokio::net::TcpStream::connect(("127.0.0.1", port))
+                .await
+                .is_ok()
+            {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        panic!("the gateway did not listen");
+    }
+
+    fn curl(dir: &Path, host: &str, port: u16, extra: &[&str]) -> (String, String) {
+        let url = format!("https://{host}:{port}/negotiate");
+        let resolve = format!("{host}:{port}:127.0.0.1");
+        let out = Command::new("curl")
+            .args([
+                "-s",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code} %{redirect_url}",
+            ])
+            .args(["--cacert", dir.join("gw-ca.pem").to_str().unwrap()])
+            .args(["--resolve", &resolve])
+            .args(extra)
+            .arg(&url)
+            .env("KRB5_CONFIG", dir.join("krb5.conf"))
+            .env(
+                "KRB5CCNAME",
+                format!("FILE:{}", dir.join("ccache").display()),
+            )
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&out.stdout).into_owned();
+        let (code, rest) = text.split_once(' ').unwrap_or((&text, ""));
+        (code.to_owned(), rest.to_owned())
+    }
+
+    /// Every file under `dir` whose bytes contain `needle`.
+    fn holding(dir: &Path, needle: &[u8], out: &mut Vec<PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                holding(&p, needle, out);
+            } else if std::fs::read(&p).is_ok_and(|b| b.windows(needle.len()).any(|w| w == needle))
+            {
+                out.push(p);
+            }
+        }
+    }
+
+    // IDP-17, OP-155 m.3 (o), §10.6.4, RR-28
+    #[tokio::test]
+    #[ignore = "needs root, the MIT KDC and the gateway binary; CI job kerberos"]
+    async fn spnego_signs_in_falls_back_and_never_writes_the_keytab() {
+        let w = world(59).await;
+        w.person("ada").await;
+        let (chain, key, cert) = leaf(&w.ca, "urn:suiss:access:gw:kerberos:corp-krb");
+        w.register(GatewayKind::Kerberos, "corp-krb", cert).await;
+        w.keytab("corp-krb", SPN, None).await;
+        let (uid, gid) = run_as();
+        let dir = std::env::temp_dir().join(format!("access-gw-kerberos-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("rcache")).unwrap();
+        let realm = env("ACCESS_TEST_KRB5_REALM");
+        let kdc = env("ACCESS_TEST_KDC");
+        let keytab = PathBuf::from(env("ACCESS_TEST_KEYTAB_DIR")).join("http.keytab");
+        write(
+            &dir,
+            "krb5.conf",
+            format!(
+                "[libdefaults]\n default_realm = {realm}\n dns_lookup_kdc = false\n rdns = false\n permitted_enctypes = aes256-cts-hmac-sha384-192 aes256-cts-hmac-sha1-96\n[realms]\n {realm} = {{\n  kdc = {kdc}\n }}\n"
+            )
+            .as_bytes(),
+        );
+        let gw =
+            rcgen::generate_simple_self_signed(vec!["access.corp.example".to_owned()]).unwrap();
+        write(&dir, "gw-ca.pem", gw.cert.pem().as_bytes());
+        write(&dir, "gw.pem", gw.cert.pem().as_bytes());
+        write(
+            &dir,
+            "gw-key.pem",
+            gw.signing_key.serialize_pem().as_bytes(),
+        );
+        write(&dir, "server-roots.pem", w.server_roots.as_bytes());
+        write(&dir, "channel.pem", chain.as_bytes());
+        write(&dir, "channel-key.pem", key.as_bytes());
+        let chown = Command::new("chown")
+            .args(["-R", &format!("{uid}:{gid}"), dir.to_str().unwrap()])
+            .status()
+            .unwrap();
+        assert!(chown.success());
+        let socket = dir.join("parser.sock");
+        let parser = Command::new(env("ACCESS_TEST_PARSER_BIN"))
+            .env_clear()
+            .env("ACCESS_PARSER_SOCKET", &socket)
+            .env("ACCESS_PARSER_CALLERS", &uid)
+            .env("ACCESS_PARSER_WORKERS", "1")
+            .env("ACCESS_PARSER_RUN_AS", format!("{uid}:{gid}"))
+            .stderr(Stdio::inherit())
+            .spawn()
+            .unwrap();
+        let mut running = Running(vec![parser]);
+        for _ in 0..200 {
+            if socket.exists() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let gateway = Command::new(env("ACCESS_TEST_GW_KERBEROS_BIN"))
+            .env_clear()
+            .env("ACCESS_GW_KERBEROS_LISTEN", format!("127.0.0.1:{port}"))
+            .env("ACCESS_GW_KERBEROS_TLS_CERT", dir.join("gw.pem"))
+            .env("ACCESS_GW_KERBEROS_TLS_KEY", dir.join("gw-key.pem"))
+            .env("ACCESS_GW_KERBEROS_SPN", SPN)
+            .env("ACCESS_GW_KERBEROS_KEYTAB", &keytab)
+            .env("ACCESS_GW_KERBEROS_LOGIN", LOGIN)
+            .env("ACCESS_GW_KERBEROS_PARSER_SOCKET", &socket)
+            .env("ACCESS_GW_KERBEROS_PARSER_UID", &uid)
+            .env("ACCESS_GW_KERBEROS_KRB5_CONF", dir.join("krb5.conf"))
+            .env("ACCESS_GW_KERBEROS_RCACHE_DIR", dir.join("rcache"))
+            .env("ACCESS_GW_KERBEROS_SERVER", w.addr.to_string())
+            .env("ACCESS_GW_KERBEROS_SERVER_NAME", "localhost")
+            .env(
+                "ACCESS_GW_KERBEROS_SERVER_ROOTS",
+                dir.join("server-roots.pem"),
+            )
+            .env("ACCESS_GW_KERBEROS_CHANNEL_CERT", dir.join("channel.pem"))
+            .env(
+                "ACCESS_GW_KERBEROS_CHANNEL_KEY",
+                dir.join("channel-key.pem"),
+            )
+            .env("ACCESS_GW_KERBEROS_RUN_AS", format!("{uid}:{gid}"))
+            .stderr(Stdio::inherit())
+            .spawn()
+            .unwrap();
+        running.0.push(gateway);
+        listening(port).await;
+        let kinit = Command::new("kinit")
+            .arg(format!("ada@{realm}"))
+            .env("KRB5_CONFIG", dir.join("krb5.conf"))
+            .env(
+                "KRB5CCNAME",
+                format!("FILE:{}", dir.join("ccache").display()),
+            )
+            .stdin(Stdio::piped())
+            .spawn()
+            .and_then(|mut c| {
+                use std::io::Write as _;
+                c.stdin
+                    .take()
+                    .unwrap()
+                    .write_all(b"ci-only-not-a-secret\n")?;
+                c.wait()
+            })
+            .unwrap();
+        assert!(kinit.success());
+        let (no_token, _) = curl(&dir, "access.corp.example", port, &[]);
+        assert_eq!(no_token, "401");
+        let (code, to) = tokio::task::spawn_blocking({
+            let dir = dir.clone();
+            move || {
+                curl(
+                    &dir,
+                    "access.corp.example",
+                    port,
+                    &["--negotiate", "-u", ":"],
+                )
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!((code.as_str(), to.as_str()), ("303", LOGIN));
+        let (wrong, to) = tokio::task::spawn_blocking({
+            let dir = dir.clone();
+            move || {
+                curl(
+                    &dir,
+                    "other.corp.example",
+                    port,
+                    &["--negotiate", "-u", ":"],
+                )
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!((wrong.as_str(), to.as_str()), ("303", LOGIN));
+        for header in [
+            "Authorization: NTLM TlRMTVNTUAABAAAAB4IIogAAAAAAAAAAAAAAAAAAAAAKAGFKAAAADw==",
+            "Authorization: Negotiate TlRMTVNTUAABAAAAB4IIogAAAAAAAAAAAAAAAAAAAAAKAGFKAAAADw==",
+        ] {
+            let (ntlm, to) = curl(&dir, "access.corp.example", port, &["-H", header]);
+            assert_eq!((ntlm.as_str(), to.as_str()), ("303", LOGIN), "{header}");
+        }
+        let (audit, outbox) = w.rows().await;
+        assert!(
+            audit.contains(&String::from("login.kerberos.succeeded")),
+            "{audit:?}"
+        );
+        assert!(
+            audit.contains(&String::from("edge.kerberos.ntlm.refused")),
+            "{audit:?}"
+        );
+        assert!(
+            audit.contains(&String::from("edge.kerberos.token.refused")),
+            "{audit:?}"
+        );
+        assert!(
+            outbox.iter().any(|k| k.ends_with("authentication")),
+            "{outbox:?}"
+        );
+        let bytes = std::fs::read(&keytab).unwrap();
+        let entries = access_edge_core::keytab::read(&bytes, SPN).unwrap();
+        let mut found = Vec::new();
+        for e in &entries {
+            let key = &bytes[e.key.clone()];
+            for place in [dir.clone(), std::env::temp_dir(), PathBuf::from("/var/tmp")] {
+                holding(&place, key, &mut found);
+            }
+        }
+        found.retain(|p| p != &keytab);
+        assert!(found.is_empty(), "the keytab's key reached disk: {found:?}");
+        drop(running);
+    }
 }

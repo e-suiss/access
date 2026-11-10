@@ -68,6 +68,40 @@ jobs:
           SANITIZER: ${{ matrix.sanitizer }}
         run: just sanitize "$SANITIZER"
 
+  # OP-155 m.3 (o), RR-28: the Kerberos C FFI under AddressSanitizer, and the ASN.1 fuzz target
+  # of the Negotiate token reader the parser worker runs; sanitizers run in the weekly job (SA-23)
+  kerberos-asan:
+    name: kerberos-asan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read the pinned sanitizer toolchain from the justfile
+        id: toolchain
+        run: echo "nightly=$(sed -n 's/^sanitizer_nightly := "\(.*\)"$/\1/p' justfile)" >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: kerberos-asan
+          toolchain: ${{ steps.toolchain.outputs.nightly }}
+          components: rust-src
+      - name: MIT Kerberos headers, libclang and cargo-fuzz
+        run: |
+          sudo apt-get install --yes --no-install-recommends libkrb5-dev libclang-dev
+          cargo install --locked cargo-fuzz --version 0.13.1
+      - name: Kerberos gateway tests under AddressSanitizer
+        working-directory: bins/access-gw-kerberos
+        env:
+          RUSTFLAGS: -Zsanitizer=address -Cforce-frame-pointers=yes
+          RUSTDOCFLAGS: -Zsanitizer=address
+          NIGHTLY: ${{ steps.toolchain.outputs.nightly }}
+        run: cargo "+$NIGHTLY" test --locked -Zbuild-std --target x86_64-unknown-linux-gnu --lib --tests
+      - name: Fuzz the Negotiate token reader (ASan)
+        run: just fuzz spnego_read 600
+
   checksec-release:
     name: checksec-release
     runs-on: ubuntu-24.04

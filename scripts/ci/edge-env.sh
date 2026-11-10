@@ -117,6 +117,7 @@ LDIF
             kdb5_util create -s -r $REALM -P $PASSWORD
             kadmin.local -q 'addprinc -pw $PASSWORD ada'
             kadmin.local -q 'addprinc -randkey HTTP/access.corp.example'
+            kadmin.local -q 'addprinc -randkey HTTP/other.corp.example'
             kadmin.local -q 'ktadd -k /keytabs/http.keytab HTTP/access.corp.example'
             chmod 0644 /keytabs/http.keytab
             exec krb5kdc -n
