@@ -104,6 +104,7 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::VaultResources => Kind::VaultResources,
         ResourceKind::SamlSps => Kind::SamlSps,
         ResourceKind::SshHostGroups => Kind::SshHostGroups,
+        ResourceKind::Proxies => Kind::Proxies,
         ResourceKind::ProtectedResources => Kind::ProtectedResources,
         ResourceKind::TrustAnchors => Kind::TrustAnchors,
         ResourceKind::SsoEnforcementPreviews => Kind::SsoPreview,
@@ -273,6 +274,14 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
         {
             return Ok(Err(problem_of(&AdminError::Invalid(i))));
         }
+        // IDP-30 (3), OP-156 m.3 (l)
+        if let Change::Proxy(
+            access_identity_proxy::domain::registration::ProxyChange::PlainHeaders(name),
+        ) = &change
+            && let Err(i) = self.plain_headers_setup(tenant, realm, name).await?
+        {
+            return Ok(Err(problem_of(&AdminError::Invalid(i))));
+        }
         // IDI-4
         if matches!(change, Change::RpId(_)) {
             let n = match admin.passkey_count(tenant, realm).await {
@@ -290,6 +299,45 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             validity,
             body,
         }))
+    }
+
+    /// The plain header setup check (IDP-30 (3), OP-156 m.3 (l)): the application must not
+    /// answer at its upstream from here, outside the proxy. A proxy without an upstream cannot
+    /// show that, so it is refused too; a refusal is audited.
+    async fn plain_headers_setup(
+        &self,
+        tenant: access_store::identity::TenantId,
+        realm: access_store::identity::RealmId,
+        name: &str,
+    ) -> Result<Result<(), Invalid>, Unavailable> {
+        let mut t = access_store::identity::TenantTx::begin(&self.app, tenant, realm)
+            .await
+            .map_err(|_| Unavailable)?;
+        let registered = match access_identity_admin::app::proxy::registered(&mut t, name).await {
+            Ok(r) => r,
+            Err(AdminError::Invalid(i)) => return Ok(Err(i)),
+            Err(_) => return Err(Unavailable),
+        };
+        let reachable = match registered.upstream.as_deref() {
+            Some(u) => crate::proxy::reachable(u).await,
+            None => true,
+        };
+        if reachable {
+            t.audit(&access_store::audit::AuditEvent {
+                event_type: "proxy.plain_headers_refused",
+                actor: "realm-admin",
+                target: name,
+                correlation: "-",
+            })
+            .await
+            .map_err(|_| Unavailable)?;
+        }
+        t.commit().await.map_err(|_| Unavailable)?;
+        Ok(if reachable {
+            Err(Invalid::ProxyDirectlyReachable)
+        } else {
+            Ok(())
+        })
     }
 
     /// Fetches the sector identifier document `uri` through the SSRF-guarded client and checks

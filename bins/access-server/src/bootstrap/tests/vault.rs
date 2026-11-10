@@ -862,10 +862,13 @@ async fn register_client(
 
 /// Revokes the person's Grant as the realm's root.
 pub(super) async fn revoke(l: &Lab) {
+    revoke_grant(l, l.holding.grant).await;
+}
+
+/// Revokes `grant` as the realm's root.
+pub(super) async fn revoke_grant(l: &Lab, grant: Id) {
     let root = root_key(&l.w.keys).unwrap();
-    let payload = Payload::GrantRevoke {
-        grant: l.holding.grant,
-    };
+    let payload = Payload::GrantRevoke { grant };
     let now = server_time(&l.w.db.app).await.unwrap();
     let validity = Window {
         from: now - 60_000,

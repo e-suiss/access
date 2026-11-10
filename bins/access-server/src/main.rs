@@ -33,6 +33,7 @@ mod oauth;
 mod orgs;
 mod platform;
 mod product;
+mod proxy;
 mod relay;
 mod retention;
 mod risk;
@@ -1757,6 +1758,7 @@ async fn serve(
     let tenants_pool = router_pool.clone();
     let sandbox_pool = router_pool.clone();
     let (edge_router, edge_app) = (router_pool.clone(), app.clone());
+    let (proxy_router, proxy_app) = (router_pool.clone(), app.clone());
     // OP-155 m.3 (g), IDP-23, IDP-29
     let scim_ids = cell_ids.key().ok_or("no cell id key")?;
     let scim_calls = scim::routes(
@@ -1860,6 +1862,19 @@ async fn serve(
     let ssh_ca = access_http::ssh::router(
         pep_tokens.clone(),
         ssh::SshCa::new(ssh_app, identity_section.signer.clone(), idp_plane.clone()),
+    );
+    // OP-156 m.3 (l), IDP-30, B22
+    let forward_auth = Arc::new(access_identity_proxy::app::Proxy::new(proxy::ServerPorts {
+        router: proxy_router,
+        app: proxy_app,
+        oauth: pep_tokens.clone(),
+        domains: domains.clone(),
+    }));
+    let (proxy_stop, proxy_stopped) = tokio::sync::watch::channel(false);
+    let proxy_watch = proxy::watch(
+        forward_auth.clone(),
+        Arc::new(tokio::sync::Notify::new()),
+        proxy_stopped,
     );
     // OP-155 m.3 (q)
     let public_adp = access_http::adp::pep::with_tokens(adp.clone(), pep_tokens, issuer);
@@ -1978,7 +1993,8 @@ async fn serve(
             .merge(edge_calls)
             .merge(scim_calls)
             .merge(declared(&Declarations::of(config.provider)))
-            .merge(access_http::stage11::router()),
+            .merge(access_http::stage11::router())
+            .merge(access_http::proxy::router(forward_auth)),
     );
     let served = listen(
         config,
@@ -1989,6 +2005,8 @@ async fn serve(
     )
     .await;
     // OP-31
+    let _ = proxy_stop.send(true);
+    drop(proxy_watch.await);
     background.stop().await;
     if let Some(d) = doorbell {
         d.stop().await;
