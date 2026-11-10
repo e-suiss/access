@@ -330,6 +330,53 @@ impl TenantTx {
         Ok(())
     }
 
+    /// Whether the realm sends immediate security authority notices: on unless the latest
+    /// decided setting closed them (OP-156 m.3 (c)).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn security_notices_enabled(&mut self) -> Result<bool, StoreError> {
+        let realm = self.realm().ok_or(StoreError::Range)?;
+        Ok(sqlx::query_scalar!(
+            "SELECT enabled FROM access.relay_notice_settings
+              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+            Uuid::from_bytes(*self.tenant.as_bytes()),
+            Uuid::from_bytes(*realm.as_bytes()),
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?
+        .unwrap_or(true))
+    }
+
+    /// Writes the next security notice setting under `bound` (`idp.realm.security_notices`,
+    /// `security_notices_close`).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn put_security_notices(
+        &mut self,
+        bound: &crate::idp::Bound,
+        enabled: bool,
+    ) -> Result<(), StoreError> {
+        let realm = self.realm().ok_or(StoreError::Range)?;
+        sqlx::query!(
+            "INSERT INTO access.relay_notice_settings
+               (tenant_id, realm_id, version, enabled, domain_id, decision_pos)
+             SELECT $1, $2,
+                    COALESCE((SELECT max(version) FROM access.relay_notice_settings
+                               WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                    $3, $4, $5",
+            Uuid::from_bytes(*self.tenant.as_bytes()),
+            Uuid::from_bytes(*realm.as_bytes()),
+            enabled,
+            bound.domain().as_bytes().as_slice(),
+            i64::try_from(bound.position()).map_err(|_| StoreError::Range)?,
+        )
+        .execute(&mut *self.tx)
+        .await?;
+        Ok(())
+    }
+
     /// The ids of the messages that repeat `original`, oldest first.
     ///
     /// # Errors

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT enabled FROM access.relay_notice_settings\n              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.relay_notice_settings",
+            "name": "enabled"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3ec6334ab235819a1b72c15a4a583dc91940db7d1ff06bed60032e291c7d7e2e"
+}

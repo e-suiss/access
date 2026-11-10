@@ -91,6 +91,8 @@ pub enum Op {
     MarkCanary,
     /// `resendRelayMessage`: `idp.relay.resend` (OP-156 m.3 (c)).
     ResendRelay,
+    /// `putSecurityNotices`: `idp.realm.security_notices`, or `security_notices_close`.
+    PutSecurityNotices,
     /// `deleteAccount`: `idp.account.delete`, reserved (OP-153 m.3 (bb)).
     DeleteAccount,
     /// `rehomeRealm`: `idp.realm.rehome`, reserved and declaration only (OP-150 m.11 (b)).
@@ -290,6 +292,7 @@ impl Op {
             "putProtectionMode" | "patchProtectionMode" => Self::PutProtectionMode,
             "markCanaryAccount" => Self::MarkCanary,
             "resendRelayMessage" => Self::ResendRelay,
+            "putSecurityNotices" => Self::PutSecurityNotices,
             "deleteAccount" => Self::DeleteAccount,
             "rehomeRealm" => Self::RehomeRealm,
             "createResetIntent" => Self::ResetIntent,
@@ -1811,6 +1814,10 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             Change::AccountCanary(subject(ids, key_of(key)?)?)
         }
         // OP-156 m.3 (c)
+        Op::PutSecurityNotices => {
+            only(m, &["enabled"])?;
+            Change::SecurityNotices(flag(m, "enabled")?)
+        }
         Op::ResendRelay => {
             only(m, &[])?;
             Change::RelayResend(super::relay::event_id(key_of(key)?)?)

@@ -774,6 +774,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 }
             }
             Change::CimdPolicy(_)
+            | Change::SecurityNotices(_)
             | Change::DeviceCode(_)
             | Change::Ciba(_)
             | Change::Coordinator(_)
@@ -1738,6 +1739,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 let g = idp::governance(t).await?.ok_or(AdminError::NoRealm)?;
                 let exercise = bound.position().to_be_bytes();
                 custom_domains::write(t, bound, d, (&g, self.base, &exercise)).await?
+            }
+            // OP-156 m.3 (c)
+            Change::SecurityNotices(on) => {
+                t.put_security_notices(bound, *on).await?;
+                true
             }
             Change::DeviceCode(on) => {
                 t.put_device_code(bound, *on).await?;

@@ -1949,6 +1949,9 @@ pub enum Change {
     },
     /// `idp.relay.resend`: the undelivered message's `CloudEvents` id (OP-156 m.3 (c)).
     RelayResend([u8; 16]),
+    /// `idp.realm.security_notices` (`true`, CT2) or `security_notices_close` (`false`, CT1):
+    /// the immediate security authority notices, on by default (OP-156 m.3 (c)).
+    SecurityNotices(bool),
 }
 
 /// A change to an organization's profile (TN-98): its name, and whether home realm discovery
@@ -2187,6 +2190,8 @@ impl Change {
         match self {
             // OP-156 m.3 (c)
             Self::RelayResend(_) => IdpAction::RelayResend,
+            Self::SecurityNotices(true) => IdpAction::RealmSecurityNotices,
+            Self::SecurityNotices(false) => IdpAction::RealmSecurityNoticesClose,
             Self::ClientRegister(_) => IdpAction::ClientRegister,
             Self::ClientUpdate(_) => IdpAction::ClientUpdate,
             Self::ClientRetire(_) => IdpAction::ClientRetire,
@@ -2361,6 +2366,7 @@ impl Change {
             Self::GatewayKeytabEmergency { gateway, kvno } => gateway::emergency(gateway, *kvno),
             Self::AccountBind(_)
             | Self::RelayResend(_)
+            | Self::SecurityNotices(_)
             | Self::OrgSsoEnforce(_)
             | Self::FrontchannelLogout
             | Self::DeviceCode(_)
@@ -2502,7 +2508,7 @@ impl Change {
             Self::Federation(f) => f.body(),
             Self::Saml(s) => s.body(),
             Self::Domain(d) => d.body(),
-            Self::DeviceCode(on) | Self::Hrd(on) => {
+            Self::DeviceCode(on) | Self::Hrd(on) | Self::SecurityNotices(on) => {
                 Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))])
             }
             Self::Ciba(c) => c.to_value(),
@@ -2688,6 +2694,7 @@ impl Change {
             }
             Self::DcrPolicy { .. }
             | Self::DeviceCode(_)
+            | Self::SecurityNotices(_)
             | Self::Ciba(_)
             | Self::Coordinator(_)
             | Self::CertificateLogin(_)

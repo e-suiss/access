@@ -289,9 +289,9 @@ pub(crate) struct NoticePools {
 ///
 /// # Errors
 /// A store failure; the cursor has not passed an event whose notice is not queued.
-pub(crate) async fn notices_step(
+pub(crate) async fn notices_step<K: access_identity_events::adapters::RealmKek>(
     pools: &NoticePools,
-    keks: &RealmKeks,
+    keks: &K,
     ids: &IdKey,
 ) -> Result<u32, String> {
     use access_identity_account::adapters::system::SystemEntropy;
@@ -326,7 +326,9 @@ pub(crate) async fn notices_step(
         let mut t = TenantTx::begin(&pools.app, r.tenant, r.realm)
             .await
             .map_err(e)?;
-        for row in &rows {
+        // OP-156 m.3 (c)
+        let open = t.security_notices_enabled().await.map_err(e)?;
+        for row in rows.iter().filter(|_| open) {
             let Ok(ev) = Event::from_bytes(&row.event) else {
                 continue;
             };

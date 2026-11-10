@@ -1469,6 +1469,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "defineAgentTemplate"
         | "putDcrPolicy"
         | "putDeviceCode"
+        // OP-156 m.3 (c)
+        | "putSecurityNotices"
         | "putCiba"
         | "putCertificateLogin"
         | "putMtlsAliases"
