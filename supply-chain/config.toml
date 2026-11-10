@@ -47,6 +47,8 @@ audit-as-crates-io = false
 
 [policy.esuiss-ledger]
 audit-as-crates-io = false
+dependency-criteria = { rcgen = "safe-to-run" }
+notes = "rcgen is reached only through the `testing` feature, which only dev-dependencies enable (OP-156 Q3)"
 
 [policy.esuiss-restriction]
 audit-as-crates-io = false
