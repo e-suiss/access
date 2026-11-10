@@ -4224,24 +4224,11 @@ protected = false
 key = "merchants-save_card"
 surface = "account"
 class = "consent"
-# Q20 (OP-156 m.4, appended): handles (E56)
-[[message]]
-key = "handle-title"
-surface = "account"
-class = "settings"
 owner = "identity_plane"
 protected = false
 
 [[message]]
 key = "merchants-save_card_confirm"
-key = "handle-intro"
-surface = "account"
-class = "info"
-owner = "identity_plane"
-protected = false
-
-[[message]]
-key = "handle-add"
 surface = "account"
 class = "action"
 owner = "identity_plane"
@@ -4251,9 +4238,6 @@ protected = false
 key = "merchants-based_on"
 surface = "account"
 class = "label"
-key = "handle-pending"
-surface = "account"
-class = "status"
 owner = "identity_plane"
 protected = false
 
@@ -4308,7 +4292,6 @@ protected = false
 
 [[message]]
 key = "payment-pay"
-key = "handle-check"
 surface = "account"
 class = "action"
 owner = "identity_plane"
@@ -4325,6 +4308,46 @@ protected = false
 key = "merchants-save_card_refused"
 surface = "account"
 class = "notice"
+owner = "identity_plane"
+protected = false
+
+# Q20 (OP-156 m.4, appended): handles (E56)
+[[message]]
+key = "handle-title"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "handle-intro"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "handle-add"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "handle-pending"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "handle-check"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "handle-remove"
 surface = "account"
 class = "action"
