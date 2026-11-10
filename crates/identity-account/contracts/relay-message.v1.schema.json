@@ -61,7 +61,13 @@
         "relay.message.sso_setup_link.v1",
         "relay.message.ciba_invite.v1",
         "relay.message.upstream_subject_conflict.v1",
-        "relay.message.ldap_credential_changed.v1"
+        "relay.message.ldap_credential_changed.v1",
+        "relay.message.push_approval.v1",
+        "relay.message.semantic_notice.v1",
+        "relay.message.security_authority_notice.v1",
+        "relay.message.passkey_setup_invite.v1",
+        "relay.message.critical_interrupt.v1",
+        "relay.message.sms_otp.v1"
       ]
     },
     "subject": {
@@ -583,6 +589,102 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.push_approval.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.push_approval.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.semantic_notice.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.semantic_notice.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.security_authority_notice.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.security_authority_notice.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.passkey_setup_invite.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.passkey_setup_invite.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.critical_interrupt.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.critical_interrupt.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.sms_otp.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.sms_otp.v1"
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -599,6 +701,11 @@
         "phone": {
           "type": "string",
           "pattern": "^\\+[1-9][0-9]{6,14}$"
+        },
+        "device": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "description": "An approver device by its key's RFC 7638 thumbprint; push approvals only."
         }
       }
     },
@@ -1547,6 +1654,269 @@
           "description": "Attacker input: the application's name, rendered as text; the password is never carried (OP-155 m.3 (n))."
         },
         "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.push_approval.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "challenge",
+        "application",
+        "action",
+        "expires_at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "challenge": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{22,86}$",
+          "description": "Secret: the challenge id the approver answers. Never logged. The number to match is never carried (OP-156 m.3 (d))."
+        },
+        "application": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the application or client's name, rendered as text."
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: what is being approved, rendered as text."
+        },
+        "location": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "The coarse location from GeoLookup; absent when unknown, never a placeholder."
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.semantic_notice.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "reason",
+        "intent",
+        "link"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "reason": {
+          "enum": [
+            "step_up",
+            "approver_needed",
+            "security_intervention",
+            "authority_revoked",
+            "authority_narrowed"
+          ]
+        },
+        "intent": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The intent digest the notice concerns (OP-156 m.3 (c)). Authority never waits on delivery."
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the link. Never logged."
+        },
+        "until": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.security_authority_notice.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "event",
+        "name",
+        "review_link",
+        "at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "event": {
+          "enum": [
+            "sub_delegation",
+            "domain_acceptance",
+            "instance_ended"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the other Party's or the domain's name, rendered as text."
+        },
+        "review_link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the Review link. Never logged."
+        },
+        "revoke_link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the Revoke link. Never logged. Absent when nothing is left to revoke."
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.passkey_setup_invite.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "link",
+        "organization",
+        "expires_at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the link. Never logged."
+        },
+        "organization": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the organization's name, rendered as text."
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.critical_interrupt.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "agent",
+        "grant",
+        "summary",
+        "at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "agent": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the agent's display name, rendered as text."
+        },
+        "grant": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$",
+          "description": "The Grant that allows the interrupt; Relay checks it live at delivery (E48)."
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: what the agent says, rendered as text."
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.sms_otp.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "code",
+        "purpose",
+        "expires_at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[0-9]{6}$",
+          "description": "Secret: the one-time code. Never logged."
+        },
+        "purpose": {
+          "enum": [
+            "sign_in",
+            "verify_address",
+            "recovery",
+            "sign_up"
+          ]
+        },
+        "expires_at": {
           "type": "string",
           "format": "date-time"
         }

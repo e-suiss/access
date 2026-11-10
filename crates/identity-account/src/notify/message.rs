@@ -8,6 +8,7 @@
 //!   [`Secret`]s and have no `Debug` of their own;
 //! - nothing else is carried: no password, no token, no IP address, no device fingerprint.
 
+use core::convert::Infallible;
 use core::fmt;
 
 use access_crypto::Secret;
@@ -33,6 +34,9 @@ pub enum Address {
     Email(String),
     /// An E.164 phone number.
     Phone(String),
+    /// An approver device, by the RFC 7638 thumbprint of its device key in base64url; Relay
+    /// reaches it through the push registration the approver made (OP-156 m.3 (d)).
+    Device(String),
 }
 
 impl fmt::Debug for Address {
@@ -40,6 +44,7 @@ impl fmt::Debug for Address {
         match self {
             Self::Email(_) => f.write_str("Email([redacted])"),
             Self::Phone(_) => f.write_str("Phone([redacted])"),
+            Self::Device(_) => f.write_str("Device([redacted])"),
         }
     }
 }
@@ -69,6 +74,16 @@ impl Address {
                     Err(Invalid("phone number"))
                 }
             }
+            Self::Device(d) => {
+                if d.len() == 43
+                    && d.bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+                {
+                    Ok(())
+                } else {
+                    Err(Invalid("device"))
+                }
+            }
         }
     }
 
@@ -76,13 +91,15 @@ impl Address {
         match self {
             Self::Email(a) => json!({ "email": a }),
             Self::Phone(p) => json!({ "phone": p }),
+            Self::Device(d) => json!({ "device": d }),
         }
     }
 
     fn from_json(v: &Value) -> Result<Self, Invalid> {
-        let a = match (v.get("email"), v.get("phone")) {
-            (Some(Value::String(e)), None) => Self::Email(e.clone()),
-            (None, Some(Value::String(p))) => Self::Phone(p.clone()),
+        let a = match (v.get("email"), v.get("phone"), v.get("device")) {
+            (Some(Value::String(e)), None, None) => Self::Email(e.clone()),
+            (None, Some(Value::String(p)), None) => Self::Phone(p.clone()),
+            (None, None, Some(Value::String(d))) => Self::Device(d.clone()),
             _ => return Err(Invalid("recipient")),
         };
         a.validate()?;
@@ -402,6 +419,83 @@ impl AppPasswordChange {
     }
 }
 
+/// Why a semantic notice is sent (OP-156 m.3 (c)); authority never waits on its delivery.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NoticeReason {
+    /// A step-up is needed to go on.
+    StepUp,
+    /// An approver's answer is needed.
+    ApproverNeeded,
+    /// A security intervention concerns the person.
+    SecurityIntervention,
+    /// Authority the person held or relied on was revoked.
+    AuthorityRevoked,
+    /// Authority the person held or relied on was narrowed.
+    AuthorityNarrowed,
+}
+
+impl NoticeReason {
+    const ALL: [Self; 5] = [
+        Self::StepUp,
+        Self::ApproverNeeded,
+        Self::SecurityIntervention,
+        Self::AuthorityRevoked,
+        Self::AuthorityNarrowed,
+    ];
+
+    /// Wire name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::StepUp => "step_up",
+            Self::ApproverNeeded => "approver_needed",
+            Self::SecurityIntervention => "security_intervention",
+            Self::AuthorityRevoked => "authority_revoked",
+            Self::AuthorityNarrowed => "authority_narrowed",
+        }
+    }
+
+    fn parse(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|c| c.name() == s)
+    }
+}
+
+/// A security-relevant authority event sent at once (OP-156 m.3 (c)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SecurityEvent {
+    /// A new sub-delegation in the person's name.
+    SubDelegation,
+    /// A new domain accepted the person's authority.
+    DomainAcceptance,
+    /// One of the person's Instances was ended.
+    InstanceEnded,
+}
+
+impl SecurityEvent {
+    const ALL: [Self; 3] = [
+        Self::SubDelegation,
+        Self::DomainAcceptance,
+        Self::InstanceEnded,
+    ];
+
+    /// Wire name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::SubDelegation => "sub_delegation",
+            Self::DomainAcceptance => "domain_acceptance",
+            Self::InstanceEnded => "instance_ended",
+        }
+    }
+
+    fn parse(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|c| c.name() == s)
+    }
+}
+
+/// Length of an SMS one-time code, in digits (OP-156 m.3 (f)).
+pub const SMS_CODE_DIGITS: usize = 6;
+
 /// Longest CIBA `binding_message`, in characters (OP-155 m.3 (l)).
 pub const BINDING_MESSAGE_MAX: usize = 32;
 
@@ -527,9 +621,85 @@ pub enum Body {
         /// When, Unix ms.
         at_ms: u64,
     },
+    /// A push verification to an approver device (`relay.message.push_approval.v1`, OP-156
+    /// m.3 (d)). It never carries the number to match. The names are attacker input rendered
+    /// as text.
+    PushApproval {
+        /// The challenge id the approver answers, base64url.
+        challenge: Secret<String>,
+        /// The application or client's name, at most 200 characters.
+        application: String,
+        /// What is being approved, at most 200 characters.
+        action: String,
+        /// The coarse location from `GeoLookup`, at most 200 characters; absent when unknown.
+        location: Option<String>,
+        /// Unix ms after which it is worthless: 120 s after it was made.
+        expires_at_ms: u64,
+    },
+    /// Something needs the person's attention (`relay.message.semantic_notice.v1`, OP-156 m.3
+    /// (c)): to whom, why, which intent, until when.
+    SemanticNotice {
+        /// Why.
+        reason: NoticeReason,
+        /// The intent digest it concerns, 64 lower-case hex digits.
+        intent: String,
+        /// The `https` link where the person acts, at most 2048 bytes.
+        link: Secret<String>,
+        /// Unix ms until which it matters; absent when it does not lapse.
+        until_ms: Option<u64>,
+    },
+    /// A security-relevant authority event, sent at once (`relay.message.security_authority_notice.v1`,
+    /// OP-156 m.3 (c)): "If you didn't expect this: Revoke / Review". The name is attacker input
+    /// rendered as text.
+    SecurityAuthorityNotice {
+        /// What happened.
+        event: SecurityEvent,
+        /// The other Party's or the domain's name, at most 200 characters.
+        name: String,
+        /// The `https` Review link, at most 2048 bytes.
+        review_link: Secret<String>,
+        /// The `https` Revoke link, at most 2048 bytes; absent when nothing is left to revoke.
+        revoke_link: Option<Secret<String>>,
+        /// When, Unix ms.
+        at_ms: u64,
+    },
+    /// A one-use passkey setup invitation on an HR start date (`relay.message.passkey_setup_invite.v1`,
+    /// OP-156 m.3 (q)), valid 7 days. The name is attacker input rendered as text.
+    PasskeySetupInvite {
+        /// The `https` link, at most 2048 bytes.
+        link: Secret<String>,
+        /// The organization's name, at most 200 characters.
+        organization: String,
+        /// Unix ms after which it is worthless.
+        expires_at_ms: u64,
+    },
+    /// A personal agent interrupts the person at the critical level (`relay.message.critical_interrupt.v1`,
+    /// E48, Ek B 4494). Relay checks the Grant live at delivery. The names are attacker input
+    /// rendered as text.
+    CriticalInterrupt {
+        /// The agent's display name, at most 200 characters.
+        agent: String,
+        /// The Grant that allows it, 32 lower-case hex digits.
+        grant: String,
+        /// What the agent says, at most 200 characters.
+        summary: String,
+        /// When, Unix ms.
+        at_ms: u64,
+    },
+    /// A restricted SMS one-time code (`relay.message.sms_otp.v1`, OP-156 m.3 (f)): 6 digits,
+    /// 5 minutes, to a phone number only.
+    SmsOtp {
+        /// The code: exactly 6 ASCII digits.
+        code: Secret<String>,
+        /// Why.
+        purpose: OtpPurpose,
+        /// Unix ms after which it is worthless.
+        expires_at_ms: u64,
+    },
 }
 
 impl fmt::Debug for Body {
+    #[expect(clippy::too_many_lines, reason = "one arm per body, each its redactions")]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Otp {
@@ -623,12 +793,60 @@ impl fmt::Debug for Body {
                 .field("application", &"[redacted]")
                 .field("at_ms", at_ms)
                 .finish(),
+            Self::PushApproval { expires_at_ms, .. } => f
+                .debug_struct("PushApproval")
+                .field("challenge", &"[redacted]")
+                .field("application", &"[redacted]")
+                .field("action", &"[redacted]")
+                .field("location", &"[redacted]")
+                .field("expires_at_ms", expires_at_ms)
+                .finish(),
+            Self::SemanticNotice {
+                reason, until_ms, ..
+            } => f
+                .debug_struct("SemanticNotice")
+                .field("reason", reason)
+                .field("intent", &"[redacted]")
+                .field("link", &"[redacted]")
+                .field("until_ms", until_ms)
+                .finish(),
+            Self::SecurityAuthorityNotice { event, at_ms, .. } => f
+                .debug_struct("SecurityAuthorityNotice")
+                .field("event", event)
+                .field("name", &"[redacted]")
+                .field("review_link", &"[redacted]")
+                .field("revoke_link", &"[redacted]")
+                .field("at_ms", at_ms)
+                .finish(),
+            Self::PasskeySetupInvite { expires_at_ms, .. } => f
+                .debug_struct("PasskeySetupInvite")
+                .field("link", &"[redacted]")
+                .field("organization", &"[redacted]")
+                .field("expires_at_ms", expires_at_ms)
+                .finish(),
+            Self::CriticalInterrupt { at_ms, .. } => f
+                .debug_struct("CriticalInterrupt")
+                .field("agent", &"[redacted]")
+                .field("grant", &"[redacted]")
+                .field("summary", &"[redacted]")
+                .field("at_ms", at_ms)
+                .finish(),
+            Self::SmsOtp {
+                purpose,
+                expires_at_ms,
+                ..
+            } => f
+                .debug_struct("SmsOtp")
+                .field("code", &"[redacted]")
+                .field("purpose", purpose)
+                .field("expires_at_ms", expires_at_ms)
+                .finish(),
         }
     }
 }
 
 /// Every kind of the contract, as outbox kind and `CloudEvents` `type`.
-pub const KINDS: [&str; 31] = [
+pub const KINDS: [&str; 37] = [
     "relay.message.otp.v1",
     "relay.message.magic_link.v1",
     "relay.message.password_changed.v1",
@@ -660,6 +878,12 @@ pub const KINDS: [&str; 31] = [
     "relay.message.ciba_invite.v1",
     "relay.message.upstream_subject_conflict.v1",
     "relay.message.ldap_credential_changed.v1",
+    "relay.message.push_approval.v1",
+    "relay.message.semantic_notice.v1",
+    "relay.message.security_authority_notice.v1",
+    "relay.message.passkey_setup_invite.v1",
+    "relay.message.critical_interrupt.v1",
+    "relay.message.sms_otp.v1",
 ];
 
 impl Body {
@@ -680,6 +904,12 @@ impl Body {
             Self::CibaInvite { .. } => KINDS[28],
             Self::UpstreamSubjectConflict { .. } => KINDS[29],
             Self::LdapCredentialChanged { .. } => KINDS[30],
+            Self::PushApproval { .. } => KINDS[31],
+            Self::SemanticNotice { .. } => KINDS[32],
+            Self::SecurityAuthorityNotice { .. } => KINDS[33],
+            Self::PasskeySetupInvite { .. } => KINDS[34],
+            Self::CriticalInterrupt { .. } => KINDS[35],
+            Self::SmsOtp { .. } => KINDS[36],
         }
     }
 
@@ -692,11 +922,16 @@ impl Body {
             | Self::Link { expires_at_ms, .. }
             | Self::Invitation { expires_at_ms, .. }
             | Self::Prompt { expires_at_ms, .. }
-            | Self::CibaInvite { expires_at_ms, .. } => Some(*expires_at_ms),
+            | Self::CibaInvite { expires_at_ms, .. }
+            | Self::PushApproval { expires_at_ms, .. }
+            | Self::PasskeySetupInvite { expires_at_ms, .. }
+            | Self::SmsOtp { expires_at_ms, .. } => Some(*expires_at_ms),
+            Self::SemanticNotice { until_ms, .. } => *until_ms,
             _ => None,
         }
     }
 
+    #[expect(clippy::too_many_lines, reason = "one arm per body, each its field rules")]
     fn validate(&self) -> Result<(), Invalid> {
         match self {
             Self::Otp { code, .. } => {
@@ -749,6 +984,65 @@ impl Body {
                     Err(Invalid("until"))
                 }
             }
+            Self::PushApproval {
+                challenge,
+                application,
+                action,
+                location,
+                ..
+            } => {
+                let c = challenge.expose();
+                if !(22..=86).contains(&c.len())
+                    || !c
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+                {
+                    return Err(Invalid("challenge"));
+                }
+                name(application, "application")?;
+                name(action, "action")?;
+                location.as_deref().map_or(Ok(()), |l| name(l, "location"))
+            }
+            Self::SemanticNotice { intent, link, .. } => {
+                hex_id(intent, 64, "intent")?;
+                https_link(link.expose())
+            }
+            Self::SecurityAuthorityNotice {
+                name: n,
+                review_link,
+                revoke_link,
+                ..
+            } => {
+                name(n, "name")?;
+                https_link(review_link.expose())?;
+                revoke_link
+                    .as_ref()
+                    .map_or(Ok(()), |l| https_link(l.expose()))
+            }
+            Self::PasskeySetupInvite {
+                link, organization, ..
+            } => {
+                https_link(link.expose())?;
+                name(organization, "organization")
+            }
+            Self::CriticalInterrupt {
+                agent,
+                grant,
+                summary,
+                ..
+            } => {
+                name(agent, "agent")?;
+                hex_id(grant, 32, "grant")?;
+                name(summary, "summary")
+            }
+            Self::SmsOtp { code, .. } => {
+                let c = code.expose();
+                if c.len() == SMS_CODE_DIGITS && c.bytes().all(|b| b.is_ascii_digit()) {
+                    Ok(())
+                } else {
+                    Err(Invalid("code"))
+                }
+            }
             _ => Ok(()),
         }
     }
@@ -771,6 +1065,14 @@ fn binding(m: &str) -> Result<(), Invalid> {
         Ok(())
     } else {
         Err(Invalid("binding_message"))
+    }
+}
+
+fn hex_id(h: &str, len: usize, field: &'static str) -> Result<(), Invalid> {
+    if h.len() == len && h.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        Ok(())
+    } else {
+        Err(Invalid(field))
     }
 }
 
@@ -819,6 +1121,16 @@ impl Message {
         // OP-153 m.3 (i), m.9 (d)
         if self.valid_since_ms.is_some() != matches!(self.to, Address::Email(_)) {
             return Err(Invalid("valid_since"));
+        }
+        // OP-156 m.3 (d), (f)
+        let channel = match (&self.body, &self.to) {
+            (Body::PushApproval { .. }, to) => matches!(to, Address::Device(_)),
+            (Body::SmsOtp { .. }, to) => matches!(to, Address::Phone(_)),
+            (Body::CriticalInterrupt { .. }, _) => true,
+            (_, to) => !matches!(to, Address::Device(_)),
+        };
+        if !channel {
+            return Err(Invalid("recipient"));
         }
         self.body.validate()
     }
@@ -922,6 +1234,18 @@ impl Message {
                 m.insert("at_ms".into(), (*at_ms).into());
                 m.insert("method".into(), method.name().into());
             }
+            Body::PushApproval { .. }
+            | Body::SemanticNotice { .. }
+            | Body::SecurityAuthorityNotice { .. }
+            | Body::PasskeySetupInvite { .. }
+            | Body::CriticalInterrupt { .. }
+            | Body::SmsOtp { .. } => match self
+                .body
+                .stage11_members(&mut m, "_ms", |ms| Ok::<_, Infallible>(ms.into()))
+            {
+                Ok(()) => {}
+                Err(never) => match never {},
+            },
             Body::AccountStatus { status, at_ms } => {
                 m.insert("status".into(), status.name().into());
                 m.insert("at_ms".into(), (*at_ms).into());
@@ -931,6 +1255,7 @@ impl Message {
     }
 
     /// Reads the sealed form back and validates it.
+    #[expect(clippy::too_many_lines, reason = "one arm per kind, each its members")]
     pub(crate) fn from_sealed_json(
         kind: &str,
         subject: [u8; 16],
@@ -939,6 +1264,42 @@ impl Message {
         let int = |k: &'static str| v.get(k).and_then(Value::as_u64).ok_or(Invalid(k));
         let text = |k: &'static str| v.get(k).and_then(Value::as_str).ok_or(Invalid(k));
         let body = match kind {
+            "relay.message.push_approval.v1" => Body::PushApproval {
+                challenge: Secret::new(text("challenge")?.to_owned()),
+                application: text("application")?.to_owned(),
+                action: text("action")?.to_owned(),
+                location: opt_text(v, "location")?,
+                expires_at_ms: int("expires_at_ms")?,
+            },
+            "relay.message.semantic_notice.v1" => Body::SemanticNotice {
+                reason: NoticeReason::parse(text("reason")?).ok_or(Invalid("reason"))?,
+                intent: text("intent")?.to_owned(),
+                link: Secret::new(text("link")?.to_owned()),
+                until_ms: opt_int(v, "until_ms")?,
+            },
+            "relay.message.security_authority_notice.v1" => Body::SecurityAuthorityNotice {
+                event: SecurityEvent::parse(text("event")?).ok_or(Invalid("event"))?,
+                name: text("name")?.to_owned(),
+                review_link: Secret::new(text("review_link")?.to_owned()),
+                revoke_link: opt_text(v, "revoke_link")?.map(Secret::new),
+                at_ms: int("at_ms")?,
+            },
+            "relay.message.passkey_setup_invite.v1" => Body::PasskeySetupInvite {
+                link: Secret::new(text("link")?.to_owned()),
+                organization: text("organization")?.to_owned(),
+                expires_at_ms: int("expires_at_ms")?,
+            },
+            "relay.message.critical_interrupt.v1" => Body::CriticalInterrupt {
+                agent: text("agent")?.to_owned(),
+                grant: text("grant")?.to_owned(),
+                summary: text("summary")?.to_owned(),
+                at_ms: int("at_ms")?,
+            },
+            "relay.message.sms_otp.v1" => Body::SmsOtp {
+                code: Secret::new(text("code")?.to_owned()),
+                purpose: OtpPurpose::parse(text("purpose")?).ok_or(Invalid("purpose"))?,
+                expires_at_ms: int("expires_at_ms")?,
+            },
             "relay.message.otp.v1" => Body::Otp {
                 code: Secret::new(text("code")?.to_owned()),
                 purpose: OtpPurpose::parse(text("purpose")?).ok_or(Invalid("purpose"))?,
@@ -1138,12 +1499,129 @@ impl Message {
                 m.insert("at".into(), rfc3339(*at_ms)?.into());
                 m.insert("method".into(), method.name().into());
             }
+            Body::PushApproval { .. }
+            | Body::SemanticNotice { .. }
+            | Body::SecurityAuthorityNotice { .. }
+            | Body::PasskeySetupInvite { .. }
+            | Body::CriticalInterrupt { .. }
+            | Body::SmsOtp { .. } => {
+                self.body
+                    .stage11_members(&mut m, "", |ms| rfc3339(ms).map(Value::from))?;
+            }
             Body::AccountStatus { status, at_ms } => {
                 m.insert("status".into(), status.name().into());
                 m.insert("at".into(), rfc3339(*at_ms)?.into());
             }
         }
         Ok(Value::Object(m))
+    }
+}
+
+fn opt_text(v: &Value, k: &'static str) -> Result<Option<String>, Invalid> {
+    match v.get(k) {
+        None => Ok(None),
+        Some(Value::String(t)) => Ok(Some(t.clone())),
+        Some(_) => Err(Invalid(k)),
+    }
+}
+
+fn opt_int(v: &Value, k: &'static str) -> Result<Option<u64>, Invalid> {
+    match v.get(k) {
+        None => Ok(None),
+        Some(n) => n.as_u64().map(Some).ok_or(Invalid(k)),
+    }
+}
+
+impl Body {
+    /// The members of the Stage 11 bodies, with times as `time` encodes them under their name
+    /// plus `suffix` (`_ms` sealed, none on the wire).
+    fn stage11_members<E>(
+        &self,
+        m: &mut Map<String, Value>,
+        suffix: &str,
+        time: impl Fn(u64) -> Result<Value, E>,
+    ) -> Result<(), E> {
+        let put_time = |m: &mut Map<String, Value>, base: &str, ms: u64| -> Result<(), E> {
+            m.insert(format!("{base}{suffix}"), time(ms)?);
+            Ok(())
+        };
+        let text = |t: &str| Value::String(t.to_owned());
+        match self {
+            Self::PushApproval {
+                challenge,
+                application,
+                action,
+                location,
+                expires_at_ms,
+            } => {
+                m.insert("challenge".into(), text(challenge.expose()));
+                m.insert("application".into(), text(application));
+                m.insert("action".into(), text(action));
+                if let Some(l) = location {
+                    m.insert("location".into(), text(l));
+                }
+                put_time(m, "expires_at", *expires_at_ms)?;
+            }
+            Self::SemanticNotice {
+                reason,
+                intent,
+                link,
+                until_ms,
+            } => {
+                m.insert("reason".into(), reason.name().into());
+                m.insert("intent".into(), text(intent));
+                m.insert("link".into(), text(link.expose()));
+                if let Some(u) = until_ms {
+                    put_time(m, "until", *u)?;
+                }
+            }
+            Self::SecurityAuthorityNotice {
+                event,
+                name,
+                review_link,
+                revoke_link,
+                at_ms,
+            } => {
+                m.insert("event".into(), event.name().into());
+                m.insert("name".into(), text(name));
+                m.insert("review_link".into(), text(review_link.expose()));
+                if let Some(l) = revoke_link {
+                    m.insert("revoke_link".into(), text(l.expose()));
+                }
+                put_time(m, "at", *at_ms)?;
+            }
+            Self::PasskeySetupInvite {
+                link,
+                organization,
+                expires_at_ms,
+            } => {
+                m.insert("link".into(), text(link.expose()));
+                m.insert("organization".into(), text(organization));
+                put_time(m, "expires_at", *expires_at_ms)?;
+            }
+            Self::CriticalInterrupt {
+                agent,
+                grant,
+                summary,
+                at_ms,
+            } => {
+                m.insert("agent".into(), text(agent));
+                m.insert("grant".into(), text(grant));
+                m.insert("summary".into(), text(summary));
+                put_time(m, "at", *at_ms)?;
+            }
+            Self::SmsOtp {
+                code,
+                purpose,
+                expires_at_ms,
+            } => {
+                m.insert("code".into(), text(code.expose()));
+                m.insert("purpose".into(), purpose.name().into());
+                put_time(m, "expires_at", *expires_at_ms)?;
+            }
+            _ => {}
+        }
+        Ok(())
     }
 }
 

@@ -34,8 +34,8 @@ use access_identity_account::notify::delivery::{
 use access_identity_account::notify::envelope::{EventId, Header, parse, seal};
 use access_identity_account::notify::http::{HttpRelay, HttpRelayConfig, RelayEndpoint};
 use access_identity_account::notify::message::{
-    Address, AgentNotice, AppPasswordChange, Body, KINDS, LinkPurpose, Message, Notice, OtpPurpose,
-    Prompt, SignInMethod,
+    Address, AgentNotice, AppPasswordChange, Body, KINDS, LinkPurpose, Message, Notice,
+    NoticeReason, OtpPurpose, Prompt, SecurityEvent, SignInMethod,
 };
 use access_identity_account::notify::notifier::OutboxNotifier;
 use access_identity_account::notify::pg::PgCourierStore;
@@ -762,6 +762,135 @@ fn a_ciba_invite_carries_a_short_binding_message_and_no_intent() {
     assert_eq!(invite(None).body.kind(), "relay.message.ciba_invite.v1");
 }
 
+fn random_hex<const N: usize>() -> String {
+    access_crypto::random::bytes::<N>()
+        .unwrap()
+        .iter()
+        .fold(String::new(), |mut out, b| {
+            use std::fmt::Write as _;
+            let _ = write!(out, "{b:02x}");
+            out
+        })
+}
+
+fn sms_code() -> String {
+    access_crypto::random::bytes::<6>()
+        .unwrap()
+        .iter()
+        .map(|b| char::from(b'0' + b % 10))
+        .collect()
+}
+
+fn device() -> Address {
+    Address::Device("A".repeat(43))
+}
+
+fn stage11_messages(s: [u8; 16]) -> Vec<Message> {
+    let email = || Address::Email(EMAIL.to_owned());
+    let since = Some(START_MS - 86_400_000);
+    vec![
+        Message {
+            subject: s,
+            to: device(),
+            locale: None,
+            valid_since_ms: None,
+            body: Body::PushApproval {
+                challenge: Secret::new(random_hex::<32>()),
+                application: "Acme Wiki".to_owned(),
+                action: "Sign in".to_owned(),
+                location: Some("Istanbul, TR".to_owned()),
+                expires_at_ms: START_MS + 120_000,
+            },
+        },
+        Message {
+            subject: s,
+            to: email(),
+            locale: None,
+            valid_since_ms: since,
+            body: Body::SemanticNotice {
+                reason: NoticeReason::ApproverNeeded,
+                intent: random_hex::<32>(),
+                link: Secret::new("https://id.example/a/abc".to_owned()),
+                until_ms: Some(START_MS + 1),
+            },
+        },
+        Message {
+            subject: s,
+            to: email(),
+            locale: None,
+            valid_since_ms: since,
+            body: Body::SecurityAuthorityNotice {
+                event: SecurityEvent::SubDelegation,
+                name: "Acme Travel".to_owned(),
+                review_link: Secret::new("https://id.example/r/abc".to_owned()),
+                revoke_link: Some(Secret::new("https://id.example/v/abc".to_owned())),
+                at_ms: START_MS,
+            },
+        },
+        Message {
+            subject: s,
+            to: email(),
+            locale: None,
+            valid_since_ms: since,
+            body: Body::PasskeySetupInvite {
+                link: Secret::new("https://id.example/p/abc".to_owned()),
+                organization: "Acme".to_owned(),
+                expires_at_ms: START_MS + 7 * 86_400_000,
+            },
+        },
+        Message {
+            subject: s,
+            to: Address::Phone("+905551112233".to_owned()),
+            locale: None,
+            valid_since_ms: None,
+            body: Body::CriticalInterrupt {
+                agent: "One".to_owned(),
+                grant: random_hex::<16>(),
+                summary: "Your flight leaves in 40 minutes".to_owned(),
+                at_ms: START_MS,
+            },
+        },
+        Message {
+            subject: s,
+            to: Address::Phone("+905551112233".to_owned()),
+            locale: None,
+            valid_since_ms: None,
+            body: Body::SmsOtp {
+                code: Secret::new(sms_code()),
+                purpose: OtpPurpose::SignIn,
+                expires_at_ms: START_MS + 300_000,
+            },
+        },
+    ]
+}
+
+// OP-156 m.3 (c), (d), (f), E42
+#[test]
+fn push_goes_to_a_device_and_sms_codes_to_a_phone_only() {
+    let mut m = stage11_messages([5; 16]);
+    for one in &m {
+        assert!(one.validate().is_ok(), "{one:?}");
+    }
+    m[0].to = Address::Email(EMAIL.to_owned());
+    m[0].valid_since_ms = Some(START_MS);
+    assert!(m[0].validate().is_err());
+    m[5].to = Address::Email(EMAIL.to_owned());
+    m[5].valid_since_ms = Some(START_MS);
+    assert!(m[5].validate().is_err());
+    m[3].to = device();
+    m[3].valid_since_ms = None;
+    assert!(m[3].validate().is_err());
+    let mut short = stage11_messages([5; 16]);
+    if let Body::SmsOtp { code, .. } = &mut short[5].body {
+        *code = Secret::new(random_hex::<2>());
+    }
+    assert!(short[5].validate().is_err());
+    let printed = format!("{:?}", stage11_messages([5; 16]));
+    for hidden in ["Acme Wiki", "Istanbul", "Acme Travel", "id.example", "flight"] {
+        assert!(!printed.contains(hidden), "{printed}");
+    }
+}
+
 // OP-131, E42 m.5
 #[test]
 fn relay_answers_are_classified_and_backoff_grows_to_a_ceiling() {
@@ -977,6 +1106,7 @@ fn every_kind_matches_the_json_schema() {
             },
         },
     ])
+    .chain(stage11_messages(s))
     .collect::<Vec<_>>();
     assert_eq!(messages.len(), KINDS.len());
     for (m, kind) in messages.iter().zip(KINDS) {

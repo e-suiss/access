@@ -22,6 +22,7 @@ fn text(a: &Address) -> (&'static str, &str) {
     match a {
         Address::Email(v) => ("email", v),
         Address::Phone(v) => ("phone", v),
+        Address::Device(v) => ("device", v),
     }
 }
 

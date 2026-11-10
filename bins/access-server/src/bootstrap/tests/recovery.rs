@@ -65,7 +65,7 @@ pub(super) struct RecordingNotifier<'a> {
 impl Notifier for RecordingNotifier<'_> {
     async fn notify(&self, tx: &mut TenantTx, m: &Message) -> Result<EventId, NotifyError> {
         let to = match &m.to {
-            Address::Email(v) | Address::Phone(v) => v.clone(),
+            Address::Email(v) | Address::Phone(v) | Address::Device(v) => v.clone(),
         };
         let (secret, until_ms) = match &m.body {
             MessageBody::Otp { code, .. } => (Some(code.expose().clone()), None),

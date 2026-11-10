@@ -362,7 +362,7 @@ fn email(text: &str) -> Option<Address> {
 
 fn shown(a: &Address) -> String {
     match a {
-        Address::Email(v) | Address::Phone(v) => v.clone(),
+        Address::Email(v) | Address::Phone(v) | Address::Device(v) => v.clone(),
     }
 }
 

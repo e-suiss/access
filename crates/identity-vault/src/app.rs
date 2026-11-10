@@ -981,7 +981,7 @@ async fn prompt(
                 .unwrap_or(1)
                 .max(1),
         ),
-        Address::Phone(_) => None,
+        Address::Phone(_) | Address::Device(_) => None,
     };
     let realm = keys.realm();
     let name: String = name.chars().take(200).collect();

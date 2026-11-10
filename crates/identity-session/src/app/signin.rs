@@ -879,7 +879,7 @@ where
             // OP-153 m.3 (i), m.9 (d)
             let valid_since_ms = match to {
                 Address::Email(_) => Some(tx.mailbox_since(subject).await?.unwrap_or(1)),
-                Address::Phone(_) => None,
+                Address::Phone(_) | Address::Device(_) => None,
             };
             tx.notify(
                 self.notifier,
