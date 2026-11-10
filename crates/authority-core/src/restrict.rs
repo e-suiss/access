@@ -30,19 +30,39 @@ action "exercise" appliesTo {
     untrusted: Set<String>,
     actor: String,
     tier: Long,
+    risk: String,
+    posture: String,
+    labels: Set<String>,
   }
 };"#;
 
 /// What the decision path knows about a request beyond its intent (E54 (1), §11.19): whether
 /// the actor is an agent and the intent's consequence tier. The restriction context names them
 /// `actor` (`agent`, `person` or `anonymous`) and `tier` (0 to 3), beside `untrusted`, the typed
-/// parameters whose provenance is `untrusted-external`.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// parameters whose provenance is `untrusted-external`, and the accepted signals.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Facts {
     /// The actor is an agent Instance.
     pub agent: bool,
     /// The consequence tier, 0 to 3.
     pub tier: u8,
+    /// The accepted external signals (OP-156 m.3 (r)).
+    pub signals: Signals,
+}
+
+/// The external signals the domain accepted, as the restriction context names them
+/// (OP-156 m.3 (r), E38, CI-2): only a forbid-only policy reads them, so a signal can deny or
+/// ask for more and never allow.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Signals {
+    /// `risk`: the most severe current `risk_external` about the actor's Party, `none` without
+    /// one.
+    pub risk: Option<access_internal_api::signals::RiskLevel>,
+    /// `posture`: the worst current `posture_mdm` about the actor's Party and Instance.
+    pub posture: access_internal_api::signals::Posture,
+    /// `labels`: `scheme:label` of each accepted `data_label` the request carries for its
+    /// resource.
+    pub labels: BTreeSet<String>,
 }
 
 /// Compiled policies by version; `None` marks a policy that does not compile.
@@ -119,7 +139,7 @@ fn quoted(s: &str) -> String {
 fn context(
     intent: &IntentEnvelope,
     (actor, capacity): (Option<&Actor>, Capacity),
-    facts: Facts,
+    facts: &Facts,
     now: u64,
 ) -> String {
     let untrusted: Vec<&String> = intent
@@ -139,6 +159,9 @@ fn context(
         "untrusted": untrusted,
         "actor": who,
         "tier": facts.tier,
+        "risk": facts.signals.risk.map_or("none", access_internal_api::signals::RiskLevel::name),
+        "posture": facts.signals.posture.name(),
+        "labels": facts.signals.labels,
     })
     .to_string()
 }
@@ -160,7 +183,7 @@ pub fn results(
         policies,
         intent,
         (actor, capacity),
-        Facts::default(),
+        &Facts::default(),
         now,
         cache,
     )
@@ -174,7 +197,7 @@ pub fn results_with(
     policies: &[(Id, ContentState)],
     intent: &IntentEnvelope,
     (actor, capacity): (Option<&Actor>, Capacity),
-    facts: Facts,
+    facts: &Facts,
     now: u64,
     cache: &Cache,
 ) -> Result<Vec<PolicyResult>, Rejection> {
@@ -264,3 +287,6 @@ pub fn results_with(
     }
     Ok(out)
 }
+
+#[cfg(test)]
+mod tests;

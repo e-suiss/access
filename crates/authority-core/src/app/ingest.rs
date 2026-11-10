@@ -339,6 +339,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if let Err(r) = carrier::check_risk(&statement) {
             return Ok(Err(r));
         }
+        // IDP-34, OP-156 m.3 (r)
+        if let Err(r) = signal_body(&statement, body) {
+            return Ok(Err(r));
+        }
         Ok(Ok(Verified {
             cut_off: false,
             statement,
@@ -588,6 +592,35 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             _ => false,
         })
     }
+}
+
+/// A signal-source Claim's body, when it travels, is one of `product-seam.cddl` under the
+/// digest its `value` names, and the assurance the statement carries is exactly the body's: a
+/// proofing claims the level it states and no more; a proofing with assurance and no body is
+/// refused (OP-156 m.3 (r), IDP-34).
+fn signal_body(s: &Statement, body: Option<&[u8]>) -> Result<(), Refusal> {
+    use access_internal_api::signals::{self, Signal};
+    if !signals::is_signal(&s.class) {
+        return Ok(());
+    }
+    let Some(EqValue::Bytes(d)) = &s.value else {
+        return Err(Refusal("claim-value"));
+    };
+    let Some(bytes) = body else {
+        return if s.assurance.is_empty() {
+            Ok(())
+        } else {
+            Err(Refusal("claim-body"))
+        };
+    };
+    let signal = Signal::from_bytes(&s.class, bytes).map_err(|_| Refusal("claim-body"))?;
+    if signal.digest().as_slice() != d.as_slice() {
+        return Err(Refusal("claim-body-digest"));
+    }
+    if signal.assurance() != s.assurance {
+        return Err(Refusal("claim-body"));
+    }
+    Ok(())
 }
 
 const fn current(s: &ClaimState, now: u64) -> bool {

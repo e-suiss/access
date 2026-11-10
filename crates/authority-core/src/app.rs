@@ -603,6 +603,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             Some(c) => Some(c),
             None => self.recovery_binding(req, actor, at).await?,
         };
+        let signals = self.signals(actor, req, &resolved, at).await?;
         let frame = Frame {
             intent_digest: digest,
             exercise,
@@ -614,6 +615,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             held: resolved.held,
             policies: &self.policies,
             compromised,
+            signals: &signals,
         };
         let (mut evaluation, _) = self.passes(req, &frame).await?;
         let tier = crate::requirements::tier_of(
@@ -903,7 +905,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         actor: Option<Actor>,
         now: u64,
         resolved: &'a Proofs,
-        compromised: Option<&'static str>,
+        (compromised, signals): (Option<&'static str>, &'a crate::restrict::Signals),
     ) -> Frame<'a> {
         Frame {
             intent_digest,
@@ -916,6 +918,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             held: resolved.held,
             policies: &self.policies,
             compromised,
+            signals,
         }
     }
 
@@ -1512,6 +1515,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 Some(c) => Some(c),
                 None => self.recovery_binding(req, actor, now).await?,
             };
+            let signals = self.signals(actor, req, &resolved, now).await?;
             let records = u64::try_from(resolved.claims.len())
                 .map_err(|_| CoreError::Protocol("proofs"))?
                 .saturating_add(u64::from(!open))
@@ -1521,7 +1525,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 actor,
                 now,
                 &resolved,
-                compromised,
+                (compromised, &signals),
             );
             let (mut evaluation, snapshot) = self.passes(req, &frame).await?;
             let (tier, render, render_bytes) = rendered(req, &evaluation)?;
@@ -2072,6 +2076,7 @@ pub mod recovery;
 mod regime;
 pub mod resources;
 pub mod roles;
+mod signals;
 pub mod sources;
 pub mod ssh;
 pub mod vault;

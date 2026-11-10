@@ -1439,6 +1439,8 @@ pub struct Frame<'a> {
     /// The DENY overlay that covers the actor, by its subcode: a `party_compromise` (OP-141
     /// m.31), a narrowing account status or a regime overlay (§9.13, E5).
     pub compromised: Option<&'static str>,
+    /// The accepted external signals the restriction context reads (OP-156 m.3 (r)).
+    pub signals: &'a crate::restrict::Signals,
 }
 
 /// One pass of the evaluation over `snapshot` (§17.1.1 steps 7–8). Implicit powers of a
@@ -1461,6 +1463,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         held,
         policies,
         compromised,
+        signals,
     } = *frame;
     snapshot.restart();
     // SEC12, OP-141 m.31 (c), (d)
@@ -1855,12 +1858,13 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
     let facts = crate::restrict::Facts {
         agent: actor_is_agent,
         tier: crate::app::approval::tier_code(tier),
+        signals: signals.clone(),
     };
     let mut restrictions = match crate::restrict::results_with(
         &applicable,
         &req.intent,
         (actor.as_ref(), req.capacity),
-        facts,
+        &facts,
         now,
         policies,
     ) {
