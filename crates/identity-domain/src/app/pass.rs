@@ -17,6 +17,22 @@ use crate::domain::schedule::{renew_after, retry_after};
 use crate::domain::verify::{self, Registration, Status, Step};
 use crate::ports::{AccountKey, AcmeHttp, Challenges, DnsProbe, Pause, Unavailable};
 
+/// Who the pass's audit events name as actor.
+pub const ACTOR: &str = "access-custom-domains";
+
+async fn audit(t: &mut TenantTx, event: &str, host: &str) -> Result<(), StoreError> {
+    let correlation = access_kernel::json::b64url_encode(
+        &access_crypto::random::bytes::<16>().map_err(|_| StoreError::Range)?,
+    );
+    t.audit(&access_store::audit::AuditEvent {
+        event_type: event,
+        actor: ACTOR,
+        target: host,
+        correlation: &correlation,
+    })
+    .await
+}
+
 /// What one pass over a realm did.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Outcome {
@@ -124,6 +140,11 @@ where
                 let txt = self.dns.txt(&r.host.challenge_name()).await;
                 let cname = self.dns.cname(r.host.as_str()).await;
                 let (Ok(txt), Ok(cname)) = (txt, cname) else {
+                    tracing::warn!(
+                        event = "domain.recheck.failed",
+                        plane = "ops",
+                        "custom domain records not read; nothing changed"
+                    );
                     out.unavailable = out.unavailable.saturating_add(1);
                     return Ok(());
                 };
@@ -141,7 +162,18 @@ where
             now: now_s,
         };
         match store::record_check(&mut t, &checked).await {
-            Ok(_) => t.commit().await?,
+            Ok(_) => {
+                // OP-156 m.3 (i), OP-41
+                match (r.status, status) {
+                    (Status::Verified, Status::Verified) => {}
+                    (_, Status::Verified) => audit(&mut t, "domain.verified", &d.hostname).await?,
+                    (Status::Verified, Status::Lapsed) | (_, Status::Expired) => {
+                        audit(&mut t, "domain.verification_failed", &d.hostname).await?;
+                    }
+                    _ => {}
+                }
+                t.commit().await?;
+            }
             Err(e) if e.integrity() => {
                 drop(t);
                 let mut t = TenantTx::begin(self.app, scope.0, scope.1).await?;
@@ -216,6 +248,7 @@ where
                 .await?;
                 store::close_orders(&mut t, &d.hostname, "valid", None).await?;
                 store::record_acme(&mut t, d.id, 0, None, None).await?;
+                audit(&mut t, "acme.certificate_issued", &d.hostname).await?;
                 out.issued = out.issued.saturating_add(1);
             }
             Err(e) => {
@@ -229,7 +262,13 @@ where
                     Some(e.code()),
                 )
                 .await?;
-                tracing::warn!(error = e.code(), "custom domain certificate not issued");
+                audit(&mut t, "acme.order_failed", &d.hostname).await?;
+                tracing::error!(
+                    event = "acme.renewal.failed",
+                    plane = "ops",
+                    error = e.code(),
+                    "custom domain certificate not issued"
+                );
                 out.failed = out.failed.saturating_add(1);
             }
         }

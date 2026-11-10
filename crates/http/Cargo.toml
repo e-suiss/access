@@ -29,7 +29,6 @@ access-identity-x509 = { workspace = true }
 access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 suiss-crypto = { workspace = true, features = ["aead", "signer", "verify"] }
-access-crypto = { workspace = true }
 zeroize = { workspace = true, features = ["alloc", "std"] }
 access-parse = { workspace = true }
 access-telemetry = { workspace = true }

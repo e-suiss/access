@@ -41,6 +41,7 @@ pub struct Service<F, V> {
     rsa_ids: BTreeMap<Realm, access_crypto::rsa_id::RsaIdKey>,
     federation: BTreeMap<Realm, Keyring>,
     saml: BTreeMap<Realm, crate::saml::Ring>,
+    acme: Option<crate::acme::AcmeKey>,
 }
 
 /// The JWS types only a realm's `federation` key signs, and the realm JOSE key never does
@@ -230,6 +231,7 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             rsa_ids: BTreeMap::new(),
             federation: BTreeMap::new(),
             saml: BTreeMap::new(),
+            acme: None,
         };
         for (realm, alg, policy, saved, federation) in all.iter().filter_map(|b| restored(b)) {
             let policy = policy.unwrap_or(s.policy);
@@ -512,7 +514,36 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                 self.handle_federation(r, now, draw)
             }
             Request::Saml(r) => self.handle_saml(&r, now),
+            Request::Acme(r) => self.handle_acme(&r),
             other => self.handle_issuer(&other, now),
+        }
+    }
+
+    /// Answers the cell ACME account key's requests (OP-156 m.3 (i)): the key is made on the
+    /// first request and stored before it is used.
+    fn handle_acme(&mut self, request: &crate::acme::AcmeRequest) -> Response {
+        use crate::acme::{AcmeKey, AcmeKeyError, slot};
+        if self.acme.is_none() {
+            let key = match self.vault.issuer(&slot()) {
+                Ok(Some(stored)) => AcmeKey::restore(&stored, &mut self.factory),
+                Ok(None) => AcmeKey::generate(&mut self.factory).and_then(|k| {
+                    let stored = k.stored().ok_or(AcmeKeyError::Stored)?;
+                    self.vault
+                        .put_issuer(&slot(), &stored)
+                        .map_err(|_| AcmeKeyError::Stored)?;
+                    Ok(k)
+                }),
+                Err(_) => Err(AcmeKeyError::Stored),
+            };
+            match key {
+                Ok(k) => self.acme = Some(k),
+                Err(e) => return Response::Error(String::from(e.code())),
+            }
+        }
+        match self.acme.as_ref().map(|k| k.answer(request)) {
+            Some(Ok(a)) => Response::Acme(a),
+            Some(Err(e)) => Response::Error(String::from(e.code())),
+            None => Response::Error(String::from(AcmeKeyError::Stored.code())),
         }
     }
 

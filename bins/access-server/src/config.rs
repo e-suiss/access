@@ -417,6 +417,10 @@ pub(crate) struct Identity {
     /// verified.
     #[serde(default)]
     pub(crate) org_domains: Option<OrgDomains>,
+    /// Where realms' custom domains get their certificates (OP-156 m.3 (i)). Their DNS records
+    /// are read through `org_domains`' resolver; without one no custom domain is verified.
+    #[serde(default)]
+    pub(crate) custom_domains: Option<CustomDomains>,
     /// `host:port` of the SAML gateway's forward listener (OP-155 m.3 (c)). Without it every
     /// SAML and WS-Federation sign-in answers that the service is unavailable.
     #[serde(default)]
@@ -451,6 +455,20 @@ pub(crate) struct OrgDomains {
     pub(crate) doh_url: String,
     /// The RDAP service the domain is appended to, `https://…/domain/` (RFC 9082).
     pub(crate) rdap_url: String,
+}
+
+/// The ACME directory custom domains' certificates come from (OP-156 m.3 (i), RFC 8555).
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CustomDomains {
+    /// The ACME directory URL, `https://…`.
+    pub(crate) directory: String,
+    /// The ACME account contact, `mailto:…` (RFC 8555 §7.3).
+    #[serde(default)]
+    pub(crate) contact: Option<String>,
+    /// PEM trust anchors of the directory's TLS; without it the system bundle is read.
+    #[serde(default)]
+    pub(crate) ca_file: Option<PathBuf>,
 }
 
 /// TLS files, read once before the lockdown.
@@ -612,6 +630,10 @@ pub(crate) enum ConfigError {
     #[error("identity.realm_base must be an https origin without a path or trailing slash (TN-10)")]
     RealmBase,
     #[error(
+        "identity.custom_domains needs an https directory and, if any, a mailto: contact (OP-156 m.3 (i))"
+    )]
+    CustomDomains,
+    #[error(
         "the suiss section is required: region, https base URLs without a trailing slash for relay, management_api and products (OP-149 m.3), and a realm slug as platform_realm when set (OP-151 m.2 M2)"
     )]
     Suiss,
@@ -763,6 +785,17 @@ impl Config {
         let identity = self.identity.as_ref().ok_or(ConfigError::NoIdentity)?;
         // OP-138, §17.9.6
         RealmBase::parse(&identity.realm_base).map_err(|_| ConfigError::RealmBase)?;
+        // OP-156 m.3 (i)
+        if let Some(c) = &identity.custom_domains {
+            let directory = access_identity_domain::acme::wire::origin(&c.directory);
+            let contact = c.contact.as_deref().is_none_or(|m| {
+                m.strip_prefix("mailto:")
+                    .is_some_and(|a| a.contains('@') && !a.contains([',', ' ', '?']))
+            });
+            if directory.is_none() || !contact {
+                return Err(ConfigError::CustomDomains);
+            }
+        }
         if self.login.lifetimes().is_none() {
             return Err(ConfigError::SessionLifetimes);
         }
@@ -871,6 +904,7 @@ mod tests {
                     doh_url: "https://dns.example/dns-query".to_owned(),
                     rdap_url: "https://rdap.example/domain/".to_owned(),
                 }),
+                custom_domains: None,
                 saml_gateway: None,
                 geo_csv: None,
                 upstream_parser: None,
@@ -1089,6 +1123,7 @@ mod tests {
                     signer: "/run/s.sock".into(),
                     outbound_ca_file: None,
                     org_domains: None,
+                    custom_domains: None,
                     saml_gateway: None,
                     geo_csv: None,
                     upstream_parser: None,

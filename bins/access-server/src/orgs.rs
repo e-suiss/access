@@ -47,7 +47,11 @@ fn down(what: &str) -> Unavailable {
 }
 
 impl WebProbe {
-    async fn records(&self, name: &str, rtype: Rtype) -> Result<Vec<String>, Unavailable> {
+    pub(crate) async fn records(
+        &self,
+        name: &str,
+        rtype: Rtype,
+    ) -> Result<Vec<String>, Unavailable> {
         let base = self.doh.as_deref().ok_or_else(|| down("no resolver"))?;
         let q = dns::query(name, rtype).map_err(|_| down("name"))?;
         let url = format!("{base}?dns={}", b64url_encode(&q));

@@ -364,8 +364,17 @@ impl Sni {
         }
         let (key, pkcs8) = suiss_crypto::signer::SoftSigner::generate_p256()
             .map_err(|e| TlsError::Key(e.to_string()))?;
-        let serial =
-            access_crypto::random::bytes::<16>().map_err(|e| TlsError::Key(e.to_string()))?;
+        let suiss_crypto::cose::PublicKey::P256(point) =
+            suiss_crypto::signer::Signer::public_key(&key)
+        else {
+            return Err(TlsError::Key(String::from("p256")));
+        };
+        let mut serial = [0_u8; 16];
+        serial.copy_from_slice(
+            suiss_crypto::digest::sha256(&point)
+                .get(..16)
+                .unwrap_or(&[1; 16]),
+        );
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .ok()

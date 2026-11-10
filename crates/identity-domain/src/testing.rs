@@ -704,7 +704,7 @@ mod tests {
             issued.leaf.not_after - issued.leaf.not_before
                 >= crate::domain::schedule::LIFETIME_S - 60
         );
-        assert!(board.0.lock().unwrap().is_empty());
+        assert_eq!(board.0.lock().unwrap().len(), 0);
         assert_eq!(twin.issued(), 1);
         twin.refuse_finalize(true);
         let refused = client.issue("login.acme.example", now_s(), &board).await;

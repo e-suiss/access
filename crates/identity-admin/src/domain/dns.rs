@@ -9,6 +9,8 @@ pub enum Rtype {
     Txt,
     /// MX (15).
     Mx,
+    /// CNAME (5), for custom domains (OP-156 m.3 (i)).
+    Cname,
 }
 
 impl Rtype {
@@ -16,6 +18,7 @@ impl Rtype {
         match self {
             Self::Txt => 16,
             Self::Mx => 15,
+            Self::Cname => 5,
         }
     }
 }
@@ -174,6 +177,7 @@ pub fn answers(m: &[u8], rtype: Rtype) -> Result<Vec<String>, DnsError> {
                     }
                     out.push(name_at(m, host_at)?.0);
                 }
+                Rtype::Cname => out.push(name_at(m, start)?.0),
             }
         }
         pos = stop;
@@ -233,5 +237,25 @@ mod tests {
         looped[at + 1] = u8::try_from(at).unwrap();
         assert_eq!(answers(&looped, Rtype::Mx), Err(DnsError::Malformed));
         assert_eq!(query("a..b", Rtype::Mx), Err(DnsError::Name));
+    }
+
+    // OP-156 m.3 (i)
+    #[test]
+    fn cname_answers_name_their_target() {
+        let mut rdata = vec![4];
+        rdata.extend_from_slice(b"acme");
+        rdata.extend_from_slice(&[5]);
+        rdata.extend_from_slice(b"suiss");
+        rdata.extend_from_slice(&[2]);
+        rdata.extend_from_slice(b"id");
+        rdata.push(0);
+        assert_eq!(
+            answers(&answer(5, &rdata, 0), Rtype::Cname).unwrap(),
+            vec![String::from("acme.suiss.id")]
+        );
+        assert_eq!(
+            answers(&answer(16, b"\x01x", 0), Rtype::Cname).unwrap(),
+            Vec::<String>::new()
+        );
     }
 }

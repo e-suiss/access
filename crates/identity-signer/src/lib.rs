@@ -7,6 +7,7 @@
 //! OpenID Federation, JWE decryption and RS256 keys of the enterprise protocols are apart from
 //! these and from every authority key (OP-155 m.1 (b)).
 
+pub mod acme;
 pub mod adapters;
 pub mod app;
 pub mod cell;

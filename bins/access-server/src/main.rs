@@ -18,6 +18,7 @@ mod ciba;
 mod claims;
 mod config;
 mod console;
+mod custom_domains;
 mod doorbell;
 mod edge;
 mod events;
@@ -109,6 +110,10 @@ const OUTBOUND_TIMEOUT: Duration = Duration::from_secs(5);
 /// Everything read from the file system before the lockdown closes it.
 struct Prepared {
     tls: Arc<access_http::tls::ServerConfig>,
+    /// OP-156 m.3 (i): the public listener's certificates by SNI.
+    sni: Arc<access_http::tls::Sni>,
+    /// OP-156 m.3 (i): the ACME directory's HTTPS, when one is configured.
+    acme: Option<access_identity_domain::adapters::https::AcmeHttps>,
     /// OP-155 m.3 (m): the mTLS listener's configuration, when `mtls_listen` is set.
     mtls: Option<Arc<access_http::tls::ServerConfig>>,
     root_cert: Vec<u8>,
@@ -572,7 +577,7 @@ fn serve_main(config: &Config, telemetry: &access_telemetry::Telemetry) -> ExitC
     }
 }
 
-fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<Prepared, String> {
+fn prepare(config: &Config, (tls, sni): TlsParts) -> Result<Prepared, String> {
     let db = config.database.as_ref().ok_or("no database section")?;
     let hsm = config.hsm.as_ref().ok_or("no hsm section")?;
     let root_cert = std::fs::read(&db.root_cert_file)
@@ -610,6 +615,8 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
         .map_err(|e| e.to_string())?;
     Ok(Prepared {
         tls,
+        sni,
+        acme: acme_https(config)?,
         mtls: mtls_config(config)?,
         root_cert,
         sequencer_password: password(&db.sequencer)?,
@@ -628,6 +635,31 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
         outbound: outbound(config)?,
         tls_names: tls_names(config),
     })
+}
+
+/// OP-156 m.3 (i): HTTPS to the configured ACME directory, its trust anchors read before the
+/// lockdown: the configured ones, else the system's.
+fn acme_https(
+    config: &Config,
+) -> Result<Option<access_identity_domain::adapters::https::AcmeHttps>, String> {
+    let Some(c) = config
+        .identity
+        .as_ref()
+        .and_then(|i| i.custom_domains.as_ref())
+    else {
+        return Ok(None);
+    };
+    let pem = match &c.ca_file {
+        Some(f) => std::fs::read(f).map_err(|e| format!("{}: {e}", f.display()))?,
+        None => SYSTEM_ROOTS
+            .iter()
+            .find_map(|f| std::fs::read(f).ok())
+            .ok_or("no trust anchors for the ACME directory")?,
+    };
+    let tls = access_http::tls::client_config(&pem).map_err(|e| e.to_string())?;
+    access_identity_domain::adapters::https::AcmeHttps::new(&c.directory, tls, OUTBOUND_TIMEOUT)
+        .map(Some)
+        .map_err(|e| e.to_string())
 }
 
 /// OP-148, §17.9.6: the certificate covers the issuer and the management origin.
@@ -688,6 +720,14 @@ fn declared_targets(config: &Config) -> Result<Vec<DeclaredTarget>, String> {
         .collect()
 }
 
+/// The ACME directory's port when it is not 443 (OP-156 m.3 (i)).
+fn acme_port(config: &Config) -> Option<u16> {
+    let c = config.identity.as_ref()?.custom_domains.as_ref()?;
+    let origin = access_identity_domain::acme::wire::origin(&c.directory)?;
+    let port = origin.rsplit_once(':')?.1.parse::<u16>().ok()?;
+    (port != access_identity_oauth::adapters::outbound::PORT).then_some(port)
+}
+
 /// SA-22 with what the authority plane reaches after it (OP-141 m.18 (g), (h)).
 fn lockdown(config: &Config) -> Lockdown {
     let mut lockdown = Lockdown::new(Profile::Server, LandlockAbi::REQUIRED);
@@ -701,6 +741,10 @@ fn lockdown(config: &Config) -> Lockdown {
         lockdown.allow_tcp_connect(access_identity_oauth::adapters::outbound::REVOCATION_PORT);
     // OP-67
     if let Some(port) = config.telemetry.otlp_port() {
+        lockdown = lockdown.allow_tcp_connect(port);
+    }
+    // OP-156 m.3 (i)
+    if let Some(port) = acme_port(config) {
         lockdown = lockdown.allow_tcp_connect(port);
     }
     // OP-149 m.23
@@ -1397,6 +1441,7 @@ struct Background {
     refreshing: tokio::task::JoinHandle<()>,
     chains: tokio::task::JoinHandle<()>,
     sampling: tokio::task::JoinHandle<()>,
+    domains: tokio::task::JoinHandle<()>,
     ready: Readiness,
     /// Every realm's JWKS loaded at start-up (OP-138, §17.9.7).
     jwks: ReadyFlag,
@@ -1406,11 +1451,29 @@ impl Background {
     fn start(
         config: &Config,
         pools: &Pools,
-        (outbound, keks): (Outbound, login::RealmKeks),
+        (outbound, (keks, (sni, acme))): (
+            Outbound,
+            (
+                login::RealmKeks,
+                (
+                    Arc<access_http::tls::Sni>,
+                    Option<access_identity_domain::adapters::https::AcmeHttps>,
+                ),
+            ),
+        ),
         ids: &Arc<ids::CellIds>,
         wake: Option<Arc<tokio::sync::Notify>>,
     ) -> Result<Self, String> {
         let identity = config.identity.as_ref().ok_or("no identity section")?;
+        // OP-156 m.3 (i)
+        let domains = custom_domains::spawn(
+            identity,
+            (pools.app.clone(), pools.router.clone()),
+            &outbound,
+            (sni, acme),
+            custom_domains::Keks(keks.clone()),
+            holder()?,
+        );
         let logout = courier(config, pools, outbound.clone())?;
         let vault_outbound = outbound.clone();
         let keks_for_vault = keks.clone();
@@ -1496,6 +1559,7 @@ impl Background {
             chains,
             // §17.8.2, OP-53
             sampling: tokio::spawn(sample_pools(PoolGauges::of(pools))),
+            domains,
             jwks: ready.flag("jwks.realms"),
             ready,
         })
@@ -1512,6 +1576,7 @@ impl Background {
         self.refreshing.abort();
         self.chains.abort();
         self.sampling.abort();
+        self.domains.abort();
     }
 }
 
@@ -1545,7 +1610,13 @@ fn mtls_config(
         .map_err(|e| e.to_string())
 }
 
-fn tls_config(config: &Config) -> Result<std::sync::Arc<access_http::tls::ServerConfig>, String> {
+/// The public listener's TLS configuration and its SNI resolver (OP-156 m.3 (i)).
+type TlsParts = (
+    std::sync::Arc<access_http::tls::ServerConfig>,
+    std::sync::Arc<access_http::tls::Sni>,
+);
+
+fn tls_config(config: &Config) -> Result<TlsParts, String> {
     let tls = config.tls.as_ref().ok_or("no tls section")?;
     let chain =
         std::fs::read(&tls.cert_file).map_err(|e| format!("{}: {e}", tls.cert_file.display()))?;
@@ -1557,8 +1628,10 @@ fn tls_config(config: &Config) -> Result<std::sync::Arc<access_http::tls::Server
         .as_ref()
         .map(|f| std::fs::read(f).map_err(|e| format!("{}: {e}", f.display())))
         .transpose()?;
-    access_http::tls::server_config(&chain, key.expose(), client_ca.as_deref())
-        .map_err(|e| e.to_string())
+    let sni = access_http::tls::Sni::new(&chain, key.expose()).map_err(|e| e.to_string())?;
+    let server = access_http::tls::sni_server_config(sni.clone(), client_ca.as_deref())
+        .map_err(|e| e.to_string())?;
+    Ok((server, sni))
 }
 
 #[expect(
@@ -1606,7 +1679,10 @@ async fn serve(
     let background = Background::start(
         config,
         &all,
-        (prepared.outbound.clone(), keks.clone()),
+        (
+            prepared.outbound.clone(),
+            (keks.clone(), (prepared.sni.clone(), prepared.acme.clone())),
+        ),
         &cell_ids,
         doorbell.as_ref().map(|d| d.wake.clone()),
     )?;

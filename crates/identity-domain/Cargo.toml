@@ -31,6 +31,9 @@ zeroize = { workspace = true, features = ["alloc", "std"] }
 testing = []
 
 [dev-dependencies]
+access-identity-domain = { path = ".", features = ["testing"] }
+access-store = { workspace = true, features = ["testing"] }
+suiss-crypto = { workspace = true, features = ["signer", "aead", "testing"] }
 rustls-webpki = { workspace = true, features = ["aws-lc-rs", "std"] }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "io-util", "time", "sync"] }
 

@@ -401,6 +401,7 @@ name = "access-identity-domain"
 version = "0.4.0"
 dependencies = [
  "access-crypto",
+ "access-identity-domain",
  "access-identity-webauthn",
  "access-parse",
  "access-store",

@@ -6,6 +6,7 @@
     clippy::unwrap_used,
     clippy::panic,
     clippy::arithmetic_side_effects,
+    clippy::many_single_char_names,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
@@ -22,7 +23,7 @@ use access_store::events::SealedKey;
 use access_store::identity::{RealmId, TenantId, TenantTx};
 use access_store::idp::{Bound, Decision, bind, create_settings};
 use access_store::scope::DomainId;
-use access_store::tenancy::{create_realm, create_tenant};
+use access_store::tenancy::{create_realm, create_tenant, set_issuer};
 use access_store::testing::{TestDb, fresh};
 
 const TTL: Duration = Duration::from_secs(10);
@@ -94,6 +95,11 @@ async fn realm(db: &TestDb, t: TenantId, d: &DomainId, slug: &str) -> RealmId {
         .unwrap();
     tx.enter_realm(r).await.unwrap();
     create_settings(&mut tx).await.unwrap();
+    assert!(
+        set_issuer(&mut tx, &format!("https://{slug}.suiss.id"))
+            .await
+            .unwrap()
+    );
     tx.commit().await.unwrap();
     r
 }
@@ -251,7 +257,8 @@ async fn one_realm_serves_a_host_and_the_router_reads_only_verified_domains() {
         .await
         .unwrap()
         .unwrap();
-    assert!(route.route.realm == r1);
+    assert_eq!(route.route.realm.as_bytes(), r1.as_bytes());
+    assert_eq!(route.route.issuer, "https://acme.suiss.id");
     assert_eq!(
         cd::served_hosts(&db.router).await.unwrap(),
         ["login.acme.example"]
@@ -301,7 +308,7 @@ async fn one_realm_serves_a_host_and_the_router_reads_only_verified_domains() {
         .await
         .unwrap()
         .unwrap();
-    assert!(route.route.realm == r2);
+    assert_eq!(route.route.realm.as_bytes(), r2.as_bytes());
 }
 
 // OP-73, OP-156 m.3 (i)
@@ -335,7 +342,7 @@ async fn an_ended_certificate_keeps_its_chain_and_loses_its_key() {
     let active = active_certificates(&mut tx).await.unwrap();
     assert_eq!(active.len(), 1);
     assert_eq!(active[0].id, [2; 16]);
-    assert!(active[0].key == sealed(2));
+    assert_eq!(active[0].key, sealed(2));
     tx.commit().await.unwrap();
     let shredded: (Option<Vec<u8>>, String) = sqlx::query_as(
         "SELECT key_sealed, status FROM access.domain_certificates WHERE cert_uuid = $1",
@@ -348,7 +355,7 @@ async fn an_ended_certificate_keeps_its_chain_and_loses_its_key() {
     assert_eq!(shredded, (None, String::from("superseded")));
     let b = allow(&mut tx, &d, 2, "idp.domain.retire").await;
     assert!(cd::retire(&mut tx, &b, [1; 16]).await.unwrap());
-    assert!(active_certificates(&mut tx).await.unwrap().is_empty());
+    assert_eq!(active_certificates(&mut tx).await.unwrap().len(), 0);
     tx.commit().await.unwrap();
     assert!(
         sqlx::query("DELETE FROM access.domain_certificates")

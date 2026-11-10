@@ -146,6 +146,8 @@ pub enum Request {
     },
     /// A request about the realm's SAML keys (OP-155 m.3 (d)).
     Saml(crate::saml::SamlRequest),
+    /// A request about the cell's ACME account key (OP-156 m.3 (i)).
+    Acme(crate::acme::AcmeRequest),
 }
 
 /// The identity signer's answer.
@@ -196,6 +198,8 @@ pub enum Response {
     },
     /// An answer about the realm's SAML keys.
     Saml(crate::saml::SamlResponse),
+    /// An answer about the cell's ACME account key.
+    Acme(crate::acme::AcmeResponse),
     /// A refusal, by stable code.
     Error(String),
 }
@@ -424,6 +428,7 @@ impl Request {
                 ]),
             )]),
             Self::Saml(s) => map(vec![("saml", s.to_value())]),
+            Self::Acme(a) => map(vec![("acme", a.to_value())]),
         }
     }
 
@@ -524,6 +529,9 @@ impl Request {
         if let Some(s) = v.get("saml") {
             return Ok(Self::Saml(crate::saml::SamlRequest::from_value(s)?));
         }
+        if let Some(a) = v.get("acme") {
+            return Ok(Self::Acme(crate::acme::AcmeRequest::from_value(a)?));
+        }
         let s = v.get("sign").ok_or(FrameError::Malformed)?;
         Ok(Self::Sign {
             realm: realm(s.get("realm"))?,
@@ -572,6 +580,7 @@ impl Response {
                 ]),
             )]),
             Self::Saml(s) => map(vec![("saml", s.to_value())]),
+            Self::Acme(a) => map(vec![("acme", a.to_value())]),
             Self::Error(code) => map(vec![("error", Value::text(code))]),
         }
     }
@@ -625,6 +634,9 @@ impl Response {
         }
         if let Some(s) = v.get("saml") {
             return Ok(Self::Saml(crate::saml::SamlResponse::from_value(s)?));
+        }
+        if let Some(a) = v.get("acme") {
+            return Ok(Self::Acme(crate::acme::AcmeResponse::from_value(a)?));
         }
         Ok(Self::Error(text(v.get("error"))?))
     }
