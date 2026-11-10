@@ -14,25 +14,33 @@ use access_kernel::schema::{ActionSchema, EffectClass, Spp, action_digest};
 /// The resource namespace every `idp.*` action addresses: `[slug, kind, …]` paths.
 pub const RESOURCE_NAMESPACE: &str = "idp";
 
-/// Version of every `idp.*` catalog (OP-153 m.3 (a), m.25 (b), OP-154 m.3 (a), OP-155 m.3 (a)).
-pub const CATALOG_VERSION: u64 = 5;
+/// Version of every `idp.*` catalog (OP-153 m.3 (a), m.25 (b), OP-154 m.3 (a), OP-155 m.3 (a),
+/// OP-156 m.3 (a)).
+pub const CATALOG_VERSION: u64 = 6;
 
 /// The `idp.*` action namespaces, one SPP each (OP-141 m.35, OP-153 m.3 (a), OP-154 m.3 (a),
-/// OP-155 m.3 (a)).
-pub const NAMESPACES: [&str; 17] = [
+/// OP-155 m.3 (a), OP-156 m.3 (a)).
+pub const NAMESPACES: [&str; 24] = [
     "idp.account",
     "idp.agent",
     "idp.client",
+    "idp.domain",
+    "idp.export",
     "idp.federation",
     "idp.gateway",
     "idp.group",
     "idp.hook",
+    "idp.hr",
+    "idp.linux",
     "idp.mapper",
     "idp.org",
+    "idp.proxy",
     "idp.realm",
     "idp.saml",
     "idp.scim",
+    "idp.signal",
     "idp.social",
+    "idp.ssh",
     "idp.upstream",
     "idp.vault",
     "idp.vc",
@@ -354,11 +362,89 @@ pub enum IdpAction {
     OrgSsoEnforceLift,
     /// Maps an upstream's `acr`, `amr` or `AuthnContextClassRef` onto assurance (OP-155 m.3 (h)): reserved, CT3.
     UpstreamAssuranceMap,
+    /// Registers a custom domain, verified by `_access-challenge` TXT and CNAME (OP-156 m.3 (i)): CT2.
+    DomainRegister,
+    /// Retires a custom domain; it is no longer served; narrowing, CT1.
+    DomainRetire,
+    /// Binds the issuer or passkey RP ID to a verified custom domain, irreversibly (§10.2.4, TN-16): reserved, CT3.
+    DomainIssuerBind,
+    /// Registers a forward-auth proxy or Access Proxy as a PEP (OP-156 m.3 (l), IDP-30): CT2.
+    ProxyRegister,
+    /// Replaces a proxy's registration: CT2.
+    ProxyUpdate,
+    /// Retires a proxy; narrowing, CT1.
+    ProxyRetire,
+    /// Lets a proxy send the plain identity headers to its application (OP-156 m.3 (l)): CT2.
+    ProxyPlainHeaders,
+    /// Stops the plain identity headers; narrowing, CT1.
+    ProxyPlainHeadersClose,
+    /// Pins an MCP server's tool list by the SHA-256 of each tool definition (OP-156 m.3 (n)): CT2.
+    ProxyMcpPin,
+    /// Turns on the realm's SSH user certificate authority (OP-156 m.3 (o), IDP-32): CT2.
+    SshCaEnable,
+    /// Turns the SSH certificate authority off; narrowing, CT1.
+    SshCaDisable,
+    /// Rotates the SSH CA key on its schedule: CT2.
+    SshCaRotate,
+    /// Replaces the SSH CA key at once: reserved, CT3.
+    SshCaEmergency,
+    /// Registers an SSH server group, the resource of `ssh.login` Grants: CT2.
+    SshHostGroupRegister,
+    /// Retires an SSH server group; narrowing, CT1.
+    SshHostGroupRetire,
+    /// Registers a Linux host of the Linux client (OP-156 m.3 (p)): CT2.
+    LinuxHostRegister,
+    /// Retires a Linux host; narrowing, CT1.
+    LinuxHostRetire,
+    /// Sets a host's offline cache limits within the `ValidityContract` horizon: CT2.
+    LinuxOfflinePolicy,
+    /// Sets a host's local break-glass policy over an offline PAP: reserved, CT3.
+    LinuxBreakGlassPolicy,
+    /// Registers an HR source as a Claim issuer (OP-156 m.3 (q), IDP-35): CT2.
+    HrSourceRegister,
+    /// Retires an HR source; narrowing, CT1.
+    HrSourceRetire,
+    /// Imports an HR batch or CSV file into the HR issuer's Claims: CT2.
+    HrImport,
+    /// Registers an HR connector of `services/hr-connector`: CT2.
+    HrConnectorRegister,
+    /// Retires an HR connector; narrowing, CT1.
+    HrConnectorRetire,
+    /// Registers an export sink for the read-only SIEM projection (OP-156 m.3 (s)): CT2.
+    ExportSinkRegister,
+    /// Replaces an export sink's configuration: CT2.
+    ExportSinkUpdate,
+    /// Retires an export sink; narrowing, CT1.
+    ExportSinkRetire,
+    /// Registers a signal source as a Claim issuer; its effect still needs an Acceptance (OP-156 m.3 (r)): CT2.
+    SignalSourceRegister,
+    /// Retires a signal source; narrowing, CT1.
+    SignalSourceRetire,
+    /// Turns on push verification with number matching (OP-156 m.3 (d)): CT2.
+    RealmPush,
+    /// Turns push verification off; narrowing, CT1.
+    RealmPushClose,
+    /// Turns on the restricted SMS one-time code (OP-156 m.3 (f)): CT2.
+    RealmSmsOtp,
+    /// Turns the SMS one-time code off; narrowing, CT1.
+    RealmSmsOtpClose,
+    /// Opens `Permissions-Policy: payment` on the approval surface for Secure Payment Confirmation (OP-156 m.3 (g)): CT2.
+    RealmSpc,
+    /// Names the coordinator URL the hub links pending approvals to (OP-156 m.3 (t)): CT2.
+    RealmCoordinator,
+    /// Turns on the IYS consent registry events (OP-156 m.3 (c)): CT2.
+    RealmIys,
+    /// Turns the IYS consent registry events off; narrowing, CT1.
+    RealmIysClose,
+    /// Turns the immediate security authority notices back on (OP-156 m.3 (c)): CT2.
+    RealmSecurityNotices,
+    /// Turns the immediate security authority notices off; it lessens notice, CT1.
+    RealmSecurityNoticesClose,
 }
 
 impl IdpAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 136] = [
+    pub const ALL: [Self; 175] = [
         Self::ClientRegister,
         Self::ClientUpdate,
         Self::ClientRetire,
@@ -495,10 +581,49 @@ impl IdpAction {
         Self::OrgSsoEnforce,
         Self::OrgSsoEnforceLift,
         Self::UpstreamAssuranceMap,
+        Self::DomainRegister,
+        Self::DomainRetire,
+        Self::DomainIssuerBind,
+        Self::ProxyRegister,
+        Self::ProxyUpdate,
+        Self::ProxyRetire,
+        Self::ProxyPlainHeaders,
+        Self::ProxyPlainHeadersClose,
+        Self::ProxyMcpPin,
+        Self::SshCaEnable,
+        Self::SshCaDisable,
+        Self::SshCaRotate,
+        Self::SshCaEmergency,
+        Self::SshHostGroupRegister,
+        Self::SshHostGroupRetire,
+        Self::LinuxHostRegister,
+        Self::LinuxHostRetire,
+        Self::LinuxOfflinePolicy,
+        Self::LinuxBreakGlassPolicy,
+        Self::HrSourceRegister,
+        Self::HrSourceRetire,
+        Self::HrImport,
+        Self::HrConnectorRegister,
+        Self::HrConnectorRetire,
+        Self::ExportSinkRegister,
+        Self::ExportSinkUpdate,
+        Self::ExportSinkRetire,
+        Self::SignalSourceRegister,
+        Self::SignalSourceRetire,
+        Self::RealmPush,
+        Self::RealmPushClose,
+        Self::RealmSmsOtp,
+        Self::RealmSmsOtpClose,
+        Self::RealmSpc,
+        Self::RealmCoordinator,
+        Self::RealmIys,
+        Self::RealmIysClose,
+        Self::RealmSecurityNotices,
+        Self::RealmSecurityNoticesClose,
     ];
 
     /// The catalog version that first declared it (OP-153 m.3 (a), OP-154 m.3 (a), OP-155
-    /// m.3 (a)).
+    /// m.3 (a), OP-156 m.3 (a)).
     #[must_use]
     #[expect(
         clippy::too_many_lines,
@@ -506,6 +631,45 @@ impl IdpAction {
     )]
     pub const fn since(self) -> u64 {
         match self {
+            Self::DomainRegister
+            | Self::DomainRetire
+            | Self::DomainIssuerBind
+            | Self::ProxyRegister
+            | Self::ProxyUpdate
+            | Self::ProxyRetire
+            | Self::ProxyPlainHeaders
+            | Self::ProxyPlainHeadersClose
+            | Self::ProxyMcpPin
+            | Self::SshCaEnable
+            | Self::SshCaDisable
+            | Self::SshCaRotate
+            | Self::SshCaEmergency
+            | Self::SshHostGroupRegister
+            | Self::SshHostGroupRetire
+            | Self::LinuxHostRegister
+            | Self::LinuxHostRetire
+            | Self::LinuxOfflinePolicy
+            | Self::LinuxBreakGlassPolicy
+            | Self::HrSourceRegister
+            | Self::HrSourceRetire
+            | Self::HrImport
+            | Self::HrConnectorRegister
+            | Self::HrConnectorRetire
+            | Self::ExportSinkRegister
+            | Self::ExportSinkUpdate
+            | Self::ExportSinkRetire
+            | Self::SignalSourceRegister
+            | Self::SignalSourceRetire
+            | Self::RealmPush
+            | Self::RealmPushClose
+            | Self::RealmSmsOtp
+            | Self::RealmSmsOtpClose
+            | Self::RealmSpc
+            | Self::RealmCoordinator
+            | Self::RealmIys
+            | Self::RealmIysClose
+            | Self::RealmSecurityNotices
+            | Self::RealmSecurityNoticesClose => 6,
             Self::SamlSpRegister
             | Self::SamlSpMapping
             | Self::SamlSpUpdate
@@ -682,7 +846,17 @@ impl IdpAction {
             | Self::RealmMtlsAliases
             | Self::RealmHrd
             | Self::RealmHrdClose
-            | Self::RealmFrontchannelLogout => "idp.realm",
+            | Self::RealmFrontchannelLogout
+            | Self::RealmPush
+            | Self::RealmPushClose
+            | Self::RealmSmsOtp
+            | Self::RealmSmsOtpClose
+            | Self::RealmSpc
+            | Self::RealmCoordinator
+            | Self::RealmIys
+            | Self::RealmIysClose
+            | Self::RealmSecurityNotices
+            | Self::RealmSecurityNoticesClose => "idp.realm",
             Self::OrgCreate
             | Self::OrgUpdate
             | Self::OrgDomainClaim
@@ -722,6 +896,35 @@ impl IdpAction {
             | Self::VcTrustedList
             | Self::VcIssuerEnable
             | Self::VcIssuerDisable => "idp.vc",
+            Self::DomainRegister
+            | Self::DomainRetire
+            | Self::DomainIssuerBind => "idp.domain",
+            Self::ProxyRegister
+            | Self::ProxyUpdate
+            | Self::ProxyRetire
+            | Self::ProxyPlainHeaders
+            | Self::ProxyPlainHeadersClose
+            | Self::ProxyMcpPin => "idp.proxy",
+            Self::SshCaEnable
+            | Self::SshCaDisable
+            | Self::SshCaRotate
+            | Self::SshCaEmergency
+            | Self::SshHostGroupRegister
+            | Self::SshHostGroupRetire => "idp.ssh",
+            Self::LinuxHostRegister
+            | Self::LinuxHostRetire
+            | Self::LinuxOfflinePolicy
+            | Self::LinuxBreakGlassPolicy => "idp.linux",
+            Self::HrSourceRegister
+            | Self::HrSourceRetire
+            | Self::HrImport
+            | Self::HrConnectorRegister
+            | Self::HrConnectorRetire => "idp.hr",
+            Self::ExportSinkRegister
+            | Self::ExportSinkUpdate
+            | Self::ExportSinkRetire => "idp.export",
+            Self::SignalSourceRegister
+            | Self::SignalSourceRetire => "idp.signal",
             Self::SocialEnable | Self::SocialUpdate | Self::SocialDisable => "idp.social",
             Self::HookRegister | Self::HookRetire => "idp.hook",
             Self::WebhookRegister | Self::WebhookUpdate | Self::WebhookRetire => "idp.webhook",
@@ -760,21 +963,26 @@ impl IdpAction {
             | Self::HookRegister
             | Self::WebhookRegister
             | Self::AgentRegister
-            | Self::GatewayRegister => "register",
+            | Self::GatewayRegister
+            | Self::DomainRegister
+            | Self::ProxyRegister => "register",
             Self::ClientUpdate
             | Self::GroupUpdate
             | Self::UpstreamUpdate
             | Self::WebhookUpdate
             | Self::OrgUpdate
             | Self::SocialUpdate
-            | Self::AgentUpdate => "update",
+            | Self::AgentUpdate
+            | Self::ProxyUpdate => "update",
             Self::ClientRetire
             | Self::GroupRetire
             | Self::UpstreamRetire
             | Self::HookRetire
             | Self::WebhookRetire
             | Self::AgentRetire
-            | Self::GatewayRetire => "retire",
+            | Self::GatewayRetire
+            | Self::DomainRetire
+            | Self::ProxyRetire => "retire",
             Self::AgentSponsorAssign => "sponsor_assign",
             Self::AgentSponsorRemove => "sponsor_remove",
             Self::AgentTemplateDefine => "template_define",
@@ -842,7 +1050,7 @@ impl IdpAction {
             Self::RealmRetentionHoldPlace => "retention_hold_place",
             Self::RealmRetentionHoldLift => "retention_hold_lift",
             Self::AccountBind => "bind",
-            Self::AccountImport => "import",
+            Self::AccountImport | Self::HrImport => "import",
             Self::AccountGuardianshipRecord => "guardianship_record",
             Self::RealmCspMode => "csp_mode",
             Self::RealmCspModeLoosen => "csp_mode_loosen",
@@ -887,6 +1095,37 @@ impl IdpAction {
             Self::OrgSsoEnforce => "sso_enforce",
             Self::OrgSsoEnforceLift => "sso_enforce_lift",
             Self::UpstreamAssuranceMap => "assurance_map",
+            Self::DomainIssuerBind => "issuer_bind",
+            Self::ProxyPlainHeaders => "plain_headers",
+            Self::ProxyPlainHeadersClose => "plain_headers_close",
+            Self::ProxyMcpPin => "mcp_pin",
+            Self::SshCaEnable => "ca_enable",
+            Self::SshCaDisable => "ca_disable",
+            Self::SshCaRotate => "ca_rotate",
+            Self::SshCaEmergency => "ca_emergency",
+            Self::SshHostGroupRegister => "host_group_register",
+            Self::SshHostGroupRetire => "host_group_retire",
+            Self::LinuxHostRegister => "host_register",
+            Self::LinuxHostRetire => "host_retire",
+            Self::LinuxOfflinePolicy => "offline_policy",
+            Self::LinuxBreakGlassPolicy => "break_glass_policy",
+            Self::HrSourceRegister | Self::SignalSourceRegister => "source_register",
+            Self::HrSourceRetire | Self::SignalSourceRetire => "source_retire",
+            Self::HrConnectorRegister => "connector_register",
+            Self::HrConnectorRetire => "connector_retire",
+            Self::ExportSinkRegister => "sink_register",
+            Self::ExportSinkUpdate => "sink_update",
+            Self::ExportSinkRetire => "sink_retire",
+            Self::RealmPush => "push",
+            Self::RealmPushClose => "push_close",
+            Self::RealmSmsOtp => "sms_otp",
+            Self::RealmSmsOtpClose => "sms_otp_close",
+            Self::RealmSpc => "spc",
+            Self::RealmCoordinator => "coordinator",
+            Self::RealmIys => "iys",
+            Self::RealmIysClose => "iys_close",
+            Self::RealmSecurityNotices => "security_notices",
+            Self::RealmSecurityNoticesClose => "security_notices_close",
         }
     }
 
@@ -948,7 +1187,21 @@ impl IdpAction {
             | Self::ClientEncryption
             | Self::RealmCibaClose
             | Self::RealmHrdClose
-            | Self::OrgSsoEnforce => EffectClass::Reversible,
+            | Self::OrgSsoEnforce
+            | Self::DomainRetire
+            | Self::ProxyRetire
+            | Self::ProxyPlainHeadersClose
+            | Self::SshCaDisable
+            | Self::SshHostGroupRetire
+            | Self::LinuxHostRetire
+            | Self::HrSourceRetire
+            | Self::HrConnectorRetire
+            | Self::ExportSinkRetire
+            | Self::SignalSourceRetire
+            | Self::RealmPushClose
+            | Self::RealmSmsOtpClose
+            | Self::RealmIysClose
+            | Self::RealmSecurityNoticesClose => EffectClass::Reversible,
             _ => EffectClass::Irreversible,
         }
     }
@@ -976,6 +1229,9 @@ impl IdpAction {
                 | Self::FederationTrustAnchorAdd
                 | Self::VcTrustedList
                 | Self::UpstreamAssuranceMap
+                | Self::DomainIssuerBind
+                | Self::SshCaEmergency
+                | Self::LinuxBreakGlassPolicy
         )
     }
 
