@@ -89,7 +89,7 @@ fn transact(node: &Path, cid: [u8; 4], cmd: u8, payload: &[u8], until: Instant) 
 
 fn assert_on(node: &Path, request: &[u8]) -> Option<Vec<u8>> {
     let until = Instant::now().checked_add(TOUCH)?;
-    let mut nonce = [0u8; 8];
+    let mut nonce = <[u8; 8]>::default();
     rustls::crypto::aws_lc_rs::default_provider()
         .secure_random
         .fill(&mut nonce)
