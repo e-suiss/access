@@ -184,8 +184,9 @@ const SQL: &str = "sql-only-in-store";
 /// The only crate that talks to PostgreSQL (OP-66).
 const STORE_DIR: &str = "crates/store/";
 
-/// The Access Executor's and the VC verifier's own SQL modules over their own databases
-/// (OP-154 m.3 (u), OP-155 m.3 (p)): the only other places SQL is written.
+/// The Access Executor's, the VC verifier's and the HR connector's own SQL modules over their
+/// own databases (OP-154 m.3 (u), OP-155 m.3 (p), OP-156 m.3 (q)): the only other places SQL is
+/// written.
 const EXECUTOR_SQL: &[&str] = &[
     "services/executor/src/store.rs",
     "services/executor/src/testing.rs",
@@ -195,10 +196,19 @@ const EXECUTOR_SQL: &[&str] = &[
     "services/vc-verifier/src/store.rs",
     "services/vc-verifier/src/testing.rs",
     "services/vc-verifier/migrations/",
+    // OP-156 m.3 (q)
+    "services/hr-connector/src/store.rs",
+    "services/hr-connector/src/testing.rs",
+    "services/hr-connector/tests/store.rs",
+    "services/hr-connector/migrations/",
 ];
 
 /// The packages outside `crates/store` that may depend on a database driver.
-const SQL_PACKAGES: &[&str] = &["services/executor", "services/vc-verifier"];
+const SQL_PACKAGES: &[&str] = &[
+    "services/executor",
+    "services/vc-verifier",
+    "services/hr-connector",
+];
 
 fn sql_allowed(rel_path: &str) -> bool {
     rel_path.starts_with(STORE_DIR)

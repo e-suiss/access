@@ -1,0 +1,5 @@
+{"title":"Access HR export","fields":[{"id":"id"},{"id":"workEmail"},{"id":"department"},{"id":"jobTitle"},{"id":"supervisorEId"},{"id":"hireDate"},{"id":"terminationDate"},{"id":"status"}],"employees":[
+{"id":"101","workEmail":"ada@acme.example","department":"R&D","jobTitle":"Engineer","supervisorEId":"100","hireDate":"2026-12-01","terminationDate":"0000-00-00","status":"Active"},
+{"id":"102","workEmail":"bob@acme.example","department":"Finance","jobTitle":"Analyst","supervisorEId":null,"hireDate":"2024-03-01","terminationDate":"2026-12-31","status":"Active"},
+{"id":"103","workEmail":null,"department":"Sales","jobTitle":"Rep","hireDate":"2026-12-15","terminationDate":"0000-00-00","status":"Active"}
+]}

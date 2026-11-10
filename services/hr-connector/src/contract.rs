@@ -1,6 +1,6 @@
 //! The HR connector contract (OP-65, OP-156 m.4): the routes of `/hr-connector/v1/*` and their `OpenAPI` 3.1
-//! document, committed as `sdks/openapi/hr-connector-v1.json`. Every route is declared before its lane serves
-//! it and answers `501 not-yet-served` until then.
+//! document, committed as `sdks/openapi/hr-connector-v1.json`. Every route is served
+//! (OP-156 m.3 (q)).
 
 use serde_json::{Map, Value, json};
 
@@ -42,7 +42,7 @@ pub struct Route {
     pub live: bool,
 }
 
-const fn planned(
+const fn live(
     verb: Verb,
     path: &'static str,
     operation: &'static str,
@@ -53,31 +53,31 @@ const fn planned(
         path,
         operation,
         summary,
-        live: false,
+        live: true,
     }
 }
 
 /// Every route.
 pub const ROUTES: &[Route] = &[
-    planned(
+    live(
         Verb::Get,
         "/hr-connector/v1/connectors",
         "listConnectors",
         "The configured connectors: vendor, the Access HR source they push to, last run.",
     ),
-    planned(
+    live(
         Verb::Post,
         "/hr-connector/v1/connectors/{connector}/runs",
         "startRun",
         "Starts a pull from the HR system now, outside the schedule.",
     ),
-    planned(
+    live(
         Verb::Get,
         "/hr-connector/v1/connectors/{connector}/runs/{run}",
         "getRun",
         "One run: records read, pushed and refused, never their content.",
     ),
-    planned(
+    live(
         Verb::Get,
         "/hr-connector/v1/healthz",
         "connectorHealth",

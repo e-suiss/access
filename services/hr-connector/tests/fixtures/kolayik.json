@@ -1,0 +1,5 @@
+{"success":true,"data":{"page":1,"total":3,"items":[
+{"id":"8f1c","workEmail":"ada@acme.example","unit":"Ar-Ge","title":"Mühendis","managerId":"8f1b","employmentStartDate":"2026-12-01","terminationDate":null,"status":"active"},
+{"id":"8f1d","workEmail":"bob@acme.example","unit":"Finans","title":"Analist","managerId":null,"employmentStartDate":"2024-03-01","terminationDate":"2026-12-31","status":"active"},
+{"id":"8f1e","workEmail":null,"unit":"Satış","status":"active"}
+]}}

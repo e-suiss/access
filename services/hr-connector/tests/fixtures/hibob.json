@@ -1,0 +1,5 @@
+{"employees":[
+{"id":"3332883884017713238","email":"ada@acme.example","work":{"department":"R&D","title":"Engineer","reportsTo":{"id":"3332883804594373380"},"startDate":"2026-12-01"},"internal":{"terminationDate":null,"lifecycleStatus":"hired"}},
+{"id":"3332883884017713239","email":"bob@acme.example","work":{"department":"Finance","title":"Analyst","reportsTo":null,"startDate":"2024-03-01"},"internal":{"terminationDate":"2026-12-31","lifecycleStatus":"employed"}},
+{"id":"","email":"nobody@acme.example","work":{"department":"Sales"},"internal":{}}
+]}

@@ -47,15 +47,20 @@ Declared:
 
 Crates:
 
-- none
+- `esuiss-access-kernel`
+- `esuiss-access-sdk`
+- `esuiss-crypto`
 
 Access endpoints:
 
-- none
+- `/admin/v1/realms/{}/hr-sources/{}/records:batch` (public)
+- `/admin/v1/realms/{}/intents` (public)
 
 Declared:
 
-- none
+- Operator Instance: its writes are idp.hr.import Exercises signed by an Instance key of the operator who registered the connector; the draft carries the operator's DPoP-bound read token (TN-110, OP-151 m.3 (c))
+- Domain Acceptances: the HR source's Claims select holders only through the domain's own CT3 subject-selection Acceptance of its issuer (TN-95, INV-16)
+- Custodial key: none: the HR system's credential and the Instance key are files the operator provides; it keeps no record content
 
 ## `access-linux-client` (services/linux-client)
 

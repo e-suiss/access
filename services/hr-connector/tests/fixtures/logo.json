@@ -1,0 +1,5 @@
+{"Items":[
+{"SicilNo":"000101","EPosta":"ada@acme.example","Departman":"Ar-Ge","Unvan":"Mühendis","YoneticiSicilNo":"000100","IseGirisTarihi":"2026-12-01T00:00:00","IstenCikisTarihi":null,"Durum":"Aktif"},
+{"SicilNo":"000102","EPosta":"bob@acme.example","Departman":"Finans","Unvan":"Analist","YoneticiSicilNo":null,"IseGirisTarihi":"2024-03-01T00:00:00","IstenCikisTarihi":"2026-12-31T00:00:00","Durum":"Aktif"},
+{"SicilNo":"000103","EPosta":"","Departman":"Satış","Durum":"Aktif"}
+]}

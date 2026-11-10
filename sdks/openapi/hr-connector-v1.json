@@ -63,15 +63,21 @@
       "get": {
         "operationId": "listConnectors",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "The configured connectors: vendor, the Access HR source they push to, last run.",
-        "x-suiss-status": "planned"
+        "summary": "The configured connectors: vendor, the Access HR source they push to, last run."
       }
     },
     "/hr-connector/v1/connectors/{connector}/runs": {
@@ -88,15 +94,21 @@
           }
         ],
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "Starts a pull from the HR system now, outside the schedule.",
-        "x-suiss-status": "planned"
+        "summary": "Starts a pull from the HR system now, outside the schedule."
       }
     },
     "/hr-connector/v1/connectors/{connector}/runs/{run}": {
@@ -121,30 +133,42 @@
           }
         ],
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "One run: records read, pushed and refused, never their content.",
-        "x-suiss-status": "planned"
+        "summary": "One run: records read, pushed and refused, never their content."
       }
     },
     "/hr-connector/v1/healthz": {
       "get": {
         "operationId": "connectorHealth",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "Whether the service can reach Access and its database.",
-        "x-suiss-status": "planned"
+        "summary": "Whether the service can reach Access and its database."
       }
     }
   }

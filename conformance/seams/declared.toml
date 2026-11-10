@@ -60,3 +60,18 @@ why = "the operator installs the trusted lists it checks issuers against"
 service = "access-vc-verifier"
 dependency = "Custodial key"
 why = "none: its request and Instance keys are its own"
+
+[[declared]]
+service = "access-hr-connector"
+dependency = "Operator Instance"
+why = "its writes are idp.hr.import Exercises signed by an Instance key of the operator who registered the connector; the draft carries the operator's DPoP-bound read token (TN-110, OP-151 m.3 (c))"
+
+[[declared]]
+service = "access-hr-connector"
+dependency = "Domain Acceptances"
+why = "the HR source's Claims select holders only through the domain's own CT3 subject-selection Acceptance of its issuer (TN-95, INV-16)"
+
+[[declared]]
+service = "access-hr-connector"
+dependency = "Custodial key"
+why = "none: the HR system's credential and the Instance key are files the operator provides; it keeps no record content"

@@ -41,7 +41,8 @@ sqlx-prepare:
     DATABASE_URL="$base/$db" sqlx migrate run --source crates/store/migrations
     DATABASE_URL="$base/$db" sqlx migrate run --source services/executor/migrations --ignore-missing
     DATABASE_URL="$base/$db" sqlx migrate run --source services/vc-verifier/migrations --ignore-missing
-    DATABASE_URL="$base/$db" SQLX_OFFLINE=false cargo sqlx prepare --workspace -- --all-targets -p access-store -p access-executor -p access-vc-verifier --features testing
+    DATABASE_URL="$base/$db" sqlx migrate run --source services/hr-connector/migrations --ignore-missing
+    DATABASE_URL="$base/$db" SQLX_OFFLINE=false cargo sqlx prepare --workspace -- --all-targets -p access-store -p access-executor -p access-vc-verifier -p access-hr-connector --features testing
 
 # OP-66: the committed .sqlx query metadata matches the queries against a freshly migrated database
 sqlx-check:
@@ -56,7 +57,8 @@ sqlx-check:
     DATABASE_URL="$base/$db" sqlx migrate run --source crates/store/migrations
     DATABASE_URL="$base/$db" sqlx migrate run --source services/executor/migrations --ignore-missing
     DATABASE_URL="$base/$db" sqlx migrate run --source services/vc-verifier/migrations --ignore-missing
-    DATABASE_URL="$base/$db" SQLX_OFFLINE=false cargo sqlx prepare --check --workspace -- --all-targets -p access-store -p access-executor -p access-vc-verifier --features testing
+    DATABASE_URL="$base/$db" sqlx migrate run --source services/hr-connector/migrations --ignore-missing
+    DATABASE_URL="$base/$db" SQLX_OFFLINE=false cargo sqlx prepare --check --workspace -- --all-targets -p access-store -p access-executor -p access-vc-verifier -p access-hr-connector --features testing
 
 fmt:
     cargo fmt --all

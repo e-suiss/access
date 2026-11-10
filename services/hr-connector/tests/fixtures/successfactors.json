@@ -1,0 +1,5 @@
+{"d":{"results":[
+{"__metadata":{"uri":"https://api.successfactors.example/odata/v2/User('ada')","type":"SFOData.User"},"userId":"ada","email":"ada@acme.example","department":"R&D","title":"Engineer","manager":{"userId":"lead"},"hireDate":"/Date(1796083200000)/","lastDateWorked":null,"status":"t"},
+{"__metadata":{"uri":"https://api.successfactors.example/odata/v2/User('bob')","type":"SFOData.User"},"userId":"bob","email":"bob@acme.example","department":"Finance","title":"Analyst","manager":null,"hireDate":"/Date(1709251200000)/","lastDateWorked":"/Date(1798675200000+0000)/","status":"t"},
+{"__metadata":{"uri":"https://api.successfactors.example/odata/v2/User('cem')","type":"SFOData.User"},"userId":"cem","email":"not-an-address","status":"f"}
+]}}

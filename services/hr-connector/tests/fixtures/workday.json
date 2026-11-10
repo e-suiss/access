@@ -1,0 +1,5 @@
+{"Report_Entry":[
+{"Employee_ID":"21001","Email_-_Work":"ada@acme.example","Supervisory_Organization":"R&D","Business_Title":"Engineer","Manager_Employee_ID":"21000","Hire_Date":"2026-12-01","Termination_Date":"","Worker_Status":"Active"},
+{"Employee_ID":"21002","Email_-_Work":"bob@acme.example","Supervisory_Organization":"Finance","Business_Title":"Analyst","Hire_Date":"2024-03-01","Termination_Date":"2026-12-31","Worker_Status":"Active"},
+{"Employee_ID":"21003","Supervisory_Organization":"Sales","Business_Title":"Rep","Hire_Date":"2026-12-15","Worker_Status":"Active"}
+]}
