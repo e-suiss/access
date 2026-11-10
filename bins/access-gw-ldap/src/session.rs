@@ -143,7 +143,14 @@ impl<'a> Session<'a> {
         self.chain = chain;
     }
 
-    async fn audit(&self, event: &str, outcome: &str) {
+    /// Writes the audit event `name` as the realm's log names it (`edge.<event>.<outcome>`).
+    async fn audit(&self, name: &str) {
+        let Some((event, outcome)) = name
+            .strip_prefix("edge.")
+            .and_then(|rest| rest.rsplit_once('.'))
+        else {
+            return;
+        };
         if self.core.audit(event, outcome, None).await.is_err() {
             crate::log("audit event not recorded");
         }
@@ -151,7 +158,7 @@ impl<'a> Session<'a> {
 
     /// A message was refused before decoding (BER limits).
     pub async fn refused_ber(&self) {
-        self.audit("ldap.ber", "refused").await;
+        self.audit("edge.ldap.ber.refused").await;
     }
 
     /// The answers to `msg`, and what the connection does next.
@@ -186,7 +193,7 @@ impl<'a> Session<'a> {
 
     // IDP-16, §10.6.3
     async fn write(&self, id: i32, op: fn(LdapResult) -> LdapOp) -> (Vec<LdapMsg>, Next) {
-        self.audit("ldap.write", "refused").await;
+        self.audit("edge.ldap.write.refused").await;
         (
             vec![reply(
                 id,
@@ -205,7 +212,7 @@ impl<'a> Session<'a> {
             LdapBindCred::Simple(secret) => self.simple(id, &b.dn, secret).await,
             LdapBindCred::SASL(sasl) if sasl.mechanism.eq_ignore_ascii_case("EXTERNAL") => {
                 if !self.tls || self.chain.is_empty() || !sasl.credentials.is_empty() {
-                    self.audit("ldap.bind", "refused").await;
+                    self.audit("edge.ldap.bind.refused").await;
                     return bind_answer(
                         id,
                         LdapResultCode::InappropriateAuthentication,
@@ -223,7 +230,7 @@ impl<'a> Session<'a> {
                 self.authenticate(id, q).await
             }
             LdapBindCred::SASL(_) => {
-                self.audit("ldap.bind", "refused").await;
+                self.audit("edge.ldap.bind.refused").await;
                 bind_answer(
                     id,
                     LdapResultCode::AuthMethodNotSupported,
@@ -238,7 +245,7 @@ impl<'a> Session<'a> {
             if dn.is_empty() {
                 return bind_answer(id, LdapResultCode::Success, "");
             }
-            self.audit("ldap.bind", "refused").await;
+            self.audit("edge.ldap.bind.refused").await;
             return bind_answer(
                 id,
                 LdapResultCode::UnwillingToPerform,
@@ -246,7 +253,7 @@ impl<'a> Session<'a> {
             );
         }
         if !self.tls {
-            self.audit("ldap.bind", "refused").await;
+            self.audit("edge.ldap.bind.refused").await;
             return bind_answer(
                 id,
                 LdapResultCode::ConfidentialityRequired,
