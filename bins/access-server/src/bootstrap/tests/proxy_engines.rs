@@ -97,8 +97,17 @@ struct Pki {
     issuer: rcgen::Issuer<'static, rcgen::KeyPair>,
 }
 
+/// A subject of its own: a leaf whose subject is its issuer's reads as self-signed to `OpenSSL`
+/// and `BoringSSL`, which then refuse it.
+fn dn(common_name: &str) -> rcgen::DistinguishedName {
+    let mut dn = rcgen::DistinguishedName::new();
+    dn.push(rcgen::DnType::CommonName, common_name);
+    dn
+}
+
 fn pki() -> Pki {
     let mut params = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+    params.distinguished_name = dn("Access Proxy test CA");
     params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
     params.key_usages = vec![
         rcgen::KeyUsagePurpose::KeyCertSign,
@@ -117,6 +126,7 @@ fn leaf(ca: &Pki, names: &[&str], client: bool) -> (String, String, Vec<u8>) {
     let mut params =
         rcgen::CertificateParams::new(names.iter().map(|n| String::from(*n)).collect::<Vec<_>>())
             .unwrap();
+    params.distinguished_name = dn(names.first().copied().unwrap_or("leaf"));
     params.extended_key_usages = vec![if client {
         rcgen::ExtendedKeyUsagePurpose::ClientAuth
     } else {
@@ -395,14 +405,14 @@ impl Browser {
 async fn ready(b: &Browser) {
     let deadline = tokio::time::Instant::now() + WAIT;
     loop {
-        if let Some(g) = b.ask(APPS[0].1, "GET", "/", None, &BTreeMap::new()).await
-            && g.status == 302
-        {
+        let seen = b.ask(APPS[0].1, "GET", "/", None, &BTreeMap::new()).await;
+        if seen.as_ref().is_some_and(|g| g.status == 302) {
             return;
         }
         assert!(
             tokio::time::Instant::now() < deadline,
-            "the engine did not come up"
+            "the engine did not come up: last answer {:?}",
+            seen.map(|g| (g.status, g.body))
         );
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
@@ -464,7 +474,7 @@ fn nginx_conf(dir: &Path, access: u16, upstream: u16, listen: u16) -> String {
             ("ACCESS_PROXY_APP_KEY", format!("{d}/apps-key.pem")),
             (
                 "ACCESS_PROXY_ACCESS_URL",
-                format!("https://localhost:{access}"),
+                format!("https://127.0.0.1:{access}"),
             ),
             ("ACCESS_PROXY_ACCESS_HOST", String::from("localhost")),
             ("ACCESS_PROXY_ACCESS_CA", format!("{d}/access-ca.pem")),
@@ -614,7 +624,7 @@ async fn run(under: Under) {
     };
     let _engine = start(under, &dir, &args);
     let browser = Browser::new(&ca.pem, listen);
-    tokio::time::timeout(WAIT, ready(&browser)).await.unwrap();
+    ready(&browser).await;
 
     let session = login_session(&l).await;
     let mut cookies: BTreeMap<&str, String> = BTreeMap::new();
