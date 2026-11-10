@@ -99,6 +99,15 @@ const UPSTREAM_CONFLICT: Problem = Problem {
 };
 
 /// One neutral answer for every refused upstream answer (CR-40).
+/// An organization's connection named an identity outside the organization's verified domains
+/// (TN-134 (1), (3)).
+const OUTSIDE_ORGANIZATION: Problem = Problem {
+    status: 403,
+    code: "upstream-identity-outside-organization",
+    title: "This identity provider can't sign in this address",
+    retry_after_s: None,
+};
+
 const UPSTREAM_FAILED: Problem = Problem {
     status: 401,
     code: "social-sign-in-failed",
@@ -414,6 +423,39 @@ where
         }))
     }
 
+    /// Whether an `organization`-profile connection `name` may speak for the asserted `address`
+    /// (TN-134 (1), (3)): only an address on one of the organization's verified, uncontested
+    /// domains; a lapsed verification drops the domain, and an assertion without an address is
+    /// refused. Other connections pass.
+    async fn organization_scope(
+        &self,
+        kit: &RealmKit,
+        name: &str,
+        address: Option<&str>,
+    ) -> Result<(), Reply> {
+        let Some((connection, _, _)) = self.registered_connection(kit, name).await? else {
+            return Err(Reply::problem(NO_CONNECTION));
+        };
+        let Some(party) = connection.profile.organization_party() else {
+            return Ok(());
+        };
+        let read = async {
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let verified = match t.org_by_party(party).await?.filter(|o| !o.ended) {
+                Some(o) => t.hrd_domains(o.id).await?,
+                None => Vec::new(),
+            };
+            t.commit().await?;
+            Ok::<_, access_store::StoreError>(verified)
+        };
+        let verified = read.await.map_err(|_| unavailable())?;
+        if address.is_some_and(|a| crate::domain::sso_setup::admits(a, &verified)) {
+            Ok(())
+        } else {
+            Err(Reply::problem(OUTSIDE_ORGANIZATION))
+        }
+    }
+
     /// Whether the governing domain `domain` accepts upstream issuer `issuer` of connection
     /// `name`; when it does not, the sessions the connection opened end (SEC9).
     async fn upstream_accepted(
@@ -567,6 +609,13 @@ where
             address,
             name: signed.external.name.as_deref(),
         };
+        // TN-134 (1), (3)
+        if let Err(r) = self
+            .organization_scope(kit, name, address.map(|a| a.0))
+            .await
+        {
+            return r;
+        }
         let national = signed.national.as_ref().map(|n| n.expose().clone());
         let facts = UpstreamFacts {
             connection: name,

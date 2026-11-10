@@ -1406,3 +1406,59 @@ async fn an_unsolicited_saml_response_signs_in_only_where_the_connection_opens_i
     assert_eq!(a.status, StatusCode::SEE_OTHER, "{}", a.code());
     assert!(e.link_at(IDP, "sam-9").await.is_some());
 }
+
+// TN-134 (1), (3), TN-94, OP-155 m.3 (i), m.17 (i), Ek B 4872, 4874
+#[tokio::test]
+async fn an_organization_connection_speaks_only_for_its_verified_domains_and_signs_in_enforced_members()
+ {
+    let e = env(0x6a, "up-sso").await;
+    let party = [0x0c; 16];
+    let mut p = corp();
+    p.organization = Some(b64url_encode(&party));
+    e.connection("corp", CORP, &p, true).await;
+    let mut t = e.tx().await;
+    let org = t.insert_org(party, "Corp", &[1; 32]).await.unwrap();
+    t.commit().await.unwrap();
+
+    // TN-134 (1): no verified domain, no identity
+    e.says("emp-9", Some("ada@corp.example"));
+    let refused = e.browser(1).upstream(&e, "corp", CORP).await;
+    assert_eq!(refused.status, StatusCode::FORBIDDEN, "{}", refused.code());
+    assert_eq!(refused.code(), "upstream-identity-outside-organization");
+    assert_eq!(e.link_at(CORP, "emp-9").await, None);
+    let mut t = e.tx().await;
+    let claim = t
+        .insert_domain_claim(org, "corp.example", "dns_txt", &[1; 32])
+        .await
+        .unwrap();
+    assert!(
+        t.verify_domain(claim, 86_400, &[2; 32], &[3; 32])
+            .await
+            .unwrap()
+    );
+    t.commit().await.unwrap();
+    e.says("emp-8", Some("eve@other.example"));
+    let other = e.browser(2).upstream(&e, "corp", CORP).await;
+    assert_eq!(other.status, StatusCode::FORBIDDEN, "{}", other.code());
+    e.says("emp-9", Some("ada@corp.example"));
+    let a = e.browser(3).upstream(&e, "corp", CORP).await;
+    assert_eq!(a.status, StatusCode::SEE_OTHER, "{}", a.code());
+    let subject = e.link_at(CORP, "emp-9").await.unwrap();
+
+    // TN-94: an enforced member signs in through the organization's own connection
+    let mut t = e.tx().await;
+    t.insert_membership(org, subject, access_store::orgs::Source::Jit, false, None)
+        .await
+        .unwrap();
+    t.commit().await.unwrap();
+    let (mut tx, bound) = e.decision("idp.org.sso_enforce").await;
+    tx.put_sso_enforcement(&bound, org, Some("cancel"))
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    e.says("emp-9", Some("ada@corp.example"));
+    let mut w = e.browser(4);
+    let b = w.upstream(&e, "corp", CORP).await;
+    assert_eq!(b.status, StatusCode::SEE_OTHER, "{}", b.code());
+    assert!(w.jar.contains_key("__Host-access-session"));
+}

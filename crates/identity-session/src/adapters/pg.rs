@@ -186,8 +186,21 @@ impl SessionTx for PgTx {
         crate::app::recovery::cancel(self, subject, at_ms).await
     }
 
-    async fn sso_enforced(&mut self, subject: [u8; 16]) -> Result<bool, SessionError> {
-        Ok(!self.0.sso_enforced_orgs_of(subject).await?.is_empty())
+    async fn sso_connections(
+        &mut self,
+        subject: [u8; 16],
+    ) -> Result<Option<Vec<String>>, SessionError> {
+        let orgs = self.0.sso_enforced_orgs_of(subject).await?;
+        if orgs.is_empty() {
+            return Ok(None);
+        }
+        let mut parties = Vec::with_capacity(orgs.len());
+        for o in orgs {
+            if let Some(row) = self.0.org(o).await? {
+                parties.push(access_kernel::json::b64url_encode(&row.party));
+            }
+        }
+        Ok(Some(self.0.organization_connections(&parties).await?))
     }
 
     async fn sign_in_methods(

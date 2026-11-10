@@ -1031,21 +1031,6 @@ webhook = false
 
 [[event]]
 event = "login.radius.failed"
-# ---------------------------------------------------------------- identity: organization SSO (OP-155 m.3 (i))
-
-[[event]]
-event = "session.ended_by_sso"
-plane = "identity"
-class = "session"
-outcome = "success"
-fields = ["actor", "target"]
-ocsf_class = 3002
-ocsf_activity = 2
-caep = "session-revoked"
-webhook = false
-
-[[event]]
-event = "login.sso_required"
 plane = "identity"
 class = "authentication"
 outcome = "failure"
@@ -1173,5 +1158,29 @@ outcome = "failure"
 fields = ["actor", "target"]
 ocsf_class = 3002
 ocsf_activity = 99
+caep = ""
+webhook = false
+
+# ---------------------------------------------------------------- identity: organization SSO (OP-155 m.3 (i))
+
+[[event]]
+event = "session.ended_by_sso"
+plane = "identity"
+class = "session"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 2
+caep = "session-revoked"
+webhook = false
+
+[[event]]
+event = "login.sso_required"
+plane = "identity"
+class = "authentication"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
 caep = ""
 webhook = false

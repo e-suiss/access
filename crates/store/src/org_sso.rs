@@ -195,6 +195,33 @@ impl TenantTx {
         Ok(rows.into_iter().map(|u| *u.as_bytes()).collect())
     }
 
+    /// The live `organization`-profile upstream connections of the organizations whose Parties
+    /// are `parties` (OP-155 m.17 (i)), by name.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn organization_connections(
+        &mut self,
+        parties: &[String],
+    ) -> Result<Vec<String>, StoreError> {
+        if parties.is_empty() {
+            return Ok(Vec::new());
+        }
+        let (tenant, realm) = self.org_scope()?;
+        Ok(sqlx::query_scalar!(
+            "SELECT name FROM access.idp_upstreams
+              WHERE tenant_id = $1 AND realm_id = $2 AND status = 'active'
+                AND profile IS NOT NULL
+                AND (profile::jsonb ->> 'organization') = ANY($3)
+              ORDER BY name",
+            tenant,
+            realm,
+            parties,
+        )
+        .fetch_all(&mut *self.tx)
+        .await?)
+    }
+
     /// What enforcing SSO on `org` would end for each of its active members (TN-94, X20).
     ///
     /// # Errors

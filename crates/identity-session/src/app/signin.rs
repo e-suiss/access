@@ -1321,8 +1321,8 @@ where
         let target = self.external(subject)?;
         // TN-94, OP-155 m.3 (i)
         if matches!(l.state.purpose, Purpose::Login)
-            && !sso_signed(&l.state.factors)
-            && tx.sso_enforced(subject).await?
+            && let Some(allowed) = tx.sso_connections(subject).await?
+            && !sso_signed(&l.state.factors, &allowed)
         {
             save(&mut tx, &l, "abandoned", Resume::Clear).await?;
             audit(&mut tx, "login.sso_required", &target, &target, correlation).await?;
@@ -1502,10 +1502,14 @@ where
     }
 }
 
-/// Whether the sign-in's first factor came from an upstream identity provider: the only way an
-/// SSO-enforced organization's member signs in (TN-94).
-fn sso_signed(factors: &[Factor]) -> bool {
-    factors
-        .first()
-        .is_some_and(|f| f.method == MethodClass::Federated)
+/// Whether the sign-in's first factor came through one of the `allowed` connections, the
+/// enforcing organizations' own: the only way an SSO-enforced organization's member signs in
+/// (TN-94, OP-155 m.17 (i)). A social sign-in is not one.
+fn sso_signed(factors: &[Factor], allowed: &[String]) -> bool {
+    factors.first().is_some_and(|f| {
+        f.method == MethodClass::Federated
+            && f.upstream
+                .as_ref()
+                .is_some_and(|u| allowed.contains(&u.connection))
+    })
 }

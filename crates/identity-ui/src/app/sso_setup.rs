@@ -113,11 +113,13 @@ fn digest(s: &str) -> [u8; 32] {
     suiss_crypto::digest::sha256(s.as_bytes())
 }
 
-/// The connection that is enacted for the organization, if any. Enterprise upstream
-/// connections are the federation broker's (OP-155 m.2 P4); until it names one for the
-/// organization the answer is none, and the test is refused.
-fn enacted(_org: &[u8; 16]) -> Option<String> {
-    None
+/// The live `organization`-profile connection the root enacted for organization Party `org`
+/// (OP-155 m.17 (i)), if any.
+async fn enacted(t: &mut TenantTx, org: &[u8; 16]) -> Result<Option<String>, StoreError> {
+    Ok(t.organization_connections(&[b64url_encode(org)])
+        .await?
+        .into_iter()
+        .next())
 }
 
 impl<K, C, M> Hosted<K, C, M>
@@ -177,7 +179,10 @@ where
         let verified = t.hrd_domains(org.id).await?;
         let drafts = t.sso_drafts(org.id).await?;
         let scim = t.scim_sources(org.id).await?;
-        let connection = sso_setup::connection_name(&org.party);
+        let enacted = enacted(t, &org.party).await?;
+        let connection = enacted
+            .clone()
+            .unwrap_or_else(|| sso_setup::connection_name(&org.party));
         let wizards = sso_setup::wizards().unwrap_or_default();
         Ok(json!({
             "organization": {
@@ -208,13 +213,17 @@ where
                     "metadata_url": d.metadata_url,
                 }))
                 .collect::<Vec<_>>(),
-            "test": if enacted(&org.party).is_some() { "ready" } else { "after_enactment" },
+            "test": if enacted.is_some() { "ready" } else { "after_enactment" },
             "texts": {
                 "title": TextId::SsoSetupTitle,
                 "choose": TextId::SsoSetupChoose,
                 "configure": TextId::SsoSetupConfigure,
                 "test": TextId::SsoSetupTest,
                 "done": TextId::SsoSetupDone,
+                "domains": TextId::SsoSetupDomains,
+                "scim": TextId::SsoSetupScim,
+                "save": TextId::SsoSetupSave,
+                "finish": TextId::SsoSetupFinish,
             },
         }))
     }
@@ -275,9 +284,20 @@ where
                     Ok(None) => return Reply::problem(SETUP_LINK_GONE),
                     Err(e) => return store_failed(&e),
                 };
-                match enacted(&party) {
-                    Some(c) => Reply::json(200, json!({ "connection": c })),
-                    None => Reply::problem(CONNECTION_NOT_ENACTED),
+                match enacted(&mut t, &party).await {
+                    Ok(Some(c)) => Reply::json(
+                        200,
+                        json!({
+                            "connection": c,
+                            "sign_in": format!(
+                                "{}/v1/login/upstream/{c}",
+                                kit.issuer.trim_end_matches('/')
+                            ),
+                            "text": TextId::SsoSetupTest,
+                        }),
+                    ),
+                    Ok(None) => Reply::problem(CONNECTION_NOT_ENACTED),
+                    Err(e) => return store_failed(&e),
                 }
             }
             SetupStep::Finish => match t.finish_setup_link(row.id).await {

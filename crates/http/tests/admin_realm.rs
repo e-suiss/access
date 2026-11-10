@@ -146,7 +146,7 @@ async fn a_planned_realm_read_answers_not_yet_served_behind_its_permission() {
         .filter(|r| access_http::api::realm::planned(r.operation_id) && r.access != Access::Write)
         .collect();
     // OP-155 m.4
-    assert_eq!(planned.len(), 4);
+    assert_eq!(planned.len(), 3);
     for row in planned {
         let (r, body) = send(&router, read(&path_of(row), &token)).await;
         assert_eq!(

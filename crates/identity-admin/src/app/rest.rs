@@ -251,6 +251,10 @@ pub enum Op {
 impl Op {
     /// The operation with this manifest id.
     #[must_use]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one match over the manifest's write operations"
+    )]
     pub fn from_operation(id: &str) -> Option<Self> {
         Some(match id {
             "createClient" => Self::CreateClient,
