@@ -1159,3 +1159,117 @@ async fn introspection_answers_as_a_signed_jwt_when_asked() {
     assert_eq!(answer["iss"], a.issuer());
     assert_eq!(answer["token_introspection"]["active"], true);
 }
+
+struct Crls(Vec<(String, Vec<u8>)>);
+
+impl access_identity_x509::ports::Fetch for Crls {
+    fn fetch<'a>(
+        &'a self,
+        request: access_identity_x509::ports::Request<'a>,
+    ) -> access_identity_x509::ports::Fetched<'a> {
+        let found = match request {
+            access_identity_x509::ports::Request::Crl { url } => self
+                .0
+                .iter()
+                .find(|(u, _)| u == url)
+                .map(|(_, b)| b.clone()),
+            access_identity_x509::ports::Request::Ocsp { .. } => None,
+        };
+        Box::pin(async move { found.ok_or(access_identity_x509::ports::Unreachable) })
+    }
+}
+
+struct Accepts(Option<[u8; 16]>);
+
+impl access_identity_x509::ports::CaTrust for Accepts {
+    fn accepted(&self, _: [u8; 32], issuer: [u8; 16]) -> access_identity_x509::ports::Held<'_> {
+        let yes = self.0 == Some(issuer);
+        Box::pin(async move { Ok(yes) })
+    }
+}
+
+// RFC 8705 §2.1, MD-8, OP-155 m.3 (k), (m), Ek B 4692, 4713: a tls_client_auth client
+// authenticates with a certificate of a CA the realm named and its domain accepted, known not
+// revoked by the CA's CRL; a revoked, unaccepted or foreign certificate is refused
+#[tokio::test]
+async fn pki_clients_go_through_the_realm_ca_and_revocation() {
+    use access_identity_oauth::adapters::certificates::X509ClientCertificates;
+    use access_identity_x509::testing::{Ca, LeafSpec, serial};
+    let c = Cluster::new(&["ha-pki"]).await;
+    let a = c.at(0);
+    let now_s = now() / 1000;
+    let url = "http://crl.example/root.crl";
+    let root = Ca::root_at("Client Root", now_s);
+    let spec = |n: u8| LeafSpec {
+        cn: "svc",
+        email: Some("svc@example.com"),
+        crl: Some(url),
+        serial: n,
+        ..LeafSpec::default()
+    };
+    let good = root.leaf(&spec(2)).der;
+    let revoked = root.leaf(&spec(3)).der;
+    let foreign = Ca::root_at("Other Root", now_s).leaf(&spec(4)).der;
+    let crl = root.crl(&[&serial(&revoked)], now_s - 3600, now_s + 3600);
+    let issuer = access_identity_x509::domain::login::ca_issuer(&root.der).unwrap();
+    let real = |trusted: bool| -> std::sync::Arc<
+        dyn access_identity_oauth::ports::profile::ClientCertificates + Sync,
+    > {
+        std::sync::Arc::new(X509ClientCertificates::new(
+            a.c.db.app.clone(),
+            std::sync::Arc::new(access_identity_x509::app::Revocation::new(
+                std::sync::Arc::new(Crls(vec![(String::from(url), crl.clone())])),
+            )),
+            std::sync::Arc::new(Accepts(trusted.then_some(issuer))),
+        ))
+    };
+    {
+        let mut tx =
+            access_store::identity::TenantTx::begin(&a.c.db.app, a.realm().tenant, a.realm().realm)
+                .await
+                .unwrap();
+        let b = a.bound(&mut tx, "idp.realm.certificate_login").await;
+        tx.put_certificate_login(
+            &b,
+            &access_store::certificate::CertificateLoginRow {
+                enabled: true,
+                rule: String::from("san_email"),
+                anchors: vec![root.der.clone()],
+                piv_policies: Vec::new(),
+            },
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+    }
+    a.set_profile(
+        'b',
+        UPDATE,
+        &ClientProfileRow {
+            tls_auth: Some(String::from("tls_client_auth")),
+            tls_name: Some((String::from("san_email"), String::from("svc@example.com"))),
+            ..ClientProfileRow::default()
+        },
+    )
+    .await
+    .unwrap();
+    *a.c.oauth.env().certs.1.lock().unwrap() = Some(real(true));
+    for refused in [&revoked, &foreign] {
+        let code = confidential_code(&a).await;
+        let r = mtls_exchange(&a, &code, std::slice::from_ref(refused)).await;
+        assert_eq!(error(&r), "invalid_client");
+    }
+    let code = confidential_code(&a).await;
+    let t = body(
+        &mtls_exchange(&a, &code, std::slice::from_ref(&good)).await,
+        200,
+    );
+    assert_eq!(
+        claims(t["access_token"].as_str().unwrap())["cnf"]["x5t#S256"],
+        x5t(&good)
+    );
+    *a.c.oauth.env().certs.1.lock().unwrap() = Some(real(false));
+    let code = confidential_code(&a).await;
+    let r = mtls_exchange(&a, &code, std::slice::from_ref(&good)).await;
+    assert_eq!(error(&r), "invalid_client");
+}

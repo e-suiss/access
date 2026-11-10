@@ -19,7 +19,7 @@ mod support;
 use std::sync::Arc;
 
 use access_http::oauth::router;
-use access_http::tls::ClientChain;
+use access_http::tls::MtlsChain;
 use access_identity_oauth::app::oauth::OAuth;
 use access_identity_oauth::ports::profile::CertificateNames;
 use access_kernel::json::b64url_encode;
@@ -109,7 +109,7 @@ async fn forwarded_certificate_headers_have_no_effect() {
                 .unwrap();
             if let Some(leaf) = chain {
                 req.extensions_mut()
-                    .insert(ClientChain(Arc::from(vec![leaf])));
+                    .insert(MtlsChain(Arc::from(vec![leaf])));
             }
             let r = app.oneshot(req).await.unwrap();
             let status = r.status().as_u16();

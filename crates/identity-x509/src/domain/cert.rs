@@ -51,6 +51,21 @@ pub struct Cert<'a> {
     pub extensions: Vec<Extension<'a>>,
 }
 
+/// RFC 4514 §2.4: `,`, `+`, `"`, `\`, `<`, `>`, `;` escaped, and a leading `#` or space and a
+/// trailing space.
+fn rfc4514_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let last = s.chars().count().saturating_sub(1);
+    for (i, c) in s.chars().enumerate() {
+        let edge = (i == 0 && (c == '#' || c == ' ')) || (i == last && c == ' ');
+        if edge || matches!(c, ',' | '+' | '"' | '\\' | '<' | '>' | ';') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
 fn malformed(_: DerError) -> X509Error {
     X509Error::Malformed
 }
@@ -230,6 +245,97 @@ impl<'a> Cert<'a> {
             .collect()
     }
 
+    fn san_texts(&self, tag: u8) -> Result<Vec<&'a str>, X509Error> {
+        self.general_names()?
+            .into_iter()
+            .filter(|g| g.tag == tag)
+            .map(|g| core::str::from_utf8(g.value).map_err(|_| X509Error::Malformed))
+            .collect()
+    }
+
+    /// The `dNSName` entries of the subjectAltName extension (RFC 8705 §2.1.2).
+    ///
+    /// # Errors
+    /// [`X509Error::Malformed`].
+    pub fn san_dns(&self) -> Result<Vec<&'a str>, X509Error> {
+        self.san_texts(0x82)
+    }
+
+    /// The `uniformResourceIdentifier` entries of the subjectAltName extension.
+    ///
+    /// # Errors
+    /// [`X509Error::Malformed`].
+    pub fn san_uris(&self) -> Result<Vec<&'a str>, X509Error> {
+        self.san_texts(0x86)
+    }
+
+    /// The `iPAddress` entries of the subjectAltName extension, in text form.
+    ///
+    /// # Errors
+    /// [`X509Error::Malformed`].
+    pub fn san_ips(&self) -> Result<Vec<String>, X509Error> {
+        self.general_names()?
+            .into_iter()
+            .filter(|g| g.tag == 0x87)
+            .map(|g| {
+                if let Ok(v4) = <[u8; 4]>::try_from(g.value) {
+                    Ok(std::net::IpAddr::from(v4).to_string())
+                } else if let Ok(v6) = <[u8; 16]>::try_from(g.value) {
+                    Ok(std::net::IpAddr::from(v6).to_string())
+                } else {
+                    Err(X509Error::Malformed)
+                }
+            })
+            .collect()
+    }
+
+    /// The subject name as an RFC 4514 string: RDNs last to first, attribute types by their
+    /// short names or dotted OIDs, string values escaped. A value that is not a UTF8, Printable
+    /// or IA5 string is refused (RFC 8705 §2.1.2 compares the string form).
+    ///
+    /// # Errors
+    /// [`X509Error::Malformed`].
+    pub fn subject_dn(&self) -> Result<String, X509Error> {
+        let name = Cursor::only(self.subject, der::SEQUENCE).map_err(malformed)?;
+        let mut rdns = Cursor::new(name.value).map_err(malformed)?;
+        let mut parts = Vec::new();
+        while !rdns.is_empty() {
+            let set = rdns.tagged(0x31).map_err(malformed)?;
+            let mut atvs = Cursor::new(set.value).map_err(malformed)?;
+            let mut rdn = Vec::new();
+            while !atvs.is_empty() {
+                let mut atv = Cursor::new(atvs.tagged(der::SEQUENCE).map_err(malformed)?.value)
+                    .map_err(malformed)?;
+                let oid = atv.tagged(der::OID).map_err(malformed)?.value;
+                let v = atv.next().map_err(malformed)?;
+                if !matches!(v.tag, 0x0c | 0x13 | 0x16) {
+                    return Err(X509Error::Malformed);
+                }
+                let text = core::str::from_utf8(v.value).map_err(|_| X509Error::Malformed)?;
+                let key = match oid {
+                    [0x55, 0x04, 0x03] => String::from("CN"),
+                    [0x55, 0x04, 0x06] => String::from("C"),
+                    [0x55, 0x04, 0x07] => String::from("L"),
+                    [0x55, 0x04, 0x08] => String::from("ST"),
+                    [0x55, 0x04, 0x0a] => String::from("O"),
+                    [0x55, 0x04, 0x0b] => String::from("OU"),
+                    [0x55, 0x04, 0x09] => String::from("STREET"),
+                    [0x09, 0x92, 0x26, 0x89, 0x93, 0xf2, 0x2c, 0x64, 0x01, 0x19] => {
+                        String::from("DC")
+                    }
+                    [0x09, 0x92, 0x26, 0x89, 0x93, 0xf2, 0x2c, 0x64, 0x01, 0x01] => {
+                        String::from("UID")
+                    }
+                    other => der::dotted(other).ok_or(X509Error::Malformed)?,
+                };
+                rdn.push(format!("{key}={}", rfc4514_escape(text)));
+            }
+            parts.push(rdn.join("+"));
+        }
+        parts.reverse();
+        Ok(parts.join(","))
+    }
+
     /// The user principal names (`otherName` 1.3.6.1.4.1.311.20.2.3) of the subjectAltName
     /// extension.
     ///
@@ -280,5 +386,31 @@ mod tests {
         assert_ne!(c.serial, &[] as &[u8]);
         assert!(Cert::parse(&leaf.der[..leaf.der.len() - 1]).is_err());
         assert!(Cert::parse(&vec![0x30; 9000]).is_err());
+    }
+
+    // RFC 8705 §2.1.2, RFC 4514 §2, OP-155 m.3 (k)
+    #[test]
+    fn names_for_mutual_tls_client_authentication() {
+        use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair, SanType};
+        let mut p = CertificateParams::new(vec![String::from("svc.example")]).unwrap();
+        let mut dn = DistinguishedName::new();
+        dn.push(DnType::OrganizationName, "Acme, Inc.");
+        dn.push(DnType::CommonName, "svc");
+        p.distinguished_name = dn;
+        p.subject_alt_names
+            .push(SanType::URI("https://svc.example/id".try_into().unwrap()));
+        p.subject_alt_names
+            .push(SanType::IpAddress(std::net::IpAddr::from([192, 0, 2, 7])));
+        let der = p
+            .self_signed(&KeyPair::generate().unwrap())
+            .unwrap()
+            .der()
+            .to_vec();
+        let c = Cert::parse(&der).unwrap();
+        assert_eq!(c.san_dns().unwrap(), vec!["svc.example"]);
+        assert_eq!(c.san_uris().unwrap(), vec!["https://svc.example/id"]);
+        assert_eq!(c.san_ips().unwrap(), vec![String::from("192.0.2.7")]);
+        assert_eq!(c.subject_dn().unwrap(), "CN=svc,O=Acme\\, Inc.");
+        assert_eq!(rfc4514_escape(" a#b "), "\\ a#b\\ ");
     }
 }

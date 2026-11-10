@@ -1216,10 +1216,21 @@ where
         + access_identity_oauth::ports::oauth::AssertionIssuers
         + access_identity_oauth::ports::oauth::WorkloadTrust
         + access_identity_oauth::ports::oauth::GrantStanding
+        + access_identity_x509::ports::CaTrust
         + Clone
         + 'static,
 {
     let identity = config.identity.as_ref().ok_or("no identity section")?;
+    // RFC 8705 §2.1, OP-155 m.3 (k), (m)
+    let client_certificates = Arc::new(
+        access_identity_oauth::adapters::certificates::X509ClientCertificates::new(
+            app.clone(),
+            Arc::new(access_identity_x509::app::Revocation::new(Arc::new(
+                certificate::OutboundRevocation(outbound.clone()),
+            ))),
+            Arc::new(projections.clone()),
+        ),
+    );
     // TN-130
     let management = Arc::new(admin::tokens::PlaneHolders(
         projections.clone(),
@@ -1250,6 +1261,7 @@ where
         hooks,
         management,
         claims,
+        client_certificates,
     };
     Ok(oauth_router(OAuth::new(env)))
 }

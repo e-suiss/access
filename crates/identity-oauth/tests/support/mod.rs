@@ -140,15 +140,19 @@ impl ClientKeys for StaticKeys {
 #[derive(Clone, Default)]
 pub struct ScriptedCerts(
     pub Arc<Mutex<HashMap<Vec<u8>, Result<CertificateNames, CertificateRefused>>>>,
+    pub Arc<Mutex<Option<Arc<dyn ClientCertificates + Sync>>>>,
 );
 
 impl ClientCertificates for ScriptedCerts {
     fn verify<'a>(
         &'a self,
-        _: RealmId,
+        realm: &'a access_identity_oauth::ports::RealmEntry,
         chain: &'a [Vec<u8>],
-        _: u64,
+        now_ms: u64,
     ) -> Held<'a, Result<CertificateNames, CertificateRefused>> {
+        if let Some(real) = self.1.lock().unwrap().clone() {
+            return Box::pin(async move { real.verify(realm, chain, now_ms).await });
+        }
         let answer = chain
             .first()
             .and_then(|leaf| self.0.lock().unwrap().get(leaf).cloned())

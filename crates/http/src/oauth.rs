@@ -36,7 +36,7 @@ struct Incoming {
     headers: HeaderMap,
     body: Bytes,
     slug: Option<String>,
-    chain: Option<crate::tls::ClientChain>,
+    chain: Option<Arc<[Vec<u8>]>>,
     peer: Option<std::net::IpAddr>,
 }
 
@@ -90,8 +90,30 @@ pub fn router<E: Env>(service: OAuth<E>) -> Router {
         .with_state(shared)
 }
 
-/// The X.509-SVID chain the TLS layer found on the connection (OP-154 m.3 (r)).
-type Chain = Option<axum::Extension<crate::tls::ClientChain>>;
+/// The client certificate chain of the connection, leaf first: the mTLS listener's (RFC 8705
+/// §2, OP-155 m.3 (k), (m)), else an X.509-SVID chain (OP-154 m.3 (r)). Only TLS that ends at
+/// access-server sets either; a forwarded header never does.
+struct Chain(Option<Arc<[Vec<u8>]>>);
+
+impl<S: Send + Sync> axum::extract::FromRequestParts<S> for Chain {
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        _: &S,
+    ) -> Result<Self, Self::Rejection> {
+        let mtls = parts
+            .extensions
+            .get::<crate::tls::MtlsChain>()
+            .map(|c| c.0.clone());
+        Ok(Self(mtls.or_else(|| {
+            parts
+                .extensions
+                .get::<crate::tls::ClientChain>()
+                .map(|c| c.0.clone())
+        })))
+    }
+}
 
 /// The peer address the listener saw (OP-154 m.3 (p), (j)).
 type PeerOf = Option<axum::Extension<crate::login::Peer>>;
@@ -109,7 +131,7 @@ fn incoming(
         headers,
         body,
         slug,
-        chain: chain.map(|axum::Extension(c)| c),
+        chain: chain.0,
         peer: peer.map(|axum::Extension(crate::login::Peer(ip))| ip),
     }
 }
@@ -217,7 +239,7 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
                 req.method.as_str(),
                 authorization,
                 &proofs,
-                req.chain.as_ref().map_or(&[], |c| &c.0),
+                req.chain.as_deref().unwrap_or(&[]),
             )
             .await,
         );
@@ -247,7 +269,7 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
                 &p,
                 authorization,
                 &proofs,
-                req.chain.as_ref().map_or(&[], |c| &c.0),
+                req.chain.as_deref().unwrap_or(&[]),
             )
             .await
         }
@@ -264,7 +286,7 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
                 TokenHttp {
                     authorization,
                     dpop: &proofs,
-                    client_chain: req.chain.as_ref().map_or(&[], |c| &c.0),
+                    client_chain: req.chain.as_deref().unwrap_or(&[]),
                 },
             )
             .await
@@ -279,7 +301,7 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
                 &p,
                 authorization,
                 jwt,
-                req.chain.as_ref().map_or(&[], |c| &c.0),
+                req.chain.as_deref().unwrap_or(&[]),
             )
             .await
         }
@@ -292,7 +314,7 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
                 TokenHttp {
                     authorization,
                     dpop: &[],
-                    client_chain: req.chain.as_ref().map_or(&[], |c| &c.0),
+                    client_chain: req.chain.as_deref().unwrap_or(&[]),
                 },
                 req.peer,
             )

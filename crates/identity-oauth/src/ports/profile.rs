@@ -31,7 +31,7 @@ pub trait ClientCertificates: Send + Sync {
     /// The names of the leaf of `chain` (leaf first) once it verified for `realm` at `now_ms`.
     fn verify<'a>(
         &'a self,
-        realm: RealmId,
+        realm: &'a crate::ports::RealmEntry,
         chain: &'a [Vec<u8>],
         now_ms: u64,
     ) -> Held<'a, Result<CertificateNames, CertificateRefused>>;
@@ -44,7 +44,7 @@ pub struct NoClientCertificates;
 impl ClientCertificates for NoClientCertificates {
     fn verify<'a>(
         &'a self,
-        _: RealmId,
+        _: &'a crate::ports::RealmEntry,
         _: &'a [Vec<u8>],
         _: u64,
     ) -> Held<'a, Result<CertificateNames, CertificateRefused>> {

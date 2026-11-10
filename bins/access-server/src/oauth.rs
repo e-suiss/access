@@ -97,6 +97,10 @@ pub(crate) struct ServerEnv<P> {
     pub(crate) workload_trust: Arc<dyn access_identity_oauth::ports::oauth::WorkloadTrust + Sync>,
     /// Whether a consent record's Grant stands, read from the authority plane (P58, EI-18).
     pub(crate) standing: Arc<dyn access_identity_oauth::ports::oauth::GrantStanding + Sync>,
+    /// Mutual TLS client certificates: the realm's CAs, their Acceptance and revocation
+    /// (RFC 8705 §2.1, OP-155 m.3 (k), (m)).
+    pub(crate) client_certificates:
+        Arc<dyn access_identity_oauth::ports::profile::ClientCertificates + Sync>,
 }
 
 impl<P: Projections + 'static> Env for ServerEnv<P> {
@@ -181,6 +185,11 @@ impl<P: Projections + 'static> Env for ServerEnv<P> {
     }
     fn standing(&self) -> &(dyn access_identity_oauth::ports::oauth::GrantStanding + Sync) {
         &*self.standing
+    }
+    fn client_certificates(
+        &self,
+    ) -> &(dyn access_identity_oauth::ports::profile::ClientCertificates + Sync) {
+        &*self.client_certificates
     }
 }
 

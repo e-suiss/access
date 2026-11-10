@@ -2,6 +2,7 @@
 //! identity signer over its Unix socket (CMP-22b).
 
 pub mod bundles;
+pub mod certificates;
 pub mod cimd;
 pub mod clients;
 pub mod dpop;

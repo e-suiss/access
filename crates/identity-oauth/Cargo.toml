@@ -13,6 +13,7 @@ access-crypto = { workspace = true }
 access-identity-hooks = { workspace = true }
 access-identity-account = { workspace = true }
 access-identity-attest = { workspace = true }
+access-identity-x509 = { workspace = true }
 access-identity-session = { workspace = true }
 access-identity-signer = { path = "../identity-signer" }
 access-internal-api = { workspace = true }
@@ -31,6 +32,7 @@ httparse = { workspace = true, features = ["std"] }
 zeroize = { workspace = true, features = ["alloc", "std"] }
 
 [dev-dependencies]
+access-identity-x509 = { workspace = true, features = ["testing"] }
 access-crypto = { workspace = true, features = ["testing"] }
 access-store = { workspace = true, features = ["testing"] }
 aws-lc-rs = { workspace = true }

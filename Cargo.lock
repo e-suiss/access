@@ -390,6 +390,7 @@ dependencies = [
  "access-identity-hooks",
  "access-identity-session",
  "access-identity-signer",
+ "access-identity-x509",
  "access-internal-api",
  "access-store",
  "access-telemetry",

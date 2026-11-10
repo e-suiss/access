@@ -36,7 +36,7 @@ impl<E: Env> OAuth<E> {
                 match self
                     .env
                     .client_certificates()
-                    .verify(realm.realm, chain, now)
+                    .verify(realm, chain, now)
                     .await?
                 {
                     Ok(names) => names_match(name, &names),
