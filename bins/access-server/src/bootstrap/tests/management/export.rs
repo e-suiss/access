@@ -35,6 +35,73 @@ async fn record(c: &Console) -> BTreeSet<String> {
         .collect()
 }
 
+/// Passes at most this often before a phase fails: each moves every sink forward by up to 20
+/// batches, so a sink that can accept catches up in a handful.
+const MAX_PASSES: usize = 600;
+
+/// The position of the newest row of the realm's audit record.
+async fn head(c: &Console) -> access_store::identity::Cursor {
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+        .await
+        .unwrap();
+    let rows = t.list_audit(10_000).await.unwrap();
+    t.commit().await.unwrap();
+    rows.iter()
+        .map(|r| access_store::identity::Cursor {
+            xid: r.xid,
+            id: r.id,
+        })
+        .max_by_key(|c| (c.xid, c.id))
+        .unwrap()
+}
+
+/// The live sinks other than `skip` whose cursor is still before `target`.
+async fn behind(c: &Console, target: access_store::identity::Cursor, skip: &str) -> Vec<String> {
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+        .await
+        .unwrap();
+    let mut out = Vec::new();
+    for s in access_store::export::sinks(&mut t).await.unwrap() {
+        if s.state != "live" || s.name == skip {
+            continue;
+        }
+        let at = access_store::export::cursor(&mut t, s.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .after;
+        if (at.xid, at.id) < (target.xid, target.id) {
+            out.push(s.name);
+        }
+    }
+    t.commit().await.unwrap();
+    out
+}
+
+/// Waits for the syslog receiver, which reads each stream after the sender closed it, to hold
+/// what the sinks' cursors say they accepted.
+async fn delivered(
+    http: &SinkTwin,
+    syslog: &SyslogTwin,
+    want: &BTreeSet<String>,
+    skip: &str,
+) -> Vec<(&'static str, usize)> {
+    let mut missing = Vec::new();
+    for _ in 0..400 {
+        missing = copies(http, syslog)
+            .into_iter()
+            .filter(|(n, _)| *n != skip)
+            .map(|(n, got)| (n, want.difference(&got).count()))
+            .filter(|(_, m)| *m > 0)
+            .collect();
+        if missing.is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    missing
+}
+
 /// The event ids each sink holds, by sink: from the Parquet objects, the collectors' bodies and
 /// the syslog messages.
 fn copies(http: &SinkTwin, syslog: &SyslogTwin) -> Vec<(&'static str, BTreeSet<String>)> {
@@ -208,22 +275,18 @@ async fn the_siem_projection_is_a_copy_that_loses_nothing_and_never_answers_for_
     // OP-44, X22
     let want = record(&c).await;
     assert!(!want.is_empty());
-    let deadline = std::time::Instant::now() + Duration::from_secs(60);
-    loop {
+    let target = head(&c).await;
+    let mut lagging = Vec::new();
+    for _ in 0..MAX_PASSES {
         pass().await;
-        let held = copies(&http, &syslog);
-        if held.iter().all(|(_, got)| want.is_subset(got)) {
+        lagging = behind(&c, target, "").await;
+        if lagging.is_empty() {
             break;
         }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "{:?}",
-            held.iter()
-                .map(|(n, got)| (n, want.difference(got).count()))
-                .collect::<Vec<_>>()
-        );
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
+    assert_eq!(lagging, Vec::<String>::new());
+    assert_eq!(delivered(&http, &syslog, &want, "").await, []);
     let seen = http.seen();
     assert!(
         seen.iter()
@@ -263,6 +326,7 @@ async fn the_siem_projection_is_a_copy_that_loses_nothing_and_never_answers_for_
         )
         .await;
     assert!(w.status.is_success(), "{:?}", w.body);
+    let held_before = record(&c).await;
     let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
         .await
         .unwrap();
@@ -277,7 +341,7 @@ async fn the_siem_projection_is_a_copy_that_loses_nothing_and_never_answers_for_
         .unwrap();
     }
     t.commit().await.unwrap();
-    let fresh: BTreeSet<String> = record(&c).await.difference(&want).cloned().collect();
+    let fresh: BTreeSet<String> = record(&c).await.difference(&held_before).cloned().collect();
     assert!(fresh.len() >= 3);
     let sent_before: Vec<String> = {
         let (_, page, _) = c.rest_read("/admin/v1/realms/acme/export-sinks").await;
@@ -288,8 +352,8 @@ async fn the_siem_projection_is_a_copy_that_loses_nothing_and_never_answers_for_
             .map(|i| i["delivery"]["sent"].as_str().unwrap().to_owned())
             .collect()
     };
-    let deadline = std::time::Instant::now() + Duration::from_secs(60);
-    loop {
+    let mut refused = false;
+    for _ in 0..MAX_PASSES {
         pass().await;
         let (_, page, _) = c.rest_read("/admin/v1/realms/acme/export-sinks").await;
         let live: Vec<&serde_json::Value> = page["items"]
@@ -318,11 +382,12 @@ async fn the_siem_projection_is_a_copy_that_loses_nothing_and_never_answers_for_
                 .map(|i| i["delivery"]["sent"].as_str().unwrap().to_owned())
                 .collect();
             assert_eq!(sent_now, sent_before);
+            refused = true;
             break;
         }
-        assert!(std::time::Instant::now() < deadline, "{page}");
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
+    assert!(refused);
     let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
         .await
         .unwrap();
@@ -353,20 +418,18 @@ async fn the_siem_projection_is_a_copy_that_loses_nothing_and_never_answers_for_
 
     http.set_down(false);
     syslog.set_down(false);
-    let deadline = std::time::Instant::now() + Duration::from_secs(60);
-    loop {
+    let target = head(&c).await;
+    let mut lagging = Vec::new();
+    for _ in 0..MAX_PASSES {
         pass().await;
-        let held = copies(&http, &syslog);
-        let done = held
-            .iter()
-            .filter(|(n, _)| *n != "collector")
-            .all(|(_, got)| fresh.is_subset(got));
-        if done {
+        lagging = behind(&c, target, "collector").await;
+        if lagging.is_empty() {
             break;
         }
-        assert!(std::time::Instant::now() < deadline);
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
+    assert_eq!(lagging, Vec::<String>::new());
+    assert_eq!(delivered(&http, &syslog, &fresh, "collector").await, []);
     let after_rotation = http
         .seen()
         .into_iter()

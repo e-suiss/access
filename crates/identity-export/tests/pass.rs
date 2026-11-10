@@ -203,18 +203,23 @@ fn token() -> String {
     access_kernel::json::b64url_encode(&access_crypto::random::bytes::<24>().unwrap())
 }
 
-/// Runs passes until every sink has sent `want` rows, or the deadline passes.
+/// Passes at most this often before a phase fails; a sink that can accept catches up in a few.
+const MAX_PASSES: usize = 600;
+
+/// Runs passes until every sink has sent `want` rows, at most [`MAX_PASSES`].
 async fn drain<W: access_identity_export::ports::Wire>(
     pass: &Pass<'_, W, Keys>,
     scope: (TenantId, RealmId),
     sent: &mut u64,
     want: u64,
 ) {
-    let deadline = std::time::Instant::now() + Duration::from_secs(30);
-    while *sent < want && std::time::Instant::now() < deadline {
+    for _ in 0..MAX_PASSES {
+        if *sent >= want {
+            return;
+        }
         *sent += pass.realm(scope, now_ms()).await.unwrap().sent;
         if *sent < want {
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
     }
 }
@@ -327,8 +332,10 @@ async fn every_row_reaches_every_sink_as_a_copy_and_a_sink_that_is_down_loses_no
     // OP-44
     drain(&pass, (tenant, r), &mut sent, 6 * 7).await;
     assert!(sent >= 6 * 7, "{sent}");
-    let deadline = std::time::Instant::now() + Duration::from_secs(30);
-    while logins(&http, &syslog_twin, 7).await != [7; 6] && std::time::Instant::now() < deadline {
+    for _ in 0..MAX_PASSES {
+        if logins(&http, &syslog_twin, 7).await == [7; 6] {
+            break;
+        }
         pass.realm((tenant, r), now_ms()).await.unwrap();
     }
     assert_eq!(logins(&http, &syslog_twin, 7).await, [7; 6]);
@@ -412,13 +419,15 @@ async fn every_row_reaches_every_sink_as_a_copy_and_a_sink_that_is_down_loses_no
         c
     };
     let mut notified = 0;
-    let deadline = std::time::Instant::now() + Duration::from_secs(30);
-    while notified < 6 && std::time::Instant::now() < deadline {
+    for _ in 0..MAX_PASSES {
+        if notified >= 6 {
+            break;
+        }
         let o = pass.realm((tenant, r), now_ms()).await.unwrap();
         assert_eq!(o.sent, 0);
         notified += o.notified;
         if o.refused == 0 {
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
     }
     assert_eq!(notified, 6);
@@ -443,17 +452,17 @@ async fn every_row_reaches_every_sink_as_a_copy_and_a_sink_that_is_down_loses_no
 
     http.set_down(false);
     syslog_twin.set_down(false);
-    let deadline = std::time::Instant::now() + Duration::from_secs(30);
-    loop {
+    let mut counts = [0; 6];
+    for _ in 0..MAX_PASSES {
         pass.realm((tenant, r), now_ms()).await.unwrap();
-        let counts = logins(&http, &syslog_twin, 0).await;
-        if counts == [10; 6] || std::time::Instant::now() > deadline {
-            // OP-44, X22
-            assert_eq!(counts, [10; 6]);
+        counts = logins(&http, &syslog_twin, 0).await;
+        if counts == [10; 6] {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        tokio::time::sleep(Duration::from_millis(10)).await;
     }
+    // OP-44, X22
+    assert_eq!(counts, [10; 6]);
     let mut tx = TenantTx::begin(&db.app, tenant, r).await.unwrap();
     for id in 1..=6 {
         let c = cursor(&mut tx, [id; 16]).await.unwrap().unwrap();
@@ -467,7 +476,6 @@ async fn every_row_reaches_every_sink_as_a_copy_and_a_sink_that_is_down_loses_no
 /// receiver holds `want`.
 async fn logins(http: &SinkTwin, syslog_twin: &SyslogTwin, want: usize) -> [usize; 6] {
     const EVENT: &str = "login.password.succeeded";
-    let deadline = std::time::Instant::now() + Duration::from_secs(10);
     let count_syslog = || {
         syslog_twin
             .messages()
@@ -475,8 +483,11 @@ async fn logins(http: &SinkTwin, syslog_twin: &SyslogTwin, want: usize) -> [usiz
             .filter(|m| m.contains(&format!("|{EVENT}|")))
             .count()
     };
-    while count_syslog() < want && std::time::Instant::now() < deadline {
-        tokio::time::sleep(Duration::from_millis(20)).await;
+    for _ in 0..400 {
+        if count_syslog() >= want {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
     }
     let seen = http.seen();
     let accepted = |f: &dyn Fn(&str) -> bool| {
