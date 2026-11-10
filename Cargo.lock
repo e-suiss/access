@@ -233,6 +233,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-hr-connector"
+version = "0.4.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "access-http"
 version = "0.4.0"
 dependencies = [
@@ -736,6 +743,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-linux-client"
+version = "0.4.0"
+
+[[package]]
 name = "access-local-client"
 version = "0.4.0"
 dependencies = [
@@ -764,6 +775,10 @@ dependencies = [
  "tokio",
  "tokio-rustls",
 ]
+
+[[package]]
+name = "access-mcp-gateway"
+version = "0.4.0"
 
 [[package]]
 name = "access-parse"
@@ -806,6 +821,17 @@ dependencies = [
  "thiserror",
  "tokio",
  "tower",
+]
+
+[[package]]
+name = "access-product-twin"
+version = "0.4.0"
+
+[[package]]
+name = "access-proxy"
+version = "0.4.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]

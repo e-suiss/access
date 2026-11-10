@@ -1,0 +1,15 @@
+[package]
+name = "access-product-twin"
+description = "A Suiss product twin for tests: a third-party product built only on the public SDK and Kernel, registered as a Party with its own issuer key and Acceptance."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+
+[dependencies]
+# OP-156 m.2 Q1, E24, PI-14: the public SDK and Kernel only
+
+[lints]
+workspace = true

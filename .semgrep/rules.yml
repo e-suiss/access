@@ -18,6 +18,10 @@ rules:
         # OP-155 m.3 (p)
         - "services/vc-verifier/src/store.rs"
         - "services/vc-verifier/src/testing.rs"
+        # OP-156 m.3 (q)
+        - "services/hr-connector/src/store.rs"
+        - "services/hr-connector/src/testing.rs"
+        - "services/hr-connector/tests/store.rs"
     pattern-either:
       - pattern: sqlx::query(...)
       - pattern: sqlx::query_as(...)

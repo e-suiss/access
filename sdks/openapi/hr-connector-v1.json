@@ -1,0 +1,151 @@
+{
+  "components": {
+    "responses": {
+      "NotYetServed": {
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description": "not-yet-served: the route is declared and its lane does not serve it yet (OP-156 m.4)."
+      },
+      "Problem": {
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description": "An RFC 9457 problem."
+      }
+    },
+    "schemas": {
+      "Problem": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "The HR connector service: its connectors, their runs and health. Records reach Access only through the HR batch API. A planned route answers 501 not-yet-served.",
+    "license": {
+      "identifier": "Apache-2.0",
+      "name": "Apache-2.0"
+    },
+    "title": "Access HR connector API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/hr-connector/v1/connectors": {
+      "get": {
+        "operationId": "listConnectors",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "The configured connectors: vendor, the Access HR source they push to, last run.",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/hr-connector/v1/connectors/{connector}/runs": {
+      "post": {
+        "operationId": "startRun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Starts a pull from the HR system now, outside the schedule.",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/hr-connector/v1/connectors/{connector}/runs/{run}": {
+      "get": {
+        "operationId": "getRun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "One run: records read, pushed and refused, never their content.",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/hr-connector/v1/healthz": {
+      "get": {
+        "operationId": "connectorHealth",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Whether the service can reach Access and its database.",
+        "x-suiss-status": "planned"
+      }
+    }
+  }
+}

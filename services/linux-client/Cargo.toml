@@ -1,0 +1,15 @@
+[package]
+name = "access-linux-client"
+description = "The Access Linux client: the access-linuxd daemon and its NSS and PAM modules for console sign-in and sudo step-up, with an offline cache bound to the host's horizon."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+
+[dependencies]
+# OP-156 m.3 (p), OP-62: public crates only
+
+[lints]
+workspace = true

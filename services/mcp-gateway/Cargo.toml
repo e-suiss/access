@@ -1,0 +1,15 @@
+[package]
+name = "access-mcp-gateway"
+description = "Access Proxy in MCP mode: an MCP-aware enforcement point that asks Access before every tool call and pins each server's tool list; it holds no authority."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+
+[dependencies]
+# OP-156 m.3 (n), OP-62: public crates only
+
+[lints]
+workspace = true

@@ -306,6 +306,18 @@ executor-contract:
 vc-verifier-contract:
     ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-vc-verifier --test contract
 
+# OP-65, OP-156 m.4: rewrite sdks/openapi/proxy-v1.json from services/proxy
+proxy-contract:
+    ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-proxy --test contract
+
+# OP-156 m.3 (p): check the Linux client's socket contract against conformance/cddl/linux-client.cddl
+linux-client-contract:
+    cargo test --locked -p access-linux-client --test contract
+
+# OP-65, OP-156 m.4: rewrite sdks/openapi/hr-connector-v1.json from services/hr-connector
+hr-connector-contract:
+    ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-hr-connector --test contract
+
 # OP-65, OP-151 m.4: rewrite sdks/openapi/admin-v1.json and problems.json from crates/http
 admin-contract:
     ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-http --test admin_contract

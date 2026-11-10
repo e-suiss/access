@@ -1,0 +1,16 @@
+[package]
+name = "access-proxy"
+description = "Access Proxy: one configuration file rendered for Envoy, Caddy and Traefik in front of an application, with Access as the policy decision point; it holds no authority."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+
+[dependencies]
+# OP-156 m.3 (m), OP-62: public crates only
+serde_json = { workspace = true, features = ["std"] }
+
+[lints]
+workspace = true

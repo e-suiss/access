@@ -1,0 +1,123 @@
+{
+  "components": {
+    "responses": {
+      "NotYetServed": {
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description": "not-yet-served: the route is declared and its lane does not serve it yet (OP-156 m.4)."
+      },
+      "Problem": {
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "description": "An RFC 9457 problem."
+      }
+    },
+    "schemas": {
+      "Problem": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "The Access Proxy sidecar beside its engine: the sign-in callback that sets the __Host-access-proxy cookie through OIDC code and PKCE, sign-out, the rendered engine configuration and health. A planned route answers 501 not-yet-served.",
+    "license": {
+      "identifier": "Apache-2.0",
+      "name": "Apache-2.0"
+    },
+    "title": "Access Proxy API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/access-proxy/v1/callback": {
+      "get": {
+        "operationId": "proxyCallback",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "The OIDC authorization code callback with PKCE that sets the application host's __Host-access-proxy cookie (OP-156 m.3 (l)).",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/access-proxy/v1/config": {
+      "get": {
+        "operationId": "proxyConfig",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "The engine configuration rendered from the one TOML file, for Envoy, Caddy or Traefik.",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/access-proxy/v1/healthz": {
+      "get": {
+        "operationId": "proxyHealth",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Whether the sidecar can reach Access; when it cannot, every request is refused.",
+        "x-suiss-status": "planned"
+      }
+    },
+    "/access-proxy/v1/sign-out": {
+      "post": {
+        "operationId": "proxySignOut",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Ends the proxy cookie for the application host.",
+        "x-suiss-status": "planned"
+      }
+    }
+  }
+}
