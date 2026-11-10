@@ -777,8 +777,11 @@ mod kerberos_gateway {
             )
             .as_bytes(),
         );
-        let gw =
-            rcgen::generate_simple_self_signed(vec!["access.corp.example".to_owned()]).unwrap();
+        let gw = rcgen::generate_simple_self_signed(vec![
+            "access.corp.example".to_owned(),
+            "other.corp.example".to_owned(),
+        ])
+        .unwrap();
         write(&dir, "gw-ca.pem", gw.cert.pem().as_bytes());
         write(&dir, "gw.pem", gw.cert.pem().as_bytes());
         write(
