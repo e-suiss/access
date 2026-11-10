@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@esuiss/access": "file:../../sdks/typescript",
+    "@suiss/access-react": "file:../components",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

@@ -165,4 +165,23 @@ test.describe("@live hosted pages", () => {
     );
     expect(metadata.status()).toBe(404);
   });
+
+  // TN-134, OP-155 m.3 (i), Ek B 4874, 4880, 4914
+  test("@live the SSO setup portal is never framed and an unknown link is spent", async ({
+    page,
+  }) => {
+    const link = "u".repeat(43);
+    const r = await page.goto(`${REALM}/login/sso-setup/${link}`);
+    expect(r?.status()).toBe(200);
+    expect(r?.headers()["content-security-policy"] ?? "").toContain("frame-ancestors 'none'");
+    await expect(page.getByTestId("expired")).toBeVisible();
+    const api = await page.request.get(`${REALM}/v1/sso-setup/${link}`);
+    expect(api.status()).toBe(404);
+    const post = await page.request.post(`${REALM}/v1/sso-setup/${link}`, {
+      data: { step: "finish" },
+      headers: { origin: new URL(page.url()).origin, "idempotency-key": crypto.randomUUID() },
+    });
+    expect(post.status()).toBe(404);
+    await clean(page);
+  });
 });

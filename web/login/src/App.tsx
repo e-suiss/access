@@ -10,6 +10,7 @@ import { Invitation } from "./Invitation.js";
 import { MagicLink } from "./MagicLink.js";
 import { Recovery } from "./Recovery.js";
 import { SignIn } from "./SignIn.js";
+import { SsoSetup } from "./SsoSetup.js";
 
 /** The page a location draws. */
 export type Page =
@@ -22,6 +23,7 @@ export type Page =
   | "recovery"
   | "invitation"
   | "link"
+  | "sso_setup"
   | "error";
 
 export function pageOf(path: string, search: string): Page {
@@ -32,6 +34,8 @@ export function pageOf(path: string, search: string): Page {
   if (rest === "/link") return "link";
   if (rest === "/error") return "error";
   if (rest === "/invitation" || rest.startsWith("/invitation/")) return "invitation";
+  // TN-134, OP-155 m.3 (i)
+  if (rest.startsWith("/sso-setup/")) return "sso_setup";
   const reason = new URLSearchParams(search).get("reason");
   // OP-153 m.3 (z)
   if (reason === "share") return "consent";
@@ -64,6 +68,8 @@ function Body({ page }: { readonly page: Page }) {
       return <Invitation />;
     case "link":
       return <MagicLink />;
+    case "sso_setup":
+      return <SsoSetup />;
     case "error":
       return <ErrorPage />;
   }
