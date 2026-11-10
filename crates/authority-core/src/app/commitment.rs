@@ -36,7 +36,7 @@ pub const BINDING: &str = "commitment";
 pub fn body(commitment: &Digest, active: bool) -> Value {
     Value::Map(vec![
         (Value::text("active"), Value::Bool(active)),
-        (Value::text("commitment"), commitment.to_value()),
+        (Value::text("commitment"), Value::Bytes(commitment.0.to_vec())),
     ])
 }
 
@@ -66,7 +66,9 @@ pub fn decode(value: Option<&EqValue>, body: &[u8]) -> Option<(Digest, bool)> {
     for (k, v) in entries {
         match (k, v) {
             (Value::Text(k), Value::Bool(b)) if k == "active" => active = Some(*b),
-            (Value::Text(k), d) if k == "commitment" => commitment = Digest::from_value(d),
+            (Value::Text(k), Value::Bytes(d)) if k == "commitment" => {
+                commitment = <[u8; 32]>::try_from(d.as_slice()).ok().map(Digest);
+            }
             _ => return None,
         }
     }
