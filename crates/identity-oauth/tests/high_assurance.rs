@@ -1188,9 +1188,7 @@ impl access_identity_x509::ports::CaTrust for Accepts {
     }
 }
 
-// RFC 8705 §2.1, MD-8, OP-155 m.3 (k), (m), Ek B 4692, 4713: a tls_client_auth client
-// authenticates with a certificate of a CA the realm named and its domain accepted, known not
-// revoked by the CA's CRL; a revoked, unaccepted or foreign certificate is refused
+// RFC 8705 §2.1, MD-8, OP-155 m.3 (k), (m), Ek B 4692, 4713
 #[tokio::test]
 async fn pki_clients_go_through_the_realm_ca_and_revocation() {
     use access_identity_oauth::adapters::certificates::X509ClientCertificates;

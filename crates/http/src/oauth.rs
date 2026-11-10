@@ -98,20 +98,21 @@ struct Chain(Option<Arc<[Vec<u8>]>>);
 impl<S: Send + Sync> axum::extract::FromRequestParts<S> for Chain {
     type Rejection = std::convert::Infallible;
 
-    async fn from_request_parts(
+    fn from_request_parts(
         parts: &mut axum::http::request::Parts,
         _: &S,
-    ) -> Result<Self, Self::Rejection> {
+    ) -> impl core::future::Future<Output = Result<Self, Self::Rejection>> + Send {
         let mtls = parts
             .extensions
             .get::<crate::tls::MtlsChain>()
             .map(|c| c.0.clone());
-        Ok(Self(mtls.or_else(|| {
+        let chain = mtls.or_else(|| {
             parts
                 .extensions
                 .get::<crate::tls::ClientChain>()
                 .map(|c| c.0.clone())
-        })))
+        });
+        std::future::ready(Ok(Self(chain)))
     }
 }
 

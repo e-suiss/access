@@ -279,9 +279,9 @@ impl<'a> Cert<'a> {
             .filter(|g| g.tag == 0x87)
             .map(|g| {
                 if let Ok(v4) = <[u8; 4]>::try_from(g.value) {
-                    Ok(std::net::IpAddr::from(v4).to_string())
+                    Ok(core::net::IpAddr::from(v4).to_string())
                 } else if let Ok(v6) = <[u8; 16]>::try_from(g.value) {
-                    Ok(std::net::IpAddr::from(v6).to_string())
+                    Ok(core::net::IpAddr::from(v6).to_string())
                 } else {
                     Err(X509Error::Malformed)
                 }
@@ -400,7 +400,7 @@ mod tests {
         p.subject_alt_names
             .push(SanType::URI("https://svc.example/id".try_into().unwrap()));
         p.subject_alt_names
-            .push(SanType::IpAddress(std::net::IpAddr::from([192, 0, 2, 7])));
+            .push(SanType::IpAddress(core::net::IpAddr::from([192, 0, 2, 7])));
         let der = p
             .self_signed(&KeyPair::generate().unwrap())
             .unwrap()
