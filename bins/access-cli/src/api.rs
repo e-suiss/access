@@ -251,6 +251,7 @@ pub(crate) const UNSUPPORTED: [&str; 2] = ["createJob", "revokeAllAgentInstances
 /// The `idp.*` action a write operation compiles to; `None` for an operation the command line
 /// does not know, which it treats as reserved (fail closed, TN-122). A protection mode change
 /// without its two sides is taken as loosening ([`protection_action`] decides with them).
+#[expect(clippy::too_many_lines, reason = "one arm per contract write")]
 pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
     Some(match operation {
         "putClient" if exists => IdpAction::ClientUpdate,
@@ -326,6 +327,45 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "putVaultResource" => IdpAction::VaultResourceRegister,
         "disableVaultResource" => IdpAction::VaultResourceDisable,
         "putVaultReleaseMode" => IdpAction::VaultReleaseModeOpen,
+        // OP-155 m.3 (a)
+        "registerSamlSp" => IdpAction::SamlSpMapping,
+        "putSamlSp" => IdpAction::SamlSpUpdate,
+        "retireSamlSp" => IdpAction::SamlSpRetire,
+        "putSamlCertificatePolicy" => IdpAction::SamlCertPolicy,
+        "replaceSamlCertificate" => IdpAction::SamlCertEmergency,
+        "registerScimClient" => IdpAction::ScimClientRegister,
+        "rotateScimSecret" => IdpAction::ScimTokenRotate,
+        "retireScimClient" => IdpAction::ScimClientRetire,
+        "registerScimTarget" => IdpAction::ScimOutboundRegister,
+        "retireScimTarget" => IdpAction::ScimOutboundRetire,
+        "registerGateway" => IdpAction::GatewayRegister,
+        "retireGateway" => IdpAction::GatewayRetire,
+        "putKeytabPolicy" => IdpAction::GatewayKeytabPolicy,
+        "replaceKeytab" => IdpAction::GatewayKeytabEmergency,
+        "registerRadiusClient" => IdpAction::GatewayRadiusClientRegister,
+        "putFederation" => IdpAction::FederationEnable,
+        "addTrustAnchor" => IdpAction::FederationTrustAnchorAdd,
+        "removeTrustAnchor" => IdpAction::FederationTrustAnchorRemove,
+        "putFederationAuthority" => IdpAction::FederationTaEnable,
+        "putFederationRegistration" => IdpAction::FederationRegistrationOpen,
+        "putVcVerifier" => IdpAction::VcVerifierEnable,
+        "putVcTrustedLists" => IdpAction::VcTrustedList,
+        "putVcIssuer" => IdpAction::VcIssuerEnable,
+        "putClientProfile" => IdpAction::ClientProfileLoosen,
+        "putClientLegacyAuthentication" => IdpAction::ClientAuthMethodLegacy,
+        "putClientSigningAlg" => IdpAction::ClientAlgRs256,
+        "putClientEncryption" => IdpAction::ClientEncryption,
+        "putClientSamlBearer" => IdpAction::ClientSamlBearer,
+        "putClientLegacyBearer" => IdpAction::ClientLegacyBearer,
+        "putCiba" => IdpAction::RealmCiba,
+        "putCertificateLogin" => IdpAction::RealmCertificateLogin,
+        "putMtlsAliases" => IdpAction::RealmMtlsAliases,
+        "putHrd" => IdpAction::RealmHrd,
+        "putFrontchannelLogout" => IdpAction::RealmFrontchannelLogout,
+        "enforceOrganizationSso" => IdpAction::OrgSsoEnforce,
+        "liftOrganizationSso" => IdpAction::OrgSsoEnforceLift,
+        "createOrganizationSetupLink" => IdpAction::OrgSetupLink,
+        "putUpstreamAssuranceMap" => IdpAction::UpstreamAssuranceMap,
         _ => return None,
     })
 }

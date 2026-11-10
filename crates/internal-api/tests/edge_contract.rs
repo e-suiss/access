@@ -6,6 +6,7 @@
     clippy::unwrap_used,
     clippy::panic,
     clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
