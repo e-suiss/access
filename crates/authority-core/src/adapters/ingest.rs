@@ -53,6 +53,56 @@ where
         }))
     }
 
+    /// The refusal of a Claim whose issuer is chain-constrained and whose chain does not hold
+    /// at trusted time (IDI-12, OP-155 m.3 (j)); `None` lets it through to verification. The
+    /// Acceptance is never read or written here.
+    async fn chain_gate(&self, sub: &ClaimSubmission) -> Result<Option<ClaimVerdict>, CoreError> {
+        use access_authority_ingest::chain::{self, Fact, Status};
+        use access_store::oidf::ChainState;
+        let named = chain::named(sub);
+        if named.party.is_none() && named.entity.is_none() {
+            return Ok(None);
+        }
+        let rows = access_store::oidf::issuer_states(
+            &self.setup.app,
+            &DomainId::from_bytes(sub.domain.0),
+            named.entity.as_deref(),
+            named.party.map(|p| p.0),
+        )
+        .await?;
+        if rows.is_empty() {
+            return Ok(None);
+        }
+        let now = {
+            let mut guard = self.leading(sub.domain).await?;
+            let Some(led) = guard.as_mut() else {
+                return Err(CoreError::Unavailable("leader"));
+            };
+            led.clock
+                .now()
+                .await
+                .map_err(|_| CoreError::Unavailable("time"))?
+        };
+        let facts: Vec<Fact> = rows
+            .iter()
+            .map(|r| Fact {
+                status: match r.state {
+                    ChainState::Pending => Status::Pending,
+                    ChainState::Resolved => Status::Resolved,
+                    ChainState::Unresolved => Status::Unresolved,
+                    ChainState::Conflict => Status::Conflict,
+                },
+                checked_ms: r.checked_ms,
+                chain_exp_ms: r.chain_exp_ms,
+            })
+            .collect();
+        Ok(chain::gate(&facts, now)
+            .err()
+            .map(|r| ClaimVerdict::Rejected {
+                code: String::from(r.0),
+            }))
+    }
+
     /// The issuers `domain` accepts for `actor-binding` whose pinned key set names `iss`, at
     /// the leader's trusted time (§11.11.3 step 1, AG-29, OP-154 m.3 (q)).
     ///
@@ -259,6 +309,13 @@ where
                 .held_before(&submission)
                 .await
                 .map_err(|e| unavailable(&e))?
+        {
+            return Ok(v);
+        }
+        if let Some(v) = self
+            .chain_gate(&submission)
+            .await
+            .map_err(|e| unavailable(&e))?
         {
             return Ok(v);
         }

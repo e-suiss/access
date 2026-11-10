@@ -10,5 +10,6 @@
 #![forbid(unsafe_code)]
 
 pub mod app;
+pub mod chain;
 pub mod domain;
 pub mod ports;
