@@ -388,7 +388,7 @@ pub(super) async fn console_with(label: &str, with_adp: bool, plan: &Plan) -> Co
         claims: Arc::new(access_identity_oauth::ports::oauth::NoClaims),
         issuers: Arc::new(w.plane.clone()),
         ciba: Arc::new(access_identity_oauth::ports::oauth::NoCiba),
-        geo: Arc::new(access_identity_oauth::ports::oauth::NoGeo),
+        geo: Arc::new(crate::ciba::CsvGeo::parse("192.0.2.0/24,CH\n").unwrap()),
     }));
     let management = crate::admin::router(
         (String::from(ORIGIN), w.identity_signer.clone()),

@@ -1,6 +1,7 @@
 // RFC 8628 §3.3, OP-154 m.3 (p), TN-35: the verification page is a trusted surface of its own.
 // The person enters the code a device shows, reads which app asks, for what and from where, and
-// approves or declines while signed in. Every wrong code reads the same.
+// approves or declines while signed in. Every wrong code reads the same. Without an operator's
+// IP-range list no country is known, and none is shown (OP-155 m.3 (l)).
 import { type SyntheticEvent, useEffect, useRef, useState } from "react";
 
 import { LOGIN, under } from "./base.js";
@@ -112,12 +113,18 @@ export function Device() {
         {state.phase === "ready" && (
           <>
             <p data-testid="request">
-              {t("device_code.request", {
-                client: state.preview.client,
-                scope: state.preview.scopes.join(" "),
-                prefix: state.preview.ip_prefix,
-                country: state.preview.country ?? "?",
-              })}
+              {state.preview.country === null
+                ? t("device_code.request_prefix", {
+                    client: state.preview.client,
+                    scope: state.preview.scopes.join(" "),
+                    prefix: state.preview.ip_prefix,
+                  })
+                : t("device_code.request", {
+                    client: state.preview.client,
+                    scope: state.preview.scopes.join(" "),
+                    prefix: state.preview.ip_prefix,
+                    country: state.preview.country,
+                  })}
             </p>
             <button
               type="button"

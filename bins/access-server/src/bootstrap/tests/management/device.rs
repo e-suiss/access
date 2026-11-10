@@ -129,6 +129,25 @@ async fn page(
     )
 }
 
+/// `POST /device_authorization` by `client` from `peer`.
+async fn device_code_from(
+    c: &Console,
+    client: &str,
+    peer: std::net::IpAddr,
+) -> (StatusCode, serde_json::Value) {
+    let r = Request::post("/realms/acme/device_authorization")
+        .header(header::HOST, HOST)
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .extension(access_http::login::Peer(peer))
+        .body(Body::from(format!("client_id={client}&scope=openid")))
+        .unwrap();
+    let (reply, bytes) = send(&c.oauth, r).await;
+    (
+        reply.status(),
+        serde_json::from_slice(&bytes).unwrap_or_default(),
+    )
+}
+
 async fn device_code(c: &Console, client: &str) -> (StatusCode, serde_json::Value) {
     let (status, body, _) = form(
         c,
@@ -236,6 +255,8 @@ async fn a_device_code_is_off_until_decided_then_approved_once_into_a_dpop_bound
     assert_eq!(view["client"], "Living room TV");
     assert_eq!(view["scopes"], serde_json::json!(["openid"]));
     assert!(view["ip_prefix"].is_string());
+    // OP-155 m.3 (l), §10.4.1, Ek B 4884
+    assert!(view["country"].is_null(), "{view}");
     let csrf = view["csrf"].as_str().unwrap().to_owned();
     // §11.4.5
     let (status, _) = page(
@@ -263,6 +284,25 @@ async fn a_device_code_is_off_until_decided_then_approved_once_into_a_dpop_bound
     assert!(answer["access_token"].is_string());
     let again = poll(&c, &client, &code, &key).await;
     assert_eq!(again["error"], "invalid_grant", "{again}");
+
+    // OP-155 m.3 (l), §10.4.1, Ek B 4884
+    for (peer, country) in [
+        ("192.0.2.7", serde_json::json!("CH")),
+        ("198.51.100.7", serde_json::Value::Null),
+    ] {
+        let (status, from) = device_code_from(&c, &client, peer.parse().unwrap()).await;
+        assert_eq!(status, StatusCode::OK, "{from}");
+        let (status, view) = page(
+            &c,
+            "/v1/device/preview",
+            Some(&cookie),
+            None,
+            &serde_json::json!({ "user_code": from["user_code"] }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{view}");
+        assert_eq!(view["country"], country, "{peer}");
+    }
 
     // OP-154 m.3 (p) CR-39
     for _ in 0..5 {
