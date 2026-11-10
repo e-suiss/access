@@ -400,9 +400,12 @@ async fn this_wasnt_me_stops_the_sign_in_signals_risk_and_tells_the_person() {
     let told = *e.sent().last().unwrap();
     assert_eq!(told.0, "relay.message.semantic_notice.v1");
     assert_eq!(told.2, subject);
-    let orders = claim_orders(&e, |o| o.iter().any(|c| c.class == "risk_signal")).await;
-    assert!(orders.iter().any(|c| c.class == "risk_signal"
-        && c.content == Content::Scalar(EqValue::Text(String::from("push_not_me")))));
+    let not_me_signal = |c: &access_identity_account::domain::claims::ClaimOrder| {
+        c.class == "risk_signal"
+            && c.content == Content::Scalar(EqValue::Text(String::from("push_not_me")))
+    };
+    let orders = claim_orders(&e, |o| o.iter().any(not_me_signal)).await;
+    assert!(orders.iter().any(not_me_signal));
     let stopped = c.poll(&waiting).await;
     assert_eq!(stopped.messages(), ["push.not_me"]);
     let submits: Vec<Value> = stopped.json()["nodes"]
