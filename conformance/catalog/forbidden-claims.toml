@@ -874,3 +874,12 @@ phrases = ["custodial signing", "custodial key mode", "we hold your keys", "key 
 negation = true
 sources = ["SI-13", "SEC17", "§6.6"]
 honest = "Access has no custodial signing mode; Instance keys are held by their parties, as the provider declarations state."
+
+# IDP-34, §10.3.1, OP-156 m.3 (r)
+[[claim]]
+id = "kyc-application"
+scope = "all"
+phrases = ["Access verifies identity documents", "Access performs liveness", "Access matches faces", "built-in KYC", "built-in identity verification", "IAL3 proofing by Access"]
+negation = true
+sources = ["IDP-34", "§10.3.1", "§10.9.1"]
+honest = "Access is not a KYC application: remote identity proofing happens at an external provider, and its result is that provider's identity_proofing Claim, which the domain accepts or not."

@@ -19,6 +19,8 @@ mod fluent;
 pub(crate) mod interop;
 #[path = "rules_iys.rs"]
 mod iys;
+#[path = "rules_kyc.rs"]
+mod kyc;
 #[path = "rules_lex.rs"]
 pub(crate) mod lex;
 #[path = "rules_limits.rs"]
@@ -213,6 +215,11 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "proxy-engine",
             run: proxy::check,
+        },
+        // IDP-34, §10.3.1, OP-156 m.2 Q15
+        Check {
+            name: "kyc-boundary",
+            run: kyc::check,
         },
     ]);
     all
