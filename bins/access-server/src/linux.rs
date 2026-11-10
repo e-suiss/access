@@ -322,14 +322,14 @@ where
                     .assurance
                     .as_ref()
                     .is_some_and(|v| reaches(v, host.sudo_ct)));
-        let event = match (sudo, allowed && step_up) {
-            (false, true) => "linux.signin",
-            (true, true) => "linux.sudo",
-            (_, false) => "linux.signin_failed",
-        };
         let actor = b64url_encode(&holder.subject);
+        let ok = allowed && step_up;
         t.audit(&AuditEvent {
-            event_type: event,
+            event_type: match (ok, sudo) {
+                (true, false) => "linux.signin",
+                (true, true) => "linux.sudo",
+                (false, _) => "linux.signin_failed",
+            },
             actor: &actor,
             target: &target,
             correlation: "-",
