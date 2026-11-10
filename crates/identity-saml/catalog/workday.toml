@@ -1,0 +1,16 @@
+# SSO app catalog template (IDP-28, OP-155 m.3 (i)): data only. Creating a connection from it is
+# idp.saml.sp_register; a template that maps a Claim which selects authority is idp.saml.sp_mapping
+# (reserved, CT3, L6). `{name}` placeholders are the administrator's values.
+v = 1
+template = "workday"
+name = "Workday"
+category = "hr"
+profile = "workday"
+selects_authority = false
+parameters = ["host", "tenant"]
+
+[saml]
+entity_id = "http://www.workday.com"
+acs = "https://{host}.myworkday.com/{tenant}/login-saml.flex"
+nameid_format = "persistent"
+attributes = ["email"]

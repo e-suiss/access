@@ -383,14 +383,16 @@ impl Profile {
     }
 }
 
-/// Checks a registration and applies its template's profile, if it names one.
+/// Checks a registration and applies its catalog template, and through it the template's profile,
+/// if it names one.
 ///
 /// # Errors
 /// [`SpError`].
 pub fn register(sp: Sp) -> Result<Sp, SpError> {
     sp.check()?;
     match sp.template.clone() {
-        Some(t) => Profile::shipped(&t)?.apply(sp),
+        // IDP-28, OP-155 m.3 (i)
+        Some(t) => crate::catalog::find(&t).ok_or(SpError::Template)?.apply(sp),
         None => Ok(sp),
     }
 }

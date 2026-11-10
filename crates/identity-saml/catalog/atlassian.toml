@@ -1,0 +1,16 @@
+# SSO app catalog template (IDP-28, OP-155 m.3 (i)): data only. Creating a connection from it is
+# idp.saml.sp_register; a template that maps a Claim which selects authority is idp.saml.sp_mapping
+# (reserved, CT3, L6). `{name}` placeholders are the administrator's values.
+v = 1
+template = "atlassian"
+name = "Atlassian Cloud"
+category = "engineering"
+profile = "atlassian"
+selects_authority = false
+parameters = ["directory"]
+
+[saml]
+entity_id = "https://auth.atlassian.com/saml/{directory}"
+acs = "https://auth.atlassian.com/login/callback?connection=saml-{directory}"
+nameid_format = "email"
+attributes = ["email"]

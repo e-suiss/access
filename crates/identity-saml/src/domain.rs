@@ -2,6 +2,7 @@
 //! request decisions, canonical XML and the edge bodies.
 
 pub mod alg;
+pub mod catalog;
 pub mod profile;
 pub mod request;
 pub mod sp;

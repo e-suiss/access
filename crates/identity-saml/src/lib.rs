@@ -15,4 +15,4 @@ pub mod ports;
 
 pub use adapters::encrypt;
 pub use app::{assertion, binding, dsig, metadata, wsfed};
-pub use domain::{alg, profile, request, sp, time, uri, wire, xml};
+pub use domain::{alg, catalog, profile, request, sp, time, uri, wire, xml};
