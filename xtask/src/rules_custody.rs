@@ -3,6 +3,10 @@
 //! or code path may name a custody key until a custody signer is decided. Identifiers and string
 //! literals of non-test Rust code, deployment configuration and scripts, and SQL migrations are
 //! scanned; `non_custodial` (the assurance flag) is the one accepted use.
+//!
+//! OP-78, E59, Ek B 4631: nothing keeps a copy of a user-keyed DEK or KEK the operator could
+//! open. No identifier, literal or configuration key names key escrow, and the content-free
+//! records of user-keyed data (One's cloud key permissions) have no column for key material.
 
 use std::path::{Path, PathBuf};
 
@@ -26,7 +30,7 @@ const ALLOWLIST: &[(&str, &str)] = &[(
 
 const DEPLOY_EXTENSIONS: &[&str] = &["toml", "yml", "yaml", "json", "sh", "conf", "env"];
 
-/// The custody word in an atom, unless it is the `non_custodial` assurance flag.
+/// The custody or escrow word in an atom, unless it is the `non_custodial` assurance flag.
 pub(crate) fn custody_word(atom: &str) -> Option<String> {
     let w = words(atom);
     w.iter().enumerate().find_map(|(i, word)| {
@@ -34,9 +38,56 @@ pub(crate) fn custody_word(atom: &str) -> Option<String> {
             .checked_sub(1)
             .and_then(|p| w.get(p))
             .is_some_and(|p| p == "non");
-        let hit = word.starts_with("custod") && !(non && word == "custodial");
+        let hit = (word.starts_with("custod") && !(non && word == "custodial"))
+            || word.starts_with("escrow");
         hit.then(|| word.clone())
     })
+}
+
+/// The statement that opens a table.
+const CREATE: &str = concat!("CREATE", " TABLE ");
+
+/// The tables that record user-keyed data without its content (E59 (2), OP-78).
+const CONTENT_FREE_TABLES: &[&str] = &["access.cloud_key_"];
+
+/// Column name words that would hold key material.
+const KEY_MATERIAL: &[&str] = &["dek", "kek", "wrapped", "plaintext", "secret", "private"];
+
+/// Columns of a content-free table whose names say they hold key material (Ek B 4631).
+pub(crate) fn content_free_violations(rel_path: &str, text: &str) -> Vec<Violation> {
+    let mut out = Vec::new();
+    let mut table: Option<String> = None;
+    for (i, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix(CREATE) {
+            let name = rest.split_whitespace().next().unwrap_or_default();
+            table = CONTENT_FREE_TABLES
+                .iter()
+                .any(|t| name.starts_with(t))
+                .then(|| name.to_owned());
+            continue;
+        }
+        if trimmed.starts_with(");") {
+            table = None;
+            continue;
+        }
+        let (Some(t), Some(column)) = (&table, trimmed.split_whitespace().next()) else {
+            continue;
+        };
+        if column.starts_with("--") || column.chars().any(|c| c.is_ascii_uppercase()) {
+            continue;
+        }
+        if let Some(w) = column.split('_').find(|w| KEY_MATERIAL.contains(w)) {
+            out.push(Violation {
+                rule: RULE,
+                path: PathBuf::from(format!("{rel_path}:{}", i.saturating_add(1))),
+                message: format!(
+                    "`{t}.{column}` (`{w}`): a content-free record of user-keyed data holds no key material (OP-78, E59)"
+                ),
+            });
+        }
+    }
+    out
 }
 
 fn violation(rel_path: &str, line: usize, word: &str) -> Violation {
@@ -101,11 +152,17 @@ pub(crate) fn check(root: &Path) -> Result<Vec<Violation>, String> {
             .unwrap_or_default();
         let rust = ext == "rs" && !is_test_file(&rel_path) && !rel_path.starts_with("xtask/");
         let deploy = rel_path.starts_with("deploy/") && DEPLOY_EXTENSIONS.contains(&ext);
-        let migration = rel_path.starts_with("crates/store/migrations/") && ext == "sql";
+        let migration = (rel_path.starts_with("crates/store/migrations/")
+            || (rel_path.starts_with("services/") && rel_path.contains("/migrations/")))
+            && ext == "sql";
         if rust {
             out.extend(rust_violations(&rel_path, &read(&path)?));
         } else if deploy || migration {
-            out.extend(text_violations(&rel_path, &read(&path)?));
+            let text = read(&path)?;
+            out.extend(text_violations(&rel_path, &text));
+            if migration {
+                out.extend(content_free_violations(&rel_path, &text));
+            }
         }
     }
     Ok(out)
@@ -136,6 +193,20 @@ mod tests {
             text_violations("deploy/a.toml", "[custody]\nkek = \"x\"\n").len(),
             1
         );
+    }
+
+    // OP-78, E59, Ek B 4631
+    #[test]
+    fn no_key_escrow_and_no_key_column_in_a_content_free_record() {
+        for atom in ["KeyEscrow", "escrow_kek", "access/one/escrowed-dek"] {
+            assert!(custody_word(atom).is_some(), "{atom}");
+        }
+        let sql = format!(
+            "{CREATE}access.cloud_key_permissions (\n  tenant_id uuid NOT NULL,\n  job_key bytea NOT NULL,\n  wrapped_dek bytea,\n  PRIMARY KEY (tenant_id)\n);\n{CREATE}access.other (\n  wrapped_dek bytea\n);\n"
+        );
+        let v = content_free_violations("crates/store/migrations/x.sql", &sql);
+        assert_eq!(v.len(), 1, "{v:?}");
+        assert!(v[0].message.contains("wrapped_dek"));
     }
 
     // OP-150, SEC17
