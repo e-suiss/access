@@ -68,6 +68,9 @@ access-executor = { path = "../../services/executor", features = ["testing"] }
 access-vc-verifier = { path = "../../services/vc-verifier", features = ["testing"] }
 # OP-156 m.2 Q1
 access-product-twin = { path = "../../services/product-twin" }
+# OP-156 m.3 (p)
+access-linux-client = { path = "../../services/linux-client" }
+access-linux-module = { path = "../../services/linux-client/module" }
 access-sdk = { workspace = true, features = ["mcp"] }
 access-authority-signer = { path = "../../crates/authority-signer" }
 access-crypto = { workspace = true, features = ["testing"] }

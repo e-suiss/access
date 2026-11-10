@@ -61,7 +61,53 @@ Declared:
 
 Crates:
 
+- `access-linux-module`
+- `esuiss-access-kernel`
+- `esuiss-access-sdk`
+- `esuiss-access-verifier`
+- `esuiss-crypto`
+
+Access endpoints:
+
 - none
+
+Declared:
+
+- none
+
+## `access-linux-module` (services/linux-client/module)
+
+Crates:
+
+- `esuiss-crypto`
+
+Access endpoints:
+
+- none
+
+Declared:
+
+- none
+
+## `access-linux-nss` (services/linux-client/nss)
+
+Crates:
+
+- `access-linux-module`
+
+Access endpoints:
+
+- none
+
+Declared:
+
+- none
+
+## `access-linux-pam` (services/linux-client/pam)
+
+Crates:
+
+- `access-linux-module`
 
 Access endpoints:
 

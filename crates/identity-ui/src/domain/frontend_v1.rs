@@ -1246,21 +1246,21 @@ pub const ROUTES: &[Route] = &[
         "getSshCaKey",
         "The realm's SSH user CA public key in authorized_keys form, for TrustedUserCAKeys.",
     ),
-    planned(
+    live(
         Owner::Q13,
         Verb::Post,
         "/linux/v1/nss",
         "linuxNss",
-        "A registered Linux host's NSS lookup (passwd, group, group list) for the daemon's cache, at most 12 hours and within the host's horizon (OP-156 m.3 (p)).",
+        "A registered Linux host's NSS snapshot for the daemon's cache: the principals of the live ssh.login Grants on its server group with their ids, served offline for at most 12 hours and never past the host's horizon; the host is named by its client certificate (OP-156 m.3 (p)).",
     ),
-    planned(
+    live(
         Owner::Q13,
         Verb::Post,
         "/linux/v1/auth",
         "linuxAuth",
-        "A Linux console sign-in through a device code or an approver push, or a local FIDO2 assertion.",
+        "A Linux console sign-in for the person whose DPoP-bound access token the host polled for: allowed when a live ssh.login Grant on the host's server group names the user; the person's device-bound security keys come back for an offline sign-in within 8 hours.",
     ),
-    planned(
+    live(
         Owner::Q13,
         Verb::Post,
         "/linux/v1/sudo",

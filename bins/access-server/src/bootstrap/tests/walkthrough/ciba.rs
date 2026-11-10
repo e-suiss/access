@@ -114,10 +114,15 @@ pub(super) fn oauth_router(w: &World) -> (axum::Router, Pings) {
     let router = access_http::oauth::shared_router(service.clone());
     // OP-156 m.3 (o)
     let ssh = access_http::ssh::router(
-        service,
+        service.clone(),
         crate::ssh::SshCa::new(w.db.app.clone(), w.identity_signer.clone(), w.plane.clone()),
     );
-    let router = router.merge(ssh);
+    // OP-156 m.3 (p)
+    let linux = access_http::linux::router(
+        service,
+        crate::linux::Linux::new(w.db.app.clone(), w.plane.clone()),
+    );
+    let router = router.merge(ssh).merge(linux);
     let discovery = access_http::realm::router(access_identity_oauth::app::Discovery::new(
         PgDirectory::new(w.db.router.clone()).with_facts(w.db.app.clone()),
         SignerKeys::new(w.identity_signer.clone()),

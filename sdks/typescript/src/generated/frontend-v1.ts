@@ -2120,7 +2120,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** A registered Linux host's NSS lookup (passwd, group, group list) for the daemon's cache, at most 12 hours and within the host's horizon (OP-156 m.3 (p)). */
+        /** A registered Linux host's NSS snapshot for the daemon's cache: the principals of the live ssh.login Grants on its server group with their ids, served offline for at most 12 hours and never past the host's horizon; the host is named by its client certificate (OP-156 m.3 (p)). */
         post: operations["linuxNss"];
         delete?: never;
         options?: never;
@@ -2137,7 +2137,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** A Linux console sign-in through a device code or an approver push, or a local FIDO2 assertion. */
+        /** A Linux console sign-in for the person whose DPoP-bound access token the host polled for: allowed when a live ssh.login Grant on the host's server group names the user; the person's device-bound security keys come back for an offline sign-in within 8 hours. */
         post: operations["linuxAuth"];
         delete?: never;
         options?: never;
@@ -5836,7 +5836,15 @@ export interface operations {
             };
         };
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
@@ -5853,7 +5861,15 @@ export interface operations {
             };
         };
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
@@ -5870,7 +5886,15 @@ export interface operations {
             };
         };
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };

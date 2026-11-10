@@ -28,6 +28,7 @@ mod ids;
 mod ingest;
 mod iys;
 mod jobs;
+mod linux;
 mod login;
 mod migration;
 mod oauth;
@@ -1851,6 +1852,7 @@ async fn serve(
         keks: claim_keks,
     });
     let ssh_app = oauth_inputs.0.clone();
+    let linux_app = oauth_inputs.0.clone();
     let (authorize, pep_tokens) = authorization(
         config,
         oauth_inputs,
@@ -1892,6 +1894,11 @@ async fn serve(
             .map_or_else(|| Arc::new(tokio::sync::Notify::new()), |d| d.proxy.clone()),
         proxy_stopped,
     );
+    // OP-156 m.3 (p)
+    let linux_client = access_http::linux::router(
+        pep_tokens.clone(),
+        linux::Linux::new(linux_app, idp_plane.clone()),
+    );
     // OP-155 m.3 (q)
     let public_adp = access_http::adp::pep::with_tokens(adp.clone(), pep_tokens, issuer);
     // OP-151 m.3, m.2 M1, m.12
@@ -1925,7 +1932,7 @@ async fn serve(
         },
         console_assets,
     )?;
-    let authorize = authorize.merge(ssf).merge(ssh_ca);
+    let authorize = authorize.merge(ssf).merge(ssh_ca).merge(linux_client);
     // OP-149 m.6, m.8, m.9
     // OP-153 m.3 (w)
     let courier = Arc::new(courier);

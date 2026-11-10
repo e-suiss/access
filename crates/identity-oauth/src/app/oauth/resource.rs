@@ -64,6 +64,9 @@ pub struct RealmHolder {
     pub client_id: String,
     /// When the session's person last authenticated, ms.
     pub auth_time_ms: u64,
+    /// The session's assurance vector (§10.1.6); `None` when it cannot be read, which no
+    /// step-up accepts.
+    pub assurance: Option<access_identity_session::domain::assurance::AssuranceVector>,
 }
 
 fn text(c: &Json, name: &str) -> Option<String> {
@@ -259,6 +262,7 @@ impl<E: Env> OAuth<E> {
             jkt: jkt.0,
             client_id: at.client_id,
             auth_time_ms: u64::try_from(session.auth_time_ms).unwrap_or(0),
+            assurance: serde_json::from_slice(&session.assurance).ok(),
         }))
     }
 

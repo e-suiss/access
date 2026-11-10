@@ -8,6 +8,7 @@
 mod ciba;
 mod cloud;
 mod cross_org;
+mod linux;
 mod local_agent;
 mod mcp_proxy;
 mod push;
@@ -184,6 +185,10 @@ pub(super) struct Desk {
     pub(super) agent_http: Http,
     /// The CIBA pings the realm sent (OP-155 m.3 (l)).
     pub(super) pings: ciba::Pings,
+    /// The deployment's test PKI (OP-156 m.3 (p)): its CA and the PEP client leaf.
+    pub(super) tls: TestTls,
+    /// The listener's address.
+    pub(super) addr: std::net::SocketAddr,
     token: KeyStore,
     stop: Option<tokio::sync::oneshot::Sender<()>>,
 }
@@ -385,6 +390,8 @@ impl Desk {
             adp,
             agent_http,
             pings,
+            tls,
+            addr,
             token,
             stop: Some(stop),
         }

@@ -4359,10 +4359,17 @@
     "/linux/v1/nss": {
       "post": {
         "operationId": "linuxNss",
-        "summary": "A registered Linux host's NSS lookup (passwd, group, group list) for the daemon's cache, at most 12 hours and within the host's horizon (OP-156 m.3 (p)).",
+        "summary": "A registered Linux host's NSS snapshot for the daemon's cache: the principals of the live ssh.login Grants on its server group with their ids, served offline for at most 12 hours and never past the host's horizon; the host is named by its client certificate (OP-156 m.3 (p)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -4376,17 +4383,23 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/linux/v1/auth": {
       "post": {
         "operationId": "linuxAuth",
-        "summary": "A Linux console sign-in through a device code or an approver push, or a local FIDO2 assertion.",
+        "summary": "A Linux console sign-in for the person whose DPoP-bound access token the host polled for: allowed when a live ssh.login Grant on the host's server group names the user; the person's device-bound security keys come back for an offline sign-in within 8 hours.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -4400,8 +4413,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/linux/v1/sudo": {
@@ -4409,8 +4421,15 @@
         "operationId": "linuxSudo",
         "summary": "A sudo step-up, CT2 by default: a phishing-resistant authenticator; a push alone is not enough and nothing is served offline.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -4424,8 +4443,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/me/cloud-key-permissions": {
