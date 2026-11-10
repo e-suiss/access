@@ -1447,20 +1447,17 @@ struct Background {
     jwks: ReadyFlag,
 }
 
+/// The SNI resolver and the ACME client the custom domain task serves with (OP-156 m.3 (i)).
+type DomainServing = (
+    Arc<access_http::tls::Sni>,
+    Option<access_identity_domain::adapters::https::AcmeHttps>,
+);
+
 impl Background {
     fn start(
         config: &Config,
         pools: &Pools,
-        (outbound, (keks, (sni, acme))): (
-            Outbound,
-            (
-                login::RealmKeks,
-                (
-                    Arc<access_http::tls::Sni>,
-                    Option<access_identity_domain::adapters::https::AcmeHttps>,
-                ),
-            ),
-        ),
+        (outbound, (keks, (sni, acme))): (Outbound, (login::RealmKeks, DomainServing)),
         ids: &Arc<ids::CellIds>,
         wake: Option<Arc<tokio::sync::Notify>>,
     ) -> Result<Self, String> {
