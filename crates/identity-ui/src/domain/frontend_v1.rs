@@ -1211,7 +1211,14 @@ pub const ROUTES: &[Route] = &[
         "retireApprover",
         "Retires an approver device; nothing is deleted (OP-73).",
     ),
-    planned(
+    live(
+        Owner::Q9,
+        Verb::Get,
+        "/v1/first-contact/keys",
+        "getFirstContactKeys",
+        "The realm's RFC 9578 issuer directory of first-contact token keys, the current 30-day key first and the previous one after it; public, as Relay and agents read it (E58, OP-156 m.3 (z)).",
+    ),
+    live(
         Owner::Q9,
         Verb::Post,
         "/v1/first-contact/tokens",

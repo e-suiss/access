@@ -2517,6 +2517,7 @@ mod doorbell;
 mod exchange;
 mod executor;
 mod experience;
+mod first_contact;
 mod management;
 mod mcp;
 mod privacy;

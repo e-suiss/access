@@ -138,3 +138,19 @@ Writes that show a secret once are not accepted in a job. Results are shown for 
 
 List endpoints read from the read replica when `[database] replica_host` is set; a single
 resource, which conditional writes compare against, is always read from the primary.
+
+## Relay and first-contact routes
+
+`POST /relay/v1/iys-status` takes Relay's report on one İYS consent record:
+`{"tenant", "realm", "record", "status": "recorded" | "failed", "reason"?, "at"}`, where `record`
+is the CloudEvents id of the `relay.message.iys_consent.v1` message the record came in. Only the
+platform product client named by `[suiss] relay_product` may report, with its RFC 7523
+assertion; any other client gets `403 not-relay`. A report changes no preference and is shown in
+the person's `GET /v1/account/preferences` under `iys`. Access never writes to İYS itself;
+`cargo xtask check no-iys-client` keeps every İYS host out of the code.
+
+`GET /v1/first-contact/keys` is the realm's RFC 9578 issuer directory: the current 30-day
+RSA-2048 PSS token key and the previous one. `POST /v1/first-contact/tokens` takes one blinded
+type 2 request `{"token_type": 2, "truncated_key_id", "blinded_msg"}` from a signed-in person and
+answers `{"blind_sig"}`, at most 20 a day per account (`429 first-contact-limit`). The token the
+client finalizes is a standard RSASSA-PSS token that names nobody and grants nothing.
