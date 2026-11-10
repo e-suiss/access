@@ -1,0 +1,23 @@
+[package]
+name = "access-gw-saml"
+description = "Access SAML gateway (OP-155 m.3 (c), (d), MD-18, IDI-7): reads and verifies SAML and WS-Federation messages through the parser worker and redeems access-server's one-use attestation handles over the edge channel; it signs nothing and stores nothing."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-edge-core = { workspace = true, features = ["channel"] }
+access-identity-saml = { workspace = true }
+access-internal-api = { workspace = true }
+httparse = { workspace = true, features = ["std"] }
+suiss-sandbox = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "time"] }
+
+[dev-dependencies]
+access-identity-saml = { workspace = true }
+
+[lints]
+workspace = true
