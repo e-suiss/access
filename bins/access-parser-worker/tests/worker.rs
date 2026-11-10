@@ -232,4 +232,30 @@ mod sandboxed {
         let facts = access_edge_core::saml::Facts::decode(&output).unwrap();
         assert_eq!(facts.issuer, "https://sp.test");
     }
+
+    // IDP-17, RR-28, OP-155 m.3 (o)
+    #[tokio::test]
+    #[ignore = "needs root for the Linux lockdown; run by `just test-parser-worker` in the CI sandbox job"]
+    async fn negotiate_tokens_are_read_in_a_worker() {
+        let s = supervisor("spnego", 1).await;
+        let client = ParserClient::new(s.socket.clone(), Some(0));
+        let mut ntlm = b"NTLMSSP\0".to_vec();
+        ntlm.extend_from_slice(&[1, 0, 0, 0]);
+        let Reply::Ok { output, .. } = client.parse(Op::SpnegoRead, ntlm).await.unwrap() else {
+            panic!("an NTLM token is summarised");
+        };
+        assert_eq!(
+            access_edge_core::spnego::Token::decode(&output)
+                .unwrap()
+                .mech,
+            access_edge_core::spnego::Mech::Ntlm
+        );
+        assert_eq!(
+            client
+                .parse(Op::SpnegoRead, vec![0x60, 0x80, 0x00, 0x00])
+                .await
+                .unwrap(),
+            Reply::Refused(String::from("spnego-malformed"))
+        );
+    }
 }

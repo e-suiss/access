@@ -28,7 +28,8 @@ parser-request-header = {
 ; debug build (U43 test hook) and a release worker refuses it with `op-refused`.
 parser-op = "xml.check" / "xml.inflate" / "der.check" / "test.abort" /
   "tl.read" /                           ; P12: ETSI TS 119 612 list summary (OP-155 m.3 (p))
-  "saml.request" / "saml.redirect"
+  "saml.request" / "saml.redirect" /
+  "spnego.read"                         ; P11: Kerberos Negotiate token summary (OP-155 m.3 (o))
 
 parser-reply-header = parser-ok / parser-refused / parser-worker-failed
 
@@ -63,7 +64,8 @@ parser-refusal = "op-refused" / "frame-malformed" / "deflate-malformed" /
   "signature-alg" / "signature-no-key" / "signature-invalid" / "signature-malformed" /
   "signature-digest-alg" / "signature-multiple" / "signature-not-enveloped" /
   "signature-reference-count" / "signature-c14n" / "signature-reference" /
-  "signature-transform" / "signature-digest" / "signature-missing"
+  "signature-transform" / "signature-digest" / "signature-missing" /
+  "spnego-malformed" / "spnego-mech"    ; P11
 
 ; P12: the `ok` segment of tl.read, deterministic CBOR. Certificates are DER; the worker verifies
 ; no signature.
@@ -125,4 +127,17 @@ saml-facts = {
 
 saml-redirect-verified = {
   verified: tstr,
+; P11: the `ok` segment of spnego.read, deterministic CBOR. A raw NTLMSSP message or a
+; NegTokenInit that offers NTLM first is `{ mech: "ntlm" }`, which the gateway refuses (IDP-17).
+; Otherwise the first mechanism must be Kerberos (1.2.840.113554.1.2.2 or 1.2.840.48018.1.2.2)
+; with its token; the AP-REQ's ticket gives these facts in the clear and nothing is decrypted.
+; `token` is the Kerberos GSS-API initial context token for libgssapi. Any other mechanism, or
+; Kerberos offered without its token, is `spnego-mech`.
+spnego-summary = { mech: "ntlm" } / {
+  mech: "kerberos",
+  realm: tstr .size (1..255),
+  sname: tstr .size (1..512),           ; components joined by "/"
+  etype: int,
+  ? kvno: uint .le 4294967295,
+  token: bstr .size (1..8192),
 }

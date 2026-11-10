@@ -10,7 +10,7 @@ use access_edge_core::ipc::{Op, Reply, Request};
 use access_edge_core::pool::{MAX_REQUESTS, read_frame};
 use suiss_sandbox::{LandlockAbi, Lockdown, Profile};
 
-use crate::{parse, saml, supervisor, trusted_list};
+use crate::{parse, saml, spnego, supervisor, trusted_list};
 
 /// Address space of one worker.
 #[cfg_attr(
@@ -93,6 +93,7 @@ pub(crate) fn handle(r: Request) -> Reply {
         Op::TlRead => trusted_list::read(&r.input),
         Op::SamlRequest => saml::request(&r.input),
         Op::SamlRedirect => saml::redirect(&r.input),
+        Op::SpnegoRead => spnego::read(&r.input),
     };
     match checked {
         Ok((summary, output)) => Reply::Ok { summary, output },

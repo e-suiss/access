@@ -13,6 +13,7 @@ mod parse;
 mod saml;
 #[cfg(test)]
 mod saml_tests;
+mod spnego;
 mod supervisor;
 mod trusted_list;
 mod work;

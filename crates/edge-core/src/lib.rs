@@ -15,7 +15,8 @@
 //! 6. **Governor**: [`governor::Governor`] token buckets per caller key.
 //! 7. **Health and metrics**: [`health::Health`], labelled by call and outcome only (OP-47).
 //!
-//! Untrusted XML and DER are parsed only in the parser worker ([`parser`], [`pool`], [`ipc`]).
+//! Untrusted XML, DER and ASN.1 are parsed only in the parser worker ([`parser`], [`pool`],
+//! [`ipc`]); [`spnego`] holds what it reads from a Kerberos `Negotiate` token.
 
 #[cfg(feature = "channel")]
 pub mod channel;
@@ -27,6 +28,7 @@ pub mod ipc;
 pub mod parser;
 pub mod pool;
 pub mod saml;
+pub mod spnego;
 
 #[cfg(feature = "channel")]
 pub use crate::core::{EdgeCore, EdgeError};

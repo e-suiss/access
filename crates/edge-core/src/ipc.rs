@@ -34,9 +34,12 @@ pub enum Op {
     SamlRequest,
     /// Verifies a detached HTTP-Redirect signature (`crate::saml::Redirect`).
     SamlRedirect,
+    /// Reads a Kerberos `Negotiate` token (SPNEGO or a raw Kerberos initial context token) into
+    /// its [`crate::spnego::Token`] (OP-155 m.3 (o)); the segment of the reply is the summary.
+    SpnegoRead,
 }
 
-const OPS: [(&str, Op); 7] = [
+const OPS: [(&str, Op); 8] = [
     ("xml.check", Op::XmlCheck),
     ("xml.inflate", Op::XmlInflate),
     ("der.check", Op::DerCheck),
@@ -44,6 +47,7 @@ const OPS: [(&str, Op); 7] = [
     ("tl.read", Op::TlRead),
     ("saml.request", Op::SamlRequest),
     ("saml.redirect", Op::SamlRedirect),
+    ("spnego.read", Op::SpnegoRead),
 ];
 
 impl Op {
