@@ -11,6 +11,7 @@
 
 pub mod bounds;
 pub mod claims;
+pub mod http_sig;
 pub mod introspection;
 pub mod keys;
 pub mod status;
