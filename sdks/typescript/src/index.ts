@@ -115,6 +115,7 @@ export * as auth from "./auth.js";
 export * as agent from "./agent/index.js";
 export * as authorize from "./authorize.js";
 export * as reason from "./reason.js";
+export * as sso from "./sso/index.js";
 export type * as AccessApi from "./generated/access-v1.js";
 export type * as AdminApi from "./generated/admin-v1.js";
 export type * as FrontendApi from "./generated/frontend.js";
