@@ -68,3 +68,21 @@ decision that let the request through, 60 seconds. Applications verify it with
 Turning on `X-Access-User` (CT2) runs a setup check first: if Access can open a connection to the
 registered upstream, anyone could, so the change is refused and audited. A proxy without an
 upstream cannot pass the check.
+
+## MCP mode
+
+The MCP gateway is a proxy registered the same way for an MCP server's host. Before it shows or
+calls a tool it asks Access:
+
+- `POST /proxy/v1/mcp/tools` with each tool the server lists and its pin answers which ones
+  stand pinned. A pin is the base64url SHA-256 of the RFC 8785 form of the tool's `name`,
+  `description`, `inputSchema` and `annotations`.
+- `POST /proxy/v1/mcp/calls` carries one `tools/call`: the tool, its pin, and the AuthZEN
+  evaluation of the agent's own `commit` statement with the gateway as PEP. The intent must be
+  the registration's action on `namespace:[proxy, tool]` in the realm's governing domain.
+
+`idp.proxy.mcp_pin` (CT2) pins a proxy's whole tool list. Pinning is strict: a tool whose
+definition changed, or that was never pinned, is blocked before any decision (`409
+mcp-tool-unpinned`) and audited as `mcp_gateway.tool_blocked`. Every decided call writes one
+`mcp_gateway.call` audit row: the Exercise, the tool and its pin, and the agent's Instance as
+actor. The arguments are never recorded.

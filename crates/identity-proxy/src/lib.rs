@@ -13,9 +13,14 @@
 //! - The application receives an ES256 `access-app+jwt` of 60 s in `Access-Identity`, and the
 //!   plain `X-Access-User`/`X-Access-Email` only under `idp.proxy.plain_headers` (CT2).
 //!
+//! - In MCP mode the proxy is the MCP gateway: it asks before it shows or calls a tool, and a
+//!   tool not pinned by `idp.proxy.mcp_pin` (CT2) with its definition is blocked ([`mcp`],
+//!   [`domain::mcp`], AG-42).
+//!
 //! Nothing here answers for Access when it cannot be reached: the request is refused (MD-8,
 //! TI-9).
 
 pub mod app;
 pub mod domain;
+pub mod mcp;
 pub mod ports;
