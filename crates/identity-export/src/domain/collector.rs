@@ -53,12 +53,12 @@ fn events(records: &[AuditRecord]) -> Result<Vec<Value>, TaxonomyError> {
 fn auth(spec: &SinkSpec, secret: Option<&SinkSecret>) -> Vec<(String, String)> {
     let mut h = vec![(String::from(copy::HEADER), String::from(copy::VALUE))];
     if let Some(s) = secret {
-        match text(&spec.settings, "auth_header") {
-            Some(name) => h.push((String::from(name), String::from(s.expose()))),
-            None => h.push((
-                String::from("Authorization"),
-                format!("Bearer {}", s.expose()),
-            )),
+        if let Some(name) = text(&spec.settings, "auth_header") {
+            h.push((String::from(name), String::from(s.expose())));
+        } else {
+            let mut value = String::from("Bearer ");
+            value.push_str(s.expose());
+            h.push((String::from("Authorization"), value));
         }
     }
     h
@@ -73,12 +73,12 @@ pub fn sentinel_token(spec: &SinkSpec, secret: &SinkSecret) -> (String, String) 
         || format!("https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"),
         String::from,
     );
-    let form = format!(
-        "grant_type=client_credentials&client_id={}&client_secret={}&scope={}",
-        form_escape(text(m, "client_id").unwrap_or_default()),
-        form_escape(secret.expose()),
-        form_escape(SENTINEL_SCOPE),
-    );
+    let mut form = String::from("grant_type=client_credentials&client_id=");
+    form.push_str(&form_escape(text(m, "client_id").unwrap_or_default()));
+    form.push_str("&client_secret=");
+    form.push_str(&form_escape(secret.expose()));
+    form.push_str("&scope=");
+    form.push_str(&form_escape(SENTINEL_SCOPE));
     (url, form)
 }
 

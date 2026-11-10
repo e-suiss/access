@@ -257,8 +257,9 @@ pub fn blind(n: &[u8], message: &[u8]) -> Result<Blinded, BlindError> {
         return Err(BlindError::Key);
     }
     let rng = SystemRandom::new();
-    let mut salt = [0_u8; SALT_LEN];
-    rng.fill(&mut salt).map_err(|_| BlindError::Random)?;
+    let salt: [u8; SALT_LEN] = aws_lc_rs::rand::generate(&rng)
+        .map_err(|_| BlindError::Random)?
+        .expose();
     let encoded = Zeroizing::new(pss_encode(message, &salt)?);
     let ctx = Ctx::new()?;
     let modulus = Bn::of(n)?;

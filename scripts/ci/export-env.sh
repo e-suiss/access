@@ -59,7 +59,7 @@ source s_tls {
     syslog(transport("tls") port(6514)
         tls(key-file("/certs/server.key") cert-file("/certs/server.crt") peer-verify(optional-untrusted)));
 };
-destination d_out { file("/out/messages.log" template("${MSGHDR}${MSG}\n")); };
+destination d_out { file("/out/messages.log" perm(0644) template("${MSGHDR}${MSG}\n")); };
 log { source(s_tls); destination(d_out); };
 CONF
     docker run --detach --name access-syslog-ng --network host \
