@@ -1,0 +1,258 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT ciba_id, client_uuid, subject_id, domain_id, nonce, intent, details, scope,\n                    binding_message, mode, notification_token, ping_handle, created_ms, expires_ms,\n                    interval_s,\n                    polled_ms, decision, session_id, contribution, used_ms\n               FROM access.oauth_ciba_requests\n              WHERE tenant_id = $1 AND realm_id = $2 AND ciba_id = $3 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ciba_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "ciba_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "client_uuid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "client_uuid"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "domain_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "domain_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "nonce",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "intent",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "intent"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "details",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "details"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "scope",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "scope"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "binding_message",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "binding_message"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "mode",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "mode"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "notification_token",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "notification_token"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "ping_handle",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "ping_handle"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "created_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "created_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "interval_s",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "interval_s"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "polled_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "polled_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "decision",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "decision"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "contribution",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "contribution"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "used_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_ciba_requests",
+            "name": "used_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "5c9ee83f6d05d98cfd6447936f78950a7dd53b905827f218987f4c12af9b36e6"
+}

@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM access.oauth_ciba_requests\n                WHERE tenant_id = $1 AND realm_id = $2\n                  AND ((domain_id = $3 AND nonce = $4 AND decision = 'approved')\n                       OR contribution = $5)) AS \"answered!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "answered!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "2ef3108cc8428bc6a3284d86ca2c04eaf3c1fc8b0727393ff6ca56b6b5bb7dd5"
+}

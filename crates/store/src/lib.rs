@@ -16,6 +16,7 @@ pub mod backchannel;
 pub mod bodies;
 pub mod certificate;
 pub mod challenges;
+pub mod ciba;
 pub mod claims;
 pub mod client_profiles;
 pub mod clients;

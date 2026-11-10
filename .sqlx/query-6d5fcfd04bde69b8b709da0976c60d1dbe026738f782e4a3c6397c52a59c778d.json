@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT enabled, login_hint, ping_clients, ping_endpoints FROM access.idp_ciba_settings\n              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.idp_ciba_settings",
+            "name": "enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "login_hint",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.idp_ciba_settings",
+            "name": "login_hint"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "ping_clients",
+        "type_info": "UuidArray",
+        "origin": {
+          "Table": {
+            "table": "access.idp_ciba_settings",
+            "name": "ping_clients"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "ping_endpoints",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.idp_ciba_settings",
+            "name": "ping_endpoints"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "6d5fcfd04bde69b8b709da0976c60d1dbe026738f782e4a3c6397c52a59c778d"
+}

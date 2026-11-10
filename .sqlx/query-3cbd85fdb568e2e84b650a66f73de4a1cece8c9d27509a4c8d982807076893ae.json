@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.oauth_ciba_requests SET pinged_ms = $4\n              WHERE tenant_id = $1 AND realm_id = $2 AND ciba_id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3cbd85fdb568e2e84b650a66f73de4a1cece8c9d27509a4c8d982807076893ae"
+}
