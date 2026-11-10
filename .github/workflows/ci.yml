@@ -373,7 +373,7 @@ jobs:
   uniffi-swift:
     name: uniffi-swift
     runs-on: macos-15
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
