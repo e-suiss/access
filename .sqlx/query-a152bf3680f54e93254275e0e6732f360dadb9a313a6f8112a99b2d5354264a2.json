@@ -1,0 +1,208 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.request, r.caller, r.domain_id, r.subject, r.mode, r.query, r.nonce, r.state,\n                    r.return_uri, r.created_ms, r.expires_ms,\n                    o.outcome AS \"outcome?\", o.reason, o.detail AS \"detail?\",\n                    o.response_code, o.recorded_ms AS \"recorded_ms?\"\n               FROM vc_verifier.requests r\n               LEFT JOIN vc_verifier.outcomes o ON o.request = r.request\n              WHERE r.request = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "vc_verifier.requests",
+            "name": "request"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "caller",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "vc_verifier.requests",
+            "name": "caller"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "domain_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "vc_verifier.requests",
+            "name": "domain_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "subject",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "vc_verifier.requests",
+            "name": "subject"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "mode",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "vc_verifier.requests",
+            "name": "mode"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "query",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "vc_verifier.requests",
+            "name": "query"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "nonce",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "vc_verifier.requests",
+            "name": "nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "vc_verifier.requests",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "return_uri",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "vc_verifier.requests",
+            "name": "return_uri"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "created_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "vc_verifier.requests",
+            "name": "created_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "vc_verifier.requests",
+            "name": "expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "outcome?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "vc_verifier.outcomes",
+            "name": "outcome"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "vc_verifier.outcomes",
+            "name": "reason"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "detail?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "vc_verifier.outcomes",
+            "name": "detail"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "response_code",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "vc_verifier.outcomes",
+            "name": "response_code"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "recorded_ms?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "vc_verifier.outcomes",
+            "name": "recorded_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "a152bf3680f54e93254275e0e6732f360dadb9a313a6f8112a99b2d5354264a2"
+}

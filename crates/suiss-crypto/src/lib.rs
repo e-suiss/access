@@ -18,6 +18,8 @@ pub mod digest;
 #[cfg(feature = "aws-lc")]
 pub mod dit;
 #[cfg(feature = "aead")]
+pub mod ecdh_es;
+#[cfg(feature = "aead")]
 pub mod envelope;
 #[cfg(feature = "verify")]
 pub mod note;

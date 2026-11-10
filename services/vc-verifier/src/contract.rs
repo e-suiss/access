@@ -1,6 +1,5 @@
 //! The verifier contract (OP-65, OP-155 m.3 (p)): the routes of `/vc-verifier/v1/*` and their
-//! `OpenAPI` 3.1 document, committed as `sdks/openapi/vc-verifier-v1.json`. A route not yet
-//! served answers `501 not-yet-served`.
+//! `OpenAPI` 3.1 document, committed as `sdks/openapi/vc-verifier-v1.json`.
 
 use serde_json::{Map, Value, json};
 
@@ -42,7 +41,7 @@ pub struct Route {
     pub live: bool,
 }
 
-const fn planned(
+const fn live(
     verb: Verb,
     path: &'static str,
     operation: &'static str,
@@ -53,37 +52,37 @@ const fn planned(
         path,
         operation,
         summary,
-        live: false,
+        live: true,
     }
 }
 
 /// Every route.
 pub const ROUTES: &[Route] = &[
-    planned(
+    live(
         Verb::Post,
         "/vc-verifier/v1/presentations",
         "createPresentationRequest",
-        "Starts a presentation request for a realm: the DCQL query, the nonce and the response mode direct_post.jwt; answers the request URI the wallet opens (HAIP).",
+        "Starts a presentation request for a domain and subject Party (Authorization: Bearer caller key): the DCQL query naming exactly the claims asked, and same-device (with return_uri) or cross-device mode; answers the request URI and the openid4vp:// link the wallet opens, as a link or a QR code (HAIP).",
     ),
-    planned(
+    live(
         Verb::Get,
         "/vc-verifier/v1/requests/{request}",
         "getRequestObject",
         "The signed request object the wallet fetches by request_uri (application/oauth-authz-req+jwt).",
     ),
-    planned(
+    live(
         Verb::Post,
         "/vc-verifier/v1/responses/{request}",
         "postWalletResponse",
-        "The wallet's encrypted direct_post.jwt response: SD-JWT VC or mdoc, ES256 only; W3C VCs only as VC-JOSE-COSE, never Data Integrity proofs.",
+        "The wallet's encrypted direct_post.jwt response (form field response): SD-JWT VC or mdoc, ES256 only, disclosing nothing beyond the DCQL query; a same-device wallet gets a redirect_uri carrying a one-time response_code.",
     ),
-    planned(
+    live(
         Verb::Get,
         "/vc-verifier/v1/presentations/{request}",
         "getPresentationResult",
-        "The request's outcome for the caller that started it: verified and sent to Claim Ingest as a Claim, refused with a reason, or pending; never the disclosed values.",
+        "The request's outcome for the caller that started it (Authorization: Bearer; same-device needs response_code): verified with the Claims sent to Claim Ingest and their dispositions, refused with a reason, pending or expired; never the disclosed values.",
     ),
-    planned(
+    live(
         Verb::Get,
         "/vc-verifier/v1/trusted-lists",
         "getTrustedListState",

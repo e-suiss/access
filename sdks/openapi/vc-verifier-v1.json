@@ -75,15 +75,21 @@
           }
         },
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "Starts a presentation request for a realm: the DCQL query, the nonce and the response mode direct_post.jwt; answers the request URI the wallet opens (HAIP).",
-        "x-suiss-status": "planned"
+        "summary": "Starts a presentation request for a domain and subject Party (Authorization: Bearer caller key): the DCQL query naming exactly the claims asked, and same-device (with return_uri) or cross-device mode; answers the request URI and the openid4vp:// link the wallet opens, as a link or a QR code (HAIP)."
       }
     },
     "/vc-verifier/v1/presentations/{request}": {
@@ -101,15 +107,21 @@
           }
         ],
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "The request's outcome for the caller that started it: verified and sent to Claim Ingest as a Claim, refused with a reason, or pending; never the disclosed values.",
-        "x-suiss-status": "planned"
+        "summary": "The request's outcome for the caller that started it (Authorization: Bearer; same-device needs response_code): verified with the Claims sent to Claim Ingest and their dispositions, refused with a reason, pending or expired; never the disclosed values."
       }
     },
     "/vc-verifier/v1/requests/{request}": {
@@ -127,15 +139,21 @@
           }
         ],
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "The signed request object the wallet fetches by request_uri (application/oauth-authz-req+jwt).",
-        "x-suiss-status": "planned"
+        "summary": "The signed request object the wallet fetches by request_uri (application/oauth-authz-req+jwt)."
       }
     },
     "/vc-verifier/v1/responses/{request}": {
@@ -162,30 +180,42 @@
           }
         },
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "The wallet's encrypted direct_post.jwt response: SD-JWT VC or mdoc, ES256 only; W3C VCs only as VC-JOSE-COSE, never Data Integrity proofs.",
-        "x-suiss-status": "planned"
+        "summary": "The wallet's encrypted direct_post.jwt response (form field response): SD-JWT VC or mdoc, ES256 only, disclosing nothing beyond the DCQL query; a same-device wallet gets a redirect_uri carrying a one-time response_code."
       }
     },
     "/vc-verifier/v1/trusted-lists": {
       "get": {
         "operationId": "getTrustedListState",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "summary": "The trusted lists the verifier loaded (EU LoTL and TLs): sequence number, next update and whether the XAdES signature verified in the parser worker.",
-        "x-suiss-status": "planned"
+        "summary": "The trusted lists the verifier loaded (EU LoTL and TLs): sequence number, next update and whether the XAdES signature verified in the parser worker."
       }
     }
   }

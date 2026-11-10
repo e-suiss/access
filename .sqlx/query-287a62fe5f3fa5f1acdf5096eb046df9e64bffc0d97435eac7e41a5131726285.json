@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO vc_verifier.trusted_lists (loaded_ms, snapshot) VALUES ($1, $2)\n             ON CONFLICT (loaded_ms) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "287a62fe5f3fa5f1acdf5096eb046df9e64bffc0d97435eac7e41a5131726285"
+}

@@ -1,6 +1,5 @@
 //! OP-65, OP-155 m.3 (p), m.4: the committed verifier contract (`sdks/openapi/vc-verifier-v1.json`)
-//! is what the route table produces, and every declared route answers `501 not-yet-served`
-//! through the real router. `ACCESS_UPDATE_CONTRACTS=1` rewrites the document.
+//! is what the route table produces. `ACCESS_UPDATE_CONTRACTS=1` rewrites the document.
 
 #![allow(
     clippy::unwrap_used,
@@ -12,12 +11,8 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use access_vc_verifier::contract::{ROUTES, Verb, openapi};
-use access_vc_verifier::router;
-use axum::body::{Body, to_bytes};
-use axum::http::{Request, StatusCode};
+use access_vc_verifier::contract::{ROUTES, openapi};
 use serde_json::Value;
-use tower::ServiceExt as _;
 
 fn path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../sdks/openapi/vc-verifier-v1.json")
@@ -53,51 +48,4 @@ fn committed_openapi_matches_the_code() {
         "{} is stale; run `just vc-verifier-contract`",
         p.display()
     );
-}
-
-// OP-155 m.4
-#[tokio::test]
-async fn every_declared_route_answers_not_yet_served() {
-    for r in ROUTES.iter().filter(|r| !r.live) {
-        let uri = r.path.replace('{', "x").replace('}', "");
-        let method = match r.verb {
-            Verb::Get => "GET",
-            Verb::Post => "POST",
-        };
-        let answer = router()
-            .oneshot(
-                Request::builder()
-                    .method(method)
-                    .uri(&uri)
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(
-            answer.status(),
-            StatusCode::NOT_IMPLEMENTED,
-            "{}",
-            r.operation
-        );
-        assert_eq!(
-            answer.headers()["content-type"],
-            "application/problem+json",
-            "{}",
-            r.operation
-        );
-        let body: Value =
-            serde_json::from_slice(&to_bytes(answer.into_body(), 1 << 16).await.unwrap()).unwrap();
-        assert_eq!(body["code"], "not-yet-served", "{}", r.operation);
-    }
-    let unknown = router()
-        .oneshot(
-            Request::builder()
-                .uri("/vc-verifier/v1/other")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(unknown.status(), StatusCode::NOT_FOUND);
 }

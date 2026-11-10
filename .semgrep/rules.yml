@@ -15,6 +15,9 @@ rules:
         - "services/executor/src/store.rs"
         - "services/executor/src/testing.rs"
         - "services/executor/tests/store.rs"
+        # OP-155 m.3 (p)
+        - "services/vc-verifier/src/store.rs"
+        - "services/vc-verifier/src/testing.rs"
     pattern-either:
       - pattern: sqlx::query(...)
       - pattern: sqlx::query_as(...)

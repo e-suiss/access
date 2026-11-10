@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO vc_verifier.outcomes\n               (request, outcome, reason, detail, response_code, recorded_ms)\n             VALUES ($1, $2, $3, $4, $5, $6)\n             ON CONFLICT (request) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "76ad1733253bc6652f96bd234798e18e60da03d787973ad7b7d51c6c1c04d11d"
+}
