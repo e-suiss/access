@@ -1190,6 +1190,10 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "putCiba"
         | "putCertificateLogin"
         | "putMtlsAliases"
+        // OP-155 m.3 (f), (o)
+        | "registerRadiusClient"
+        | "putKeytabPolicy"
+        | "replaceKeytab"
         | "createCrossAppConnection"
         | "retireCrossAppConnection"
         // OP-155 m.3 (g)
@@ -1455,6 +1459,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             | Invalid::NoSamlSp
             | Invalid::NoCrossAppConnection
             | Invalid::NoScimClient
+            | Invalid::NoGateway
             | Invalid::NoDomain => &codes::NOT_FOUND,
         },
         AdminError::Issuer(_) | AdminError::NoRealm => &codes::NOT_FOUND,

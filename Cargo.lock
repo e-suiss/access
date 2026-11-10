@@ -313,6 +313,7 @@ dependencies = [
  "access-telemetry",
  "esuiss-access-kernel",
  "esuiss-crypto",
+ "rcgen",
  "serde_json",
  "thiserror",
  "time",

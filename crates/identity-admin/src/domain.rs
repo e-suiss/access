@@ -11,6 +11,7 @@ pub use access_identity_hooks::domain::{
     Disclosure, ExtensionPolicy, HookChange, HookPoint, HookSpec, OnNoAnswer, Signing,
 };
 use access_identity_oauth::adapters::outbound::DeclaredTargets;
+use access_internal_api::edge::GatewayKind;
 use access_internal_api::idp::{IdpAction, RESOURCE_NAMESPACE};
 use access_internal_api::instances::PlatformProduct;
 use access_kernel::digest::Digest;
@@ -29,6 +30,7 @@ pub mod certificate;
 pub mod ciba;
 pub mod dns;
 pub mod federation;
+pub mod gateway;
 pub mod org;
 pub mod provision;
 pub use access_identity_risk::domain::mode::ProtectionMode;
@@ -506,6 +508,9 @@ pub enum Invalid {
     /// No live SCIM client or target by that name.
     #[error("no such scim client")]
     NoScimClient,
+    /// No live gateway of that kind and name (OP-155 m.3 (f), (o)).
+    #[error("no such gateway")]
+    NoGateway,
 }
 
 impl Invalid {
@@ -615,6 +620,7 @@ impl Invalid {
             Self::RecoveryGrace => "recovery-grace",
             Self::ScimClient => "invalid-scim-client",
             Self::NoScimClient => "no-such-scim-client",
+            Self::NoGateway => "no-such-gateway",
         }
     }
 }
@@ -1805,6 +1811,20 @@ pub enum Change {
     /// `idp.realm.certificate_login` (CT2): certificate, PIV and CAC sign-in, turned on, changed
     /// or off (OP-155 m.3 (m)).
     CertificateLogin(certificate::CertificateLogin),
+    /// `idp.gateway.radius_client_register` (CT2): a `RadSec` client of a RADIUS gateway
+    /// (OP-155 m.3 (f)).
+    GatewayRadiusClientRegister(gateway::RadiusClient),
+    /// `idp.gateway.keytab_policy` (CT2): a Kerberos gateway's SPN and rotation period
+    /// (OP-155 m.3 (o)).
+    GatewayKeytabPolicy(gateway::KeytabPolicy),
+    /// `idp.gateway.keytab_emergency` (reserved, CT3): key versions below this one are refused at
+    /// once (OP-155 m.3 (o)).
+    GatewayKeytabEmergency {
+        /// The Kerberos gateway's name.
+        gateway: String,
+        /// The replacement keytab's key version.
+        kvno: u32,
+    },
     /// `idp.realm.mtls_aliases` (CT2): whether the realm publishes `mtls_endpoint_aliases`
     /// (OP-155 m.3 (m), §10.4.3).
     MtlsAliases(bool),
@@ -2176,6 +2196,9 @@ impl Change {
             Self::Ciba(c) if c.enabled => IdpAction::RealmCiba,
             Self::Ciba(_) => IdpAction::RealmCibaClose,
             Self::CertificateLogin(_) => IdpAction::RealmCertificateLogin,
+            Self::GatewayRadiusClientRegister(_) => IdpAction::GatewayRadiusClientRegister,
+            Self::GatewayKeytabPolicy(_) => IdpAction::GatewayKeytabPolicy,
+            Self::GatewayKeytabEmergency { .. } => IdpAction::GatewayKeytabEmergency,
             Self::MtlsAliases(_) => IdpAction::RealmMtlsAliases,
             Self::ClientProfile { delta, .. } => delta.action(),
             Self::FrontchannelLogout => IdpAction::RealmFrontchannelLogout,
@@ -2258,6 +2281,9 @@ impl Change {
             Self::CertificateLogin(c) => c.check(),
             Self::ClientProfile { delta, .. } => delta.check(),
             Self::Ciba(c) => c.check(),
+            Self::GatewayRadiusClientRegister(c) => c.check(),
+            Self::GatewayKeytabPolicy(p) => p.check(),
+            Self::GatewayKeytabEmergency { gateway, kvno } => gateway::emergency(gateway, *kvno),
             Self::AccountBind(_)
             | Self::FrontchannelLogout
             | Self::DeviceCode(_)
@@ -2395,6 +2421,12 @@ impl Change {
             Self::DeviceCode(on) => Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))]),
             Self::Ciba(c) => c.to_value(),
             Self::CertificateLogin(c) => c.to_value(),
+            Self::GatewayRadiusClientRegister(c) => c.to_value(),
+            Self::GatewayKeytabPolicy(p) => p.to_value(),
+            Self::GatewayKeytabEmergency { gateway, kvno } => Value::Map(vec![
+                (Value::text("gateway"), Value::text(gateway.as_str())),
+                (Value::text("kvno"), Value::Unsigned(u64::from(*kvno))),
+            ]),
             Self::MtlsAliases(on) => Value::Map(vec![(Value::text("published"), Value::Bool(*on))]),
             Self::ClientProfile { client, delta } => Value::Map(vec![
                 (Value::text("client_id"), Value::text(client.as_str())),
@@ -2560,6 +2592,15 @@ impl Change {
             | Self::FrontchannelLogout => path.push(String::from("realm")),
             Self::ClientProfile { client, .. } => {
                 path.extend([String::from("client"), String::from(client.as_str())]);
+            }
+            Self::GatewayRadiusClientRegister(c) => {
+                path.extend(gateway::path(GatewayKind::Radius, &c.gateway));
+                path.extend([String::from("client"), c.client.clone()]);
+            }
+            Self::GatewayKeytabPolicy(gateway::KeytabPolicy { gateway: name, .. })
+            | Self::GatewayKeytabEmergency { gateway: name, .. } => {
+                path.extend(gateway::path(GatewayKind::Kerberos, name));
+                path.push(String::from("keytab"));
             }
         }
         ResourceRef {

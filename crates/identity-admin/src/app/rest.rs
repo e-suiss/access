@@ -230,6 +230,12 @@ pub enum Op {
     PutClientLegacyBearer,
     /// `putFrontchannelLogout`: `idp.realm.frontchannel_logout`.
     PutFrontchannelLogout,
+    /// `registerRadiusClient`: `idp.gateway.radius_client_register` (OP-155 m.3 (f)).
+    RegisterRadiusClient,
+    /// `putKeytabPolicy`: `idp.gateway.keytab_policy` (OP-155 m.3 (o)).
+    PutKeytabPolicy,
+    /// `replaceKeytab`: `idp.gateway.keytab_emergency`, reserved (OP-155 m.3 (o)).
+    ReplaceKeytab,
 }
 
 impl Op {
@@ -329,6 +335,9 @@ impl Op {
             "putClientSamlBearer" => Self::PutClientSamlBearer,
             "putClientLegacyBearer" => Self::PutClientLegacyBearer,
             "putFrontchannelLogout" => Self::PutFrontchannelLogout,
+            "registerRadiusClient" => Self::RegisterRadiusClient,
+            "putKeytabPolicy" => Self::PutKeytabPolicy,
+            "replaceKeytab" => Self::ReplaceKeytab,
             _ => return None,
         })
     }
@@ -1500,6 +1509,51 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         Op::PutMtlsAliases => {
             only(m, &["published"])?;
             Change::MtlsAliases(flag(m, "published")?)
+        }
+        // OP-155 m.3 (f)
+        Op::RegisterRadiusClient => {
+            only(m, &["client", "certificate"])?;
+            let gateway = crate::domain::gateway::key_of_kind(
+                key_of(key)?,
+                access_internal_api::edge::GatewayKind::Radius,
+            )?;
+            let der = b64url_decode(text(m, "certificate")?).map_err(|_| Invalid::Gateway)?;
+            Change::GatewayRadiusClientRegister(crate::domain::gateway::RadiusClient::new(
+                gateway,
+                text(m, "client")?,
+                &der,
+            )?)
+        }
+        // OP-155 m.3 (o)
+        Op::PutKeytabPolicy => {
+            only(m, &["spn", "rotate_days"])?;
+            let gateway = crate::domain::gateway::key_of_kind(
+                key_of(key)?,
+                access_internal_api::edge::GatewayKind::Kerberos,
+            )?;
+            let rotate_days = m
+                .get("rotate_days")
+                .and_then(Json::as_u64)
+                .and_then(|d| u16::try_from(d).ok())
+                .ok_or(Invalid::Gateway)?;
+            Change::GatewayKeytabPolicy(crate::domain::gateway::KeytabPolicy {
+                gateway,
+                spn: String::from(text(m, "spn")?),
+                rotate_days,
+            })
+        }
+        Op::ReplaceKeytab => {
+            only(m, &["kvno"])?;
+            let gateway = crate::domain::gateway::key_of_kind(
+                key_of(key)?,
+                access_internal_api::edge::GatewayKind::Kerberos,
+            )?;
+            let kvno = m
+                .get("kvno")
+                .and_then(Json::as_u64)
+                .and_then(|k| u32::try_from(k).ok())
+                .ok_or(Invalid::Gateway)?;
+            Change::GatewayKeytabEmergency { gateway, kvno }
         }
         // OP-154 m.3 (j)
         Op::PutDcrPolicy => {

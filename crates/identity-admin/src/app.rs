@@ -58,6 +58,16 @@ use crate::domain::{
     extension_invalid, issuer_cutoff, policy_value, raises,
 };
 
+/// The admin refusal of a gateway setting the edge adapter refused (OP-155 m.3 (f), (o)).
+fn setting(e: access_identity_edge::adapters::SettingError) -> AdminError {
+    use access_identity_edge::adapters::SettingError;
+    match e {
+        SettingError::NoGateway => Invalid::NoGateway.into(),
+        SettingError::Invalid => Invalid::Gateway.into(),
+        SettingError::Store(e) => e.into(),
+    }
+}
+
 /// Clients that opted in to their realm's public `sub` (MD-10, OP-151 m.9 (h)); no realm label
 /// (OP-47).
 pub static PUBLIC_SUB_OPT_IN: access_telemetry::metrics::Counter<0> =
@@ -485,6 +495,34 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .is_none_or(|r| r.state != "live")
                 {
                     return Err(Invalid::NoCrossAppConnection.into());
+                }
+            }
+            // OP-155 m.3 (f), (o)
+            Change::GatewayRadiusClientRegister(c) => {
+                if access_store::edge::live_gateway(t, "radius", &c.gateway)
+                    .await?
+                    .is_none()
+                {
+                    return Err(Invalid::NoGateway.into());
+                }
+            }
+            Change::GatewayKeytabPolicy(crate::domain::gateway::KeytabPolicy {
+                gateway: name,
+                ..
+            })
+            | Change::GatewayKeytabEmergency { gateway: name, .. } => {
+                if access_store::edge::live_gateway(t, "kerberos", name)
+                    .await?
+                    .is_none()
+                {
+                    return Err(Invalid::NoGateway.into());
+                }
+                if let Change::GatewayKeytabEmergency { kvno, .. } = change
+                    && access_store::edge::keytab_policy(t, name)
+                        .await?
+                        .is_none_or(|k| *kvno <= k.kvno_floor)
+                {
+                    return Err(Invalid::Gateway.into());
                 }
             }
             Change::OrgInvite(i) => orgs::invite_current(t, i).await?,
@@ -1685,6 +1723,37 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-155 m.3 (k), IDP-12
             Change::ClientProfile { client, delta } => {
                 write_profile(t, bound, client, delta).await?
+            }
+            // OP-155 m.3 (f), (o)
+            Change::GatewayRadiusClientRegister(c) => {
+                access_identity_edge::adapters::radius_client_register(
+                    t,
+                    bound,
+                    &c.gateway,
+                    &c.client,
+                    &c.certificate,
+                )
+                .await
+                .map_err(setting)?;
+                true
+            }
+            Change::GatewayKeytabPolicy(p) => {
+                access_identity_edge::adapters::keytab_policy(
+                    t,
+                    bound,
+                    &p.gateway,
+                    &p.spn,
+                    p.rotate_days,
+                )
+                .await
+                .map_err(setting)?;
+                true
+            }
+            Change::GatewayKeytabEmergency { gateway, kvno } => {
+                access_identity_edge::adapters::keytab_emergency(t, bound, gateway, *kvno)
+                    .await
+                    .map_err(setting)?;
+                true
             }
             Change::DcrPolicy { policy, .. } => {
                 t.put_dcr_policy(

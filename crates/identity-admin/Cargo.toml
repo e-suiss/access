@@ -37,6 +37,7 @@ tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
 access-identity-x509 = { workspace = true, features = ["testing"] }
+rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
 
 [lints]
 workspace = true
