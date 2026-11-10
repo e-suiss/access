@@ -6,9 +6,9 @@
  "rules": ["OP-141 m.35 (b)"],
  "cases": [
   {"id": "commerce", "schema": "seams/schemas/commerce.toml", "namespace": "commerce", "actions": {}},
-  {"id": "health", "schema": "seams/schemas/health.toml", "namespace": "health", "actions": {"read": "67aa96dd40a50c577dfb344051754fff588bc41d6facacb3103fded6525c1a9a", "share": "ff2657c0c43dcdb11b1f3849590d551061cf17708e687cadfa630efdc6fab264", "book": "c2956c013551e8fe865c75af37b16c3562c3bdae50ec4e8f0ddb994336293d71"}},
+  {"id": "health", "schema": "seams/schemas/health.toml", "namespace": "health", "actions": {"read": "67aa96dd40a50c577dfb344051754fff588bc41d6facacb3103fded6525c1a9a", "share": "d7b9d8888b17ae592db7cbb7303c5f2ab5b09e1e28a6110b363fab19151a452e", "book": "96f7e484f70d2da81dcd5ecbbb88a28eb8021256a53737cc64fff0c265ed0560"}},
   {"id": "pay", "schema": "seams/schemas/pay.toml", "namespace": "pay", "actions": {}},
-  {"id": "ride", "schema": "seams/schemas/ride.toml", "namespace": "ride", "actions": {"request": "14717c0805841d340569348ee4e17c704a30d922005b6ec72ecdb0f3df0b1209", "accept": "fb449116462428c72a8632d8fb62d571b6c64278142f136aae3847b025e47aeb"}},
+  {"id": "ride", "schema": "seams/schemas/ride.toml", "namespace": "ride", "actions": {"request": "31d61b5ec2d4f07d11ba63916b12110c9bde1f4608290ecddad7ca093b5a9bd5", "accept": "20bdffd3ae2a3abdbfef30bb2d3b5ca58074a669aa0221af3e2ab8ce33db3afe"}},
   {"id": "serve", "schema": "seams/schemas/serve.toml", "namespace": "serve", "actions": {}}
  ]
 }

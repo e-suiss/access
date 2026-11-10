@@ -1083,6 +1083,7 @@ truth = ["order", "refund window"]
 name = "refund"
 major = 1
 effect_class = "irreversible"
+reversibility = "compensable"
 resource_types = ["order"]
 
 [[claims]]

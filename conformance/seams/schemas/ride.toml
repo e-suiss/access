@@ -10,6 +10,7 @@ truth = ["trip", "driver eligibility", "fare", "location"]
 name = "request"
 major = 1
 effect_class = "reversible"
+reversibility = "compensable"
 consumption_bearing = true
 params = { fare = "amount" }
 classes = { fare = "amount" }
@@ -20,6 +21,7 @@ render = "Request a ride for {fare}"
 name = "accept"
 major = 1
 effect_class = "reversible"
+reversibility = "reversible"
 resource_types = ["trip"]
 render = "Accept a ride"
 

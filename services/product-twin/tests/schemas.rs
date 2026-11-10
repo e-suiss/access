@@ -47,6 +47,16 @@ fn ride_is_a_schema_a_membership_claim_and_an_amount() {
         ride.classes["request"]["fare"], "amount",
         "the fare bounds an amount budget"
     );
+    let fare = ride.actions.iter().find(|a| a.name == "request").unwrap();
+    assert_eq!(
+        fare.reversibility,
+        Some(access_kernel::schema::Reversibility::Compensable)
+    );
+    assert_eq!(
+        ride.package()["actions"][0]["reversibility"],
+        "compensable",
+        "the publication carries the declared reversibility"
+    );
     let driver = ride.claim("ride_driver").unwrap();
     assert_eq!(driver.use_, access_kernel::claim::SUBJECT_SELECTION);
     assert!(ride.spp(access_kernel::model::Id([1; 16])).is_some());
