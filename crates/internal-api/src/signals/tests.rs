@@ -103,7 +103,7 @@ fn a_proofing_level_is_the_kernel_loa_dimension() {
             IDENTITY_PROOFING,
             &map(vec![
                 ("provider", Value::text("x")),
-                ("method", Value::text("selfie_liveness")),
+                ("method", Value::text("selfie")),
                 ("ial", Value::Unsigned(2)),
                 ("verified_at", Value::Unsigned(1)),
             ])

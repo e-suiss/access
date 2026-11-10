@@ -6,6 +6,8 @@
 
 use std::collections::BTreeMap;
 
+use access_kernel::json::Json;
+
 use access_kernel::claim::body::BODY_CONTEXT;
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::digest::context_digest;
@@ -515,6 +517,84 @@ pub fn label_of(r: &Reading) -> String {
     match r {
         Reading::Read(Signal::Label(l)) => l.qualified(),
         _ => String::from("unreadable"),
+    }
+}
+
+// OP-156 m.3 (r)
+/// CAEP `device-compliance-change` (OpenID CAEP 1.0 §3.5).
+pub const CAEP_DEVICE_COMPLIANCE: &str =
+    "https://schemas.openid.net/secevent/caep/event-type/device-compliance-change";
+
+/// CAEP `risk-level-change` (OpenID CAEP 1.0 §3.4).
+pub const CAEP_RISK_LEVEL: &str =
+    "https://schemas.openid.net/secevent/caep/event-type/risk-level-change";
+
+/// The reason class of a risk event that names none.
+pub const UNSPECIFIED: &str = "unspecified";
+
+fn reason(v: Option<&Json>) -> String {
+    v.and_then(Json::as_str)
+        .map(str::to_ascii_lowercase)
+        .map(|s| {
+            s.chars()
+                .map(|c| if c == ' ' || c == '_' { '-' } else { c })
+                .take(128)
+                .collect::<String>()
+        })
+        .filter(|s| is_ref(s))
+        .unwrap_or_else(|| String::from(UNSPECIFIED))
+}
+
+/// A CAEP risk level as Access reads it: `low`, `medium` and `high`; CAEP has no `critical`.
+#[must_use]
+pub fn caep_level(s: &str) -> Option<RiskLevel> {
+    match s.to_ascii_lowercase().as_str() {
+        "low" => Some(RiskLevel::Low),
+        "medium" => Some(RiskLevel::Medium),
+        "high" => Some(RiskLevel::High),
+        _ => None,
+    }
+}
+
+/// The signal of one CAEP event of type `uri` with members `body`, from the source whose
+/// provider is `provider`; `None` for an event that states no signal.
+///
+/// - `device-compliance-change`: `posture_mdm`, compliant only for `current_status`
+///   `compliant`; Okta's SSF transmitter sends these for devices it manages.
+/// - `risk-level-change`: `risk_external` at `current_level`, its reason from
+///   `risk_reason` (Okta) or `reason_admin`.
+#[must_use]
+pub fn caep(uri: &str, body: &Json, provider: &str) -> Option<Signal> {
+    if !is_ref(provider) {
+        return None;
+    }
+    match uri {
+        CAEP_DEVICE_COMPLIANCE => {
+            let status = body.get("current_status")?.as_str()?;
+            let compliant = match status {
+                "compliant" => true,
+                "not-compliant" => false,
+                _ => return None,
+            };
+            Some(Signal::Posture(PostureMdm {
+                managed: true,
+                compliant,
+                provider: String::from(provider),
+                statement: format!("Device {status} (CAEP)"),
+            }))
+        }
+        CAEP_RISK_LEVEL => {
+            let level = caep_level(body.get("current_level")?.as_str()?)?;
+            let why = body
+                .get("risk_reason")
+                .or_else(|| body.get("reason_admin").and_then(|r| r.get("en")))
+                .or_else(|| body.get("reason_admin"));
+            Some(Signal::Risk(RiskExternal {
+                level,
+                reason_class: reason(why),
+            }))
+        }
+        _ => None,
     }
 }
 

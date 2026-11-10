@@ -13,13 +13,16 @@
 //! | `set` | compact JWS under the pinned key set, `typ` `secevent+jwt` | as `oidc` | as `oidc`, from `sub_id` (`iss_sub`) or `sub` | `account_status` | the event's status | `iat` / `[iat, exp or iat + 90 days]` |
 //!
 //! SET events mapped (RFC 8935 RISC): `account-disabled` → `suspended`, `account-enabled` →
-//! `active`, `account-purged` → `tombstone`; any other event is refused. The SAML, SCIM, LDAP,
+//! `active`, `account-purged` → `tombstone`; CAEP `device-compliance-change` → `posture_mdm` and
+//! `risk-level-change` → `risk_external`, each with its body (OP-156 m.3 (r)); any other event
+//! is refused. The SAML, SCIM, LDAP,
 //! SPNEGO, mTLS/PIV and device attestation rows of §10.1.2 move to their protocol stages
 //! (OP-150 m.3 (i)); until then their carriers are not accepted.
 
 use std::collections::BTreeMap;
 
 use access_internal_api::claims::Carrier;
+use access_internal_api::signals;
 use access_kernel::claim::body::{
     self, AuthMethod, Authentication, Body, Class, IdentityBinding, Upstream,
 };
@@ -405,7 +408,16 @@ fn set_subject(claims: &Json) -> Option<String> {
     claims.get("sub").and_then(Json::as_str).map(String::from)
 }
 
-/// Maps a Security Event Token to an `account_status` Claim (§10.1.2 SET row).
+/// The provider `ref` of a pinned SET issuer: its host, lower case.
+fn provider_of(iss: &str) -> Option<String> {
+    let host = iss.strip_prefix("https://")?.split(['/', ':']).next()?;
+    let host = host.to_ascii_lowercase();
+    signals::is_ref(&host).then_some(host)
+}
+
+/// Maps a Security Event Token to an `account_status` Claim (§10.1.2 SET row), or a CAEP
+/// `device-compliance-change` or `risk-level-change` to the pinned issuer's `posture_mdm` or
+/// `risk_external` Claim with its body (OP-156 m.3 (r)).
 ///
 /// # Errors
 /// [`Refusal`].
@@ -430,24 +442,30 @@ pub fn map_set(token: &[u8], f: &Frame<'_>) -> Result<Mapped, Refusal> {
     let Some(Json::Object(events)) = claims.get("events") else {
         return Err(Refusal::CARRIER);
     };
-    let [(uri, _)] = events.as_slice() else {
+    let [(uri, event)] = events.as_slice() else {
         return Err(Refusal::EVENT);
     };
     let status = uri
         .strip_prefix(RISC)
         .and_then(|e| SET_EVENTS.iter().find(|(name, _)| *name == e))
-        .map(|(_, s)| *s)
-        .ok_or(Refusal::EVENT)?;
+        .map(|(_, s)| *s);
+    let (class, value, body) = match status {
+        Some(status) => ("account_status", EqValue::Text(String::from(status)), None),
+        // OP-156 m.3 (r)
+        None => {
+            let provider = provider_of(&f.pinned.iss).ok_or(Refusal::EVENT)?;
+            let signal = signals::caep(uri, event, &provider).ok_or(Refusal::EVENT)?;
+            (
+                signal.class(),
+                EqValue::Bytes(signal.digest().to_vec()),
+                Some(signal.to_bytes()),
+            )
+        }
+    };
     let sub = set_subject(&claims).ok_or(Refusal::CARRIER)?;
     Ok(Mapped {
-        statement: statement(
-            f,
-            "account_status",
-            EqValue::Text(String::from(status)),
-            iat,
-            until,
-        ),
-        body: None,
+        statement: statement(f, class, value, iat, until),
+        body,
         subject: subject_digest(&f.pinned.iss, &sub),
         evidence: evidence(token),
     })

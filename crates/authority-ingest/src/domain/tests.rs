@@ -134,6 +134,55 @@ fn a_set_maps_to_an_account_status_claim() {
     assert_eq!(map_set(&token, &frame(&p)), Err(Refusal::CARRIER));
 }
 
+// OP-156 m.3 (r), CI-2: an SSF transmitter's CAEP events are its own signal Claims
+#[test]
+fn a_caep_set_maps_to_the_pinned_issuers_signal_claim() {
+    let p = pinned(3);
+    let sub = r#"{"format":"iss_sub","iss":"https://idp.example","sub":"u-1"}"#;
+    let caep = |event: &str, members: &str| {
+        format!(
+            r#"{{"iss":"{ISS}","aud":"access","iat":{},"jti":"j2","sub_id":{sub},"events":{{"https://schemas.openid.net/secevent/caep/event-type/{event}":{members}}}}}"#,
+            NOW / 1000
+        )
+    };
+    let token = jws(
+        3,
+        SET_TYP,
+        &caep(
+            "risk-level-change",
+            r#"{"current_level":"HIGH","risk_reason":"anomalous location"}"#,
+        ),
+    );
+    let m = map_set(&token, &frame(&p)).unwrap();
+    assert_eq!(m.statement.class, "risk_external");
+    assert!(m.statement.assurance.is_empty());
+    let Some(EqValue::Bytes(d)) = &m.statement.value else {
+        panic!("digest");
+    };
+    let read = signals::read("risk_external", Some(d), m.body.as_deref());
+    assert_eq!(
+        signals::risk_of(&read),
+        signals::RiskLevel::High,
+        "{read:?}"
+    );
+    let token = jws(
+        3,
+        SET_TYP,
+        &caep(
+            "device-compliance-change",
+            r#"{"current_status":"not-compliant","previous_status":"compliant"}"#,
+        ),
+    );
+    let m = map_set(&token, &frame(&p)).unwrap();
+    assert_eq!(m.statement.class, "posture_mdm");
+    let token = jws(
+        3,
+        SET_TYP,
+        &caep("risk-level-change", r#"{"current_level":"none"}"#),
+    );
+    assert_eq!(map_set(&token, &frame(&p)), Err(Refusal::EVENT));
+}
+
 // G44, §13.7.4
 #[test]
 fn narrowing_claims_are_recognised() {
