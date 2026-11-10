@@ -31,8 +31,8 @@ mod platform;
 mod product;
 mod retention;
 mod risk;
-mod scim;
 mod saml;
+mod scim;
 mod startup;
 mod status;
 #[cfg(test)]

@@ -561,9 +561,7 @@ async fn unsolicited_sso_needs_the_opt_in() {
     idp.c.w.domains.release().await;
 }
 
-// §10.6.1 SLO, MD-7, Ek B 4782, 4761: single logout signs the user out locally with an epoch
-// step, answers the SP with a signed HTTP-Redirect LogoutResponse saying PartialLogout, and the
-// old session vouches for nothing after.
+// §10.6.1, MD-7, Ek B 4782, 4761
 #[tokio::test]
 async fn single_logout_signs_out_locally_and_answers_the_sp() {
     let idp = Idp::new("saml-slo").await;
