@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.proxy_sessions SET used_ms = $5\n          WHERE tenant_id = $1 AND realm_id = $2 AND kind = 'sign_in' AND digest = $3\n            AND proxy = $4 AND used_ms IS NULL AND ended_ms IS NULL AND expires_ms > $5\n         RETURNING verifier AS \"verifier!\", return_to AS \"return_to!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "verifier!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.proxy_sessions",
+            "name": "verifier"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "return_to!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.proxy_sessions",
+            "name": "return_to"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "131f214e7cffaa52b91929dc5108bdb355ac18a1c713f0e7770b3d774954e589"
+}

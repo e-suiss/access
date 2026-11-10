@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT sid AS \"sid!\" FROM access.proxy_sessions\n          WHERE tenant_id = $1 AND realm_id = $2 AND kind = 'session' AND digest = $3\n            AND proxy = $4 AND ended_ms IS NULL AND expires_ms > $5",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sid!",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.proxy_sessions",
+            "name": "sid"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "1342b80622c60829adcddb3847c7ccaec1b5919405dc1259865ab23e6604fb4e"
+}

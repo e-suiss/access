@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.proxy_sessions (tenant_id, realm_id, proxy, kind, digest, verifier,\n                return_to, created_ms, expires_ms)\n         VALUES ($1, $2, $3, 'sign_in', $4, $5, $6, $7, $8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "323aa17e3495697300c858a1d3cfc61d34901263a0e096c07ba519699b4fb183"
+}

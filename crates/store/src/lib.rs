@@ -59,6 +59,7 @@ pub mod passkeys;
 pub mod platform;
 pub mod privacy;
 pub mod projections;
+pub mod proxy;
 pub mod publications;
 pub mod push;
 pub mod realm_binding;
