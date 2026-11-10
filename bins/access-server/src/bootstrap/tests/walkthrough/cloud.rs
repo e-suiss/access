@@ -1,60 +1,17 @@
 //! Cloud agent (§11.19): a hosted agent's own Party, registered by its operator, with one
-//! Instance for its session; P's Grant for P; a `REQUIRE_ACTION` it cannot meet itself; P's
-//! invitation through Relay (`relay.message.approval_requested.v1`, the stand-in for CIBA until
-//! Stage 10, OP-154 m.3 (ff)); P's Approval Act Statement on the hosted Approval Surface; the
-//! agent's `commit` again on the same nonce; then revocation by a new decision and the
-//! session's end as `instance_terminate`.
+//! Instance for its session; P's Grant for P; a `REQUIRE_ACTION` it cannot meet itself; the
+//! agent's CIBA backchannel request naming it (OP-155 m.3 (l), OP-154 m.17 (b)), P's Relay
+//! `CibaInvite`, P's Approval Act Statement on the hosted Approval Surface, the contribution the
+//! agent learns by polling; the agent's `commit` again on the same nonce; then revocation by a new
+//! decision and the session's end as `instance_terminate`.
 
-use access_identity_account::adapters::system::{SystemClock, SystemEntropy};
-use access_identity_account::notify::message::{Address, Body as Said, Message, Prompt};
-use access_identity_account::notify::notifier::OutboxNotifier;
-use access_identity_account::notify::ports::Notifier as _;
 use access_internal_api::instances::{terminate_intent, terminate_payload};
 use access_kernel::meta::kind;
 use access_sdk::agent::contract::{Proof, Step};
 use access_sdk::agent::decision::{Route, TermKind};
 
+use super::ciba::contribution_of;
 use super::*;
-
-/// P's invitation to the waiting approval, through the identity plane's Relay outbox: a link
-/// to P's own account and the requester's name, never the authority it asks for (§11.14.2).
-async fn invite(d: &Desk) {
-    let route = route_by_slug(&d.w.db.router, "acme")
-        .await
-        .unwrap()
-        .unwrap();
-    let keks = crate::login::RealmKeks::new(Arc::clone(&d.w.keys));
-    let kek = keks.vault(route.realm).unwrap().kek;
-    let ids = crate::ids::CellIds::new(d.w.keys.clone()).key().unwrap();
-    let realm = access_identity_account::app::Realm {
-        tenant: route.tenant,
-        realm: route.realm,
-        kek: &*kek,
-        ids: &ids,
-    };
-    let mut t = TenantTx::begin(&d.w.db.app, route.tenant, route.realm)
-        .await
-        .unwrap();
-    OutboxNotifier::new(&realm, &SystemEntropy, &SystemClock)
-        .notify(
-            &mut t,
-            &Message {
-                subject: d.subject,
-                to: Address::Email(String::from("test.user@acme.example")),
-                locale: None,
-                valid_since_ms: Some(1),
-                body: Said::Prompt {
-                    prompt: Prompt::ApprovalRequested,
-                    link: Secret::new(format!("{}/account", d.user.issuer)),
-                    name: String::from("Mail agent"),
-                    expires_at_ms: now_ms() + 600_000,
-                },
-            },
-        )
-        .await
-        .unwrap();
-    t.commit().await.unwrap();
-}
 
 // §11.19, §11.14.2, §9.14.1, §9.14.5, E49, EI-18, AGI-8, A-1, A-2, A-4, INV-4, INV-19, PI-13, EI-6,
 // OP-154 m.3 (ff), Ek B 4452, 4457
@@ -89,11 +46,22 @@ async fn a_cloud_agent_waits_for_its_principals_approval_and_commits_on_the_same
         "{wait:?}"
     );
     assert_eq!(wait.routes, [Route::Coordinator], "{wait:?}");
-    // §11.14.2, OP-154 m.3 (ff)
-    invite(&d).await;
+    // §11.14.2, §9.9.5, OP-155 m.3 (l), OP-154 m.17 (b), Ek B 4365
+    let client = d.ciba_client("Mail agent", false).await;
+    d.ciba_on(false, &[]).await;
+    let hint = d.hint_token(&client).await;
+    let (status, asked) = d
+        .bc_authorize(
+            &client,
+            &d.ciba_params(&ex, &intent, ("login_hint_token", &hint), Some("Code 4F2Q")),
+        )
+        .await;
+    assert_eq!(status, 200, "{asked}");
+    let auth_req_id = String::from(asked["auth_req_id"].as_str().unwrap());
+    assert_eq!(asked["interval"], 5);
     let invites = identity_events_until(
         &d.w.db,
-        Prompt::ApprovalRequested.kind(),
+        "relay.message.ciba_invite.v1",
         |q| !q.is_empty(),
         "the invitation",
     )
@@ -104,10 +72,44 @@ async fn a_cloud_agent_waits_for_its_principals_approval_and_commits_on_the_same
         !sealed.windows(ex.nonce().len()).any(|w| w == ex.nonce()),
         "the invitation carries no authority"
     );
+    // P54
+    let (status, body) = d.ciba_poll(&client, &auth_req_id).await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (400, Some("authorization_pending"))
+    );
+    let (status, body) = d.ciba_poll(&client, &auth_req_id).await;
+    assert_eq!((status, body["error"].as_str()), (400, Some("slow_down")));
     // A-4, EI-18
     let before = intent_digest(&access_local_client::intent::parse(&intent).unwrap()).unwrap();
     assert!(matches!(d.ask(&mut ex), Step::Wait(_)));
-    let contribution = d.approve(&ex, &intent).await;
+    let request = d.ciba_request(&auth_req_id).await;
+    let mut jar = d.person().await;
+    let (status, preview) = d.ciba_preview(&mut jar, &request).await;
+    assert_eq!(status, 200, "{preview}");
+    assert_eq!(preview["client"], "Mail agent");
+    assert_eq!(preview["binding_message"], "Code 4F2Q");
+    let done = d.ciba_aas(&preview["request"], &intent).await;
+    let (status, body) = d
+        .ciba_answer(
+            &jar,
+            &request,
+            preview["csrf"].as_str().unwrap(),
+            done["request_uri"].as_str(),
+        )
+        .await;
+    assert_eq!(status, 200, "{body}");
+    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    let (status, token) = d.ciba_poll(&client, &auth_req_id).await;
+    assert_eq!(status, 200, "{token}");
+    assert_eq!(token["token_type"], "DPoP");
+    assert!(token.get("id_token").is_some() && token.get("authorization_details").is_none());
+    // PI-3, §9.14.5 k.2
+    let contribution = contribution_of(&token);
+    assert_eq!(
+        b64url_encode(&contribution.0),
+        done["contribution"].as_str().unwrap()
+    );
     ex.prove(Proof::Contribution(contribution)).unwrap();
     let step = d.ask(&mut ex);
     let Step::Proceed(allowed) = &step else {
