@@ -962,7 +962,7 @@ async fn an_exchange_writes_act_from_the_lineage_only() {
         )
         .await;
     assert_eq!(body["error"], "invalid_grant", "{body}");
-    // OP-154 m.3 (m)
+    // OP-154 m.3 (m), OP-155 m.3 (k)
     let (_, body) = r
         .exchange(
             &r.a2,
@@ -972,7 +972,7 @@ async fn an_exchange_writes_act_from_the_lineage_only() {
             &[],
         )
         .await;
-    assert_eq!(body["error"], "invalid_request", "{body}");
+    assert_eq!(body["error"], "unauthorized_client", "{body}");
 
     // INV-5
     let exchanged = String::from(token);

@@ -227,7 +227,8 @@ impl<E: Env> OAuth<E> {
             return Ok(unauthorized("invalid_token"));
         };
         let dpop_scheme = scheme.eq_ignore_ascii_case("dpop");
-        if !dpop_scheme && !scheme.eq_ignore_ascii_case("bearer") {
+        if (!dpop_scheme && !scheme.eq_ignore_ascii_case("bearer")) || token.split('.').count() != 3
+        {
             return Ok(unauthorized("invalid_token"));
         }
         let now = self.now()?;
