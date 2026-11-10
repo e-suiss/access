@@ -702,6 +702,32 @@ export const en = {
   domainRetire: "Retire this domain",
   domainBindRpId: "Use it for passkeys (can't be reversed)",
   domainBindIssuer: "Make it the issuer (can't be reversed)",
+  screenSsh: "SSH access",
+  sshCaTitle: "SSH certificate authority",
+  sshCaIntro:
+    "People and agents get short-lived SSH certificates from their ssh.login access instead of keeping keys on servers.",
+  sshCaOn: "Turn on",
+  sshCaOff: "Turn off",
+  sshCaRotate: "Rotate key",
+  sshCaReplace: "Replace key now",
+  sshCaReplaceWarning:
+    "Emergency only: a new key signs at once and every certificate the old key signed stops working on servers that read the revocation list.",
+  sshServerSetup: "Server setup",
+  sshCaKeyAt: "CA key",
+  sshKrlAt: "Revocation list",
+  sshGroupsTitle: "Server groups",
+  sshGroupsIntro: "An ssh.login grant names a server group; a retired name is never reused.",
+  sshGroupLive: "In use",
+  sshGroupRetired: "Retired",
+  sshGroupRetire: "Retire {name}",
+  sshGroupRegister: "Register a server group",
+  sshGroupName: "Name",
+  sshGroupNameHint: "Lower-case letters, digits and hyphens, starting with a letter",
+  sshGroupDescription: "Description",
+  sshGroupRegisterSend: "Register",
+  sshCertificatesTitle: "Issued certificates",
+  sshCertificatesNote: "Each issued certificate is recorded as an ssh.certificate_issued event.",
+  sshAuditLink: "Open the audit records",
 } as const;
 
 export type Key = keyof typeof en;

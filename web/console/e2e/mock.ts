@@ -140,6 +140,11 @@ const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   enforceOrganizationSso: ["idp.org", "sso_enforce"],
   liftOrganizationSso: ["idp.org", "sso_enforce_lift"],
   createOrganizationSetupLink: ["idp.org", "setup_link"],
+  putSshCa: ["idp.ssh", "ca_enable"],
+  rotateSshCa: ["idp.ssh", "ca_rotate"],
+  replaceSshCa: ["idp.ssh", "ca_emergency"],
+  registerSshHostGroup: ["idp.ssh", "host_group_register"],
+  retireSshHostGroup: ["idp.ssh", "host_group_retire"],
 };
 
 export interface Write {
