@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access_ops.hibp_mirror_versions SET status = 'archived', archived_at = clock_timestamp()\n          WHERE directory = $1 AND status = 'current'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0426ffaf612f7de9e5228c15116ac7ec996b38f042e074813efcc620365556af"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access_ops.hibp_mirror_versions SET status = 'failed', ended_at = clock_timestamp()\n          WHERE version_id = $1 AND status = 'staged'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3f1d4eb866df2b8a8da0d6bce153df61633bc9d78bcc895fdfaee979ddf3ba42"
+}

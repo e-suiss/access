@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT version_id, directory, status, ranges FROM access.hibp_mirror_versions\n          WHERE directory = $1 ORDER BY started_at DESC, version_id DESC LIMIT 64",
+  "query": "SELECT version_id, directory, status, ranges FROM access_ops.hibp_mirror_versions\n          WHERE directory = $1 ORDER BY started_at DESC, version_id DESC LIMIT 64",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "access.hibp_mirror_versions",
+            "table": "access_ops.hibp_mirror_versions",
             "name": "version_id"
           }
         }
@@ -20,7 +20,7 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "access.hibp_mirror_versions",
+            "table": "access_ops.hibp_mirror_versions",
             "name": "directory"
           }
         }
@@ -31,7 +31,7 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "access.hibp_mirror_versions",
+            "table": "access_ops.hibp_mirror_versions",
             "name": "status"
           }
         }
@@ -42,7 +42,7 @@
         "type_info": "Int4",
         "origin": {
           "Table": {
-            "table": "access.hibp_mirror_versions",
+            "table": "access_ops.hibp_mirror_versions",
             "name": "ranges"
           }
         }
@@ -60,5 +60,5 @@
       true
     ]
   },
-  "hash": "146da7c302a754e87621b2316f24cb60f74ca4351375f5b882f4ecd0048560ad"
+  "hash": "2397806e5c5a8e5122ac8ceb01433955923580ecbb38e0210a8a449de21d1432"
 }

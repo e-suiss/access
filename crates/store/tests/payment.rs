@@ -7,6 +7,7 @@
     clippy::unwrap_used,
     clippy::panic,
     clippy::arithmetic_side_effects,
+    clippy::many_single_char_names,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
@@ -354,8 +355,8 @@ async fn a_mirror_version_becomes_current_and_the_old_one_is_archived() {
         ]
     );
     assert!(
-        sqlx::query("DELETE FROM access.hibp_mirror_versions")
-            .execute(&db.owner)
+        sqlx::query("DELETE FROM access_ops.hibp_mirror_versions")
+            .execute(&db.app)
             .await
             .is_err()
     );

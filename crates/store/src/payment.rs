@@ -548,7 +548,7 @@ pub async fn stage_mirror_version(
     source_host: &str,
 ) -> Result<[u8; 16], StoreError> {
     let id = sqlx::query_scalar!(
-        "INSERT INTO access.hibp_mirror_versions (directory, source_host) VALUES ($1, $2)
+        "INSERT INTO access_ops.hibp_mirror_versions (directory, source_host) VALUES ($1, $2)
          RETURNING version_id",
         directory,
         source_host,
@@ -564,7 +564,7 @@ pub async fn stage_mirror_version(
 /// [`StoreError`].
 pub async fn fail_mirror_version(pool: &PgPool, id: [u8; 16]) -> Result<(), StoreError> {
     sqlx::query!(
-        "UPDATE access.hibp_mirror_versions SET status = 'failed', ended_at = clock_timestamp()
+        "UPDATE access_ops.hibp_mirror_versions SET status = 'failed', ended_at = clock_timestamp()
           WHERE version_id = $1 AND status = 'staged'",
         Uuid::from_bytes(id),
     )
@@ -586,7 +586,7 @@ pub async fn promote_mirror_version(
 ) -> Result<bool, StoreError> {
     let mut tx = pool.begin().await?;
     let directory = sqlx::query_scalar!(
-        "SELECT directory FROM access.hibp_mirror_versions
+        "SELECT directory FROM access_ops.hibp_mirror_versions
           WHERE version_id = $1 AND status = 'staged' FOR UPDATE",
         Uuid::from_bytes(id),
     )
@@ -596,14 +596,14 @@ pub async fn promote_mirror_version(
         return Ok(false);
     };
     sqlx::query!(
-        "UPDATE access.hibp_mirror_versions SET status = 'archived', archived_at = clock_timestamp()
+        "UPDATE access_ops.hibp_mirror_versions SET status = 'archived', archived_at = clock_timestamp()
           WHERE directory = $1 AND status = 'current'",
         directory,
     )
     .execute(&mut *tx)
     .await?;
     sqlx::query!(
-        "UPDATE access.hibp_mirror_versions
+        "UPDATE access_ops.hibp_mirror_versions
             SET status = 'current', ranges = $2, digest = $3, promoted_at = clock_timestamp()
           WHERE version_id = $1",
         Uuid::from_bytes(id),
@@ -625,7 +625,7 @@ pub async fn mirror_versions(
     directory: &str,
 ) -> Result<Vec<MirrorVersion>, StoreError> {
     let rows = sqlx::query!(
-        "SELECT version_id, directory, status, ranges FROM access.hibp_mirror_versions
+        "SELECT version_id, directory, status, ranges FROM access_ops.hibp_mirror_versions
           WHERE directory = $1 ORDER BY started_at DESC, version_id DESC LIMIT 64",
         directory,
     )

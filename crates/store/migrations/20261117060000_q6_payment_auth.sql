@@ -151,7 +151,7 @@ CREATE TRIGGER no_mutation BEFORE UPDATE OR DELETE ON access.sim_change_signals
 
 -- OP-156 m.3 (h), IDP-3: one refresh of the breach-range mirror; the directory it fills is made
 -- current in one rename and the one it replaces is archived in place
-CREATE TABLE access.hibp_mirror_versions (
+CREATE TABLE access_ops.hibp_mirror_versions (
   version_id uuid PRIMARY KEY DEFAULT uuidv7(),
   directory text NOT NULL CHECK (char_length(directory) BETWEEN 1 AND 4096),
   source_host text NOT NULL CHECK (char_length(source_host) BETWEEN 1 AND 253),
@@ -167,7 +167,7 @@ CREATE TABLE access.hibp_mirror_versions (
   CHECK ((status = 'archived') = (archived_at IS NOT NULL)),
   CHECK ((status = 'failed') = (ended_at IS NOT NULL))
 );
-CREATE UNIQUE INDEX hibp_mirror_versions_current ON access.hibp_mirror_versions (directory)
+CREATE UNIQUE INDEX hibp_mirror_versions_current ON access_ops.hibp_mirror_versions (directory)
   WHERE status = 'current';
 
 CREATE FUNCTION access.hibp_mirror_version_rules() RETURNS trigger
@@ -188,14 +188,16 @@ BEGIN
   RETURN NEW;
 END
 $$;
-CREATE TRIGGER hibp_mirror_version_rules BEFORE UPDATE OR DELETE ON access.hibp_mirror_versions
+CREATE TRIGGER hibp_mirror_version_rules BEFORE UPDATE OR DELETE ON access_ops.hibp_mirror_versions
   FOR EACH ROW EXECUTE FUNCTION access.hibp_mirror_version_rules();
-CREATE TRIGGER no_truncate BEFORE TRUNCATE ON access.hibp_mirror_versions
+CREATE TRIGGER no_truncate BEFORE TRUNCATE ON access_ops.hibp_mirror_versions
   FOR EACH STATEMENT EXECUTE FUNCTION access.reject_mutation();
-ALTER TABLE access.hibp_mirror_versions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE access.hibp_mirror_versions FORCE ROW LEVEL SECURITY;
-REVOKE ALL ON access.hibp_mirror_versions FROM PUBLIC;
-CREATE POLICY rows ON access.hibp_mirror_versions AS PERMISSIVE USING (true);
+ALTER TABLE access_ops.hibp_mirror_versions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE access_ops.hibp_mirror_versions FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON access_ops.hibp_mirror_versions FROM PUBLIC;
+CREATE POLICY rows ON access_ops.hibp_mirror_versions AS PERMISSIVE USING (true);
+CREATE POLICY app_only ON access_ops.hibp_mirror_versions AS RESTRICTIVE
+  USING (pg_has_role(current_user, 'access_app', 'MEMBER'));
 
 REVOKE ALL ON FUNCTION access.sms_code_rules() FROM PUBLIC;
 REVOKE ALL ON FUNCTION access.hibp_mirror_version_rules() FROM PUBLIC;
@@ -204,8 +206,8 @@ GRANT SELECT, INSERT ON access.idp_sms_otp_settings, access.idp_spc_settings, ac
 GRANT UPDATE (attempts, used_ms) ON access.sms_codes TO access_app;
 GRANT SELECT, INSERT ON access.sim_change_signals TO access_sequencer;
 GRANT SELECT ON access.sim_change_signals TO access_app;
-GRANT SELECT, INSERT ON access.hibp_mirror_versions TO access_app;
+GRANT SELECT, INSERT ON access_ops.hibp_mirror_versions TO access_app;
 GRANT UPDATE (status, ranges, digest, promoted_at, archived_at, ended_at)
-  ON access.hibp_mirror_versions TO access_app;
+  ON access_ops.hibp_mirror_versions TO access_app;
 
 RESET ROLE;
