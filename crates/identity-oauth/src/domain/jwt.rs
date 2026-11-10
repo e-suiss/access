@@ -211,6 +211,17 @@ fn int(claims: &Json, name: &str) -> Result<Option<u64>, JwtError> {
         .transpose()
 }
 
+/// Whether `key` is of the type `alg` verifies with (RFC 7517 §4.4): a key of another type is
+/// never a candidate, so a JWKS holding an EC and an RSA key selects one.
+const fn fits(alg: ClientAlg, key: &ClientKey) -> bool {
+    matches!(
+        (alg, key),
+        (ClientAlg::Es256, ClientKey::P256(_))
+            | (ClientAlg::Ed25519, ClientKey::Ed25519(_))
+            | (ClientAlg::Rs256, ClientKey::Rsa { .. })
+    )
+}
+
 /// What a verified client assertion yields for the replay cache.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Assertion {
@@ -298,7 +309,7 @@ pub fn verify_assertion(
     let kid = text(header, "kid");
     let candidates: Vec<&Jwk> = keys
         .iter()
-        .filter(|k| kid.is_none_or(|id| k.kid.as_deref() == Some(id)))
+        .filter(|k| kid.is_none_or(|id| k.kid.as_deref() == Some(id)) && fits(alg, &k.key))
         .collect();
     let [key] = candidates.as_slice() else {
         return Err(JwtError::Key);
@@ -337,7 +348,7 @@ pub(crate) fn verify_client_jws(
     let kid = text(header, "kid");
     let candidates: Vec<&Jwk> = keys
         .iter()
-        .filter(|k| kid.is_none_or(|id| k.kid.as_deref() == Some(id)))
+        .filter(|k| kid.is_none_or(|id| k.kid.as_deref() == Some(id)) && fits(alg, &k.key))
         .collect();
     let [key] = candidates.as_slice() else {
         return Err(JwtError::Key);

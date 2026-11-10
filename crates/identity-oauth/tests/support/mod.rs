@@ -44,6 +44,9 @@ use access_identity_oauth::ports::oauth::{
     ClientDocuments, ClientKeys, Fetch, FetchRefused, Fetched, GrantStanding, Held, IssuedGrant,
     ManagementHolders,
 };
+use access_identity_oauth::ports::profile::{
+    CertificateNames, CertificateRefused, ClientCertificates, JwtSecrets, RequestKeys,
+};
 use access_identity_session::domain::assurance::{Factor, vector};
 use access_identity_session::domain::session::cookie_digest;
 use access_identity_signer::adapters::{DirVault, SealedFactory, now_ms, serve};
@@ -112,13 +115,80 @@ pub fn now() -> u64 {
     SysClock.now().unwrap()
 }
 
-/// Client JWKS documents by URI.
+/// Client JWKS documents by URI, and how often each was fetched again past the cache.
 #[derive(Clone, Default)]
-pub struct StaticKeys(pub Arc<Mutex<HashMap<String, Vec<u8>>>>);
+pub struct StaticKeys(
+    pub Arc<Mutex<HashMap<String, Vec<u8>>>>,
+    pub Arc<Mutex<HashMap<String, u32>>>,
+);
 
 impl ClientKeys for StaticKeys {
     fn fetch(&self, uri: &str) -> impl Future<Output = Result<Vec<u8>, Unavailable>> {
         std::future::ready(self.0.lock().unwrap().get(uri).cloned().ok_or(Unavailable))
+    }
+
+    fn refetch(&self, uri: &str) -> impl Future<Output = Result<Vec<u8>, Unavailable>> {
+        *self.1.lock().unwrap().entry(String::from(uri)).or_insert(0) += 1;
+        std::future::ready(self.0.lock().unwrap().get(uri).cloned().ok_or(Unavailable))
+    }
+}
+
+/// The realm's client certificate checks as a test scripts them (P9's port): the names each
+/// leaf shows, or why it is refused (OP-155 m.3 (k), (m)).
+#[derive(Clone, Default)]
+pub struct ScriptedCerts(
+    pub Arc<Mutex<HashMap<Vec<u8>, Result<CertificateNames, CertificateRefused>>>>,
+);
+
+impl ClientCertificates for ScriptedCerts {
+    fn verify<'a>(
+        &'a self,
+        _: RealmId,
+        chain: &'a [Vec<u8>],
+        _: u64,
+    ) -> Held<'a, Result<CertificateNames, CertificateRefused>> {
+        let answer = chain
+            .first()
+            .and_then(|leaf| self.0.lock().unwrap().get(leaf).cloned())
+            .unwrap_or(Err(CertificateRefused::Untrusted));
+        Box::pin(async move { Ok(answer) })
+    }
+}
+
+/// `client_secret_jwt` secrets as the realm KEK would open them: by sealed ciphertext.
+#[derive(Clone, Default)]
+pub struct ScriptedSecrets(pub Arc<Mutex<HashMap<Vec<u8>, Vec<u8>>>>);
+
+impl JwtSecrets for ScriptedSecrets {
+    fn open<'a>(
+        &'a self,
+        _: RealmId,
+        _: [u8; 16],
+        sealed: &'a access_store::client_profiles::SealedJwtSecret,
+    ) -> Held<'a, Option<zeroize::Zeroizing<Vec<u8>>>> {
+        let s = self
+            .0
+            .lock()
+            .unwrap()
+            .get(&sealed.ciphertext)
+            .cloned()
+            .map(zeroize::Zeroizing::new);
+        Box::pin(async move { Ok(s) })
+    }
+}
+
+/// The realm's `jwe-enc` key as a test holds it.
+#[derive(Clone, Default)]
+pub struct ScriptedRequestKeys(pub Arc<Mutex<Option<Vec<u8>>>>);
+
+impl RequestKeys for ScriptedRequestKeys {
+    fn decrypt<'a>(&'a self, _: RealmId, jwe: &'a str) -> Held<'a, Option<Vec<u8>>> {
+        let key = self.0.lock().unwrap().clone();
+        let plain = key
+            .and_then(|der| access_crypto::jwe::DecryptKey::p256(&der).ok())
+            .and_then(|k| access_crypto::jwe::decrypt(&k, jwe).ok())
+            .map(|o| o.plaintext);
+        Box::pin(async move { Ok(plain) })
     }
 }
 
@@ -310,6 +380,9 @@ pub struct TestEnv {
     pub management: ScriptedManagement,
     pub documents: FixtureDocs,
     pub standing: ScriptedStanding,
+    pub certs: ScriptedCerts,
+    pub secrets: ScriptedSecrets,
+    pub request_keys: ScriptedRequestKeys,
 }
 
 /// Live Instance keys by (domain, kid).
@@ -375,6 +448,9 @@ impl Clone for TestEnv {
             management: self.management.clone(),
             documents: self.documents.clone(),
             standing: self.standing.clone(),
+            certs: self.certs.clone(),
+            secrets: self.secrets.clone(),
+            request_keys: self.request_keys.clone(),
         }
     }
 }
@@ -442,6 +518,15 @@ impl Env for TestEnv {
     }
     fn standing(&self) -> &(dyn GrantStanding + Sync) {
         &self.standing
+    }
+    fn client_certificates(&self) -> &(dyn ClientCertificates + Sync) {
+        &self.certs
+    }
+    fn jwt_secrets(&self) -> &(dyn JwtSecrets + Sync) {
+        &self.secrets
+    }
+    fn request_keys(&self) -> &(dyn RequestKeys + Sync) {
+        &self.request_keys
     }
 }
 
@@ -801,6 +886,9 @@ impl Cluster {
             management: ScriptedManagement::default(),
             documents: FixtureDocs::default(),
             standing: ScriptedStanding::default(),
+            certs: ScriptedCerts::default(),
+            secrets: ScriptedSecrets::default(),
+            request_keys: ScriptedRequestKeys::default(),
         };
         let oauth = OAuth::new(env);
         let mut realms = Vec::new();
@@ -1051,6 +1139,17 @@ impl At<'_> {
         authorization: Option<&str>,
         dpop: &[&str],
     ) -> Reply {
+        self.token_over(pairs, authorization, dpop, &[]).await
+    }
+
+    /// `/token` over a connection that presented the client certificate `chain`.
+    pub async fn token_over(
+        &self,
+        pairs: &[(&str, &str)],
+        authorization: Option<&str>,
+        dpop: &[&str],
+        chain: &[Vec<u8>],
+    ) -> Reply {
         let p: Vec<(String, String)> = pairs
             .iter()
             .map(|(k, v)| ((*k).into(), (*v).into()))
@@ -1063,10 +1162,60 @@ impl At<'_> {
                 TokenHttp {
                     authorization,
                     dpop,
-                    client_chain: &[],
+                    client_chain: chain,
                 },
             )
             .await
+    }
+
+    /// The internal id of fixture client `kind` (`a`, `b`, `c`) of this realm.
+    pub fn client_uuid(&self, kind: char) -> [u8; 16] {
+        let k = match kind {
+            'a' => 1,
+            'b' => 2,
+            _ => 3,
+        };
+        let seed = 40
+            + u8::try_from(
+                self.c
+                    .realms
+                    .iter()
+                    .position(|f| std::ptr::eq(f, self.f))
+                    .unwrap(),
+            )
+            .unwrap();
+        [seed, k, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, k]
+    }
+
+    /// Writes the next profile of client `kind` under a spare ALLOW of `action`.
+    pub async fn set_profile(
+        &self,
+        kind: char,
+        action: &str,
+        p: &access_store::client_profiles::ClientProfileRow,
+    ) -> Result<u64, access_store::StoreError> {
+        let mut tx = TenantTx::begin(&self.c.db.app, self.f.realm.tenant, self.f.realm.realm)
+            .await
+            .unwrap();
+        let b = self.bound(&mut tx, action).await;
+        let v = access_store::client_profiles::put_profile(&mut tx, &b, self.client_uuid(kind), p)
+            .await?;
+        tx.commit().await.unwrap();
+        Ok(v)
+    }
+
+    /// Turns on the realm's front-channel logout under a spare ALLOW.
+    pub async fn enable_frontchannel(&self) {
+        let mut tx = TenantTx::begin(&self.c.db.app, self.f.realm.tenant, self.f.realm.realm)
+            .await
+            .unwrap();
+        let b = self.bound(&mut tx, "idp.realm.frontchannel_logout").await;
+        assert!(
+            access_store::client_profiles::enable_frontchannel(&mut tx, &b)
+                .await
+                .unwrap()
+        );
+        tx.commit().await.unwrap();
     }
 
     /// The public client's code exchange.
