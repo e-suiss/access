@@ -196,6 +196,8 @@ pub enum Op {
     PutFederationRegistration,
     /// `putDeviceCode`: `idp.realm.device_code`, or `device_code_close` (OP-154 m.3 (p)).
     PutDeviceCode,
+    /// `putCiba`: `idp.realm.ciba`, or `ciba_close` (OP-155 m.3 (l)).
+    PutCiba,
     /// `createCrossAppConnection`: `idp.client.cross_app_connection` (OP-154 m.3 (n)).
     CreateCrossAppConnection,
     /// `retireCrossAppConnection`: `idp.client.cross_app_connection_retire`.
@@ -310,6 +312,7 @@ impl Op {
             "putFederationAuthority" => Self::PutFederationAuthority,
             "putFederationRegistration" => Self::PutFederationRegistration,
             "putDeviceCode" => Self::PutDeviceCode,
+            "putCiba" => Self::PutCiba,
             "createCrossAppConnection" => Self::CreateCrossAppConnection,
             "retireCrossAppConnection" => Self::RetireCrossAppConnection,
             "putCertificateLogin" => Self::PutCertificateLogin,
@@ -1448,6 +1451,30 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         Op::PutDeviceCode => {
             only(m, &["enabled"])?;
             Change::DeviceCode(flag(m, "enabled")?)
+        }
+        // OP-155 m.3 (l)
+        Op::PutCiba => {
+            only(m, &["enabled", "login_hint", "ping"])?;
+            let ping = match m.get("ping") {
+                None | Some(Json::Null) => Vec::new(),
+                Some(Json::Array(a)) => a
+                    .iter()
+                    .map(|p| {
+                        let p = p.as_object().ok_or(Invalid::Body)?;
+                        only(p, &["client_id", "endpoint"])?;
+                        Ok((
+                            ClientId::parse(text(p, "client_id")?)?,
+                            String::from(text(p, "endpoint")?),
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, Invalid>>()?,
+                Some(_) => return Err(Invalid::Body),
+            };
+            Change::Ciba(crate::domain::CibaSetting {
+                enabled: flag(m, "enabled")?,
+                login_hint: flag(m, "login_hint")?,
+                ping,
+            })
         }
         // OP-155 m.3 (m)
         Op::PutCertificateLogin => {

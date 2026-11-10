@@ -26,6 +26,7 @@ use suiss_crypto::rotation::Policy;
 pub mod accounts;
 pub mod agent;
 pub mod certificate;
+pub mod ciba;
 pub mod dns;
 pub mod federation;
 pub mod org;
@@ -36,6 +37,7 @@ pub mod realm;
 pub mod saml;
 pub mod scim;
 
+pub use ciba::CibaSetting;
 pub use realm::{
     Binding, Group, Members, MembershipIssuer, Name, SessionPolicy, SigninMethod, SigninPolicy,
     Social, SocialClient, Upstream, UpstreamLink,
@@ -1797,6 +1799,9 @@ pub enum Change {
     /// `idp.realm.device_code` (`true`, CT2) or `device_code_close` (`false`, CT1), RFC 8628
     /// (OP-154 m.3 (a), (p)).
     DeviceCode(bool),
+    /// `idp.realm.ciba` (CT2) or `ciba_close` (CT1): CIBA as an invitation, poll and ping
+    /// (OP-155 m.3 (l), IDP-14).
+    Ciba(CibaSetting),
     /// `idp.realm.certificate_login` (CT2): certificate, PIV and CAC sign-in, turned on, changed
     /// or off (OP-155 m.3 (m)).
     CertificateLogin(certificate::CertificateLogin),
@@ -2168,6 +2173,8 @@ impl Change {
             Self::CrossAppConnectionRetire(_) => IdpAction::ClientCrossAppConnectionRetire,
             Self::DeviceCode(true) => IdpAction::RealmDeviceCode,
             Self::DeviceCode(false) => IdpAction::RealmDeviceCodeClose,
+            Self::Ciba(c) if c.enabled => IdpAction::RealmCiba,
+            Self::Ciba(_) => IdpAction::RealmCibaClose,
             Self::CertificateLogin(_) => IdpAction::RealmCertificateLogin,
             Self::MtlsAliases(_) => IdpAction::RealmMtlsAliases,
             Self::ClientProfile { delta, .. } => delta.action(),
@@ -2250,6 +2257,7 @@ impl Change {
             }
             Self::CertificateLogin(c) => c.check(),
             Self::ClientProfile { delta, .. } => delta.check(),
+            Self::Ciba(c) => c.check(),
             Self::AccountBind(_)
             | Self::FrontchannelLogout
             | Self::DeviceCode(_)
@@ -2385,6 +2393,7 @@ impl Change {
             Self::Federation(f) => f.body(),
             Self::Saml(s) => s.body(),
             Self::DeviceCode(on) => Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))]),
+            Self::Ciba(c) => c.to_value(),
             Self::CertificateLogin(c) => c.to_value(),
             Self::MtlsAliases(on) => Value::Map(vec![(Value::text("published"), Value::Bool(*on))]),
             Self::ClientProfile { client, delta } => Value::Map(vec![
@@ -2545,6 +2554,7 @@ impl Change {
             }
             Self::DcrPolicy { .. }
             | Self::DeviceCode(_)
+            | Self::Ciba(_)
             | Self::CertificateLogin(_)
             | Self::MtlsAliases(_)
             | Self::FrontchannelLogout => path.push(String::from("realm")),

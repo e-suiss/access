@@ -1187,6 +1187,7 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "defineAgentTemplate"
         | "putDcrPolicy"
         | "putDeviceCode"
+        | "putCiba"
         | "putCertificateLogin"
         | "putMtlsAliases"
         | "createCrossAppConnection"

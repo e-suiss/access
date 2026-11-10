@@ -698,6 +698,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             Change::CimdPolicy(_)
             | Change::DeviceCode(_)
+            | Change::Ciba(_)
             | Change::CertificateLogin(_)
             | Change::MtlsAliases(_)
             | Change::FrontchannelLogout
@@ -1635,6 +1636,27 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Saml(s) => saml::write(t, bound, s).await?,
             Change::DeviceCode(on) => {
                 t.put_device_code(bound, *on).await?;
+                true
+            }
+            // OP-155 m.3 (l)
+            Change::Ciba(c) => {
+                let mut ping = Vec::with_capacity(c.ping.len());
+                for (client, endpoint) in &c.ping {
+                    let row = idp::client(t, client.as_str())
+                        .await?
+                        .filter(|r| r.active)
+                        .ok_or(Invalid::NoClient)?;
+                    ping.push((row.client_uuid, endpoint.clone()));
+                }
+                t.put_ciba(
+                    bound,
+                    &access_store::ciba::CibaSettingsRow {
+                        enabled: c.enabled,
+                        login_hint: c.login_hint,
+                        ping,
+                    },
+                )
+                .await?;
                 true
             }
             // OP-155 m.3 (m)
