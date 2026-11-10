@@ -587,7 +587,7 @@ pub(super) fn contribution_of(body: &JsonValue) -> Digest {
     )
 }
 
-// IDI-9, OP-154 m.13 (f), §9.14.5 k.2, P54, OP-155 m.3 (l), Ek B 4719, 4720
+// IDI-9, OP-154 m.13 (f), §9.14.5 k.2, P54, OP-155 m.3 (l), Ek B 4718, 4719, 4720
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_ciba_answer_needs_the_persons_aas_and_a_nonce_is_answered_once() {
     let d = Desk::open("p8-ciba-once", false).await;
@@ -678,7 +678,7 @@ async fn a_ciba_answer_needs_the_persons_aas_and_a_nonce_is_answered_once() {
     d.close().await;
 }
 
-// OP-155 m.3 (l), IDP-14, Ek B 4719
+// OP-155 m.3 (l), IDP-14, Ek B 4718
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_declined_request_is_access_denied_for_good_and_the_ping_client_is_told() {
     let d = Desk::open("p8-ciba-deny", false).await;
@@ -725,7 +725,7 @@ async fn a_declined_request_is_access_denied_for_good_and_the_ping_client_is_tol
     d.close().await;
 }
 
-// IDP-14, §10.5.3, §10.2.1, §10.5.1, OP-155 m.3 (l), Ek B 4719, 4721, 5043
+// IDP-14, §10.5.3, §10.2.1, §10.5.1, OP-155 m.3 (l), Ek B 4718, 4721, 5043
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn push_and_free_hints_are_refused_and_fapi_clients_sign_their_request() {
     let d = Desk::open("p8-ciba-profile", false).await;

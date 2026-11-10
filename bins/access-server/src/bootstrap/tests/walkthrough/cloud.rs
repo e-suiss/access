@@ -46,7 +46,7 @@ async fn a_cloud_agent_waits_for_its_principals_approval_and_commits_on_the_same
         "{wait:?}"
     );
     assert_eq!(wait.routes, [Route::Coordinator], "{wait:?}");
-    // §11.14.2, §9.9.5, OP-155 m.3 (l), OP-154 m.17 (b), Ek B 4365
+    // §11.14.2, §9.9.5, OP-155 m.3 (l), OP-154 m.17 (b), Ek B 4365, 4718, 4719
     let client = d.ciba_client("Mail agent", false).await;
     d.ciba_on(false, &[]).await;
     let hint = d.hint_token(&client).await;

@@ -31,7 +31,7 @@ function ciba(mock: import("./mock.js").LoginMock, status = 200) {
   mock.json.set("POST /v1/ciba/approval", { status: 200, body: { decision: "denied" } });
 }
 
-// OP-155 m.3 (l), Ek B 4719
+// OP-155 m.3 (l), Ek B 4718
 test("the CIBA page shows the client and its binding message, and declining needs the CSRF token", async ({
   page,
   mock,

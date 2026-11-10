@@ -74,7 +74,7 @@ test.describe("@live hosted pages", () => {
     await clean(page);
   });
 
-  // OP-155 m.3 (l), IDP-14, Ek B 4719
+  // OP-155 m.3 (l), IDP-14, Ek B 4718
   test("@live the CIBA approval page is never framed, may compile only the Kernel and needs a sign-in", async ({
     page,
   }) => {
