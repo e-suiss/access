@@ -1587,8 +1587,7 @@ async fn serve(
     )?;
     let tenants_pool = router_pool.clone();
     let sandbox_pool = router_pool.clone();
-    // OP-155 m.3 (c), IDI-11
-    let edge_calls = edge::routes(router_pool.clone(), app.clone(), edge_keks, saml.clone());
+    let (edge_router, edge_app) = (router_pool.clone(), app.clone());
     // OP-155 m.3 (g), IDP-23, IDP-29
     let scim_ids = cell_ids.key().ok_or("no cell id key")?;
     let scim_calls = scim::routes(
@@ -1725,6 +1724,22 @@ async fn serve(
         prepared.account_assets,
         limits,
     );
+    // OP-155 m.3 (c), (n), IDI-11
+    let edge_calls = edge::routes(
+        edge_router,
+        edge_app,
+        edge_keks,
+        saml.clone(),
+        (
+            cell_ids.key().ok_or("cell id key unavailable")?,
+            certificate::edge_certificates(prepared.outbound.clone(), Arc::new(idp_plane.clone())),
+        ),
+    );
+    // OP-155 m.3 (n)
+    let ldap_credentials = access_http::login::ldap_credentials_router(
+        RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
+        hosted.clone(),
+    );
     // OP-155 m.3 (m)
     let certificate_login = access_http::login::certificate_router(
         RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
@@ -1752,6 +1767,7 @@ async fn serve(
             .merge(platform)
             .merge(realms)
             .merge(sign_in.merge(me).merge(certificate_login))
+            .merge(ldap_credentials)
             .merge(account_pages)
             .merge(authorize)
             .merge(edge_calls)

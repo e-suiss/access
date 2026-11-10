@@ -1110,21 +1110,21 @@ pub const ROUTES: &[Route] = &[
         "certificateLoginPage",
         "Certificate, PIV and CAC sign-in on the mTLS listener: trust comes only from TLS that ends at access-server, never from a forwarded header (OP-155 m.3 (k), (m)).",
     ),
-    planned(
+    live(
         Owner::P10,
         Verb::Get,
         "/v1/account/ldap-credentials",
         "listLdapCredentials",
         "The person's directory app passwords: application, created, last used; never the password (OP-155 m.3 (n)).",
     ),
-    planned(
+    live(
         Owner::P10,
         Verb::Post,
         "/v1/account/ldap-credentials",
         "createLdapCredential",
         "Creates a directory app password for one application, shown once and kept as Argon2id.",
     ),
-    planned(
+    live(
         Owner::P10,
         Verb::Post,
         "/v1/account/ldap-credentials/{credential}/revoke",

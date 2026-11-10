@@ -17,6 +17,7 @@ mod credential;
 pub mod devices;
 pub mod did;
 pub mod household;
+pub mod ldap;
 mod me;
 pub mod orgs;
 pub mod pages;

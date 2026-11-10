@@ -3864,21 +3864,34 @@
         "operationId": "listLdapCredentials",
         "summary": "The person's directory app passwords: application, created, last used; never the password (OP-155 m.3 (n)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       },
       "post": {
         "operationId": "createLdapCredential",
         "summary": "Creates a directory app password for one application, shown once and kept as Argon2id.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -3892,8 +3905,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/account/ldap-credentials/{credential}/revoke": {
@@ -3901,8 +3913,15 @@
         "operationId": "revokeLdapCredential",
         "summary": "Revokes a directory app password; nothing is deleted (OP-73).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -3926,8 +3945,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/.well-known/openid-credential-issuer": {
