@@ -194,3 +194,100 @@ async fn a_url_client_id_with_a_chain_resolves_through_federation_only() {
     assert_eq!(problem(&refused), "invalid-client");
     let _ = CB;
 }
+
+async fn open_registration(a: &At<'_>) {
+    let mut tx = TenantTx::begin(&a.c.db.app, a.f.realm.tenant, a.f.realm.realm)
+        .await
+        .unwrap();
+    let b = a.bound(&mut tx, "idp.federation.registration_open").await;
+    tx.put_federation_settings(
+        &b,
+        &FederationSettingsRow {
+            enabled: true,
+            registration_open: true,
+            ..FederationSettingsRow::default()
+        },
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+}
+
+async fn registration(a: &At<'_>, id: &str) -> Option<access_store::oidf::OidfRegistration> {
+    let mut tx = TenantTx::begin(&a.c.db.app, a.f.realm.tenant, a.f.realm.realm)
+        .await
+        .unwrap();
+    let row = tx.oidf_client(id).await.unwrap();
+    tx.commit().await.unwrap();
+    row.map(|r| r.registration)
+}
+
+// IDP-19, §10.7.1 rule 7, OP-155 m.3 (j), Ek B 4755
+#[tokio::test]
+async fn automatic_registration_is_closed_by_default_and_refuses_a_replayed_request_object() {
+    use access_identity_oidf::testing::Key;
+    let c = Cluster::new(&["oidf-auto"]).await;
+    let a = c.at(0);
+    a.register_resource(MCP).await;
+    let t = now();
+    let (iat, exp) = (t - 1_000, t + 3_600_000);
+    let ta = Entity::new(TA).unwrap();
+    let rp = Entity::new(RP).unwrap();
+    let signing = Key::new("rp-req").unwrap();
+    let jwks = access_crypto::jose::output::to_string(&signing.jwks());
+    let meta = j(&format!(
+        r#"{{"openid_relying_party":{{"client_name":"Federated","redirect_uris":["{RP}/cb"],"token_endpoint_auth_method":"private_key_jwt","jwks":{jwks}}}}}"#
+    ));
+    let ta_meta = j(&format!(
+        r#"{{"federation_entity":{{"federation_fetch_endpoint":"{}"}}}}"#,
+        ta.fetch_endpoint()
+    ));
+    let chain = format!(
+        r#"["{}","{}","{}"]"#,
+        rp.config(&[TA], &meta, iat, exp),
+        ta.about(&rp, None, iat, exp),
+        ta.config(&[], &ta_meta, iat, exp)
+    );
+    let object = |key: &Key, jti: &str| {
+        key.sign_header(
+            &format!(
+                r#"{{"alg":"ES256","kid":"{}","typ":"oauth-authz-req+jwt","trust_chain":{chain}}}"#,
+                key.kid
+            ),
+            &format!(
+                r#"{{"iss":"{RP}","client_id":"{RP}","aud":"{}","jti":"{jti}","exp":{},"nbf":{}}}"#,
+                a.issuer(),
+                t / 1000 + 300,
+                t / 1000 - 5
+            ),
+        )
+    };
+    federate(&a, &ta).await;
+    let first = object(&signing, "j-1");
+    let closed = ask(&a, RP, &[("request", first.as_str())]).await;
+    assert_eq!(
+        problem(&closed),
+        "invalid-client",
+        "registration is off by default"
+    );
+    assert_eq!(registration(&a, RP).await, None);
+    open_registration(&a).await;
+    let forged = object(&Key::new("rp-req").unwrap(), "j-0");
+    let refused = ask(&a, RP, &[("request", forged.as_str())]).await;
+    assert_eq!(
+        problem(&refused),
+        "invalid-client",
+        "not signed by the chain's RP keys"
+    );
+    let _ = ask(&a, RP, &[("request", first.as_str())]).await;
+    assert_eq!(
+        registration(&a, RP).await,
+        Some(access_store::oidf::OidfRegistration::Automatic)
+    );
+    let replayed = ask(&a, RP, &[("request", first.as_str())]).await;
+    assert_eq!(
+        problem(&replayed),
+        "invalid-client",
+        "jti and exp are kept for replay"
+    );
+}

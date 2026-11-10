@@ -73,6 +73,28 @@ fn federated_metadata(c: &access_identity_oidf::Chain, id: &str) -> Option<Strin
     Some(text)
 }
 
+/// The replay key and `exp` of an automatic registration's request object, verified with the
+/// keys its chain's `openid_relying_party` metadata names (§10.7.1 rule 7); `None` refuses it.
+fn automatic(
+    c: &access_identity_oidf::Chain,
+    object: &str,
+    id: &str,
+    issuer: &str,
+    now: u64,
+) -> Option<([u8; 32], u64)> {
+    use access_identity_oidf::request::verify_request_object;
+    use access_identity_oidf::statement::parse_jwks;
+    let keys = parse_jwks(c.metadata_of("openid_relying_party")?.get("jwks")?).ok()?;
+    let r = verify_request_object(object, &keys, id, issuer, now).ok()?;
+    let mut input = id.as_bytes().to_vec();
+    input.push(0);
+    input.extend_from_slice(r.jti.as_bytes());
+    Some((
+        access_crypto::oauth::opaque_digest("access/oidf-registration/v1", &input),
+        r.exp_ms,
+    ))
+}
+
 /// The client a live OIDF snapshot describes (IDP-20: it still asks the person).
 fn of_oidf(row: &access_store::oidf::OidfClientRow) -> Option<Client> {
     let doc = cimd::parse(&row.metadata, &row.client_id).ok()?;
@@ -190,13 +212,23 @@ impl<E: Env> OAuth<E> {
         id: &str,
     ) -> Result<Option<Result<(), Refusal>>, Unavailable> {
         use access_identity_oidf::chain::{self, FRESHNESS_MS};
-        let offered = params.get("trust_chain");
+        // OIDF 1.0 §12.1.1.1: automatic registration carries its chain in the request object
+        let object = params
+            .get("request")
+            .filter(|_| params.get("trust_chain").is_none());
+        let carried = object.and_then(access_identity_oidf::request::trust_chain_header);
+        let offered: Option<Result<Vec<String>, chain::ChainError>> =
+            match (params.get("trust_chain"), &carried) {
+                (Some(tc), _) => Some(chain::parse_trust_chain_json(tc.as_bytes())),
+                (None, Some(c)) => Some(Ok(c.clone())),
+                (None, None) => None,
+            };
         let now = self.now()?;
         let mut tx = self.begin(realm).await?;
         let fed = tx.federation().await?;
-        if !fed.enabled {
+        // IDI-10, OP-154 m.3 (i), §10.7.1 rule 7
+        if !fed.enabled || (carried.is_some() && !fed.registration_open) {
             tx.commit().await?;
-            // IDI-10, OP-154 m.3 (i)
             return Ok(offered.map(|_| Err(Refusal::Federation)));
         }
         let anchors = crate::adapters::oidf::anchors(&tx.trust_anchors().await?);
@@ -209,8 +241,8 @@ impl<E: Env> OAuth<E> {
         {
             return Ok(Some(Ok(())));
         }
-        let resolved = if let Some(tc) = offered {
-            chain::parse_trust_chain_json(tc.as_bytes()).and_then(|jwts| {
+        let resolved = if let Some(jwts) = &offered {
+            jwts.clone().and_then(|jwts| {
                 let refs: Vec<&str> = jwts.iter().map(String::as_str).collect();
                 chain::verify_chain(&refs, &anchors, now)
             })
@@ -235,6 +267,21 @@ impl<E: Env> OAuth<E> {
             }
             return Ok(offered.map(|_| Err(Refusal::Federation)));
         };
+        let mut registration = access_store::oidf::OidfRegistration::Resolved;
+        if let (Some(object), Some(_)) = (object, &carried) {
+            // §10.7.1 rule 7, IDP-19
+            let Some(replay) = automatic(&c, object, id, realm.issuer.as_str(), now) else {
+                return Ok(Some(Err(Refusal::Federation)));
+            };
+            let mut tx = self.begin(realm).await?;
+            let first = tx.oidf_jti_first(&replay.0, replay.1).await?;
+            tx.commit().await?;
+            if !first {
+                tracing::info!("OIDF registration request object replayed");
+                return Ok(Some(Err(Refusal::Federation)));
+            }
+            registration = access_store::oidf::OidfRegistration::Automatic;
+        }
         let marks: Vec<String> = c
             .trust_marks
             .iter()
@@ -245,7 +292,7 @@ impl<E: Env> OAuth<E> {
             metadata_hash: suiss_crypto::digest::sha256(metadata.as_bytes()),
             anchor: &c.anchor,
             trust_marks: &marks,
-            registration: access_store::oidf::OidfRegistration::Resolved,
+            registration,
             fetched_ms: now,
             chain_exp_ms: c.exp_ms,
         };

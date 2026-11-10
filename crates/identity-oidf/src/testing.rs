@@ -45,6 +45,12 @@ impl Key {
     #[must_use]
     pub fn sign(&self, typ: &str, payload: &str) -> String {
         let header = format!(r#"{{"alg":"ES256","kid":"{}","typ":"{typ}"}}"#, self.kid);
+        self.sign_header(&header, payload)
+    }
+
+    /// A compact ES256 JWS of `payload` under the protected header `header`, as given.
+    #[must_use]
+    pub fn sign_header(&self, header: &str, payload: &str) -> String {
         let input = format!(
             "{}.{}",
             b64url_encode(header.as_bytes()),
