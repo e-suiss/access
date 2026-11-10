@@ -456,11 +456,45 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The forward-auth check of a registered proxy for one request, in the engine's own protocol (nginx auth_request, Traefik forwardAuth, Caddy forward_auth, Envoy ext_authz HTTP): a real AuthZEN evaluation, cached by session, application, method and path pattern for at most min(horizon, 30 s); unreachable means refused (IDP-30, OP-156 m.3 (l)). */
+        /** The forward-auth check of a registered proxy for one request, in the engine's own protocol (nginx auth_request, Traefik forwardAuth, Caddy forward_auth, Envoy ext_authz HTTP): a real eligibility check of the session's Party, cached by session, application, method and path pattern for at most min(horizon, 30 s); unreachable means refused (IDP-30, OP-156 m.3 (l)). */
         get: operations["proxyCheck"];
         put?: never;
         /** The same check for an engine that forwards the original method; the body is never read. */
         post: operations["proxyCheckPost"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/proxy/v1/check/envoy/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The check as Envoy ext_authz in HTTP service mode asks it: the original method and the original path after the check path; every method is answered alike. */
+        get: operations["proxyCheckEnvoy"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/relay/v1/iys-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Relay's report of an İYS consent record's registration state for a preference.changed event; it changes no preference (OP-156 m.3 (c)). */
+        post: operations["relayIysStatus"];
         delete?: never;
         options?: never;
         head?: never;
@@ -478,23 +512,6 @@ export interface paths {
         put?: never;
         /** Who may approve a Gate of a class now (§7.9.5.3, E41, OP-156 m.3 (t)): derived, advisory, never recorded, at most 1000 Parties. Only the domain's auditors and a reader holding `access:read` on `access.search:[eligible-set]` get Parties (E26); anyone else gets an empty set. A Gate being satisfied is never an ALLOW (G30, EI-4). */
         post: operations["eligibleSet"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/relay/v1/iys-status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Relay's report of an İYS consent record's registration state; it changes no preference and no authority (OP-156 m.3 (c), IDP-37 (4), B23). */
-        post: operations["relayIysStatus"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2093,26 +2110,6 @@ export interface components {
                 /** @constant */
                 recorded: false;
             };
-        };
-        IysStatusReport: {
-            /** @description The tenant's external id (tnt_), as the Relay message's accesstenant names it. */
-            tenant: string;
-            /**
-             * Format: uuid
-             * @description The realm, as the Relay message's accessrealm names it.
-             */
-            realm: string;
-            /**
-             * Format: uuid
-             * @description The CloudEvents id of the relay.message.iys_consent.v1 the record came in.
-             */
-            record: string;
-            /** @enum {unknown} */
-            status: "recorded" | "failed";
-            /** @description Why it failed; never with recorded. */
-            reason?: string;
-            /** @description When it happened at İYS, Unix ms. */
-            at: number;
         };
     };
     responses: never;
@@ -3787,7 +3784,23 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The request is refused; nothing is read. */
+            /** @description Allowed: Access-Identity carries the application token (access-app+jwt, ES256, 60 s); X-Access-User and X-Access-Email only under idp.proxy.plain_headers. The body is a proxy-decision (proxy.cddl). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sign in, or the end of one: Location and Set-Cookie (__Host-access-proxy-state, __Host-access-proxy) for the browser. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description invalid-forwarded-request: the engine's method, URI or host header is missing or malformed; refused. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3796,8 +3809,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-156 m.4). */
-            501: {
+            /** @description proxy-unregistered: no proxy transport identity, or none registered for the application host. For Nginx, also a sign-in: Location and Set-Cookie say where to. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3805,7 +3818,14 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Temporarily unavailable; retry. */
+            /** @description Refused by the domain's decision; the body is a proxy-decision. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Access is unreachable; the request is refused (MD-8). */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -3823,6 +3843,131 @@ export interface operations {
             path: {
                 engine: "nginx" | "traefik" | "caddy" | "envoy";
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Allowed: Access-Identity carries the application token (access-app+jwt, ES256, 60 s); X-Access-User and X-Access-Email only under idp.proxy.plain_headers. The body is a proxy-decision (proxy.cddl). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sign in, or the end of one: Location and Set-Cookie (__Host-access-proxy-state, __Host-access-proxy) for the browser. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description invalid-forwarded-request: the engine's method, URI or host header is missing or malformed; refused. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description proxy-unregistered: no proxy transport identity, or none registered for the application host. For Nginx, also a sign-in: Location and Set-Cookie say where to. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Refused by the domain's decision; the body is a proxy-decision. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Access is unreachable; the request is refused (MD-8). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    proxyCheckEnvoy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The original request's path, appended by Envoy ext_authz. */
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Allowed: Access-Identity carries the application token (access-app+jwt, ES256, 60 s); X-Access-User and X-Access-Email only under idp.proxy.plain_headers. The body is a proxy-decision (proxy.cddl). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description Sign in, or the end of one: Location and Set-Cookie (__Host-access-proxy-state, __Host-access-proxy) for the browser. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description invalid-forwarded-request: the engine's method, URI or host header is missing or malformed; refused. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description proxy-unregistered: no proxy transport identity, or none registered for the application host. For Nginx, also a sign-in: Location and Set-Cookie say where to. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Refused by the domain's decision; the body is a proxy-decision. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Access is unreachable; the request is refused (MD-8). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    relayIysStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -3898,82 +4043,6 @@ export interface operations {
             };
             /** @description Over a rate limit. */
             429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Temporarily unavailable; retry. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    relayIysStatus: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["IysStatusReport"];
-            };
-        };
-        responses: {
-            /** @description Kept beside its record; no preference changed. */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description invalid-request: the report is malformed; nothing is kept. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description client-unauthenticated: no valid platform client assertion. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description not-relay: the client is not Relay's. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description not-found: the realm has no such record. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description body-too-large */
-            413: {
                 headers: {
                     [name: string]: unknown;
                 };

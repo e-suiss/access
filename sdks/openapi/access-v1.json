@@ -2202,40 +2202,7 @@
     "/proxy/v1/check/{engine}": {
       "get": {
         "operationId": "proxyCheck",
-        "summary": "The forward-auth check of a registered proxy for one request, in the engine's own protocol (nginx auth_request, Traefik forwardAuth, Caddy forward_auth, Envoy ext_authz HTTP): a real AuthZEN evaluation, cached by session, application, method and path pattern for at most min(horizon, 30 s); unreachable means refused (IDP-30, OP-156 m.3 (l)).",
-        "x-suiss-status": "planned",
-        "responses": {
-          "400": {
-            "description": "The request is refused; nothing is read.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Temporarily unavailable; retry.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-156 m.4).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
+        "summary": "The forward-auth check of a registered proxy for one request, in the engine's own protocol (nginx auth_request, Traefik forwardAuth, Caddy forward_auth, Envoy ext_authz HTTP): a real eligibility check of the session's Party, cached by session, application, method and path pattern for at most min(horizon, 30 s); unreachable means refused (IDP-30, OP-156 m.3 (l)).",
         "parameters": [
           {
             "name": "engine",
@@ -2251,44 +2218,59 @@
               ]
             }
           }
-        ]
+        ],
+        "responses": {
+          "400": {
+            "description": "invalid-forwarded-request: the engine's method, URI or host header is missing or malformed; refused.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "proxy-unregistered: no proxy transport identity, or none registered for the application host. For Nginx, also a sign-in: Location and Set-Cookie say where to.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access is unreachable; the request is refused (MD-8).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Allowed: Access-Identity carries the application token (access-app+jwt, ES256, 60 s); X-Access-User and X-Access-Email only under idp.proxy.plain_headers. The body is a proxy-decision (proxy.cddl).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "302": {
+            "description": "Sign in, or the end of one: Location and Set-Cookie (__Host-access-proxy-state, __Host-access-proxy) for the browser."
+          },
+          "403": {
+            "description": "Refused by the domain's decision; the body is a proxy-decision."
+          }
+        }
       },
       "post": {
         "operationId": "proxyCheckPost",
         "summary": "The same check for an engine that forwards the original method; the body is never read.",
-        "x-suiss-status": "planned",
-        "responses": {
-          "400": {
-            "description": "The request is refused; nothing is read.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Temporarily unavailable; retry.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-156 m.4).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        },
         "parameters": [
           {
             "name": "engine",
@@ -2304,7 +2286,120 @@
               ]
             }
           }
-        ]
+        ],
+        "responses": {
+          "400": {
+            "description": "invalid-forwarded-request: the engine's method, URI or host header is missing or malformed; refused.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "proxy-unregistered: no proxy transport identity, or none registered for the application host. For Nginx, also a sign-in: Location and Set-Cookie say where to.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access is unreachable; the request is refused (MD-8).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Allowed: Access-Identity carries the application token (access-app+jwt, ES256, 60 s); X-Access-User and X-Access-Email only under idp.proxy.plain_headers. The body is a proxy-decision (proxy.cddl).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "302": {
+            "description": "Sign in, or the end of one: Location and Set-Cookie (__Host-access-proxy-state, __Host-access-proxy) for the browser."
+          },
+          "403": {
+            "description": "Refused by the domain's decision; the body is a proxy-decision."
+          }
+        }
+      }
+    },
+    "/proxy/v1/check/envoy/{path}": {
+      "get": {
+        "operationId": "proxyCheckEnvoy",
+        "summary": "The check as Envoy ext_authz in HTTP service mode asks it: the original method and the original path after the check path; every method is answered alike.",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The original request's path, appended by Envoy ext_authz."
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "invalid-forwarded-request: the engine's method, URI or host header is missing or malformed; refused.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "proxy-unregistered: no proxy transport identity, or none registered for the application host. For Nginx, also a sign-in: Location and Set-Cookie say where to.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access is unreachable; the request is refused (MD-8).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Allowed: Access-Identity carries the application token (access-app+jwt, ES256, 60 s); X-Access-User and X-Access-Email only under idp.proxy.plain_headers. The body is a proxy-decision (proxy.cddl).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "302": {
+            "description": "Sign in, or the end of one: Location and Set-Cookie (__Host-access-proxy-state, __Host-access-proxy) for the browser."
+          },
+          "403": {
+            "description": "Refused by the domain's decision; the body is a proxy-decision."
+          }
+        }
       }
     },
     "/access/v1/eligibility:set": {

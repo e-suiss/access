@@ -23,8 +23,76 @@ pub(super) fn components() -> Value {
     })
 }
 
-/// Every declared route of [`PLANNED`], and the served relay status (OP-156 m.3 (c)).
+/// The forward-auth checks, served (IDP-30, OP-156 m.3 (l)).
+fn proxy_paths(paths: &mut Map<String, Value>) {
+    let mut responses = problems(&[
+        (
+            "400",
+            "invalid-forwarded-request: the engine's method, URI or host header is missing or malformed; refused.",
+        ),
+        (
+            "401",
+            "proxy-unregistered: no proxy transport identity, or none registered for the application host. For Nginx, also a sign-in: Location and Set-Cookie say where to.",
+        ),
+        (
+            "503",
+            "Access is unreachable; the request is refused (MD-8).",
+        ),
+    ]);
+    responses.insert(
+        "200".into(),
+        json!({
+            "description": "Allowed: Access-Identity carries the application token (access-app+jwt, ES256, 60 s); X-Access-User and X-Access-Email only under idp.proxy.plain_headers. The body is a proxy-decision (proxy.cddl).",
+            "content": { "application/json": { "schema": { "type": "object" } } },
+        }),
+    );
+    responses.insert(
+        "302".into(),
+        json!({ "description": "Sign in, or the end of one: Location and Set-Cookie (__Host-access-proxy-state, __Host-access-proxy) for the browser." }),
+    );
+    responses.insert(
+        "403".into(),
+        json!({ "description": "Refused by the domain's decision; the body is a proxy-decision." }),
+    );
+    let engine = json!([{
+        "name": "engine",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "enum": PROXY_ENGINES },
+    }]);
+    let op = |id: &str, summary: &str, params: &Value| {
+        json!({
+            "operationId": id,
+            "summary": summary,
+            "parameters": params,
+            "responses": Value::Object(responses.clone()),
+        })
+    };
+    paths.insert(
+        "/proxy/v1/check/{engine}".into(),
+        json!({
+            "get": op("proxyCheck", "The forward-auth check of a registered proxy for one request, in the engine's own protocol (nginx auth_request, Traefik forwardAuth, Caddy forward_auth, Envoy ext_authz HTTP): a real eligibility check of the session's Party, cached by session, application, method and path pattern for at most min(horizon, 30 s); unreachable means refused (IDP-30, OP-156 m.3 (l)).", &engine),
+            "post": op("proxyCheckPost", "The same check for an engine that forwards the original method; the body is never read.", &engine),
+        }),
+    );
+    let path = json!([{
+        "name": "path",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string" },
+        "description": "The original request's path, appended by Envoy ext_authz.",
+    }]);
+    paths.insert(
+        "/proxy/v1/check/envoy/{path}".into(),
+        json!({
+            "get": op("proxyCheckEnvoy", "The check as Envoy ext_authz in HTTP service mode asks it: the original method and the original path after the check path; every method is answered alike.", &path),
+        }),
+    );
+}
+
+/// Every declared route of [`PLANNED`], the served relay status (OP-156 m.3 (c)) and the forward-auth checks.
 pub(super) fn paths(paths: &mut Map<String, Value>) {
+    proxy_paths(paths);
     let mut responses = problems(&[("503", "Temporarily unavailable; retry.")]);
     responses.insert(
         "200".into(),

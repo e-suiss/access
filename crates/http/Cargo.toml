@@ -16,6 +16,7 @@ access-identity-domain = { workspace = true }
 access-identity-events = { workspace = true }
 access-identity-federation = { workspace = true }
 access-identity-oauth = { workspace = true }
+access-identity-proxy = { workspace = true }
 access-identity-oidf = { workspace = true }
 access-identity-attest = { workspace = true }
 access-identity-account = { workspace = true }

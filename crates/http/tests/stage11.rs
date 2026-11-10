@@ -47,5 +47,7 @@ async fn every_declared_stage_11_route_is_not_yet_served() {
 #[test]
 fn the_relay_status_and_forward_auth_checks_are_declared() {
     let ops: Vec<_> = PLANNED.iter().map(|p| p.operation).collect();
-    assert!(ops.contains(&"proxyCheck"), "{ops:?}");
+    for op in ["proxyCheck", "proxyCheckPost", "relayIysStatus"] {
+        assert!(!ops.contains(&op), "{op}");
+    }
 }
