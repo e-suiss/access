@@ -149,6 +149,13 @@ impl SignerKeys {
         call(&self.socket, request).await.map_err(|_| Unavailable)
     }
 
+    /// The identity signer's socket, for the requests of other identity plane surfaces (SAML,
+    /// OP-155 m.3 (d)).
+    #[must_use]
+    pub fn socket(&self) -> &std::path::Path {
+        &self.socket
+    }
+
     /// Opens the key set of `realm` with `alg`, or makes its next keys use `alg` (OP-146
     /// m.16 (m), m.8 (e)).
     ///

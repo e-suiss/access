@@ -17,7 +17,16 @@ impl Vaults for EdgeVaults {
     }
 }
 
-/// The edge calls: the registry read by the router role, writes by the application role.
-pub(crate) fn routes(router: Pool, app: Pool, keks: RealmKeks) -> axum::Router {
-    access_http::edge::router(Edge::new(PgRegistry(router), EdgeVaults(keks), app))
+/// The edge calls: the registry read by the router role, writes by the application role; the
+/// SAML gateway's `session_attest` by the SAML identity provider (OP-155 m.3 (c)).
+pub(crate) fn routes(
+    router: Pool,
+    app: Pool,
+    keks: RealmKeks,
+    saml: std::sync::Arc<crate::saml::Saml>,
+) -> axum::Router {
+    access_http::edge::router_with(
+        Edge::new(PgRegistry(router), EdgeVaults(keks), app),
+        Some(saml),
+    )
 }

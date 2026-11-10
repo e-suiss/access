@@ -56,8 +56,22 @@ pub async fn confine(request: Request, next: Next) -> Response {
     next.run(request).await
 }
 
+/// The SAML gateway's `session_attest` (OP-155 m.3 (c), IDI-7): the gateway redeems the one-use
+/// handle access-server forwarded and gets the flow decided; a forged or used handle is refused.
+pub trait SessionAttest: Send + Sync {
+    /// Answers one `session_attest` body of gateway `g`.
+    fn attest<'a>(
+        &'a self,
+        g: &'a Gateway,
+        body: &'a [u8],
+    ) -> core::pin::Pin<
+        Box<dyn core::future::Future<Output = Result<Vec<u8>, EdgeError>> + Send + 'a>,
+    >;
+}
+
 struct Shared<R, V> {
     edge: Edge<R, V>,
+    saml: Option<Arc<dyn SessionAttest>>,
 }
 
 /// The edge calls over `edge`.
@@ -66,11 +80,20 @@ where
     R: Registry + 'static,
     V: Vaults + 'static,
 {
+    router_with(edge, None)
+}
+
+/// The edge calls over `edge`, with the SAML gateway's `session_attest` when `saml` is given.
+pub fn router_with<R, V>(edge: Edge<R, V>, saml: Option<Arc<dyn SessionAttest>>) -> Router
+where
+    R: Registry + 'static,
+    V: Vaults + 'static,
+{
     let mut path = String::from(PREFIX);
     path.push_str("{call}");
     Router::new()
         .route(&path, post(handle::<R, V>))
-        .with_state(Arc::new(Shared { edge }))
+        .with_state(Arc::new(Shared { edge, saml }))
 }
 
 fn problem(status: StatusCode, code: &'static str) -> Response {
@@ -122,6 +145,22 @@ async fn handle<R: Registry, V: Vaults>(
         Ok(g) => g,
         Err(e) => return refused(&e),
     };
+    if call == Call::SessionAttest {
+        // IDI-7, §13.2
+        let done = match (&shared.saml, gateway.uri.kind) {
+            (Some(s), access_internal_api::edge::GatewayKind::Saml) => {
+                s.attest(&gateway, &body).await
+            }
+            (Some(_), _) => Err(EdgeError::Refused(
+                access_identity_edge::domain::Refusal::Method,
+            )),
+            (None, _) => return problem(StatusCode::NOT_IMPLEMENTED, "edge-call-not-served"),
+        };
+        return match done {
+            Ok(body) => cbor(body),
+            Err(e) => refused(&e),
+        };
+    }
     answer(&shared.edge, &gateway, call, &body).await
 }
 

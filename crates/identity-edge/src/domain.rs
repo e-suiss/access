@@ -48,6 +48,11 @@ pub enum Refusal {
     Subject,
     /// An audit event whose type does not fit the audit log.
     Event,
+    /// A `session_attest` handle that names no open flow of the realm: forged, used or
+    /// expired (IDI-7).
+    Attest,
+    /// A `session_attest` body outside the contract.
+    Malformed,
 }
 
 impl Refusal {
@@ -60,6 +65,8 @@ impl Refusal {
             Self::AuthTime => "edge-auth-time",
             Self::Subject => "edge-subject",
             Self::Event => "edge-event",
+            Self::Attest => "edge-attest",
+            Self::Malformed => "edge-malformed",
         }
     }
 }

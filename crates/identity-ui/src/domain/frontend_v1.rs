@@ -935,70 +935,70 @@ pub const ROUTES: &[Route] = &[
         "scimBulk",
         "SCIM Bulk is not offered and always answers 501 (OP-155 m.3 (g)).",
     ),
-    planned(
+    live(
         Owner::P2,
         Verb::Get,
         "/saml/metadata",
         "samlMetadata",
         "The SAML IdP metadata, signed with the realm's saml key (OP-155 m.3 (e)).",
     ),
-    planned(
+    live(
         Owner::P2,
         Verb::Get,
         "/saml/sso",
         "samlSsoRedirect",
         "SAML SSO, HTTP-Redirect binding: access-server keeps the cookies and forwards the AuthnRequest to the SAML gateway with session_attest (OP-155 m.3 (c)).",
     ),
-    planned(
+    live(
         Owner::P2,
         Verb::Post,
         "/saml/sso",
         "samlSsoPost",
         "SAML SSO, HTTP-POST binding.",
     ),
-    planned(
+    live(
         Owner::P2,
         Verb::Get,
         "/saml/sso/{sp}",
         "samlIdpInitiated",
         "IdP-initiated SSO to one service provider, only when its registration allows it; the assertion lives 2 minutes.",
     ),
-    planned(
+    live(
         Owner::P2,
         Verb::Get,
         "/saml/slo",
         "samlSloRedirect",
         "SAML single logout, HTTP-Redirect binding.",
     ),
-    planned(
+    live(
         Owner::P2,
         Verb::Post,
         "/saml/slo",
         "samlSloPost",
         "SAML single logout, HTTP-POST binding.",
     ),
-    planned(
+    live(
         Owner::P2,
         Verb::Post,
         "/saml/ecp",
         "samlEcp",
         "SAML ECP (PAOS) with a per-application credential, never Basic authentication with the account's password (OP-155 m.3 (e)).",
     ),
-    planned(
+    live(
         Owner::P2,
         Verb::Get,
         "/wsfed",
         "wsfedPassive",
         "WS-Federation passive requestor: wsignin1.0 and wsignout1.0 with a SAML 1.1 or 2.0 token per relying party (OP-155 m.3 (f)).",
     ),
-    planned(
+    live(
         Owner::P2,
         Verb::Post,
         "/wsfed",
         "wsfedPassivePost",
         "WS-Federation passive requestor, POST form.",
     ),
-    planned(
+    live(
         Owner::P2,
         Verb::Get,
         "/wsfed/metadata",

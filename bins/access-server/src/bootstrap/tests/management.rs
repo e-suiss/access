@@ -1168,6 +1168,7 @@ mod device;
 mod organizations;
 mod resources;
 mod scim;
+mod saml;
 mod settings;
 mod vault;
 mod walkthrough_enterprise;

@@ -978,6 +978,20 @@ impl RealmKeyring {
 }
 
 impl RealmKeys for RealmKeyring {
+    // MD-6, OP-155 m.3 (d)
+    async fn saml_open(&self, realm: RealmId, p256: bool) -> Result<(), Unavailable> {
+        crate::saml::open_key(self.signer.socket(), realm, p256)
+            .await
+            .map_err(|e| Unavailable(e.0))
+    }
+
+    // OP-155 m.3 (a), (e)
+    async fn saml_emergency(&self, realm: RealmId, p256: bool) -> Result<(), Unavailable> {
+        crate::saml::emergency(self.signer.socket(), realm, p256)
+            .await
+            .map_err(|e| Unavailable(e.0))
+    }
+
     async fn open(&self, realm: RealmId, alg: JoseAlg) -> Result<(), Unavailable> {
         let alg = match alg {
             JoseAlg::Es256 => JwsAlg::Es256,

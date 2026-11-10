@@ -22,6 +22,7 @@ pub mod orgs;
 pub mod pages;
 pub mod privacy;
 pub mod recovery;
+mod saml;
 pub mod shell;
 pub mod signup;
 pub mod social;

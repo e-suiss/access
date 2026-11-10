@@ -32,6 +32,7 @@ mod product;
 mod retention;
 mod risk;
 mod scim;
+mod saml;
 mod startup;
 mod status;
 #[cfg(test)]
@@ -886,7 +887,7 @@ fn frontend<I, Q>(
     router: Pool,
     hosted: HostedLogin,
     (plane, claims): (I, Q),
-    outbound: Outbound,
+    (outbound, saml): (Outbound, Arc<saml::Saml>),
 ) -> Result<axum::Router, String>
 where
     I: DeviceInstances
@@ -945,6 +946,15 @@ where
         hosted.clone(),
         social(config, outbound)?,
     );
+    // OP-155 m.3 (c), (e), (f)
+    let saml = access_http::login::saml_router::<_, _, _, _, _, saml::Saml>(
+        RealmDiscovery::new(
+            PgDirectory::new(router.clone()),
+            SignerKeys::new(identity.signer.clone()),
+        ),
+        hosted.clone(),
+        saml,
+    );
     let me = me_router(
         RealmDiscovery::new(
             PgDirectory::new(router),
@@ -959,7 +969,12 @@ where
             pep: String::from(IDENTITY_PEP),
         },
     );
-    let me = me.merge(social).merge(vault).merge(did).merge(workloads);
+    let me = me
+        .merge(social)
+        .merge(vault)
+        .merge(did)
+        .merge(workloads)
+        .merge(saml);
     // OP-65, OP-67 m.1
     Ok(me.layer(axum::middleware::from_fn_with_state(
         RequestIds::new(Arc::new(admin::OsEntropy)),
@@ -1507,6 +1522,14 @@ async fn serve(
     let claim_keks = keks.clone();
     let edge_keks = keks.clone();
     let scim_keks = keks.clone();
+    // OP-155 m.3 (c), (e), (f)
+    let saml = Arc::new(saml::Saml::new(
+        all.app.clone(),
+        identity_section.signer.clone(),
+        identity_section.saml_gateway.clone().map(saml::GatewayAddr),
+        prepared.identity_keys.clone(),
+        keks.clone(),
+    ));
     let platform_pools = event_pools(&all, &cell_ids, &prepared.outbound);
     // TN-135, OP-151 m.3 (j)
     let hooks = oauth::hooks(all.app.clone(), prepared.outbound.clone(), keks.clone());
@@ -1539,7 +1562,7 @@ async fn serve(
     let tenants_pool = router_pool.clone();
     let sandbox_pool = router_pool.clone();
     // OP-155 m.3 (c), IDI-11
-    let edge_calls = edge::routes(router_pool.clone(), app.clone(), edge_keks);
+    let edge_calls = edge::routes(router_pool.clone(), app.clone(), edge_keks, saml.clone());
     // OP-155 m.3 (g), IDP-23, IDP-29
     let scim_ids = cell_ids.key().ok_or("no cell id key")?;
     let scim_calls = scim::routes(
@@ -1687,7 +1710,7 @@ async fn serve(
         tenants_pool.clone(),
         hosted,
         (idp_plane, courier),
-        prepared.outbound.clone(),
+        (prepared.outbound.clone(), saml),
     )?;
     let products = product::routes(
         config,

@@ -22,6 +22,29 @@ pub fn encode(s: &str) -> String {
     out
 }
 
+/// Decodes a URL-encoded query or form value (`+` is a space); `None` for a malformed escape or
+/// a value that is not UTF-8.
+#[must_use]
+pub fn form_decode(s: &str) -> Option<String> {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while let Some(&c) = b.get(i) {
+        match c {
+            b'+' => out.push(b' '),
+            b'%' => {
+                let hex =
+                    core::str::from_utf8(b.get(i.checked_add(1)?..i.checked_add(3)?)?).ok()?;
+                out.push(u8::from_str_radix(hex, 16).ok()?);
+                i = i.checked_add(2)?;
+            }
+            c => out.push(c),
+        }
+        i = i.checked_add(1)?;
+    }
+    String::from_utf8(out).ok()
+}
+
 /// The signed HTTP-Redirect URL of `message` (`SAMLRequest` or `SAMLResponse`) to `location`:
 /// raw DEFLATE, base64, then `param=…&RelayState=…&SigAlg=…` signed as these encoded octets.
 ///
