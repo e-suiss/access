@@ -448,7 +448,8 @@ dependencies = [
 name = "access-identity-saml"
 version = "0.4.0"
 dependencies = [
- "access-edge-core",
+ "access-crypto",
+ "access-internal-api",
  "access-parse",
  "aws-lc-rs",
  "esuiss-crypto",
@@ -700,6 +701,7 @@ dependencies = [
 name = "access-parser-worker"
 version = "0.4.0"
 dependencies = [
+ "access-crypto",
  "access-edge-core",
  "access-parse",
  "aws-lc-rs",

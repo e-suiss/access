@@ -3,36 +3,12 @@
 //! exclusive c14n transforms, a SHA-2 digest. The signature value comes from an [`XmlSigner`]: the
 //! realm's `saml` key in the identity signer, never a key in this process (Golden SAML, HL-35).
 
-use std::future::Future;
-
 use crate::alg::SigAlg;
 use crate::sp::b64;
 use crate::uri;
 use crate::xml::El;
 
-/// A signature from the realm's SAML key.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Signature {
-    /// The signature value (PKCS#1 v1.5, or raw `r || s` for ECDSA).
-    pub value: Vec<u8>,
-    /// The signing key's certificate, DER, for `KeyInfo` (a hint, never a trust anchor).
-    pub certificate: Vec<u8>,
-}
-
-/// Why nothing was signed.
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
-#[error("signer: {0}")]
-pub struct SignError(pub String);
-
-/// Signs canonical `SignedInfo` octets with the realm's SAML key (§10.6.1 `XmlSigner`).
-pub trait XmlSigner: Sync {
-    /// The signature of `signed_info` with `alg`.
-    fn sign(
-        &self,
-        signed_info: Vec<u8>,
-        alg: SigAlg,
-    ) -> impl Future<Output = Result<Signature, SignError>> + Send;
-}
+pub use crate::ports::{SignError, Signature, XmlSigner};
 
 fn ds(local: &'static str) -> El {
     El::new("ds", uri::DS, local)

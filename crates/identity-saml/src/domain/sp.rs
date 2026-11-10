@@ -12,7 +12,7 @@ use crate::uri;
 pub const MAX_ACS: usize = 16;
 
 /// Most pinned certificates.
-pub const MAX_CERTS: usize = access_edge_core::saml::MAX_CERTS;
+pub const MAX_CERTS: usize = access_internal_api::saml::MAX_CERTS;
 
 /// Most released attributes.
 pub const MAX_ATTRIBUTES: usize = 64;
@@ -405,7 +405,9 @@ pub mod b64 {
 
 fn cert(s: &str) -> Result<Vec<u8>, SpError> {
     let der = b64::decode(s).ok_or(SpError::Certificate)?;
-    if der.is_empty() || der.len() > access_edge_core::saml::MAX_CERT || der.first() != Some(&0x30)
+    if der.is_empty()
+        || der.len() > access_internal_api::saml::MAX_CERT
+        || der.first() != Some(&0x30)
     {
         return Err(SpError::Certificate);
     }
@@ -568,7 +570,7 @@ mod tests {
         })
     }
 
-    // §10.6.1 rule 6, IDP-15, MD-10: the defaults sign both, persistent, no IdP-initiated.
+    // §10.6.1, IDP-15, MD-10
     #[test]
     fn a_minimal_registration_has_the_safe_defaults() {
         let sp = Sp::from_json(&minimal()).unwrap();
@@ -580,7 +582,7 @@ mod tests {
         assert_eq!(Sp::from_json(&sp.to_json()).unwrap(), sp);
     }
 
-    // §10.6.1: what a registration refuses.
+    // §10.6.1
     #[test]
     fn registrations_are_checked() {
         let bad = |patch: serde_json::Value| {

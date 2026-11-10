@@ -109,7 +109,7 @@ pub enum Attest {
         realm: String,
         /// The attestation handle.
         handle: [u8; 32],
-        /// The worker's facts (`access_edge_core::saml::Facts`), when a message was read.
+        /// The worker's facts (`access_internal_api::saml::Facts`), when a message was read.
         facts: Option<Vec<u8>>,
         /// A detached HTTP-Redirect signature verified with a pinned certificate.
         redirect_signed: bool,
@@ -366,7 +366,7 @@ impl SpAnswer {
         let Some(Value::Array(list)) = v.get("certs") else {
             return Err(Malformed);
         };
-        if list.len() > access_edge_core::saml::MAX_CERTS {
+        if list.len() > access_internal_api::saml::MAX_CERTS {
             return Err(Malformed);
         }
         let certs = list
@@ -410,7 +410,7 @@ mod tests {
 
     use super::*;
 
-    // OP-155 m.3 (c): the SAML edge bodies round-trip and refuse unknown members.
+    // OP-155 m.3 (c)
     #[test]
     fn bodies_round_trip() {
         let f = Forward {

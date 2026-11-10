@@ -93,6 +93,19 @@ pub fn signed_octets(
     s.into_bytes()
 }
 
+/// A fresh nonce for a page's `Content-Security-Policy` script source.
+#[must_use]
+pub fn csp_nonce() -> String {
+    access_crypto::random::bytes::<16>()
+        .map(|b| {
+            crate::sp::b64::encode(&b)
+                .trim_end_matches('=')
+                .replace('+', "-")
+                .replace('/', "_")
+        })
+        .unwrap_or_default()
+}
+
 /// An HTML page that posts `fields` to `action` at once; the script runs only under `nonce`.
 #[must_use]
 pub fn post_page(action: &str, fields: &[(&str, &str)], nonce: &str) -> String {
@@ -114,34 +127,11 @@ pub fn post_page(action: &str, fields: &[(&str, &str)], nonce: &str) -> String {
     )
 }
 
-/// The MAC of an IdP-initiated `RelayState` for `sp` under the realm's key (IDP-15).
-#[must_use]
-pub fn relay_mac(key: &[u8], sp: &str, relay_state: &str) -> String {
-    let k = aws_lc_rs::hmac::Key::new(aws_lc_rs::hmac::HMAC_SHA256, key);
-    let mut ctx = aws_lc_rs::hmac::Context::with_key(&k);
-    ctx.update(sp.as_bytes());
-    ctx.update(&[0]);
-    ctx.update(relay_state.as_bytes());
-    let tag = ctx.sign();
-    b64::encode(tag.as_ref())
-        .trim_end_matches('=')
-        .replace('+', "-")
-        .replace('/', "_")
-}
-
-/// Whether `mac` is the MAC of `relay_state` for `sp`, compared in constant time.
-#[must_use]
-pub fn relay_mac_ok(key: &[u8], sp: &str, relay_state: &str, mac: &str) -> bool {
-    let expected = relay_mac(key, sp, relay_state);
-    aws_lc_rs::constant_time::verify_slices_are_equal(expected.as_bytes(), mac.as_bytes()).is_ok()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    // SAML Bindings §3.4.4.1: the signed octets keep the received encoding and drop an absent
-    // RelayState.
+    // §3.4.4.1
     #[test]
     fn redirect_signed_octets_use_the_received_encoding() {
         assert_eq!(
@@ -155,7 +145,7 @@ mod tests {
         assert_eq!(encode("a b/+="), "a%20b%2F%2B%3D");
     }
 
-    // §10.6.1: the POST page escapes what it carries and runs only under its nonce.
+    // §10.6.1
     #[test]
     fn the_post_page_escapes_and_carries_the_nonce() {
         let p = post_page(
@@ -167,16 +157,5 @@ mod tests {
         assert!(p.contains("value=\"PD94&lt;&gt;\""));
         assert!(p.contains("value=\"r&quot;\""));
         assert!(p.contains("<script nonce=\"n0nce\">"));
-    }
-
-    // IDP-15: an IdP-initiated RelayState is honoured only with its MAC for that SP.
-    #[test]
-    fn relay_state_macs_bind_the_service_provider() {
-        let mut key = [0_u8; 32];
-        aws_lc_rs::rand::fill(&mut key).unwrap_or_default();
-        let m = relay_mac(&key, "https://sp.test", "/app");
-        assert!(relay_mac_ok(&key, "https://sp.test", "/app", &m));
-        assert!(!relay_mac_ok(&key, "https://other.test", "/app", &m));
-        assert!(!relay_mac_ok(&key, "https://sp.test", "/evil", &m));
     }
 }

@@ -31,7 +31,7 @@ WS-Federation tokens, and has them signed by the identity signer's `saml` key.
 | Attributes | `NameFormat` URI by default, per-registration override; `FriendlyName` is written, never matched |
 | Time | `NotBefore` −60 s, `NotOnOrAfter` +5 min (IdP-initiated: 2 min), request skew ±3 min, UTC `Z`, `OneTimeUse` off |
 | Requests | `IsPassive` wins over `ForceAuthn`; `NoPassive` when the user would have to interact; `InvalidNameIDPolicy` when the policy cannot be met; signed requests when `AuthnRequestsSigned`; request IDs kept 10 min against replay |
-| IdP-initiated | Off unless the registration opts in; only the `isDefault` ACS; `RelayState` must carry the realm's MAC |
+| IdP-initiated | Off unless the registration opts in; only the `isDefault` ACS; a `RelayState` must carry the realm's HSM MAC |
 | Metadata | `validUntil` +14 days, `cacheDuration` PT6H, re-signed each time it is served, every published certificate listed; PEM download and SSO URL for manual setup |
 
 ## Interop profiles
@@ -49,27 +49,27 @@ From the profiles of §10.6.1; actions 1 to 16 come first, 17 to 21 next. Each h
 
 | # | Action | Test |
 |---|---|---|
-| 1 | Sign both Response and Assertion by default | `assertion::tests::a_response_follows_the_ten_rules_and_both_signatures_verify` |
-| 2 | Per-registration `sign_response`/`sign_assertion`, never neither | `sp::tests::registrations_are_checked` |
-| 3 | RSA-SHA256 by default, RSA-3072 key | `sp::tests::a_minimal_registration_has_the_safe_defaults` |
-| 4 | No SHA-1 anywhere | `alg::tests::sha1_is_never_an_algorithm_and_sha384_has_the_right_uri` |
-| 5 | NameID format from the template; persistent and pairwise by default | `profile::tests::entra_takes_persistent_and_idp_email` |
-| 6 | E-mail NameID only when the template asks | `profile::tests::identity_center_takes_email_and_no_encryption` |
-| 7 | Transient NameID new for every assertion | `assertion::tests::the_class_comes_from_the_assurance_vector` |
-| 8 | Fixed, case-sensitive attribute names per template; multi-valued attributes | `profile::tests::aws_requires_role_and_session_name` |
-| 9 | `NameFormat` URI by default, override per SP; `FriendlyName` never matched | `sp::tests::registrations_are_checked` |
-| 10 | Exact ACS match; mismatch shown to the user | `request::tests::the_acs_matches_the_registration_exactly` |
-| 11 | HTTP-POST always available for the Response | `binding::tests::the_post_page_escapes_and_carries_the_nonce` |
-| 12 | Short `NotOnOrAfter`, ±3 min skew, unique IDs | `time::tests::request_windows` |
-| 13 | Audience is the entity ID, or the template's value (Salesforce) | `profile::tests::salesforce_requires_the_assertion_signature_and_its_audience` |
-| 14 | `Recipient` is the ACS; exactly one bearer `SubjectConfirmation` | `assertion::tests::a_response_follows_the_ten_rules_and_both_signatures_verify` |
-| 15 | Optional encryption per SP; never `EncryptedAttribute` | `assertion::tests::an_encrypted_assertion_round_trips_against_the_sp_key` |
-| 16 | IdP-initiated only by per-SP opt-in (AWS) | `profile::tests::idp_initiated_stays_opt_in_per_registration` |
-| 17 | Metadata lists every published certificate for rotation | `metadata::tests::metadata_lists_every_certificate_and_its_windows` |
-| 18 | PEM download and SSO URL for manual setup (Slack, Workday, Atlassian) | `metadata::tests::metadata_lists_every_certificate_and_its_windows` |
-| 19 | SLO optional per SP (none for Slack); `PartialLogout` | `profile::tests::slack_requires_the_response_signature_and_no_logout` |
-| 20 | Metadata within 75 000 characters, UTF-8 without BOM | `metadata::tests::metadata_lists_every_certificate_and_its_windows` |
-| 21 | Profiles cannot relax security | `profile::tests::a_profile_that_relaxes_security_is_refused_at_load` |
+| 1 | Sign both Response and Assertion by default | `app::assertion::tests::a_response_follows_the_ten_rules_and_both_signatures_verify` |
+| 2 | Per-registration `sign_response`/`sign_assertion`, never neither | `domain::sp::tests::registrations_are_checked` |
+| 3 | RSA-SHA256 by default, RSA-3072 key | `domain::sp::tests::a_minimal_registration_has_the_safe_defaults` |
+| 4 | No SHA-1 anywhere | `domain::alg::tests::sha1_is_never_an_algorithm_and_sha384_has_the_right_uri` |
+| 5 | NameID format from the template; persistent and pairwise by default | `domain::profile::tests::entra_takes_persistent_and_idp_email` |
+| 6 | E-mail NameID only when the template asks | `domain::profile::tests::identity_center_takes_email_and_no_encryption` |
+| 7 | Transient NameID new for every assertion | `app::assertion::tests::the_class_comes_from_the_assurance_vector` |
+| 8 | Fixed, case-sensitive attribute names per template; multi-valued attributes | `domain::profile::tests::aws_requires_role_and_session_name` |
+| 9 | `NameFormat` URI by default, override per SP; `FriendlyName` never matched | `domain::sp::tests::registrations_are_checked` |
+| 10 | Exact ACS match; mismatch shown to the user | `domain::request::tests::the_acs_matches_the_registration_exactly` |
+| 11 | HTTP-POST offered for every Response | `app::binding::tests::the_post_page_escapes_and_carries_the_nonce` |
+| 12 | Short `NotOnOrAfter`, ±3 min skew, unique IDs | `domain::time::tests::request_windows` |
+| 13 | Audience is the entity ID, or the template's value (Salesforce) | `domain::profile::tests::salesforce_requires_the_assertion_signature_and_its_audience` |
+| 14 | `Recipient` is the ACS; exactly one bearer `SubjectConfirmation` | `app::assertion::tests::a_response_follows_the_ten_rules_and_both_signatures_verify` |
+| 15 | Optional encryption per SP; never `EncryptedAttribute` | `app::assertion::tests::an_encrypted_assertion_round_trips_against_the_sp_key` |
+| 16 | IdP-initiated only by per-SP opt-in (AWS) | `domain::profile::tests::idp_initiated_stays_opt_in_per_registration` |
+| 17 | Metadata lists every published certificate for rotation | `app::metadata::tests::metadata_lists_every_certificate_and_its_windows` |
+| 18 | PEM download and SSO URL for manual setup (Slack, Workday, Atlassian) | `app::metadata::tests::metadata_lists_every_certificate_and_its_windows` |
+| 19 | SLO optional per SP (none for Slack); `PartialLogout` | `domain::profile::tests::slack_requires_the_response_signature_and_no_logout` |
+| 20 | Metadata within 75 000 characters, UTF-8 without BOM | `app::metadata::tests::metadata_lists_every_certificate_and_its_windows` |
+| 21 | Profiles cannot relax security | `domain::profile::tests::a_profile_that_relaxes_security_is_refused_at_load` |
 
 ## Certificate rotation
 

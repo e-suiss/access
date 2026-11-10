@@ -117,12 +117,12 @@ impl DigestAlg {
     /// The digest of `data`.
     #[must_use]
     pub fn digest(self, data: &[u8]) -> Vec<u8> {
-        let a = match self {
-            Self::Sha256 => &aws_lc_rs::digest::SHA256,
-            Self::Sha384 => &aws_lc_rs::digest::SHA384,
-            Self::Sha512 => &aws_lc_rs::digest::SHA512,
+        let d = match self {
+            Self::Sha256 => access_crypto::xmlsec::Digest::Sha256,
+            Self::Sha384 => access_crypto::xmlsec::Digest::Sha384,
+            Self::Sha512 => access_crypto::xmlsec::Digest::Sha512,
         };
-        aws_lc_rs::digest::digest(a, data).as_ref().to_vec()
+        access_crypto::xmlsec::digest(d, data)
     }
 }
 
@@ -130,7 +130,7 @@ impl DigestAlg {
 mod tests {
     use super::*;
 
-    // TI-9, OP-155 m.3 (e), §10.6.1: SHA-1 has no algorithm; the SHA-384 URI is xmldsig-more's.
+    // TI-9, OP-155 m.3 (e), §10.6.1, SHA-1, SHA-384
     #[test]
     fn sha1_is_never_an_algorithm_and_sha384_has_the_right_uri() {
         for r in REFUSED {

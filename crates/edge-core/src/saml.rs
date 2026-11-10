@@ -8,17 +8,9 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 
 use crate::ipc::FrameError;
 
-/// Most certificates a service provider pins.
-pub const MAX_CERTS: usize = 8;
-
-/// Largest pinned certificate.
-pub const MAX_CERT: usize = 8 * 1024;
-
-/// Most `RequesterID`s or `SessionIndex`es kept from one message.
-pub const MAX_LIST: usize = 16;
-
-/// Longest text field kept from a message.
-pub const MAX_TEXT: usize = 2048;
+pub use access_internal_api::saml::{
+    Facts, Kind, MAX_CERT, MAX_CERTS, MAX_LIST, MAX_TEXT, Signed, decode_verified, encode_verified,
+};
 
 /// What a gateway asks the worker to do with one SAML message.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -42,68 +34,6 @@ pub struct Redirect {
     pub signed: Vec<u8>,
     /// `Signature`, base64-decoded.
     pub signature: Vec<u8>,
-}
-
-/// The kind of message read.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Kind {
-    /// `samlp:AuthnRequest`.
-    Authn,
-    /// `samlp:LogoutRequest`.
-    Logout,
-}
-
-/// What the worker found about the message's signature.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Signed {
-    /// No enveloped signature (and none was required).
-    Absent,
-    /// An enveloped signature over the message element verified with a pinned certificate, with
-    /// this `SignatureMethod`.
-    Verified(String),
-}
-
-/// The facts of one request, read from the element whose signature was verified (IDI-8).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Facts {
-    /// The message kind.
-    pub kind: Kind,
-    /// `ID`.
-    pub id: String,
-    /// `IssueInstant`, as written.
-    pub issue_instant: String,
-    /// `Destination`.
-    pub destination: Option<String>,
-    /// `saml:Issuer`.
-    pub issuer: String,
-    /// `AssertionConsumerServiceURL`.
-    pub acs_url: Option<String>,
-    /// `AssertionConsumerServiceIndex`.
-    pub acs_index: Option<u64>,
-    /// `ProtocolBinding`.
-    pub protocol_binding: Option<String>,
-    /// `ForceAuthn`.
-    pub force_authn: bool,
-    /// `IsPassive`.
-    pub is_passive: bool,
-    /// `NameIDPolicy/@Format`.
-    pub nameid_format: Option<String>,
-    /// `NameIDPolicy/@AllowCreate`.
-    pub allow_create: Option<bool>,
-    /// `NameIDPolicy/@SPNameQualifier`.
-    pub sp_name_qualifier: Option<String>,
-    /// `Scoping/RequesterID`s.
-    pub requester_ids: Vec<String>,
-    /// `Scoping/@ProxyCount`.
-    pub proxy_count: Option<u64>,
-    /// The signature.
-    pub signed: Signed,
-    /// `saml:NameID` of a `LogoutRequest`.
-    pub name_id: Option<String>,
-    /// `SessionIndex`es of a `LogoutRequest`.
-    pub session_indexes: Vec<String>,
-    /// The message came in a SOAP envelope (ECP, PAOS).
-    pub soap: bool,
 }
 
 fn put(out: &mut Vec<u8>, part: &[u8]) -> Result<(), FrameError> {
@@ -177,36 +107,6 @@ fn text(v: &Value, key: &str) -> Result<String, FrameError> {
         Some(Value::Text(t)) if t.len() <= MAX_TEXT => Ok(t.clone()),
         _ => Err(FrameError::Malformed),
     }
-}
-
-fn opt_text(v: &Value, key: &str) -> Result<Option<String>, FrameError> {
-    match v.get(key) {
-        None => Ok(None),
-        Some(_) => text(v, key).map(Some),
-    }
-}
-
-fn opt_uint(v: &Value, key: &str) -> Result<Option<u64>, FrameError> {
-    match v.get(key) {
-        None => Ok(None),
-        Some(Value::Unsigned(n)) => Ok(Some(*n)),
-        Some(_) => Err(FrameError::Malformed),
-    }
-}
-
-fn texts(v: &Value, key: &str) -> Result<Vec<String>, FrameError> {
-    let Some(Value::Array(list)) = v.get(key) else {
-        return Err(FrameError::Malformed);
-    };
-    if list.len() > MAX_LIST {
-        return Err(FrameError::TooLarge);
-    }
-    list.iter()
-        .map(|t| match t {
-            Value::Text(t) if t.len() <= MAX_TEXT => Ok(t.clone()),
-            _ => Err(FrameError::Malformed),
-        })
-        .collect()
 }
 
 fn only(v: &Value, keys: &[&str]) -> Result<(), FrameError> {
@@ -294,149 +194,6 @@ impl Redirect {
     }
 }
 
-fn opt(entries: &mut Vec<(&'static str, Value)>, key: &'static str, v: Option<Value>) {
-    if let Some(v) = v {
-        entries.push((key, v));
-    }
-}
-
-fn text_list(list: &[String]) -> Value {
-    Value::Array(list.iter().map(|t| Value::text(t)).collect())
-}
-
-impl Facts {
-    /// The worker's output.
-    ///
-    /// # Errors
-    /// [`FrameError::TooLarge`].
-    pub fn encode(&self) -> Result<Vec<u8>, FrameError> {
-        let kind = match self.kind {
-            Kind::Authn => "authn",
-            Kind::Logout => "logout",
-        };
-        let mut e = vec![
-            ("kind", Value::text(kind)),
-            ("id", Value::text(&self.id)),
-            ("issue_instant", Value::text(&self.issue_instant)),
-            ("issuer", Value::text(&self.issuer)),
-            ("force_authn", Value::Bool(self.force_authn)),
-            ("is_passive", Value::Bool(self.is_passive)),
-            ("requester_ids", text_list(&self.requester_ids)),
-            ("session_indexes", text_list(&self.session_indexes)),
-            ("soap", Value::Bool(self.soap)),
-        ];
-        match &self.signed {
-            Signed::Absent => {}
-            Signed::Verified(alg) => e.push(("signed", Value::text(alg))),
-        }
-        opt(
-            &mut e,
-            "destination",
-            self.destination.as_deref().map(Value::text),
-        );
-        opt(&mut e, "acs_url", self.acs_url.as_deref().map(Value::text));
-        opt(&mut e, "acs_index", self.acs_index.map(Value::Unsigned));
-        opt(
-            &mut e,
-            "protocol_binding",
-            self.protocol_binding.as_deref().map(Value::text),
-        );
-        opt(
-            &mut e,
-            "nameid_format",
-            self.nameid_format.as_deref().map(Value::text),
-        );
-        opt(&mut e, "allow_create", self.allow_create.map(Value::Bool));
-        opt(
-            &mut e,
-            "sp_name_qualifier",
-            self.sp_name_qualifier.as_deref().map(Value::text),
-        );
-        opt(&mut e, "proxy_count", self.proxy_count.map(Value::Unsigned));
-        opt(&mut e, "name_id", self.name_id.as_deref().map(Value::text));
-        encoded(&map(e))
-    }
-
-    /// Reads the worker's output.
-    ///
-    /// # Errors
-    /// [`FrameError`].
-    pub fn decode(input: &[u8]) -> Result<Self, FrameError> {
-        let v = dcbor::decode(input, Limits::CEILING).map_err(|_| FrameError::Malformed)?;
-        only(
-            &v,
-            &[
-                "kind",
-                "id",
-                "issue_instant",
-                "issuer",
-                "force_authn",
-                "is_passive",
-                "requester_ids",
-                "session_indexes",
-                "soap",
-                "signed",
-                "destination",
-                "acs_url",
-                "acs_index",
-                "protocol_binding",
-                "nameid_format",
-                "allow_create",
-                "sp_name_qualifier",
-                "proxy_count",
-                "name_id",
-            ],
-        )?;
-        let kind = match text(&v, "kind")?.as_str() {
-            "authn" => Kind::Authn,
-            "logout" => Kind::Logout,
-            _ => return Err(FrameError::Malformed),
-        };
-        Ok(Self {
-            kind,
-            id: text(&v, "id")?,
-            issue_instant: text(&v, "issue_instant")?,
-            destination: opt_text(&v, "destination")?,
-            issuer: text(&v, "issuer")?,
-            acs_url: opt_text(&v, "acs_url")?,
-            acs_index: opt_uint(&v, "acs_index")?,
-            protocol_binding: opt_text(&v, "protocol_binding")?,
-            force_authn: flag(&v, "force_authn")?,
-            is_passive: flag(&v, "is_passive")?,
-            nameid_format: opt_text(&v, "nameid_format")?,
-            allow_create: match v.get("allow_create") {
-                None => None,
-                Some(_) => Some(flag(&v, "allow_create")?),
-            },
-            sp_name_qualifier: opt_text(&v, "sp_name_qualifier")?,
-            requester_ids: texts(&v, "requester_ids")?,
-            proxy_count: opt_uint(&v, "proxy_count")?,
-            signed: opt_text(&v, "signed")?.map_or(Signed::Absent, Signed::Verified),
-            name_id: opt_text(&v, "name_id")?,
-            session_indexes: texts(&v, "session_indexes")?,
-            soap: flag(&v, "soap")?,
-        })
-    }
-}
-
-/// The output of a verified detached signature: its `SigAlg`.
-///
-/// # Errors
-/// [`FrameError::TooLarge`].
-pub fn encode_verified(sig_alg: &str) -> Result<Vec<u8>, FrameError> {
-    encoded(&map(vec![("verified", Value::text(sig_alg))]))
-}
-
-/// Reads [`encode_verified`].
-///
-/// # Errors
-/// [`FrameError`].
-pub fn decode_verified(input: &[u8]) -> Result<String, FrameError> {
-    let v = dcbor::decode(input, Limits::CEILING).map_err(|_| FrameError::Malformed)?;
-    only(&v, &["verified"])?;
-    text(&v, "verified")
-}
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, reason = "test code")]
@@ -462,7 +219,7 @@ mod tests {
             signature: vec![2; 3],
         };
         assert_eq!(Redirect::decode(&r.encode().unwrap()).unwrap(), r);
-        let f = Facts {
+        let f = crate::saml::Facts {
             kind: Kind::Authn,
             id: String::from("_1"),
             issue_instant: String::from("2026-01-01T00:00:00Z"),

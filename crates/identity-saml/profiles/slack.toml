@@ -9,25 +9,25 @@ template = "slack"
 [[tolerances]]
 rule = "saml.sign_response"
 value = true
-test = "identity_saml::profile::tests::slack_requires_the_response_signature_and_no_logout"
+test = "identity_saml::domain::profile::tests::slack_requires_the_response_signature_and_no_logout"
 source = "slack.com/help/articles/205168057"
 
 [[tolerances]]
 rule = "saml.nameid_format"
 value = "persistent"
-test = "identity_saml::profile::tests::slack_requires_the_response_signature_and_no_logout"
+test = "identity_saml::domain::profile::tests::slack_requires_the_response_signature_and_no_logout"
 
 [[tolerances]]
 rule = "saml.attribute_names"
 value = ["User.Email"]
-test = "identity_saml::profile::tests::slack_requires_the_response_signature_and_no_logout"
+test = "identity_saml::domain::profile::tests::slack_requires_the_response_signature_and_no_logout"
 
 [[tolerances]]
 rule = "saml.acs_binding"
 value = "post"
-test = "identity_saml::profile::tests::slack_requires_the_response_signature_and_no_logout"
+test = "identity_saml::domain::profile::tests::slack_requires_the_response_signature_and_no_logout"
 
 [[tolerances]]
 rule = "saml.slo_binding"
 value = "none"
-test = "identity_saml::profile::tests::slack_requires_the_response_signature_and_no_logout"
+test = "identity_saml::domain::profile::tests::slack_requires_the_response_signature_and_no_logout"

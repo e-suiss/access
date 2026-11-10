@@ -8,19 +8,11 @@
 
 use crate::alg::SigAlg;
 use crate::dsig::{SignError, XmlSigner, sign};
+pub use crate::ports::{Encrypter, Random};
 use crate::sp::{Aal3Class, NameIdFormat, Sp};
 use crate::time;
 use crate::uri;
 use crate::xml::El;
-
-/// Random bytes from the process's random source (a port: clock and RNG are ports, OP-63).
-pub trait Random: Sync {
-    /// Fills `out`.
-    ///
-    /// # Errors
-    /// [`SignError`] when no randomness is available.
-    fn fill(&self, out: &mut [u8]) -> Result<(), SignError>;
-}
 
 /// A SAML identifier: `_` and 160 random bits in hex (rule 9).
 ///
@@ -209,15 +201,6 @@ pub fn response(
         r = r.child(c);
     }
     r
-}
-
-/// Encrypts a signed assertion for the registration's encryption certificate.
-pub trait Encrypter: Sync {
-    /// The `saml:EncryptedAssertion` of `assertion`.
-    ///
-    /// # Errors
-    /// [`SignError`].
-    fn encrypt(&self, assertion: &El, cert: &[u8]) -> Result<El, SignError>;
 }
 
 /// The finished, canonical Response of a completed authentication: the Assertion signed when the

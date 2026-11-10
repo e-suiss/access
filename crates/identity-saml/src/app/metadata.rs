@@ -163,8 +163,7 @@ mod tests {
 
     use super::*;
 
-    // §10.6.1, Ek B 4763, 4781: every published certificate, validUntil +14 d, PT6H, the SSO
-    // URL and a PEM for manual setup; within AWS IAM Identity Center's 75 000 characters.
+    // §10.6.1, Ek B 4763
     #[test]
     fn metadata_lists_every_certificate_and_its_windows() {
         let e = Endpoints::of("https://acme.id.test/");

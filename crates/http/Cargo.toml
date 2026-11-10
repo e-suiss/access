@@ -27,7 +27,6 @@ access-identity-vault = { workspace = true }
 access-identity-x509 = { workspace = true }
 access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
-aws-lc-rs = { workspace = true }
 suiss-crypto = { workspace = true, features = ["aead", "verify"] }
 access-parse = { workspace = true }
 access-telemetry = { workspace = true }

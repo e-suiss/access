@@ -133,7 +133,7 @@ pub fn request_fresh(issued: u64, now: u64) -> bool {
 mod tests {
     use super::*;
 
-    // §10.6.1: UTC with `Z`.
+    // §10.6.1
     #[test]
     fn times_are_utc_with_z_and_round_trip() {
         assert_eq!(format(0), "1970-01-01T00:00:00Z");
@@ -150,7 +150,7 @@ mod tests {
         );
     }
 
-    // OP-155 m.3 (e): ±3 min skew, 10 min replay window.
+    // OP-155 m.3 (e)
     #[test]
     fn request_windows() {
         let now = 1_794_304_800_000;

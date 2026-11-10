@@ -3,8 +3,7 @@
 //! SHA-256) for the registration's pinned encryption certificate, placed inline. `rsa-1_5` and
 //! `EncryptedAttribute` are never produced.
 
-use aws_lc_rs::aead::{AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
-use aws_lc_rs::rsa::{OAEP_SHA256_MGF1SHA256, OaepPublicEncryptingKey, PublicEncryptingKey};
+use access_crypto::xmlsec;
 
 use crate::assertion::{Encrypter, Random};
 use crate::dsig::SignError;
@@ -80,24 +79,13 @@ fn cipher(value: &[u8]) -> El {
 
 impl<R: Random + ?Sized> Encrypter for XmlEnc<'_, R> {
     fn encrypt(&self, assertion: &El, cert: &[u8]) -> Result<El, SignError> {
-        let public =
-            PublicEncryptingKey::from_der(&spki(cert)?).map_err(|_| err("encryption key"))?;
-        let oaep = OaepPublicEncryptingKey::new(public).map_err(|_| err("encryption key"))?;
         let mut key = [0_u8; 32];
         self.0.fill(&mut key)?;
         let mut nonce = [0_u8; 12];
         self.0.fill(&mut nonce)?;
-        let mut wrapped = vec![0_u8; oaep.ciphertext_size()];
-        let wrapped = oaep
-            .encrypt(&OAEP_SHA256_MGF1SHA256, &key, &mut wrapped, None)
-            .map_err(|_| err("key wrap"))?
-            .to_vec();
-        let sealing =
-            LessSafeKey::new(UnboundKey::new(&AES_256_GCM, &key).map_err(|_| err("aead"))?);
+        let wrapped = xmlsec::rsa_oaep_encrypt(&spki(cert)?, &key).map_err(|_| err("key wrap"))?;
         let mut data = assertion.canonical().into_bytes();
-        sealing
-            .seal_in_place_append_tag(Nonce::assume_unique_for_key(nonce), Aad::empty(), &mut data)
-            .map_err(|_| err("aead"))?;
+        xmlsec::aes256_gcm_seal(&key, nonce, &mut data).map_err(|_| err("aead"))?;
         let mut body = nonce.to_vec();
         body.extend_from_slice(&data);
         let encrypted_key = xenc("EncryptedKey")

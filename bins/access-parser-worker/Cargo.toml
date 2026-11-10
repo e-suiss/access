@@ -11,7 +11,7 @@ publish = false
 [dependencies]
 access-edge-core = { workspace = true }
 access-parse = { workspace = true }
-aws-lc-rs = { workspace = true }
+access-crypto = { workspace = true }
 miniz_oxide = { workspace = true }
 quick-xml = { workspace = true }
 suiss-crypto = { workspace = true }
@@ -21,6 +21,7 @@ suiss-sandbox = { workspace = true }
 rustix = { workspace = true, features = ["std", "net", "process", "time"] }
 
 [dev-dependencies]
+aws-lc-rs = { workspace = true }
 rcgen = { workspace = true, features = ["aws_lc_rs"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "io-util", "time"] }
 

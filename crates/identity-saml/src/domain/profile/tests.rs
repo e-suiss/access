@@ -26,7 +26,7 @@ fn with_attrs(mut s: Sp, names: &[&str]) -> Sp {
     s
 }
 
-// IDP-28, IDP-40, OP-155 m.3 (q): every shipped profile loads and names a test per tolerance.
+// IDP-28, IDP-40, OP-155 m.3 (q)
 #[test]
 fn every_shipped_profile_loads() {
     for (t, source) in SHIPPED {
@@ -37,12 +37,12 @@ fn every_shipped_profile_loads() {
         assert!(
             p.tolerances
                 .iter()
-                .all(|(_, test)| test.starts_with("identity_saml::profile::tests::"))
+                .all(|(_, test)| test.starts_with("identity_saml::domain::profile::tests::"))
         );
     }
 }
 
-// §10.6.1 AWS rows: Role and RoleSessionName are required, case-sensitive.
+// §10.6.1
 #[test]
 fn aws_requires_role_and_session_name() {
     let p = Profile::shipped("aws-iam").unwrap();
@@ -65,7 +65,7 @@ fn aws_requires_role_and_session_name() {
     assert_eq!(p.apply(wrong_case), Err(SpError::Profile));
 }
 
-// IDP-15: a profile that says the counterpart uses IdP-initiated SSO never turns it on.
+// IDP-15
 #[test]
 fn idp_initiated_stays_opt_in_per_registration() {
     let s = with_attrs(
@@ -79,7 +79,7 @@ fn idp_initiated_stays_opt_in_per_registration() {
     assert!(!applied.allow_idp_initiated);
 }
 
-// §10.6.1 AWS IAM Identity Center: e-mail NameID, no encryption.
+// §10.6.1
 #[test]
 fn identity_center_takes_email_and_no_encryption() {
     let p = Profile::shipped("aws-identity-center").unwrap();
@@ -91,7 +91,7 @@ fn identity_center_takes_email_and_no_encryption() {
     assert_eq!(p.apply(enc), Err(SpError::Profile));
 }
 
-// §10.6.1 Entra: persistent only, IDPEmail.
+// §10.6.1
 #[test]
 fn entra_takes_persistent_and_idp_email() {
     let p = Profile::shipped("entra").unwrap();
@@ -101,7 +101,7 @@ fn entra_takes_persistent_and_idp_email() {
     assert_eq!(applied.attribute_name_format, NameFormat::Unspecified);
 }
 
-// §10.6.1 Salesforce: the Assertion signature and its own audience.
+// §10.6.1
 #[test]
 fn salesforce_requires_the_assertion_signature_and_its_audience() {
     let p = Profile::shipped("salesforce").unwrap();
@@ -112,7 +112,7 @@ fn salesforce_requires_the_assertion_signature_and_its_audience() {
     assert_eq!(p.apply(unsigned), Err(SpError::Profile));
 }
 
-// §10.6.1 Slack: the Response signature, persistent opaque NameID, User.Email, POST, no SLO.
+// §10.6.1
 #[test]
 fn slack_requires_the_response_signature_and_no_logout() {
     let p = Profile::shipped("slack").unwrap();
@@ -129,7 +129,7 @@ fn slack_requires_the_response_signature_and_no_logout() {
     assert_eq!(p.apply(s), Err(SpError::Profile));
 }
 
-// §10.6.1 Atlassian: the Assertion signature, e-mail NameID.
+// §10.6.1
 #[test]
 fn atlassian_requires_the_assertion_signature_and_email() {
     let applied = Profile::shipped("atlassian")
@@ -146,8 +146,7 @@ fn doc(rule: &str, value: &str) -> String {
     )
 }
 
-// IDP-40 (5), Ek B 4935, 4976: a profile tolerates format only; one that tries to relax
-// signature, time, audience or recipient, or parser isolation is refused at load, whole.
+// IDP-40 (5), Ek B 4935
 #[test]
 fn a_profile_that_relaxes_security_is_refused_at_load() {
     for rule in [

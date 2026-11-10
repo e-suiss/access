@@ -28,7 +28,6 @@ access-identity-scim = { workspace = true }
 access-identity-saml = { workspace = true }
 access-identity-signer = { path = "../../crates/identity-signer" }
 access-edge-core = { workspace = true, features = ["channel"] }
-aws-lc-rs = { workspace = true }
 access-identity-risk = { workspace = true }
 access-identity-session = { workspace = true }
 access-identity-hooks = { workspace = true }

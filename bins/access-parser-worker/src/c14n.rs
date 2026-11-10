@@ -197,8 +197,7 @@ mod tests {
         canonical(&read(xml.as_bytes()).unwrap(), apex, None, &[]).unwrap()
     }
 
-    // §10.6.1: exc-c14n renders only visibly used namespaces, sorted, and empty elements open
-    // and close.
+    // §10.6.1
     #[test]
     fn exclusive_canonical_form_of_a_subtree() {
         let doc = r#"<a:r xmlns:a="urn:a" xmlns:b="urn:b" xmlns="urn:d"><a:x z="1" b:y="2" a="3"/><c>t</c></a:r>"#;
@@ -213,7 +212,7 @@ mod tests {
         );
     }
 
-    // W3C xml-exc-c14n §3 escaping rules.
+    // §3
     #[test]
     fn text_and_attributes_are_escaped() {
         let doc = "<r a=\"&lt;&amp;&quot;&#9;&#10;&#13;\">&lt;&amp;&gt;&#13;</r>";
@@ -223,7 +222,6 @@ mod tests {
         );
     }
 
-    // A default namespace undeclared below a rendered one renders xmlns="".
     #[test]
     fn an_undeclared_default_namespace_is_rendered_empty() {
         let doc = r#"<r xmlns="urn:d"><x xmlns=""><y/></x></r>"#;
@@ -231,7 +229,6 @@ mod tests {
         assert_eq!(c(doc, 1), r"<x><y></y></x>");
     }
 
-    // InclusiveNamespaces PrefixList.
     #[test]
     fn inclusive_prefixes_are_rendered_on_the_apex() {
         let doc = read(br#"<r xmlns:xs="urn:xs" xmlns:p="urn:p"><p:x>v</p:x></r>"#).unwrap();
@@ -241,8 +238,7 @@ mod tests {
         );
     }
 
-    // CVE-2017-11427, CVE-2017-11428: a comment inside text never splits what is signed from
-    // what is read.
+    // CVE-2017-11427, CVE-2017-11428
     #[test]
     fn comments_are_not_part_of_the_canonical_form() {
         assert_eq!(c("<r>a@x.test<!---->.evil</r>", 0), "<r>a@x.test.evil</r>");

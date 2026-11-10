@@ -6,13 +6,7 @@
 //! switches to it, and the old one is removed; the schedule (at least 14 days per phase) is the
 //! realm policy's, kept by access-server. SHA-1 is never used.
 
-use aws_lc_rs::encoding::{AsDer, Pkcs8V1Der, PublicKeyX509Der};
-use aws_lc_rs::rand::SystemRandom;
-use aws_lc_rs::rsa::{KeyPair as RsaKeyPair, KeySize};
-use aws_lc_rs::signature::{
-    ECDSA_P256_SHA256_ASN1_SIGNING, ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair as _,
-    RSA_PKCS1_SHA256, RSA_PKCS1_SHA384, RSA_PKCS1_SHA512,
-};
+use access_crypto::xmlsec::{self, P256Key, RsaKey};
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::secret::Secret;
 use suiss_crypto::signer::SignError;
@@ -404,11 +398,8 @@ impl SamlResponse {
 }
 
 enum Pair {
-    Rsa(RsaKeyPair),
-    P256 {
-        fixed: EcdsaKeyPair,
-        asn1: EcdsaKeyPair,
-    },
+    Rsa(RsaKey),
+    P256(P256Key),
 }
 
 struct Key {
@@ -510,7 +501,7 @@ fn generalized(ms: u64) -> Vec<u8> {
 )]
 fn certificate(pair: &Pair, spki: &[u8], realm: Realm, now: u64) -> Result<Vec<u8>, SamlKeyError> {
     let mut serial = [0_u8; 16];
-    aws_lc_rs::rand::fill(&mut serial).map_err(|_| SamlKeyError::Key)?;
+    xmlsec::fill(&mut serial).map_err(|_| SamlKeyError::Key)?;
     if let Some(first) = serial.first_mut() {
         *first &= 0x7f;
         *first |= 0x01;
@@ -522,7 +513,7 @@ fn certificate(pair: &Pair, spki: &[u8], realm: Realm, now: u64) -> Result<Vec<u
     let name = seq(&[tlv(0x31, &seq(&[tlv(0x06, &CN), tlv(0x0c, cn.as_bytes())]))]);
     let alg = match pair {
         Pair::Rsa(_) => seq(&[tlv(0x06, &SHA256_RSA), vec![0x05, 0x00]]),
-        Pair::P256 { .. } => seq(&[tlv(0x06, &ECDSA_SHA256)]),
+        Pair::P256(_) => seq(&[tlv(0x06, &ECDSA_SHA256)]),
     };
     let tbs = seq(&[
         tlv(0xa0, &tlv(0x02, &[0x02])),
@@ -536,20 +527,11 @@ fn certificate(pair: &Pair, spki: &[u8], realm: Realm, now: u64) -> Result<Vec<u
         name,
         spki.to_vec(),
     ]);
-    let rng = SystemRandom::new();
     let signature = match pair {
-        Pair::Rsa(k) => {
-            let mut sig = vec![0; k.public_modulus_len()];
-            k.sign(&RSA_PKCS1_SHA256, &rng, &tbs, &mut sig)
-                .map_err(|_| SamlKeyError::Key)?;
-            sig
-        }
-        Pair::P256 { asn1, .. } => asn1
-            .sign(&rng, &tbs)
-            .map_err(|_| SamlKeyError::Key)?
-            .as_ref()
-            .to_vec(),
-    };
+        Pair::Rsa(k) => k.sign(xmlsec::Digest::Sha256, &tbs),
+        Pair::P256(k) => k.sign_der(&tbs),
+    }
+    .map_err(|_| SamlKeyError::Key)?;
     let mut bits = vec![0];
     bits.extend_from_slice(&signature);
     Ok(seq(&[tbs, alg, tlv(0x03, &bits)]))
@@ -557,28 +539,17 @@ fn certificate(pair: &Pair, spki: &[u8], realm: Realm, now: u64) -> Result<Vec<u
 
 fn pair_of(alg: SamlAlg, doc: &Secret<Vec<u8>>) -> Result<Pair, SamlKeyError> {
     Ok(match alg {
-        SamlAlg::Rsa3072 => {
-            Pair::Rsa(RsaKeyPair::from_pkcs8(doc.expose()).map_err(|_| SamlKeyError::Key)?)
-        }
-        SamlAlg::P256 => Pair::P256 {
-            fixed: EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, doc.expose())
-                .map_err(|_| SamlKeyError::Key)?,
-            asn1: EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, doc.expose())
-                .map_err(|_| SamlKeyError::Key)?,
-        },
+        SamlAlg::Rsa3072 => Pair::Rsa(RsaKey::from_pkcs8(doc).map_err(|_| SamlKeyError::Key)?),
+        SamlAlg::P256 => Pair::P256(P256Key::from_pkcs8(doc).map_err(|_| SamlKeyError::Key)?),
     })
 }
 
 fn spki_of(pair: &Pair) -> Result<Vec<u8>, SamlKeyError> {
     match pair {
-        Pair::Rsa(k) => {
-            let der: PublicKeyX509Der<'static> =
-                k.public_key().as_der().map_err(|_| SamlKeyError::Key)?;
-            Ok(der.as_ref().to_vec())
-        }
-        Pair::P256 { fixed, .. } => {
+        Pair::Rsa(k) => k.spki().map_err(|_| SamlKeyError::Key),
+        Pair::P256(k) => {
             let mut bits = vec![0];
-            bits.extend_from_slice(fixed.public_key().as_ref());
+            bits.extend_from_slice(&k.point());
             Ok(seq(&[
                 seq(&[tlv(0x06, &EC_PUBLIC), tlv(0x06, &P256_CURVE)]),
                 tlv(0x03, &bits),
@@ -595,19 +566,8 @@ fn new_key<F: KeyFactory + ?Sized>(
     factory: &mut F,
 ) -> Result<Key, SamlKeyError> {
     let doc = match alg {
-        SamlAlg::Rsa3072 => {
-            let k = RsaKeyPair::generate(KeySize::Rsa3072).map_err(|_| SamlKeyError::Key)?;
-            let der: Pkcs8V1Der<'static> = k.as_der().map_err(|_| SamlKeyError::Key)?;
-            Secret::new(der.as_ref().to_vec())
-        }
-        SamlAlg::P256 => {
-            let d = EcdsaKeyPair::generate_pkcs8(
-                &ECDSA_P256_SHA256_FIXED_SIGNING,
-                &SystemRandom::new(),
-            )
-            .map_err(|_| SamlKeyError::Key)?;
-            Secret::new(d.as_ref().to_vec())
-        }
+        SamlAlg::Rsa3072 => RsaKey::generate().map_err(|_| SamlKeyError::Key)?.1,
+        SamlAlg::P256 => P256Key::generate().map_err(|_| SamlKeyError::Key)?.1,
     };
     let pair = pair_of(alg, &doc)?;
     let sealed = factory
@@ -677,26 +637,14 @@ impl Ring {
             .iter()
             .find(|k| k.info.phase == Phase::Active && k.info.alg == sig.key())
             .ok_or(SamlKeyError::NoKey)?;
-        let rng = SystemRandom::new();
         let signature = match (&k.pair, sig) {
-            (Pair::Rsa(p), SamlSig::RsaSha256 | SamlSig::RsaSha384 | SamlSig::RsaSha512) => {
-                let padding = match sig {
-                    SamlSig::RsaSha384 => &RSA_PKCS1_SHA384,
-                    SamlSig::RsaSha512 => &RSA_PKCS1_SHA512,
-                    _ => &RSA_PKCS1_SHA256,
-                };
-                let mut out = vec![0; p.public_modulus_len()];
-                p.sign(padding, &rng, data, &mut out)
-                    .map_err(|_| SamlKeyError::Key)?;
-                out
-            }
-            (Pair::P256 { fixed, .. }, SamlSig::EcdsaSha256) => fixed
-                .sign(&rng, data)
-                .map_err(|_| SamlKeyError::Key)?
-                .as_ref()
-                .to_vec(),
+            (Pair::Rsa(p), SamlSig::RsaSha256) => p.sign(xmlsec::Digest::Sha256, data),
+            (Pair::Rsa(p), SamlSig::RsaSha384) => p.sign(xmlsec::Digest::Sha384, data),
+            (Pair::Rsa(p), SamlSig::RsaSha512) => p.sign(xmlsec::Digest::Sha512, data),
+            (Pair::P256(p), SamlSig::EcdsaSha256) => p.sign(data),
             _ => return Err(SamlKeyError::NoKey),
-        };
+        }
+        .map_err(|_| SamlKeyError::Key)?;
         Ok((signature, &k.info))
     }
 

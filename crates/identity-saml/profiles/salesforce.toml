@@ -9,15 +9,15 @@ template = "salesforce"
 [[tolerances]]
 rule = "saml.sign_assertion"
 value = true
-test = "identity_saml::profile::tests::salesforce_requires_the_assertion_signature_and_its_audience"
+test = "identity_saml::domain::profile::tests::salesforce_requires_the_assertion_signature_and_its_audience"
 source = "help.salesforce.com sf.sso_saml_validation_errors"
 
 [[tolerances]]
 rule = "saml.audience_value"
 value = "https://saml.salesforce.com"
-test = "identity_saml::profile::tests::salesforce_requires_the_assertion_signature_and_its_audience"
+test = "identity_saml::domain::profile::tests::salesforce_requires_the_assertion_signature_and_its_audience"
 
 [[tolerances]]
 rule = "saml.encrypt_assertion"
 value = "optional"
-test = "identity_saml::profile::tests::every_shipped_profile_loads"
+test = "identity_saml::domain::profile::tests::every_shipped_profile_loads"

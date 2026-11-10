@@ -9,4 +9,4 @@ template = "google-workspace"
 [[tolerances]]
 rule = "saml.nameid_format"
 value = "email"
-test = "identity_saml::profile::tests::every_shipped_profile_loads"
+test = "identity_saml::domain::profile::tests::every_shipped_profile_loads"

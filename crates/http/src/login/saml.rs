@@ -243,11 +243,7 @@ fn error_page(code: &str) -> Response {
 }
 
 fn nonce() -> String {
-    let mut b = [0_u8; 16];
-    if aws_lc_rs::rand::fill(&mut b).is_err() {
-        return String::new();
-    }
-    access_kernel::json::b64url_encode(&b)
+    binding::csp_nonce()
 }
 
 fn redirect(to: &str, status: StatusCode) -> Response {
@@ -641,7 +637,7 @@ mod tests {
 
     use super::*;
 
-    // SAML Bindings §3.4.4.1: the raw values are kept for the signature; repeats refuse.
+    // §3.4.4.1
     #[test]
     fn query_values_stay_raw_and_unknown_ones_are_dropped() {
         let v = raw_pairs("SAMLRequest=fZ%2B&x=1&RelayState=a%20b").unwrap();

@@ -32,23 +32,23 @@ pub const RULES: [&str; 15] = [
 
 /// The shipped profiles, one per profiled service provider (§10.6.1 table).
 pub const SHIPPED: [(&str, &str); 11] = [
-    ("aws", include_str!("../profiles/aws.toml")),
-    ("aws-iam", include_str!("../profiles/aws-iam.toml")),
+    ("aws", include_str!("../../profiles/aws.toml")),
+    ("aws-iam", include_str!("../../profiles/aws-iam.toml")),
     (
         "aws-identity-center",
-        include_str!("../profiles/aws-identity-center.toml"),
+        include_str!("../../profiles/aws-identity-center.toml"),
     ),
-    ("entra", include_str!("../profiles/entra.toml")),
+    ("entra", include_str!("../../profiles/entra.toml")),
     (
         "google-workspace",
-        include_str!("../profiles/google-workspace.toml"),
+        include_str!("../../profiles/google-workspace.toml"),
     ),
-    ("salesforce", include_str!("../profiles/salesforce.toml")),
-    ("servicenow", include_str!("../profiles/servicenow.toml")),
-    ("workday", include_str!("../profiles/workday.toml")),
-    ("slack", include_str!("../profiles/slack.toml")),
-    ("zoom", include_str!("../profiles/zoom.toml")),
-    ("atlassian", include_str!("../profiles/atlassian.toml")),
+    ("salesforce", include_str!("../../profiles/salesforce.toml")),
+    ("servicenow", include_str!("../../profiles/servicenow.toml")),
+    ("workday", include_str!("../../profiles/workday.toml")),
+    ("slack", include_str!("../../profiles/slack.toml")),
+    ("zoom", include_str!("../../profiles/zoom.toml")),
+    ("atlassian", include_str!("../../profiles/atlassian.toml")),
 ];
 
 /// Why a profile was refused at load.

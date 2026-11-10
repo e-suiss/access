@@ -9,5 +9,5 @@ template = "workday"
 [[tolerances]]
 rule = "saml.key_info_certificate"
 value = true
-test = "identity_saml::profile::tests::every_shipped_profile_loads"
+test = "identity_saml::domain::profile::tests::every_shipped_profile_loads"
 source = "saml-doc.okta.com (secondary)"

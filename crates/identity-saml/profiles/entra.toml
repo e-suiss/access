@@ -9,14 +9,14 @@ template = "entra"
 [[tolerances]]
 rule = "saml.nameid_format"
 value = "persistent"
-test = "identity_saml::profile::tests::entra_takes_persistent_and_idp_email"
+test = "identity_saml::domain::profile::tests::entra_takes_persistent_and_idp_email"
 
 [[tolerances]]
 rule = "saml.attribute_names"
 value = ["IDPEmail"]
-test = "identity_saml::profile::tests::entra_takes_persistent_and_idp_email"
+test = "identity_saml::domain::profile::tests::entra_takes_persistent_and_idp_email"
 
 [[tolerances]]
 rule = "saml.attribute_name_format"
 value = "unspecified"
-test = "identity_saml::profile::tests::entra_takes_persistent_and_idp_email"
+test = "identity_saml::domain::profile::tests::entra_takes_persistent_and_idp_email"

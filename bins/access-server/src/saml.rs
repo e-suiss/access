@@ -72,14 +72,12 @@ pub(crate) struct OsRandom;
 
 impl Random for OsRandom {
     fn fill(&self, out: &mut [u8]) -> Result<(), SignError> {
-        aws_lc_rs::rand::fill(out).map_err(|_| SignError(String::from("random")))
+        access_crypto::xmlsec::fill(out).map_err(|_| SignError(String::from("random")))
     }
 }
 
 fn random32() -> Option<[u8; 32]> {
-    let mut b = [0_u8; 32];
-    aws_lc_rs::rand::fill(&mut b).ok()?;
-    Some(b)
+    access_crypto::random::bytes::<32>().ok()
 }
 
 fn sha256(b: &[u8]) -> [u8; 32] {
@@ -672,7 +670,7 @@ impl Saml {
             }
             (Some(s), None) => {
                 if !accepted.requesters.is_empty() {
-                    // Ek B 4947: RequesterID to the audit log
+                    // §10.6.1, Ek B 4947
                     for r in &accepted.requesters {
                         let target = hex(&sha256(r.as_bytes()));
                         if !Self::audit(t, "saml.requester", &target, correlation).await {
@@ -728,8 +726,7 @@ impl Saml {
             return false;
         };
         let expected = access_kernel::json::b64url_encode(&tag);
-        aws_lc_rs::constant_time::verify_slices_are_equal(expected.as_bytes(), mac.as_bytes())
-            .is_ok()
+        access_crypto::xmlsec::same(expected.as_bytes(), mac.as_bytes())
     }
 
     async fn decide_unsolicited(
@@ -1054,7 +1051,7 @@ impl SamlFront for Saml {
         let mut t = TenantTx::begin(&self.app, entry.tenant, entry.realm)
             .await
             .ok()?;
-        // Ek B 4947, 4994
+        // §10.6.1, Ek B 4947
         if !Self::audit(&mut t, "saml.signed", "metadata", "-").await {
             return None;
         }
@@ -1280,7 +1277,7 @@ mod tests {
 
     use super::*;
 
-    // MD-10, IDP-24: an affiliation shares one sector; every other SP has its own.
+    // MD-10, IDP-24
     #[test]
     fn sectors_follow_the_affiliation() {
         let sp = |e: &str, a: Option<&str>| {

@@ -37,8 +37,8 @@ fn spki_and_tbs(cert: &[u8]) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
     (key, tbs, sig)
 }
 
-// OP-155 m.3 (d), (e), HL-35: an RSA-3072 key is made once, its self-signed certificate verifies
-// under its own key, and it signs SAML octets with SHA-256/384/512, never SHA-1.
+// OP-155 m.3 (d), HL-35, RSA-3072
+// SHA-256, SHA-1
 #[test]
 fn a_realm_rsa_key_signs_saml_octets_and_certifies_itself() {
     let mut f = factory();
@@ -74,8 +74,7 @@ fn a_realm_rsa_key_signs_saml_octets_and_certifies_itself() {
     );
 }
 
-// §10.6.1, Ek B 4778: T0 add, T1 switch, then remove; out-of-order steps are refused; the ring
-// survives a restart through the sealed vault form.
+// §10.6.1, Ek B 4778
 #[test]
 fn two_phase_rotation_publishes_switches_and_removes() {
     let mut f = factory();
@@ -107,8 +106,7 @@ fn two_phase_rotation_publishes_switches_and_removes() {
     assert!(Ring::restore(Realm([4; 16]), &stored, &mut f).is_err());
 }
 
-// OP-155 m.3 (e): the P-256 key signs ECDSA-SHA256 as r || s; an emergency replaces every key
-// of the algorithm at once.
+// OP-155 m.3 (e)
 #[test]
 fn a_p256_key_signs_ecdsa_and_an_emergency_replaces_it() {
     let mut f = factory();

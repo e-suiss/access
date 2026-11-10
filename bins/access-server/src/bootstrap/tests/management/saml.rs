@@ -8,6 +8,13 @@
 //! `bins/access-gw-saml/tests/real.rs` in the CI sandbox job): it returns the facts the worker
 //! would read from the request the test sent.
 
+#![allow(
+    clippy::similar_names,
+    clippy::format_collect,
+    clippy::needless_pass_by_value,
+    reason = "test code"
+)]
+
 use std::sync::Mutex;
 
 use access_edge_core::EdgeCore;
@@ -104,7 +111,12 @@ impl Idp {
         )
         .unwrap();
         let edge = access_http::harden(
-            crate::edge::routes(c.w.db.router.clone(), c.w.db.app.clone(), keks, saml.clone()),
+            crate::edge::routes(
+                c.w.db.router.clone(),
+                c.w.db.app.clone(),
+                keks,
+                saml.clone(),
+            ),
             access_http::Limits::default(),
         );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -125,8 +137,9 @@ impl Idp {
             PgDirectory::new(c.w.db.router.clone()),
             SignerKeys::new(c.w.identity_signer.clone()),
         );
-        let saml_router =
-            access_http::login::saml_router::<_, _, _, _, _, crate::saml::Saml>(discovery, hosted, saml);
+        let saml_router = access_http::login::saml_router::<_, _, _, _, _, crate::saml::Saml>(
+            discovery, hosted, saml,
+        );
 
         let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
             .await
@@ -295,9 +308,11 @@ async fn stand_in(listener: tokio::net::TcpListener, channel: Channel, script: S
         let edge = core.as_ref().unwrap();
         let scripted = script.lock().unwrap().take();
         let done = match (f.binding, scripted) {
-            (access_identity_saml::wire::Binding::Unsolicited | access_identity_saml::wire::Binding::Wsfed, _) => {
-                issue(edge, &f, None).await
-            }
+            (
+                access_identity_saml::wire::Binding::Unsolicited
+                | access_identity_saml::wire::Binding::Wsfed,
+                _,
+            ) => issue(edge, &f, None).await,
             (_, Some(Ok(facts))) => {
                 let sp = Attest::Sp {
                     realm: f.realm.clone(),
@@ -339,7 +354,9 @@ fn field(page: &str, name: &str) -> String {
     let marker = format!("name=\"{name}\" value=\"");
     let at = page.find(&marker).unwrap() + marker.len();
     let end = page[at..].find('"').unwrap();
-    page[at..at + end].replace("&amp;", "&").replace("&quot;", "\"")
+    page[at..at + end]
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
 }
 
 fn response_xml(page: &str) -> String {
@@ -371,18 +388,14 @@ fn sp(name: &str, extra: serde_json::Value) -> serde_json::Value {
     v
 }
 
-// IDI-7, CVE-2022-39299, IDP-15, MD-10, IDP-24, Ek B 4760, 4761, 4762, 4764, 4766, 4770-4775,
-// 4947, 4974: a signed Response only from a live session; a forged or used handle is refused by
-// the channel; the ACS must match exactly and a mismatch is an error page with nothing sent;
-// persistent NameIDs differ per SP and stay per SP; every signature is audited; replays and
-// passive requests without a session are handled.
+// IDI-7, CVE-2022-39299, IDP-15, MD-10, IDP-24, Ek B 4760
 #[tokio::test]
 async fn idi_7_signed_responses_come_only_from_an_attested_session() {
     let idp = Idp::new("saml-sso").await;
     idp.register(sp("alpha", serde_json::json!({}))).await;
     idp.register(sp("beta", serde_json::json!({}))).await;
 
-    // IDI-7: a handle access-server never issued is refused by the channel.
+    // IDI-7
     let core = idp.core().await;
     let forged = Attest::Issue {
         realm: String::from("acme"),
@@ -397,16 +410,17 @@ async fn idi_7_signed_responses_come_only_from_an_attested_session() {
         other => panic!("{other:?}"),
     }
 
-    // No session, not passive: the user signs in first, and the flow continues after.
     let alpha = "https://alpha.sp.test/metadata";
     let (r, _) = idp
         .sso(idp.facts(alpha, "_a1", "https://alpha.sp.test/acs"), false)
         .await;
     assert_eq!(r.status(), StatusCode::SEE_OTHER);
     let to = location(&r);
-    assert!(to.starts_with("/realms/acme/login?return_to=%2Frealms%2Facme%2Fsaml%2Fsso%3Fflow%3D"), "{to}");
+    assert!(
+        to.starts_with("/realms/acme/login?return_to=%2Frealms%2Facme%2Fsaml%2Fsso%3Fflow%3D"),
+        "{to}"
+    );
 
-    // IsPassive without a session: NoPassive to the validated ACS, unsigned.
     let passive = Facts {
         is_passive: true,
         force_authn: true,
@@ -418,21 +432,29 @@ async fn idi_7_signed_responses_come_only_from_an_attested_session() {
     assert!(xml.contains(uri::STATUS_NO_PASSIVE));
     assert!(!xml.contains("ds:Signature") && !xml.contains("saml:Assertion"));
 
-    // IDP-15: an ACS that is not registered exactly is an error page; nothing is posted.
-    let before = idp.audit().await.iter().filter(|e| *e == "saml.signed").count();
+    // IDP-15
+    let before = idp
+        .audit()
+        .await
+        .iter()
+        .filter(|e| *e == "saml.signed")
+        .count();
     let (r, page) = idp
         .sso(idp.facts(alpha, "_a3", "https://alpha.sp.test/acs/"), true)
         .await;
     assert_eq!(r.status(), StatusCode::BAD_REQUEST);
     assert!(page.contains("saml-acs-mismatch") && !page.contains("SAMLResponse"));
 
-    // Signed in: a Response signed twice, to the exact ACS, the request answered.
     let (r, page) = idp
         .sso(idp.facts(alpha, "_a4", "https://alpha.sp.test/acs"), true)
         .await;
     assert_eq!(r.status(), StatusCode::OK, "{page}");
-    let csp = r.headers()[header::CONTENT_SECURITY_POLICY].to_str().unwrap();
-    assert!(csp.contains("script-src 'nonce-") && csp.contains("form-action https://alpha.sp.test"));
+    let csp = r.headers()[header::CONTENT_SECURITY_POLICY]
+        .to_str()
+        .unwrap();
+    assert!(
+        csp.contains("script-src 'nonce-") && csp.contains("form-action https://alpha.sp.test")
+    );
     assert!(page.contains("action=\"https://alpha.sp.test/acs\""));
     assert_eq!(field(&page, "RelayState"), "r1");
     let xml = response_xml(&page);
@@ -445,20 +467,26 @@ async fn idi_7_signed_responses_come_only_from_an_attested_session() {
     let alpha_id = String::from(name_id(&xml));
     assert_eq!(alpha_id.len(), 43);
     let after = idp.audit().await;
-    assert_eq!(after.iter().filter(|e| *e == "saml.signed").count(), before + 2);
+    assert_eq!(
+        after.iter().filter(|e| *e == "saml.signed").count(),
+        before + 2
+    );
     assert!(after.iter().any(|e| e == "saml.requester"));
 
-    // A replayed request identifier is refused.
     let (r, page) = idp
         .sso(idp.facts(alpha, "_a4", "https://alpha.sp.test/acs"), true)
         .await;
     assert_eq!(r.status(), StatusCode::BAD_REQUEST);
     assert!(page.contains("saml-replay"));
 
-    // MD-10: the same user, another SP: another persistent NameID; the same SP: the same one.
+    // MD-10
     let (_, page) = idp
         .sso(
-            idp.facts("https://beta.sp.test/metadata", "_b1", "https://beta.sp.test/acs"),
+            idp.facts(
+                "https://beta.sp.test/metadata",
+                "_b1",
+                "https://beta.sp.test/acs",
+            ),
             true,
         )
         .await;
@@ -469,19 +497,26 @@ async fn idi_7_signed_responses_come_only_from_an_attested_session() {
         .await;
     assert!(response_xml(&page).contains(&alpha_id));
 
-    // An entity ID no registration has is an error page.
-    let unknown = idp.sso(idp.facts("https://nobody.test", "_n1", "https://nobody.test/acs"), true).await;
+    let unknown = idp
+        .sso(
+            idp.facts("https://nobody.test", "_n1", "https://nobody.test/acs"),
+            true,
+        )
+        .await;
     assert!(unknown.1.contains("saml-unknown-sp"));
     idp.c.w.domains.release().await;
 }
 
-// IDP-15, Ek B 4774: IdP-initiated SSO only for a registration that opted in, only to its
-// isDefault ACS, 2 minutes, no InResponseTo; a RelayState needs the realm's MAC.
+// IDP-15, Ek B 4774
 #[tokio::test]
 async fn unsolicited_sso_needs_the_opt_in() {
     let idp = Idp::new("saml-idp-init").await;
     idp.register(sp("closed", serde_json::json!({}))).await;
-    idp.register(sp("open", serde_json::json!({ "allow_idp_initiated": true }))).await;
+    idp.register(sp(
+        "open",
+        serde_json::json!({ "allow_idp_initiated": true }),
+    ))
+    .await;
     let (r, page) = idp.get("/realms/acme/saml/sso/closed", true).await;
     assert_eq!(r.status(), StatusCode::BAD_REQUEST);
     assert!(page.contains("saml-unsolicited"));
@@ -490,20 +525,24 @@ async fn unsolicited_sso_needs_the_opt_in() {
     let xml = response_xml(&page);
     assert!(!xml.contains("InResponseTo"));
     assert!(xml.contains("Destination=\"https://open.sp.test/acs\""));
-    let (r, page) = idp.get("/realms/acme/saml/sso/open?RelayState=%2Fapp", true).await;
+    let (r, page) = idp
+        .get("/realms/acme/saml/sso/open?RelayState=%2Fapp", true)
+        .await;
     assert_eq!(r.status(), StatusCode::BAD_REQUEST);
     assert!(page.contains("saml-relay-state"));
     idp.c.w.domains.release().await;
 }
 
-// §10.6.1 rule 7, CR-4, Ek B 4765: sign, then encrypt for the SP's pinned key; the SP's private
-// key opens a signed assertion.
+// §10.6.1, CR-4, Ek B 4765
 #[tokio::test]
 async fn an_encrypted_assertion_opens_with_the_sp_key() {
-    use aws_lc_rs::rsa::{KeySize, OAEP_SHA256_MGF1SHA256, OaepPrivateDecryptingKey, PrivateDecryptingKey};
+    use aws_lc_rs::rsa::{
+        KeySize, OAEP_SHA256_MGF1SHA256, OaepPrivateDecryptingKey, PrivateDecryptingKey,
+    };
     let idp = Idp::new("saml-enc").await;
     let key = aws_lc_rs::rsa::KeyPair::generate(KeySize::Rsa2048).unwrap();
-    let pkcs8 = aws_lc_rs::encoding::AsDer::<aws_lc_rs::encoding::Pkcs8V1Der>::as_der(&key).unwrap();
+    let pkcs8 =
+        aws_lc_rs::encoding::AsDer::<aws_lc_rs::encoding::Pkcs8V1Der>::as_der(&key).unwrap();
     let rc = rcgen::KeyPair::from_pkcs8_der_and_sign_algo(
         &rustls_pki_types::PrivatePkcs8KeyDer::from(pkcs8.as_ref().to_vec()),
         &rcgen::PKCS_RSA_SHA256,
@@ -519,19 +558,35 @@ async fn an_encrypted_assertion_opens_with_the_sp_key() {
     ))
     .await;
     let (r, page) = idp
-        .sso(idp.facts("https://enc.sp.test/metadata", "_e1", "https://enc.sp.test/acs"), true)
+        .sso(
+            idp.facts(
+                "https://enc.sp.test/metadata",
+                "_e1",
+                "https://enc.sp.test/acs",
+            ),
+            true,
+        )
         .await;
     assert_eq!(r.status(), StatusCode::OK, "{page}");
     let xml = response_xml(&page);
     assert!(xml.contains("<saml:EncryptedAssertion"));
     assert!(xml.contains("xmlenc11#aes256-gcm") && xml.contains("xmlenc11#rsa-oaep"));
     assert!(!xml.contains("rsa-1_5") && !xml.contains("EncryptedAttribute"));
-    let values: Vec<&str> = xml.split("<xenc:CipherValue>").skip(1).map(|s| s.split('<').next().unwrap()).collect();
+    let values: Vec<&str> = xml
+        .split("<xenc:CipherValue>")
+        .skip(1)
+        .map(|s| s.split('<').next().unwrap())
+        .collect();
     let wrapped = b64::decode(values[0]).unwrap();
     let body = b64::decode(values[1]).unwrap();
-    let oaep = OaepPrivateDecryptingKey::new(PrivateDecryptingKey::from_pkcs8(pkcs8.as_ref()).unwrap()).unwrap();
+    let oaep =
+        OaepPrivateDecryptingKey::new(PrivateDecryptingKey::from_pkcs8(pkcs8.as_ref()).unwrap())
+            .unwrap();
     let mut k = vec![0; oaep.min_output_size()];
-    let k = oaep.decrypt(&OAEP_SHA256_MGF1SHA256, &wrapped, &mut k, None).unwrap().to_vec();
+    let k = oaep
+        .decrypt(&OAEP_SHA256_MGF1SHA256, &wrapped, &mut k, None)
+        .unwrap()
+        .to_vec();
     let opening = aws_lc_rs::aead::LessSafeKey::new(
         aws_lc_rs::aead::UnboundKey::new(&aws_lc_rs::aead::AES_256_GCM, &k).unwrap(),
     );
@@ -550,8 +605,7 @@ async fn an_encrypted_assertion_opens_with_the_sp_key() {
     idp.c.w.domains.release().await;
 }
 
-// Ek B 4763, 4781, 4994, 4778, 4790: signed metadata with the published certificates and its
-// windows, re-signed when served; WS-Federation answers with a signed SAML 1.1 token.
+// §10.6.1, Ek B 4763
 #[tokio::test]
 async fn metadata_is_signed_and_ws_federation_issues_a_token() {
     let idp = Idp::new("saml-meta").await;
@@ -578,7 +632,9 @@ async fn metadata_is_signed_and_ws_federation_issues_a_token() {
     assert_eq!(r.status(), StatusCode::OK, "{page}");
     assert_eq!(field(&page, "wa"), "wsignin1.0");
     assert_eq!(field(&page, "wctx"), "c1");
-    let wresult = field(&page, "wresult").replace("&lt;", "<").replace("&gt;", ">");
+    let wresult = field(&page, "wresult")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">");
     assert!(wresult.contains("<t:RequestSecurityTokenResponse"));
     assert!(wresult.contains("MajorVersion=\"1\"") && wresult.contains("<ds:Signature"));
     let (r, _) = idp

@@ -106,9 +106,7 @@ fn redirect() -> Forward {
     }
 }
 
-// OP-155 m.3 (c), IDI-8: the message is read without keys, the pinned certificates come from
-// access-server, the redirect signature and the message are verified with them, and only the
-// verified facts go back with the handle.
+// OP-155 m.3 (c), IDI-8
 #[tokio::test]
 async fn a_redirect_request_is_verified_then_redeemed() {
     let s = script(
@@ -132,8 +130,7 @@ async fn a_redirect_request_is_verified_then_redeemed() {
     );
 }
 
-// IDI-7, CVE-2022-39299: a refused message or a refused handle ends with its code; no issue call
-// follows a refusal, and a handle the channel refuses yields nothing signed.
+// IDI-7, CVE-2022-39299
 #[tokio::test]
 async fn refusals_end_the_forward() {
     let s = script(

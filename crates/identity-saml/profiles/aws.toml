@@ -9,15 +9,15 @@ template = "aws"
 [[tolerances]]
 rule = "saml.attribute_names"
 value = ["https://aws.amazon.com/SAML/Attributes/Role", "https://aws.amazon.com/SAML/Attributes/RoleSessionName"]
-test = "identity_saml::profile::tests::aws_requires_role_and_session_name"
+test = "identity_saml::domain::profile::tests::aws_requires_role_and_session_name"
 source = "docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_saml_assertions.html"
 
 [[tolerances]]
 rule = "saml.attribute_multi_value"
 value = true
-test = "identity_saml::profile::tests::aws_requires_role_and_session_name"
+test = "identity_saml::domain::profile::tests::aws_requires_role_and_session_name"
 
 [[tolerances]]
 rule = "saml.idp_initiated"
 value = true
-test = "identity_saml::profile::tests::idp_initiated_stays_opt_in_per_registration"
+test = "identity_saml::domain::profile::tests::idp_initiated_stays_opt_in_per_registration"

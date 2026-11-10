@@ -237,7 +237,7 @@ mod tests {
 
     use super::*;
 
-    // OP-155 m.3 (f): only the passive requestor actions, a bounded wctx, a realm for sign-in.
+    // OP-155 m.3 (f)
     #[test]
     fn passive_requests_are_bounded() {
         let q = |pairs: &'static [(&'static str, &'static str)]| {

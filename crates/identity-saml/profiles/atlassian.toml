@@ -9,10 +9,10 @@ template = "atlassian"
 [[tolerances]]
 rule = "saml.sign_assertion"
 value = true
-test = "identity_saml::profile::tests::atlassian_requires_the_assertion_signature_and_email"
+test = "identity_saml::domain::profile::tests::atlassian_requires_the_assertion_signature_and_email"
 source = "support.atlassian.com SAML SSO"
 
 [[tolerances]]
 rule = "saml.nameid_format"
 value = "email"
-test = "identity_saml::profile::tests::atlassian_requires_the_assertion_signature_and_email"
+test = "identity_saml::domain::profile::tests::atlassian_requires_the_assertion_signature_and_email"

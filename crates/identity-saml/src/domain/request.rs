@@ -4,7 +4,7 @@
 //! its `NameID` policy can be met. A refusal before the ACS is known is shown to the user and never
 //! sent to the service provider; one after it is a SAML status sent to that exact ACS.
 
-use access_edge_core::saml::{Facts, Kind, Signed};
+use access_internal_api::saml::{Facts, Kind, Signed};
 
 use crate::sp::{Acs, NameIdFormat, Protocol, Sp};
 use crate::time;
@@ -276,7 +276,7 @@ mod tests {
         vec![String::from("https://idp.test/saml/sso")]
     }
 
-    // IDP-15, SAMLProf §4.1.4.1, Ek B 4771: the ACS matches exactly, by URL or index.
+    // IDP-15, §4.1.4.1, Ek B 4771
     #[test]
     fn the_acs_matches_the_registration_exactly() {
         let s = sp();
@@ -323,7 +323,7 @@ mod tests {
         assert_eq!(decide(&s, &f, false, &ep(), NOW), Err(Refusal::Acs));
     }
 
-    // §10.6.1: IsPassive wins over ForceAuthn.
+    // §10.6.1
     #[test]
     fn is_passive_wins_over_force_authn() {
         let f = Facts {
@@ -340,7 +340,7 @@ mod tests {
         assert!(decide(&sp(), &f, false, &ep(), NOW).unwrap().force);
     }
 
-    // §10.6.1: AuthnRequestsSigned, Destination, freshness.
+    // §10.6.1
     #[test]
     fn signature_destination_and_freshness_are_required() {
         let mut s = sp();
@@ -375,7 +375,7 @@ mod tests {
         assert_eq!(decide(&sp(), &f, false, &ep(), NOW), Err(Refusal::Stale));
     }
 
-    // §10.6.1: NameIDPolicy that cannot be met is a status to the ACS.
+    // §10.6.1
     #[test]
     fn an_unmeetable_nameid_policy_is_a_status() {
         let f = Facts {
@@ -402,7 +402,7 @@ mod tests {
         assert!(!a.allow_create && a.status.is_none());
     }
 
-    // IDP-15: IdP-initiated only when opted in, and only to the isDefault ACS.
+    // IDP-15
     #[test]
     fn unsolicited_needs_the_opt_in() {
         let mut s = sp();

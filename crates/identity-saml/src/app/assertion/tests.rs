@@ -167,8 +167,7 @@ fn verify(signer: &TestSigner, el: &El) {
     assert!(signer.verify(si.canonical().as_bytes(), &value));
 }
 
-// §10.6.1 rules 1-6, 9, Ek B 4764, 4772, 4775, 4777: schema order, audience, bearer
-// confirmation without NotBefore, SessionIndex = ID, class from AAL, both signatures.
+// §10.6.1, Ek B 4764
 #[tokio::test]
 async fn a_response_follows_the_ten_rules_and_both_signatures_verify() {
     let signer = TestSigner::new();
@@ -237,7 +236,7 @@ async fn issue_and(signer: &TestSigner, sp: &Sp, i: &Issue) -> String {
         .unwrap()
 }
 
-// OP-155 m.3 (e): AAL to AuthnContextClassRef.
+// OP-155 m.3 (e)
 #[test]
 fn the_class_comes_from_the_assurance_vector() {
     let (x, y) = (new_value(&OsRandom).unwrap(), new_value(&OsRandom).unwrap());
@@ -249,7 +248,7 @@ fn the_class_comes_from_the_assurance_vector() {
     assert_eq!(class_ref(3, Aal3Class::RefedsMfa), uri::AC_REFEDS_MFA);
 }
 
-// IDP-15: an IdP-initiated assertion lives 2 minutes and names no request.
+// IDP-15
 #[test]
 fn an_unsolicited_assertion_is_short_and_answers_nothing() {
     let i = Issue {
@@ -266,8 +265,7 @@ fn an_unsolicited_assertion_is_short_and_answers_nothing() {
     );
 }
 
-// §10.6.1 rule 7, CR-4, Ek B 4765: sign, then encrypt with aes256-gcm and rsa-oaep for the SP's
-// key; the SP's private key opens exactly the signed assertion.
+// §10.6.1, CR-4, Ek B 4765
 #[tokio::test]
 async fn an_encrypted_assertion_round_trips_against_the_sp_key() {
     let sp_key = aws_lc_rs::rsa::KeyPair::generate(KeySize::Rsa2048).unwrap();

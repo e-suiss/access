@@ -151,8 +151,7 @@ fn a_signed_request_verifies_and_its_facts_come_from_the_signed_element() {
     assert_eq!(f.signed, Signed::Verified(String::from(ECDSA_SHA256)));
 }
 
-// §10.6.1: a changed signed message no longer verifies; a certificate the message carries is
-// never a trust anchor (rule 8).
+// §10.6.1
 #[test]
 fn a_tampered_request_or_a_foreign_key_is_refused() {
     let sp = sp();
@@ -189,8 +188,7 @@ fn strip_signature(xml: &str) -> (String, String) {
     )
 }
 
-// IDI-8 XSW corpus, classes 1-8 (Somorovsky et al. 2012, adapted to a signed request) and three
-// newer ones; each must be refused with the reason the defence names.
+// IDI-8
 #[test]
 fn idi_8_xsw_corpus_is_refused() {
     let sp = sp();
@@ -279,7 +277,7 @@ fn idi_8_xsw_corpus_is_refused() {
     }
 }
 
-// TI-9, OP-155 m.3 (e): SHA-1 is never accepted, as a signature or a digest method.
+// TI-9, OP-155 m.3 (e), SHA-1
 #[test]
 fn sha1_is_refused() {
     let sp = sp();
@@ -304,7 +302,7 @@ fn sha1_is_refused() {
     );
 }
 
-// SAML Bindings §3.4.4.1: the detached signature covers the octets as received.
+// §3.4.4.1
 #[test]
 fn a_redirect_signature_verifies_over_the_received_octets() {
     let sp = sp();
@@ -338,8 +336,7 @@ fn deflate(data: &[u8]) -> Vec<u8> {
     miniz_oxide::deflate::compress_to_vec(data, 9)
 }
 
-// CVE regression corpus (§10.6.1): one vector per listed CVE, each refused by the defence that
-// closes its class.
+// §10.6.1
 #[test]
 fn cve_corpus_is_refused() {
     let sp = sp();
@@ -347,14 +344,13 @@ fn cve_corpus_is_refused() {
     let original = signed(&sp, "_r1");
     let (bare, sig) = strip_signature(&original);
 
-    // CVE-2025-25291, CVE-2025-25292: two parsers disagreeing on one document; one parser
-    // reads every message and refuses a DOCTYPE outright.
+    // CVE-2025-25291, CVE-2025-25292
     let doctype = format!(
         r#"<!DOCTYPE samlp:AuthnRequest [<!ATTLIST samlp:AuthnRequest ID CDATA "_x">]>{original}"#
     );
     assert_eq!(run(&c, &doctype).map(|_| ()), Err("xml-doctype"));
 
-    // CVE-2025-25293, CVE-2023-28119: a compressed message that inflates without bound.
+    // CVE-2025-25293, CVE-2023-28119
     let bomb = format!(
         "{}{ISSUER}<samlp:Extensions>{}</samlp:Extensions>{TAIL}",
         head("_b"),
@@ -367,7 +363,7 @@ fn cve_corpus_is_refused() {
     let r = request(&inflating.encode(&deflate(bomb.as_bytes())).unwrap()).map(|_| ());
     assert!(matches!(r, Err("xml-ratio" | "xml-too-large")), "{r:?}");
 
-    // CVE-2024-45409: a second DigestValue an XPath search could pick up.
+    // CVE-2024-45409
     let two_digests = original.replacen(
         "</ds:DigestValue>",
         "</ds:DigestValue><ds:DigestValue>AAAA</ds:DigestValue>",
@@ -378,8 +374,7 @@ fn cve_corpus_is_refused() {
         Err("signature-malformed")
     );
 
-    // CVE-2025-29774, CVE-2025-29775: a second SignedInfo, and a DigestValue split by a
-    // comment.
+    // CVE-2025-29774, CVE-2025-29775
     let si_start = original.find("<ds:SignedInfo>").unwrap();
     let si_end = original.find("</ds:SignedInfo>").unwrap() + "</ds:SignedInfo>".len();
     let si = &original[si_start..si_end];
@@ -393,7 +388,7 @@ fn cve_corpus_is_refused() {
     );
     assert_eq!(run(&c, &commented).map(|_| ()), Err("signature-digest"));
 
-    // CVE-2017-11427, CVE-2017-11428: a comment inside a NameID never truncates it.
+    // CVE-2017-11427, CVE-2017-11428
     let logout = format!(
         r#"<samlp:LogoutRequest xmlns:samlp="{SAMLP_NS}" ID="_l1" IssueInstant="2026-11-10T10:00:00Z" Version="2.0">{ISSUER}<saml:NameID xmlns:saml="{SAML_NS}">a@x.test<!---->.evil.test</saml:NameID><samlp:SessionIndex>_s1</samlp:SessionIndex></samlp:LogoutRequest>"#
     );
@@ -406,15 +401,15 @@ fn cve_corpus_is_refused() {
     assert_eq!(f.name_id.as_deref(), Some("a@x.test.evil.test"));
     assert_eq!(f.session_indexes, ["_s1"]);
 
-    // CVE-2022-39299: an unsigned message where a signature is required is refused; the
-    // signed output side of the class is IDI-7 at the edge channel.
+    // CVE-2022-39299
+    // IDI-7
     assert_eq!(run(&c, &bare).map(|_| ()), Err("signature-missing"));
 
-    // CVE-2018-0489: entity tricks are refused before anything is read.
+    // CVE-2018-0489
     let entity = original.replacen("https://sp.test</saml:Issuer>", "&sp;</saml:Issuer>", 1);
     assert_eq!(run(&c, &entity).map(|_| ()), Err("xml-entity"));
 
-    // CVE-2025-23369: the signature element's prefix rebound mid-document.
+    // CVE-2025-23369
     let rebound = original.replacen(
         r"<ds:SignedInfo>",
         r#"<ds:SignedInfo xmlns:ds="urn:evil">"#,
@@ -422,7 +417,7 @@ fn cve_corpus_is_refused() {
     );
     assert_eq!(run(&c, &rebound).map(|_| ()), Err("signature-malformed"));
 
-    // CVE-2025-54419: a signature over one part while another part is read.
+    // CVE-2025-54419
     let part = format!(
         r#"{}{ISSUER}{}<samlp:Extensions ID="_part"></samlp:Extensions>{POLICY}{TAIL}"#,
         head("_r9"),
@@ -430,7 +425,7 @@ fn cve_corpus_is_refused() {
     );
     assert_eq!(run(&c, &part).map(|_| ()), Err("signature-reference"));
 
-    // CVE-2025-66578: identifiers that differ only by attribute name.
+    // CVE-2025-66578
     let twin = original.replacen(
         "<samlp:NameIDPolicy",
         r#"<samlp:Extensions Id="_r1"></samlp:Extensions><samlp:NameIDPolicy"#,
@@ -440,7 +435,7 @@ fn cve_corpus_is_refused() {
     drop(bare);
 }
 
-// §10.6.1: an ECP request arrives in a SOAP body; a LogoutRequest never does.
+// §10.6.1
 #[test]
 fn an_ecp_request_is_read_from_the_soap_body() {
     let sp = sp();

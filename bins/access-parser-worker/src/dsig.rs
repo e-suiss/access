@@ -5,8 +5,7 @@
 //! The key is one of the service provider's pinned certificates; `KeyInfo` is never read
 //! (rule 8). SHA-1, DSA, HMAC and every other transform are refused.
 
-use aws_lc_rs::digest;
-use aws_lc_rs::signature::{self, UnparsedPublicKey, VerificationAlgorithm};
+use access_crypto::xmlsec::{self, Verify};
 
 use crate::c14n::{self, DEFAULT_TOKEN};
 use crate::dom::Doc;
@@ -108,13 +107,13 @@ pub(crate) fn key_of(cert: &[u8]) -> Result<Key, &'static str> {
 
 /// The verification algorithm for `sig_alg` over `key`; SHA-1 and anything unlisted refuse
 /// (TI-9, OP-155 m.3 (e)).
-fn algorithm(sig_alg: &str, key: &Key) -> Option<&'static dyn VerificationAlgorithm> {
+fn algorithm(sig_alg: &str, key: &Key) -> Option<Verify> {
     Some(match (sig_alg, key) {
-        (RSA_SHA256, Key::Rsa(_)) => &signature::RSA_PKCS1_2048_8192_SHA256,
-        (RSA_SHA384, Key::Rsa(_)) => &signature::RSA_PKCS1_2048_8192_SHA384,
-        (RSA_SHA512, Key::Rsa(_)) => &signature::RSA_PKCS1_2048_8192_SHA512,
-        (ECDSA_SHA256, Key::P256(_)) => &signature::ECDSA_P256_SHA256_FIXED,
-        (ECDSA_SHA384, Key::P384(_)) => &signature::ECDSA_P384_SHA384_FIXED,
+        (RSA_SHA256, Key::Rsa(_)) => Verify::RsaSha256,
+        (RSA_SHA384, Key::Rsa(_)) => Verify::RsaSha384,
+        (RSA_SHA512, Key::Rsa(_)) => Verify::RsaSha512,
+        (ECDSA_SHA256, Key::P256(_)) => Verify::P256Sha256,
+        (ECDSA_SHA384, Key::P384(_)) => Verify::P384Sha384,
         _ => return None,
     })
 }
@@ -158,10 +157,7 @@ pub(crate) fn verify_with(
         let Some(alg) = algorithm(sig_alg, &key) else {
             continue;
         };
-        if UnparsedPublicKey::new(alg, bytes(&key))
-            .verify(signed, sig)
-            .is_ok()
-        {
+        if xmlsec::verify(alg, bytes(&key), signed, sig) {
             return Ok(());
         }
     }
@@ -212,13 +208,13 @@ pub(crate) mod b64std {
 }
 
 fn digest_of(alg: &str, data: &[u8]) -> Result<Vec<u8>, &'static str> {
-    let a = match alg {
-        SHA256 => &digest::SHA256,
-        SHA384 => &digest::SHA384,
-        SHA512 => &digest::SHA512,
+    let d = match alg {
+        SHA256 => xmlsec::Digest::Sha256,
+        SHA384 => xmlsec::Digest::Sha384,
+        SHA512 => xmlsec::Digest::Sha512,
         _ => return Err("signature-digest-alg"),
     };
-    Ok(digest::digest(a, data).as_ref().to_vec())
+    Ok(xmlsec::digest(d, data))
 }
 
 fn prefix_list(doc: &Doc, transform: usize) -> Result<Vec<String>, &'static str> {

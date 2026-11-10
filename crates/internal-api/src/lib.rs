@@ -9,6 +9,7 @@ pub mod events;
 pub mod idp;
 pub mod instances;
 pub mod projections;
+pub mod saml;
 
 #[cfg(test)]
 pub(crate) fn block_on<F: std::future::Future>(f: F) -> F::Output {

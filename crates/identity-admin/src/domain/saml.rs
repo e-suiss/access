@@ -354,8 +354,7 @@ mod tests {
         })
     }
 
-    // OP-155 m.3 (a), (e): a registration compiles to sp_register with its profile applied; a
-    // registration its template refuses never reaches a decision.
+    // OP-155 m.3 (a)
     #[test]
     fn a_registration_compiles_with_its_profile() {
         let c = SamlChange::register(&body()).unwrap();
@@ -375,7 +374,7 @@ mod tests {
         );
     }
 
-    // §10.6.1, Ek B 4778: each rotation phase lasts at least 14 days.
+    // §10.6.1, Ek B 4778
     #[test]
     fn certificate_policies_keep_two_week_phases() {
         let ok = SamlChange::cert_policy(&json!({"rotate_days": 365, "overlap_days": 14})).unwrap();

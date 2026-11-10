@@ -188,7 +188,7 @@ fn write(e: &El, rendered: &BTreeMap<&'static str, &'static str>, out: &mut Stri
 mod tests {
     use super::*;
 
-    // §10.6.1 rule 6: what is written is the exclusive canonical form.
+    // §10.6.1
     #[test]
     fn a_tree_serializes_as_its_exclusive_canonical_form() {
         let e = El::new("a", "urn:a", "r")

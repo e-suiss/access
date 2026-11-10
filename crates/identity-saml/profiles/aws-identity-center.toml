@@ -9,10 +9,10 @@ template = "aws-identity-center"
 [[tolerances]]
 rule = "saml.nameid_format"
 value = "email"
-test = "identity_saml::profile::tests::identity_center_takes_email_and_no_encryption"
+test = "identity_saml::domain::profile::tests::identity_center_takes_email_and_no_encryption"
 source = "docs.aws.amazon.com/singlesignon/latest/userguide/other-idps.html"
 
 [[tolerances]]
 rule = "saml.encrypt_assertion"
 value = "unsupported"
-test = "identity_saml::profile::tests::identity_center_takes_email_and_no_encryption"
+test = "identity_saml::domain::profile::tests::identity_center_takes_email_and_no_encryption"
