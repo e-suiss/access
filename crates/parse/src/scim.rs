@@ -4,6 +4,8 @@
 //! since ignoring it would widen the result to every row. Size, depth and term count are bounded
 //! before any recursion (CR-10, OP-8).
 
+pub mod protocol;
+
 /// Longest accepted filter, in bytes.
 pub const MAX_LEN: usize = 1024;
 
