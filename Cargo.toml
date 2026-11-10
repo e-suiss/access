@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "bins/*", "services/*", "sdks/bindings/wasm", "sdks/bindings/uniffi", "sdks/rust/*", "xtask"]
+# OP-155 m.3 (o): its own workspace, lock file and supply-chain run; Linux CI only
+exclude = ["bins/access-gw-kerberos"]
 
 [workspace.package]
 version = "0.4.0"

@@ -1,4 +1,6 @@
 /target/
+# OP-155 m.3 (o): the Kerberos gateway's own workspace
+/bins/access-gw-kerberos/target/
 node_modules/
 dist/
 

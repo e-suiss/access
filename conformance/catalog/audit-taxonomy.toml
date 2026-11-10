@@ -1082,3 +1082,57 @@ ocsf_activity = 99
 caep = ""
 webhook = false
 
+[[event]]
+event = "edge.kerberos.ntlm.refused"
+plane = "identity"
+class = "authentication"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "edge.kerberos.token.refused"
+plane = "identity"
+class = "authentication"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "edge.kerberos.accept.refused"
+plane = "identity"
+class = "authentication"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "edge.kerberos.s4u2proxy.ok"
+plane = "identity"
+class = "authentication"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "edge.kerberos.s4u2proxy.refused"
+plane = "identity"
+class = "authentication"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 99
+caep = ""
+webhook = false

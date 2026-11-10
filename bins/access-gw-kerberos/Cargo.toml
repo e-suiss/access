@@ -1,0 +1,67 @@
+# OP-155 m.3 (o), MD-1, §14.5 C FFI profile: the Kerberos gateway is its own workspace, outside the
+# root one, with its own Cargo.lock and its own cargo-deny and cargo-vet runs. libgssapi (C FFI)
+# links only here. Built and tested on Linux CI only (job `kerberos`) and shipped as a separate
+# image variant.
+[workspace]
+members = ["."]
+resolver = "3"
+
+[package]
+name = "access-gw-kerberos"
+description = "Access Kerberos/SPNEGO gateway (§10.6.4, IDP-17, OP-155 m.3 (o)): an HTTP Negotiate acceptor with a mandatory fallback to normal sign-in, reached through the mTLS edge channel."
+version = "0.4.0"
+edition = "2024"
+rust-version = "1.99"
+license = "Apache-2.0"
+repository = "https://github.com/e-suiss/access"
+publish = false
+
+[dependencies]
+access-edge-core = { path = "../../crates/edge-core", default-features = false, features = ["channel"] }
+access-internal-api = { path = "../../crates/internal-api", default-features = false }
+suiss-crypto = { package = "esuiss-crypto", path = "../../crates/suiss-crypto", default-features = false }
+suiss-sandbox = { package = "esuiss-sandbox", path = "../../crates/suiss-sandbox", default-features = false }
+# OP-155 m.3 (u): the system libgssapi through the binding cross-krb5 is built on; cross-krb5
+# exposes neither the delegated (S4U2Proxy) credential nor a credential that also initiates
+libgssapi = { version = "=0.11.0", default-features = false }
+httparse = { version = "1.10.1", default-features = false, features = ["std"] }
+rustls = { version = "0.23.46", default-features = false, features = ["aws_lc_rs", "prefer-post-quantum", "std"] }
+thiserror = { version = "2.0.21", default-features = false }
+tokio = { version = "1.53.1", default-features = false, features = ["io-util", "macros", "net", "rt-multi-thread", "time"] }
+tokio-rustls = { version = "0.26.4", default-features = false, features = ["aws_lc_rs"] }
+
+[dev-dependencies]
+rcgen = { version = "0.14.7", default-features = false, features = ["aws_lc_rs", "pem"] }
+
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "deny"
+unreachable_pub = "deny"
+unused_must_use = "deny"
+rust_2024_compatibility = { level = "deny", priority = -1 }
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+panic = "deny"
+unimplemented = "deny"
+todo = "deny"
+unreachable = "deny"
+arithmetic_side_effects = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+mem_forget = "deny"
+undocumented_unsafe_blocks = "deny"
+
+[profile.release]
+overflow-checks = true
+panic = "unwind"
+lto = "thin"
+codegen-units = 1
+debug = "line-tables-only"
