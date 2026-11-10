@@ -291,6 +291,9 @@ fn render(services: &[Service], public: &BTreeSet<String>, declared: &[DeclaredE
     for svc in services {
         let _ = write!(s, "\n## `{}` ({})\n\n", svc.name, svc.dir);
         s.push_str("Crates:\n\n");
+        if svc.crates.is_empty() {
+            s.push_str("- none\n");
+        }
         for c in &svc.crates {
             let _ = writeln!(s, "- `{c}`");
         }

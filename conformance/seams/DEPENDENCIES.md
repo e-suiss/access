@@ -42,6 +42,48 @@ Declared:
 - Caller statement: it reads with the caller's own Actor Intent Statement and holds no authority (CMP-16)
 - Custodial key: none
 
+## `access-hr-connector` (services/hr-connector)
+
+Crates:
+
+- none
+
+Access endpoints:
+
+- none
+
+Declared:
+
+- none
+
+## `access-linux-client` (services/linux-client)
+
+Crates:
+
+- none
+
+Access endpoints:
+
+- none
+
+Declared:
+
+- none
+
+## `access-mcp-gateway` (services/mcp-gateway)
+
+Crates:
+
+- none
+
+Access endpoints:
+
+- none
+
+Declared:
+
+- none
+
 ## `access-product-twin` (services/product-twin)
 
 Crates:
@@ -66,6 +108,20 @@ Declared:
 - Client certificate: the transport authenticates it as its own PEP (L1-ADP-2) with a certificate from any CA the deployment trusts
 - Domain Acceptances: its schema and Claims take effect only through the domain's own Acceptance Exercises (§7.9.10.3, PI-3)
 - Custodial key: none: its service and client keys are its own
+
+## `access-proxy` (services/proxy)
+
+Crates:
+
+- none
+
+Access endpoints:
+
+- none
+
+Declared:
+
+- none
 
 ## `access-vc-verifier` (services/vc-verifier)
 
