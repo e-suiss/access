@@ -33,6 +33,8 @@ pub(crate) mod privileged;
 mod profile;
 #[path = "rules_progress.rs"]
 mod progress;
+#[path = "rules_proxy.rs"]
+mod proxy;
 #[path = "rules_restriction.rs"]
 mod restriction;
 #[path = "rules_seam.rs"]
@@ -206,6 +208,11 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "no-iys-client",
             run: iys::check,
+        },
+        // IDP-30 (2), B22, OP-156 m.3 (m), Ek B 5369
+        Check {
+            name: "proxy-engine",
+            run: proxy::check,
         },
     ]);
     all
