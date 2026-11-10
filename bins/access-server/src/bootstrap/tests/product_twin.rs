@@ -1278,6 +1278,7 @@ async fn a_domain_predicate_is_consumed_and_never_recomputed() {
     s.only_public();
 }
 
+mod seams;
 mod security;
 mod signals;
 mod work;

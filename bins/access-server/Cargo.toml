@@ -71,6 +71,8 @@ access-vc-verifier = { path = "../../services/vc-verifier", features = ["testing
 access-hr-connector = { path = "../../services/hr-connector", features = ["testing"] }
 # OP-156 m.2 Q1
 access-product-twin = { path = "../../services/product-twin" }
+# OP-156 m.3 (u)
+access-verifier = { workspace = true, features = ["testing"] }
 # OP-156 m.3 (p)
 access-linux-client = { path = "../../services/linux-client" }
 access-linux-module = { path = "../../services/linux-client/module" }

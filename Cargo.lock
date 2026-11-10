@@ -1080,6 +1080,7 @@ dependencies = [
  "ed25519-dalek",
  "esuiss-access-kernel",
  "esuiss-access-sdk",
+ "esuiss-access-verifier",
  "esuiss-crypto",
  "esuiss-ledger",
  "esuiss-sandbox",
