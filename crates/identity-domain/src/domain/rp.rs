@@ -132,6 +132,17 @@ mod tests {
 
     // OP-156 m.3 (i), OP-69
     #[test]
+    fn a_single_label_service_name_is_not_a_suiss_domain() {
+        let base = Base::new("access-server");
+        assert!(!base.is_suiss());
+        assert_eq!(
+            effective(None, &base, "access-server", &[]).as_deref(),
+            Some("access-server")
+        );
+    }
+
+    // OP-156 m.3 (i), RFC 6761
+    #[test]
     fn localhost_is_not_a_suiss_domain() {
         let base = Base::new("localhost");
         assert_eq!(

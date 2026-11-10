@@ -65,10 +65,11 @@ pub fn dns_name(host: &str) -> bool {
             .is_some_and(|tld| !tld.bytes().all(|b| b.is_ascii_digit()))
 }
 
-/// Whether `host` is `localhost` or a name under it (RFC 6761 §6.3).
+/// Whether `host` is `localhost` or a name under it (RFC 6761 §6.3), or a single-label name
+/// such as a container's service name, which no public DNS serves and no public CA certifies.
 #[must_use]
 pub fn localhost(host: &str) -> bool {
-    host == "localhost" || host.ends_with(".localhost")
+    host == "localhost" || host.ends_with(".localhost") || !host.contains('.')
 }
 
 /// Whether `a` is `b` or a name under it.
