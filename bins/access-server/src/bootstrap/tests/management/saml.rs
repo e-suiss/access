@@ -768,3 +768,138 @@ async fn the_saml_idp_suite_finds_no_standards_fault_in_a_real_response_or_metad
     assert!(all_ok(&findings), "{findings:#?}");
     idp.c.w.domains.release().await;
 }
+
+/// Runs the counterpart command in `var` on `dir`; the job `differential` sets it.
+pub(super) async fn counterpart(var: &str, args: Vec<String>) {
+    let cmd = std::env::var(var)
+        .unwrap_or_else(|_| panic!("{var} is not set; this test runs in the CI job differential"));
+    let out = tokio::task::spawn_blocking(move || {
+        std::process::Command::new("sh")
+            .arg("-c")
+            .arg(format!("{cmd} \"$@\""))
+            .arg("counterpart")
+            .args(args)
+            .output()
+    })
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(
+        out.status.success(),
+        "{var}:\n{}\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// Writes what a counterpart service provider checks: the signed metadata, a fresh signed
+/// response for `entity` at `acs`, the same response with its `NameID` changed, the
+/// `IdP` signing certificate, the certificate in the metadata signature and the expected values.
+async fn saml_artifacts(label: &str, entity: &str, acs: &str) -> std::path::PathBuf {
+    let idp = Idp::new(label).await;
+    let (_, md) = idp.get("/realms/acme/saml/metadata", false).await;
+    let parsed = saml_idp_suite::xml::parse(&md).unwrap();
+    let idp_entity = parsed.root.attr("entityID").unwrap().to_owned();
+    let pem_of = |e: &saml_idp_suite::xml::Element| {
+        let cert = e
+            .descendants()
+            .into_iter()
+            .find(|x| x.is(saml_idp_suite::DS, "X509Certificate"))
+            .unwrap()
+            .text()
+            .split_whitespace()
+            .collect::<String>();
+        format!(
+            "-----BEGIN CERTIFICATE-----\n{}\n-----END CERTIFICATE-----\n",
+            cert.as_bytes()
+                .chunks(64)
+                .map(|c| std::str::from_utf8(c).unwrap())
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
+    };
+    let signing = parsed
+        .root
+        .descendants()
+        .into_iter()
+        .find(|e| e.local() == "KeyDescriptor" && e.attr("use") != Some("encryption"))
+        .unwrap();
+    let pem = pem_of(signing);
+    let md_pem = parsed
+        .root
+        .child(saml_idp_suite::DS, "Signature")
+        .map_or_else(|| pem.clone(), pem_of);
+    idp.register(sp(
+        label,
+        serde_json::json!({
+            "entity_id": entity,
+            "acs": [{ "url": acs, "index": 0, "binding": "post", "default": true }],
+        }),
+    ))
+    .await;
+    let (r, page) = idp.sso(idp.facts(entity, "_i1", acs), true).await;
+    assert_eq!(r.status(), StatusCode::OK, "{page}");
+    let response = response_xml(&page);
+    let tampered = response.replacen(name_id(&response), "attacker", 1);
+    assert_ne!(response, tampered);
+    let dir = std::env::temp_dir().join(format!("access-saml-{label}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for (f, body) in [
+        ("metadata.xml", md.as_str()),
+        ("response.xml", response.as_str()),
+        ("tampered.xml", tampered.as_str()),
+        ("idp.pem", pem.as_str()),
+        ("metadata.pem", md_pem.as_str()),
+        (
+            "expected.env",
+            &format!(
+                "IDP_ENTITY={idp_entity}\nSP_ENTITY={entity}\nACS={acs}\nREQUEST_ID=_i1\nRESPONSE_B64={}\nTAMPERED_B64={}\n",
+                b64::encode(response.as_bytes()),
+                b64::encode(tampered.as_bytes())
+            ),
+        ),
+    ] {
+        std::fs::write(dir.join(f), body).unwrap();
+    }
+    idp.c.w.domains.release().await;
+    dir
+}
+
+// T42, IDP-40, OP-155 m.3 (q), Ek B 5100
+#[tokio::test]
+#[ignore = "needs xmlsec1 of CI job differential"]
+async fn xmlsec1_verifies_a_real_response_and_metadata_and_refuses_a_tampered_one() {
+    let dir = saml_artifacts(
+        "xmlsec",
+        "https://xmlsec.sp.test/metadata",
+        "https://xmlsec.sp.test/acs",
+    )
+    .await;
+    counterpart("ACCESS_TEST_XMLSEC1", vec![dir.display().to_string()]).await;
+}
+
+// T42, IDP-40, OP-155 m.3 (q), Ek B 4934, 5100
+#[tokio::test]
+#[ignore = "needs SimpleSAMLphp of CI job differential"]
+async fn simplesamlphp_accepts_a_real_response_and_refuses_a_tampered_one() {
+    let dir = saml_artifacts(
+        "ssp",
+        "https://ssp.sp.test/module.php/saml/sp/metadata.php/default-sp",
+        "https://ssp.sp.test/module.php/saml/sp/saml2-acs.php/default-sp",
+    )
+    .await;
+    counterpart("ACCESS_TEST_SIMPLESAMLPHP", vec![dir.display().to_string()]).await;
+}
+
+// T42, IDP-40, OP-155 m.3 (q), Ek B 4934, 5100
+#[tokio::test]
+#[ignore = "needs Shibboleth SP of CI job differential"]
+async fn shibboleth_sp_accepts_a_real_response_and_refuses_a_tampered_one() {
+    let dir = saml_artifacts(
+        "shib",
+        "https://shib.sp.test/shibboleth",
+        "https://shib.sp.test/Shibboleth.sso/SAML2/POST",
+    )
+    .await;
+    counterpart("ACCESS_TEST_SHIBBOLETH_SP", vec![dir.display().to_string()]).await;
+}

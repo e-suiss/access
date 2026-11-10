@@ -808,3 +808,27 @@ async fn provisioned_users_are_pushed_to_a_registered_target_and_logged() {
     assert_eq!(pushes[0].5, 2);
     assert_eq!(pushes[1].4, "retry");
 }
+
+// T42, IDP-40, OP-155 m.3 (q), Ek B 5100
+#[tokio::test]
+#[ignore = "needs scim2-tester of CI job differential"]
+async fn scim2_tester_finds_the_server_compliant() {
+    let c = console("scim-tester", false).await;
+    let secret = register(&c, "scim2-tester", None).await;
+    let app = scim_router(&c).router.layer(axum::middleware::map_request(
+        |mut r: Request<Body>| async move {
+            r.headers_mut()
+                .insert(header::HOST, header::HeaderValue::from_static(HOST));
+            r
+        },
+    ));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, app).await });
+    super::saml::counterpart(
+        "ACCESS_TEST_SCIM2_TESTER",
+        vec![format!("http://{addr}{BASE}"), secret],
+    )
+    .await;
+    c.w.domains.release().await;
+}

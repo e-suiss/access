@@ -1,0 +1,31 @@
+{
+  "recorded": true,
+  "results": {
+    "Device|check_remove_required_attribute|active": "Removing a required attribute answers scimType invalidValue; RFC 7644 \u00a73.5.2 names mutability for read-only attributes; finding to triage",
+    "Device|search_with_attributes|": "Device search (RFC 9944) is not served on /Devices/.search; finding to triage",
+    "Device|search_with_excluded_attributes|": "Device search (RFC 9944) is not served on /Devices/.search; finding to triage",
+    "Group|check_add_attribute|members": "A group member must be a resource the same SCIM client provisioned (client isolation, \u00a710.6.2); scim2-tester adds members it did not create",
+    "Group|check_remove_attribute|": "A group member must be a resource the same SCIM client provisioned (client isolation, \u00a710.6.2); scim2-tester adds members it did not create",
+    "Group|check_remove_required_attribute|displayName": "Removing a required attribute answers scimType invalidValue; RFC 7644 \u00a73.5.2 names mutability for read-only attributes; finding to triage",
+    "Group|check_replace_attribute|members": "A group member must be a resource the same SCIM client provisioned (client isolation, \u00a710.6.2); scim2-tester adds members it did not create",
+    "Group|object_list_with_attributes|": "A group member must be a resource the same SCIM client provisioned (client isolation, \u00a710.6.2); scim2-tester adds members it did not create",
+    "Group|object_list_with_excluded_attributes|": "A group member must be a resource the same SCIM client provisioned (client isolation, \u00a710.6.2); scim2-tester adds members it did not create",
+    "Group|object_query_with_attributes|": "A group member must be a resource the same SCIM client provisioned (client isolation, \u00a710.6.2); scim2-tester adds members it did not create",
+    "Group|object_query_with_excluded_attributes|": "A group member must be a resource the same SCIM client provisioned (client isolation, \u00a710.6.2); scim2-tester adds members it did not create",
+    "Group|object_replacement|": "A group member must be a resource the same SCIM client provisioned (client isolation, \u00a710.6.2); scim2-tester adds members it did not create",
+    "Group|search_with_attributes|": "A group member must be a resource the same SCIM client provisioned (client isolation, \u00a710.6.2); scim2-tester adds members it did not create",
+    "Group|search_with_excluded_attributes|": "A group member must be a resource the same SCIM client provisioned (client isolation, \u00a710.6.2); scim2-tester adds members it did not create",
+    "User|check_add_attribute|": "scim2-tester's own HrUser extension: its start_date comes back in a form scim2-models does not parse; finding to triage",
+    "User|check_remove_attribute|": "scim2-tester's own HrUser extension: its start_date comes back in a form scim2-models does not parse; finding to triage",
+    "User|check_remove_required_attribute|userName": "Removing a required attribute answers scimType invalidValue; RFC 7644 \u00a73.5.2 names mutability for read-only attributes; finding to triage",
+    "User|check_replace_attribute|": "scim2-tester's own HrUser extension: its start_date comes back in a form scim2-models does not parse; finding to triage",
+    "User|object_list_with_attributes|": "scim2-tester's own HrUser extension: its start_date comes back in a form scim2-models does not parse; finding to triage",
+    "User|object_list_with_excluded_attributes|": "scim2-tester's own HrUser extension: its start_date comes back in a form scim2-models does not parse; finding to triage",
+    "User|object_query_with_attributes|": "scim2-tester's own HrUser extension: its start_date comes back in a form scim2-models does not parse; finding to triage",
+    "User|object_query_with_excluded_attributes|": "scim2-tester's own HrUser extension: its start_date comes back in a form scim2-models does not parse; finding to triage",
+    "User|object_replacement|": "scim2-tester's own HrUser extension: its start_date comes back in a form scim2-models does not parse; finding to triage",
+    "User|search_with_attributes|": "scim2-tester's own HrUser extension: its start_date comes back in a form scim2-models does not parse; finding to triage",
+    "User|search_with_excluded_attributes|": "scim2-tester's own HrUser extension: its start_date comes back in a form scim2-models does not parse; finding to triage",
+    "|random_url|": "A path outside the SCIM resources answers the RFC 9457 problem of every Access route (OP-65), not a SCIM error body; finding to triage"
+  }
+}

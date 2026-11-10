@@ -1,0 +1,15 @@
+{
+  "name": "@esuiss/access-oidc-differential",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "The OAuth and OpenID Connect differential tests of the CI job differential: openid-client as a relying party against Access, and oidc-provider as the reference authorization server Access's refusals are compared with.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "oidc-provider": "9.13.3",
+    "openid-client": "6.8.8"
+  }
+}
