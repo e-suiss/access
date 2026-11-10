@@ -44,6 +44,7 @@ access-identity-domain = { path = "crates/identity-domain", default-features = f
 access-identity-ssh = { path = "crates/identity-ssh", default-features = false }
 access-identity-scim = { path = "crates/identity-scim", default-features = false }
 access-identity-vc = { path = "crates/identity-vc", default-features = false }
+access-identity-proxy = { path = "crates/identity-proxy", default-features = false }
 access-identity-oidf = { path = "crates/identity-oidf", default-features = false }
 access-identity-saml = { path = "crates/identity-saml", default-features = false }
 access-edge-core = { path = "crates/edge-core", default-features = false }

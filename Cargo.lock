@@ -267,6 +267,7 @@ dependencies = [
  "access-identity-hooks",
  "access-identity-oauth",
  "access-identity-oidf",
+ "access-identity-proxy",
  "access-identity-saml",
  "access-identity-scim",
  "access-identity-session",
@@ -344,6 +345,7 @@ dependencies = [
  "access-identity-federation",
  "access-identity-hooks",
  "access-identity-oauth",
+ "access-identity-proxy",
  "access-identity-risk",
  "access-identity-saml",
  "access-identity-scim",
@@ -547,6 +549,18 @@ dependencies = [
  "esuiss-access-kernel",
  "esuiss-crypto",
  "thiserror",
+]
+
+[[package]]
+name = "access-identity-proxy"
+version = "0.4.0"
+dependencies = [
+ "access-internal-api",
+ "esuiss-access-kernel",
+ "esuiss-crypto",
+ "serde_json",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -921,6 +935,7 @@ dependencies = [
  "access-identity-hooks",
  "access-identity-oauth",
  "access-identity-oidf",
+ "access-identity-proxy",
  "access-identity-risk",
  "access-identity-saml",
  "access-identity-scim",
