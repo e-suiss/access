@@ -107,6 +107,7 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::TrustAnchors => Kind::TrustAnchors,
         ResourceKind::SsoEnforcementPreviews => Kind::SsoPreview,
         ResourceKind::CustomDomains => Kind::CustomDomains,
+        ResourceKind::RelayUndelivered => Kind::RelayUndelivered,
     }
 }
 

@@ -8,6 +8,7 @@ pub(crate) mod diff;
 pub(crate) mod export;
 pub(crate) mod migrate;
 pub(crate) mod realm;
+pub(crate) mod relay;
 pub(crate) mod replay;
 
 use std::io::Write as _;

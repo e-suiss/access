@@ -210,6 +210,9 @@ fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
         ResourceKind::Deliveries => {
             json!({ "event_id": key, "event": "account.created", "state": "delivered" })
         }
+        ResourceKind::RelayUndelivered => json!({ "event_id": key, "kind": "relay.message.otp.v1",
+                                                  "reason": "rejected", "relay_status": 422,
+                                                  "resends": [] }),
         ResourceKind::VaultResources => json!({ "resource": key, "upstream": "github",
                                                 "status": "enabled" }),
         ResourceKind::ProtectedResources => json!({ "resource": key, "display_name": "MCP" }),

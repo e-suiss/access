@@ -201,6 +201,8 @@ pub enum ResourceKind {
     SsoEnforcementPreviews,
     /// Custom domains, by host (OP-156 m.3 (i)).
     CustomDomains,
+    /// Undelivered Relay messages, by event id, without their content (OP-156 m.3 (c)).
+    RelayUndelivered,
 }
 
 impl ResourceKind {
@@ -228,6 +230,7 @@ impl ResourceKind {
             Self::TrustAnchors => "trust-anchors",
             Self::SsoEnforcementPreviews => "sso-enforcement-previews",
             Self::CustomDomains => "domains",
+            Self::RelayUndelivered => "relay-undelivered",
         }
     }
 }

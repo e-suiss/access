@@ -528,6 +528,15 @@ pub enum Invalid {
     /// OP-156 m.3 (i)).
     #[error("issuer fixed")]
     IssuerFixed,
+    /// No undelivered Relay message with that id in the realm (OP-156 m.3 (c)).
+    #[error("no such relay message")]
+    NoRelayMessage,
+    /// The message's sealed content was crypto-shredded (OP-156 m.3 (c), OP-73).
+    #[error("relay message content shredded")]
+    RelayShredded,
+    /// The message's code or link has expired (OP-156 m.3 (c)).
+    #[error("relay message expired")]
+    RelayExpired,
 }
 
 impl Invalid {
@@ -642,6 +651,9 @@ impl Invalid {
             Self::NoGateway => "no-such-gateway",
             Self::CustomDomain => "invalid-custom-domain",
             Self::IssuerFixed => "issuer-fixed",
+            Self::NoRelayMessage => "no-such-relay-message",
+            Self::RelayShredded => "content-shredded",
+            Self::RelayExpired => "message-expired",
         }
     }
 }
@@ -1935,6 +1947,8 @@ pub enum Change {
         /// Whether it loosens the current mode.
         loosens: bool,
     },
+    /// `idp.relay.resend`: the undelivered message's `CloudEvents` id (OP-156 m.3 (c)).
+    RelayResend([u8; 16]),
 }
 
 /// A change to an organization's profile (TN-98): its name, and whether home realm discovery
@@ -2171,6 +2185,8 @@ impl Change {
     #[must_use]
     pub fn action(&self) -> IdpAction {
         match self {
+            // OP-156 m.3 (c)
+            Self::RelayResend(_) => IdpAction::RelayResend,
             Self::ClientRegister(_) => IdpAction::ClientRegister,
             Self::ClientUpdate(_) => IdpAction::ClientUpdate,
             Self::ClientRetire(_) => IdpAction::ClientRetire,
@@ -2344,6 +2360,7 @@ impl Change {
             Self::GatewayKeytabPolicy(p) => p.check(),
             Self::GatewayKeytabEmergency { gateway, kvno } => gateway::emergency(gateway, *kvno),
             Self::AccountBind(_)
+            | Self::RelayResend(_)
             | Self::OrgSsoEnforce(_)
             | Self::FrontchannelLogout
             | Self::DeviceCode(_)
@@ -2379,6 +2396,9 @@ impl Change {
     )]
     fn body(&self) -> Value {
         match self {
+            Self::RelayResend(id) => {
+                Value::Map(vec![(Value::text("event_id"), Value::Bytes(id.to_vec()))])
+            }
             Self::ClientRegister(c) | Self::ClientUpdate(c) => c.to_value(),
             Self::ClientRetire(id) | Self::ClientSecretRotate(id) => {
                 Value::Map(vec![(Value::text("client_id"), Value::text(id.as_str()))])
@@ -2573,6 +2593,9 @@ impl Change {
     pub fn resource(&self, slug: &str) -> ResourceRef {
         let mut path = vec![String::from(slug)];
         match self {
+            Self::RelayResend(id) => {
+                path.extend([String::from("relay"), b64url_encode(id)]);
+            }
             Self::ClientRegister(c) | Self::ClientUpdate(c) => {
                 path.extend([String::from("client"), String::from(c.id.as_str())]);
             }

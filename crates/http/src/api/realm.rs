@@ -1443,8 +1443,9 @@ const fn put(section: &'static str) -> Shape {
 pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
     use ResourceKind::{
         Accounts, AgentSponsors, Agents, Analytics, Clients, CustomDomains, Deliveries, Groups,
-        Hooks, Organizations, ProtectedResources, SamlSps, Settings, Signals, SocialProviders,
-        SsoEnforcementPreviews, TrustAnchors, UpstreamIdps, VaultResources, Webhooks,
+        Hooks, Organizations, ProtectedResources, RelayUndelivered, SamlSps, Settings, Signals,
+        SocialProviders, SsoEnforcementPreviews, TrustAnchors, UpstreamIdps, VaultResources,
+        Webhooks,
     };
     const CREATE: Shape = Shape::Write {
         patch: None,
@@ -1543,6 +1544,12 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "getDomain" => (CustomDomains, Shape::Get),
         "registerDomain" => (CustomDomains, CREATE),
         "retireDomain" | "bindDomainIssuer" => (CustomDomains, w(false)),
+        // OP-156 m.3 (c)
+        "listUndeliveredRelayMessages" => (
+            RelayUndelivered,
+            Shape::List(&["event_id", "kind", "reason"]),
+        ),
+        "resendRelayMessage" => (RelayUndelivered, w(false)),
         o if declared(o) => (Settings, Shape::Planned(planned_body(o))),
         "listClients" => (
             Clients,
@@ -1761,7 +1768,11 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             | Invalid::NoCrossAppConnection
             | Invalid::NoScimClient
             | Invalid::NoGateway
-            | Invalid::NoDomain => &codes::NOT_FOUND,
+            | Invalid::NoDomain
+            | Invalid::NoRelayMessage => &codes::NOT_FOUND,
+            // OP-156 m.3 (c)
+            Invalid::RelayShredded => &r::CONTENT_SHREDDED,
+            Invalid::RelayExpired => &r::MESSAGE_EXPIRED,
         },
         AdminError::Issuer(_) | AdminError::NoRealm => &codes::NOT_FOUND,
         // TN-91

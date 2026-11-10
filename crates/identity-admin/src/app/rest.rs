@@ -89,6 +89,8 @@ pub enum Op {
     PutProtectionMode,
     /// `markCanaryAccount` (§4.4).
     MarkCanary,
+    /// `resendRelayMessage`: `idp.relay.resend` (OP-156 m.3 (c)).
+    ResendRelay,
     /// `deleteAccount`: `idp.account.delete`, reserved (OP-153 m.3 (bb)).
     DeleteAccount,
     /// `rehomeRealm`: `idp.realm.rehome`, reserved and declaration only (OP-150 m.11 (b)).
@@ -287,6 +289,7 @@ impl Op {
             "putCimdPolicy" | "patchCimdPolicy" => Self::PutCimdPolicy,
             "putProtectionMode" | "patchProtectionMode" => Self::PutProtectionMode,
             "markCanaryAccount" => Self::MarkCanary,
+            "resendRelayMessage" => Self::ResendRelay,
             "deleteAccount" => Self::DeleteAccount,
             "rehomeRealm" => Self::RehomeRealm,
             "createResetIntent" => Self::ResetIntent,
@@ -1807,6 +1810,11 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             only(m, &[])?;
             Change::AccountCanary(subject(ids, key_of(key)?)?)
         }
+        // OP-156 m.3 (c)
+        Op::ResendRelay => {
+            only(m, &[])?;
+            Change::RelayResend(super::relay::event_id(key_of(key)?)?)
+        }
         Op::PutMapper => {
             only(m, &["claim", "source"])?;
             let claim = ClaimName::parse(key_of(key)?)?;
@@ -2204,6 +2212,8 @@ pub enum Kind {
     SsoPreview,
     /// The realm's custom domains by host (OP-156 m.3 (i)).
     CustomDomains,
+    /// The undelivered Relay messages by event id, without their content (OP-156 m.3 (c)).
+    RelayUndelivered,
 }
 
 /// How many days the analytics read covers, today included (PD).
@@ -2618,6 +2628,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 last: None,
             },
             // OP-155 m.3 (j)
+            // OP-156 m.3 (c)
+            (Kind::RelayUndelivered, _) => Read {
+                items: super::relay::list(t, key, limit).await?,
+                last: None,
+            },
             (Kind::TrustAnchors, _) => Read {
                 items: super::federation::anchors(t, key).await?,
                 last: None,

@@ -62,6 +62,7 @@ mod orgs;
 mod platform;
 mod profiles;
 mod records;
+mod relay;
 mod resources;
 mod scim;
 mod social;

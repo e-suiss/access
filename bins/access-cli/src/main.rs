@@ -58,6 +58,8 @@ enum Command {
     Replay(commands::replay::ReplayArgs),
     /// Applies a realm template, one Exercise per setting (OP-153 m.3 (r)).
     Realm(commands::realm::RealmArgs),
+    /// Lists undelivered Relay messages and resends one (OP-156 m.3 (c)).
+    Relay(commands::relay::RelayArgs),
 }
 
 fn main() -> ExitCode {
@@ -93,6 +95,7 @@ fn main() -> ExitCode {
                     Command::Diff(a) => Box::pin(commands::diff::run(a)).await,
                     Command::Apply(a) => Box::pin(commands::apply::run(a)).await,
                     Command::Realm(a) => Box::pin(commands::realm::run(a)).await,
+                    Command::Relay(a) => Box::pin(commands::relay::run(a)).await,
                     Command::Migrate(a) => commands::migrate::run(&cli.config, &a),
                     Command::Replay(a) => commands::replay::run(&a),
                 }

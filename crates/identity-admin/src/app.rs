@@ -12,6 +12,7 @@ pub mod org_flows;
 pub mod orgs;
 pub mod platform;
 pub mod provision;
+pub mod relay;
 pub mod rest;
 pub mod saml;
 mod scim;
@@ -390,6 +391,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     ) -> Result<(), AdminError> {
         change.check(declared)?;
         match change {
+            // OP-156 m.3 (c)
+            Change::RelayResend(id) => relay::check(t, *id).await?,
             // OP-153 m.22 (g), m.25 (b)
             Change::CspMode { mode, loosens } => {
                 let stored = idp::branding(t)
@@ -1139,6 +1142,19 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-148, §7.9.8, E42, TN-49
             self.status_notice(&mut t, p, subject, to).await?;
         }
+        if let Change::RelayResend(original) = &p.change {
+            // OP-156 m.3 (c)
+            let kek = self
+                .vault
+                .and_then(|v| v.realm_kek(p.tenant, p.realm))
+                .ok_or_else(|| AdminError::Unavailable(String::from("kek")))?;
+            let correlation = access_kernel::json::b64url_encode(&exercise.0);
+            let who = access_identity_account::app::Actor {
+                actor: DECIDED_BY,
+                correlation: &correlation,
+            };
+            relay::resend(&mut t.0, (&*kek, self.ids), *original, &who).await?;
+        }
         if let Change::AccountDelete(subject) = &p.change {
             // OP-153 m.3 (bb), TN-78
             let correlation = access_kernel::json::b64url_encode(&exercise.0);
@@ -1693,6 +1709,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .ok_or(Invalid::UpstreamSubjectLinked)?
             }
             Change::AccountDelete(_)
+            | Change::RelayResend(_)
             | Change::AccountImport(_)
             | Change::MigrationExport(_)
             | Change::AccountBind(_)
