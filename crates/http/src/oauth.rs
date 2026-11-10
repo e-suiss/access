@@ -183,6 +183,10 @@ fn params(req: &Incoming) -> Option<Params> {
     Params::parse(&text).ok()
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one dispatch over the authorization server endpoints"
+)]
 async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) -> Response {
     let realm: Realm = match s
         .realm(authority(&req.uri, &req.headers), req.slug.as_deref())

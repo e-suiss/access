@@ -2210,8 +2210,8 @@ impl Change {
             }
             Self::CertificateLogin(c) => c.check(),
             Self::ClientProfile { delta, .. } => delta.check(),
-            Self::FrontchannelLogout => Ok(()),
             Self::AccountBind(_)
+            | Self::FrontchannelLogout
             | Self::DeviceCode(_)
             | Self::MtlsAliases(_)
             | Self::CspMode { .. }

@@ -1197,6 +1197,7 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "retireScimClient"
         | "registerScimTarget"
         | "retireScimTarget" => (Settings, w(false)),
+        | "putFrontchannelLogout" => (Settings, w(false)),
         "revokeAllAgentInstances" => (Agents, Shape::RevokeAll),
         // OP-154 m.3 (t)
         "listVaultResources" => (
@@ -1218,7 +1219,6 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "putClientEncryption"
         | "putClientSamlBearer"
         | "putClientLegacyBearer" => (Clients, w(false)),
-        "putFrontchannelLogout" => (Settings, w(false)),
         o if declared(o) => (Settings, Shape::Planned(planned_body(o))),
         "listClients" => (
             Clients,

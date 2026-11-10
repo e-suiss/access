@@ -533,10 +533,6 @@ impl<E: Env> OAuth<E> {
         })
     }
 
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one introspection, each token kind in order"
-    )]
     async fn introspect_inner(
         &self,
         realm: &Realm,
@@ -565,10 +561,6 @@ impl<E: Env> OAuth<E> {
         Ok((reply, Some(client)))
     }
 
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one introspection, each token kind in order"
-    )]
     async fn introspect_for(
         &self,
         mut tx: <E::Db as crate::ports::oauth::OAuthDb>::Tx,
