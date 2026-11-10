@@ -1462,7 +1462,7 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
     use ResourceKind::{
         Accounts, AgentSponsors, Agents, Analytics, Clients, CustomDomains, Deliveries, Groups,
         Hooks, HrConnectors, HrSources, LinuxHosts, Organizations, ProtectedResources, Proxies,
-        RelayUndelivered, SamlSps, Settings, Signals, SocialProviders, SshHostGroups,
+        RelayUndelivered, SamlSps, Settings, SignalSources, Signals, SocialProviders, SshHostGroups,
         SsoEnforcementPreviews, TrustAnchors, UpstreamIdps, VaultResources, Webhooks,
     };
     const CREATE: Shape = Shape::Write {
@@ -1574,6 +1574,13 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "retireHrConnector" => (HrConnectors, w(false)),
         "registerSshHostGroup" => (SshHostGroups, CREATE),
         "retireSshHostGroup" => (SshHostGroups, w(false)),
+        // OP-156 m.3 (r)
+        "listSignalSources" => (
+            SignalSources,
+            Shape::List(&["name", "kind", "provider", "status"]),
+        ),
+        "registerSignalSource" => (SignalSources, CREATE),
+        "retireSignalSource" => (SignalSources, w(false)),
         // OP-156 m.3 (l)
         "listProxies" => (Proxies, Shape::List(&["name", "host", "status"])),
         "getProxy" => (Proxies, Shape::Get),
@@ -1814,6 +1821,8 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::SshCa => &r::INVALID_SSH_CA,
             Invalid::SshHostGroup => &r::INVALID_SSH_HOST_GROUP,
             Invalid::SshHostGroupExists => &r::SSH_HOST_GROUP_EXISTS,
+            Invalid::SignalSource => &r::INVALID_SIGNAL_SOURCE,
+            Invalid::SignalSourceExists => &r::SIGNAL_SOURCE_EXISTS,
             Invalid::Proxy => &r::INVALID_PROXY,
             Invalid::ProxyExists => &r::PROXY_EXISTS,
             Invalid::ProxyClient => &r::INVALID_PROXY_CLIENT,
@@ -1844,6 +1853,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             | Invalid::NoTrustAnchor
             | Invalid::NoSamlSp
             | Invalid::NoSshHostGroup
+            | Invalid::NoSignalSource
             | Invalid::NoProxy
             | Invalid::NoExportSink
             | Invalid::NoLinuxHost

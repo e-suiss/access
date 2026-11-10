@@ -208,6 +208,10 @@ pub enum Op {
     RegisterSshHostGroup,
     /// `retireSshHostGroup`: `idp.ssh.host_group_retire`, keyed by the group's name.
     RetireSshHostGroup,
+    /// `registerSignalSource`: `idp.signal.source_register` (OP-156 m.3 (r)).
+    RegisterSignalSource,
+    /// `retireSignalSource`: `idp.signal.source_retire`, keyed by the source's name.
+    RetireSignalSource,
     /// `registerProxy`: `idp.proxy.register` (OP-156 m.3 (l)).
     RegisterProxy,
     /// `putProxy`: `idp.proxy.update`.
@@ -402,6 +406,8 @@ impl Op {
             "replaceSshCa" => Self::ReplaceSshCa,
             "registerSshHostGroup" => Self::RegisterSshHostGroup,
             "retireSshHostGroup" => Self::RetireSshHostGroup,
+            "registerSignalSource" => Self::RegisterSignalSource,
+            "retireSignalSource" => Self::RetireSignalSource,
             "registerProxy" => Self::RegisterProxy,
             "putProxy" => Self::PutProxy,
             "retireProxy" => Self::RetireProxy,
@@ -1062,6 +1068,26 @@ fn export_change(
     }))
 }
 
+/// The `idp.signal.*` change of a signal source operation (OP-156 m.3 (r)), `None` for any
+/// other.
+fn signal_change(
+    op: Op,
+    key: Option<&str>,
+    body: &Json,
+) -> Result<Option<access_identity_signals::domain::source::SourceChange>, Invalid> {
+    use access_identity_signals::domain::source::SourceChange;
+    let mut own = obj(body)?.clone();
+    own.remove(VALIDITY);
+    own.remove("ais");
+    let body = Json::Object(own);
+    let bad = |_| Invalid::SignalSource;
+    Ok(Some(match op {
+        Op::RegisterSignalSource => SourceChange::register(&body).map_err(bad)?,
+        Op::RetireSignalSource => SourceChange::retire(key_of(key)?, &body).map_err(bad)?,
+        _ => return Ok(None),
+    }))
+}
+
 /// The `idp.proxy.*` change of a proxy operation (OP-156 m.3 (l)), `None` for any other.
 fn proxy_change(
     op: Op,
@@ -1216,6 +1242,9 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
     }
     if let Some(s) = ssh_change(op, key, body)? {
         return Ok(Change::Ssh(s));
+    }
+    if let Some(s) = signal_change(op, key, body)? {
+        return Ok(Change::Signal(Box::new(s)));
     }
     if let Some(p) = proxy_change(op, key, body)? {
         return Ok(Change::Proxy(p));
@@ -1690,6 +1719,8 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         | Op::ReplaceSshCa
         | Op::RegisterSshHostGroup
         | Op::RetireSshHostGroup
+        | Op::RegisterSignalSource
+        | Op::RetireSignalSource
         | Op::RegisterProxy
         | Op::PutProxy
         | Op::RetireProxy
@@ -2479,6 +2510,8 @@ pub enum Kind {
     SamlSps,
     /// The SSH server groups by name (OP-156 m.3 (o)).
     SshHostGroups,
+    /// The signal sources by name (OP-156 m.3 (r)).
+    SignalSources,
     /// The forward-auth proxies by name (OP-156 m.3 (l)).
     Proxies,
     /// The export sinks by name, with their delivery state (OP-156 m.3 (s)).
@@ -2940,6 +2973,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-156 m.3 (o)
             (Kind::SshHostGroups, _) => Read {
                 items: super::ssh::list(t, key).await?,
+                last: None,
+            },
+            // OP-156 m.3 (r)
+            (Kind::SignalSources, _) => Read {
+                items: super::signal_sources::list(t, key).await?,
                 last: None,
             },
             // OP-156 m.3 (l)

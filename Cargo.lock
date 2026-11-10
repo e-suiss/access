@@ -365,6 +365,7 @@ dependencies = [
  "access-identity-risk",
  "access-identity-saml",
  "access-identity-scim",
+ "access-identity-signals",
  "access-identity-signer",
  "access-identity-ssh",
  "access-identity-vault",

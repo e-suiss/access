@@ -20,6 +20,7 @@ pub mod relay;
 pub mod rest;
 pub mod saml;
 mod scim;
+pub mod signal_sources;
 mod signals;
 pub mod ssh;
 mod sso;
@@ -490,6 +491,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Saml(s) => saml::current(t, s).await?,
             // OP-156 m.3 (o)
             Change::Ssh(s) => ssh::current(t, s).await?,
+            // OP-156 m.3 (r)
+            Change::Signal(s) => signal_sources::current(t, s).await?,
             // OP-156 m.3 (l)
             Change::Proxy(p) => proxy::current(t, p).await?,
             // OP-156 m.3 (s)
@@ -1778,6 +1781,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             // OP-156 m.3 (o)
             Change::Ssh(s) => ssh::write(t, bound, s).await?,
+            // OP-156 m.3 (r)
+            Change::Signal(s) => signal_sources::write(t, bound, s).await?,
             // OP-156 m.3 (l)
             Change::Proxy(p) => proxy::write(t, bound, p).await?,
             // OP-156 m.3 (s)

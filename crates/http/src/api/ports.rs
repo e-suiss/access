@@ -195,6 +195,8 @@ pub enum ResourceKind {
     SamlSps,
     /// SSH server groups, by name (OP-156 m.3 (o)).
     SshHostGroups,
+    /// Signal sources (KYC, MDM, risk, DLP), by name (OP-156 m.3 (r)).
+    SignalSources,
     /// Forward-auth proxies, by name (OP-156 m.3 (l)).
     Proxies,
     /// Export sinks of the read-only SIEM projection, by name (OP-156 m.3 (s)).
@@ -239,6 +241,7 @@ impl ResourceKind {
             Self::VaultResources => "vault-resources",
             Self::SamlSps => "saml-sps",
             Self::SshHostGroups => "ssh-host-groups",
+            Self::SignalSources => "signal-sources",
             Self::Proxies => "proxies",
             Self::ExportSinks => "export-sinks",
             Self::LinuxHosts => "linux-hosts",

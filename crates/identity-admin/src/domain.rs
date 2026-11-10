@@ -520,6 +520,15 @@ pub enum Invalid {
     /// No live SSH server group by that name.
     #[error("no such SSH server group")]
     NoSshHostGroup,
+    /// A signal source body outside the rules (OP-156 m.3 (r)).
+    #[error("invalid signal source")]
+    SignalSource,
+    /// No live signal source by that name.
+    #[error("no such signal source")]
+    NoSignalSource,
+    /// The name was registered before; it is not reused (OP-73).
+    #[error("signal source exists")]
+    SignalSourceExists,
     /// The name was registered before; it is not reused (OP-73).
     #[error("SSH server group exists")]
     SshHostGroupExists,
@@ -664,6 +673,9 @@ impl Invalid {
             Self::SshHostGroup => "invalid-ssh-host-group",
             Self::NoSshHostGroup => "no-such-ssh-host-group",
             Self::SshHostGroupExists => "ssh-host-group-exists",
+            Self::SignalSource => "invalid-signal-source",
+            Self::NoSignalSource => "no-such-signal-source",
+            Self::SignalSourceExists => "signal-source-exists",
             Self::Proxy => "invalid-proxy",
             Self::NoProxy => "no-such-proxy",
             Self::ProxyExists => "proxy-exists",
@@ -1940,6 +1952,8 @@ pub enum Change {
     Domain(custom_domain::DomainChange),
     /// `idp.ssh.*` (OP-156 m.3 (a), (o)).
     Ssh(access_identity_ssh::domain::change::SshChange),
+    /// `idp.signal.*` (OP-156 m.3 (a), (r)).
+    Signal(Box<access_identity_signals::domain::source::SourceChange>),
     /// `idp.proxy.*` but `mcp_pin` (OP-156 m.3 (a), (l)).
     Proxy(access_identity_proxy::domain::registration::ProxyChange),
     /// `idp.export.*` (OP-156 m.3 (a), (s)).
@@ -2431,6 +2445,7 @@ impl Change {
             Self::Saml(s) => s.action(),
             Self::Domain(d) => d.action(),
             Self::Ssh(s) => s.action(),
+            Self::Signal(s) => s.action(),
             Self::Proxy(p) => p.action(),
             Self::Export(e) => e.action(),
             Self::Linux(l) => l.action(),
@@ -2524,6 +2539,7 @@ impl Change {
             Self::Saml(s) => s.check(),
             Self::Domain(d) => d.check(),
             Self::Ssh(s) => s.check().map_err(ssh_invalid),
+            Self::Signal(s) => s.check().map_err(|_| Invalid::SignalSource),
             Self::Proxy(p) => p.check().map_err(|_| Invalid::Proxy),
             Self::Export(e) => e.check().map_err(|_| Invalid::ExportSink),
             Self::Linux(l) => l.check(),
@@ -2703,6 +2719,7 @@ impl Change {
             Self::Domain(d) => d.body(),
             Self::Ssh(s) => s.body(),
             Self::Hr(h) => h.body(),
+            Self::Signal(s) => s.body(),
             Self::Proxy(p) => p.body(),
             Self::Export(e) => e.body(),
             Self::Linux(l) => l.body(),
@@ -2896,6 +2913,7 @@ impl Change {
             Self::Saml(s) => path.extend(s.path()),
             Self::Domain(d) => path.extend(d.path()),
             Self::Ssh(s) => path.extend(s.path()),
+            Self::Signal(s) => path.extend(s.path()),
             Self::Proxy(p) => path.extend(p.path()),
             Self::Export(e) => path.extend(e.path()),
             Self::Linux(l) => path.extend(l.path()),

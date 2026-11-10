@@ -914,6 +914,20 @@
       "description": "An SSH server group with this name was registered before; a retired group's name is never reused (OP-73)."
     },
     {
+      "code": "invalid-signal-source",
+      "type": "urn:suiss:access:problem:invalid-signal-source",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A signal source needs a name of a lower-case letter followed by up to 62 lower-case letters, digits and hyphens, a kind (kyc, mdm, risk, dlp), a provider of 1 to 64 characters, the base64url of its issuer Party, a format that carries the kind, an https transmitter only for an SSF format and an expected interval of 60 s to 30 days (OP-156 m.3 (r))."
+    },
+    {
+      "code": "signal-source-exists",
+      "type": "urn:suiss:access:problem:signal-source-exists",
+      "status": 409,
+      "title": "Conflict",
+      "description": "A signal source with this name was registered before; a retired source's name is never reused (OP-73)."
+    },
+    {
       "code": "ssh-ca-off",
       "type": "urn:suiss:access:problem:ssh-ca-off",
       "status": 409,

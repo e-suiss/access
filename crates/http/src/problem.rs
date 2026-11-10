@@ -488,6 +488,8 @@ pub const CODES: &[Code] = &[
     codes::realm::INVALID_SSH_CA,
     codes::realm::INVALID_SSH_HOST_GROUP,
     codes::realm::SSH_HOST_GROUP_EXISTS,
+    codes::realm::INVALID_SIGNAL_SOURCE,
+    codes::realm::SIGNAL_SOURCE_EXISTS,
     codes::realm::SSH_CA_OFF,
     codes::realm::SSH_NOT_GRANTED,
     codes::realm::SSH_LIFETIME,

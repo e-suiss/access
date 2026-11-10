@@ -58,7 +58,8 @@ pub const fn id_member(kind: ResourceKind) -> &'static str {
         | ResourceKind::ExportSinks
         | ResourceKind::LinuxHosts
         | ResourceKind::HrSources
-        | ResourceKind::HrConnectors => "name",
+        | ResourceKind::HrConnectors 
+        | ResourceKind::SignalSources => "name",
         ResourceKind::CustomDomains => "host",
         _ => "client_id",
     }

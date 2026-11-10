@@ -104,6 +104,7 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::VaultResources => Kind::VaultResources,
         ResourceKind::SamlSps => Kind::SamlSps,
         ResourceKind::SshHostGroups => Kind::SshHostGroups,
+        ResourceKind::SignalSources => Kind::SignalSources,
         ResourceKind::Proxies => Kind::Proxies,
         ResourceKind::ExportSinks => Kind::ExportSinks,
         ResourceKind::LinuxHosts => Kind::LinuxHosts,

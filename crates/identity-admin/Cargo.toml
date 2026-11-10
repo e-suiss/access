@@ -24,6 +24,7 @@ access-identity-proxy = { workspace = true }
 access-identity-risk = { workspace = true }
 access-identity-scim = { workspace = true }
 access-identity-signer = { path = "../identity-signer" }
+access-identity-signals = { workspace = true }
 access-identity-ssh = { workspace = true }
 access-identity-export = { workspace = true }
 access-identity-webauthn = { workspace = true }

@@ -741,6 +741,20 @@ pub const EXPORT_SINK_EXISTS: Code = code(
     409,
     "Conflict",
     "An export sink with this name was registered before; a retired sink keeps its name and its cursor (OP-73).",
+/// A signal source that is not a name, a kind, a provider, an issuer Party and a format that
+/// carries the kind (OP-156 m.3 (r)).
+pub const INVALID_SIGNAL_SOURCE: Code = code(
+    "invalid-signal-source",
+    400,
+    "Bad Request",
+    "A signal source needs a name of a lower-case letter followed by up to 62 lower-case letters, digits and hyphens, a kind (kyc, mdm, risk, dlp), a provider of 1 to 64 characters, the base64url of its issuer Party, a format that carries the kind, an https transmitter only for an SSF format and an expected interval of 60 s to 30 days (OP-156 m.3 (r)).",
+);
+/// The signal source name was registered before; it is not reused (OP-73).
+pub const SIGNAL_SOURCE_EXISTS: Code = code(
+    "signal-source-exists",
+    409,
+    "Conflict",
+    "A signal source with this name was registered before; a retired source's name is never reused (OP-73).",
 );
 /// A Linux host registration or policy outside the rules (OP-156 m.3 (p)).
 pub const INVALID_LINUX_HOST: Code = code(
