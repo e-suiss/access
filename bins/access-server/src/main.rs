@@ -1296,6 +1296,7 @@ struct Background {
     retaining: tokio::task::JoinHandle<()>,
     watching: tokio::task::JoinHandle<()>,
     refreshing: tokio::task::JoinHandle<()>,
+    chains: tokio::task::JoinHandle<()>,
     sampling: tokio::task::JoinHandle<()>,
     ready: Readiness,
     /// Every realm's JWKS loaded at start-up (OP-138, §17.9.7).
@@ -1314,6 +1315,12 @@ impl Background {
         let logout = courier(config, pools, outbound.clone())?;
         let vault_outbound = outbound.clone();
         let keks_for_vault = keks.clone();
+        // IDI-12, OP-155 m.3 (j)
+        let chains = tokio::spawn(idp::federation::refresh_run(
+            pools.app.clone(),
+            pools.router.clone(),
+            outbound.clone(),
+        ));
         // TN-90, OP-153 m.3 (o)
         let probe = orgs::WebProbe {
             outbound: outbound.clone(),
@@ -1384,6 +1391,7 @@ impl Background {
             retaining,
             watching,
             refreshing,
+            chains,
             // §17.8.2, OP-53
             sampling: tokio::spawn(sample_pools(PoolGauges::of(pools))),
             jwks: ready.flag("jwks.realms"),
@@ -1400,6 +1408,7 @@ impl Background {
         self.retaining.abort();
         self.watching.abort();
         self.refreshing.abort();
+        self.chains.abort();
         self.sampling.abort();
     }
 }
