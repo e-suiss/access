@@ -18,6 +18,10 @@ pub(super) const IO_URING: [i64; 3] = [
     libc::SYS_io_uring_register,
 ];
 
+/// `prctl(PR_GET_AUXV)` reads the process's own auxiliary vector; the standard library's
+/// CPU feature detection asks it (Linux 6.4, not in libc's Linux constants).
+const PR_GET_AUXV: libc::c_int = 0x4155_5856;
+
 /// x32 ABI syscall numbers carry this bit on `x86_64`. Allowlists never match them; the
 /// `io_uring` filter denies the x32 variants explicitly as well.
 #[cfg(target_arch = "x86_64")]
@@ -357,6 +361,7 @@ fn common_rules(rules: &mut Rules, phase: Phase, pid: i32) -> Result<(), Error> 
     let mut prctl_ops = vec![
         libc::PR_SET_NAME,
         libc::PR_GET_NAME,
+        PR_GET_AUXV,
         libc::PR_SET_VMA,
         libc::PR_GET_DUMPABLE,
         libc::PR_GET_NO_NEW_PRIVS,
@@ -567,6 +572,7 @@ fn supervisor_rules(rules: &mut Rules) -> Result<(), Error> {
     let ops: Vec<u64> = [
         libc::PR_SET_NAME,
         libc::PR_GET_NAME,
+        PR_GET_AUXV,
         libc::PR_SET_VMA,
         libc::PR_GET_DUMPABLE,
         libc::PR_SET_DUMPABLE,
