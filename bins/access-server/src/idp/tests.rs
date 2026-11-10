@@ -58,6 +58,7 @@ mod domains;
 mod extensions;
 mod federation;
 mod governance;
+mod iys;
 mod orgs;
 mod platform;
 mod profiles;

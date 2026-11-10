@@ -24,6 +24,8 @@ use crate::app::accounts::status_moved;
 use crate::app::vault::{self, PiiClass};
 use crate::app::{Actor, Realm};
 use crate::domain::status::AccountStatus;
+use crate::notify::message::{Address, Body, IysChannel, IysRecipient, Message};
+use crate::notify::ports::Notifier;
 use crate::ports::{AccountDb, AccountTx};
 
 /// The channels a preference names (OP-153 m.3 (ee)).
@@ -143,29 +145,42 @@ pub fn preference_digest(account: &str, c: &PreferenceChange<'_>, method: &str) 
 }
 
 /// Records preference changes in one transaction: a row, an audit row binding its digest, and
-/// one `preference.changed` event naming the topics (IDP-37, OP-153 m.3 (ee)).
+/// one `preference.changed` event naming the topics (IDP-37, OP-153 m.3 (ee)). A topic is a
+/// built-in one or one of the realm's own (`idp.realm.preference_topics`).
+///
+/// With the realm's İYS switch on (`idp.realm.iys`, OP-156 m.3 (c)), every commercial channel
+/// the change touches also gets one İYS consent record: a sealed Relay message to the address
+/// it is about, with the channel, the recipient type, approved or rejected, the source and the
+/// time (IDP-37 (4), B23). Relay alone writes to İYS; the event names the channels, never the
+/// address. A consent is never authority: nothing here reaches a decision (IDP-37 (3)).
 ///
 /// # Errors
 /// [`AccountError::Invalid`] for an unknown channel, topic or method; [`AccountError`].
-pub async fn set_preferences(
+pub async fn set_preferences<N: Notifier + Sync>(
     db: &PgAccounts,
     realm: &Realm<'_>,
     subject: [u8; 16],
     changes: &[PreferenceChange<'_>],
     method: &str,
     who: &Actor<'_>,
+    notifier: &N,
 ) -> Result<(), AccountError> {
     if changes.is_empty()
         || changes.len() > 32
         || !METHODS.contains(&method)
-        || changes
-            .iter()
-            .any(|c| !CHANNELS.contains(&c.channel) || !BUILT_IN_TOPICS.contains(&c.topic))
+        || changes.iter().any(|c| !CHANNELS.contains(&c.channel))
     {
         return Err(AccountError::Invalid);
     }
     let mut tx = db.begin(realm.tenant, realm.realm).await?;
     live(&mut tx, subject, true).await?;
+    let own = tx.0.preference_topics().await?;
+    if changes
+        .iter()
+        .any(|c| !BUILT_IN_TOPICS.contains(&c.topic) && !own.iter().any(|t| t == c.topic))
+    {
+        return Err(AccountError::Invalid);
+    }
     let account = realm.external(subject)?;
     let mut topics: Vec<&str> = Vec::new();
     let mut at = 0_i64;
@@ -185,21 +200,140 @@ pub async fn set_preferences(
             topics.push(c.topic);
         }
     }
-    outbox(
-        &mut tx,
-        "event.preference.changed",
-        json!({
-            "realm": realm_uuid(realm),
-            "account": account,
-            "topics": topics,
-            "at": u64::try_from(at).unwrap_or_default(),
-        }),
-    )
-    .await?;
+    let at_ms = u64::try_from(at).unwrap_or_default();
+    let mut payload = json!({
+        "realm": realm_uuid(realm),
+        "account": account,
+        "topics": topics,
+        "at": at_ms,
+    });
+    if let Some(setting) = tx.0.iys_setting().await?.filter(|s| s.enabled) {
+        let recipient_type =
+            IysRecipient::parse(&setting.recipient_type).ok_or(AccountError::Corrupt)?;
+        let mut channels: Vec<IysChannel> = Vec::new();
+        for c in changes {
+            if let Some(ch) = IysChannel::parse(c.channel)
+                && !channels.contains(&ch)
+            {
+                channels.push(ch);
+            }
+        }
+        if !channels.is_empty() {
+            let current = channel_consent(&mut tx, subject).await?;
+            let mut consents = Vec::with_capacity(channels.len());
+            for ch in &channels {
+                let approved = current.iter().any(|(c, g)| c == ch.name() && *g);
+                consents.push(approved);
+                iys_record(
+                    &mut tx,
+                    notifier,
+                    subject,
+                    (*ch, recipient_type, approved),
+                    method,
+                    at_ms,
+                )
+                .await?;
+            }
+            let mut iys = json!({
+                "channels": channels.iter().map(|c| c.name()).collect::<Vec<_>>(),
+                "recipient_type": recipient_type.name(),
+                "source": method,
+            });
+            if let (Some(first), Some(map)) = (consents.first(), iys.as_object_mut())
+                && consents.iter().all(|c| c == first)
+            {
+                map.insert(
+                    "consent".into(),
+                    Value::from(if *first { "approved" } else { "rejected" }),
+                );
+            }
+            if let Some(map) = payload.as_object_mut() {
+                map.insert("iys".into(), iys);
+            }
+        }
+    }
+    outbox(&mut tx, "event.preference.changed", payload).await?;
     tx.commit().await
 }
 
-/// The subject's preferences as they stand and their history, oldest first.
+/// Each channel's topics as they stand: `(channel, granted)` per recorded topic.
+async fn channel_consent(
+    tx: &mut PgTx,
+    subject: [u8; 16],
+) -> Result<Vec<(String, bool)>, AccountError> {
+    let mut latest: Map<String, Value> = Map::new();
+    for r in tx.0.preferences(subject).await? {
+        latest.insert(format!("{}:{}", r.channel, r.topic), Value::Bool(r.granted));
+    }
+    Ok(latest
+        .into_iter()
+        .filter_map(|(k, v)| {
+            let (channel, _) = k.split_once(':')?;
+            Some((channel.to_owned(), v.as_bool()?))
+        })
+        .collect())
+}
+
+/// One İYS consent record of `channel` (IDP-37 (4), B23): the Relay message to the address the
+/// channel names and the record row Relay's report refers to. Without such an address there is
+/// nothing to register.
+async fn iys_record<N: Notifier + Sync>(
+    tx: &mut PgTx,
+    notifier: &N,
+    subject: [u8; 16],
+    (channel, recipient_type, approved): (IysChannel, IysRecipient, bool),
+    method: &str,
+    at_ms: u64,
+) -> Result<(), AccountError> {
+    let kind = match channel {
+        IysChannel::Email => "email",
+        IysChannel::Sms | IysChannel::Call => "phone",
+    };
+    let Some(stored) = tx.0.iys_contact(subject, kind).await? else {
+        return Ok(());
+    };
+    let Some(value) = tx.reveal(subject, &stored).await? else {
+        return Ok(());
+    };
+    let (to, valid_since_ms) = if channel == IysChannel::Email {
+        let since = tx.0.mailbox_since(subject).await?;
+        (
+            Address::Email(value),
+            Some(
+                since
+                    .and_then(|v| u64::try_from(v).ok())
+                    .unwrap_or(1)
+                    .max(1),
+            ),
+        )
+    } else {
+        (Address::Phone(value), None)
+    };
+    let message = Message {
+        subject,
+        to,
+        locale: None,
+        valid_since_ms,
+        body: Body::IysConsent {
+            channel,
+            recipient_type,
+            approved,
+            source: method.to_owned(),
+            consent_at_ms: at_ms,
+        },
+    };
+    let event = notifier
+        .notify(&mut tx.0, &message)
+        .await
+        .map_err(|_| AccountError::Corrupt)?;
+    tx.0.insert_iys_record(event.0, subject, channel.name(), approved)
+        .await?;
+    Ok(())
+}
+
+/// The subject's preferences as they stand and their history, oldest first, and with the
+/// realm's İYS switch on, each commercial channel's latest record and what Relay reported on it:
+/// `recorded`, `failed`, or `pending` while Relay has not reported (OP-156 m.3 (c)).
 ///
 /// # Errors
 /// [`AccountError`].
@@ -211,10 +345,21 @@ pub async fn preferences(
     let mut tx = db.begin(realm.tenant, realm.realm).await?;
     live(&mut tx, subject, false).await?;
     let rows = tx.0.preferences(subject).await?;
+    let own = tx.0.preference_topics().await?;
+    let iys = tx.0.iys_setting().await?.filter(|s| s.enabled);
+    let states = if iys.is_some() {
+        tx.0.iys_state(subject).await?
+    } else {
+        Vec::new()
+    };
     tx.commit().await?;
     let mut current: Map<String, Value> = Map::new();
     for c in CHANNELS {
-        for t in BUILT_IN_TOPICS {
+        for t in BUILT_IN_TOPICS
+            .iter()
+            .copied()
+            .chain(own.iter().map(String::as_str))
+        {
             current.insert(format!("{c}:{t}"), Value::Bool(false));
         }
     }
@@ -230,7 +375,27 @@ pub async fn preferences(
             "record_digest": hex(&r.record_digest),
         }));
     }
-    Ok(json!({ "current": current, "history": history }))
+    let mut out = json!({ "current": current, "history": history });
+    if let (Some(setting), Some(map)) = (iys, out.as_object_mut()) {
+        let channels: Map<String, Value> = states
+            .iter()
+            .map(|s| {
+                (
+                    s.channel.clone(),
+                    json!({
+                        "consent": if s.consent { "approved" } else { "rejected" },
+                        "status": s.status.as_deref().unwrap_or("pending"),
+                        "at": s.reported_ms.map_or(Value::Null, rfc3339),
+                    }),
+                )
+            })
+            .collect();
+        map.insert(
+            "iys".into(),
+            json!({ "recipient_type": setting.recipient_type, "channels": channels }),
+        );
+    }
+    Ok(out)
 }
 
 /// A document acceptance to record.

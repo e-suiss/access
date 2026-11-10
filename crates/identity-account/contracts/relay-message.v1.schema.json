@@ -67,7 +67,8 @@
         "relay.message.security_authority_notice.v1",
         "relay.message.passkey_setup_invite.v1",
         "relay.message.critical_interrupt.v1",
-        "relay.message.sms_otp.v1"
+        "relay.message.sms_otp.v1",
+        "relay.message.iys_consent.v1"
       ]
     },
     "subject": {
@@ -682,6 +683,22 @@
         "properties": {
           "data": {
             "$ref": "#/$defs/relay.message.sms_otp.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.iys_consent.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.iys_consent.v1"
           }
         }
       }
@@ -1917,6 +1934,63 @@
           ]
         },
         "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.iys_consent.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One İYS consent record for Relay to register; never delivered to the person (IDP-37 (4), B23, OP-156 m.3 (c)). Relay reports its registration state to POST /relay/v1/iys-status under this event's id.",
+      "required": [
+        "recipient",
+        "channel",
+        "recipient_type",
+        "consent",
+        "source",
+        "consent_at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "channel": {
+          "enum": [
+            "sms",
+            "email",
+            "call"
+          ],
+          "description": "The commercial message channel; the recipient is the e-mail for email and the phone for sms and call."
+        },
+        "recipient_type": {
+          "enum": [
+            "individual",
+            "merchant"
+          ]
+        },
+        "consent": {
+          "enum": [
+            "approved",
+            "rejected"
+          ]
+        },
+        "source": {
+          "enum": [
+            "self_service",
+            "admin",
+            "import",
+            "app"
+          ],
+          "description": "How the person gave or withdrew it."
+        },
+        "consent_at": {
           "type": "string",
           "format": "date-time"
         }

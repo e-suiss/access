@@ -486,7 +486,7 @@ const STAGE10: [Route; 45] = [
 
 /// The Stage 11 realm routes, declared before their lanes serve them (OP-156 m.4): each answers
 /// `501 not-yet-served` behind its permission until its lane fills the handler.
-const STAGE11: [Route; 41] = [
+const STAGE11: [Route; 42] = [
     list(
         "/admin/v1/realms/{slug}/proxies",
         "listProxies",
@@ -706,6 +706,12 @@ const STAGE11: [Route; 41] = [
         "/admin/v1/realms/{slug}/settings/iys",
         "putIys",
         "Turns the İYS consent registry events on (idp.realm.iys) or off (iys_close).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/preference-topics",
+        "putPreferenceTopics",
+        "Sets the realm's own preference topics beside campaign, newsletter and product_news: idp.realm.preference_topics (OP-153 m.3 (ee)).",
     ),
     write(
         Verb::Put,
@@ -1482,6 +1488,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "replaceKeytab"
         // OP-155 m.3 (h)
         | "putHrd"
+        // OP-156 m.3 (c), OP-153 m.3 (ee)
+        | "putIys"
+        | "putPreferenceTopics"
         | "createCrossAppConnection"
         | "retireCrossAppConnection"
         // OP-155 m.3 (g)

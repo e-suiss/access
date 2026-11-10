@@ -297,6 +297,11 @@ pub(crate) struct Suiss {
     /// refuses every request.
     #[serde(default)]
     pub(crate) platform_realm: Option<String>,
+    /// The product name Relay's platform product client is registered under: only that client
+    /// may report İYS registration states (OP-156 m.3 (c), B23). Without it every report is
+    /// refused.
+    #[serde(default)]
+    pub(crate) relay_product: Option<String>,
     /// Access's platform tenant in Relay and the credential it sends with (E42 (1), (2),
     /// OP-156 m.3 (c)). Required: every message to a person leaves through Relay.
     pub(crate) relay_platform: RelayPlatform,
@@ -342,8 +347,13 @@ impl Suiss {
             .platform_realm
             .as_deref()
             .is_none_or(|s| access_identity_oauth::domain::issuer::check_slug(s).is_ok());
+        let relay_product = self
+            .relay_product
+            .as_deref()
+            .is_none_or(|n| access_internal_api::instances::PlatformProduct::parse(n).is_some());
         region
             && platform
+            && relay_product
             && self.relay_platform.valid()
             && url(&self.relay)
             && url(&self.management_api)
@@ -943,6 +953,7 @@ mod tests {
                 management_api: "https://api.access.example".to_owned(),
                 products: BTreeMap::from([("work".to_owned(), "https://work.example".to_owned())]),
                 platform_realm: Some("platform".to_owned()),
+                relay_product: Some("relay".to_owned()),
                 relay_platform: RelayPlatform {
                     tenant: "rtn_access".to_owned(),
                     credential_file: "/run/secrets/relay-credential".into(),
@@ -1189,6 +1200,7 @@ mod tests {
         assert!(bad(|s| s.region = "-eu".to_owned()));
         assert!(bad(|s| s.relay = "http://relay.example".to_owned()));
         // OP-156 m.3 (c)
+        assert!(bad(|s| s.relay_product = Some("Relay".to_owned())));
         assert!(bad(|s| s.relay_platform.tenant = String::new()));
         assert!(bad(|s| s.relay_platform.tenant = "a tenant".to_owned()));
         assert!(bad(|s| s.management_api = "https://api.example/".to_owned()));

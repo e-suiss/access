@@ -60,6 +60,8 @@ data:
     products = { work = "https://work.access.example" }
     # OP-151 m.2 M2: the platform tenant realm governs the platform-admin surface
     platform_realm = "platform"
+    # OP-156 m.3 (c): the platform product name Relay's client is registered under
+    relay_product = "relay"
     # E42, OP-156 m.3 (c): Access as Relay's platform tenant
     [suiss.relay_platform]
     tenant = "access"

@@ -26,6 +26,14 @@
           "marketing.email"
         ],
         "at": 1793750400000,
+        "iys": {
+          "channels": [
+            "sms"
+          ],
+          "recipient_type": "individual",
+          "source": "self_service",
+          "consent": "approved"
+        },
         "access_position": {
           "pos": 42,
           "idx": 0

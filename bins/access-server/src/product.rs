@@ -50,6 +50,17 @@ where
     let ingest = crate::ingest::routes(keys.clone(), app.clone());
     // OP-150 m.3 (a)
     let status = crate::status::routes(app.clone());
+    let assertions = Arc::new(assertions);
+    // OP-156 m.3 (c), B23
+    let iys = access_http::relay_callback::router(
+        assertions.clone(),
+        crate::iys::PgIysReports {
+            app: app.clone(),
+            ids: ids.clone(),
+        },
+        api_base.clone(),
+        config.suiss.as_ref().and_then(|x| x.relay_product.clone()),
+    );
     Ok(product_router(Service::new(
         keys.clone(),
         PgTenants::new(router, ids),
@@ -59,7 +70,8 @@ where
         api_base,
     ))
     .merge(ingest)
-    .merge(status))
+    .merge(status)
+    .merge(iys))
 }
 
 /// The head of a governing domain as a consistency token (OP-141 m.22 (f)).

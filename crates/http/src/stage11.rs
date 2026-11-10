@@ -64,12 +64,6 @@ pub const PLANNED: &[Planned] = &[
         "proxyCheckPost",
         "The same check for an engine that forwards the original method; the body is never read.",
     ),
-    planned(
-        Method::Post,
-        "/relay/v1/iys-status",
-        "relayIysStatus",
-        "Relay's report of an İYS consent record's registration state for a preference.changed event; it changes no preference (OP-156 m.3 (c)).",
-    ),
 ];
 
 async fn not_yet_served() -> Response {

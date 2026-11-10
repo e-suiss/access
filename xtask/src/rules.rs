@@ -17,6 +17,8 @@ pub(crate) mod files;
 mod fluent;
 #[path = "rules_interop.rs"]
 pub(crate) mod interop;
+#[path = "rules_iys.rs"]
+mod iys;
 #[path = "rules_lex.rs"]
 pub(crate) mod lex;
 #[path = "rules_limits.rs"]
@@ -199,6 +201,11 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "no-privileged-path",
             run: privileged::check,
+        },
+        // IDP-37 (4), B23, E42, OP-156 m.2 Q9
+        Check {
+            name: "no-iys-client",
+            run: iys::check,
         },
     ]);
     all

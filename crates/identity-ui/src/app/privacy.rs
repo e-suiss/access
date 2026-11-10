@@ -5,10 +5,12 @@
 
 use access_identity_account::AccountError;
 use access_identity_account::adapters::pg::PgAccounts;
+use access_identity_account::adapters::system::{SystemClock, SystemEntropy};
 use access_identity_account::app::Actor;
 use access_identity_account::app::privacy::{
     self, Acceptance, PreferenceChange, Scheduled, rfc3339,
 };
+use access_identity_account::notify::notifier::OutboxNotifier;
 use access_identity_oauth::ports::RealmEntry;
 use access_identity_session::app::sessions::SessionStatus;
 use access_identity_session::ports::Clock;
@@ -131,7 +133,10 @@ where
             correlation: b.correlation,
         };
         let db = self.db(&kit);
-        match privacy::set_preferences(&db, &realm, me, &changes, "self_service", &who).await {
+        let notifier = OutboxNotifier::new(&realm, &SystemEntropy, &SystemClock);
+        match privacy::set_preferences(&db, &realm, me, &changes, "self_service", &who, &notifier)
+            .await
+        {
             Ok(()) => match privacy::preferences(&db, &realm, me).await {
                 Ok(v) => Reply::json(200, v),
                 Err(e) => account_failed(&e),

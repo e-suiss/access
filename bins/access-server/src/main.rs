@@ -25,6 +25,7 @@ mod events;
 mod idp;
 mod ids;
 mod ingest;
+mod iys;
 mod jobs;
 mod login;
 mod migration;

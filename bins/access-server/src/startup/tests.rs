@@ -23,6 +23,7 @@ fn config(issuer: &str, management: &str) -> Config {
                 credential_file: "/run/secrets/relay-credential".into(),
                 ca_file: None,
             },
+            relay_product: None,
         }),
         ..Config::default()
     }

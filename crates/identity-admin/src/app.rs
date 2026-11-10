@@ -785,6 +785,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::CertificateLogin(_)
             | Change::MtlsAliases(_)
             | Change::Hrd(_)
+            | Change::Iys { .. }
+            | Change::PreferenceTopics(_)
             | Change::FrontchannelLogout
             | Change::ClientProfile { .. }
             | Change::MapperSet { .. }
@@ -1807,6 +1809,19 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // TN-98, OP-155 m.3 (h)
             Change::Hrd(on) => {
                 t.put_realm_hrd(bound, *on).await?;
+                true
+            }
+            // OP-156 m.3 (c), IDP-37 (4)
+            Change::Iys {
+                enabled,
+                recipient_type,
+            } => {
+                t.put_iys(bound, *enabled, recipient_type).await?;
+                true
+            }
+            // OP-153 m.3 (ee)
+            Change::PreferenceTopics(topics) => {
+                t.put_preference_topics(bound, topics).await?;
                 true
             }
             // IDP-27, OP-155 m.3 (h)

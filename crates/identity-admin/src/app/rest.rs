@@ -238,6 +238,10 @@ pub enum Op {
     PutMtlsAliases,
     /// `putHrd`: `idp.realm.hrd` or `hrd_close` (TN-98, OP-155 m.3 (h)).
     PutHrd,
+    /// `putIys`: `idp.realm.iys` or `iys_close` (OP-156 m.3 (c)).
+    PutIys,
+    /// `putPreferenceTopics`: `idp.realm.preference_topics` (OP-153 m.3 (ee)).
+    PutPreferenceTopics,
     /// `putUpstreamAssuranceMap`: `idp.upstream.assurance_map` (IDP-27, OP-155 m.3 (h)).
     PutUpstreamAssuranceMap,
     /// `registerScimClient`: `idp.scim.client_register` (OP-155 m.3 (g)).
@@ -377,6 +381,8 @@ impl Op {
             "putCertificateLogin" => Self::PutCertificateLogin,
             "putMtlsAliases" => Self::PutMtlsAliases,
             "putHrd" => Self::PutHrd,
+            "putIys" => Self::PutIys,
+            "putPreferenceTopics" => Self::PutPreferenceTopics,
             "putUpstreamAssuranceMap" => Self::PutUpstreamAssuranceMap,
             "registerScimClient" => Self::RegisterScimClient,
             "rotateScimSecret" => Self::RotateScimSecret,
@@ -1750,6 +1756,30 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         Op::PutHrd => {
             only(m, &["enabled"])?;
             Change::Hrd(flag(m, "enabled")?)
+        }
+        // OP-156 m.3 (c), IDP-37 (4)
+        Op::PutIys => {
+            only(m, &["enabled", "recipient_type"])?;
+            Change::Iys {
+                enabled: flag(m, "enabled")?,
+                recipient_type: match m.get("recipient_type") {
+                    None => String::from("individual"),
+                    Some(Json::String(t)) => t.clone(),
+                    Some(_) => return Err(Invalid::Body.into()),
+                },
+            }
+        }
+        // OP-153 m.3 (ee)
+        Op::PutPreferenceTopics => {
+            only(m, &["topics"])?;
+            let Some(Json::Array(list)) = m.get("topics") else {
+                return Err(Invalid::Body);
+            };
+            Change::PreferenceTopics(
+                list.iter()
+                    .map(|t| t.as_str().map(String::from).ok_or(Invalid::Body))
+                    .collect::<Result<_, _>>()?,
+            )
         }
         // IDP-27, OP-155 m.3 (h)
         Op::PutUpstreamAssuranceMap => {

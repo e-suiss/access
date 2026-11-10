@@ -18,6 +18,7 @@ pub mod platform;
 pub mod problem;
 pub mod product;
 pub mod realm;
+pub mod relay_callback;
 pub mod scim;
 mod security_txt;
 pub mod ssf;

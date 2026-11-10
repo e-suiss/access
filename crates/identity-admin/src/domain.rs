@@ -1899,6 +1899,17 @@ pub enum Change {
     /// `idp.realm.hrd` (`true`, CT2) or `hrd_close` (`false`, CT1): home realm discovery
     /// (TN-98, OP-155 m.3 (h)).
     Hrd(bool),
+    /// `idp.realm.iys` (on, CT2) or `iys_close` (off, CT1): İYS consent records go to Relay with
+    /// the realm's recipient type, `individual` or `merchant` (OP-156 m.3 (c), IDP-37 (4)).
+    Iys {
+        /// On or off.
+        enabled: bool,
+        /// `individual` or `merchant`.
+        recipient_type: String,
+    },
+    /// `idp.realm.preference_topics` (CT2): the realm's own preference topics beside the
+    /// built-in ones (OP-153 m.3 (ee)).
+    PreferenceTopics(Vec<String>),
     /// `idp.upstream.assurance_map` (reserved, CT3): how a connection's `acr`, `amr` or
     /// `AuthnContextClassRef` reach assurance; anything unmapped is the lowest class (IDP-27,
     /// OP-155 m.3 (h)).
@@ -2213,6 +2224,34 @@ fn uint(v: u32) -> Value {
     Value::Unsigned(u64::from(v))
 }
 
+/// The built-in preference topics, which a realm list may not repeat (OP-153 m.3 (ee)).
+const BUILT_IN_TOPICS: [&str; 3] = ["campaign", "newsletter", "product_news"];
+
+/// OP-153 m.3 (ee): at most 32 distinct topics of `^[a-z][a-z0-9_.-]{0,63}$`, none built in.
+fn preference_topics(topics: &[String]) -> Result<(), Invalid> {
+    let word = |t: &str| {
+        t.len() <= 64
+            && t.bytes().next().is_some_and(|b| b.is_ascii_lowercase())
+            && t.bytes().all(|b| {
+                b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'_' | b'.' | b'-')
+            })
+    };
+    let distinct = topics
+        .iter()
+        .enumerate()
+        .all(|(i, t)| !topics.iter().take(i).any(|u| u == t));
+    if topics.len() <= 32
+        && distinct
+        && topics
+            .iter()
+            .all(|t| word(t) && !BUILT_IN_TOPICS.contains(&t.as_str()))
+    {
+        Ok(())
+    } else {
+        Err(Invalid::Body)
+    }
+}
+
 impl Change {
     /// The action that authorizes it.
     #[must_use]
@@ -2307,6 +2346,10 @@ impl Change {
             Self::MtlsAliases(_) => IdpAction::RealmMtlsAliases,
             Self::Hrd(true) => IdpAction::RealmHrd,
             Self::Hrd(false) => IdpAction::RealmHrdClose,
+            // OP-156 m.3 (c), OP-153 m.3 (ee)
+            Self::Iys { enabled: true, .. } => IdpAction::RealmIys,
+            Self::Iys { enabled: false, .. } => IdpAction::RealmIysClose,
+            Self::PreferenceTopics(_) => IdpAction::RealmPreferenceTopics,
             Self::UpstreamAssuranceMap { .. } => IdpAction::UpstreamAssuranceMap,
             Self::ClientProfile { delta, .. } => delta.action(),
             Self::FrontchannelLogout => IdpAction::RealmFrontchannelLogout,
@@ -2399,6 +2442,16 @@ impl Change {
             Self::GatewayRadiusClientRegister(c) => c.check(),
             Self::GatewayKeytabPolicy(p) => p.check(),
             Self::GatewayKeytabEmergency { gateway, kvno } => gateway::emergency(gateway, *kvno),
+            // IDP-37 (4)
+            Self::Iys { recipient_type, .. } => {
+                if ["individual", "merchant"].contains(&recipient_type.as_str()) {
+                    Ok(())
+                } else {
+                    Err(Invalid::Body)
+                }
+            }
+            // OP-153 m.3 (ee)
+            Self::PreferenceTopics(topics) => preference_topics(topics),
             Self::AccountBind(_)
             | Self::RelayResend(_)
             | Self::SecurityNotices(_)
@@ -2548,6 +2601,17 @@ impl Change {
             Self::DeviceCode(on) | Self::Hrd(on) | Self::SecurityNotices(on) | Self::Push(on) => {
                 Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))])
             }
+            Self::Iys {
+                enabled,
+                recipient_type,
+            } => Value::Map(vec![
+                (Value::text("enabled"), Value::Bool(*enabled)),
+                (Value::text("recipient_type"), Value::text(recipient_type)),
+            ]),
+            Self::PreferenceTopics(topics) => Value::Map(vec![(
+                Value::text("topics"),
+                Value::Array(topics.iter().map(|t| Value::text(t)).collect()),
+            )]),
             Self::Ciba(c) => c.to_value(),
             Self::Coordinator(url) => Value::Map(
                 url.iter()
@@ -2739,6 +2803,8 @@ impl Change {
             | Self::CertificateLogin(_)
             | Self::MtlsAliases(_)
             | Self::Hrd(_)
+            | Self::Iys { .. }
+            | Self::PreferenceTopics(_)
             | Self::FrontchannelLogout => path.push(String::from("realm")),
             Self::ClientProfile { client, .. } => {
                 path.extend([String::from("client"), String::from(client.as_str())]);

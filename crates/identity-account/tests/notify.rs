@@ -35,8 +35,8 @@ use access_identity_account::notify::envelope::{EventId, Header, parse, seal};
 use access_identity_account::notify::http::{HttpRelay, HttpRelayConfig, RelayEndpoint};
 use access_identity_account::notify::lease::{CourierLease, TTL, Term};
 use access_identity_account::notify::message::{
-    Address, AgentNotice, AppPasswordChange, Body, KINDS, LinkPurpose, Message, Notice,
-    NoticeReason, OtpPurpose, Prompt, SecurityEvent, SignInMethod,
+    Address, AgentNotice, AppPasswordChange, Body, IysChannel, IysRecipient, KINDS, LinkPurpose,
+    Message, Notice, NoticeReason, OtpPurpose, Prompt, SecurityEvent, SignInMethod,
 };
 use access_identity_account::notify::notifier::OutboxNotifier;
 use access_identity_account::notify::pg::PgCourierStore;
@@ -1090,6 +1090,7 @@ fn every_kind_matches_the_json_schema() {
         },
     ])
     .chain(stage11_messages(s))
+    .chain(iys_messages(s))
     .collect::<Vec<_>>();
     assert_eq!(messages.len(), KINDS.len());
     for (m, kind) in messages.iter().zip(KINDS) {
@@ -1643,4 +1644,38 @@ async fn the_courier_delivers_to_the_twin() {
             .iter()
             .all(|p| p.schema_errors.is_empty() && p.status == 202)
     );
+}
+
+fn iys_messages(s: [u8; 16]) -> [Message; 1] {
+    [Message {
+        subject: s,
+        to: Address::Phone("+905551112233".to_owned()),
+        locale: None,
+        valid_since_ms: None,
+        body: Body::IysConsent {
+            channel: IysChannel::Sms,
+            recipient_type: IysRecipient::Individual,
+            approved: true,
+            source: "self_service".to_owned(),
+            consent_at_ms: START_MS,
+        },
+    }]
+}
+
+// IDP-37 (4), B23, OP-156 m.3 (c)
+#[test]
+fn an_iys_record_goes_to_the_address_its_channel_names() {
+    let [mut m] = iys_messages([6; 16]);
+    assert!(m.validate().is_ok());
+    m.to = Address::Email(EMAIL.to_owned());
+    m.valid_since_ms = Some(START_MS);
+    assert!(m.validate().is_err(), "an sms consent is about a phone");
+    if let Body::IysConsent { channel, .. } = &mut m.body {
+        *channel = IysChannel::Email;
+    }
+    assert!(m.validate().is_ok());
+    if let Body::IysConsent { source, .. } = &mut m.body {
+        *source = "someone".to_owned();
+    }
+    assert!(m.validate().is_err());
 }

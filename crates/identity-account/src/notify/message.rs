@@ -696,6 +696,85 @@ pub enum Body {
         /// Unix ms after which it is worthless.
         expires_at_ms: u64,
     },
+    /// Stage 11 Q9: one İYS consent record for Relay to register (`relay.message.iys_consent.v1`,
+    /// IDP-37 (4), B23, OP-156 m.3 (c)). It is never delivered to the person; the recipient is
+    /// the address the consent is about: the e-mail for `email`, the phone for `sms` and `call`.
+    IysConsent {
+        /// The commercial message channel.
+        channel: IysChannel,
+        /// `individual` or `merchant`.
+        recipient_type: IysRecipient,
+        /// Approved or rejected.
+        approved: bool,
+        /// How it was given: `self_service`, `admin`, `import` or `app`.
+        source: String,
+        /// When it was given, Unix ms.
+        consent_at_ms: u64,
+    },
+}
+
+/// An İYS message channel (IDP-37 (4)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IysChannel {
+    /// SMS.
+    Sms,
+    /// E-mail.
+    Email,
+    /// Voice call.
+    Call,
+}
+
+impl IysChannel {
+    /// Its wire name, as preferences name the channel.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Sms => "sms",
+            Self::Email => "email",
+            Self::Call => "call",
+        }
+    }
+
+    /// The channel of a preference channel; `push` is no İYS channel.
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "sms" => Some(Self::Sms),
+            "email" => Some(Self::Email),
+            "call" => Some(Self::Call),
+            _ => None,
+        }
+    }
+}
+
+/// An İYS recipient type (IDP-37 (4)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IysRecipient {
+    /// A person (bireysel).
+    Individual,
+    /// A merchant (tacir).
+    Merchant,
+}
+
+impl IysRecipient {
+    /// Its wire name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Individual => "individual",
+            Self::Merchant => "merchant",
+        }
+    }
+
+    /// The type of a wire name.
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "individual" => Some(Self::Individual),
+            "merchant" => Some(Self::Merchant),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Debug for Body {
@@ -844,12 +923,26 @@ impl fmt::Debug for Body {
                 .field("purpose", purpose)
                 .field("expires_at_ms", expires_at_ms)
                 .finish(),
+            Self::IysConsent {
+                channel,
+                recipient_type,
+                approved,
+                source,
+                consent_at_ms,
+            } => f
+                .debug_struct("IysConsent")
+                .field("channel", channel)
+                .field("recipient_type", recipient_type)
+                .field("approved", approved)
+                .field("source", source)
+                .field("consent_at_ms", consent_at_ms)
+                .finish(),
         }
     }
 }
 
 /// Every kind of the contract, as outbox kind and `CloudEvents` `type`.
-pub const KINDS: [&str; 37] = [
+pub const KINDS: [&str; 38] = [
     "relay.message.otp.v1",
     "relay.message.magic_link.v1",
     "relay.message.password_changed.v1",
@@ -887,6 +980,7 @@ pub const KINDS: [&str; 37] = [
     "relay.message.passkey_setup_invite.v1",
     "relay.message.critical_interrupt.v1",
     "relay.message.sms_otp.v1",
+    "relay.message.iys_consent.v1",
 ];
 
 impl Body {
@@ -913,6 +1007,7 @@ impl Body {
             Self::PasskeySetupInvite { .. } => KINDS[34],
             Self::CriticalInterrupt { .. } => KINDS[35],
             Self::SmsOtp { .. } => KINDS[36],
+            Self::IysConsent { .. } => KINDS[37],
         }
     }
 
@@ -1049,6 +1144,13 @@ impl Body {
                     Err(Invalid("code"))
                 }
             }
+            Self::IysConsent { source, .. } => {
+                if ["self_service", "admin", "import", "app"].contains(&source.as_str()) {
+                    Ok(())
+                } else {
+                    Err(Invalid("source"))
+                }
+            }
             _ => Ok(()),
         }
     }
@@ -1133,6 +1235,11 @@ impl Message {
             (Body::PushApproval { .. }, to) => matches!(to, Address::Device(_)),
             (Body::SmsOtp { .. }, to) => matches!(to, Address::Phone(_)),
             (Body::CriticalInterrupt { .. }, _) => true,
+            // IDP-37 (4)
+            (Body::IysConsent { channel, .. }, to) => match channel {
+                IysChannel::Email => matches!(to, Address::Email(_)),
+                IysChannel::Sms | IysChannel::Call => matches!(to, Address::Phone(_)),
+            },
             (_, to) => !matches!(to, Address::Device(_)),
         };
         if !channel {
@@ -1245,7 +1352,8 @@ impl Message {
             | Body::SecurityAuthorityNotice { .. }
             | Body::PasskeySetupInvite { .. }
             | Body::CriticalInterrupt { .. }
-            | Body::SmsOtp { .. } => match self
+            | Body::SmsOtp { .. }
+            | Body::IysConsent { .. } => match self
                 .body
                 .stage11_members(&mut m, "_ms", |ms| Ok::<_, Infallible>(ms.into()))
             {
@@ -1305,6 +1413,18 @@ impl Message {
                 code: Secret::new(text("code")?.to_owned()),
                 purpose: OtpPurpose::parse(text("purpose")?).ok_or(Invalid("purpose"))?,
                 expires_at_ms: int("expires_at_ms")?,
+            },
+            "relay.message.iys_consent.v1" => Body::IysConsent {
+                channel: IysChannel::parse(text("channel")?).ok_or(Invalid("channel"))?,
+                recipient_type: IysRecipient::parse(text("recipient_type")?)
+                    .ok_or(Invalid("recipient_type"))?,
+                approved: match text("consent")? {
+                    "approved" => true,
+                    "rejected" => false,
+                    _ => return Err(Invalid("consent")),
+                },
+                source: text("source")?.to_owned(),
+                consent_at_ms: int("consent_at_ms")?,
             },
             "relay.message.otp.v1" => Body::Otp {
                 code: Secret::new(text("code")?.to_owned()),
@@ -1510,7 +1630,8 @@ impl Message {
             | Body::SecurityAuthorityNotice { .. }
             | Body::PasskeySetupInvite { .. }
             | Body::CriticalInterrupt { .. }
-            | Body::SmsOtp { .. } => {
+            | Body::SmsOtp { .. }
+            | Body::IysConsent { .. } => {
                 self.body
                     .stage11_members(&mut m, "", |ms| rfc3339(ms).map(Value::from))?;
             }
@@ -1624,6 +1745,22 @@ impl Body {
                 m.insert("code".into(), text(code.expose()));
                 m.insert("purpose".into(), purpose.name().into());
                 put_time(m, "expires_at", *expires_at_ms)?;
+            }
+            Self::IysConsent {
+                channel,
+                recipient_type,
+                approved,
+                source,
+                consent_at_ms,
+            } => {
+                m.insert("channel".into(), channel.name().into());
+                m.insert("recipient_type".into(), recipient_type.name().into());
+                m.insert(
+                    "consent".into(),
+                    if *approved { "approved" } else { "rejected" }.into(),
+                );
+                m.insert("source".into(), text(source));
+                put_time(m, "consent_at", *consent_at_ms)?;
             }
             _ => {}
         }

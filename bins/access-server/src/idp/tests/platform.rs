@@ -28,7 +28,7 @@ const PEP_NAME: &str = "access-identity";
 const SERVICE_SEED: u8 = 41;
 
 /// The identity plane's clock at `NOW`, the authority plane's time in these tests.
-struct AtNow;
+pub(super) struct AtNow;
 
 impl OAuthClock for AtNow {
     fn now(&self) -> Result<u64, ClockUnavailable> {
@@ -37,7 +37,7 @@ impl OAuthClock for AtNow {
 }
 
 /// Fetches nothing: the test's platform client registered one key inline.
-struct NoJwks;
+pub(super) struct NoJwks;
 
 impl ClientKeys for NoJwks {
     fn fetch(
@@ -50,25 +50,25 @@ impl ClientKeys for NoJwks {
     }
 }
 
-type Api = PlatformApi<PgDirectory, NoJwks, TestPlane, NoSeal, OsRandom, AtNow>;
+pub(super) type Api = PlatformApi<PgDirectory, NoJwks, TestPlane, NoSeal, OsRandom, AtNow>;
 
-struct Product {
+pub(super) struct Product {
     app: axum::Router,
     /// The platform API behind `app`, the product routes' assertion verifier (OP-149 m.37).
-    api: Arc<Api>,
+    pub(super) api: Arc<Api>,
     key: EcdsaKeyPair,
-    client: String,
+    pub(super) client: String,
     /// The seed of the Ed25519 service key its pairing Exercises are signed with.
     seed: u8,
     ids: Arc<IdKey>,
     jti: std::sync::atomic::AtomicU64,
 }
 
-const ISSUER: &str = "https://platform.id.test";
+pub(super) const ISSUER: &str = "https://platform.id.test";
 
 impl Product {
     /// A fresh `private_key_jwt` assertion for the platform realm (RFC 7523).
-    fn assertion(&self, aud: &str) -> String {
+    pub(super) fn assertion(&self, aud: &str) -> String {
         let n = self.jti.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let header = r#"{"alg":"ES256","typ":"JWT"}"#;
         let payload = json!({
@@ -257,7 +257,7 @@ async fn product(w: &World) -> (Product, TenantId, RealmId) {
 
 /// The platform realm and one platform client per `(product name, service key seed)`, each with
 /// its own ES256 client key and an event receiver, over the real authority plane.
-async fn products(w: &World, named: &[(&str, u8)]) -> (Vec<Product>, TenantId, RealmId) {
+pub(super) async fn products(w: &World, named: &[(&str, u8)]) -> (Vec<Product>, TenantId, RealmId) {
     let (pt, pr, pd) = w.realm("platform").await;
     onboard(&w.plane, pd, ROOT, ROOT_KEY).await;
     let platform = Admin {

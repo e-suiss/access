@@ -399,6 +399,7 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "putSpc" => IdpAction::RealmSpc,
         "putCoordinator" => IdpAction::RealmCoordinator,
         "putIys" => IdpAction::RealmIys,
+        "putPreferenceTopics" => IdpAction::RealmPreferenceTopics,
         "putSecurityNotices" => IdpAction::RealmSecurityNotices,
         "resendRelayMessage" => IdpAction::RelayResend,
         _ => return None,

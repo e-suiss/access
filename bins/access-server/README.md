@@ -123,6 +123,7 @@ Organization domain verification (DNS TXT or HTTPS challenge) and its daily MX a
 | `management_api` | yes | The management API's base URL. |
 | `products` | no | Product name to base URL. |
 | `platform_realm` | no | The platform tenant's realm slug; without it the platform surface refuses every request. |
+| `relay_product` | no | The product name Relay's platform product client is registered under. Only that client may report İYS registration states to `POST /relay/v1/iys-status`; without it every report is refused. |
 
 ### `[suiss.relay_platform]` (required)
 

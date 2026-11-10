@@ -35,9 +35,10 @@
       "additionalProperties": false,
       "required": [
         "channels",
-        "recipient_type"
+        "recipient_type",
+        "source"
       ],
-      "description": "Present when the realm sends İYS consent records (idp.realm.iys, OP-156 m.3 (c)): which commercial message channels the change touched; never the address.",
+      "description": "Present when the realm sends İYS consent records (idp.realm.iys, OP-156 m.3 (c), IDP-37 (4)): the commercial message channels the change touched, the recipient type, how it was given, and approved or rejected when every touched channel ended the same. The consent date is `at`; the address goes to Relay only, inside each channel's sealed relay.message.iys_consent.v1, never in this event.",
       "properties": {
         "channels": {
           "type": "array",
@@ -66,6 +67,16 @@
             "approved",
             "rejected"
           ]
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "self_service",
+            "admin",
+            "import",
+            "app"
+          ],
+          "description": "How the person gave or withdrew it."
         }
       }
     },
