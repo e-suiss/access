@@ -289,6 +289,10 @@ pub(crate) const HMAC_ALLOWED: &[(&str, &str)] = &[
         "crates/crypto/src/webhook.rs",
         "OP-149 m.4: Standard Webhooks signatures; two-party like client_secret_jwt (CR-3): one secret per subscription, between Access and that one receiver",
     ),
+    (
+        "crates/crypto/src/sigv4.rs",
+        "OP-156 m.3 (s), (z): AWS Signature Version 4 of an export sink's S3 uploads; two-party like client_secret_jwt (CR-3): one secret access key between the realm and its own bucket",
+    ),
 ];
 
 const HMAC_TOKENS: &[&str] = &[

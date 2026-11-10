@@ -16,7 +16,9 @@
 //! The one exception is an event delivery endpoint the operator declared (OP-149 m.23): a push
 //! or webhook `POST` to a URL byte-for-byte equal to a declared target may reach a private
 //! address and a port other than 443. Its certificate is still verified, against the target's
-//! own trust anchors when it names them. Every other request keeps the rules above.
+//! own trust anchors when it names them. Every other request keeps the rules above. An export
+//! sink's batch also reaches a URL below a declared target, and its syslog stream the declared
+//! target's host and port or port 6514 on a public address (OP-156 m.3 (s)).
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
@@ -949,6 +951,103 @@ impl Outbound {
         .map_err(|_| OutboundError::Unreachable)?
     }
 }
+
+impl Outbound {
+    /// The declared target `url` is, or lies below: its URL followed by `/` or `?`
+    /// (OP-156 m.3 (s): an object key below a declared bucket).
+    fn declared_under(&self, url: &str) -> Option<&DeclaredTarget> {
+        self.declared.iter().find(|d| {
+            url == d.url
+                || url.strip_prefix(d.url.as_str()).is_some_and(|rest| {
+                    d.url.ends_with('/') || rest.starts_with('/') || rest.starts_with('?')
+                })
+        })
+    }
+
+    /// `method url` (`POST` or `PUT`) with `body` of `content_type` and extra `headers`, the
+    /// answer body read up to `max_body` bytes: a batch of the audit copy to an export sink
+    /// (OP-156 m.3 (s)). It reaches a declared target by its URL or a URL below it; every
+    /// other rule above holds.
+    ///
+    /// # Errors
+    /// [`OutboundError`]; [`OutboundError::Url`] for another method.
+    pub async fn deliver(
+        &self,
+        method: &str,
+        url: &str,
+        (content_type, headers): (&str, &[(&str, String)]),
+        body: &[u8],
+        max_body: usize,
+    ) -> Result<Answer, OutboundError> {
+        if !matches!(method, "POST" | "PUT") {
+            return Err(OutboundError::Url);
+        }
+        let target = Target::parse(url)?;
+        let mut request = post_request(&target, content_type, headers, body)?;
+        if method == "PUT"
+            && let Some(rest) = request.strip_prefix(b"POST ".as_slice())
+        {
+            let mut out = b"PUT ".to_vec();
+            out.extend_from_slice(rest);
+            request = out;
+        }
+        let declared = self.declared_under(url);
+        self.bounded(&target, request, max_body, declared).await
+    }
+
+    /// A TLS stream to `host:port` for syslog over TLS (RFC 5425, OP-156 m.3 (s)): port
+    /// [`SYSLOG_TLS_PORT`] on a public address, or the host and port of a declared target over
+    /// its own trust anchors. The certificate is verified for `host`.
+    ///
+    /// # Errors
+    /// [`OutboundError`].
+    pub async fn tls_stream(
+        &self,
+        host: &str,
+        port: u16,
+    ) -> Result<tokio_rustls::client::TlsStream<TcpStream>, OutboundError> {
+        let target = Target::parse(&format!("https://{host}:{port}/"))?;
+        let declared = self
+            .declared
+            .iter()
+            .find(|d| d.target.host == target.host && d.target.port == target.port);
+        tokio::time::timeout(self.timeout, async {
+            let (connector, tcp) = if let Some(d) = declared {
+                let connector = d
+                    .connector
+                    .as_ref()
+                    .or(self.connector.as_ref())
+                    .ok_or(OutboundError::Unreachable)?;
+                (connector, connect_declared(&target).await?)
+            } else {
+                if target.port != SYSLOG_TLS_PORT {
+                    return Err(OutboundError::Blocked);
+                }
+                let addr = resolve(&target).await?;
+                let connector = self.connector.as_ref().ok_or(OutboundError::Unreachable)?;
+                let tcp = TcpStream::connect(addr)
+                    .await
+                    .map_err(|_| OutboundError::Unreachable)?;
+                (connector, tcp)
+            };
+            let name = match target.host.parse::<IpAddr>() {
+                Ok(ip) => ServerName::IpAddress(ip.into()),
+                Err(_) => {
+                    ServerName::try_from(target.host.clone()).map_err(|_| OutboundError::Url)?
+                }
+            };
+            connector
+                .connect(name, tcp)
+                .await
+                .map_err(|_| OutboundError::Unreachable)
+        })
+        .await
+        .map_err(|_| OutboundError::Unreachable)?
+    }
+}
+
+/// The port syslog over TLS reaches on a public address (RFC 5425 §4.1).
+pub const SYSLOG_TLS_PORT: u16 = 6514;
 
 /// The one port reached over plain `http`: OCSP responders and CRL distribution points, whose
 /// documents are signed (OP-155 m.3 (m)).

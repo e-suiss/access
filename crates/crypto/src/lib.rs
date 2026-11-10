@@ -24,6 +24,7 @@ pub mod rsa_id;
 pub mod scim_cursor;
 pub mod sd_jwt;
 pub mod secret_file;
+pub mod sigv4;
 pub mod token;
 pub mod totp;
 pub mod webauthn;
