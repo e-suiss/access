@@ -26,6 +26,9 @@ use access_internal_api::projections::Projections as _;
 
 use crate::ports::oauth::{OAuthTx, TokenSigner};
 
+/// `typ` of a JWT introspection answer (RFC 9701 §5).
+pub(crate) const INTROSPECTION_TYP: &str = "token-introspection+jwt";
+
 /// `typ` of a signed userinfo answer (OIDC Core §5.3.2).
 pub(crate) const USERINFO_TYP: &str = "JWT";
 
@@ -332,6 +335,7 @@ impl<E: Env> OAuth<E> {
             tx.commit().await?;
             return Ok(Reply::Jwt {
                 body: jwt,
+                media: "application/jwt",
                 dpop_nonce: nonce,
             });
         }
@@ -455,9 +459,78 @@ impl<E: Env> OAuth<E> {
         params: &Params,
         authorization: Option<&str>,
     ) -> Reply {
-        self.introspect_inner(realm, params, authorization)
+        self.introspect_as(realm, params, authorization, false, &[])
             .await
-            .unwrap_or_else(|Unavailable| active_false())
+    }
+
+    /// [`Self::introspect`]; when the client asked for `application/token-introspection+jwt`
+    /// (`accept_jwt`) or is under FAPI 2.0 Message Signing, the answer is a JWT the realm signs
+    /// with the client's algorithm, encrypted when it asked (RFC 9701, OP-155 m.3 (k)). `chain`
+    /// is the connection's client certificate, leaf first (RFC 8705 §2).
+    pub async fn introspect_as(
+        &self,
+        realm: &Realm,
+        params: &Params,
+        authorization: Option<&str>,
+        accept_jwt: bool,
+        chain: &[Vec<u8>],
+    ) -> Reply {
+        match self
+            .introspect_inner(realm, params, authorization, chain)
+            .await
+        {
+            Ok((reply, Some(client))) if accept_jwt || client.profile.fapi2 => self
+                .introspection_jwt(realm, &client, reply)
+                .await
+                .unwrap_or_else(|Unavailable| active_false()),
+            Ok((reply, _)) => reply,
+            Err(Unavailable) => active_false(),
+        }
+    }
+
+    /// RFC 9701 §5: the introspection answer as a signed JWT: `iss`, `aud` the client, `iat`,
+    /// and the answer under `token_introspection`.
+    async fn introspection_jwt(
+        &self,
+        realm: &Realm,
+        client: &Client,
+        reply: Reply,
+    ) -> Result<Reply, Unavailable> {
+        let Reply::Json {
+            status: 200, body, ..
+        } = reply
+        else {
+            return Ok(reply);
+        };
+        let answer: Value = serde_json::from_str(&body).map_err(|_| Unavailable)?;
+        let now = self.now()?;
+        let claims = json!({
+            "iss": realm.issuer.as_str(),
+            "aud": client.id,
+            "iat": now / 1000,
+            "token_introspection": answer,
+        })
+        .to_string()
+        .into_bytes();
+        let encrypt = client.profile.encryption.is_some();
+        let mut tx = self.begin(realm).await?;
+        let jwt = self
+            .client_jwt(
+                &mut tx,
+                realm,
+                client,
+                INTROSPECTION_TYP,
+                &claims,
+                encrypt,
+                now,
+            )
+            .await?;
+        tx.commit().await?;
+        Ok(Reply::Jwt {
+            body: jwt,
+            media: "application/token-introspection+jwt",
+            dpop_nonce: None,
+        })
     }
 
     #[expect(
@@ -469,25 +542,42 @@ impl<E: Env> OAuth<E> {
         realm: &Realm,
         params: &Params,
         authorization: Option<&str>,
-    ) -> Result<Reply, Unavailable> {
+        chain: &[Vec<u8>],
+    ) -> Result<(Reply, Option<Client>), Unavailable> {
         let now = self.now()?;
         let mut tx = self.begin(realm).await?;
         let req = ClientRequest {
             authorization,
             params,
             endpoint: Endpoint::Introspect.path(),
-            chain: &[],
+            chain,
         };
         let client: Client = match self.authenticate(&mut tx, realm, &req, now).await? {
             Ok(c) if c.client_type() == crate::domain::dpop::ClientType::Confidential => c,
             Ok(_) | Err(_) => {
-                return Ok(Reply::oauth_error(
-                    401,
-                    "invalid_client",
-                    "client authentication failed",
+                return Ok((
+                    Reply::oauth_error(401, "invalid_client", "client authentication failed"),
+                    None,
                 ));
             }
         };
+        let reply = self.introspect_for(tx, realm, &client, params, now).await?;
+        Ok((reply, Some(client)))
+    }
+
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one introspection, each token kind in order"
+    )]
+    async fn introspect_for(
+        &self,
+        mut tx: <E::Db as crate::ports::oauth::OAuthDb>::Tx,
+        realm: &Realm,
+        client: &Client,
+        params: &Params,
+        now: u64,
+    ) -> Result<Reply, Unavailable> {
+        let client = client.clone();
         let Some(token) = params.get("token") else {
             return Ok(Reply::oauth_error(
                 400,

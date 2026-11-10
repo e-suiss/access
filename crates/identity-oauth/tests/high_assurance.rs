@@ -1116,3 +1116,46 @@ fn body_text(r: &Reply) -> String {
         other => format!("{other:?}"),
     }
 }
+
+// RFC 9701, OP-155 m.3 (k), Ek B 4717
+#[tokio::test]
+async fn introspection_answers_as_a_signed_jwt_when_asked() {
+    let c = Cluster::new(&["ha-intro"]).await;
+    let a = c.at(0);
+    let code = a.code(&a.f.keyed).await;
+    let t = body(&keyed_exchange(&a, &code, true).await, 200);
+    let token = t["access_token"].as_str().unwrap().to_owned();
+    let ask = |jwt: bool| {
+        let a = a.clone();
+        let token = token.clone();
+        async move {
+            let assertion = a.assertion(a.issuer());
+            a.oauth()
+                .introspect_as(
+                    a.realm(),
+                    &params(&[
+                        ("token", token.as_str()),
+                        ("client_assertion_type", JWT_BEARER),
+                        ("client_assertion", assertion.as_str()),
+                    ]),
+                    None,
+                    jwt,
+                    &[],
+                )
+                .await
+        }
+    };
+    assert_eq!(body(&ask(false).await, 200)["active"], true);
+    let r = ask(true).await;
+    let Reply::Jwt {
+        body: jwt, media, ..
+    } = r
+    else {
+        panic!("{r:?}");
+    };
+    assert_eq!(media, "application/token-introspection+jwt");
+    let answer = realm_jws(&a, &jwt, "token-introspection+jwt").await;
+    assert_eq!(answer["aud"], a.f.keyed.as_str());
+    assert_eq!(answer["iss"], a.issuer());
+    assert_eq!(answer["token_introspection"]["active"], true);
+}

@@ -213,6 +213,8 @@ pub enum Reply {
     Jwt {
         /// The JWT.
         body: String,
+        /// Its media type: `application/jwt`, or `application/token-introspection+jwt`.
+        media: &'static str,
         /// `DPoP-Nonce` to send (TN-29).
         dpop_nonce: Option<String>,
     },

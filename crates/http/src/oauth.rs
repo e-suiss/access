@@ -266,7 +266,19 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
             .await
         }
         Endpoint::Revoke => s.revoke(&realm, &p, authorization).await,
-        Endpoint::Introspect => s.introspect(&realm, &p, authorization).await,
+        // RFC 9701 §4, OP-155 m.3 (k)
+        Endpoint::Introspect => {
+            let jwt = header_text(&req.headers, header::ACCEPT.as_str())
+                .is_some_and(|a| a.contains("application/token-introspection+jwt"));
+            s.introspect_as(
+                &realm,
+                &p,
+                authorization,
+                jwt,
+                req.chain.as_ref().map_or(&[], |c| &c.0),
+            )
+            .await
+        }
         Endpoint::EndSession => s.end_session(&realm, &p, cookie.as_deref()).await,
         // OP-154 m.3 (p)
         Endpoint::DeviceAuthorization => {
@@ -377,13 +389,14 @@ pub fn render(reply: Reply) -> Response {
         Reply::FormPost { action, body } => form_post(&action, body),
         // IDP-24
         Reply::Page { body, frames } => page(&frames, body),
-        Reply::Jwt { body, dpop_nonce } => {
+        Reply::Jwt {
+            body,
+            media,
+            dpop_nonce,
+        } => {
             let mut r = (
                 StatusCode::OK,
-                [(
-                    header::CONTENT_TYPE,
-                    HeaderValue::from_static("application/jwt"),
-                )],
+                [(header::CONTENT_TYPE, HeaderValue::from_static(media))],
                 body,
             )
                 .into_response();
