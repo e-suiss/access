@@ -72,6 +72,47 @@ fn tn_135_md_8_hooks_fail_closed() {
     );
 }
 
+// TN-135, CI-2, OP-156 m.3 (r): a risk engine at the call point only narrows, and a lost
+// answer never lets a sign-in through
+#[test]
+fn a_call_point_risk_verdict_only_narrows() {
+    let at = |body: &str| {
+        decide(
+            HookPoint::PostLogin,
+            OnNoAnswer::Refuse,
+            &answered(200, body),
+        )
+    };
+    assert_eq!(
+        at(r#"{"decision":"allow","risk":{"level":"low","reason_class":"none"}}"#),
+        Outcome::proceed()
+    );
+    assert_eq!(
+        at(r#"{"decision":"allow","risk":{"level":"high","reason_class":"bot"}}"#),
+        Outcome::Refused(Refusal::Denied {
+            reason_code: Some(String::from("risk-high"))
+        })
+    );
+    assert_eq!(
+        at(r#"{"decision":"deny","risk":{"level":"low","reason_class":"none"}}"#),
+        Outcome::Refused(Refusal::Denied { reason_code: None })
+    );
+    assert_eq!(
+        refused(&at(
+            r#"{"decision":"allow","risk":{"level":"allow","reason_class":"none"}}"#
+        )),
+        Some(&Refusal::Violation)
+    );
+    assert_eq!(
+        refused(&decide(
+            HookPoint::PostLogin,
+            OnNoAnswer::Refuse,
+            &Reply::NoAnswer
+        )),
+        Some(&Refusal::Unanswered)
+    );
+}
+
 // TN-135
 #[test]
 fn tn_135_refusing_points_only_refuse() {

@@ -744,12 +744,16 @@ fn reason_code_ok(s: &str) -> bool {
         && b.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_' || c == b'-')
 }
 
-/// Reads a refusing call point's answer: `{"decision": "allow"|"deny", "reason_code"?}` and
-/// nothing else.
+/// Reads a refusing call point's answer: `{"decision": "allow"|"deny", "reason_code"?,
+/// "risk"?}` and nothing else. A risk or fraud engine at the call point states its verdict in
+/// `risk` (`{level, reason_class}`); a `high` or `critical` level refuses even an `allow`, and
+/// no level turns a `deny` into anything else (TN-135, CI-2, OP-156 m.3 (r)).
 fn read_decision(body: &[u8]) -> Result<Outcome, Refusal> {
     let v: Value = serde_json::from_slice(body).map_err(|_| Refusal::Violation)?;
     let o = v.as_object().ok_or(Refusal::Violation)?;
-    if o.keys().any(|k| k != "decision" && k != "reason_code") {
+    if o.keys()
+        .any(|k| k != "decision" && k != "reason_code" && k != "risk")
+    {
         return Err(Refusal::Violation);
     }
     let reason_code = match o.get("reason_code") {
@@ -757,7 +761,16 @@ fn read_decision(body: &[u8]) -> Result<Outcome, Refusal> {
         Some(Value::String(s)) if reason_code_ok(s) => Some(s.clone()),
         Some(_) => return Err(Refusal::Violation),
     };
+    let risk =
+        access_identity_signals::domain::mapping::hook_risk(o).map_err(|_| Refusal::Violation)?;
+    let narrowed = risk.as_ref().is_some_and(|r| {
+        access_identity_signals::domain::effect::narrowing(Some(r.level))
+            >= access_identity_signals::domain::effect::Narrowing::Deny
+    });
     match o.get("decision").and_then(Value::as_str) {
+        Some("allow") if narrowed => Ok(Outcome::Refused(Refusal::Denied {
+            reason_code: risk.map(|r| format!("risk-{}", r.level.name())),
+        })),
         Some("allow") => Ok(Outcome::proceed()),
         Some("deny") => Ok(Outcome::Refused(Refusal::Denied { reason_code })),
         _ => Err(Refusal::Violation),

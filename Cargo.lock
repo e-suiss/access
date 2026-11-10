@@ -542,6 +542,7 @@ name = "access-identity-hooks"
 version = "0.4.0"
 dependencies = [
  "access-crypto",
+ "access-identity-signals",
  "access-internal-api",
  "access-store",
  "esuiss-access-kernel",
