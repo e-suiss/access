@@ -2055,6 +2055,7 @@ pub mod consent;
 mod events;
 pub mod export;
 pub mod faces;
+mod holdings;
 pub mod hub;
 pub mod impact;
 mod ingest;
