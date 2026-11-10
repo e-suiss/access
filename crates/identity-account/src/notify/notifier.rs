@@ -3,6 +3,7 @@
 //! `identity_outbox` in the caller's transaction.
 
 use access_store::identity::TenantTx;
+use suiss_crypto::envelope::Dek;
 
 use crate::app::Realm;
 use crate::app::sealing::subject_key;
@@ -35,29 +36,38 @@ impl<'a> OutboxNotifier<'a> {
     }
 }
 
+/// The DEK a message to `subject` is sealed under: the subject's, or that of the address
+/// challenge of an address with no account yet (OP-153 m.3 (g)).
+///
+/// # Errors
+/// [`NotifyError::NoSubject`] when neither exists or the key was shredded; [`NotifyError`].
+pub(crate) async fn recipient_key(
+    realm: &Realm<'_>,
+    tx: &mut TenantTx,
+    subject: [u8; 16],
+) -> Result<Dek, NotifyError> {
+    if let Some(row) = tx.subject(subject, false).await? {
+        return subject_key(realm, &row).map_err(|_| NotifyError::NoSubject);
+    }
+    // OP-153 m.3 (g)
+    let key = tx
+        .challenge_key(subject)
+        .await?
+        .ok_or(NotifyError::NoSubject)?;
+    let wrapped = key.wrapped_dek.ok_or(NotifyError::NoSubject)?;
+    if key.kek_id != realm.kek.id() {
+        return Err(NotifyError::NoSubject);
+    }
+    realm.kek.unwrap(&wrapped).map_err(|_| NotifyError::Seal)
+}
+
 impl Notifier for OutboxNotifier<'_> {
     async fn notify(&self, tx: &mut TenantTx, message: &Message) -> Result<EventId, NotifyError> {
         message.validate()?;
         if tx.tenant() != self.realm.tenant || tx.realm() != Some(self.realm.realm) {
             return Err(NotifyError::NoSubject);
         }
-        let dek = if let Some(row) = tx.subject(message.subject, false).await? {
-            subject_key(self.realm, &row).map_err(|_| NotifyError::NoSubject)?
-        } else {
-            // OP-153 m.3 (g)
-            let key = tx
-                .challenge_key(message.subject)
-                .await?
-                .ok_or(NotifyError::NoSubject)?;
-            let wrapped = key.wrapped_dek.ok_or(NotifyError::NoSubject)?;
-            if key.kek_id != self.realm.kek.id() {
-                return Err(NotifyError::NoSubject);
-            }
-            self.realm
-                .kek
-                .unwrap(&wrapped)
-                .map_err(|_| NotifyError::Seal)?
-        };
+        let dek = recipient_key(self.realm, tx, message.subject).await?;
         let event = EventId::from_random(self.entropy.salt().map_err(|_| NotifyError::Random)?);
         let header = Header {
             tenant: *self.realm.tenant.as_bytes(),

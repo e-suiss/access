@@ -10,7 +10,7 @@ publish = false
 
 [features]
 # OP-153 m.3 (aa): in-memory vault keys for tests of other crates
-testing = ["access-crypto/testing"]
+testing = ["access-crypto/testing", "dep:rcgen"]
 
 [dependencies]
 access-crypto = { workspace = true }
@@ -33,6 +33,8 @@ zeroize = { workspace = true, features = ["alloc"] }
 rustls = { workspace = true, features = ["aws_lc_rs", "std"] }
 tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }
 httparse = { workspace = true, features = ["std"] }
+# OP-156 m.3 (c): the Relay twin's certificate
+rcgen = { workspace = true, features = ["aws_lc_rs", "pem"], optional = true }
 
 [dev-dependencies]
 access-crypto = { workspace = true, features = ["testing"] }

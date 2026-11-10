@@ -9,6 +9,8 @@
 //! - An event that can never be delivered (unreadable, shredded subject, expired, refused by
 //!   Relay) is recorded in `relay_undelivered` and passed; its outbox row stays (OP-73).
 //! - Other outbox kinds belong to other consumers and are passed.
+//! - Only the node holding the courier lease sends, and the cursor moves only under the
+//!   lease's epoch (OP-156 m.3 (c), [`lease`](crate::notify::lease)).
 
 use std::sync::Mutex;
 use std::time::Duration;
@@ -22,6 +24,7 @@ use crate::app::SUBJECT_PREFIX;
 use crate::notify::NotifyError;
 use crate::notify::delivery::{Backoff, SendFailure, Undeliverable, cloud_event};
 use crate::notify::envelope::{EventId, parse};
+use crate::notify::lease::{RETRY, TTL, Term};
 use crate::notify::message::KIND_PREFIX;
 use crate::notify::ports::{CourierStore, RealmKeys, RelayPort, SubjectKey};
 use crate::ports::Clock;
@@ -46,6 +49,8 @@ pub struct Step {
     pub skipped: u32,
     /// Set when Relay failed transiently: wait this long, then step again.
     pub wait_ms: Option<u64>,
+    /// Set when the lease's term ended before the batch did: renew before stepping again.
+    pub lapsed: bool,
 }
 
 enum Outcome {
@@ -96,15 +101,38 @@ where
         &self.store
     }
 
-    /// Delivers what the outbox holds past the cursor, up to one batch.
+    /// Takes or renews the courier lease for `holder`.
     ///
     /// # Errors
-    /// [`NotifyError`] when storage fails; the cursor has not passed an undelivered event.
-    pub async fn step(&self) -> Result<Step, NotifyError> {
+    /// [`NotifyError`] when storage fails.
+    pub async fn hold(
+        &self,
+        holder: &str,
+        ttl: std::time::Duration,
+    ) -> Result<Option<Term>, NotifyError> {
+        let asked = self.clock.now_ms();
+        Ok(self
+            .store
+            .lease(holder, ttl)
+            .await?
+            .map(|l| Term::new(l, asked, ttl)))
+    }
+
+    /// Delivers what the outbox holds past the cursor, up to one batch, under `term`. It stops
+    /// before the next send once the term has ended.
+    ///
+    /// # Errors
+    /// [`NotifyError::LeaseLost`] when another node took the lease; [`NotifyError`] when
+    /// storage fails. The cursor has not passed an undelivered event.
+    pub async fn step(&self, term: &Term) -> Result<Step, NotifyError> {
         let at = self.store.cursor().await?;
         let batch = self.store.poll(at, BATCH).await?;
         let mut step = Step::default();
         for event in &batch {
+            if !term.live(self.clock.now_ms()) {
+                step.lapsed = true;
+                return Ok(step);
+            }
             // OP-67 m.1, §17.8.2
             let span = access_telemetry::trace::consumed(
                 CONSUMER,
@@ -123,30 +151,69 @@ where
                     return Ok(step);
                 }
             }
-            self.store.ack(event.cursor()).await?;
+            self.store.ack(&term.lease, event.cursor()).await?;
         }
         Ok(step)
     }
 
-    /// Steps until `stop` resolves, sleeping while idle or backing off.
-    pub async fn run(&self, stop: &tokio::sync::watch::Receiver<bool>) {
+    /// Steps as `holder` until `stop` resolves: only while it holds the courier lease, which it
+    /// renews when half of [`TTL`] is left and gives up when it stops. Without the lease it asks
+    /// again every [`RETRY`].
+    pub async fn run(&self, holder: &str, stop: &tokio::sync::watch::Receiver<bool>) {
         let mut stop = stop.clone();
+        let mut term: Option<Term> = None;
         while !*stop.borrow() {
-            let wait = match self.step().await {
-                Ok(Step {
-                    wait_ms: Some(ms), ..
-                }) => Duration::from_millis(ms),
-                Ok(s) if s.delivered > 0 || s.undelivered > 0 || s.skipped > 0 => Duration::ZERO,
-                Ok(_) => POLL_INTERVAL,
-                Err(e) => {
-                    tracing::warn!(error = %e, "relay courier step failed");
-                    Duration::from_millis(self.backoff.base_ms)
-                }
+            if term
+                .as_ref()
+                .is_none_or(|t| t.due(self.clock.now_ms(), TTL))
+            {
+                term = match self.hold(holder, TTL).await {
+                    Ok(t) => t,
+                    Err(e) => {
+                        tracing::warn!(error = %e, "relay courier lease failed");
+                        None
+                    }
+                };
+            }
+            let wait = match &term {
+                None => RETRY,
+                Some(t) => match self.step(t).await {
+                    Ok(Step {
+                        wait_ms: Some(ms), ..
+                    }) => Duration::from_millis(ms),
+                    Ok(Step { lapsed: true, .. }) => Duration::ZERO,
+                    Ok(s) if s.delivered > 0 || s.undelivered > 0 || s.skipped > 0 => {
+                        Duration::ZERO
+                    }
+                    Ok(_) => POLL_INTERVAL,
+                    Err(NotifyError::LeaseLost) => {
+                        tracing::warn!("relay courier lease lost; another node sends");
+                        term = None;
+                        RETRY
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "relay courier step failed");
+                        Duration::from_millis(self.backoff.base_ms)
+                    }
+                },
             };
             if !wait.is_zero() {
                 let _ = tokio::time::timeout(wait, stop.changed()).await;
             }
         }
+        if let Some(t) = term
+            && let Err(e) = self.store.release(&t.lease).await
+        {
+            tracing::warn!(error = %e, "relay courier lease release failed");
+        }
+    }
+
+    /// The age in ms of the oldest message waiting for Relay; `None` when none waits.
+    ///
+    /// # Errors
+    /// [`NotifyError`] when storage fails.
+    pub async fn lag_ms(&self) -> Result<Option<u64>, NotifyError> {
+        self.store.lag_ms().await
     }
 
     fn failed(&self, at: Cursor, retry_after_ms: Option<u64>) -> u64 {

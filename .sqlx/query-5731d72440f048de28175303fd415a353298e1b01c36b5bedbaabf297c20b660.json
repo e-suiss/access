@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT event_id FROM access.relay_resends\n              WHERE tenant_id = $1 AND realm_id = $2 AND original_event_id = $3\n              ORDER BY recorded_at, event_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.relay_resends",
+            "name": "event_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5731d72440f048de28175303fd415a353298e1b01c36b5bedbaabf297c20b660"
+}

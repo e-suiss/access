@@ -2,12 +2,15 @@
 //! (OP-131 m.3), subject keys and undeliverable records as `access_app` under the realm's
 //! scope (OP-12).
 
-use access_store::Pool;
+use std::time::Duration;
+
 use access_store::identity::{self, Cursor, OutboxEvent, RealmId, TenantId, TenantTx};
-use access_store::relay::Undelivered;
+use access_store::relay::{self, CourierLease, Undelivered};
+use access_store::{Pool, StoreError};
 
 use crate::notify::NotifyError;
 use crate::notify::courier::CONSUMER;
+use crate::notify::message::KIND_PREFIX;
 use crate::notify::ports::{CourierStore, SubjectKey};
 
 /// The courier's two pools.
@@ -19,16 +22,36 @@ pub struct PgCourierStore {
 }
 
 impl CourierStore for PgCourierStore {
+    async fn lease(
+        &self,
+        holder: &str,
+        ttl: Duration,
+    ) -> Result<Option<CourierLease>, NotifyError> {
+        Ok(relay::acquire_courier_lease(&self.reader, CONSUMER, holder, ttl).await?)
+    }
+
+    async fn release(&self, lease: &CourierLease) -> Result<(), NotifyError> {
+        Ok(relay::release_courier_lease(&self.reader, lease).await?)
+    }
+
     async fn cursor(&self) -> Result<Cursor, NotifyError> {
         Ok(identity::cursor(&self.reader, CONSUMER).await?)
+    }
+
+    async fn lag_ms(&self) -> Result<Option<u64>, NotifyError> {
+        let at = identity::cursor(&self.reader, CONSUMER).await?;
+        Ok(relay::oldest_pending_ms(&self.reader, at, KIND_PREFIX).await?)
     }
 
     async fn poll(&self, after: Cursor, limit: u32) -> Result<Vec<OutboxEvent>, NotifyError> {
         Ok(identity::poll(&self.reader, after, limit).await?)
     }
 
-    async fn ack(&self, at: Cursor) -> Result<(), NotifyError> {
-        Ok(identity::ack(&self.reader, CONSUMER, at).await?)
+    async fn ack(&self, lease: &CourierLease, at: Cursor) -> Result<(), NotifyError> {
+        match relay::ack_fenced(&self.reader, lease, at).await {
+            Err(StoreError::LeaseLost) => Err(NotifyError::LeaseLost),
+            r => Ok(r?),
+        }
     }
 
     async fn subject_key(

@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT (extract(epoch FROM clock_timestamp() - created_at) * 1000)::bigint AS \"age_ms!\"\n             FROM access.identity_outbox\n            WHERE (xid, id) > ($1::bigint::text::xid8, $2) AND left(kind, length($3)) = $3\n            ORDER BY xid, id\n            LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "age_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "05acfba2e5b23a6763bf4302a2859ca0dcab99887b7bef28a76a11cd668512af"
+}

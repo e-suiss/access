@@ -2,8 +2,10 @@
 
 use std::future::Future;
 
+use std::time::Duration;
+
 use access_store::identity::{Cursor, OutboxEvent, RealmId, TenantId, TenantTx};
-use access_store::relay::Undelivered;
+use access_store::relay::{CourierLease, Undelivered};
 use suiss_crypto::envelope::Kek;
 
 use crate::notify::NotifyError;
@@ -57,19 +59,37 @@ pub enum SubjectKey {
     },
 }
 
-/// The courier's storage: the outbox and its cursor as `access_outbox_reader` (OP-131), and
-/// realm-scoped reads and records as `access_app`.
+/// The courier's storage: the outbox, its cursor and the courier lease as
+/// `access_outbox_reader` (OP-131, OP-156 m.3 (c)), and realm-scoped reads and records as
+/// `access_app`.
 pub trait CourierStore: Send + Sync {
+    /// Takes or renews the courier lease for `holder`; `None` while another node holds it.
+    fn lease(
+        &self,
+        holder: &str,
+        ttl: Duration,
+    ) -> impl Future<Output = Result<Option<CourierLease>, NotifyError>> + Send;
+    /// Gives the lease up.
+    fn release(&self, lease: &CourierLease)
+    -> impl Future<Output = Result<(), NotifyError>> + Send;
     /// The courier's cursor.
     fn cursor(&self) -> impl Future<Output = Result<Cursor, NotifyError>> + Send;
+    /// The age in ms of the oldest Relay message past the cursor; `None` when none waits.
+    fn lag_ms(&self) -> impl Future<Output = Result<Option<u64>, NotifyError>> + Send;
     /// Outbox events after `after`, in `(xid, id)` order.
     fn poll(
         &self,
         after: Cursor,
         limit: u32,
     ) -> impl Future<Output = Result<Vec<OutboxEvent>, NotifyError>> + Send;
-    /// Moves the cursor forward to `at`.
-    fn ack(&self, at: Cursor) -> impl Future<Output = Result<(), NotifyError>> + Send;
+    /// Moves the cursor forward to `at` under `lease`.
+    ///
+    /// [`NotifyError::LeaseLost`] when the lease is no longer live.
+    fn ack(
+        &self,
+        lease: &CourierLease,
+        at: Cursor,
+    ) -> impl Future<Output = Result<(), NotifyError>> + Send;
     /// The subject's wrapped DEK.
     fn subject_key(
         &self,

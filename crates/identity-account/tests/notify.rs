@@ -33,6 +33,7 @@ use access_identity_account::notify::delivery::{
 };
 use access_identity_account::notify::envelope::{EventId, Header, parse, seal};
 use access_identity_account::notify::http::{HttpRelay, HttpRelayConfig, RelayEndpoint};
+use access_identity_account::notify::lease::{CourierLease, TTL, Term};
 use access_identity_account::notify::message::{
     Address, AgentNotice, AppPasswordChange, Body, KINDS, LinkPurpose, Message, Notice,
     NoticeReason, OtpPurpose, Prompt, SecurityEvent, SignInMethod,
@@ -42,7 +43,9 @@ use access_identity_account::notify::pg::PgCourierStore;
 use access_identity_account::notify::ports::{
     CourierStore, Notifier, RealmKeys, RelayPort, SubjectKey,
 };
+use access_identity_account::notify::resend::{ResendError, resend};
 use access_identity_account::ports::Clock;
+use access_identity_account::testing::relay::{Answer, RelayTwin, check, schema_errors};
 use access_store::authority::{LogRecord, create_domain};
 use access_store::identity::{Cursor, OutboxEvent, RealmId, TenantId, TenantTx};
 use access_store::relay::Undelivered;
@@ -136,19 +139,35 @@ struct Store {
 }
 
 impl CourierStore for Store {
+    async fn lease(
+        &self,
+        holder: &str,
+        ttl: Duration,
+    ) -> Result<Option<CourierLease>, NotifyError> {
+        self.pg.lease(holder, ttl).await
+    }
+
+    async fn release(&self, lease: &CourierLease) -> Result<(), NotifyError> {
+        self.pg.release(lease).await
+    }
+
     async fn cursor(&self) -> Result<Cursor, NotifyError> {
         self.pg.cursor().await
+    }
+
+    async fn lag_ms(&self) -> Result<Option<u64>, NotifyError> {
+        self.pg.lag_ms().await
     }
 
     async fn poll(&self, after: Cursor, limit: u32) -> Result<Vec<OutboxEvent>, NotifyError> {
         self.pg.poll(after, limit).await
     }
 
-    async fn ack(&self, at: Cursor) -> Result<(), NotifyError> {
+    async fn ack(&self, lease: &CourierLease, at: Cursor) -> Result<(), NotifyError> {
         if self.fail_ack.swap(false, Ordering::SeqCst) {
             return Err(NotifyError::Store(access_store::StoreError::Range));
         }
-        self.pg.ack(at).await
+        self.pg.ack(lease, at).await
     }
 
     async fn subject_key(
@@ -182,6 +201,8 @@ struct Env {
     clock: TestClock,
     relay: FakeRelay,
     courier: TestCourier,
+    term: Term,
+    seed: u8,
 }
 
 async fn env(seed: u8, slug: &str) -> Env {
@@ -219,6 +240,7 @@ async fn env(seed: u8, slug: &str) -> Env {
         IdKey::new(Secret::new([seed.wrapping_add(1); 32])),
         Backoff::default(),
     );
+    let term = courier.hold("node-a", TTL).await.unwrap().unwrap();
     Env {
         db,
         tenant,
@@ -232,6 +254,8 @@ async fn env(seed: u8, slug: &str) -> Env {
         clock,
         relay,
         courier,
+        term,
+        seed,
     }
 }
 
@@ -292,7 +316,7 @@ impl Env {
             assert!(Instant::now() < deadline);
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        self.courier.step().await.unwrap();
+        self.courier.step(&self.term).await.unwrap();
         s
     }
 
@@ -355,7 +379,8 @@ impl Env {
         let deadline = Instant::now() + Duration::from_secs(20);
         let mut total = Step::default();
         loop {
-            let s = self.courier.step().await.unwrap();
+            let term = self.courier.hold("node-a", TTL).await.unwrap().unwrap();
+            let s = self.courier.step(&term).await.unwrap();
             total.delivered += s.delivered;
             total.undelivered += s.undelivered;
             total.skipped += s.skipped;
@@ -474,7 +499,7 @@ async fn redelivery_after_a_lost_acknowledgement_carries_the_same_id() {
     e.queue(&otp(s, START_MS + 300_000)).await;
     e.fail_ack_once();
     let deadline = Instant::now() + Duration::from_secs(20);
-    while e.courier.step().await.is_ok() {
+    while e.courier.step(&e.term).await.is_ok() {
         assert!(Instant::now() < deadline);
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
@@ -920,56 +945,6 @@ fn relay_answers_are_classified_and_backoff_grows_to_a_ceiling() {
     assert_eq!(b.wait_ms(1, Some(10_000_000)), 300_000);
 }
 
-fn check(schema: &Value, root: &Value, v: &Value, path: &str) -> Vec<String> {
-    let mut errs = Vec::new();
-    if let Some(r) = schema.get("$ref").and_then(Value::as_str) {
-        let name = r.strip_prefix("#/$defs/").unwrap();
-        return check(&root["$defs"][name], root, v, path);
-    }
-    if let Some(c) = schema.get("const")
-        && v != c
-    {
-        errs.push(format!("{path}: {v} != {c}"));
-    }
-    if let Some(Value::Array(e)) = schema.get("enum")
-        && !e.contains(v)
-    {
-        errs.push(format!("{path}: {v} not in enum"));
-    }
-    match schema.get("type").and_then(Value::as_str) {
-        Some("string") if !v.is_string() => errs.push(format!("{path}: not a string")),
-        Some("object") if !v.is_object() => errs.push(format!("{path}: not an object")),
-        _ => {}
-    }
-    if let (Some(Value::Object(o)), Some(Value::Array(req))) = (Some(v), schema.get("required")) {
-        for r in req {
-            if !o.contains_key(r.as_str().unwrap()) {
-                errs.push(format!("{path}: missing {r}"));
-            }
-        }
-    }
-    if let (Value::Object(o), Some(Value::Object(props))) = (v, schema.get("properties")) {
-        for (k, val) in o {
-            match props.get(k) {
-                Some(p) => errs.extend(check(p, root, val, &format!("{path}.{k}"))),
-                None if schema.get("additionalProperties") == Some(&Value::Bool(false)) => {
-                    errs.push(format!("{path}: unexpected {k}"));
-                }
-                None => {}
-            }
-        }
-    }
-    if let Some(Value::Array(all)) = schema.get("allOf") {
-        for a in all {
-            let applies = check(&a["if"], root, v, path).is_empty();
-            if applies {
-                errs.extend(check(&a["then"], root, v, path));
-            }
-        }
-    }
-    errs
-}
-
 // OP-146 m.4 (b)
 #[test]
 fn every_kind_matches_the_json_schema() {
@@ -1287,4 +1262,382 @@ async fn an_unreachable_relay_is_transient() {
     assert!(RelayEndpoint::parse("http://relay.internal/e").is_err());
     assert!(RelayEndpoint::parse("https://relay.internal\r\nX: y/e").is_err());
     assert!(RelayEndpoint::parse("https://relay.internal:8443/v1/events").is_ok());
+}
+
+/// A second courier over the same database, as another node would run it.
+fn node(e: &Env, relay: FakeRelay) -> TestCourier {
+    Courier::new(
+        Store {
+            pg: PgCourierStore {
+                reader: e.db.reader.clone(),
+                app: e.db.app.clone(),
+            },
+            fail_ack: AtomicBool::new(false),
+        },
+        relay,
+        Keys(SoftKek::new("realm-kek:1", [e.seed; 32])),
+        e.clock.clone(),
+        IdKey::new(Secret::new([e.seed.wrapping_add(1); 32])),
+        Backoff::default(),
+    )
+}
+
+// OP-156 m.3 (c), OP-31
+#[tokio::test]
+async fn only_the_lease_holder_sends_and_a_lost_lease_cannot_move_the_cursor() {
+    let e = env(40, "rn-l1").await;
+    let s = e.subject(EMAIL).await;
+    let b_relay = FakeRelay::default();
+    let b = node(&e, b_relay.clone());
+    assert!(
+        b.hold("node-b", TTL).await.unwrap().is_none(),
+        "a live lease is not shared"
+    );
+    let renewed = e.courier.hold("node-a", TTL).await.unwrap().unwrap();
+    assert_eq!(
+        renewed.lease.epoch, e.term.lease.epoch,
+        "a renewal keeps the epoch"
+    );
+
+    e.queue(&notice(s, START_MS)).await;
+    e.courier.store().release(&e.term.lease).await.unwrap();
+    let taken = b.hold("node-b", TTL).await.unwrap().unwrap();
+    assert!(
+        taken.lease.epoch > e.term.lease.epoch,
+        "a new holder fences the old"
+    );
+    let before = access_store::identity::cursor(&e.db.reader, CONSUMER)
+        .await
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        match e.courier.step(&e.term).await {
+            Err(NotifyError::LeaseLost) => break,
+            Ok(_) => {
+                assert!(Instant::now() < deadline);
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            Err(other) => panic!("{other}"),
+        }
+    }
+    assert_eq!(
+        access_store::identity::cursor(&e.db.reader, CONSUMER)
+            .await
+            .unwrap(),
+        before,
+        "the old holder's cursor write was refused"
+    );
+    let step = loop {
+        let step = b.step(&taken).await.unwrap();
+        if step.delivered > 0 {
+            break step;
+        }
+        assert!(Instant::now() < deadline);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    assert_eq!(step.delivered, 1);
+    assert_eq!(
+        e.relay.posts()[0].0,
+        b_relay.posts()[0].0,
+        "the new holder sends the same id, which Relay deduplicates"
+    );
+}
+
+// OP-156 m.3 (c)
+#[tokio::test]
+async fn a_node_whose_term_ended_sends_nothing_more() {
+    let e = env(41, "rn-l2").await;
+    let s = e.subject(EMAIL).await;
+    e.queue(&notice(s, START_MS)).await;
+    let ended = Term {
+        lease: e.term.lease.clone(),
+        until_ms: START_MS,
+    };
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while access_store::identity::poll(&e.db.reader, Cursor::default(), 100)
+        .await
+        .unwrap()
+        .len()
+        < 2
+    {
+        assert!(Instant::now() < deadline);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let step = e.courier.step(&ended).await.unwrap();
+    assert!(step.lapsed);
+    assert_eq!(step.delivered, 0);
+    assert_eq!(e.relay.posts().len(), 0);
+    assert!(e.term.due(START_MS + 6_000, TTL));
+    assert!(!e.term.due(START_MS + 1_000, TTL));
+}
+
+// OP-156 m.3 (c): two nodes running at once, one sends
+#[tokio::test]
+async fn of_two_running_nodes_only_one_sends() {
+    let e = env(42, "rn-l3").await;
+    let s = e.subject(EMAIL).await;
+    e.courier.store().release(&e.term.lease).await.unwrap();
+    let (a_relay, b_relay) = (FakeRelay::default(), FakeRelay::default());
+    let a = Arc::new(node(&e, a_relay.clone()));
+    let b = Arc::new(node(&e, b_relay.clone()));
+    let (stop, stopped) = tokio::sync::watch::channel(false);
+    let runs = [("node-a", a.clone()), ("node-b", b.clone())].map(|(h, c)| {
+        let stopped = stopped.clone();
+        tokio::spawn(async move { c.run(h, &stopped).await })
+    });
+    for at in 0..3 {
+        e.queue(&notice(s, START_MS + at)).await;
+    }
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while a_relay.accepted().len() + b_relay.accepted().len() < 3 {
+        assert!(Instant::now() < deadline);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    stop.send(true).unwrap();
+    for r in runs {
+        r.await.unwrap();
+    }
+    let (na, nb) = (a_relay.posts().len(), b_relay.posts().len());
+    assert!(na == 0 || nb == 0, "both sent: {na} and {nb}");
+    assert_eq!(na + nb, 3);
+    let next = node(&e, FakeRelay::default());
+    assert!(
+        next.hold("node-c", TTL).await.unwrap().is_some(),
+        "a stopped node gives its lease up"
+    );
+}
+
+/// A message Relay refused for good, recorded as undeliverable; returns its id.
+async fn refused(e: &Env, m: &Message) -> EventId {
+    let id = e.queue(m).await;
+    e.relay.answer(Err(SendFailure::Rejected { status: 422 }));
+    let step = e.settle(1).await;
+    assert_eq!(step.undelivered, 1);
+    id
+}
+
+async fn resend_of(e: &Env, id: EventId) -> Result<EventId, ResendError> {
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let r = resend(&mut tx, &e.realm(), &SystemEntropy, &e.clock, id, &ADMIN).await;
+    if r.is_ok() {
+        tx.commit().await.unwrap();
+    } else {
+        tx.rollback().await.unwrap();
+    }
+    r
+}
+
+// OP-156 m.3 (c), OP-73, Ek B 5401
+#[tokio::test]
+async fn a_resend_writes_a_new_row_and_leaves_the_original() {
+    let e = env(43, "rn-r1").await;
+    let s = e.subject(EMAIL).await;
+    let original = refused(&e, &otp(s, START_MS + 300_000)).await;
+    let rows_before = e.outbox_rows(1).await;
+    let again = resend_of(&e, original).await.unwrap();
+    assert_ne!(again, original, "a new CloudEvents id, so Relay takes it");
+    let step = e.settle(1).await;
+    assert_eq!(step.delivered, 1);
+    let posts = e.relay.posts();
+    assert_eq!(posts.last().unwrap().0, again.to_string());
+    assert_eq!(posts.last().unwrap().1["data"], posts[0].1["data"]);
+    let rows = e.outbox_rows(2).await;
+    assert_eq!(rows.len(), 2);
+    assert_eq!(
+        &rows[..1],
+        &rows_before[..],
+        "the original row is unchanged"
+    );
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    assert_eq!(tx.relay_resends_of(original.0).await.unwrap(), [again.0]);
+    assert_eq!(tx.list_relay_undelivered(10).await.unwrap().len(), 1);
+    tx.commit().await.unwrap();
+    assert!(matches!(
+        resend_of(&e, EventId::from_random([7; 16])).await,
+        Err(ResendError::NotFound)
+    ));
+}
+
+// OP-156 m.3 (c), OP-73
+#[tokio::test]
+async fn shredded_or_expired_content_is_not_resent() {
+    let e = env(44, "rn-r2").await;
+    let s = e.subject(EMAIL).await;
+    let code = refused(&e, &otp(s, START_MS + 300_000)).await;
+    let notice_id = refused(&e, &notice(s, START_MS)).await;
+    e.clock.0.store(START_MS + 300_000, Ordering::SeqCst);
+    assert!(matches!(
+        resend_of(&e, code).await,
+        Err(ResendError::Expired)
+    ));
+    let pg = PgAccounts::sealed(e.db.app.clone(), e.vault.clone());
+    for to in [
+        AccountStatus::Deactivated,
+        AccountStatus::Tombstone,
+        AccountStatus::Purging,
+    ] {
+        change_status(&pg, &e.realm(), s, to, &ADMIN).await.unwrap();
+    }
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    assert!(tx.shred_subject_for_test(s).await.unwrap());
+    tx.commit().await.unwrap();
+    assert!(matches!(
+        resend_of(&e, notice_id).await,
+        Err(ResendError::Shredded)
+    ));
+}
+
+// OP-156 m.3 (c): the age of the oldest waiting message
+#[tokio::test]
+async fn the_lag_is_the_age_of_the_oldest_waiting_message() {
+    let e = env(45, "rn-g1").await;
+    let s = e.subject(EMAIL).await;
+    assert_eq!(e.courier.lag_ms().await.unwrap(), None);
+    e.queue(&notice(s, START_MS)).await;
+    e.relay.answer(Err(SendFailure::Transient {
+        retry_after_ms: None,
+    }));
+    assert!(e.settle(1).await.wait_ms.is_some());
+    assert!(e.courier.lag_ms().await.unwrap().is_some());
+    assert_eq!(e.settle(1).await.delivered, 1);
+    assert_eq!(e.courier.lag_ms().await.unwrap(), None);
+}
+
+fn random_token() -> String {
+    use std::fmt::Write as _;
+    access_crypto::random::bytes::<16>()
+        .unwrap()
+        .iter()
+        .fold(String::new(), |mut s, b| {
+            let _ = write!(s, "{b:02x}");
+            s
+        })
+}
+
+fn secret_file(tag: &str, value: &str) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt as _;
+    let p = std::env::temp_dir().join(format!(
+        "access-relay-twin-{tag}-{}-{}",
+        std::process::id(),
+        random_token()
+    ));
+    std::fs::write(&p, value).unwrap();
+    std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600)).unwrap();
+    p
+}
+
+fn twin_relay(twin: &RelayTwin, token: &str, timeout: Duration) -> HttpRelay {
+    let file = secret_file("adapter", token);
+    let relay = HttpRelay::new(HttpRelayConfig {
+        endpoint: RelayEndpoint::parse(&twin.events_url()).unwrap(),
+        tls: twin.tls.clone(),
+        token_file: file.clone(),
+        timeout,
+    })
+    .unwrap();
+    std::fs::remove_file(&file).unwrap();
+    relay
+}
+
+// OP-156 m.3 (c), OP-146 m.4 (b): the twin answers as Relay does
+#[tokio::test]
+async fn the_relay_twin_validates_and_answers_like_relay() {
+    let token = random_token();
+    let twin = RelayTwin::start(&token, "https://id.test").await;
+    let relay = twin_relay(&twin, &token, Duration::from_secs(5));
+    let ev = sample_event();
+    twin.script([
+        Answer::Status(503, Some(7)),
+        Answer::Status(429, None),
+        Answer::Delay(Duration::from_millis(50)),
+    ]);
+    assert_eq!(
+        relay.send(&ev).await,
+        Err(SendFailure::Transient {
+            retry_after_ms: Some(7_000)
+        })
+    );
+    assert!(matches!(
+        relay.send(&ev).await,
+        Err(SendFailure::Transient { .. })
+    ));
+    assert_eq!(relay.send(&ev).await, Ok(()));
+    assert_eq!(
+        relay.send(&ev).await,
+        Ok(()),
+        "a duplicate id is 409, taken"
+    );
+    let posts = twin.posts();
+    assert_eq!(
+        posts.iter().map(|p| p.status).collect::<Vec<_>>(),
+        [503, 429, 202, 409]
+    );
+    assert!(posts.iter().all(|p| p.schema_errors.is_empty()));
+    assert_eq!(twin.accepted(), [ev.id.to_string()]);
+
+    let wrong = twin_relay(&twin, &random_token(), Duration::from_secs(5));
+    assert!(
+        matches!(wrong.send(&ev).await, Err(SendFailure::Transient { .. })),
+        "a credential Relay refuses must not cost the message"
+    );
+    let slow = twin_relay(&twin, &token, Duration::from_millis(50));
+    twin.script([Answer::Delay(Duration::from_secs(2))]);
+    let other = cloud_event(
+        &Header {
+            tenant: [1; 16],
+            realm: [2; 16],
+            event: EventId::from_random([5; 16]),
+            subject: [4; 16],
+            occurred_ms: START_MS,
+        },
+        "usr_x",
+        &notice([4; 16], START_MS),
+    )
+    .unwrap();
+    assert!(matches!(
+        slow.send(&other).await,
+        Err(SendFailure::Transient { .. })
+    ));
+    let mut bad: Value = serde_json::from_slice(ev.body()).unwrap();
+    bad["data"]["extra"] = Value::Bool(true);
+    assert_ne!(schema_errors(&bad), Vec::<String>::new());
+    assert_eq!(twin.discovery()["events_endpoint"], twin.events_url());
+}
+
+// OP-156 m.3 (c), E42: the courier against the twin over HTTPS
+#[tokio::test]
+async fn the_courier_delivers_to_the_twin() {
+    let e = env(46, "rn-t1").await;
+    let s = e.subject(EMAIL).await;
+    let token = random_token();
+    let twin = RelayTwin::start(&token, "https://id.test").await;
+    let courier = Courier::new(
+        Store {
+            pg: PgCourierStore {
+                reader: e.db.reader.clone(),
+                app: e.db.app.clone(),
+            },
+            fail_ack: AtomicBool::new(false),
+        },
+        twin_relay(&twin, &token, Duration::from_secs(5)),
+        Keys(SoftKek::new("realm-kek:1", [e.seed; 32])),
+        e.clock.clone(),
+        IdKey::new(Secret::new([e.seed.wrapping_add(1); 32])),
+        Backoff::default(),
+    );
+    let id = e.queue(&otp(s, START_MS + 300_000)).await;
+    e.queue(&notice(s, START_MS)).await;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while twin.accepted().len() < 2 {
+        courier.step(&e.term).await.unwrap();
+        assert!(Instant::now() < deadline);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let posts = twin.posts();
+    assert_eq!(posts[0].id, id.to_string());
+    assert!(
+        posts
+            .iter()
+            .all(|p| p.schema_errors.is_empty() && p.status == 202)
+    );
 }

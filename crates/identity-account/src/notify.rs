@@ -5,16 +5,19 @@
 //! speaks SMTP or SMS itself.
 //!
 //! Layers (OP-63): [`message`], [`envelope`] and [`delivery`] are the domain; [`ports`];
-//! [`notifier`] and [`courier`] the use cases; [`pg`] and [`http`] the adapters.
+//! [`notifier`], [`courier`], [`lease`] and [`resend`] the use cases; [`pg`] and [`http`] the
+//! adapters.
 
 pub mod courier;
 pub mod delivery;
 pub mod envelope;
 pub mod http;
+pub mod lease;
 pub mod message;
 pub mod notifier;
 pub mod pg;
 pub mod ports;
+pub mod resend;
 
 use access_store::StoreError;
 
@@ -42,4 +45,7 @@ pub enum NotifyError {
     /// The random source failed.
     #[error("no randomness")]
     Random,
+    /// The courier lease ran out or another node took it (OP-156 m.3 (c)).
+    #[error("courier lease lost")]
+    LeaseLost,
 }

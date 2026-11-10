@@ -8,6 +8,8 @@ pub mod app;
 pub mod domain;
 pub mod notify;
 pub mod ports;
+#[cfg(feature = "testing")]
+pub mod testing;
 
 use access_crypto::opaque_id::OpaqueIdError;
 use access_store::StoreError;
