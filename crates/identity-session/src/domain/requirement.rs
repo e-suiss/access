@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::domain::assurance::{Aal, Factor, MethodClass, vector};
+use crate::domain::assurance::{Aal, AssuranceProfile, Factor, MethodClass, vector};
 
 /// Whether a second step is asked for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,6 +38,13 @@ pub struct AuthPolicy {
     pub remember_device_days: Option<u32>,
     /// Push verification as a second step (`idp.realm.push`, OP-156 m.3 (d)); off by default.
     pub push: bool,
+    /// SMS codes as a second step (`idp.realm.sms_otp`, OP-156 m.3 (f)); off by default.
+    pub sms: bool,
+    /// The realm's assurance profile (MD-11, OP-156 m.3 (e)).
+    pub profile: AssuranceProfile,
+    /// Secure Payment Confirmation on the approval surface (`idp.realm.spc`, OP-156 m.3 (g)); off
+    /// by default.
+    pub spc: bool,
 }
 
 impl AuthPolicy {
@@ -51,6 +58,9 @@ impl AuthPolicy {
         magic_link: true,
         remember_device_days: Some(30),
         push: false,
+        sms: false,
+        profile: AssuranceProfile::Standard,
+        spc: false,
     };
 }
 
@@ -70,13 +80,16 @@ pub struct Enrolled {
     /// An active approver, in a realm that offers push (OP-156 m.3 (d)).
     #[serde(default)]
     pub push: bool,
+    /// A phone number, in a realm that takes SMS codes at sign-in (OP-156 m.3 (f)).
+    #[serde(default)]
+    pub sms: bool,
 }
 
 impl Enrolled {
     /// Whether any second factor is enrolled.
     #[must_use]
     pub const fn second_factor(&self) -> bool {
-        self.totp || self.passkeys || self.push
+        self.totp || self.passkeys || self.push || self.sms
     }
 }
 
@@ -115,7 +128,12 @@ pub const fn is_first_factor(m: MethodClass) -> bool {
 pub const fn is_second_factor(m: MethodClass) -> bool {
     matches!(
         m,
-        MethodClass::Totp | MethodClass::RecoveryCode | MethodClass::Passkey | MethodClass::Push
+        MethodClass::Totp
+            | MethodClass::RecoveryCode
+            | MethodClass::Passkey
+            | MethodClass::Push
+            | MethodClass::Sms
+            | MethodClass::AppControlled
     )
 }
 

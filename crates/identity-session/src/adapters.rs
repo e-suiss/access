@@ -2,6 +2,7 @@
 //! system randomness.
 
 pub mod passkeys;
+mod payment;
 pub mod pg;
 mod push;
 mod recovery;

@@ -392,6 +392,85 @@ impl TenantTx {
     }
 }
 
+impl TenantTx {
+    /// The subject's active phone number as stored, for its SMS codes (OP-156 m.3 (f)).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn sms_line(
+        &mut self,
+        subject: [u8; 16],
+    ) -> Result<Option<crate::accounts::StoredValue>, StoreError> {
+        let (tenant, realm) = scope(self)?;
+        let row = sqlx::query!(
+            "SELECT value, value_index, pii_class, nonce, ciphertext
+               FROM access.identity_identifiers
+              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'
+                AND kind = 'phone'
+              ORDER BY identifier_id LIMIT 1",
+            tenant,
+            realm,
+            Uuid::from_bytes(subject),
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?;
+        row.map(|r| {
+            crate::accounts::stored(r.value, r.value_index, r.pii_class, r.nonce, r.ciphertext)
+        })
+        .transpose()
+    }
+
+    /// The SIM change signals about the Party of `subject` in the realm's governing domain: the
+    /// latest change any of them names and the newest check, Unix ms; `None` when the subject
+    /// has no Party or there is no signal. The domain scope is set for this read only.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn sim_signals(
+        &mut self,
+        subject: [u8; 16],
+    ) -> Result<Option<(u64, u64)>, StoreError> {
+        let (tenant, realm) = scope(self)?;
+        let found = sqlx::query!(
+            "SELECT r.governing_domain_id, p.party_id
+               FROM access.realms r
+               JOIN access.subject_party p ON p.tenant_id = r.tenant_id AND p.realm_id = r.realm_id
+              WHERE r.tenant_id = $1 AND r.realm_id = $2 AND r.status = 'active'
+                AND p.subject_id = $3",
+            tenant,
+            realm,
+            Uuid::from_bytes(subject),
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?;
+        let Some(found) = found else {
+            return Ok(None);
+        };
+        let domain = DomainId::from_bytes(
+            <[u8; 32]>::try_from(found.governing_domain_id.as_slice())
+                .map_err(|_| StoreError::Corrupt)?,
+        );
+        sqlx::query!("SELECT set_config('app.domain_id', $1, true)", domain.hex())
+            .fetch_one(&mut *self.tx)
+            .await?;
+        let row = sqlx::query!(
+            "SELECT max(last_change_ms) AS last_change, max(checked_ms) AS checked
+               FROM access.sim_change_signals WHERE domain_id = $1 AND subject_id = $2",
+            domain.as_bytes().as_slice(),
+            found.party_id.as_slice(),
+        )
+        .fetch_one(&mut *self.tx)
+        .await?;
+        sqlx::query!("SELECT set_config('app.domain_id', '', true)")
+            .fetch_one(&mut *self.tx)
+            .await?;
+        match (row.last_change, row.checked) {
+            (Some(l), Some(c)) => Ok(Some((u64_of(l)?, u64_of(c)?))),
+            _ => Ok(None),
+        }
+    }
+}
+
 /// Records `s` once (sequencer role, after its Claim record committed).
 ///
 /// # Errors

@@ -14,6 +14,7 @@ pub mod registered;
 pub mod sessions;
 pub mod settings;
 pub mod signin;
+pub mod sms;
 mod webauthn;
 
 use access_identity_account::app::Realm;

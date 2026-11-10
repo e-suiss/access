@@ -32,6 +32,8 @@ pub enum MethodClass {
     /// Any other client certificate presented on the mTLS listener: a software key (OP-155
     /// m.3 (m)).
     Certificate,
+    /// A restricted SMS one-time code (OP-156 m.3 (f), IDP-4): AAL2 second factor at best, no CT.
+    Sms,
 }
 
 impl MethodClass {
@@ -49,6 +51,7 @@ impl MethodClass {
             Self::Federated => "fed",
             Self::SmartCard => "sc",
             Self::Certificate => "swk",
+            Self::Sms => "sms",
         }
     }
 }
@@ -315,6 +318,35 @@ impl Factor {
         }
     }
 
+    /// An SMS code (§10.2.2, IDP-4, OP-156 m.3 (f)): possession of the line, replay resistant
+    /// through its single use, never phishing resistant and never a CT.
+    #[must_use]
+    pub fn sms(at_ms: u64) -> Self {
+        Self {
+            replay_resistant: true,
+            session_login_only: true,
+            ..Self::base(MethodClass::Sms, vec![FactorKind::Possession], at_ms)
+        }
+    }
+
+    /// The app-controlled factor (MD-11, IDP-9, OP-156 m.3 (e)): an approver key attested in
+    /// hardware that signed only after the app checked its own PIN. Possession and knowledge,
+    /// replay resistant, never phishing resistant; it adds no key binding to the vector, so it
+    /// never lends a synced key a hardware property, and alone it meets no CT.
+    #[must_use]
+    pub fn app_controlled(approver: [u8; 16], at_ms: u64) -> Self {
+        Self {
+            replay_resistant: true,
+            app_controlled: true,
+            credential: Some(approver),
+            ..Self::base(
+                MethodClass::AppControlled,
+                vec![FactorKind::Possession, FactorKind::Knowledge],
+                at_ms,
+            )
+        }
+    }
+
     /// An e-mail code or link (§10.2.2): AAL1, no CT.
     #[must_use]
     pub fn email(method: MethodClass, at_ms: u64) -> Self {
@@ -482,6 +514,64 @@ pub fn ct_ceiling(factors: &[Factor]) -> CtCeiling {
         .unwrap_or(CtCeiling::None)
 }
 
+/// IDP-8 under a realm's assurance profile (MD-11, SA-54, OP-156 m.3 (e)): the TR payment
+/// profile asks CT2 and CT3 for a phishing-resistant step **and** an app-controlled factor, so
+/// without one the ceiling stays at CT1. Nothing here raises [`ct_ceiling`].
+#[must_use]
+pub fn ct_ceiling_in(factors: &[Factor], profile: AssuranceProfile) -> CtCeiling {
+    let ceiling = ct_ceiling(factors);
+    match profile {
+        AssuranceProfile::Standard => ceiling,
+        AssuranceProfile::TrPayment if factors.iter().any(|f| f.app_controlled) => ceiling,
+        AssuranceProfile::TrPayment => ceiling.min(CtCeiling::Ct1),
+    }
+}
+
+/// A realm's assurance profile (MD-11, SA-54): realm settings and requirement narrowing only,
+/// never a widening.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AssuranceProfile {
+    /// No profile.
+    #[default]
+    Standard,
+    /// Turkish payment and e-money institutions (BDDK/TCMB, `tr-payment`, OP-156 m.3 (e), (f)).
+    TrPayment,
+}
+
+impl AssuranceProfile {
+    /// The stored name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Standard => "standard",
+            Self::TrPayment => "tr-payment",
+        }
+    }
+
+    /// From the stored name.
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        [Self::Standard, Self::TrPayment]
+            .into_iter()
+            .find(|p| p.name() == s)
+    }
+
+    /// Whether the platform's own user verification counts as a factor (MD-11): never under the
+    /// TR payment profile, where biometrics alone authenticate nothing.
+    #[must_use]
+    pub const fn platform_uv_is_factor(self) -> bool {
+        matches!(self, Self::Standard)
+    }
+
+    /// Whether an SMS code may be a sign-in step (OP-156 m.3 (f)): under the TR payment profile
+    /// only enrolment and activation take one.
+    #[must_use]
+    pub const fn sms_signs_in(self) -> bool {
+        matches!(self, Self::Standard)
+    }
+}
+
 /// §10.3.2: the eIDAS equivalent of an upstream-asserted AAL. "High" is never derived from
 /// Access's own methods; this maps only upstream evidence (Stage 10 Acceptance).
 #[must_use]
@@ -628,6 +718,61 @@ mod tests {
         assert!(v.app_controlled_factor);
         assert!(!v.phishing_resistant);
         assert_eq!(ct_ceiling(&[app]), CtCeiling::None);
+    }
+
+    // MD-11, IDP-9, OP-156 m.3 (e), Ek B 5395
+    #[test]
+    fn the_app_controlled_factor_alone_meets_no_ct2_and_meets_it_with_a_passkey() {
+        let app = Factor::app_controlled([4; 16], T);
+        let alone = [app.clone()];
+        let v = vector(&alone);
+        assert!(v.app_controlled_factor && !v.phishing_resistant && !v.hardware_bound);
+        assert_eq!(v.aal, Aal::Aal2);
+        assert_eq!(app.method.amr(), "pin");
+        for p in [AssuranceProfile::Standard, AssuranceProfile::TrPayment] {
+            assert_eq!(ct_ceiling_in(&alone, p), CtCeiling::None);
+        }
+        let passkey = Factor::passkey([1; 16], true, true, false, T);
+        assert_eq!(
+            ct_ceiling_in(&[passkey.clone()], AssuranceProfile::TrPayment),
+            CtCeiling::Ct1
+        );
+        assert_eq!(
+            ct_ceiling_in(&[passkey.clone()], AssuranceProfile::Standard),
+            CtCeiling::Ct2
+        );
+        let both = [passkey, app];
+        assert_eq!(
+            ct_ceiling_in(&both, AssuranceProfile::TrPayment),
+            CtCeiling::Ct2
+        );
+        assert!(!vector(&both).hardware_bound);
+    }
+
+    // OP-156 m.3 (f), IDP-4, IDP-8
+    #[test]
+    fn an_sms_code_is_an_aal2_second_factor_and_meets_no_ct() {
+        let sms = Factor::sms(T);
+        assert_eq!(sms.method.amr(), "sms");
+        assert_eq!(vector(&[sms.clone()]).aal, Aal::Aal1);
+        let steps = [Factor::password(T), sms];
+        assert_eq!(vector(&steps).aal, Aal::Aal2);
+        assert!(!vector(&steps).phishing_resistant);
+        assert_eq!(ct_ceiling(&steps), CtCeiling::None);
+    }
+
+    // MD-11, OP-156 m.3 (e), (f)
+    #[test]
+    fn the_tr_payment_profile_counts_no_biometrics_and_no_sms_sign_in() {
+        assert_eq!(
+            AssuranceProfile::parse("tr-payment"),
+            Some(AssuranceProfile::TrPayment)
+        );
+        assert_eq!(AssuranceProfile::parse("TR-payment"), None);
+        assert!(!AssuranceProfile::TrPayment.platform_uv_is_factor());
+        assert!(!AssuranceProfile::TrPayment.sms_signs_in());
+        assert!(AssuranceProfile::Standard.platform_uv_is_factor());
+        assert!(AssuranceProfile::Standard.sms_signs_in());
     }
 
     // §10.3.2

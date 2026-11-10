@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.governing_domain_id, p.party_id\n               FROM access.realms r\n               JOIN access.subject_party p ON p.tenant_id = r.tenant_id AND p.realm_id = r.realm_id\n              WHERE r.tenant_id = $1 AND r.realm_id = $2 AND r.status = 'active'\n                AND p.subject_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "governing_domain_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.realms",
+            "name": "governing_domain_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "party_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.subject_party",
+            "name": "party_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "6bb2233d13a72d56a46995996ef3270cdb0c3fabf9652ab9cccd98c94e82d1c0"
+}

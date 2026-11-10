@@ -34,7 +34,7 @@ pub trait Random: Send + Sync {
 
 /// The account transaction plus the flow and session tables, and the SL2 risk tables in the
 /// same unit of work (TN-46).
-pub trait SessionTx: AccountTx + RiskTx + PushTx {
+pub trait SessionTx: AccountTx + RiskTx + PushTx + PaymentTx {
     /// Stores a flow.
     fn insert_flow(
         &mut self,
@@ -293,6 +293,63 @@ pub trait PushTx {
         subject: [u8; 16],
         since_ms: u64,
     ) -> impl Future<Output = Result<Vec<PushHistoryRow>, SessionError>> + Send;
+}
+
+pub use access_store::payment::{AppFactorKey, NewSmsCode, SmsCodeRow};
+
+/// SMS codes, SIM change signals and the app-controlled factor in the same unit of work (OP-156
+/// m.3 (e), (f)).
+pub trait PaymentTx {
+    /// The subject's active phone number, revealed.
+    fn sms_line(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<Option<String>, SessionError>> + Send;
+    /// The SIM change signals about the subject's Party: latest change and newest check.
+    fn sim_signals(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<Option<(u64, u64)>, SessionError>> + Send;
+    /// Keeps an SMS code.
+    fn insert_sms_code(
+        &mut self,
+        c: &NewSmsCode<'_>,
+    ) -> impl Future<Output = Result<(), SessionError>> + Send;
+    /// The newest SMS code bound to `binding` for `purpose`, locked.
+    fn sms_code(
+        &mut self,
+        binding: &[u8; 32],
+        purpose: &str,
+    ) -> impl Future<Output = Result<Option<SmsCodeRow>, SessionError>> + Send;
+    /// Counts one try of code `id`, using it when `used_ms` is given.
+    fn try_sms_code(
+        &mut self,
+        id: [u8; 16],
+        used_ms: Option<u64>,
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// How many codes the subject was sent since `since_ms`.
+    fn sms_codes_since(
+        &mut self,
+        subject: [u8; 16],
+        since_ms: u64,
+    ) -> impl Future<Output = Result<u64, SessionError>> + Send;
+    /// What the approver key `device` holds for the app-controlled factor.
+    fn app_factor_key(
+        &mut self,
+        device: [u8; 16],
+    ) -> impl Future<Output = Result<Option<AppFactorKey>, SessionError>> + Send;
+    /// Keeps the PIN declaration of an answer.
+    fn record_app_factor_answer(
+        &mut self,
+        challenge: [u8; 16],
+        device: [u8; 16],
+        pin_verified: bool,
+    ) -> impl Future<Output = Result<(), SessionError>> + Send;
+    /// Whether the answer to challenge `challenge` declared the app PIN verified.
+    fn app_factor_answer(
+        &mut self,
+        challenge: [u8; 16],
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
 }
 
 /// Opens session transactions in one realm.

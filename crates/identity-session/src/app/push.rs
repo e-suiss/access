@@ -27,9 +27,10 @@ use super::{
     refuse, save,
 };
 use crate::SessionError;
+use crate::domain::assurance::Factor;
 use crate::domain::flow::Pending;
 use crate::domain::push::{CHALLENGE_TTL_MS, Ended, HISTORY_MS, Past, factor, held};
-use crate::ports::{Clock, PushTx as _, Random, SessionDb, SessionTx as _};
+use crate::ports::{Clock, PaymentTx as _, PushTx as _, Random, SessionDb, SessionTx as _};
 
 const CHALLENGE_CONTEXT: &[u8] = b"access/push-challenge/v1\0";
 
@@ -344,7 +345,18 @@ where
                     return Err(SessionError::Conflict);
                 }
                 l.state.pending = None;
-                if l.state.record(subject, factor(device, now)).is_err() {
+                // MD-11, OP-156 m.3 (e)
+                let app_controlled = tx.app_factor_answer(r.id).await?
+                    && tx
+                        .app_factor_key(device)
+                        .await?
+                        .is_some_and(|k| k.hardware_attested && k.app_pin);
+                let step = if app_controlled {
+                    Factor::app_controlled(device, now)
+                } else {
+                    factor(device, now)
+                };
+                if l.state.record(subject, step).is_err() {
                     save(&mut tx, &l, "open", Resume::Keep).await?;
                     tx.commit().await?;
                     return Ok(PushPoll::Step(refuse(STEP_NOT_ALLOWED)));
@@ -446,6 +458,11 @@ where
             .await?
         {
             return Ok(Answered::AlreadyAnswered);
+        }
+        // MD-11, OP-156 m.3 (e)
+        if let (Answered::Approved, Some(pin_verified)) = (outcome, a.pin_verified) {
+            tx.record_app_factor_answer(row.id, device.id, pin_verified)
+                .await?;
         }
         tx.approver_seen(device.id).await?;
         let target = self.external(row.subject)?;

@@ -1126,6 +1126,12 @@ where
                 && !crate::ports::PushTx::approvers(tx, subject)
                     .await?
                     .is_empty(),
+            // OP-156 m.3 (f)
+            sms: self.policy.sms
+                && self.policy.profile.sms_signs_in()
+                && crate::ports::PaymentTx::sms_line(tx, subject)
+                    .await?
+                    .is_some(),
         })
     }
 

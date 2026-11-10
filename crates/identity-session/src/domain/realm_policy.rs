@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 
 use suiss_crypto::dcbor::{self, Limits, Value};
 
+use crate::domain::assurance::AssuranceProfile;
 use crate::domain::requirement::{AuthPolicy, MfaPolicy};
 
 /// A realm's sign-in requirements as written.
@@ -28,6 +29,8 @@ pub struct RealmSignin {
     pub email_keep_days: Option<u32>,
     /// Whether a hosted sign-in offers DBSC registration (TN-33, OP-153 m.22 (c), m.25 (b)).
     pub dbsc: bool,
+    /// The assurance profile (MD-11, SA-54, OP-156 m.3 (e)).
+    pub profile: AssuranceProfile,
 }
 
 impl Default for RealmSignin {
@@ -43,6 +46,7 @@ impl Default for RealmSignin {
             strict: false,
             email_keep_days: None,
             dbsc: true,
+            profile: AssuranceProfile::Standard,
         }
     }
 }
@@ -95,6 +99,12 @@ impl RealmSignin {
             Some(Value::Bool(b)) => *b,
             Some(_) => return None,
         };
+        // OP-156 m.3 (e)
+        let profile = match get("profile") {
+            None => AssuranceProfile::Standard,
+            Some(Value::Text(t)) => AssuranceProfile::parse(t)?,
+            Some(_) => return None,
+        };
         let required_fields = match get("required_fields") {
             None => BTreeSet::from([String::from("email")]),
             v => texts(v)?,
@@ -108,6 +118,7 @@ impl RealmSignin {
             strict,
             email_keep_days,
             dbsc,
+            profile,
         })
     }
 
@@ -131,6 +142,7 @@ impl RealmSignin {
             passkey: base.passkey && self.has("passkey"),
             email_otp: base.email_otp && email,
             magic_link: base.magic_link && email,
+            profile: self.profile,
             ..base
         }
     }
@@ -208,6 +220,31 @@ mod tests {
         assert!(!RealmSignin::decode(&off).unwrap().dbsc);
         m.pop();
         m.push((Value::text("dbsc"), Value::text("no")));
+        let bad = dcbor::encode(&Value::Map(m), Limits::CEILING).unwrap_or_default();
+        assert_eq!(RealmSignin::decode(&bad), None);
+    }
+
+    // MD-11, SA-54, OP-156 m.3 (e), MD-8
+    #[test]
+    fn a_policy_names_its_assurance_profile_or_does_not_decode() {
+        let base = stored(&["passkey"], true, &[], &[]);
+        assert_eq!(
+            RealmSignin::decode(&base).unwrap().profile,
+            AssuranceProfile::Standard
+        );
+        let Ok(Value::Map(mut m)) = dcbor::decode(&base, Limits::CEILING) else {
+            panic!("a policy map");
+        };
+        m.push((Value::text("profile"), Value::text("tr-payment")));
+        let tr = dcbor::encode(&Value::Map(m.clone()), Limits::CEILING).unwrap_or_default();
+        let p = RealmSignin::decode(&tr).unwrap();
+        assert_eq!(p.profile, AssuranceProfile::TrPayment);
+        assert_eq!(
+            p.apply(AuthPolicy::DEFAULT).profile,
+            AssuranceProfile::TrPayment
+        );
+        m.pop();
+        m.push((Value::text("profile"), Value::text("lenient")));
         let bad = dcbor::encode(&Value::Map(m), Limits::CEILING).unwrap_or_default();
         assert_eq!(RealmSignin::decode(&bad), None);
     }
