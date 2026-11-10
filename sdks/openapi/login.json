@@ -678,7 +678,11 @@
           "action.open_wallet",
           "vc.present_failed",
           "consent.trust_mark",
-          "action.sign_in_with"
+          "action.sign_in_with",
+          "sso_setup.domains",
+          "sso_setup.scim",
+          "sso_setup.save",
+          "sso_setup.finish"
         ]
       },
       "Text": {

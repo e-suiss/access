@@ -3517,6 +3517,38 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "sso_setup-domains"
+text_id = "sso_setup.domains"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "sso_setup-scim"
+text_id = "sso_setup.scim"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "sso_setup-save"
+text_id = "sso_setup.save"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "sso_setup-finish"
+text_id = "sso_setup.finish"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "ldap_credentials-title"
 surface = "account"
 class = "settings"

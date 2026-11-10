@@ -402,11 +402,23 @@ pub enum TextId {
     /// P4: an enterprise upstream connection's button; never "Trusted provider" (TN-95, Ek B 4678).
     #[serde(rename = "action.sign_in_with")]
     SignInWith,
+    /// P5: the setup portal's domain step: publish the TXT record (TN-134).
+    #[serde(rename = "sso_setup.domains")]
+    SsoSetupDomains,
+    /// P5: the setup portal's provisioning step; the secret comes from an owner (TN-134, TN-95).
+    #[serde(rename = "sso_setup.scim")]
+    SsoSetupScim,
+    /// P5: saves the connection draft; an owner still has to turn it on (TN-134).
+    #[serde(rename = "sso_setup.save")]
+    SsoSetupSave,
+    /// P5: ends the setup and spends the link (TN-134).
+    #[serde(rename = "sso_setup.finish")]
+    SsoSetupFinish,
 }
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 132] = [
+    pub const ALL: [Self; 136] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -539,6 +551,10 @@ impl TextId {
         Self::VcPresentFailed,
         Self::ConsentTrustMark,
         Self::SignInWith,
+        Self::SsoSetupDomains,
+        Self::SsoSetupScim,
+        Self::SsoSetupSave,
+        Self::SsoSetupFinish,
     ];
 
     /// The stable id on the wire.
@@ -678,6 +694,10 @@ impl TextId {
             Self::VcPresentFailed => "vc.present_failed",
             Self::ConsentTrustMark => "consent.trust_mark",
             Self::SignInWith => "action.sign_in_with",
+            Self::SsoSetupDomains => "sso_setup.domains",
+            Self::SsoSetupScim => "sso_setup.scim",
+            Self::SsoSetupSave => "sso_setup.save",
+            Self::SsoSetupFinish => "sso_setup.finish",
         }
     }
 
@@ -877,6 +897,14 @@ impl TextId {
                 "{ $mark } says this about the app. Access shows it as extra information; it doesn't replace your answer."
             }
             Self::SignInWith => "Sign in with { $provider }",
+            Self::SsoSetupDomains => {
+                "Prove you own these domains: publish each TXT record shown here."
+            }
+            Self::SsoSetupScim => {
+                "To keep members in step, point your provider's provisioning at this address. An owner of the organization gives you its secret."
+            }
+            Self::SsoSetupSave => "Save the connection",
+            Self::SsoSetupFinish => "Finish setup",
         }
     }
 

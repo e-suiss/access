@@ -151,3 +151,7 @@ action-open_wallet = Cüzdanı aç
 vc-present_failed = Cüzdanının cevabı kullanılamadı. Yeniden dene.
 consent-trust_mark = { $mark } bu uygulama hakkında bunu söylüyor. Access bunu ek bilgi olarak gösterir; senin cevabının yerini tutmaz.
 action-sign_in_with = { $provider } ile giriş yap
+sso_setup-domains = Bu alan adlarının senin olduğunu kanıtla: burada gösterilen her TXT kaydını yayımla.
+sso_setup-scim = Üyeleri eşit tutmak için sağlayıcının hazırlama ayarını bu adrese yönlendir. Gizli anahtarı organizasyonun bir sahibi verir.
+sso_setup-save = Bağlantıyı kaydet
+sso_setup-finish = Kurulumu bitir
