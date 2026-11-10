@@ -4232,8 +4232,15 @@
         "operationId": "issueSshCertificate",
         "summary": "Issues an OpenSSH user certificate for an ephemeral Ed25519 key as a projection.issue: principals, constraints and lifetime from the ssh.login Grant, at most 12 hours for a person and 1 hour for an agent, never past the horizon (OP-156 m.3 (o)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -4247,8 +4254,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/ssh/krl": {
@@ -4256,14 +4262,20 @@
         "operationId": "getSshKrl",
         "summary": "The realm's OpenSSH key revocation list.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/ssh/ca.pub": {
@@ -4271,14 +4283,20 @@
         "operationId": "getSshCaKey",
         "summary": "The realm's SSH user CA public key in authorized_keys form, for TrustedUserCAKeys.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/linux/v1/nss": {

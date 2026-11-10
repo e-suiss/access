@@ -877,6 +877,62 @@
       "status": 409,
       "title": "Conflict",
       "description": "The message is past its expiry, so it is not resent; start the flow that sends it again (OP-156 m.3 (c))."
+    },
+    {
+      "code": "invalid-ssh-ca",
+      "type": "urn:suiss:access:problem:invalid-ssh-ca",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The SSH CA change is `{\"enabled\": true}` or `{\"enabled\": false}`; a rotation or a replacement has an empty body (OP-156 m.3 (o))."
+    },
+    {
+      "code": "invalid-ssh-host-group",
+      "type": "urn:suiss:access:problem:invalid-ssh-host-group",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The SSH server group needs a name of a lower-case letter followed by up to 62 lower-case letters, digits and hyphens, and a description of at most 256 characters (OP-156 m.3 (o))."
+    },
+    {
+      "code": "ssh-host-group-exists",
+      "type": "urn:suiss:access:problem:ssh-host-group-exists",
+      "status": 409,
+      "title": "Conflict",
+      "description": "An SSH server group with this name was registered before; a retired group's name is never reused (OP-73)."
+    },
+    {
+      "code": "ssh-ca-off",
+      "type": "urn:suiss:access:problem:ssh-ca-off",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The realm's SSH certificate authority is off, so no certificate is issued and no CA key is published; an administrator turns it on with idp.ssh.ca_enable (OP-156 m.3 (o))."
+    },
+    {
+      "code": "ssh-not-granted",
+      "type": "urn:suiss:access:problem:ssh-not-granted",
+      "status": 403,
+      "title": "Forbidden",
+      "description": "No live ssh.login Grant of the caller covers this server group with these principals, constraints and extensions, or the server group is not live; a certificate never carries more than its Grant (IDP-32)."
+    },
+    {
+      "code": "ssh-lifetime",
+      "type": "urn:suiss:access:problem:ssh-lifetime",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A person's certificate lives at most 12 hours and an agent's at most 1 hour, never past the Grant or the horizon (OP-156 m.3 (o))."
+    },
+    {
+      "code": "invalid-ssh-request",
+      "type": "urn:suiss:access:problem:invalid-ssh-request",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The request is a draft ask {host_group, public_key, principals?, lifetime_s?} or a signed draft {draft, ais}; the AIS is signed by the key the access token is bound to (OP-156 m.3 (o))."
+    },
+    {
+      "code": "ssh-denied",
+      "type": "urn:suiss:access:problem:ssh-denied",
+      "status": 403,
+      "title": "Forbidden",
+      "description": "The authority decision on the certificate's projection.issue is not ALLOW: it was denied or waits on an action such as a fresh sign-in or an approval; the decision is in `decision` (OP-156 m.3 (o))."
     }
   ]
 }
