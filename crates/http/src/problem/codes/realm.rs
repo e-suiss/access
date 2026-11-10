@@ -627,3 +627,61 @@ pub const ISSUER_FIXED: Code = code(
     "Conflict",
     "The realm's issuer moves to a custom domain only before its first client or service provider is registered, and only from a subdomain issuer (TN-16, OP-156 m.3 (i)).",
 );
+/// An SSH CA body that is not `{"enabled": true|false}`, or a rotation or replacement with a
+/// body (OP-156 m.3 (o)).
+pub const INVALID_SSH_CA: Code = code(
+    "invalid-ssh-ca",
+    400,
+    "Bad Request",
+    "The SSH CA change is `{\"enabled\": true}` or `{\"enabled\": false}`; a rotation or a replacement has an empty body (OP-156 m.3 (o)).",
+);
+/// An SSH server group that is not a name of lower-case letters, digits and hyphens with a
+/// short description (OP-156 m.3 (o)).
+pub const INVALID_SSH_HOST_GROUP: Code = code(
+    "invalid-ssh-host-group",
+    400,
+    "Bad Request",
+    "The SSH server group needs a name of a lower-case letter followed by up to 62 lower-case letters, digits and hyphens, and a description of at most 256 characters (OP-156 m.3 (o)).",
+);
+/// The SSH server group name was registered before; it is not reused (OP-73).
+pub const SSH_HOST_GROUP_EXISTS: Code = code(
+    "ssh-host-group-exists",
+    409,
+    "Conflict",
+    "An SSH server group with this name was registered before; a retired group's name is never reused (OP-73).",
+);
+/// The realm's SSH certificate authority is off: no key signs (OP-156 m.3 (o)).
+pub const SSH_CA_OFF: Code = code(
+    "ssh-ca-off",
+    409,
+    "Conflict",
+    "The realm's SSH certificate authority is off, so no certificate is issued and no CA key is published; an administrator turns it on with idp.ssh.ca_enable (OP-156 m.3 (o)).",
+);
+/// An SSH certificate request outside the holder's ssh.login Grant (IDP-32, G2).
+pub const SSH_NOT_GRANTED: Code = code(
+    "ssh-not-granted",
+    403,
+    "Forbidden",
+    "No live ssh.login Grant of the caller covers this server group with these principals, constraints and extensions, or the server group is not live; a certificate never carries more than its Grant (IDP-32).",
+);
+/// An SSH certificate lifetime past the holder's ceiling (OP-156 m.3 (o)).
+pub const SSH_LIFETIME: Code = code(
+    "ssh-lifetime",
+    400,
+    "Bad Request",
+    "A person's certificate lives at most 12 hours and an agent's at most 1 hour, never past the Grant or the horizon (OP-156 m.3 (o)).",
+);
+/// A malformed SSH certificate request (OP-156 m.3 (o)).
+pub const INVALID_SSH_REQUEST: Code = code(
+    "invalid-ssh-request",
+    400,
+    "Bad Request",
+    "The request is a draft ask {host_group, public_key, principals?, lifetime_s?} or a signed draft {draft, ais}; the AIS is signed by the key the access token is bound to (OP-156 m.3 (o)).",
+);
+/// The projection was decided and not allowed (OP-156 m.3 (o)).
+pub const SSH_DENIED: Code = code(
+    "ssh-denied",
+    403,
+    "Forbidden",
+    "The authority decision on the certificate's projection.issue is not ALLOW: it was denied or waits on an action such as a fresh sign-in or an approval; the decision is in `decision` (OP-156 m.3 (o)).",
+);

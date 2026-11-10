@@ -336,6 +336,7 @@ dependencies = [
  "access-identity-saml",
  "access-identity-scim",
  "access-identity-signer",
+ "access-identity-ssh",
  "access-identity-vault",
  "access-identity-webauthn",
  "access-identity-x509",
@@ -653,9 +654,11 @@ dependencies = [
 name = "access-identity-ssh"
 version = "0.4.0"
 dependencies = [
+ "access-internal-api",
  "aws-lc-rs",
  "esuiss-access-kernel",
  "esuiss-crypto",
+ "serde_json",
  "thiserror",
 ]
 

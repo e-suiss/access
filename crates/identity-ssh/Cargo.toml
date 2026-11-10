@@ -9,8 +9,10 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 suiss-crypto = { workspace = true, features = ["verify"] }
+serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }
 
 [dev-dependencies]

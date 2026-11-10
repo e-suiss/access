@@ -1444,8 +1444,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
     use ResourceKind::{
         Accounts, AgentSponsors, Agents, Analytics, Clients, CustomDomains, Deliveries, Groups,
         Hooks, Organizations, ProtectedResources, RelayUndelivered, SamlSps, Settings, Signals,
-        SocialProviders, SsoEnforcementPreviews, TrustAnchors, UpstreamIdps, VaultResources,
-        Webhooks,
+        SocialProviders, SshHostGroups, SsoEnforcementPreviews, TrustAnchors, UpstreamIdps,
+        VaultResources, Webhooks,
     };
     const CREATE: Shape = Shape::Write {
         patch: None,
@@ -1500,7 +1500,11 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "replaceSamlCertificate"
         | "retireGateway"
         // OP-156 m.3 (t)
-        | "putCoordinator" => (Settings, w(false)),
+        | "putCoordinator"
+        // OP-156 m.3 (o)
+        | "putSshCa"
+        | "rotateSshCa"
+        | "replaceSshCa" => (Settings, w(false)),
         "revokeAllAgentInstances" => (Agents, Shape::RevokeAll),
         // OP-154 m.3 (t)
         "listVaultResources" => (
@@ -1536,6 +1540,10 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "putSamlSp" => (SamlSps, w(true)),
         "retireSamlSp" => (SamlSps, w(false)),
         "registerGateway" => (Settings, CREATE),
+        // OP-156 m.3 (o)
+        "listSshHostGroups" => (SshHostGroups, Shape::List(&["name", "status"])),
+        "registerSshHostGroup" => (SshHostGroups, CREATE),
+        "retireSshHostGroup" => (SshHostGroups, w(false)),
         // OP-155 m.3 (i)
         "previewSsoEnforcement" => (SsoEnforcementPreviews, Shape::Get),
         "enforceOrganizationSso" | "liftOrganizationSso" | "createOrganizationSetupLink" => {
@@ -1752,6 +1760,9 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::SamlSpExists => &r::SAML_SP_EXISTS,
             Invalid::SamlCertificate => &r::INVALID_SAML_CERTIFICATE_POLICY,
             Invalid::Gateway => &r::INVALID_GATEWAY,
+            Invalid::SshCa => &r::INVALID_SSH_CA,
+            Invalid::SshHostGroup => &r::INVALID_SSH_HOST_GROUP,
+            Invalid::SshHostGroupExists => &r::SSH_HOST_GROUP_EXISTS,
             Invalid::NoClient
             | Invalid::NoAgent
             | Invalid::NoKey
@@ -1767,6 +1778,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             | Invalid::NoVaultResource
             | Invalid::NoTrustAnchor
             | Invalid::NoSamlSp
+            | Invalid::NoSshHostGroup
             | Invalid::NoCrossAppConnection
             | Invalid::NoScimClient
             | Invalid::NoGateway

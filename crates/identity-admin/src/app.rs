@@ -17,6 +17,7 @@ pub mod rest;
 pub mod saml;
 mod scim;
 mod signals;
+pub mod ssh;
 mod sso;
 pub mod transfers;
 pub mod vault;
@@ -483,6 +484,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Federation(f) => federation::current(t, f).await?,
             // OP-155 m.3 (a), (e)
             Change::Saml(s) => saml::current(t, s).await?,
+            // OP-156 m.3 (o)
+            Change::Ssh(s) => ssh::current(t, s).await?,
             // OP-154 m.3 (j)
             Change::DcrPolicy { policy, loosens } => {
                 let current =
@@ -1745,6 +1748,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 t.put_security_notices(bound, *on).await?;
                 true
             }
+            // OP-156 m.3 (o)
+            Change::Ssh(s) => ssh::write(t, bound, s).await?,
             Change::DeviceCode(on) => {
                 t.put_device_code(bound, *on).await?;
                 true

@@ -198,6 +198,16 @@ pub enum Op {
     RetireDomain,
     /// `bindDomainIssuer`: `idp.domain.issuer_bind` (reserved).
     BindDomainIssuer,
+    /// `putSshCa`: `idp.ssh.ca_enable` or `ca_disable` (OP-156 m.3 (o)).
+    PutSshCa,
+    /// `rotateSshCa`: `idp.ssh.ca_rotate`.
+    RotateSshCa,
+    /// `replaceSshCa`: `idp.ssh.ca_emergency` (reserved).
+    ReplaceSshCa,
+    /// `registerSshHostGroup`: `idp.ssh.host_group_register`.
+    RegisterSshHostGroup,
+    /// `retireSshHostGroup`: `idp.ssh.host_group_retire`, keyed by the group's name.
+    RetireSshHostGroup,
     /// `putDcrPolicy`: `idp.client.dcr_policy`, or `dcr_policy_tighten` (OP-154 m.3 (j)).
     PutDcrPolicy,
     /// `putFederation`: `idp.federation.enable` or `disable` (OP-155 m.3 (j)).
@@ -345,6 +355,11 @@ impl Op {
             "registerDomain" => Self::RegisterDomain,
             "retireDomain" => Self::RetireDomain,
             "bindDomainIssuer" => Self::BindDomainIssuer,
+            "putSshCa" => Self::PutSshCa,
+            "rotateSshCa" => Self::RotateSshCa,
+            "replaceSshCa" => Self::ReplaceSshCa,
+            "registerSshHostGroup" => Self::RegisterSshHostGroup,
+            "retireSshHostGroup" => Self::RetireSshHostGroup,
             "putDcrPolicy" => Self::PutDcrPolicy,
             "putFederation" => Self::PutFederation,
             "addTrustAnchor" => Self::AddTrustAnchor,
@@ -916,6 +931,30 @@ fn saml_change(
     }))
 }
 
+/// The `idp.ssh.*` change of an SSH CA or server group operation (OP-156 m.3 (o)), `None` for
+/// any other.
+fn ssh_change(
+    op: Op,
+    key: Option<&str>,
+    body: &Json,
+) -> Result<Option<access_identity_ssh::domain::change::SshChange>, Invalid> {
+    use access_identity_ssh::domain::change::SshChange;
+    let mut own = obj(body)?.clone();
+    own.remove(VALIDITY);
+    own.remove("ais");
+    let body = Json::Object(own);
+    let ca = |_| Invalid::SshCa;
+    let group = |_| Invalid::SshHostGroup;
+    Ok(Some(match op {
+        Op::PutSshCa => SshChange::put_ca(&body).map_err(ca)?,
+        Op::RotateSshCa => SshChange::rotate_ca(&body, false).map_err(ca)?,
+        Op::ReplaceSshCa => SshChange::rotate_ca(&body, true).map_err(ca)?,
+        Op::RegisterSshHostGroup => SshChange::register_group(&body).map_err(group)?,
+        Op::RetireSshHostGroup => SshChange::retire_group(key_of(key)?, &body).map_err(group)?,
+        _ => return Ok(None),
+    }))
+}
+
 /// A hook's or webhook's id from its external id; anything else is `missing`.
 fn extension_id(ids: &IdKey, prefix: &str, s: &str, missing: Invalid) -> Result<[u8; 16], Invalid> {
     ids.decode(prefix, s).map_err(|_| missing)
@@ -1026,6 +1065,9 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
     }
     if let Some(d) = domain_change(op, key, body)? {
         return Ok(Change::Domain(d));
+    }
+    if let Some(s) = ssh_change(op, key, body)? {
+        return Ok(Change::Ssh(s));
     }
     Ok(match op {
         Op::CreateOrganization => {
@@ -1470,7 +1512,12 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         | Op::RetireGateway
         | Op::RegisterDomain
         | Op::RetireDomain
-        | Op::BindDomainIssuer => return Err(Invalid::Body),
+        | Op::BindDomainIssuer
+        | Op::PutSshCa
+        | Op::RotateSshCa
+        | Op::ReplaceSshCa
+        | Op::RegisterSshHostGroup
+        | Op::RetireSshHostGroup => return Err(Invalid::Body),
         // OP-153 m.18 (e), m.25 (b)
         Op::BindAccount => {
             only(
@@ -2211,6 +2258,8 @@ pub enum Kind {
     VaultResources,
     /// The SAML service providers and WS-Federation relying parties by name (OP-155 m.3 (e)).
     SamlSps,
+    /// The SSH server groups by name (OP-156 m.3 (o)).
+    SshHostGroups,
     /// The protected resources by canonical URI (AG-8).
     ProtectedResources,
     /// The trust anchors by the base64url of their entity identifier (OP-155 m.3 (j)).
@@ -2657,6 +2706,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-156 m.3 (i)
             (Kind::CustomDomains, _) => Read {
                 items: super::custom_domains::list(t, key).await?,
+                last: None,
+            },
+            // OP-156 m.3 (o)
+            (Kind::SshHostGroups, _) => Read {
+                items: super::ssh::list(t, key).await?,
                 last: None,
             },
             (Kind::Socials, _) => {

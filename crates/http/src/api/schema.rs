@@ -689,7 +689,8 @@ fn body_of(row: &Route) -> &'static str {
             | ResourceKind::TrustAnchors
             | ResourceKind::RelayUndelivered
             | ResourceKind::SamlSps
-            | ResourceKind::CustomDomains => "Page",
+            | ResourceKind::CustomDomains
+            | ResourceKind::SshHostGroups => "Page",
             ResourceKind::SocialProviders => "SocialProvider",
             ResourceKind::Organizations => "Organization",
             ResourceKind::Agents => "Agent",

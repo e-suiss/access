@@ -498,6 +498,19 @@ pub enum Invalid {
     /// A SAML certificate policy with a phase shorter than 14 days, or an unknown algorithm.
     #[error("invalid SAML certificate policy")]
     SamlCertificate,
+    /// An SSH CA body that is not `{"enabled"}` or an empty rotation (OP-156 m.3 (o)).
+    #[error("invalid SSH CA change")]
+    SshCa,
+    /// An SSH server group that is not a name of lower-case letters, digits and `-` with a
+    /// short description.
+    #[error("invalid SSH server group")]
+    SshHostGroup,
+    /// No live SSH server group by that name.
+    #[error("no such SSH server group")]
+    NoSshHostGroup,
+    /// The name was registered before; it is not reused (OP-73).
+    #[error("SSH server group exists")]
+    SshHostGroupExists,
     /// A gateway registration that is not a gateway name, kind and certificate digest, or a
     /// retirement of a gateway that is not live.
     #[error("invalid gateway")]
@@ -581,6 +594,10 @@ impl Invalid {
             Self::NoSamlSp => "no-such-saml-sp",
             Self::SamlSpExists => "saml-sp-exists",
             Self::SamlCertificate => "invalid-saml-certificate-policy",
+            Self::SshCa => "invalid-ssh-ca",
+            Self::SshHostGroup => "invalid-ssh-host-group",
+            Self::NoSshHostGroup => "no-such-ssh-host-group",
+            Self::SshHostGroupExists => "ssh-host-group-exists",
             Self::Gateway => "invalid-gateway",
             Self::DisplayName => "invalid-display-name",
             Self::RedirectUri | Self::RedirectUris => "invalid-redirect-uri",
@@ -1707,6 +1724,14 @@ pub fn policy_value(p: &Policy) -> Value {
     ])
 }
 
+/// The refusal of an `idp.ssh.*` body (OP-156 m.3 (o)).
+const fn ssh_invalid(e: access_identity_ssh::domain::change::ChangeError) -> Invalid {
+    match e {
+        access_identity_ssh::domain::change::ChangeError::Ca => Invalid::SshCa,
+        access_identity_ssh::domain::change::ChangeError::HostGroup => Invalid::SshHostGroup,
+    }
+}
+
 /// One `idp.*` configuration change.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Change {
@@ -1831,6 +1856,8 @@ pub enum Change {
     Saml(saml::SamlChange),
     /// `idp.domain.*` (OP-156 m.3 (a), (i)).
     Domain(custom_domain::DomainChange),
+    /// `idp.ssh.*` (OP-156 m.3 (a), (o)).
+    Ssh(access_identity_ssh::domain::change::SshChange),
     /// `idp.client.resource_register` (AG-8, OP-154 m.3 (a)).
     ResourceRegister(ProtectedResource),
     /// `idp.client.cross_app_connection` (CT2, OP-154 m.3 (a), (n)).
@@ -2259,6 +2286,7 @@ impl Change {
             Self::Federation(f) => f.action(),
             Self::Saml(s) => s.action(),
             Self::Domain(d) => d.action(),
+            Self::Ssh(s) => s.action(),
             Self::ResourceRegister(_) => IdpAction::ClientResourceRegister,
             Self::CrossAppConnection(_) => IdpAction::ClientCrossAppConnection,
             Self::CrossAppConnectionRetire(_) => IdpAction::ClientCrossAppConnectionRetire,
@@ -2339,6 +2367,7 @@ impl Change {
             Self::Federation(f) => f.check().map_err(|_| Invalid::Federation),
             Self::Saml(s) => s.check(),
             Self::Domain(d) => d.check(),
+            Self::Ssh(s) => s.check().map_err(ssh_invalid),
             Self::ResourceRegister(r) => r.check(),
             Self::CrossAppConnection(c) => c.check(),
             Self::CrossAppConnectionRetire(name) => {
@@ -2508,6 +2537,7 @@ impl Change {
             Self::Federation(f) => f.body(),
             Self::Saml(s) => s.body(),
             Self::Domain(d) => d.body(),
+            Self::Ssh(s) => s.body(),
             Self::DeviceCode(on) | Self::Hrd(on) | Self::SecurityNotices(on) => {
                 Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))])
             }
@@ -2685,6 +2715,7 @@ impl Change {
             Self::Federation(f) => path.extend(f.path()),
             Self::Saml(s) => path.extend(s.path()),
             Self::Domain(d) => path.extend(d.path()),
+            Self::Ssh(s) => path.extend(s.path()),
             Self::ResourceRegister(r) => {
                 path.extend([String::from("resource"), r.resource.clone()]);
             }

@@ -483,6 +483,14 @@ pub const CODES: &[Code] = &[
     codes::realm::NOT_THE_HANDOVER,
     codes::realm::CONTENT_SHREDDED,
     codes::realm::MESSAGE_EXPIRED,
+    codes::realm::INVALID_SSH_CA,
+    codes::realm::INVALID_SSH_HOST_GROUP,
+    codes::realm::SSH_HOST_GROUP_EXISTS,
+    codes::realm::SSH_CA_OFF,
+    codes::realm::SSH_NOT_GRANTED,
+    codes::realm::SSH_LIFETIME,
+    codes::realm::INVALID_SSH_REQUEST,
+    codes::realm::SSH_DENIED,
 ];
 
 /// The type URI of `code`.

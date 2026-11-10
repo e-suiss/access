@@ -54,6 +54,7 @@ pub const fn id_member(kind: ResourceKind) -> &'static str {
         ResourceKind::Agents => "agent",
         ResourceKind::SamlSps => "name",
         ResourceKind::CustomDomains => "host",
+        ResourceKind::SamlSps | ResourceKind::SshHostGroups => "name",
         _ => "client_id",
     }
 }
