@@ -254,9 +254,9 @@ mod tests {
         assert!(!verify(Verify::P256Sha256, &p.point(), b"n", &s));
         assert_eq!(digest(Digest::Sha384, b"").len(), 48);
         assert!(same(b"ab", b"ab") && !same(b"ab", b"ac"));
-        let mut key = [0_u8; 32];
+        let mut key = <[u8; 32]>::default();
         fill(&mut key).unwrap();
-        let mut nonce = [0_u8; 12];
+        let mut nonce = <[u8; 12]>::default();
         fill(&mut nonce).unwrap();
         let mut data = b"x".to_vec();
         aes256_gcm_seal(&key, nonce, &mut data).unwrap();

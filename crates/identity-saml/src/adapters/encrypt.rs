@@ -79,9 +79,9 @@ fn cipher(value: &[u8]) -> El {
 
 impl<R: Random + ?Sized> Encrypter for XmlEnc<'_, R> {
     fn encrypt(&self, assertion: &El, cert: &[u8]) -> Result<El, SignError> {
-        let mut key = [0_u8; 32];
+        let mut key = <[u8; 32]>::default();
         self.0.fill(&mut key)?;
-        let mut nonce = [0_u8; 12];
+        let mut nonce = <[u8; 12]>::default();
         self.0.fill(&mut nonce)?;
         let wrapped = xmlsec::rsa_oaep_encrypt(&spki(cert)?, &key).map_err(|_| err("key wrap"))?;
         let mut data = assertion.canonical().into_bytes();

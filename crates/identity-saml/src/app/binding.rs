@@ -148,14 +148,15 @@ mod tests {
     // §10.6.1
     #[test]
     fn the_post_page_escapes_and_carries_the_nonce() {
+        let nonce: String = (0..5_u8).map(|i| char::from(b'a' + i)).collect();
         let p = post_page(
             "https://sp.test/acs?a=1&b=\"",
             &[("SAMLResponse", "PD94<>"), ("RelayState", "r\"")],
-            "n0nce",
+            &nonce,
         );
         assert!(p.contains("action=\"https://sp.test/acs?a=1&amp;b=&quot;\""));
         assert!(p.contains("value=\"PD94&lt;&gt;\""));
         assert!(p.contains("value=\"r&quot;\""));
-        assert!(p.contains("<script nonce=\"n0nce\">"));
+        assert!(p.contains(&format!("<script nonce=\"{nonce}\">")));
     }
 }

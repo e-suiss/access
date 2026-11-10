@@ -98,7 +98,8 @@ member: cn=Ada Lovelace,ou=people,$BASE
 uSNChanged: 103
 objectGUID:: ICEiIyQlJicoKSorLC0uLw==
 LDIF
-    docker cp access-openldap:/container/service/slapd/assets/certs/ca.crt "${RUNNER_TEMP:-/tmp}/access-ldap-ca.pem"
+    docker exec access-openldap cat /container/service/slapd/assets/certs/ca.crt >"${RUNNER_TEMP:-/tmp}/access-ldap-ca.pem"
+    test -s "${RUNNER_TEMP:-/tmp}/access-ldap-ca.pem"
     export_var ACCESS_TEST_LDAP_ADDR "127.0.0.1:6636"
     export_var ACCESS_TEST_LDAP_SERVER_NAME "ldap.corp.example"
     export_var ACCESS_TEST_LDAP_CA "${RUNNER_TEMP:-/tmp}/access-ldap-ca.pem"
