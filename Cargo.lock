@@ -247,7 +247,22 @@ dependencies = [
 name = "access-hr-connector"
 version = "0.4.0"
 dependencies = [
+ "access-hr-connector",
+ "axum",
+ "esuiss-access-kernel",
+ "esuiss-access-sdk",
+ "esuiss-crypto",
+ "httparse",
+ "rustls",
+ "serde",
  "serde_json",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tokio-rustls",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -997,6 +1012,7 @@ dependencies = [
  "access-edge-core",
  "access-executor",
  "access-experience",
+ "access-hr-connector",
  "access-http",
  "access-identity-account",
  "access-identity-admin",

@@ -59,6 +59,7 @@ mod extensions;
 mod federation;
 mod governance;
 mod iys;
+mod hr;
 mod orgs;
 mod platform;
 mod profiles;

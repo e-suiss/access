@@ -1183,6 +1183,7 @@ mod device;
 mod domains;
 mod export;
 mod gateways;
+mod hr;
 mod organizations;
 mod resources;
 mod saml;

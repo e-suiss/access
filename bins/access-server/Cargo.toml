@@ -66,6 +66,8 @@ access-identity-export = { workspace = true, features = ["testing"] }
 access-experience = { workspace = true }
 access-executor = { path = "../../services/executor", features = ["testing"] }
 access-vc-verifier = { path = "../../services/vc-verifier", features = ["testing"] }
+# OP-156 m.2 Q14
+access-hr-connector = { path = "../../services/hr-connector", features = ["testing"] }
 # OP-156 m.2 Q1
 access-product-twin = { path = "../../services/product-twin" }
 # OP-156 m.3 (p)
