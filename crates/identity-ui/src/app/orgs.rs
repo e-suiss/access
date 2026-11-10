@@ -350,9 +350,19 @@ where
             Ok(t) => t,
             Err(r) => return r,
         };
+        // TN-98, OP-155 m.3 (h)
+        match super::hrd::realm_on(&mut t).await {
+            Ok(true) => {}
+            Ok(false) => return Reply::problem(NO_ORGANIZATION),
+            Err(e) => return store_failed(&e),
+        }
         let org = match t.org_by_party(party).await {
             Ok(Some(o)) if !o.ended && o.hrd => o,
             Ok(_) => return Reply::problem(NO_ORGANIZATION),
+            Err(e) => return store_failed(&e),
+        };
+        let target = match super::hrd::target(&mut t, org.party).await {
+            Ok(c) => c,
             Err(e) => return store_failed(&e),
         };
         let domains = match t.hrd_domains(org.id).await {
@@ -374,6 +384,11 @@ where
                 },
                 "domains": domains,
                 "confirm": true,
+                "connection": target.map(|c| json!({
+                    "name": c.connection,
+                    "display_name": c.display_name,
+                    "start": format!("/v1/login/upstream/{}", c.connection),
+                })),
             }),
         )
     }

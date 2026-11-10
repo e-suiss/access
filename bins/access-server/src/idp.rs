@@ -272,6 +272,66 @@ where
     }
 }
 
+// TN-95, INV-17, SEC9, OP-155 m.3 (h)
+impl<K, B, S, C> access_identity_federation::ports::UpstreamTrust for Plane<K, B, S, C>
+where
+    K: Keys + Send + Sync + 'static,
+    B: Binding + Clone + Send + Sync + 'static,
+    S: Salts + Clone + Send + Sync + 'static,
+    C: Clock + Clone + Send + Sync + 'static,
+{
+    fn accepted(
+        &self,
+        domain: [u8; 32],
+        issuer: [u8; 16],
+    ) -> access_identity_federation::ports::Trusted<'_> {
+        Box::pin(async move {
+            let class = access_kernel::claim::body::Class::IdentityBinding(
+                access_kernel::claim::body::BindingKind::Person,
+            )
+            .name();
+            self.domains
+                .issuer_accepted(
+                    Digest(domain),
+                    Id(issuer),
+                    (access_kernel::claim::ACTOR_BINDING, &class),
+                )
+                .await
+                .map_err(|e| {
+                    tracing::warn!(event = "login.upstream.trust.unavailable", outcome = "error", error = %e, "upstream acceptance unavailable");
+                    access_identity_federation::ports::Unreachable
+                })
+        })
+    }
+}
+
+/// The realm's key signs `private_key_jwt` client assertions to upstream connections (RFC 7523,
+/// OP-155 m.3 (h)); the upstream reads the realm's published JWKS.
+pub(crate) struct RealmAssertions(pub(crate) SignerKeys);
+
+impl access_identity_federation::ports::ClientAssertion for RealmAssertions {
+    fn sign(
+        &self,
+        realm: [u8; 16],
+        alg: &'static str,
+        claims: Vec<u8>,
+        at_ms: u64,
+    ) -> access_identity_federation::ports::Signed<'_> {
+        use access_identity_oauth::ports::oauth::TokenSigner as _;
+        Box::pin(async move {
+            let realm = RealmId::from_bytes(realm);
+            let signed = if alg == "RS256" {
+                self.0.sign_rs256(realm, "JWT", &claims, at_ms).await
+            } else {
+                self.0
+                    .sign(realm, JwsAlg::Es256, "JWT", &claims, at_ms)
+                    .await
+            };
+            signed.map_err(|_| access_identity_federation::ports::Unreachable)
+        })
+    }
+}
+
 // §11.6 rule 1, P58, EI-18, OP-154 m.3 (k)
 impl<K, B, S, C> access_identity_oauth::ports::oauth::GrantStanding for Plane<K, B, S, C>
 where

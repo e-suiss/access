@@ -898,6 +898,7 @@ where
         + access_identity_vault::ports::Exercises
         + access_identity_ui::ports::PartyKeys
         + access_identity_ui::ports::WorkloadInstances
+        + access_identity_federation::ports::UpstreamTrust
         + Clone
         + 'static,
     Q: access_identity_ui::ports::ApprovalClaims + 'static,
@@ -941,13 +942,29 @@ where
         access_identity_ui::app::workloads::AttestRoots::embedded(),
     );
     // IDP-31, OP-153 m.3 (l)
+    let social_services = Arc::new(social(config, outbound)?);
     let social = access_http::login::social_router(
         RealmDiscovery::new(
             PgDirectory::new(router.clone()),
             SignerKeys::new(identity.signer.clone()),
         ),
         hosted.clone(),
-        social(config, outbound)?,
+        social_services.clone(),
+    );
+    // OP-155 m.3 (h)
+    let upstream = access_http::login::upstream_router(
+        RealmDiscovery::new(
+            PgDirectory::new(router.clone()),
+            SignerKeys::new(identity.signer.clone()),
+        ),
+        hosted.clone(),
+        social_services,
+        access_identity_ui::app::upstream::Upstreams {
+            trust: Arc::new(plane.clone()),
+            assertions: Arc::new(idp::RealmAssertions(SignerKeys::new(
+                identity.signer.clone(),
+            ))),
+        },
     );
     // OP-155 m.3 (c), (e), (f)
     let saml = access_http::login::saml_router::<_, _, _, _, _, saml::Saml>(
@@ -974,6 +991,7 @@ where
     );
     let me = me
         .merge(social)
+        .merge(upstream)
         .merge(vault)
         .merge(did)
         .merge(workloads)

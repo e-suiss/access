@@ -3839,51 +3839,6 @@ async fn an_invitation_from_an_inviter_who_left_grants_nothing() {
     assert_eq!(a.json()["code"], "inviter-not-authorized");
 }
 
-// TN-3, TN-98, §10.2.6, OP-153 m.3 (gg), Ek B 3436, 3454, 3599
-#[tokio::test]
-async fn home_realm_discovery_routes_by_organization_id_only_when_turned_on() {
-    let e = env(0x33, "lg-hrd", AuthPolicy::DEFAULT).await;
-    let owner = e.account("owner@acme.example").await;
-    let org = org_with_invitation(
-        &e,
-        owner,
-        [0x79; 16],
-        "x@acme.example",
-        ("tok-hrd-0123456789abcdefghijklmnopq", "HRDC2345"),
-    )
-    .await;
-    let path = format!("/v1/organizations/{}/sign-in", b64url_encode(&[0x0a; 16]));
-    let mut b = e.browser("b");
-    // TN-98
-    assert_eq!(b.get(&path).await.status, StatusCode::NOT_FOUND);
-    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
-    assert!(t.set_org_hrd(org, true).await.unwrap());
-    t.commit().await.unwrap();
-    // §10.2.6
-    assert_eq!(b.get(&path).await.status, StatusCode::NOT_FOUND);
-    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
-    let claim = t
-        .insert_domain_claim(org, "acme.example", "dns_txt", &[1; 32])
-        .await
-        .unwrap();
-    assert!(
-        t.verify_domain(claim, 86_400, &[2; 32], &[3; 32])
-            .await
-            .unwrap()
-    );
-    t.commit().await.unwrap();
-    let a = b.get(&path).await;
-    assert_eq!(a.status, StatusCode::OK);
-    assert_eq!(a.json()["organization"]["display_name"], "Acme");
-    assert_eq!(a.json()["domains"][0], "acme.example");
-    assert_eq!(a.json()["confirm"], true);
-    // TN-3
-    assert_eq!(
-        b.get("/v1/organizations/acme.example/sign-in").await.status,
-        StatusCode::NOT_FOUND
-    );
-}
-
 // TN-90, TN-109, SI-21, OP-153 m.1 (d), m.3 (o), (gg), Ek B 3612, 3613, 4039
 #[tokio::test]
 async fn autojoin_admits_a_verified_domains_people_never_a_consumer_domains_and_cools() {

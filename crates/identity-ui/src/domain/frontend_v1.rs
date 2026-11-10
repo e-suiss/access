@@ -1005,14 +1005,14 @@ pub const ROUTES: &[Route] = &[
         "wsfedMetadata",
         "The WS-Federation metadata document.",
     ),
-    planned(
+    live(
         Owner::P4,
         Verb::Get,
         "/v1/login/upstream/{connection}",
         "startUpstreamSignIn",
         "Starts sign-in at an enterprise upstream identity provider (OIDC or SAML); home realm discovery confirms the organization first when it is on (OP-155 m.3 (h)).",
     ),
-    planned(
+    live(
         Owner::P4,
         Verb::Get,
         "/v1/login/upstream/{connection}/callback",

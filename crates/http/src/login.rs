@@ -14,6 +14,7 @@ mod me;
 mod recovery;
 mod saml;
 mod social;
+mod upstream;
 mod vault;
 pub(crate) mod web;
 mod workloads;
@@ -36,6 +37,7 @@ pub use ldap::router as ldap_credentials_router;
 pub use me::router as me_router;
 pub use saml::{Opening as SamlOpening, Outcome as SamlOutcome, SamlFront, router as saml_router};
 pub use social::router as social_router;
+pub use upstream::router as upstream_router;
 pub use vault::router as vault_router;
 pub use workloads::router as workloads_router;
 
