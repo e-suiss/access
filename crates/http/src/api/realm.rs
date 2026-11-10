@@ -1462,8 +1462,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
     use ResourceKind::{
         Accounts, AgentSponsors, Agents, Analytics, Clients, CustomDomains, Deliveries, Groups,
         Hooks, HrConnectors, HrSources, LinuxHosts, Organizations, ProtectedResources, Proxies,
-        RelayUndelivered, SamlSps, Settings, SignalSources, Signals, SocialProviders, SshHostGroups,
-        SsoEnforcementPreviews, TrustAnchors, UpstreamIdps, VaultResources, Webhooks,
+        RelayUndelivered, SamlSps, Settings, SignalSources, Signals, SocialProviders,
+        SshHostGroups, SsoEnforcementPreviews, TrustAnchors, UpstreamIdps, VaultResources,
+        Webhooks,
     };
     const CREATE: Shape = Shape::Write {
         patch: None,
