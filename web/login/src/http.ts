@@ -65,19 +65,21 @@ export function follow(target: string): void {
   if (url.protocol === "https:" || url.protocol === "http:") window.location.assign(url.href);
 }
 
-/** The authorization request that sent the browser to this page, when `return_to` names this
- * realm's own `/authorize` on this origin (TN-104, X41); otherwise `null`. */
+/** The request that sent the browser to this page, when `return_to` names this realm's own
+ * `/authorize` (TN-104, X41), or its SAML or WS-Federation flow (`/saml/sso?flow=…`,
+ * `/wsfed?flow=…`, OP-155 m.3 (c)), on this origin; otherwise `null`. */
 export function returnTo(): string | null {
   const raw = new URL(window.location.href).searchParams.get("return_to");
   if (raw === null) return null;
   try {
     const url = new URL(raw, window.location.origin);
     const base = window.location.pathname.replace(/\/login(?:\/.*)?$/, "");
+    const flow = /^\?flow=[A-Za-z0-9_-]{1,64}$/.test(url.search);
     const ok =
       url.origin === window.location.origin &&
-      url.pathname === `${base}/authorize` &&
-      url.search.length > 1 &&
-      url.hash === "";
+      url.hash === "" &&
+      ((url.pathname === `${base}/authorize` && url.search.length > 1) ||
+        ((url.pathname === `${base}/saml/sso` || url.pathname === `${base}/wsfed`) && flow));
     return ok ? url.href : null;
   } catch {
     return null;

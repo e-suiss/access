@@ -140,3 +140,30 @@ test("a completed sign-in returns to the authorization request that sent it, and
     mock.submissions.length = 0;
   }
 });
+
+// OP-155 m.3 (c), IDI-7
+test("a completed sign-in continues the SAML or WS-Federation flow that sent it, and nothing else", async ({
+  page,
+  mock,
+}) => {
+  await page.route("**/saml/sso?**", (r) => r.fulfill({ status: 200, body: "saml" }));
+  await page.route("**/wsfed?**", (r) => r.fulfill({ status: 200, body: "wsfed" }));
+  for (const [returnTo, back] of [
+    ["/saml/sso?flow=AbC_-9", /\/saml\/sso\?flow=AbC_-9$/],
+    ["/wsfed?flow=Xy1", /\/wsfed\?flow=Xy1$/],
+    ["/saml/sso?SAMLRequest=x", null],
+    ["/saml/sso?flow=a&RelayState=b", null],
+    ["https://evil.example/saml/sso?flow=a", null],
+  ] as const) {
+    await page.goto(`/login?return_to=${encodeURIComponent(returnTo)}`);
+    await page.getByLabel("Email or username").fill("ada@example.org");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByLabel("Password").fill(password);
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await page.getByLabel("Code from your authenticator app").fill(totp);
+    await page.getByRole("button", { name: "Verify" }).click();
+    if (back) await expect(page).toHaveURL(back);
+    else await expect(page.getByRole("heading", { name: "Signed in" })).toBeVisible();
+    mock.submissions.length = 0;
+  }
+});
