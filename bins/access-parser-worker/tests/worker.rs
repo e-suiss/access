@@ -193,4 +193,43 @@ mod sandboxed {
             .unwrap();
         assert!(matches!(ok, Reply::Ok { .. }), "{ok:?}");
     }
+
+    fn saml(message: &[u8]) -> Vec<u8> {
+        access_edge_core::saml::Context {
+            inflate: false,
+            certs: Vec::new(),
+            require_signature: false,
+        }
+        .encode(message)
+        .unwrap()
+    }
+
+    // RUSTSEC-2024-0437, IDI-8, OP-155 m.3 (c)
+    #[tokio::test]
+    #[ignore = "needs root for the Linux lockdown; run by `just test-parser-worker` in the CI sandbox job"]
+    async fn rustsec_2024_0437_and_idi_8_the_real_worker_refuses_deep_and_duplicate_documents() {
+        let s = supervisor("saml", 2).await;
+        let client = ParserClient::new(s.socket.clone(), Some(0));
+        let mut deep = "<a>".repeat(100_000);
+        deep.push_str(&"</a>".repeat(100_000));
+        assert_eq!(
+            client
+                .parse(Op::SamlRequest, saml(deep.as_bytes()))
+                .await
+                .unwrap(),
+            Reply::Refused(String::from("xml-depth"))
+        );
+        let twin = br#"<samlp:AuthnRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" ID="_a" IssueInstant="2026-11-10T10:00:00Z" Version="2.0"><samlp:Extensions ID="_a"></samlp:Extensions></samlp:AuthnRequest>"#;
+        assert_eq!(
+            client.parse(Op::SamlRequest, saml(twin)).await.unwrap(),
+            Reply::Refused(String::from("xml-duplicate-id"))
+        );
+        let ok = br#"<samlp:AuthnRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" ID="_a" IssueInstant="2026-11-10T10:00:00Z" Version="2.0"><saml:Issuer xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">https://sp.test</saml:Issuer></samlp:AuthnRequest>"#;
+        let reply = client.parse(Op::SamlRequest, saml(ok)).await.unwrap();
+        let Reply::Ok { output, .. } = reply else {
+            panic!("{reply:?}");
+        };
+        let facts = access_edge_core::saml::Facts::decode(&output).unwrap();
+        assert_eq!(facts.issuer, "https://sp.test");
+    }
 }
