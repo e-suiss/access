@@ -169,7 +169,7 @@ but no producer yet; a webhook or stream that names them is refused (`invalid-we
 same way until the SCIM server and SSO enforcement raise them.
 
 `ssh.certificate_issued` is raised by the realm's SSH certificate authority for each
-certificate it issues. `hr.record_due`, `proxy.registered` and `export.sink_failed` are
-catalogued and refused the same way until the HR job, proxy registration and the export sinks
-raise them. `preference.changed` may carry an `iys` member naming
+certificate it issues, and `export.sink_failed` by the export pass once a sink has refused three
+batches in a row. `hr.record_due` and `proxy.registered` are catalogued and refused the same
+way until the HR job and proxy registration raise them. `preference.changed` may carry an `iys` member naming
 the commercial message channels a change touched, for realms that record consent with İYS.

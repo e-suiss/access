@@ -82,15 +82,11 @@ pub fn urn(name: &str) -> String {
 /// the preference center (IDP-37), organizations and their memberships `idp.org.*` and
 /// invitation acceptance (OP-153 m.4), agent suspension and sponsor assignment the agent
 /// registry's `idp.agent.*` (OP-154 m.3 (e), SI-21), the SCIM events the SCIM server (OP-155 m.3
-/// (g)), the SSH certificate authority `ssh.certificate_issued` (OP-156 m.3 (o)).
-/// `org.sso_enforced` waits for `idp.org.sso_enforce` (OP-155 m.3 (i)); the other Stage 11 events
-/// wait for the HR job, `idp.proxy.register` and the export sinks (OP-156 m.3 (l), (q), (s)).
-pub const UNPRODUCED: [&str; 4] = [
-    "org.sso_enforced",
-    "hr.record_due",
-    "proxy.registered",
-    "export.sink_failed",
-];
+/// (g)), the SSH certificate authority `ssh.certificate_issued` (OP-156 m.3 (o)), the export
+/// pass `export.sink_failed` (OP-156 m.3 (s)). `org.sso_enforced` waits for
+/// `idp.org.sso_enforce` (OP-155 m.3 (i)); the other Stage 11 events wait for the HR job and
+/// `idp.proxy.register` (OP-156 m.3 (l), (q)).
+pub const UNPRODUCED: [&str; 3] = ["org.sso_enforced", "hr.record_due", "proxy.registered"];
 
 /// Whether a webhook or stream may subscribe to `name`: a catalog event with a producer.
 #[must_use]

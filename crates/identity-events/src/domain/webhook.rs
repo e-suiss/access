@@ -306,10 +306,12 @@ mod tests {
         assert!(event_names(&[String::from("org.sso_enforced")]).is_err());
         // OP-156 m.3 (o)
         assert!(event_names(&[String::from("ssh.certificate_issued")]).is_ok());
-        // OP-156 m.3 (l), (q), (s)
-        for name in ["hr.record_due", "proxy.registered", "export.sink_failed"] {
+        // OP-156 m.3 (l), (q)
+        for name in ["hr.record_due", "proxy.registered"] {
             assert!(event_names(&[String::from(name)]).is_err(), "{name}");
         }
+        // OP-156 m.3 (s)
+        assert!(event_names(&[String::from("export.sink_failed")]).is_ok());
     }
 
     // EI-25
