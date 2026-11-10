@@ -1516,22 +1516,8 @@ impl Background {
             keks.clone(),
             &consumers,
         );
-        // E42, OP-156 m.3 (c), Ek B 5401
-        let relay = relay_prepared.map(|p| -> Result<relay::Running, String> {
-            Ok(relay::start(
-                p,
-                (
-                    pools.outbox_reader.clone(),
-                    pools.app.clone(),
-                    pools.router.clone(),
-                ),
-                keks.clone(),
-                id_key,
-                format!("relay/{}", holder()?),
-                &consumers,
-            ))
-        });
-        let relay = relay.transpose()?;
+        // E42, OP-156 m.3 (c)
+        let relay = relay::spawn(relay_prepared, pools, &keks, id_key, &consumers)?;
         let (stop, stopped) = tokio::sync::watch::channel(false);
         let ended = consumers.clone();
         let delivering = tokio::spawn(async move {

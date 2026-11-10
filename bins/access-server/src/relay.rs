@@ -224,6 +224,35 @@ pub(crate) fn start(
     }
 }
 
+/// Starts the couriers of `prepared`, when there is one, under a fresh holder name.
+///
+/// # Errors
+/// No randomness for the holder name.
+pub(crate) fn spawn(
+    prepared: Option<Prepared>,
+    pools: &crate::Pools,
+    keks: &RealmKeks,
+    ids: [u8; 32],
+    alive: &ReadyFlag,
+) -> Result<Option<Running>, String> {
+    prepared
+        .map(|p| {
+            Ok(start(
+                p,
+                (
+                    pools.outbox_reader.clone(),
+                    pools.app.clone(),
+                    pools.router.clone(),
+                ),
+                keks.clone(),
+                ids,
+                format!("relay/{}", crate::holder()?),
+                alive,
+            ))
+        })
+        .transpose()
+}
+
 /// `GET /access/v1/relay-status` over the courier's store (OP-156 m.3 (c), §8.13).
 pub(crate) fn routes(reader: Pool, app: Pool) -> axum::Router {
     axum::Router::new()
