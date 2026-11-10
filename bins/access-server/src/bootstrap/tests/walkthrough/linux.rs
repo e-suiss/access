@@ -414,28 +414,47 @@ async fn installed(d: &Desk, cookie: &str) {
     let (ok, text) = run(&["getent", "group", "prod-web"]).await;
     assert!(ok && text.trim_end().ends_with(":ayse"), "{text}");
     let mut child = std::process::Command::new("stdbuf")
-        .args(["-oL", "pamtester", "access-test", "ayse", "authenticate"])
+        .args([
+            "-oL",
+            "pamtester",
+            "-v",
+            "access-test",
+            "ayse",
+            "authenticate",
+        ])
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
     let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+    let (code_tx, code_rx) = std::sync::mpsc::channel::<String>();
+    let seen = std::thread::spawn(move || {
+        let mut all = Vec::new();
+        for line in std::io::BufReader::new(stdout).lines() {
+            let line = line.unwrap_or_default();
+            if let Some((_, rest)) = line.split_once("enter ") {
+                let _ = code_tx.send(String::from(rest.trim_end_matches('.').trim()));
+            }
+            all.push(line);
+        }
+        all.join("\n")
+    });
+    let errors = std::thread::spawn(move || {
+        let mut all = String::new();
+        let _ = std::io::Read::read_to_string(&mut std::io::BufReader::new(stderr), &mut all);
+        all
+    });
     let code = tokio::time::timeout(
         std::time::Duration::from_secs(60),
-        tokio::task::spawn_blocking(move || {
-            for line in std::io::BufReader::new(stdout).lines() {
-                let line = line.unwrap();
-                if let Some((_, rest)) = line.split_once("enter ") {
-                    return String::from(rest.trim_end_matches('.').trim());
-                }
-            }
-            panic!("no device code shown");
-        }),
+        tokio::task::spawn_blocking(move || code_rx.recv().ok()),
     )
     .await
     .unwrap()
     .unwrap();
-    d.approve_device(cookie, &code).await;
+    if let Some(code) = &code {
+        d.approve_device(cookie, code).await;
+    }
     let status = tokio::time::timeout(
         std::time::Duration::from_secs(60),
         tokio::task::spawn_blocking(move || child.wait().unwrap()),
@@ -443,5 +462,10 @@ async fn installed(d: &Desk, cookie: &str) {
     .await
     .unwrap()
     .unwrap();
-    assert!(status.success());
+    let out = seen.join().unwrap();
+    let err = errors.join().unwrap();
+    assert!(
+        code.is_some() && status.success(),
+        "pamtester {status}\nstdout:\n{out}\nstderr:\n{err}"
+    );
 }
