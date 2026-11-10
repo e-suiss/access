@@ -46,6 +46,7 @@ use access_identity_oauth::ports::oauth::{
 };
 use access_identity_oauth::ports::profile::{
     CertificateNames, CertificateRefused, ClientCertificates, JwtSecrets, RequestKeys,
+    SamlAssertions, SamlRefused, SamlSubject,
 };
 use access_identity_session::domain::assurance::{Factor, vector};
 use access_identity_session::domain::session::cookie_digest;
@@ -174,6 +175,30 @@ impl JwtSecrets for ScriptedSecrets {
             .cloned()
             .map(zeroize::Zeroizing::new);
         Box::pin(async move { Ok(s) })
+    }
+}
+
+/// SAML assertions as the parser worker and the SAML verifier would answer them (P1, P2).
+#[derive(Clone, Default)]
+pub struct ScriptedSaml(pub Arc<Mutex<HashMap<String, Result<SamlSubject, SamlRefused>>>>);
+
+impl SamlAssertions for ScriptedSaml {
+    fn verify<'a>(
+        &'a self,
+        _: RealmId,
+        _: &'a str,
+        assertion: &'a str,
+        _: &'a str,
+        _: u64,
+    ) -> Held<'a, Result<SamlSubject, SamlRefused>> {
+        let answer = self
+            .0
+            .lock()
+            .unwrap()
+            .get(assertion)
+            .cloned()
+            .unwrap_or(Err(SamlRefused::Malformed));
+        Box::pin(async move { Ok(answer) })
     }
 }
 
@@ -383,6 +408,7 @@ pub struct TestEnv {
     pub certs: ScriptedCerts,
     pub secrets: ScriptedSecrets,
     pub request_keys: ScriptedRequestKeys,
+    pub saml: ScriptedSaml,
 }
 
 /// Live Instance keys by (domain, kid).
@@ -451,6 +477,7 @@ impl Clone for TestEnv {
             certs: self.certs.clone(),
             secrets: self.secrets.clone(),
             request_keys: self.request_keys.clone(),
+            saml: self.saml.clone(),
         }
     }
 }
@@ -527,6 +554,9 @@ impl Env for TestEnv {
     }
     fn request_keys(&self) -> &(dyn RequestKeys + Sync) {
         &self.request_keys
+    }
+    fn saml_assertions(&self) -> &(dyn SamlAssertions + Sync) {
+        &self.saml
     }
 }
 
@@ -889,6 +919,7 @@ impl Cluster {
             certs: ScriptedCerts::default(),
             secrets: ScriptedSecrets::default(),
             request_keys: ScriptedRequestKeys::default(),
+            saml: ScriptedSaml::default(),
         };
         let oauth = OAuth::new(env);
         let mut realms = Vec::new();

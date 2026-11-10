@@ -11,6 +11,7 @@
 
 mod mtls;
 mod presentation;
+pub(crate) mod saml_bearer;
 mod secret;
 mod spiffe;
 

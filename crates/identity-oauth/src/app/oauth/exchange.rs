@@ -139,11 +139,25 @@ impl<E: Env> OAuth<E> {
         client: &Client,
         kind: SubjectKind,
         token: &str,
+        saml2: bool,
         now: u64,
     ) -> Result<Result<Subject, Reply>, Unavailable> {
         let refused = || Ok(Err(invalid_grant("the subject token is not valid")));
         match kind {
-            SubjectKind::Saml => Ok(Err(invalid_request("SAML subject tokens are not read yet"))),
+            // OP-154 m.3 (m), OP-155 m.3 (k)
+            SubjectKind::Saml if !saml2 => Ok(Err(invalid_request("SAML 1.1 is not read"))),
+            SubjectKind::Saml => {
+                use super::client_auth::saml_bearer::SamlRefusal;
+                match self.saml_subject(realm, client, token, now).await? {
+                    Ok(_) => Ok(Ok(Subject::Identity)),
+                    Err(SamlRefusal::NotAllowed) => Ok(Err(Reply::oauth_error(
+                        400,
+                        "unauthorized_client",
+                        "this client may not exchange SAML assertions",
+                    ))),
+                    Err(SamlRefusal::Invalid) => refused(),
+                }
+            }
             SubjectKind::Access if looks_authority(token) => {
                 let Some(domain) = self.domain_of(realm).await? else {
                     return refused();
@@ -218,6 +232,8 @@ impl<E: Env> OAuth<E> {
     ) -> Result<Reply, Unavailable> {
         if params.get("grant_type") == Some(crate::domain::metadata::TOKEN_EXCHANGE_GRANT) {
             self.agent_exchange(realm, client, params, jkt, now).await
+        } else if params.get("grant_type") == Some(crate::domain::metadata::SAML2_BEARER_GRANT) {
+            self.saml_bearer(realm, client, params, jkt, now).await
         } else {
             self.jwt_bearer(realm, client, params, jkt, now).await
         }
@@ -245,7 +261,8 @@ impl<E: Env> OAuth<E> {
         let Some(asked) = exchange::requested(params.get("requested_token_type")) else {
             return Ok(invalid_request("requested_token_type is not supported"));
         };
-        let subject = match self.subject(realm, client, kind, token, now).await? {
+        let saml2 = params.get("subject_token_type") == Some(exchange::SAML2);
+        let subject = match self.subject(realm, client, kind, token, saml2, now).await? {
             Ok(s) => s,
             Err(r) => return Ok(r),
         };

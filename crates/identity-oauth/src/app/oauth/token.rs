@@ -115,6 +115,8 @@ fn admitted(grant_type: Option<&str>) -> Result<bool, Reply> {
     let agent = match grant_type {
         Some(TOKEN_EXCHANGE_GRANT) => SERVED.feature(Feature::TokenExchange),
         Some(JWT_BEARER_GRANT) => SERVED.feature(Feature::JwtBearer),
+        // OP-155 m.3 (k)
+        Some(crate::domain::metadata::SAML2_BEARER_GRANT) => SERVED.feature(Feature::SamlBearer),
         _ => false,
     };
     // OP-154 m.3 (p)

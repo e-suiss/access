@@ -81,6 +81,9 @@ pub enum Feature {
     /// Mutual TLS client authentication and certificate-bound tokens (RFC 8705, OP-155 m.3
     /// (k)).
     Mtls,
+    /// The SAML 2.0 bearer grant and SAML 2.0 subject tokens, per-client opt-ins that are not
+    /// advertised (RFC 7522, OP-155 m.3 (k)).
+    SamlBearer,
 }
 
 /// Grant type of RFC 8628.
@@ -89,6 +92,8 @@ pub const DEVICE_CODE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_cod
 pub const TOKEN_EXCHANGE_GRANT: &str = "urn:ietf:params:oauth:grant-type:token-exchange";
 /// Grant type of RFC 7523.
 pub const JWT_BEARER_GRANT: &str = "urn:ietf:params:oauth:grant-type:jwt-bearer";
+/// Grant type of RFC 7522.
+pub const SAML2_BEARER_GRANT: &str = "urn:ietf:params:oauth:grant-type:saml2-bearer";
 
 /// What the realm's authorization server serves; the metadata declares nothing else (§10.4.6).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -138,6 +143,7 @@ pub const SERVED: Served = Served {
         Feature::Jarm,
         Feature::Jwe,
         Feature::Mtls,
+        Feature::SamlBearer,
     ],
 };
 

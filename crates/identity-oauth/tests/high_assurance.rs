@@ -1028,3 +1028,105 @@ async fn userinfo_can_be_signed_by_the_realm_key() {
     assert_eq!(info["aud"], a.f.public.as_str());
     assert!(info["sub"].is_string());
 }
+
+// RFC 7522, OP-154 m.3 (m), OP-155 m.3 (k), Ek B 4703: a SAML 2.0 assertion is taken only from
+// the accepted upstream a client opted in to, verified in the worker, once; a broken signature
+// is refused, and an assertion is never a grant
+#[tokio::test]
+async fn saml_assertions_are_one_clients_claim_input() {
+    use access_identity_oauth::ports::profile::{SamlRefused, SamlSubject};
+    let c = Cluster::new(&["ha-saml"]).await;
+    let a = c.at(0);
+    let subject = SamlSubject {
+        issuer: String::from("https://idp.corp.example"),
+        name_id: String::from("ann"),
+        id: String::from("_a1"),
+        not_on_or_after_ms: now() + 60_000,
+        subject: None,
+    };
+    {
+        let mut m = a.c.oauth.env().saml.0.lock().unwrap();
+        m.insert(String::from("good"), Ok(subject.clone()));
+        m.insert(
+            String::from("good-2"),
+            Ok(SamlSubject {
+                id: String::from("_a2"),
+                ..subject.clone()
+            }),
+        );
+        m.insert(String::from("broken"), Err(SamlRefused::Signature));
+    }
+    let bearer = |assertion: &'static str| {
+        let a = a.clone();
+        async move {
+            let client = a.assertion(a.issuer());
+            a.token(
+                &[
+                    (
+                        "grant_type",
+                        "urn:ietf:params:oauth:grant-type:saml2-bearer",
+                    ),
+                    ("assertion", assertion),
+                    ("client_assertion_type", JWT_BEARER),
+                    ("client_assertion", &client),
+                ],
+                None,
+            )
+            .await
+        }
+    };
+    assert_eq!(error(&bearer("good").await), "unauthorized_client");
+    let profile = ClientProfileRow {
+        saml_bearer_upstream: Some(String::from("corp-idp")),
+        ..ClientProfileRow::default()
+    };
+    a.set_profile('c', "idp.client.saml_bearer", &profile)
+        .await
+        .unwrap();
+    assert_eq!(error(&bearer("broken").await), "invalid_grant");
+    let first = bearer("good").await;
+    assert_eq!(error(&first), "invalid_grant");
+    assert!(body_text(&first).contains("not a grant"), "{first:?}");
+    let again = bearer("good").await;
+    assert!(!body_text(&again).contains("not a grant"), "{again:?}");
+
+    let exchange = |token_type: &'static str, token: &'static str| {
+        let a = a.clone();
+        async move {
+            let client = a.assertion(a.issuer());
+            a.token(
+                &[
+                    (
+                        "grant_type",
+                        "urn:ietf:params:oauth:grant-type:token-exchange",
+                    ),
+                    ("subject_token_type", token_type),
+                    ("subject_token", token),
+                    ("client_assertion_type", JWT_BEARER),
+                    ("client_assertion", &client),
+                ],
+                None,
+            )
+            .await
+        }
+    };
+    let saml2 = "urn:ietf:params:oauth:token-type:saml2";
+    assert_eq!(
+        error(&exchange("urn:ietf:params:oauth:token-type:saml1", "good-2").await),
+        "invalid_request"
+    );
+    assert_eq!(error(&exchange(saml2, "broken").await), "invalid_grant");
+    let taken = exchange(saml2, "good-2").await;
+    assert!(
+        !matches!(support::status(&taken), 400) || error(&taken) != "invalid_grant",
+        "{taken:?}"
+    );
+    assert_eq!(error(&exchange(saml2, "good-2").await), "invalid_grant");
+}
+
+fn body_text(r: &Reply) -> String {
+    match r {
+        Reply::Json { body, .. } => body.clone(),
+        other => format!("{other:?}"),
+    }
+}
