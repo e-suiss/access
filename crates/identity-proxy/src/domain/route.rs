@@ -39,32 +39,31 @@ pub fn route_ok(route: &str) -> bool {
 
 /// Whether `s` percent-encodes only bytes without a plain spelling, in upper-case hex (TN-113):
 /// `/%41dmin` is another spelling of `/admin` the application would decode, so it is refused.
-fn encoding_unique(s: &str) -> bool {
-    let b = s.as_bytes();
-    let mut i = 0_usize;
-    while let Some(&c) = b.get(i) {
-        if c == b'%' {
-            let hex = |x: Option<&u8>| {
-                x.and_then(|x| match x {
-                    b'0'..=b'9' => Some(x.wrapping_sub(b'0')),
-                    b'A'..=b'F' => Some(x.wrapping_sub(b'A').wrapping_add(10)),
-                    _ => None,
-                })
-            };
-            let (Some(h), Some(l)) = (
-                hex(b.get(i.saturating_add(1))),
-                hex(b.get(i.saturating_add(2))),
-            ) else {
+fn encoding_unique(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    let digit = |at: usize| {
+        bytes.get(at).and_then(|x| match x {
+            b'0'..=b'9' => Some(x.wrapping_sub(b'0')),
+            b'A'..=b'F' => Some(x.wrapping_sub(b'A').wrapping_add(10)),
+            _ => None,
+        })
+    };
+    let mut at = 0_usize;
+    while let Some(&byte) = bytes.get(at) {
+        if byte == b'%' {
+            let (Some(high), Some(low)) =
+                (digit(at.saturating_add(1)), digit(at.saturating_add(2)))
+            else {
                 return false;
             };
-            let d = h.wrapping_mul(16).wrapping_add(l);
-            if d.is_ascii_graphic() || d <= b' ' || d == 0x7f {
+            let decoded = high.wrapping_mul(16).wrapping_add(low);
+            if decoded.is_ascii_graphic() || decoded <= b' ' || decoded == 0x7f {
                 return false;
             }
-            i = i.saturating_add(3);
+            at = at.saturating_add(3);
             continue;
         }
-        i = i.saturating_add(1);
+        at = at.saturating_add(1);
     }
     true
 }
