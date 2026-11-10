@@ -2493,6 +2493,7 @@ mod experience;
 mod management;
 mod mcp;
 mod privacy;
+mod product_twin;
 mod recovery;
 mod recovery_authority;
 mod sample_agent;
