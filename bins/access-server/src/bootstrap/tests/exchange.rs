@@ -505,6 +505,7 @@ impl Realm {
         }
         let ids = std::sync::Arc::new(crate::ids::CellIds::new(w.keys.clone()));
         let oauth = access_http::oauth::router(OAuth::new(crate::oauth::ServerEnv {
+            saml: Arc::new(access_identity_oauth::ports::profile::NoSamlAssertions),
             client_certificates: Arc::new(
                 access_identity_oauth::ports::profile::NoClientCertificates,
             ),

@@ -3553,8 +3553,15 @@
         "operationId": "upstreamSamlAcs",
         "summary": "The SAML upstream's assertion consumer service; an unsolicited Response is refused unless the connection opens it, and the raw assertion is sealed under the subject's DEK.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -3578,8 +3585,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/login/upstream/{connection}/saml/metadata": {
@@ -3587,8 +3593,15 @@
         "operationId": "upstreamSamlMetadata",
         "summary": "Access's SP metadata for one SAML upstream connection.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -3603,8 +3616,7 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       }
     },
     "/v1/sso-setup/{link}": {

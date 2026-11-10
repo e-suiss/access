@@ -216,14 +216,24 @@ fn the_assertion(doc: &Doc) -> Result<(usize, bool), &'static str> {
     let all = doc
         .subtree(0)?
         .into_iter()
-        .filter(|&i| doc.get(i).is_ok_and(|e| e.is(SAML, "Assertion") || e.is(SAML, "EncryptedAssertion")))
+        .filter(|&i| {
+            doc.get(i)
+                .is_ok_and(|e| e.is(SAML, "Assertion") || e.is(SAML, "EncryptedAssertion"))
+        })
         .collect::<Vec<_>>();
-    if all.iter().any(|&i| doc.get(i).is_ok_and(|e| e.is(SAML, "EncryptedAssertion"))) {
+    if all
+        .iter()
+        .any(|&i| doc.get(i).is_ok_and(|e| e.is(SAML, "EncryptedAssertion")))
+    {
         return Err("saml-encrypted");
     }
     let root = doc.get(0)?;
     if root.is(SAML, "Assertion") {
-        return if all.len() == 1 { Ok((0, false)) } else { Err("saml-message") };
+        return if all.len() == 1 {
+            Ok((0, false))
+        } else {
+            Err("saml-message")
+        };
     }
     if !root.is(SAMLP, "Response") || root.attr("Version") != Some("2.0") {
         return Err("saml-message");
@@ -253,7 +263,9 @@ fn assertion_facts(
         return Err("saml-issuer");
     }
     let subject = doc.one(at, SAML, "Subject")?.ok_or("saml-name-id")?;
-    if doc.one(subject, SAML, "EncryptedID")?.is_some() || doc.one(subject, SAML, "BaseID")?.is_some() {
+    if doc.one(subject, SAML, "EncryptedID")?.is_some()
+        || doc.one(subject, SAML, "BaseID")?.is_some()
+    {
         return Err("saml-name-id");
     }
     let n = doc.one(subject, SAML, "NameID")?.ok_or("saml-name-id")?;

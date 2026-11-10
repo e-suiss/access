@@ -5,6 +5,7 @@ pub mod connection;
 pub mod key;
 pub mod preset;
 pub mod rules;
+pub mod saml;
 pub mod token;
 
 /// An `https` URL without user info or fragment, at most 2048 bytes.

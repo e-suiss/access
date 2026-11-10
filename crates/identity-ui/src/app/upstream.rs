@@ -18,15 +18,19 @@ use access_identity_account::app::external::{
     Asserted, Externals, Linked, UpstreamFacts, UpstreamResolved,
 };
 use access_identity_account::domain::login::Problem;
-use access_identity_federation::app::connection::{Connection, Resolved};
+use access_identity_federation::app::connection::{
+    Connection, Resolved, SamlFailure, UpstreamSignIn, saml_sign_in, verify_saml,
+};
 use access_identity_federation::app::{Federation, FederationError};
+use access_identity_federation::domain::connection::Mapped;
 use access_identity_federation::domain::connection::{
     ConnectionProtocol, Profile, issuer_id, mapped,
 };
 use access_identity_federation::domain::rules::ATTEMPT_TTL_MS;
+use access_identity_federation::domain::saml::{self as sp_saml, Sp};
 use access_identity_federation::domain::token::Secrets;
 use access_identity_federation::ports::{
-    ClientAssertion, ProviderHttp, SocialSecrets, UpstreamTrust,
+    AssertionReader, ClientAssertion, ProviderHttp, SamlRequestSigner, SocialSecrets, UpstreamTrust,
 };
 use access_identity_oauth::ports::RealmEntry;
 use access_identity_session::app::{FLOW_GONE, Step as Outcome};
@@ -50,6 +54,10 @@ pub struct Upstreams {
     pub trust: Arc<dyn UpstreamTrust>,
     /// The realm's signer of `private_key_jwt` client assertions.
     pub assertions: Arc<dyn ClientAssertion>,
+    /// The parser worker, for SAML upstreams' Responses.
+    pub reader: Arc<dyn AssertionReader>,
+    /// The realm's SAML key, for `AuthnRequest`s.
+    pub saml_signer: Arc<dyn SamlRequestSigner>,
 }
 
 impl core::fmt::Debug for Upstreams {
@@ -129,6 +137,20 @@ fn redirect_uri(kit: &RealmKit, connection: &str) -> String {
     format!("{}/v1/login/upstream/{connection}/callback", kit.issuer)
 }
 
+/// Access's entity ID and ACS for SAML connection `name`.
+fn sp_urls(kit: &RealmKit, name: &str) -> (String, String) {
+    let base = format!("{}/v1/login/upstream/{name}/saml", kit.issuer);
+    (format!("{base}/metadata"), format!("{base}/acs"))
+}
+
+/// The `AuthnRequest` ID of an attempt: an NCName from its random nonce.
+fn request_id(nonce: &str) -> String {
+    format!("_{nonce}")
+}
+
+/// Digest context of a SAML assertion's one use, shared with the SAML 2.0 bearer grant.
+const ASSERTION_ID_CONTEXT: &str = "access/saml-assertion-id/v1";
+
 fn redirect(to: String) -> Reply {
     Reply::new(303, Body::Redirect(to))
 }
@@ -162,14 +184,13 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    /// The active OIDC connection `name` of the realm with its discovery read; `None` when the
-    /// realm has no such connection.
-    pub(crate) async fn upstream_connection<H: ProviderHttp, S: SocialSecrets>(
+    /// The active connection `name` of the realm as registered, its governing domain and its
+    /// assurance map; `None` when the realm has no such connection.
+    pub(crate) async fn registered_connection(
         &self,
         kit: &RealmKit,
-        social: &Social<H, S>,
         name: &str,
-    ) -> Result<Option<Held>, Reply> {
+    ) -> Result<Option<(Connection, [u8; 32], Option<String>)>, Reply> {
         let read = async {
             let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
             let row = access_store::idp::realm::upstream(&mut t, name).await?;
@@ -186,17 +207,34 @@ where
         };
         let profile = Profile::stored(row.profile.as_deref(), row.client_secret_ref.is_some())
             .map_err(|_| unavailable())?;
-        if profile.protocol != ConnectionProtocol::Oidc {
+        Ok(Some((
+            Connection {
+                name: row.name,
+                issuer: row.issuer,
+                client_id: row.client_id,
+                secret_ref: row.client_secret_ref,
+                jwks_uri: row.jwks_uri,
+                profile,
+            },
+            domain,
+            map,
+        )))
+    }
+
+    /// The active OIDC connection `name` of the realm with its discovery read; `None` when the
+    /// realm has no such connection.
+    pub(crate) async fn upstream_connection<H: ProviderHttp, S: SocialSecrets>(
+        &self,
+        kit: &RealmKit,
+        social: &Social<H, S>,
+        name: &str,
+    ) -> Result<Option<Held>, Reply> {
+        let Some((connection, domain, map)) = self.registered_connection(kit, name).await? else {
+            return Ok(None);
+        };
+        if connection.profile.protocol != ConnectionProtocol::Oidc {
             return Ok(None);
         }
-        let connection = Connection {
-            name: row.name,
-            issuer: row.issuer,
-            client_id: row.client_id,
-            secret_ref: row.client_secret_ref,
-            jwks_uri: row.jwks_uri,
-            profile,
-        };
         match federation(social).resolve(connection).await {
             Ok(resolved) => Ok(Some(Held {
                 resolved,
@@ -262,7 +300,8 @@ where
         Ok((url, cookie))
     }
 
-    /// `GET /v1/login/upstream/{connection}` (OP-155 m.3 (h)): to the connection.
+    /// `GET /v1/login/upstream/{connection}` (OP-155 m.3 (h)): to the connection; a SAML
+    /// connection gets a signed `AuthnRequest` in the HTTP-Redirect binding.
     pub async fn start_upstream<H: ProviderHttp, S: SocialSecrets>(
         &self,
         entry: &RealmEntry,
@@ -270,35 +309,127 @@ where
         name: &str,
         q: StartQuery<'_>,
         social: &Social<H, S>,
+        upstreams: &Upstreams,
     ) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
         };
-        match self.begin_upstream(&kit, b, name, None, social, q).await {
-            Ok((url, cookie)) => redirect(url).cookie(cookie),
+        match self.registered_connection(&kit, name).await {
+            Ok(Some((c, _, _))) if c.profile.protocol == ConnectionProtocol::Saml => {
+                match self.begin_saml(&kit, b, &c, upstreams).await {
+                    Ok((url, cookie)) => redirect(url).cookie(cookie),
+                    Err(r) => r,
+                }
+            }
+            Ok(_) => match self.begin_upstream(&kit, b, name, None, social, q).await {
+                Ok((url, cookie)) => redirect(url).cookie(cookie),
+                Err(r) => r,
+            },
             Err(r) => r,
         }
     }
 
-    /// Whether the governing domain accepts the connection's issuer; when it does not, the
-    /// sessions the connection opened end (SEC9).
+    /// The flow device of this browser, and the cookie that sets one when it has none.
+    fn device(b: &Browser<'_>) -> Result<([u8; 32], Option<String>), Reply> {
+        match b
+            .flow
+            .and_then(|f| b64url_decode(f).ok())
+            .and_then(|d| <[u8; 32]>::try_from(d).ok())
+        {
+            Some(d) => Ok((d, None)),
+            None => {
+                let d = access_crypto::random::bytes::<32>().map_err(|_| unavailable())?;
+                Ok((d, Some(set_cookie(FLOW_COOKIE, &b64url_encode(&d), None))))
+            }
+        }
+    }
+
+    /// Opens an attempt at SAML connection `c`: its `AuthnRequest` ID and `RelayState` are kept
+    /// with this browser's flow device, then signed into the IdP's SSO URL (OP-155 m.3 (h)).
+    async fn begin_saml(
+        &self,
+        kit: &RealmKit,
+        b: &Browser<'_>,
+        c: &Connection,
+        upstreams: &Upstreams,
+    ) -> Result<(String, Option<String>), Reply> {
+        let Some(idp) = c.profile.saml.as_ref() else {
+            return Err(unavailable());
+        };
+        let random = access_crypto::random::bytes::<96>().map_err(|_| unavailable())?;
+        let secrets = Secrets::from_random(&random);
+        let (device, cookie) = Self::device(b)?;
+        let now = self.clock.now_ms();
+        let state_hash = suiss_crypto::digest::sha256(secrets.state.as_bytes());
+        let stored = async {
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            t.insert_social_attempt(&access_store::federation::NewAttempt {
+                state_hash: &state_hash,
+                device_hash: &device_digest(&device),
+                provider: &c.name,
+                link_to: None,
+                nonce: &secrets.nonce,
+                verifier: &secrets.verifier,
+                now_ms: now,
+                expires_ms: now.saturating_add(ATTEMPT_TTL_MS),
+            })
+            .await?;
+            t.commit().await
+        };
+        stored.await.map_err(|_| unavailable())?;
+        let (entity, acs) = sp_urls(kit, &c.name);
+        let request = sp_saml::authn_request(
+            &Sp {
+                entity_id: &entity,
+                acs: &acs,
+            },
+            &request_id(&secrets.nonce),
+            &access_identity_saml::time::format(now),
+            &idp.sso_url,
+        );
+        let url = upstreams
+            .saml_signer
+            .redirect(
+                *kit.realm.as_bytes(),
+                &idp.sso_url,
+                &request,
+                &secrets.state,
+            )
+            .await
+            .map_err(|_| unreachable(&c.name))?;
+        Ok((url, cookie))
+    }
+
+    /// `GET /v1/login/upstream/{connection}/saml/metadata`: Access's SP metadata for one SAML
+    /// connection; `None` when the realm has no such connection.
+    pub async fn upstream_metadata(&self, entry: &RealmEntry, name: &str) -> Option<String> {
+        let kit = self.kit(entry).await.ok()?;
+        let (c, _, _) = self.registered_connection(&kit, name).await.ok()??;
+        if c.profile.protocol != ConnectionProtocol::Saml {
+            return None;
+        }
+        let (entity, acs) = sp_urls(&kit, name);
+        Some(sp_saml::metadata(&Sp {
+            entity_id: &entity,
+            acs: &acs,
+        }))
+    }
+
+    /// Whether the governing domain `domain` accepts upstream issuer `issuer` of connection
+    /// `name`; when it does not, the sessions the connection opened end (SEC9).
     async fn upstream_accepted(
         &self,
         kit: &RealmKit,
-        held: &Held,
+        (name, issuer, domain): (&str, &str, [u8; 32]),
         upstreams: &Upstreams,
     ) -> Result<(), Reply> {
-        let issuer = issuer_id(&held.resolved.connection.issuer);
-        match upstreams.trust.accepted(held.domain, issuer).await {
+        match upstreams.trust.accepted(domain, issuer_id(issuer)).await {
             Ok(true) => Ok(()),
             Ok(false) => {
                 signin!(self, kit, auth);
                 // SEC9
-                if let Err(e) = auth
-                    .quarantine_upstream(&held.resolved.connection.name)
-                    .await
-                {
+                if let Err(e) = auth.quarantine_upstream(name).await {
                     tracing::warn!(error = %e, "upstream sessions not ended");
                     return Err(unavailable());
                 }
@@ -362,7 +493,11 @@ where
             return Reply::problem(UPSTREAM_FAILED);
         }
         // TN-95, INV-17, SEC9
-        if let Err(r) = self.upstream_accepted(&kit, &held, upstreams).await {
+        let c = &held.resolved.connection;
+        if let Err(r) = self
+            .upstream_accepted(&kit, (&c.name, &c.issuer, held.domain), upstreams)
+            .await
+        {
             return r;
         }
         let secrets = Secrets {
@@ -388,6 +523,35 @@ where
         };
         // IDP-27
         let assurance = mapped(held.map.as_deref(), &signed.declared);
+        let display = held.resolved.preset.display_name.clone();
+        self.complete_upstream(
+            &kit,
+            b,
+            name,
+            (&signed, assurance, false),
+            attempt.link_to,
+            &display,
+        )
+        .await
+    }
+
+    /// The account side of a checked upstream sign-in, OIDC or SAML: a link of the signed-in
+    /// subject, or the linked or just-in-time account, a conflict, and the flow (TN-66,
+    /// §10.2.6).
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the account side's steps in their order"
+    )]
+    async fn complete_upstream(
+        &self,
+        kit: &RealmKit,
+        b: &Browser<'_>,
+        name: &str,
+        (signed, assurance, saml): (&UpstreamSignIn, Mapped, bool),
+        link_to: Option<[u8; 16]>,
+        display: &str,
+    ) -> Reply {
+        let now = self.clock.now_ms();
         let realm = kit.realm();
         let vault = kit.vault();
         let externals = Externals {
@@ -414,8 +578,8 @@ where
             raw: signed.raw.expose(),
             national: national.as_deref(),
         };
-        if let Some(subject) = attempt.link_to {
-            let (current, _) = match self.fresh(&kit, b, None).await {
+        if let Some(subject) = link_to {
+            let (current, _) = match self.fresh(kit, b, None).await {
                 Ok(s) => s,
                 Err(r) => return r,
             };
@@ -456,10 +620,7 @@ where
             Ok(UpstreamResolved::Conflict { holder, fresh }) => {
                 if fresh {
                     signin!(self, kit, auth);
-                    if let Err(e) = auth
-                        .upstream_conflict_notice(holder, &held.resolved.preset.display_name)
-                        .await
-                    {
+                    if let Err(e) = auth.upstream_conflict_notice(holder, display).await {
                         tracing::warn!(error = %e, "upstream conflict notice not queued");
                     }
                 }
@@ -470,7 +631,7 @@ where
         let factor = Factor::upstream(
             UpstreamStep {
                 connection: String::from(name),
-                saml: false,
+                saml,
                 iss: signed.issuer.clone(),
                 acr: signed.declared.acr.clone(),
                 amr: signed.declared.amr.clone(),
@@ -493,5 +654,140 @@ where
             },
             Err(e) => failed(&e),
         }
+    }
+}
+
+/// The fields of a SAML upstream's answer at the ACS.
+#[derive(Clone, Copy, Debug)]
+pub struct SamlAnswer<'a> {
+    /// `SAMLResponse`, base64.
+    pub response: &'a str,
+    /// `RelayState`, the attempt's state, absent for an unsolicited Response.
+    pub relay_state: Option<&'a str>,
+}
+
+impl<K, C, M> Hosted<K, C, M>
+where
+    K: Kits,
+    C: Clock + Sync,
+    M: Messages,
+{
+    /// `POST /v1/login/upstream/{connection}/saml/acs` (OP-155 m.3 (h), §10.6.1): the Response
+    /// is read and its assertion's signature verified in the parser worker against the IdP's
+    /// pinned certificates; it must answer the `AuthnRequest` this browser's attempt sent, or be
+    /// an unsolicited Response the connection opens, and it is used once.
+    #[expect(clippy::too_many_lines, reason = "the ACS's steps in their order")]
+    pub async fn finish_upstream_saml(
+        &self,
+        entry: &RealmEntry,
+        b: &Browser<'_>,
+        name: &str,
+        answer: SamlAnswer<'_>,
+        upstreams: &Upstreams,
+    ) -> Reply {
+        use access_identity_oauth::ports::dpop::ReplayCache as _;
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        let (c, domain, map) = match self.registered_connection(&kit, name).await {
+            Ok(Some(x)) if x.0.profile.protocol == ConnectionProtocol::Saml => x,
+            Ok(_) => return Reply::problem(NO_CONNECTION),
+            Err(r) => return r,
+        };
+        let Some(idp) = c.profile.saml.clone() else {
+            return unavailable();
+        };
+        // TN-95, INV-17, SEC9
+        if let Err(r) = self
+            .upstream_accepted(&kit, (&c.name, &idp.entity_id, domain), upstreams)
+            .await
+        {
+            return r;
+        }
+        let now = self.clock.now_ms();
+        let device = b
+            .flow
+            .and_then(|f| b64url_decode(f).ok())
+            .and_then(|d| <[u8; 32]>::try_from(d).ok());
+        let attempt = match (answer.relay_state, device) {
+            (Some(state), Some(device)) => {
+                let taken = async {
+                    let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+                    let a = t
+                        .take_social_attempt(
+                            &suiss_crypto::digest::sha256(state.as_bytes()),
+                            &device_digest(&device),
+                            name,
+                            now,
+                        )
+                        .await?;
+                    t.commit().await?;
+                    Ok::<_, access_store::StoreError>(a)
+                };
+                match taken.await {
+                    Ok(Some(a)) => Some(a),
+                    Ok(None) => return Reply::problem(FLOW_GONE),
+                    Err(_) => return unavailable(),
+                }
+            }
+            _ => None,
+        };
+        let Some(message) = access_identity_saml::sp::b64::decode(answer.response) else {
+            return Reply::problem(UPSTREAM_FAILED);
+        };
+        let (entity, acs) = sp_urls(&kit, name);
+        let wanted = attempt.as_ref().map(|a| request_id(&a.nonce));
+        let expect = sp_saml::Expect {
+            idp: &idp.entity_id,
+            audience: &entity,
+            recipient: Some(&acs),
+            in_response_to: wanted.as_deref(),
+            allow_unsolicited: c.profile.allow_unsolicited,
+            now_ms: now,
+        };
+        let (facts, declared) = match verify_saml(&*upstreams.reader, &c, &message, &expect).await {
+            Ok(x) => x,
+            Err(SamlFailure::Unavailable) => return unreachable(name),
+            Err(SamlFailure::Refused) => {
+                tracing::info!(
+                    event = "login.upstream.saml.refused",
+                    outcome = "refused",
+                    connection = name,
+                    "SAML upstream answer refused"
+                );
+                return Reply::problem(UPSTREAM_FAILED);
+            }
+        };
+        // §10.6.1: one use
+        let mut input = facts.issuer.as_bytes().to_vec();
+        input.push(0);
+        input.extend_from_slice(facts.id.as_bytes());
+        let key = suiss_crypto::digest::context_digest(ASSERTION_ID_CONTEXT, &input).0;
+        let end = sp_saml::bearer_end(&facts).unwrap_or(now);
+        let day = u32::try_from(end / 86_400_000).unwrap_or(u32::MAX);
+        let replay = access_identity_oauth::adapters::dpop::PgReplayCache::new(
+            self.db.clone(),
+            kit.tenant,
+            kit.realm,
+        );
+        match replay.first_use(day, key).await {
+            Ok(true) => {}
+            Ok(false) => return Reply::problem(UPSTREAM_FAILED),
+            Err(_) => return unavailable(),
+        }
+        let signed = match saml_sign_in(&c, &facts, declared, &message) {
+            Ok(s) => s,
+            Err(_) => return Reply::problem(UPSTREAM_FAILED),
+        };
+        // IDP-27
+        let assurance = mapped(map.as_deref(), &signed.declared);
+        let display = c
+            .profile
+            .display_name
+            .clone()
+            .unwrap_or_else(|| c.name.clone());
+        self.complete_upstream(&kit, b, name, (&signed, assurance, true), None, &display)
+            .await
     }
 }

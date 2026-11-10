@@ -249,3 +249,96 @@ impl Resolved {
         url
     }
 }
+
+/// Why a SAML upstream's assertion signs nobody in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum SamlFailure {
+    /// The parser worker could not be reached, or the connection names no IdP (MD-8).
+    #[error("unavailable")]
+    Unavailable,
+    /// The worker refused it, or it does not match the connection (§10.6.1).
+    #[error("refused")]
+    Refused,
+}
+
+/// The attributes an address may come in.
+const MAIL: [&str; 3] = ["mail", "email", "urn:oid:0.9.2342.19200300.100.1.3"];
+
+/// Reads `message` (a decoded `SAMLResponse` or assertion) of SAML connection `c` in the parser
+/// worker against the IdP's pinned certificates and checks it against `e` (OP-155 m.3 (h)).
+///
+/// # Errors
+/// [`SamlFailure`].
+pub async fn verify_saml(
+    reader: &dyn crate::ports::AssertionReader,
+    c: &Connection,
+    message: &[u8],
+    e: &crate::domain::saml::Expect<'_>,
+) -> Result<(access_internal_api::saml::AssertionFacts, Declared), SamlFailure> {
+    let Some(idp) = c.profile.saml.as_ref() else {
+        return Err(SamlFailure::Unavailable);
+    };
+    let certs = idp
+        .certificates
+        .iter()
+        .map(|b| access_identity_saml::sp::b64::decode(b).ok_or(SamlFailure::Unavailable))
+        .collect::<Result<Vec<_>, _>>()?;
+    let facts = match reader.read(certs, message.to_vec()).await {
+        Ok(f) => f,
+        Err(crate::ports::AssertionError::Unavailable) => return Err(SamlFailure::Unavailable),
+        Err(crate::ports::AssertionError::Refused(_)) => return Err(SamlFailure::Refused),
+    };
+    let declared = crate::domain::saml::check(&facts, e).map_err(|_| SamlFailure::Refused)?;
+    Ok((facts, declared))
+}
+
+/// The upstream sign-in of a verified SAML assertion of connection `c`: keyed by
+/// `(IdP entity ID, NameID)` (§10.1.2 SAML row); its address carries no assurance.
+///
+/// # Errors
+/// [`SamlFailure::Refused`] when a preset's national identity number is missing.
+pub fn saml_sign_in(
+    c: &Connection,
+    facts: &access_internal_api::saml::AssertionFacts,
+    declared: Declared,
+    raw: &[u8],
+) -> Result<UpstreamSignIn, SamlFailure> {
+    let attr = |n: &str| crate::domain::saml::attribute(facts, n);
+    let national = c
+        .profile
+        .preset
+        .as_deref()
+        .and_then(UpstreamPreset::get)
+        .and_then(|p| p.national_id.as_deref())
+        .map(|n| {
+            attr(n)
+                .filter(|v| (1..=64).contains(&v.len()) && v.bytes().all(|b| b.is_ascii_digit()))
+                .map(|v| Secret::new(String::from(v)))
+                .ok_or(SamlFailure::Refused)
+        })
+        .transpose()?;
+    let email = MAIL
+        .iter()
+        .find_map(|n| attr(n))
+        .filter(|a| a.len() <= 320 && a.contains('@'))
+        .map(|a| crate::domain::token::ProviderEmail {
+            address: String::from(a),
+            vouched: false,
+        });
+    Ok(UpstreamSignIn {
+        external: External {
+            provider: c.name.clone(),
+            key: identity_key(&facts.issuer, &facts.name_id),
+            email,
+            name: attr("displayName")
+                .filter(|n| n.chars().count() <= 128 && !n.chars().any(char::is_control))
+                .map(String::from),
+            asserted: None,
+        },
+        issuer: facts.issuer.clone(),
+        declared,
+        evidence: evidence(raw),
+        raw: Secret::new(raw.to_vec()),
+        national,
+    })
+}

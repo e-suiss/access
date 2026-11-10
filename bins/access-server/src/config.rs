@@ -395,6 +395,22 @@ pub(crate) struct Identity {
     /// per line (OP-155 m.3 (l)). Without it the page shows no country.
     #[serde(default)]
     pub(crate) geo_csv: Option<PathBuf>,
+    /// The parser worker supervisor's socket that reads SAML upstreams' Responses and SAML
+    /// bearer assertions, and the user id it must run as (OP-155 m.3 (c), (h)). Without it every
+    /// SAML upstream sign-in and SAML bearer grant is refused.
+    #[serde(default)]
+    pub(crate) upstream_parser: Option<UpstreamParser>,
+}
+
+/// The parser worker supervisor access-server reaches for upstream SAML (OP-155 m.3 (h)).
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct UpstreamParser {
+    /// Its Unix socket.
+    pub(crate) socket: PathBuf,
+    /// The user id the supervisor must run as.
+    #[serde(default)]
+    pub(crate) uid: Option<u32>,
 }
 
 /// The services a domain verification reads (TN-90, OP-153 m.3 (o)).
@@ -818,6 +834,7 @@ mod tests {
                 }),
                 saml_gateway: None,
                 geo_csv: None,
+                upstream_parser: None,
             }),
             suiss: Some(Suiss {
                 region: "eu-central".to_owned(),
@@ -1035,6 +1052,7 @@ mod tests {
                     org_domains: None,
                     saml_gateway: None,
                     geo_csv: None,
+                    upstream_parser: None,
                 }),
                 ..with_tls()
             };

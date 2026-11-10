@@ -38,6 +38,7 @@ mod startup;
 mod status;
 #[cfg(test)]
 mod testing;
+mod upstream;
 
 use std::ffi::OsString;
 use std::fmt::Write as _;
@@ -964,6 +965,8 @@ where
             assertions: Arc::new(idp::RealmAssertions(SignerKeys::new(
                 identity.signer.clone(),
             ))),
+            reader: Arc::new(upstream_reader(config)),
+            saml_signer: Arc::new(saml::UpstreamRequests(identity.signer.clone())),
         },
     );
     // OP-155 m.3 (c), (e), (f)
@@ -1235,6 +1238,18 @@ fn oauth_inputs(pools: &Pools, prepared: &Prepared) -> OAuthInputs {
     )
 }
 
+/// The parser worker supervisor upstream SAML is read by (OP-155 m.3 (c), (h)); none
+/// configured refuses every read.
+fn upstream_reader(config: &Config) -> upstream::ParserReader {
+    upstream::ParserReader(
+        config
+            .identity
+            .as_ref()
+            .and_then(|i| i.upstream_parser.as_ref())
+            .map(|p| access_edge_core::parser::ParserClient::new(p.socket.clone(), p.uid)),
+    )
+}
+
 /// The realm authorization server (OP-146 I7) over the application pool, the identity signer,
 /// clients' endpoints, the HSM's DPoP nonce keys and the authority plane's token projections
 /// (OP-150 m.2).
@@ -1254,6 +1269,7 @@ where
         + access_identity_oauth::ports::oauth::GrantStanding
         + access_identity_x509::ports::CaTrust
         + access_identity_ui::ports::Approvals
+        + access_identity_federation::ports::UpstreamTrust
         + Clone
         + 'static,
 {
@@ -1278,6 +1294,13 @@ where
             }
             None => Arc::new(access_identity_oauth::ports::oauth::NoGeo),
         };
+    // OP-155 m.3 (h), (k)
+    let saml = Arc::new(upstream::UpstreamSamlAssertions {
+        app: app.clone(),
+        router: router.clone(),
+        reader: Arc::new(upstream_reader(config)),
+        trust: Arc::new(projections.clone()),
+    });
     // RFC 8705 §2.1, OP-155 m.3 (k), (m)
     let client_certificates = Arc::new(
         access_identity_oauth::adapters::certificates::X509ClientCertificates::new(
@@ -1321,6 +1344,7 @@ where
         client_certificates,
         ciba,
         geo,
+        saml,
     };
     Ok(oauth_router(OAuth::new(env)))
 }

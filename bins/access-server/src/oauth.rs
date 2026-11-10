@@ -105,6 +105,9 @@ pub(crate) struct ServerEnv<P> {
     pub(crate) ciba: Arc<dyn access_identity_oauth::ports::oauth::CibaServices + Sync>,
     /// The operator's IP-range → country list for the device page, or none (OP-155 m.3 (l)).
     pub(crate) geo: Arc<dyn access_identity_oauth::ports::oauth::GeoLookup + Sync>,
+    /// SAML 2.0 bearer assertions of accepted SAML upstreams, read in the parser worker (OP-155
+    /// m.3 (h), (k)).
+    pub(crate) saml: Arc<dyn access_identity_oauth::ports::profile::SamlAssertions + Sync>,
 }
 
 impl<P: Projections + 'static> Env for ServerEnv<P> {
@@ -145,6 +148,12 @@ impl<P: Projections + 'static> Env for ServerEnv<P> {
 
     fn directory(&self) -> &PgDirectory {
         &self.directory
+    }
+
+    fn saml_assertions(
+        &self,
+    ) -> &(dyn access_identity_oauth::ports::profile::SamlAssertions + Sync) {
+        &*self.saml
     }
 
     fn replay(&self, tenant: TenantId, realm: RealmId) -> PgReplayCache {

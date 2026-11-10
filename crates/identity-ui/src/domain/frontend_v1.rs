@@ -1019,14 +1019,14 @@ pub const ROUTES: &[Route] = &[
         "upstreamCallback",
         "The OIDC upstream's redirect back; its subject key is the connection's own, sub or [tid, oid].",
     ),
-    planned(
+    live(
         Owner::P4,
         Verb::Post,
         "/v1/login/upstream/{connection}/saml/acs",
         "upstreamSamlAcs",
         "The SAML upstream's assertion consumer service; an unsolicited Response is refused unless the connection opens it, and the raw assertion is sealed under the subject's DEK.",
     ),
-    planned(
+    live(
         Owner::P4,
         Verb::Get,
         "/v1/login/upstream/{connection}/saml/metadata",

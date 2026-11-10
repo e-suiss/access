@@ -20,14 +20,14 @@ use access_identity_oauth::domain::request::Params;
 use access_identity_oauth::ports::{Directory, Keys};
 use access_identity_ui::app::Hosted;
 use access_identity_ui::app::social::Social;
-use access_identity_ui::app::upstream::{StartQuery, Upstreams};
+use access_identity_ui::app::upstream::{SamlAnswer, StartQuery, Upstreams};
 use access_identity_ui::ports::{Clock, Kits, Messages};
-use axum::Extension;
-use axum::Router;
+use axum::body::Bytes;
 use axum::extract::{Path, State};
-use axum::http::{HeaderMap, StatusCode, Uri};
-use axum::response::Response;
-use axum::routing::get;
+use axum::http::{HeaderMap, HeaderValue, StatusCode, Uri, header};
+use axum::response::{IntoResponse, Response};
+use axum::routing::{get, post};
+use axum::{Extension, Router};
 
 use super::web::{Jar, problem, realm, send};
 use super::{Peer, Shared};
@@ -82,6 +82,14 @@ where
             .route(
                 &format!("{prefix}/v1/login/upstream/{{connection}}/callback"),
                 get(callback::<D, K, KI, C, M, H, S>),
+            )
+            .route(
+                &format!("{prefix}/v1/login/upstream/{{connection}}/saml/acs"),
+                post(acs::<D, K, KI, C, M, H, S>),
+            )
+            .route(
+                &format!("{prefix}/v1/login/upstream/{{connection}}/saml/metadata"),
+                get(metadata::<D, K, KI, C, M, H, S>),
             );
     }
     r.with_state(svc)
@@ -149,6 +157,7 @@ where
             name,
             StartQuery { ui_locales },
             &s.social,
+            &s.upstreams,
         )
         .await;
     send(reply, &headers).await
@@ -205,4 +214,144 @@ where
         )
         .await;
     send(reply, &headers).await
+}
+
+/// Largest ACS form.
+const MAX_FORM: usize = 256 * 1024;
+
+fn hardened(mut r: Response, csp: &str) -> Response {
+    let h = r.headers_mut();
+    h.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    if let Ok(v) = HeaderValue::from_str(csp) {
+        h.insert(header::CONTENT_SECURITY_POLICY, v);
+    }
+    h.insert(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
+    h.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    r
+}
+
+/// `POST /v1/login/upstream/{connection}/saml/acs` (OP-155 m.3 (h)): the IdP's cross-site POST
+/// carries no `SameSite=Lax` cookie, so it is first posted again from this origin as a
+/// top-level navigation; the second POST, with the flow cookie, is decided.
+async fn acs<D, K, KI, C, M, H, S>(
+    State(s): St<D, K, KI, C, M, H, S>,
+    Path(p): Params0,
+    peer: Option<Extension<Peer>>,
+    uri: Uri,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response
+where
+    D: Directory,
+    K: Keys,
+    KI: Kits,
+    C: Clock + Sync,
+    M: Messages,
+    H: ProviderHttp,
+    S: SocialSecrets,
+{
+    let entry = match realm(&s.login, &p, &uri, &headers).await {
+        Ok(e) => e,
+        Err(r) => return r,
+    };
+    let name = match connection(&p) {
+        Ok(n) => n,
+        Err(r) => return r,
+    };
+    if body.len() > MAX_FORM {
+        return bad();
+    }
+    let Ok(form) = core::str::from_utf8(&body) else {
+        return bad();
+    };
+    let Ok(params) = Params::parse(form) else {
+        return bad();
+    };
+    let Some(response) = params.get("SAMLResponse").filter(|r| !r.is_empty()) else {
+        return bad();
+    };
+    let relay_state = params
+        .get("RelayState")
+        .filter(|r| !r.is_empty() && r.len() <= 80);
+    if params.get("hop") != Some("1") {
+        let n = access_identity_saml::binding::csp_nonce();
+        let mut fields = vec![("SAMLResponse", response)];
+        if let Some(r) = relay_state {
+            fields.push(("RelayState", r));
+        }
+        fields.push(("hop", "1"));
+        let page = access_identity_saml::binding::post_page(uri.path(), &fields, &n);
+        return hardened(
+            (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+                page,
+            )
+                .into_response(),
+            &format!(
+                "default-src 'none'; script-src 'nonce-{n}'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+            ),
+        );
+    }
+    let jar = Jar::of(&headers, peer);
+    let reply = s
+        .login
+        .hosted
+        .finish_upstream_saml(
+            &entry,
+            &jar.browser(),
+            name,
+            SamlAnswer {
+                response,
+                relay_state,
+            },
+            &s.upstreams,
+        )
+        .await;
+    send(reply, &headers).await
+}
+
+/// `GET /v1/login/upstream/{connection}/saml/metadata`.
+async fn metadata<D, K, KI, C, M, H, S>(
+    State(s): St<D, K, KI, C, M, H, S>,
+    Path(p): Params0,
+    uri: Uri,
+    headers: HeaderMap,
+) -> Response
+where
+    D: Directory,
+    K: Keys,
+    KI: Kits,
+    C: Clock + Sync,
+    M: Messages,
+    H: ProviderHttp,
+    S: SocialSecrets,
+{
+    let entry = match realm(&s.login, &p, &uri, &headers).await {
+        Ok(e) => e,
+        Err(r) => return r,
+    };
+    let name = match connection(&p) {
+        Ok(n) => n,
+        Err(r) => return r,
+    };
+    match s.login.hosted.upstream_metadata(&entry, name).await {
+        Some(xml) => hardened(
+            (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, "application/samlmetadata+xml")],
+                xml,
+            )
+                .into_response(),
+            "default-src 'none'",
+        ),
+        None => problem(
+            StatusCode::NOT_FOUND,
+            "no-such-provider",
+            "That sign-in option isn't available here",
+        ),
+    }
 }

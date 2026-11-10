@@ -304,6 +304,52 @@ impl ClientAssertion for Assertions {
     }
 }
 
+/// The parser worker's answer as the test encodes it: the message is the facts' CBOR, read only
+/// with the IdP's pinned certificate (the real worker's signature checks are its own tests).
+struct FakeReader;
+
+const IDP_CERT: &[u8] = b"pinned-idp-cert";
+
+impl access_identity_federation::ports::AssertionReader for FakeReader {
+    fn read(
+        &self,
+        certs: Vec<Vec<u8>>,
+        message: Vec<u8>,
+    ) -> access_identity_federation::ports::Read<'_> {
+        Box::pin(async move {
+            if certs != [IDP_CERT.to_vec()] {
+                return Err(access_identity_federation::ports::AssertionError::Refused(
+                    String::from("signature-invalid"),
+                ));
+            }
+            access_internal_api::saml::AssertionFacts::decode(&message).map_err(|_| {
+                access_identity_federation::ports::AssertionError::Refused(String::from(
+                    "saml-field",
+                ))
+            })
+        })
+    }
+}
+
+/// Hands the `AuthnRequest` and `RelayState` back in the URL, unsigned.
+struct FakeSamlSigner;
+
+impl access_identity_federation::ports::SamlRequestSigner for FakeSamlSigner {
+    fn redirect<'a>(
+        &'a self,
+        _: [u8; 16],
+        location: &'a str,
+        request: &'a str,
+        relay_state: &'a str,
+    ) -> Signed<'a> {
+        let mut url = format!("{location}?SAMLRequest=");
+        access_identity_oauth::domain::issuer::form_encode(request, &mut url);
+        url.push_str("&RelayState=");
+        url.push_str(relay_state);
+        Box::pin(async move { Ok(url) })
+    }
+}
+
 struct Env {
     db: TestDb,
     tenant: TenantId,
@@ -423,6 +469,8 @@ async fn env(seed: u8, slug: &str) -> Env {
         Upstreams {
             trust: Arc::new(trust.clone()),
             assertions: Arc::new(assertions.clone()),
+            reader: Arc::new(FakeReader),
+            saml_signer: Arc::new(FakeSamlSigner),
         },
     ));
     Env {
@@ -1116,4 +1164,228 @@ async fn home_realm_discovery_is_off_until_the_realm_turns_it_on_and_no_hint_ove
         w.send("GET", &path, None).await.status,
         StatusCode::NOT_FOUND
     );
+}
+
+const IDP: &str = "https://idp.test/saml";
+
+fn saml_profile(unsolicited: bool) -> Profile {
+    let mut p = corp();
+    p.protocol = access_identity_federation::domain::connection::ConnectionProtocol::Saml;
+    p.allow_unsolicited = unsolicited;
+    p.saml = Some(access_identity_federation::domain::connection::SamlIdp {
+        entity_id: String::from(IDP),
+        sso_url: String::from("https://idp.test/sso"),
+        certificates: vec![access_crypto::webhook::b64_encode(IDP_CERT)],
+    });
+    p
+}
+
+fn saml_facts(
+    id: &str,
+    name_id: &str,
+    in_response_to: Option<&str>,
+) -> access_internal_api::saml::AssertionFacts {
+    let at = access_identity_saml::time::format(T0);
+    let end = access_identity_saml::time::format(T0 + 300_000);
+    access_internal_api::saml::AssertionFacts {
+        id: id.to_owned(),
+        issuer: String::from(IDP),
+        issue_instant: at.clone(),
+        name_id: name_id.to_owned(),
+        name_id_format: None,
+        audiences: vec![format!(
+            "https://{HOST}/v1/login/upstream/corp/saml/metadata"
+        )],
+        not_before: Some(at.clone()),
+        not_on_or_after: Some(end.clone()),
+        recipient: Some(format!("https://{HOST}/v1/login/upstream/corp/saml/acs")),
+        confirmation_not_on_or_after: Some(end),
+        in_response_to: in_response_to.map(String::from),
+        authn_instant: Some(at),
+        session_index: Some(String::from("s1")),
+        authn_context: Some(String::from(
+            "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport",
+        )),
+        attributes: vec![(String::from("mail"), vec![String::from("sam@corp.example")])],
+        signed: String::from("rsa-sha256"),
+        in_response: true,
+    }
+}
+
+impl Web {
+    /// Posts `facts` to the ACS as the IdP's browser POST, then as the page's own repost.
+    async fn acs(
+        &mut self,
+        facts: &access_internal_api::saml::AssertionFacts,
+        relay: Option<&str>,
+    ) -> Answer {
+        let response = access_crypto::webhook::b64_encode(&facts.encode().unwrap());
+        let mut form = String::from("SAMLResponse=");
+        access_identity_oauth::domain::issuer::form_encode(&response, &mut form);
+        if let Some(r) = relay {
+            form.push_str("&RelayState=");
+            form.push_str(r);
+        }
+        let first = self
+            .post_form("/v1/login/upstream/corp/saml/acs", &form)
+            .await;
+        assert_eq!(first.status, StatusCode::OK);
+        assert!(String::from_utf8_lossy(&first.body).contains("name=\"hop\" value=\"1\""));
+        form.push_str("&hop=1");
+        self.post_form("/v1/login/upstream/corp/saml/acs", &form)
+            .await
+    }
+
+    async fn post_form(&mut self, path: &str, form: &str) -> Answer {
+        let mut req = Request::builder()
+            .method("POST")
+            .uri(path)
+            .header(header::HOST, HOST)
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded");
+        if !self.jar.is_empty() {
+            let cookies: Vec<String> = self.jar.iter().map(|(k, v)| format!("{k}={v}")).collect();
+            req = req.header(header::COOKIE, cookies.join("; "));
+        }
+        let mut req = req.body(HttpBody::from(form.to_owned())).unwrap();
+        req.extensions_mut().insert(Peer(IpAddr::V4(self.ip)));
+        let response = self.app.clone().oneshot(req).await.unwrap();
+        let status = response.status();
+        let headers = response.headers().clone();
+        for c in headers.get_all(header::SET_COOKIE) {
+            let c = c.to_str().unwrap();
+            let (name, value) = c.split(';').next().unwrap().split_once('=').unwrap();
+            self.jar.insert(name.to_owned(), value.to_owned());
+        }
+        let body = response
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .to_vec();
+        Answer {
+            status,
+            headers,
+            body,
+        }
+    }
+}
+
+// OP-155 m.3 (h), §10.6.1, §10.2.6, TN-95, Ek B 4784, 4682
+#[tokio::test]
+async fn a_saml_upstream_signs_in_by_answering_its_request_and_refuses_an_unsolicited_response() {
+    let e = env(0x67, "up-g").await;
+    e.connection("corp", IDP, &saml_profile(false), true).await;
+    let day = u32::try_from((T0 + 300_000) / 86_400_000).unwrap();
+    access_store::dpop::open_dpop_replay_day(&e.db.archive, day)
+        .await
+        .unwrap();
+    let mut w = e.browser(1);
+    let md = w
+        .send("GET", "/v1/login/upstream/corp/saml/metadata", None)
+        .await;
+    assert_eq!(md.status, StatusCode::OK);
+    assert!(String::from_utf8_lossy(&md.body).contains("WantAssertionsSigned=\"true\""));
+    let start = w.send("GET", "/v1/login/upstream/corp", None).await;
+    assert_eq!(start.status, StatusCode::SEE_OTHER, "{}", start.code());
+    let to = start.location();
+    assert!(to.starts_with("https://idp.test/sso?SAMLRequest="), "{to}");
+    let p = Params::parse(to.split_once('?').unwrap().1).unwrap();
+    let relay = p.get("RelayState").unwrap().to_owned();
+    let request = p.get("SAMLRequest").unwrap().to_owned();
+    let id = request
+        .split("ID=\"")
+        .nth(1)
+        .unwrap()
+        .split('"')
+        .next()
+        .unwrap()
+        .to_owned();
+
+    // §10.6.1: an answer to another request
+    let mut stray = e.browser(2);
+    let _ = stray.send("GET", "/v1/login/upstream/corp", None).await;
+    let a = w
+        .acs(&saml_facts("a0", "sam-1", Some("_other")), Some(&relay))
+        .await;
+    assert_eq!(a.status, StatusCode::UNAUTHORIZED, "{}", a.code());
+
+    let start = w.send("GET", "/v1/login/upstream/corp", None).await;
+    let p = Params::parse(start.location().split_once('?').unwrap().1).unwrap();
+    let relay = p.get("RelayState").unwrap().to_owned();
+    let id2 = p
+        .get("SAMLRequest")
+        .unwrap()
+        .split("ID=\"")
+        .nth(1)
+        .unwrap()
+        .split('"')
+        .next()
+        .unwrap()
+        .to_owned();
+    assert_ne!(id, id2);
+    let b = w
+        .acs(&saml_facts("a1", "sam-1", Some(&id2)), Some(&relay))
+        .await;
+    assert_eq!(b.status, StatusCode::SEE_OTHER, "{}", b.code());
+    assert!(w.jar.contains_key("__Host-access-session"));
+    let sam = e.link_at(IDP, "sam-1").await.unwrap();
+    let auth = e.orders("authentication").await;
+    let last = auth.last().unwrap();
+    let access_identity_account::domain::claims::Content::Body {
+        body: ClaimBody::Authentication(body),
+        ..
+    } = &last.content
+    else {
+        panic!("not an authentication body")
+    };
+    assert_eq!(body.method, access_kernel::claim::body::AuthMethod::Saml);
+    assert_eq!(body.upstream.as_ref().unwrap().iss, IDP);
+    assert_eq!(e.status(sam).await, "active");
+
+    // §10.6.1: once
+    let start = w.send("GET", "/v1/login/upstream/corp", None).await;
+    let p = Params::parse(start.location().split_once('?').unwrap().1).unwrap();
+    let relay3 = p.get("RelayState").unwrap().to_owned();
+    let mut replayed = saml_facts("a1", "sam-1", Some(&id2));
+    replayed.in_response_to = Some(
+        p.get("SAMLRequest")
+            .unwrap()
+            .split("ID=\"")
+            .nth(1)
+            .unwrap()
+            .split('"')
+            .next()
+            .unwrap()
+            .to_owned(),
+    );
+    let c = w.acs(&replayed, Some(&relay3)).await;
+    assert_eq!(
+        c.status,
+        StatusCode::UNAUTHORIZED,
+        "an assertion ID is used once"
+    );
+
+    // §10.2.6, Ek B 4682: unsolicited is off by default
+    let mut idp_initiated = e.browser(3);
+    let d = idp_initiated
+        .acs(&saml_facts("a2", "sam-2", None), None)
+        .await;
+    assert_eq!(d.status, StatusCode::UNAUTHORIZED);
+    assert!(e.link_at(IDP, "sam-2").await.is_none());
+}
+
+// OP-155 m.3 (h), Ek B 4682
+#[tokio::test]
+async fn an_unsolicited_saml_response_signs_in_only_where_the_connection_opens_it() {
+    let e = env(0x68, "up-h").await;
+    e.connection("corp", IDP, &saml_profile(true), true).await;
+    let day = u32::try_from((T0 + 300_000) / 86_400_000).unwrap();
+    access_store::dpop::open_dpop_replay_day(&e.db.archive, day)
+        .await
+        .unwrap();
+    let mut w = e.browser(1);
+    let a = w.acs(&saml_facts("u1", "sam-9", None), None).await;
+    assert_eq!(a.status, StatusCode::SEE_OTHER, "{}", a.code());
+    assert!(e.link_at(IDP, "sam-9").await.is_some());
 }

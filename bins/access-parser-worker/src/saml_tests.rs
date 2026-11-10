@@ -480,7 +480,10 @@ fn response(inner: &str, status: &str) -> String {
     )
 }
 
-fn run_assertion(c: &Context, xml: &str) -> Result<access_edge_core::saml::AssertionFacts, &'static str> {
+fn run_assertion(
+    c: &Context,
+    xml: &str,
+) -> Result<access_edge_core::saml::AssertionFacts, &'static str> {
     let (_, out) = crate::saml::assertion(&c.encode(xml.as_bytes()).unwrap())?;
     Ok(access_edge_core::saml::AssertionFacts::decode(&out).unwrap())
 }
@@ -490,7 +493,11 @@ fn run_assertion(c: &Context, xml: &str) -> Result<access_edge_core::saml::Asser
 fn an_upstream_assertion_verifies_and_its_facts_come_from_the_signed_assertion() {
     let idp = sp();
     let c = ctx(&idp);
-    let f = run_assertion(&c, &response(&assertion(&idp, "a1", "emp-1", true), "Success")).unwrap();
+    let f = run_assertion(
+        &c,
+        &response(&assertion(&idp, "a1", "emp-1", true), "Success"),
+    )
+    .unwrap();
     assert_eq!(f.id, "a1");
     assert_eq!(f.issuer, "https://idp.test");
     assert_eq!(f.name_id, "emp-1");
@@ -498,8 +505,15 @@ fn an_upstream_assertion_verifies_and_its_facts_come_from_the_signed_assertion()
     assert_eq!(f.in_response_to.as_deref(), Some("_req1"));
     assert_eq!(f.recipient.as_deref(), Some("https://sp.test/acs"));
     assert_eq!(f.session_index.as_deref(), Some("s1"));
-    assert!(f.authn_context.unwrap().ends_with("PasswordProtectedTransport"));
-    assert_eq!(f.attributes, [(String::from("mail"), vec![String::from("ada@corp.test")])]);
+    assert!(
+        f.authn_context
+            .unwrap()
+            .ends_with("PasswordProtectedTransport")
+    );
+    assert_eq!(
+        f.attributes,
+        [(String::from("mail"), vec![String::from("ada@corp.test")])]
+    );
     assert!(f.in_response);
     assert_eq!(f.signed, ECDSA_SHA256);
     let bare = run_assertion(&c, &assertion(&idp, "a2", "emp-2", true)).unwrap();
@@ -512,7 +526,10 @@ fn an_unsigned_tampered_wrapped_encrypted_or_failed_assertion_is_refused() {
     let idp = sp();
     let c = ctx(&idp);
     assert_eq!(
-        run_assertion(&c, &response(&assertion(&idp, "a1", "emp-1", false), "Success")),
+        run_assertion(
+            &c,
+            &response(&assertion(&idp, "a1", "emp-1", false), "Success")
+        ),
         Err("signature-missing")
     );
     let signed = assertion(&idp, "a1", "emp-1", true);
@@ -521,13 +538,20 @@ fn an_unsigned_tampered_wrapped_encrypted_or_failed_assertion_is_refused() {
     let other = sp();
     assert!(run_assertion(&ctx(&other), &response(&signed, "Success")).is_err());
     let two = format!("{signed}{}", assertion(&idp, "a2", "evil", false));
-    assert_eq!(run_assertion(&c, &response(&two, "Success")), Err("saml-message"));
+    assert_eq!(
+        run_assertion(&c, &response(&two, "Success")),
+        Err("saml-message")
+    );
     assert_eq!(
         run_assertion(&c, &response(&signed, "Requester")),
         Err("saml-status")
     );
-    let enc = format!(r#"<saml:EncryptedAssertion xmlns:saml="{SAML_NS}"></saml:EncryptedAssertion>"#);
-    assert_eq!(run_assertion(&c, &response(&enc, "Success")), Err("saml-encrypted"));
+    let enc =
+        format!(r#"<saml:EncryptedAssertion xmlns:saml="{SAML_NS}"></saml:EncryptedAssertion>"#);
+    assert_eq!(
+        run_assertion(&c, &response(&enc, "Success")),
+        Err("saml-encrypted")
+    );
     let none = Context {
         certs: Vec::new(),
         ..ctx(&idp)

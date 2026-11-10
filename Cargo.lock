@@ -430,6 +430,8 @@ version = "0.4.0"
 dependencies = [
  "access-crypto",
  "access-identity-oauth",
+ "access-identity-saml",
+ "access-internal-api",
  "aws-lc-rs",
  "esuiss-access-kernel",
  "esuiss-crypto",
@@ -622,6 +624,7 @@ dependencies = [
  "access-identity-federation",
  "access-identity-hooks",
  "access-identity-oauth",
+ "access-identity-saml",
  "access-identity-session",
  "access-identity-vault",
  "access-identity-webauthn",

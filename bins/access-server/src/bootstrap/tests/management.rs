@@ -364,6 +364,7 @@ pub(super) async fn console_with(label: &str, with_adp: bool, plan: &Plan) -> Co
         scripted: std::sync::atomic::AtomicBool::new(false),
     });
     let oauth = access_http::oauth::router(OAuth::new(crate::oauth::ServerEnv {
+        saml: Arc::new(access_identity_oauth::ports::profile::NoSamlAssertions),
         client_certificates: Arc::new(access_identity_oauth::ports::profile::NoClientCertificates),
         db: PgOAuth::with_reader(w.db.app.clone(), w.db.reader.clone()),
         signer: SignerKeys::new(w.identity_signer.clone()),
