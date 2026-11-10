@@ -42,6 +42,7 @@ access-identity-edge = { path = "crates/identity-edge", default-features = false
 access-identity-x509 = { path = "crates/identity-x509", default-features = false }
 access-identity-domain = { path = "crates/identity-domain", default-features = false }
 access-identity-ssh = { path = "crates/identity-ssh", default-features = false }
+access-identity-export = { path = "crates/identity-export", default-features = false }
 access-identity-scim = { path = "crates/identity-scim", default-features = false }
 access-identity-vc = { path = "crates/identity-vc", default-features = false }
 access-identity-proxy = { path = "crates/identity-proxy", default-features = false }
@@ -133,6 +134,8 @@ quick-xml = { version = "=0.42.0", default-features = false }
 # OP-5, OP-155 m.3 (n), (u): the LDAP codec, linked only by the LDAP gateway
 ldap3_proto = { version = "=0.8.1", default-features = false }
 bytes = { version = "1.12.1", default-features = false }
+# OP-156 m.3 (s), (z): OCSF Parquet files of the export crate; Snappy only
+parquet = { version = "=60.1.0", default-features = false, features = ["snap"] }
 tokio-util = { version = "0.7.19", default-features = false }
 # OP-83
 wasm-bindgen = { version = "=0.2.129", default-features = false }

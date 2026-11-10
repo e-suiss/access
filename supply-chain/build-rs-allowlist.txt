@@ -1,5 +1,6 @@
 # F-2, SA-34
 access-store
+ahash
 anyhow
 aws-lc-rs
 aws-lc-sys
@@ -8,6 +9,7 @@ camino
 cedar-policy
 cedar-policy-core
 crossbeam-utils
+crunchy
 cryptoki-sys
 curve25519-dalek
 figment
@@ -22,6 +24,7 @@ iana-time-zone-haiku
 icu_normalizer_data
 icu_properties_data
 libc
+libm
 num-traits
 object
 parking_lot_core
@@ -37,8 +40,10 @@ rustversion
 serde
 serde_core
 serde_json
+snap
 stacker
 thiserror
+tiny-keccak
 uncased
 wasm-bindgen
 wasm-bindgen-shared

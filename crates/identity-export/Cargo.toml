@@ -1,0 +1,44 @@
+[package]
+name = "access-identity-export"
+description = "Export adapters of the read-only SIEM projection (OP-41, OP-156 m.3 (s)): OCSF Parquet on S3 with our own SigV4, OTLP logs, the HTTP event collector with its Splunk, Sentinel, Datadog and Elastic presets, and syslog over TLS with CEF or LEEF. A copy, never the record (X22)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+# OP-156 m.1 (c): the S3, HTTP collector and syslog TLS twins, for tests of other crates
+testing = ["dep:rcgen", "dep:httparse"]
+
+[dependencies]
+access-crypto = { workspace = true }
+access-identity-audit = { path = "../identity-audit" }
+access-identity-events = { workspace = true }
+access-identity-oauth = { workspace = true }
+access-store = { workspace = true }
+access-internal-api = { workspace = true }
+access-kernel = { workspace = true }
+suiss-crypto = { workspace = true, features = ["aead"] }
+bytes = { workspace = true, features = ["std"] }
+parquet = { workspace = true }
+rustls = { workspace = true, features = ["aws_lc_rs", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true }
+time = { workspace = true, features = ["std", "formatting", "macros"] }
+tokio = { workspace = true, features = ["io-util", "net", "time", "rt", "macros", "sync"] }
+tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }
+tracing = { workspace = true, features = ["std"] }
+zeroize = { workspace = true, features = ["alloc", "std"] }
+rcgen = { workspace = true, features = ["aws_lc_rs", "pem"], optional = true }
+httparse = { workspace = true, features = ["std"], optional = true }
+
+[dev-dependencies]
+access-identity-export = { path = ".", features = ["testing"] }
+access-store = { workspace = true, features = ["testing"] }
+suiss-crypto = { workspace = true, features = ["aead", "testing"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+
+[lints]
+workspace = true
