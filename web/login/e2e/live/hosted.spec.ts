@@ -158,7 +158,8 @@ test.describe("@live hosted pages", () => {
       maxRedirects: 0,
     });
     expect(start.status()).toBe(404);
-    expect((await start.json())["code"]).toBe("no-such-provider");
+    const problem = (await start.json()) as { code?: string };
+    expect(problem.code).toBe("no-such-provider");
     const metadata = await page.request.get(
       `${REALM}/v1/login/upstream/no-such-connection/saml/metadata`,
     );
