@@ -1,7 +1,8 @@
-//! The k-anonymity range API (IDP-3, OP-151 m.3 (o)): `GET {base}/range/{prefix}`, the first
-//! five hex characters of the password's SHA-1 in the HIBP format. Only the prefix leaves the
-//! process. Any failure, a status other than 200, a slow answer or a body that is not text is
-//! unavailable, never "not breached" (G50).
+//! The k-anonymity range API (IDP-3, OP-151 m.3 (o), OP-156 m.3 (h)): `GET {base}/range/{prefix}`,
+//! the first five hex characters of the password's SHA-1 in the HIBP format. Only the prefix
+//! leaves the process, with `Add-Padding: true` so the answer's size does not tell the prefix;
+//! the padding lines, whose count is 0, are dropped. Any failure, a status other than 200, a slow
+//! answer or a body that is not the range format is unavailable, never "not breached" (G50).
 
 use std::time::Duration;
 
@@ -71,13 +72,44 @@ impl<F: RangeFetch> BreachRanges for RangeApi<F> {
             return Err(RangeUnavailable);
         }
         let url = self.url(prefix);
-        let answer = tokio::time::timeout(self.timeout, self.fetch.get(&url, MAX_RANGE_BYTES))
-            .await
-            .map_err(|_| RangeUnavailable)?
-            .map_err(|_| RangeUnavailable)?;
+        let answer = tokio::time::timeout(
+            self.timeout,
+            self.fetch.get(&url, &[ADD_PADDING], MAX_RANGE_BYTES),
+        )
+        .await
+        .map_err(|_| RangeUnavailable)?
+        .map_err(|_| RangeUnavailable)?;
         if answer.status != 200 {
             return Err(RangeUnavailable);
         }
-        String::from_utf8(answer.body).map_err(|_| RangeUnavailable)
+        let body = String::from_utf8(answer.body).map_err(|_| RangeUnavailable)?;
+        unpadded(&body).ok_or(RangeUnavailable)
     }
+}
+
+/// The request header that asks for padding (OP-156 m.3 (h)).
+pub const ADD_PADDING: (&str, &str) = ("add-padding", "true");
+
+/// `body` without its padding lines: every line `SUFFIX:COUNT` with a 35-character hex suffix,
+/// the ones whose count is 0 dropped; `None` when a line is not the range format.
+#[must_use]
+pub fn unpadded(body: &str) -> Option<String> {
+    let mut out = String::with_capacity(body.len());
+    for line in body.split('\n') {
+        let line = line.strip_suffix('\r').unwrap_or(line);
+        if line.is_empty() {
+            continue;
+        }
+        let (suffix, count) = line.split_once(':')?;
+        let hex = suffix.len() == 35 && suffix.bytes().all(|b| b.is_ascii_hexdigit());
+        if !hex || count.is_empty() || !count.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        if count.bytes().all(|b| b == b'0') {
+            continue;
+        }
+        out.push_str(line);
+        out.push_str("\r\n");
+    }
+    Some(out)
 }

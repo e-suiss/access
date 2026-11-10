@@ -85,10 +85,11 @@ pub struct NoAnswer;
 
 /// An outbound `GET` (the SSRF-guarded client in production).
 pub trait RangeFetch: Send + Sync {
-    /// `GET url`, the body read up to `max_body` bytes.
+    /// `GET url` with `headers`, the body read up to `max_body` bytes.
     fn get(
         &self,
         url: &str,
+        headers: &[(&str, &str)],
         max_body: usize,
     ) -> impl Future<Output = Result<Fetched, NoAnswer>> + Send;
 }

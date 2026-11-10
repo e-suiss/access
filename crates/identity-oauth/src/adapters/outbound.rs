@@ -757,6 +757,38 @@ impl Outbound {
             .await
     }
 
+    /// `GET url` accepting `accept` with extra `headers`, the body read up to `max_body` bytes: the
+    /// padded breach range request (OP-156 m.3 (h)). A header name or value that is not a visible
+    /// ASCII token, or contains a line break, is [`OutboundError::Url`].
+    ///
+    /// # Errors
+    /// [`OutboundError`].
+    pub async fn get_with(
+        &self,
+        url: &str,
+        accept: &str,
+        headers: &[(&str, &str)],
+        max_body: usize,
+    ) -> Result<Answer, OutboundError> {
+        let target = Target::parse(url)?;
+        if !headers.iter().all(|(name, value)| header_ok(name, value)) {
+            return Err(OutboundError::Url);
+        }
+        let extra: String = headers
+            .iter()
+            .map(|(name, value)| format!("{name}: {value}\r\n"))
+            .collect();
+        let request = format!(
+            "GET {} HTTP/1.1\r\nHost: {}\r\nAccept: {accept}\r\n{extra}User-Agent: access\r\n\
+             Accept-Encoding: identity\r\nConnection: close\r\n{}\r\n",
+            target.path,
+            target.host_header(),
+            traceparent(),
+        );
+        self.bounded(&target, request.into_bytes(), max_body, None)
+            .await
+    }
+
     /// `GET url` with a bearer token: a social provider's user-info or address list
     /// (OP-153 m.3 (l)). A token that cannot be carried in a header is [`OutboundError::Url`].
     ///

@@ -1,6 +1,7 @@
 //! Port implementations (OP-63): the MMDB GeoIP/ASN file, the k-anonymity range API, address
 //! pseudonyms in the token, and the PostgreSQL transaction.
 
+pub mod mirror;
 pub mod mmdb;
 pub mod range_api;
 

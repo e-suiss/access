@@ -69,8 +69,12 @@ days, exported as `access_risk_fp_ratio_ppm` with an alert above 5000.
   configured".
 - **Breached passwords.** `GET {base}/range/{prefix}` with the first five hex characters of the
   password's SHA-1 (`[risk] breach_range_api`), through the outbound client with a 2 second
-  deadline, or a local mirror (`[risk] breach_ranges_dir`). Any failure is unavailable, never
-  "not breached".
+  deadline and `Add-Padding: true`; the padding lines (count 0) are dropped. Or a local mirror
+  (`[risk] breach_ranges_dir`). Any failure is unavailable, never "not breached".
+- **Mirror refresh.** With `[risk] breach_mirror_source`, every 24 hours the mirror downloads
+  every range through the padded API into `versions/<id>/` and only a complete download becomes
+  `current`, by one rename of a link; a refresh that stops halfway leaves the old version served.
+  The replaced version stays on disk and is recorded as archived; nothing is removed.
 
 ## Privacy
 

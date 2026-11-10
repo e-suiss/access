@@ -1703,6 +1703,8 @@ async fn serve(
     .await?;
     let _geo_watch =
         mmdb.map(|m| tokio::spawn(m.watch(access_identity_risk::adapters::mmdb::WATCH_EVERY)));
+    // OP-156 m.3 (h)
+    let _mirror_refresh = risk::mirror_refresh(config, all.app.clone(), prepared.outbound.clone());
     let cell_ids = Arc::new(ids::CellIds::new(prepared.identity_keys.clone()));
     let (admin_app, admin_ids) = (all.app.clone(), cell_ids.clone());
     let admin_reads = all.reads.clone();

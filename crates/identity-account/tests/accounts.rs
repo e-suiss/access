@@ -18,7 +18,7 @@ use access_crypto::Secret;
 use access_crypto::envelope::SoftKek;
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::AccountError;
-use access_identity_account::adapters::hibp::{LiveRanges, MirrorRanges};
+use access_identity_account::adapters::hibp::MirrorRanges;
 use access_identity_account::adapters::pg::PgAccounts;
 use access_identity_account::adapters::system::SystemEntropy;
 use access_identity_account::app::accounts::{
@@ -497,7 +497,7 @@ async fn breached_or_unchecked_passwords_are_refused() {
     }
     let services = PasswordServices {
         hasher: &e.hasher,
-        ranges: &LiveRanges,
+        ranges: &NoRanges,
         entropy: &SystemEntropy,
     };
     let err = set_password(
@@ -683,4 +683,17 @@ async fn no_identifier_is_touched_without_the_vault() {
         tx.subject_by_identifier("nv@example.com").await,
         Err(AccountError::Vault)
     ));
+}
+
+/// A range source that never answers.
+struct NoRanges;
+
+impl access_identity_account::ports::BreachRanges for NoRanges {
+    fn range(
+        &self,
+        _prefix: &str,
+    ) -> impl Future<Output = Result<String, access_identity_account::ports::RangeUnavailable>> + Send
+    {
+        std::future::ready(Err(access_identity_account::ports::RangeUnavailable))
+    }
 }

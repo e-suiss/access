@@ -25,6 +25,7 @@ use tokio::net::{TcpListener, TcpStream};
 #[derive(Clone, Default)]
 struct Mock {
     seen: Arc<Mutex<Vec<String>>>,
+    padded: Arc<Mutex<Vec<bool>>>,
 }
 
 async fn serve(listener: TcpListener, mock: Mock) {
@@ -41,11 +42,21 @@ async fn serve(listener: TcpListener, mock: Mock) {
                 .unwrap_or_default()
                 .to_owned();
             mock.seen.lock().unwrap().push(path.clone());
+            mock.padded.lock().unwrap().push(
+                head.to_ascii_lowercase()
+                    .contains("\r\nadd-padding: true\r\n"),
+            );
             let (status, body) = match path.as_str() {
                 "/v3/range/21BD1" => (
                     200,
                     "0018A45C4D1DEF81644B54AB7F969B88D65:1\r\n\
-                     2DC183F740EE76F27B78EB39C8AD972A757:52579\r\n",
+                     2DC183F740EE76F27B78EB39C8AD972A757:52579\r\n\
+                     3A00000000000000000000000000000000F:0\r\n",
+                ),
+                "/v3/range/7C4A8" => (
+                    200,
+                    "D09CA3762AF61E59520943DC26494F8941B:0\r\n\
+                     0018A45C4D1DEF81644B54AB7F969B88D65:3\r\n",
                 ),
                 "/v3/range/ABF7A" => (200, "0018A45C4D1DEF81644B54AB7F969B88D65:1\r\n"),
                 "/v3/range/A94A8" => (503, ""),
@@ -68,12 +79,21 @@ async fn serve(listener: TcpListener, mock: Mock) {
 struct ToMock(u16);
 
 impl RangeFetch for ToMock {
-    async fn get(&self, url: &str, max_body: usize) -> Result<Fetched, NoAnswer> {
+    async fn get(
+        &self,
+        url: &str,
+        headers: &[(&str, &str)],
+        max_body: usize,
+    ) -> Result<Fetched, NoAnswer> {
         let path = url.strip_prefix("https://ranges.test").ok_or(NoAnswer)?;
         let mut tcp = TcpStream::connect(("127.0.0.1", self.0))
             .await
             .map_err(|_| NoAnswer)?;
-        let request = format!("GET {path} HTTP/1.1\r\nHost: ranges.test\r\n\r\n");
+        let extra: String = headers
+            .iter()
+            .map(|(n, v)| format!("{n}: {v}\r\n"))
+            .collect();
+        let request = format!("GET {path} HTTP/1.1\r\nHost: ranges.test\r\n{extra}\r\n");
         tcp.write_all(request.as_bytes())
             .await
             .map_err(|_| NoAnswer)?;
@@ -119,6 +139,24 @@ async fn range_api_fails_closed() {
         "{seen:?}"
     );
     assert!(seen.contains(&String::from("/v3/range/21BD1")));
+    // OP-156 m.3 (h)
+    assert!(mock.padded.lock().unwrap().iter().all(|p| *p));
+    assert_eq!(check("123456").await, Breach::Clean);
+}
+
+// OP-156 m.3 (h), IDP-3, Ek B 5396
+#[test]
+fn padding_lines_are_dropped_and_a_malformed_line_is_no_range() {
+    use access_identity_risk::adapters::range_api::unpadded;
+    let padded =
+        "0018A45C4D1DEF81644B54AB7F969B88D65:1\r\n3A00000000000000000000000000000000F:0\r\n";
+    assert_eq!(
+        unpadded(padded).unwrap(),
+        "0018A45C4D1DEF81644B54AB7F969B88D65:1\r\n"
+    );
+    assert_eq!(unpadded("").unwrap(), "");
+    assert!(unpadded("<html>").is_none());
+    assert!(unpadded("0018A45C4D1DEF81644B54AB7F969B88D65:x\r\n").is_none());
 }
 
 // OP-151 m.3 (o)
