@@ -18,6 +18,8 @@ use crate::EdgeError;
 use crate::domain::{self, Gateway, Refusal};
 pub use crate::ports::{Registry, Vaults};
 
+pub mod ldap;
+
 /// The edge service over the gateway registry and the realms' account tables.
 pub struct Edge<R, V> {
     registry: R,

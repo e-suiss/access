@@ -9,11 +9,15 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+access-crypto = { workspace = true }
 access-identity-account = { workspace = true }
+access-identity-x509 = { workspace = true }
 access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 access-store = { workspace = true }
+suiss-crypto = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true, features = ["time"] }
 
 [dev-dependencies]
 access-identity-account = { workspace = true, features = ["testing"] }

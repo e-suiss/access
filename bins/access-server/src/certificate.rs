@@ -59,3 +59,15 @@ pub(crate) fn certificates(
         trust,
     }
 }
+
+/// What SASL EXTERNAL on the LDAP gateway needs (OP-155 m.3 (n)): the same revocation and CA
+/// Acceptances as certificate sign-in.
+pub(crate) fn edge_certificates(
+    outbound: Outbound,
+    trust: Arc<dyn CaTrust>,
+) -> access_identity_edge::app::ldap::Certificates {
+    access_identity_edge::app::ldap::Certificates {
+        revocation: Arc::new(Revocation::new(Arc::new(OutboundRevocation(outbound)))),
+        trust,
+    }
+}

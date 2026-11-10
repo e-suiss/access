@@ -1,7 +1,17 @@
-//! The edge channel's gateway registry and the realms' vault keys (OP-155 m.3 (c), IDI-11).
+//! The edge channel's gateway registry and the realms' vault keys (OP-155 m.3 (c), IDI-11), and
+//! the LDAP gateway's calls (OP-155 m.3 (n)).
 
+use std::sync::Arc;
+
+use access_crypto::opaque_id::IdKey;
+use access_identity_account::adapters::system::{
+    SystemClock, SystemEntropy, cgroup_memory_budget, cores,
+};
+use access_identity_account::app::hasher::{Hasher, HasherConfig};
 use access_identity_account::app::vault::Vault;
+use access_identity_account::domain::password::Argon2Params;
 use access_identity_edge::adapters::PgRegistry;
+use access_identity_edge::app::ldap::{Certificates, Ldap};
 use access_identity_edge::app::{Edge, Vaults};
 use access_store::Pool;
 use access_store::identity::{RealmId, TenantId};
@@ -18,15 +28,35 @@ impl Vaults for EdgeVaults {
 }
 
 /// The edge calls: the registry read by the router role, writes by the application role; the
-/// SAML gateway's `session_attest` by the SAML identity provider (OP-155 m.3 (c)).
+/// SAML gateway's `session_attest` by the SAML identity provider (OP-155 m.3 (c)). LDAP binds hash
+/// on their own Argon2id service, sized to half the host, so that a directory client cannot
+/// starve the hosted sign-in (CR-36).
 pub(crate) fn routes(
     router: Pool,
     app: Pool,
     keks: RealmKeks,
-    saml: std::sync::Arc<crate::saml::Saml>,
+    saml: Arc<crate::saml::Saml>,
+    (ids, certificates): (Arc<IdKey>, Certificates),
 ) -> axum::Router {
-    access_http::edge::router_with(
+    let hasher = Hasher::new(HasherConfig::sized(
+        Argon2Params::CANONICAL,
+        (cores() / 2).max(1),
+        cgroup_memory_budget().map(|b| b / 2),
+    ));
+    let ldap = Ldap::new(
+        EdgeVaults(keks.clone()),
+        app.clone(),
+        (
+            Arc::new(hasher),
+            Arc::new(SystemEntropy),
+            Arc::new(SystemClock),
+        ),
+        ids,
+        Some(certificates),
+    );
+    access_http::edge::router_with_ldap(
         Edge::new(PgRegistry(router), EdgeVaults(keks), app),
         Some(saml),
+        Some(Arc::new(ldap)),
     )
 }

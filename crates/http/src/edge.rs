@@ -24,6 +24,8 @@ use axum::routing::post;
 
 use crate::Problem;
 
+pub mod ldap;
+
 /// The gateway a connection's verified client certificate names (OP-155 m.3 (c)).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GatewayCert {
@@ -72,6 +74,7 @@ pub trait SessionAttest: Send + Sync {
 struct Shared<R, V> {
     edge: Edge<R, V>,
     saml: Option<Arc<dyn SessionAttest>>,
+    ldap: Option<Arc<dyn ldap::LdapCalls>>,
 }
 
 /// The edge calls over `edge`.
@@ -89,11 +92,24 @@ where
     R: Registry + 'static,
     V: Vaults + 'static,
 {
+    router_with_ldap(edge, saml, None)
+}
+
+/// [`router_with`], with the LDAP gateway's calls over `ldap` (OP-155 m.3 (n)).
+pub fn router_with_ldap<R, V>(
+    edge: Edge<R, V>,
+    saml: Option<Arc<dyn SessionAttest>>,
+    ldap: Option<Arc<dyn ldap::LdapCalls>>,
+) -> Router
+where
+    R: Registry + 'static,
+    V: Vaults + 'static,
+{
     let mut path = String::from(PREFIX);
     path.push_str("{call}");
     Router::new()
         .route(&path, post(handle::<R, V>))
-        .with_state(Arc::new(Shared { edge, saml }))
+        .with_state(Arc::new(Shared { edge, saml, ldap }))
 }
 
 fn problem(status: StatusCode, code: &'static str) -> Response {
@@ -159,6 +175,15 @@ async fn handle<R: Registry, V: Vaults>(
         return match done {
             Ok(body) => cbor(body),
             Err(e) => refused(&e),
+        };
+    }
+    if let Some(l) = &shared.ldap
+        && let Some(done) = ldap::answer(l.as_ref(), &gateway, call, &body).await
+    {
+        return match done {
+            Ok(body) => cbor(body),
+            Err(Some(e)) => refused(&e),
+            Err(None) => problem(StatusCode::BAD_REQUEST, "edge-malformed"),
         };
     }
     answer(&shared.edge, &gateway, call, &body).await

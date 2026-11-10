@@ -3,6 +3,8 @@
 
 use std::collections::BTreeMap;
 
+pub mod directory;
+
 use access_internal_api::edge::{GatewayKind, GatewayUri};
 use access_kernel::claim::body::AuthMethod;
 use access_store::identity::{RealmId, TenantId};
@@ -53,6 +55,10 @@ pub enum Refusal {
     Attest,
     /// A `session_attest` body outside the contract.
     Malformed,
+    /// An LDAP bind handle that is forged, expired, of another gateway or of a dead bind.
+    Bind,
+    /// An LDAP paging cookie of another search, tampered with or expired.
+    Cookie,
 }
 
 impl Refusal {
@@ -67,6 +73,8 @@ impl Refusal {
             Self::Event => "edge-event",
             Self::Attest => "edge-attest",
             Self::Malformed => "edge-malformed",
+            Self::Bind => "edge-bind",
+            Self::Cookie => "edge-cookie",
         }
     }
 }
