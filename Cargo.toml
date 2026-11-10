@@ -69,6 +69,8 @@ p256 = { version = "0.14.0", default-features = false, features = ["ecdsa"] }
 cryptoki = { version = "=0.12.1", default-features = false }
 # CR-13, CR-54
 aws-lc-rs = { version = "1.18.2", default-features = false, features = ["aws-lc-sys"] }
+# OP-156 m.3 (z): the raw blind RSA operations of `esuiss-crypto::blind_rsa`; the same build aws-lc-rs links
+aws-lc-sys = { version = "0.46.0", default-features = false }
 # OP-146 m.3, CR-36
 argon2 = { version = "=0.6.0", default-features = false }
 # OP-151 m.1 (b): GeoIP/ASN MMDB files

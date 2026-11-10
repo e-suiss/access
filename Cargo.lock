@@ -2286,6 +2286,7 @@ name = "esuiss-crypto"
 version = "0.4.0"
 dependencies = [
  "aws-lc-rs",
+ "aws-lc-sys",
  "cryptoki",
  "curve25519-dalek",
  "ed25519-dalek",
