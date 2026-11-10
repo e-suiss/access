@@ -426,3 +426,74 @@ async fn a_declared_target_with_the_wrong_anchor_is_unreachable() {
         .declaring(vec![DeclaredTarget::new(&url, None).unwrap()]);
     assert_eq!(deliver(&none, &url).await, Err(OutboundError::Unreachable));
 }
+
+// OP-155 m.3 (m), §14.3
+#[test]
+fn revocation_urls_may_be_http_on_port_80_only() {
+    let (t, tls) = revocation_target("http://ocsp.Example/").unwrap();
+    assert_eq!(
+        (t.host.as_str(), t.port, t.path.as_str(), tls),
+        ("ocsp.example", 80, "/", false)
+    );
+    let (t, tls) = revocation_target("http://crl.example:80/ca.crl").unwrap();
+    assert_eq!((t.port, t.path.as_str(), tls), (80, "/ca.crl", false));
+    let (t, tls) = revocation_target("https://ocsp.example/").unwrap();
+    assert_eq!((t.port, tls), (443, true));
+    let (t, _) = revocation_target("http://[2606:4700::1]/o").unwrap();
+    assert_eq!(t.port, 80);
+    for blocked in [
+        "http://ocsp.example:8080/",
+        "http://ocsp.example:443/",
+        "https://ocsp.example:8443/",
+        "http://[2606:4700::1]:81/",
+    ] {
+        assert_eq!(
+            revocation_target(blocked).unwrap_err(),
+            OutboundError::Blocked,
+            "{blocked}"
+        );
+    }
+    for bad in [
+        "ftp://ocsp.example/",
+        "http://user@ocsp.example/",
+        "http://ocsp.example/#f",
+        "ldap://x/",
+    ] {
+        assert_eq!(
+            revocation_target(bad).unwrap_err(),
+            OutboundError::Url,
+            "{bad}"
+        );
+    }
+}
+
+// OP-155 m.3 (m), §14.3
+#[tokio::test]
+async fn a_revocation_fetch_reaches_no_private_address() {
+    let out = Outbound::disabled(Duration::from_secs(1));
+    for url in [
+        "http://127.0.0.1/ocsp",
+        "http://10.0.0.1/ca.crl",
+        "http://169.254.169.254/latest",
+        "http://[::1]/o",
+    ] {
+        assert_eq!(
+            out.revocation(url, None, "application/pkix-crl", 1024)
+                .await
+                .unwrap_err(),
+            OutboundError::Blocked,
+            "{url}"
+        );
+    }
+    assert_eq!(
+        out.revocation(
+            "http://192.168.1.1/",
+            Some(("application/ocsp-request", &[0x30, 0x00])),
+            "application/ocsp-response",
+            1024
+        )
+        .await
+        .unwrap_err(),
+        OutboundError::Blocked
+    );
+}

@@ -10,6 +10,9 @@
 //! - redirects are not followed; a `3xx` is an answer like any other;
 //! - one deadline for the whole exchange, a bounded response head and a bounded body.
 //!
+//! OCSP responders and CRL distribution points may also be `http` on port 80, because what they
+//! answer is signed (OP-155 m.3 (m)); every other guard applies to them.
+//!
 //! The one exception is an event delivery endpoint the operator declared (OP-149 m.23): a push
 //! or webhook `POST` to a URL byte-for-byte equal to a declared target may reach a private
 //! address and a port other than 443. Its certificate is still verified, against the target's
@@ -855,6 +858,95 @@ impl Outbound {
             traceparent(),
         );
         self.bounded(&target, request.into_bytes(), 0, None).await
+    }
+
+    /// `GET url`, or `POST url` with `post` (its content type and body), of a signed revocation
+    /// document: an OCSP answer or a CRL (OP-155 m.3 (m)). Because the document is signed, the
+    /// URL may also be `http` on port [`REVOCATION_PORT`], the one exception to `https`; every
+    /// other guard stays: public addresses only, no redirect followed, one deadline, a bounded
+    /// body.
+    ///
+    /// # Errors
+    /// [`OutboundError`].
+    pub async fn revocation(
+        &self,
+        url: &str,
+        post: Option<(&str, &[u8])>,
+        accept: &str,
+        max_body: usize,
+    ) -> Result<Answer, OutboundError> {
+        let (target, tls) = revocation_target(url)?;
+        if !header_ok("accept", accept) {
+            return Err(OutboundError::Url);
+        }
+        let request = match post {
+            Some((content_type, body)) => post_request(
+                &target,
+                content_type,
+                &[("Accept", String::from(accept))],
+                body,
+            )?,
+            None => format!(
+                "GET {} HTTP/1.1\r\nHost: {}\r\nAccept: {accept}\r\nUser-Agent: access\r\n\
+                 Accept-Encoding: identity\r\nConnection: close\r\n{}\r\n",
+                target.path,
+                target.host_header(),
+                traceparent(),
+            )
+            .into_bytes(),
+        };
+        if tls {
+            return self.bounded(&target, request, max_body, None).await;
+        }
+        tokio::time::timeout(self.timeout, async {
+            let addr = resolve(&target).await?;
+            let mut tcp = match self.connect {
+                Some(d) => tokio::time::timeout(d, TcpStream::connect(addr))
+                    .await
+                    .map_err(|_| OutboundError::Unreachable)?,
+                None => TcpStream::connect(addr).await,
+            }
+            .map_err(|_| OutboundError::Unreachable)?;
+            exchange(&mut tcp, &request, max_body).await
+        })
+        .await
+        .map_err(|_| OutboundError::Unreachable)?
+    }
+}
+
+/// The one port reached over plain `http`: OCSP responders and CRL distribution points, whose
+/// documents are signed (OP-155 m.3 (m)).
+pub const REVOCATION_PORT: u16 = 80;
+
+/// A revocation URL: `https` on port 443, or `http` on port [`REVOCATION_PORT`]; whether it
+/// is `https`.
+///
+/// # Errors
+/// [`OutboundError::Url`]; [`OutboundError::Blocked`] for another port.
+pub fn revocation_target(url: &str) -> Result<(Target, bool), OutboundError> {
+    let Some(rest) = url.strip_prefix("http://") else {
+        let t = Target::parse(url)?;
+        return if t.port == PORT {
+            Ok((t, true))
+        } else {
+            Err(OutboundError::Blocked)
+        };
+    };
+    let authority = rest.split(['/', '?']).next().unwrap_or_default();
+    let explicit = match authority.strip_prefix('[') {
+        Some(v6) => v6
+            .split_once(']')
+            .is_some_and(|(_, after)| !after.is_empty()),
+        None => authority.contains(':'),
+    };
+    let mut t = Target::parse(&format!("https://{rest}"))?;
+    if !explicit {
+        t.port = REVOCATION_PORT;
+    }
+    if t.port == REVOCATION_PORT {
+        Ok((t, false))
+    } else {
+        Err(OutboundError::Blocked)
     }
 }
 

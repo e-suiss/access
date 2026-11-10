@@ -688,6 +688,9 @@ fn lockdown(config: &Config) -> Lockdown {
     }
     // §10.4.6, §11.3.6
     lockdown = lockdown.allow_tcp_connect(access_identity_oauth::adapters::outbound::PORT);
+    // OP-155 m.3 (m)
+    lockdown =
+        lockdown.allow_tcp_connect(access_identity_oauth::adapters::outbound::REVOCATION_PORT);
     // OP-67
     if let Some(port) = config.telemetry.otlp_port() {
         lockdown = lockdown.allow_tcp_connect(port);
