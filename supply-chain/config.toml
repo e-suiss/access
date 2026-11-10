@@ -26,6 +26,10 @@ url = "https://raw.githubusercontent.com/zcash/rust-ecosystem/main/supply-chain/
 dependency-criteria = { rcgen = "safe-to-run", time = "safe-to-run" }
 notes = "rcgen and time are reached only through the `testing` feature, which only dev-dependencies enable (OP-155 m.8)"
 
+[policy.access-vc-verifier]
+dependency-criteria = { rcgen = "safe-to-run" }
+notes = "rcgen is reached only through the `testing` feature, which only dev-dependencies enable (OP-155 m.8)"
+
 [policy.esuiss-access-kernel]
 audit-as-crates-io = false
 
