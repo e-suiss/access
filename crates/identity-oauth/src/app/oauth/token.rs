@@ -753,7 +753,7 @@ async fn signal<T: OAuthTx>(
 
 /// The grant a redeemed code opened, with the CAEP `session-presented` of the login session
 /// the client redeemed queued beside it (TN-41).
-async fn presented<T: OAuthTx>(
+pub(super) async fn presented<T: OAuthTx>(
     tx: &mut T,
     grant: [u8; 16],
     subject: [u8; 16],

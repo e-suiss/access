@@ -18,6 +18,7 @@ mod logout;
 mod management;
 pub mod pep;
 mod profile;
+pub mod proxy;
 mod resource;
 mod service;
 mod token;
