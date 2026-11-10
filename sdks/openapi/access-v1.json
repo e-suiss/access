@@ -5339,6 +5339,34 @@
             "minimum": 0,
             "description": "How many while-conditions it carries."
           },
+          "commitment": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ref",
+              "state",
+              "owner"
+            ],
+            "properties": {
+              "ref": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "description": "The CommitmentRef digest the holding ends with (\"Ends with Work commitment X\", §8.17.7.2)."
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "lapsed",
+                  "ended"
+                ],
+                "description": "`active` while the coordinator's current Claim says so, `lapsed` until one does, `ended` for good once it said the commitment ended (EI-5)."
+              },
+              "owner": {
+                "const": "coordinator"
+              }
+            }
+          },
           "named": {
             "type": "object",
             "additionalProperties": false,

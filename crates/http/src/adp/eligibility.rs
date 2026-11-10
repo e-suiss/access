@@ -4,8 +4,8 @@
 //! `approve:<class>` now, at most 1000, with `truncated` when more were left out. It is derived
 //! and advisory, records nothing, and is answered only to a reader the domain allowed to see it.
 
-use access_kernel::json::{Json, b64url_encode};
 use access_authority_core::query::Hit;
+use access_kernel::json::{Json, b64url_encode};
 use serde_json::{Value, json};
 
 use crate::adp::app::{Reply, Service};
@@ -29,8 +29,7 @@ pub fn gate_class(v: &Json) -> Result<String, AdpError> {
     let s = v.as_str().ok_or(AdpError("query"))?;
     let ok = (1..=64).contains(&s.len())
         && s.bytes().next().is_some_and(|b| b.is_ascii_lowercase())
-        && s
-            .bytes()
+        && s.bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
     ok.then(|| String::from(s)).ok_or(AdpError("query"))
 }

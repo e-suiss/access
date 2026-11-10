@@ -8,7 +8,10 @@ use super::*;
 fn a_gate_class_is_a_contribution_class_and_a_resource_is_bounded() {
     let j = |s: &str| parse(s.as_bytes(), 1024).unwrap();
     assert_eq!(gate_class(&j("\"approve\"")).unwrap(), "approve");
-    assert_eq!(gate_class(&j("\"finance_approve2\"")).unwrap(), "finance_approve2");
+    assert_eq!(
+        gate_class(&j("\"finance_approve2\"")).unwrap(),
+        "finance_approve2"
+    );
     for bad in ["\"\"", "\"Approve\"", "\"2fa\"", "\"a-b\"", "1"] {
         assert!(gate_class(&j(bad)).is_err(), "{bad}");
     }

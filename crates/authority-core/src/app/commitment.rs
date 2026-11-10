@@ -11,8 +11,8 @@
 //! (E14). This is the only channel through which a coordinator ends authority, and it never
 //! starts any.
 
-use access_kernel::claim::{self, ClaimState, Gate, PREDICATE_INPUT, Statement};
 use access_kernel::claim::body::BODY_CONTEXT;
+use access_kernel::claim::{self, ClaimState, Gate, PREDICATE_INPUT, Statement};
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::HopStatus;
 use access_kernel::digest::Digest;
@@ -139,9 +139,7 @@ pub(crate) fn admissible(view: &Snapshot, intent: &IntentEnvelope, payload: &Pay
             };
             let before = old.content.authority.constraints.conditions.iter();
             let after = authority.constraints.conditions.iter();
-            let of_class = |c: &&WhileCondition| {
-                matches!(c, WhileCondition::ClaimHeld { class, .. } if class == CLASS)
-            };
+            let of_class = |c: &&WhileCondition| matches!(c, WhileCondition::ClaimHeld { class, .. } if class == CLASS);
             before.filter(of_class).eq(after.filter(of_class))
         }
         _ => true,
@@ -234,7 +232,9 @@ fn names_issuer(view: &Snapshot, issuer: &Id, acceptance: &Digest) -> bool {
         .filter(|a| claim::acceptance_digest(&a.content) == *acceptance)
         .filter_map(|a| Gate::of(&a.content).ok())
         .any(|g| {
-            g.issuer == Some(*issuer) && g.use_ == PREDICATE_INPUT && g.classes.iter().any(|c| c == CLASS)
+            g.issuer == Some(*issuer)
+                && g.use_ == PREDICATE_INPUT
+                && g.classes.iter().any(|c| c == CLASS)
         })
 }
 

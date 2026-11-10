@@ -329,19 +329,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             .await
     }
 
-    /// Runs `f` over a snapshot, fetching what it asks for until it asks for nothing more.
+    /// Runs `f` over a snapshot, fetching the keys and prefix scans it asks for until it asks
+    /// for nothing more.
     pub(crate) async fn settled<T>(&self, f: impl Fn(&Snapshot) -> T) -> Result<T, CoreError> {
-        let mut snap = Snapshot::default();
-        for _ in 0..crate::app::MAX_PASSES {
-            snap.restart();
-            let out = f(&snap);
-            let missing = snap.missing();
-            if missing.is_empty() {
-                return Ok(out);
-            }
-            snap.fill(self.reader.fetch(&missing).await?);
-        }
-        Err(CoreError::Passes)
+        crate::app::publishing::settle(&self.reader, f).await
     }
 
     /// The reader of a search: the actor of a `check` AIS over the search intent, `None` when

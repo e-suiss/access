@@ -40,10 +40,11 @@ meaning = "The subject's commitment is active; false ends authority held while i
 const GATE_CLASS: &str = "finance_approve";
 
 /// The public routes a coordinator calls beyond the kit's own (PI-14).
-const ROUTES: [&str; 3] = [
+const ROUTES: [&str; 4] = [
     "/access/v1/eligibility:set",
     "/access/v1/eligibility:check",
     "/access/v1/claims:ingest",
+    "/access/v1/search/{kind}",
 ];
 
 /// `SHA-256("access/claim-body/v1" ‖ 0x00 ‖ dCBOR(["commitment_active", body]))`, as the
@@ -186,10 +187,13 @@ impl Coordinator {
     }
 
     async fn head(&self) -> u64 {
-        read_head(&self.s.w.db.sequencer, &DomainId::from_bytes(self.s.domain.0))
-            .await
-            .unwrap()
-            .pos
+        read_head(
+            &self.s.w.db.sequencer,
+            &DomainId::from_bytes(self.s.domain.0),
+        )
+        .await
+        .unwrap()
+        .pos
     }
 
     /// The root accepts the coordinator's `commitment_active` Claims as predicate inputs and
@@ -248,7 +252,7 @@ impl Coordinator {
     }
 
     async fn post(&self, path: &str, body: Json) -> Json {
-        assert!(ROUTES.contains(&path));
+        assert!(ROUTES.contains(&path) || path == "/access/v1/search/inventory");
         let key = b64url_encode(&access_crypto::random::bytes::<16>().unwrap());
         let mut req = HttpRequestOf::builder()
             .method("POST")
@@ -266,12 +270,47 @@ impl Coordinator {
         serde_json::from_slice(&bytes).unwrap()
     }
 
+    /// `who`'s own inventory rows (§8.17.7.1), read with its own statement.
+    async fn inventory(&self, who: &Actor) -> Vec<Json> {
+        let search = IntentEnvelope {
+            provenance: BTreeMap::new(),
+            action: meta::core_action("read"),
+            resources: vec![ResourceRef {
+                namespace: String::from("access.search"),
+                path: vec![String::from("inventory")],
+                incarnation: 0,
+            }],
+            params: BTreeMap::new(),
+            opaque: BTreeMap::new(),
+            recipient: None,
+            purpose: None,
+            context: ContextRefs::default(),
+            validity: window(),
+        };
+        let basis = ExerciseBasis::Anchor(meta::meta_anchor(&self.s.domain));
+        let mut context = self.signed_context(&who.key, &search, basis);
+        context["query"] = json!({ "party": b64url_encode(&who.party.0) });
+        let answer = self
+            .post("/access/v1/search/inventory", json!({ "context": context }))
+            .await;
+        answer["results"].as_array().unwrap().clone()
+    }
+
     /// The coordinator's own signed `check` context over `envelope` on `basis`.
     fn context(&self, envelope: &IntentEnvelope, basis: ExerciseBasis) -> Json {
+        self.signed_context(&self.key, envelope, basis)
+    }
+
+    fn signed_context(
+        &self,
+        key: &SoftSigner,
+        envelope: &IntentEnvelope,
+        basis: ExerciseBasis,
+    ) -> Json {
         let nonce = access_crypto::random::bytes::<16>().unwrap().to_vec();
         let digest = intent_digest(envelope).unwrap();
         let ais = Seam::ais(
-            &self.key,
+            key,
             &Statement {
                 domain: self.s.domain,
                 nonce: nonce.clone(),
@@ -341,8 +380,7 @@ impl Coordinator {
 
     /// `eligibility:check`: whether `who` may contribute `class` to `gate` now on `basis`.
     async fn eligible(&self, who: Id, class: &str, gate: Digest, basis: ExerciseBasis) -> bool {
-        let intent =
-            access_kernel::contribution::contribute_intent(gate, class, window()).unwrap();
+        let intent = access_kernel::contribution::contribute_intent(gate, class, window()).unwrap();
         let digest = intent_digest(&intent).unwrap();
         let body = adp_body(&ExerciseRequest {
             domain: &self.s.domain,
@@ -532,7 +570,11 @@ async fn commitment_scoped(label: &str, product: &str) {
     let agent = c.s.actor().await;
     let commitment = digest();
     let held = |exercise: Digest, since: u64| {
-        holding(meta::object_id(&exercise, kind::GRANT, 0), agent.party, since)
+        holding(
+            meta::object_id(&exercise, kind::GRANT, 0),
+            agent.party,
+            since,
+        )
     };
 
     // EI-5
@@ -570,6 +612,14 @@ async fn commitment_scoped(label: &str, product: &str) {
     ProductTwin::enforce(allowed.unwrap(), &delivery, || delivered.push("po-1182")).unwrap();
     assert_eq!(delivered, ["po-1182"]);
 
+    // §8.17.7.2, IA-3
+    let grant = b64url_encode(&meta::object_id(&exercise, kind::GRANT, 0).0);
+    let row = |rows: Vec<Json>| rows.into_iter().find(|r| r["grant"] == grant.as_str());
+    let shared = row(c.inventory(&principal).await).unwrap();
+    assert_eq!(shared["commitment"]["ref"], b64url_encode(&commitment.0));
+    assert_eq!(shared["commitment"]["state"], "active");
+    assert_eq!(shared["commitment"]["owner"], "coordinator");
+
     // EI-23
     let stranger = c.s.actor().await;
     c.commitment(stranger.party, &digest(), true).await;
@@ -602,6 +652,9 @@ async fn commitment_scoped(label: &str, product: &str) {
     c.commitment(agent.party, &commitment, true).await;
     let r = c.submit(&agent, &principal, basis).await;
     assert!(matches!(r, Err(Denied::Refused(_))), "{r:?}");
+    if let Some(r) = row(c.inventory(&principal).await) {
+        assert_eq!(r["commitment"]["state"], "ended", "{r}");
+    }
     let kept = access_store::commitments::termination(
         &c.s.w.db.app,
         &DomainId::from_bytes(c.s.domain.0),
@@ -618,16 +671,15 @@ async fn commitment_scoped(label: &str, product: &str) {
     );
 
     // EI-5
-    let to_itself = c
-        .s
-        .twin
-        .attempt(
-            &c.s.domain,
-            &Payload::GrantIssue(c.scoped(&principal, &agent, acceptance)),
-            ExerciseBasis::Anchor(principal.anchor),
-        )
-        .await
-        .unwrap();
+    let to_itself =
+        c.s.twin
+            .attempt(
+                &c.s.domain,
+                &Payload::GrantIssue(c.scoped(&principal, &agent, acceptance)),
+                ExerciseBasis::Anchor(principal.anchor),
+            )
+            .await
+            .unwrap();
     assert!(!to_itself.took_effect(), "{to_itself:?}");
     c.only_public();
 }
@@ -649,16 +701,22 @@ async fn eligible_set(label: &str, product: &str) {
         .await;
     c.approver(pred("finance_team", EqValue::Bool(true)), GATE_CLASS, open)
         .await;
-    c.approver(SubjectSelector::Party(other_class.party), "legal_approve", open)
-        .await;
+    c.approver(
+        SubjectSelector::Party(other_class.party),
+        "legal_approve",
+        open,
+    )
+    .await;
     let meta_anchor = ExerciseBasis::Anchor(meta::meta_anchor(&c.s.domain));
 
     // E26
     let before = c.head().await;
-    assert_eq!(c.eligible_set(GATE_CLASS, meta_anchor).await, (Vec::new(), false));
-    let (read, since) = c
-        .s
-        .grant(
+    assert_eq!(
+        c.eligible_set(GATE_CLASS, meta_anchor).await,
+        (Vec::new(), false)
+    );
+    let (read, since) =
+        c.s.grant(
             SubjectSelector::Party(c.s.party),
             canonical(
                 &[meta::core_action("read")],

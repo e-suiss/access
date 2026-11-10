@@ -120,6 +120,20 @@ pub struct Holding {
     pub said: Option<Said>,
     /// The holder as an agent, when it is one (XI-17).
     pub agent: Option<crate::app::faces::AgentFace>,
+    /// The coordinator commitment it ends with, and where that stands (§8.17.7.2, IA-3,
+    /// OP-156 m.3 (t)).
+    pub commitment: Option<(access_kernel::digest::Digest, CommitmentState)>,
+}
+
+/// Where a commitment-scoped holding's commitment stands, as Access sees it (EI-5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum CommitmentState {
+    /// The coordinator's current Claim says it is active.
+    Active,
+    /// No current Claim says so: the holding lapsed until one does.
+    Lapsed,
+    /// The coordinator said it ended: so did the holding, for good.
+    Ended,
 }
 
 /// The Claim behind a selection (XI-15, INV-16, §8.17.5.7): its issuer and when it was stated.
@@ -427,6 +441,24 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             Holder::Party(p) => self.agent_face(p, now).await?,
             _ => None,
         };
+        // §8.17.7.2, EI-5
+        let commitment = self
+            .settled(|snap| {
+                crate::app::commitment::of(snap, &grant).map(|c| {
+                    let state = match crate::app::commitment::status(snap, &grant, state, Some(now))
+                    {
+                        Some(access_kernel::combinator::HopStatus::Revoked) => {
+                            CommitmentState::Ended
+                        }
+                        Some(access_kernel::combinator::HopStatus::Lapsed) => {
+                            CommitmentState::Lapsed
+                        }
+                        _ => CommitmentState::Active,
+                    };
+                    (c, state)
+                })
+            })
+            .await?;
         Ok(Some(Holding {
             grant,
             groups,
@@ -450,6 +482,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             selection,
             said,
             agent,
+            commitment,
         }))
     }
 

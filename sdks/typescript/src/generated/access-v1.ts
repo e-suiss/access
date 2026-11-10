@@ -1403,6 +1403,17 @@ export interface components {
             budget: Record<string, never>[];
             /** @description How many while-conditions it carries. */
             conditions: number;
+            commitment?: {
+                /** @description The CommitmentRef digest the holding ends with ("Ends with Work commitment X", §8.17.7.2). */
+                ref: string;
+                /**
+                 * @description `active` while the coordinator's current Claim says so, `lapsed` until one does, `ended` for good once it said the commitment ended (EI-5).
+                 * @enum {string}
+                 */
+                state: "active" | "lapsed" | "ended";
+                /** @constant */
+                owner: "coordinator";
+            };
             named?: {
                 /** @description Role. */
                 name: string;

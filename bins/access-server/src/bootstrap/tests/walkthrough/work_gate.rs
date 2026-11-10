@@ -95,8 +95,10 @@ impl Desk {
         .unwrap();
         assert_eq!(done["render_digest_verified"], true, "{done}");
         let contribution = Digest(
-            <[u8; 32]>::try_from(access_kernel::json::b64url_decode(done["contribution"].as_str().unwrap()).unwrap())
-                .unwrap(),
+            <[u8; 32]>::try_from(
+                access_kernel::json::b64url_decode(done["contribution"].as_str().unwrap()).unwrap(),
+            )
+            .unwrap(),
         );
         let route = route_by_slug(&self.w.db.router, "acme")
             .await
@@ -105,14 +107,16 @@ impl Desk {
         let mut t = TenantTx::begin(&self.w.db.app, route.tenant, route.realm)
             .await
             .unwrap();
-        let row = access_store::approvals::approval_by_uri(&mut t, done["request_uri"].as_str().unwrap())
-            .await
-            .unwrap()
-            .unwrap();
+        let row =
+            access_store::approvals::approval_by_uri(&mut t, done["request_uri"].as_str().unwrap())
+                .await
+                .unwrap()
+                .unwrap();
         t.commit().await.unwrap();
         assert_eq!(row.exercise, Some(contribution.0));
-        let aas = suiss_crypto::dcbor::decode(&row.aas.unwrap(), suiss_crypto::dcbor::Limits::CEILING)
-            .unwrap();
+        let aas =
+            suiss_crypto::dcbor::decode(&row.aas.unwrap(), suiss_crypto::dcbor::Limits::CEILING)
+                .unwrap();
         (contribution, ApprovalAct::from_value(&aas).unwrap())
     }
 }

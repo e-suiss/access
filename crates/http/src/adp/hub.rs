@@ -77,6 +77,19 @@ fn holding(h: &Holding) -> Out {
     }
     m.insert("since".into(), Out::from(h.since));
     m.insert("revision".into(), Out::from(h.revision));
+    // §8.17.7.2, IA-3, OP-156 m.3 (t)
+    if let Some((c, state)) = &h.commitment {
+        use access_authority_core::app::hub::CommitmentState;
+        let state = match state {
+            CommitmentState::Active => "active",
+            CommitmentState::Lapsed => "lapsed",
+            CommitmentState::Ended => "ended",
+        };
+        m.insert(
+            "commitment".into(),
+            json!({ "ref": b64url_encode(&c.0), "state": state, "owner": "coordinator" }),
+        );
+    }
     // XI-17, A-12
     if let Some(a) = &h.agent {
         m.insert("agent".into(), face(a));

@@ -77,7 +77,8 @@ pub async fn termination(
             commitment: fixed(&r.commitment)?,
             pos: u64::try_from(r.pos).map_err(|_| StoreError::Corrupt)?,
             claim: <[u8; 16]>::try_from(r.claim_id.as_slice()).map_err(|_| StoreError::Corrupt)?,
-            issuer: <[u8; 16]>::try_from(r.issuer_id.as_slice()).map_err(|_| StoreError::Corrupt)?,
+            issuer: <[u8; 16]>::try_from(r.issuer_id.as_slice())
+                .map_err(|_| StoreError::Corrupt)?,
             subject: <[u8; 16]>::try_from(r.subject_id.as_slice())
                 .map_err(|_| StoreError::Corrupt)?,
         })

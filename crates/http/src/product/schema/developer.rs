@@ -342,6 +342,14 @@ fn hub() -> Value {
                 "validity": object(&json!({ "from": uint("Unix ms."), "until": uint("Unix ms.") }), &["from", "until"]),
                 "budget": list(&json!({ "type": "object" }), "Its authority limits (XI-14); a financial limit is another owner's row."),
                 "conditions": uint("How many while-conditions it carries."),
+                "commitment": object(
+                    &json!({
+                        "ref": b64("The CommitmentRef digest the holding ends with (\"Ends with Work commitment X\", §8.17.7.2)."),
+                        "state": { "type": "string", "enum": ["active", "lapsed", "ended"], "description": "`active` while the coordinator's current Claim says so, `lapsed` until one does, `ended` for good once it said the commitment ended (EI-5)." },
+                        "owner": { "const": "coordinator" },
+                    }),
+                    &["ref", "state", "owner"],
+                ),
                 "named": object(&json!({ "name": text("Role."), "version": uint("Version.") }), &["name", "version"]),
                 "since": uint("Issuing position."),
                 "revision": uint("Revision, 0 at issue."),
