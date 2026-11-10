@@ -1,0 +1,103 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH people AS (\n               SELECT subject_id FROM access.identity_subjects\n                WHERE tenant_id = $1 AND realm_id = $2 AND status = 'active'\n                  AND ($3::uuid IS NULL OR subject_id = $3)\n                ORDER BY subject_id LIMIT $4)\n             SELECT i.subject_id, i.kind, i.value, i.value_index, i.pii_class, i.nonce, i.ciphertext\n               FROM access.identity_identifiers i JOIN people p ON p.subject_id = i.subject_id\n              WHERE i.tenant_id = $1 AND i.realm_id = $2 AND i.status = 'active'\n                AND i.kind IN ('username', 'email')\n              ORDER BY i.subject_id, i.identifier_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "value",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "value"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "value_index",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "value_index"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "pii_class",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "pii_class"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "nonce",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "ciphertext",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "ciphertext"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "3e92f08edd200c4577576254d44ea13871b991c8f6aacced7b1d8a72079d89cb"
+}

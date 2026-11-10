@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM access.ldap_credentials\n                  WHERE tenant_id = $1 AND realm_id = $2 AND credential_id = $3\n                    AND subject_id = $4 AND status = 'active') AS \"active!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "active!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "5a92ec7229deb8a56324155a5b2be1af427ebf7e16b5d64e22f290003feb25f9"
+}

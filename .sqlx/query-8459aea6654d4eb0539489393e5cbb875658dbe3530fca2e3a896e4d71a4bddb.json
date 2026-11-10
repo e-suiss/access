@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.ldap_credentials\n                SET status = 'revoked', revoked_at = clock_timestamp()\n              WHERE tenant_id = $1 AND realm_id = $2 AND credential_id = $3 AND subject_id = $4\n                AND status = 'active'\n             RETURNING application",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "application",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.ldap_credentials",
+            "name": "application"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8459aea6654d4eb0539489393e5cbb875658dbe3530fca2e3a896e4d71a4bddb"
+}
