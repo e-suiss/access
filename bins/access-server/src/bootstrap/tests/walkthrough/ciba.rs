@@ -84,6 +84,7 @@ pub(super) fn oauth_router(w: &World) -> (axum::Router, Pings) {
         pings: Arc::clone(&pings),
     };
     let router = access_http::oauth::router(OAuth::new(crate::oauth::ServerEnv {
+        saml: std::sync::Arc::new(access_identity_oauth::ports::profile::NoSamlAssertions),
         client_certificates: Arc::new(access_identity_oauth::ports::profile::NoClientCertificates),
         db: PgOAuth::with_reader(w.db.app.clone(), w.db.reader.clone()),
         signer: SignerKeys::new(w.identity_signer.clone()),
