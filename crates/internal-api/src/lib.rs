@@ -8,6 +8,7 @@ pub mod epochs;
 pub mod events;
 pub mod idp;
 pub mod instances;
+pub mod linux;
 pub mod projections;
 pub mod saml;
 pub mod ssh;
