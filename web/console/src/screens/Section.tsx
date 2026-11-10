@@ -12,6 +12,7 @@ import * as D from "./Developer.js";
 import * as O from "./Organizations.js";
 import type { Ctx } from "./parts.js";
 import { SignInSettings } from "./SignInSettings.js";
+import { Export as SiemExport } from "./Export.js";
 import { Ssh } from "./Ssh.js";
 
 export const SCREEN_TITLE: Readonly<Record<Screen, Key>> = {
@@ -27,6 +28,7 @@ export const SCREEN_TITLE: Readonly<Record<Screen, Key>> = {
   organizations: "screenOrganizations",
   agents: "screenAgents",
   ssh: "screenSsh",
+  siem: "screenSiem",
   "sign-in": "screenSignIn",
   schemas: "screenSchemas",
   integrations: "screenIntegrations",
@@ -78,6 +80,8 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
       return <Agents ctx={ctx} />;
     case "ssh":
       return <Ssh ctx={ctx} />;
+    case "siem":
+      return <SiemExport ctx={ctx} />;
     case "sign-in":
       return <SignInSettings ctx={ctx} />;
     case "schemas":

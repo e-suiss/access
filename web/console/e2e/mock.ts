@@ -145,6 +145,8 @@ const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   replaceSshCa: ["idp.ssh", "ca_emergency"],
   registerSshHostGroup: ["idp.ssh", "host_group_register"],
   retireSshHostGroup: ["idp.ssh", "host_group_retire"],
+  registerExportSink: ["idp.export", "sink_register"],
+  retireExportSink: ["idp.export", "sink_retire"],
 };
 
 export interface Write {

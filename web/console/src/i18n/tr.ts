@@ -737,4 +737,27 @@ export const tr: Record<Key, string> = {
   sshCertificatesTitle: "Verilen sertifikalar",
   sshCertificatesNote: "Verilen her sertifika bir ssh.certificate_issued olayı olarak kaydedilir.",
   sshAuditLink: "Denetim kayıtlarını aç",
+  screenSiem: "SIEM dışa aktarımı",
+  exportSinksTitle: "Dışa aktarım hedefleri",
+  exportSinksIntro:
+    "Realm'in her denetim olayı her hedefe sırayla gider; örnekleme yoktur. Kapalı bir hedef yerini korur ve dönünce birikeni alır.",
+  exportCopyNote:
+    "Hedefte kaydın kendisi değil kopyası durur: her denetim sorusu denetim kayıtlarından cevaplanır.",
+  exportRecordsLink: "Denetim kayıtlarını aç",
+  exportDelivering: "{sent} olay teslim edildi",
+  exportFailing: "Kabul etmiyor ({code}); hiçbir şey kaybolmaz",
+  exportRetired: "Emekli",
+  exportSecretStored: "sır saklı",
+  exportRetire: "{name} hedefini emekliye ayır",
+  exportRegister: "Hedef kaydet",
+  exportName: "Ad",
+  exportNameHint: "Küçük harf, rakam ve tire; harfle başlar; yeniden kullanılmaz",
+  exportKind: "Hedef türü",
+  exportEndpoint: "Uç nokta",
+  exportEndpointHint: "Bir https URL'si ya da TLS üzerinden syslog için host:port",
+  exportSettings: "Ayarlar (JSON)",
+  exportSecret: "Sır",
+  exportSecretHint:
+    "Jeton, API anahtarı ya da gizli erişim anahtarı; mühürlü saklanır, bir daha gösterilmez",
+  exportRegisterSend: "Kaydet",
 };

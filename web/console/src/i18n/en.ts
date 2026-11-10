@@ -728,6 +728,28 @@ export const en = {
   sshCertificatesTitle: "Issued certificates",
   sshCertificatesNote: "Each issued certificate is recorded as an ssh.certificate_issued event.",
   sshAuditLink: "Open the audit records",
+  screenSiem: "SIEM export",
+  exportSinksTitle: "Export sinks",
+  exportSinksIntro:
+    "Every audit event of the realm goes to each sink in order, none sampled. A sink that is down keeps its place and gets the backlog when it returns.",
+  exportCopyNote:
+    "A sink holds a copy, not the record: every audit question is answered from the audit records.",
+  exportRecordsLink: "Open the audit records",
+  exportDelivering: "{sent} events delivered",
+  exportFailing: "Not accepting ({code}); nothing is lost",
+  exportRetired: "Retired",
+  exportSecretStored: "secret stored",
+  exportRetire: "Retire {name}",
+  exportRegister: "Register a sink",
+  exportName: "Name",
+  exportNameHint: "Lower-case letters, digits and hyphens, starting with a letter; never reused",
+  exportKind: "Destination",
+  exportEndpoint: "Endpoint",
+  exportEndpointHint: "An https URL, or host:port for syslog over TLS",
+  exportSettings: "Settings (JSON)",
+  exportSecret: "Secret",
+  exportSecretHint: "Token, API key or secret access key; stored sealed and never shown again",
+  exportRegisterSend: "Register",
 } as const;
 
 export type Key = keyof typeof en;

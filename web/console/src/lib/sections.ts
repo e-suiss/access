@@ -24,6 +24,7 @@ export const SCREENS = {
     "organizations",
     "agents",
     "ssh",
+    "siem",
     "sign-in",
   ],
   developer: ["schemas", "integrations", "lab", "logs"],
@@ -68,6 +69,8 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
   agents: [idp("agent", "register"), idp("agent", "retire"), idp("agent", "sponsor_assign")],
   // OP-156 m.3 (o)
   ssh: [idp("ssh", "ca_enable"), idp("ssh", "ca_disable"), idp("ssh", "host_group_register")],
+  // OP-156 m.3 (s)
+  siem: [idp("export", "sink_register"), idp("export", "sink_retire")],
   "sign-in": [
     idp("realm", "signin_policy"),
     idp("realm", "branding"),
