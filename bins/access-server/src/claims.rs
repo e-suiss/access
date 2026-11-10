@@ -22,6 +22,7 @@ pub(crate) struct Running {
     stop: tokio::sync::watch::Sender<bool>,
     task: tokio::task::JoinHandle<()>,
     scim: tokio::task::JoinHandle<()>,
+    hr: tokio::task::JoinHandle<()>,
     renewing: tokio::task::JoinHandle<()>,
 }
 
@@ -35,7 +36,7 @@ pub(crate) type ClaimsCourier<L> =
 pub(crate) fn start<L, R, F>(
     signer: SignerKeys,
     pools: &EventPools,
-    domains: Arc<L>,
+    (domains, hr): (Arc<L>, (crate::hr::Vaults, Arc<crate::ids::CellIds>)),
     renew: R,
 ) -> (Running, Arc<ClaimsCourier<L>>)
 where
@@ -59,6 +60,15 @@ where
         ),
         clock: access_identity_scim::ports::SystemClock,
     };
+    // OP-156 m.3 (q), INV-16
+    let hr_ingest = Ingest::new(
+        Arc::clone(&domains),
+        PgSubmissions(app.clone()),
+        Trusted(tokio::sync::Mutex::new(
+            access_authority_sequencer::adapters::SourcesClock::new(app.clone()),
+        )),
+    );
+    let hr_pools = (app.clone(), reader.clone());
     let courier = Arc::new(Courier {
         app: app.clone(),
         reader,
@@ -73,13 +83,16 @@ where
     let (stop, stopped) = tokio::sync::watch::channel(false);
     let running = Arc::clone(&courier);
     let scim_stopped = stopped.clone();
+    let hr_stopped = stopped.clone();
     let task = tokio::spawn(async move { running.run(INTERVAL, &stopped).await });
     let scim = tokio::spawn(async move { scim.run(INTERVAL, &scim_stopped).await });
+    let hr = tokio::spawn(crate::hr::run(hr_pools, hr_ingest, hr, hr_stopped));
     (
         Running {
             stop,
             task,
             scim,
+            hr,
             renewing,
         },
         courier,
@@ -92,6 +105,7 @@ impl Running {
         let _ = self.stop.send(true);
         let _ = self.task.await;
         let _ = self.scim.await;
+        let _ = self.hr.await;
         self.renewing.abort();
     }
 }

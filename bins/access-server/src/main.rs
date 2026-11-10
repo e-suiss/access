@@ -23,6 +23,7 @@ mod doorbell;
 mod edge;
 mod events;
 mod export;
+mod hr;
 mod idp;
 mod ids;
 mod ingest;
@@ -1732,6 +1733,7 @@ async fn serve(
     let claim_keks = keks.clone();
     let edge_keks = keks.clone();
     let scim_keks = keks.clone();
+    let hr_keks = keks.clone();
     // OP-155 m.3 (c), (e), (f)
     let saml = Arc::new(saml::Saml::new(
         all.app.clone(),
@@ -1816,7 +1818,12 @@ async fn serve(
         None => domains,
     });
     // OP-150 L2, CMP-8
-    let (renewing, courier) = claims::start(signer(), &platform_pools, domains.clone(), renew);
+    let (renewing, courier) = claims::start(
+        signer(),
+        &platform_pools,
+        (domains.clone(), (hr::Vaults(hr_keks), cell_ids.clone())),
+        renew,
+    );
     let _publishing = status::spawn(&domains, &product_app, &sequencer, config.signer.as_ref());
     // OP-38, OP-44, CMP-6, T16
     let led = domains.clone();
