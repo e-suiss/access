@@ -15,6 +15,7 @@ pub mod claims;
 pub mod http_sig;
 pub mod introspection;
 pub mod keys;
+pub mod release;
 pub mod status;
 
 use alloc::collections::BTreeSet;
