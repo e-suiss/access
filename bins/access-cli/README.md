@@ -122,6 +122,27 @@ access-cli realm apply-template <connect> <name|FILE>
 - **`realm apply-template`** applies a realm template from `deploy/realm-templates/` (`b2c`, `b2b-saas`, `workforce`, `finance`, `health`, `public`, `ecommerce`, `mobile`, `devplatform`, `tr-payment`) or a file of the same shape: each setting is its own Exercise, and the first failure stops the run with the earlier steps committed. Rules a template carries that the realm settings cannot express yet are printed for the operator.
 - **`replay`** re-evaluates a recorded decision with the Kernel from a bundle `{"input": <hex CBOR>, "decision": <hex CBOR>, "fuel": <n>}` and prints `match` or `mismatch`.
 
+## `ssh login`
+
+```text
+access-cli ssh login --issuer <realm issuer> --ca <ca.pem> --client-id <id> (--key-file <PATH> | --pkcs11 <URI>)
+    --host-group <name> [--principal <user>]... [--lifetime <seconds>] [--agent <party>] [--out <file>]
+```
+
+Gets a short-lived OpenSSH certificate for a fresh Ed25519 key. The browser opens the realm's
+sign-in (passkey or MFA) through the code flow with PKCE and a loopback redirect
+(`http://127.0.0.1:<port>/callback`, which the realm's client for the command line registers);
+the token is bound with DPoP to the Instance key. The realm drafts the certificate from your
+`ssh.login` Grant; the command checks that the draft names its key and server group, signs it
+with the Instance key and receives the certificate. Principals, `force-command`,
+`source-address` and extensions are the Grant's; a person's certificate lives 8 hours unless you
+ask for less (at most 12), an agent's 15 minutes (at most 1 hour).
+
+The key and certificate go to the `ssh-agent` at `SSH_AUTH_SOCK`, which drops them when the
+certificate expires, or with `--out` to a `0600` file and `<file>-cert.pub`. Servers trust the
+realm's CA with `TrustedUserCAKeys` (from `/ssh/ca.pub`) and refuse revoked certificates with
+`RevokedKeys` (from `/ssh/krl`).
+
 ## The reconciler's rules
 
 - It acts as its own agent Instance under its own Grant. That Grant holds no reserved action, so reserved changes (an upstream identity provider, the RP ID) are never applied: they are written as proposals for a quorum to sign.

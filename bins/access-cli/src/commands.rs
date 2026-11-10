@@ -10,6 +10,7 @@ pub(crate) mod migrate;
 pub(crate) mod realm;
 pub(crate) mod relay;
 pub(crate) mod replay;
+pub(crate) mod ssh;
 
 use std::io::Write as _;
 use std::path::PathBuf;

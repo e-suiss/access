@@ -2,7 +2,8 @@
 //! module under `commands/`; this file only parses the command line and maps the outcome to an
 //! exit code ([`exit`]). Secrets never come from arguments or the environment: arguments name
 //! files, and the configuration names credential files (OP-129 m.3). There is no bearer token
-//! option: the management commands act with an Instance key (TN-130).
+//! option: the management commands act with an Instance key (TN-130), and `ssh login` signs in
+//! in the browser before it does (IDP-32).
 
 mod api;
 mod client;
@@ -60,6 +61,8 @@ enum Command {
     Realm(commands::realm::RealmArgs),
     /// Lists undelivered Relay messages and resends one (OP-156 m.3 (c)).
     Relay(commands::relay::RelayArgs),
+    /// Gets a short-lived SSH certificate after a browser sign-in (IDP-32, OP-156 m.3 (o)).
+    Ssh(commands::ssh::SshArgs),
 }
 
 fn main() -> ExitCode {
@@ -96,6 +99,7 @@ fn main() -> ExitCode {
                     Command::Apply(a) => Box::pin(commands::apply::run(a)).await,
                     Command::Realm(a) => Box::pin(commands::realm::run(a)).await,
                     Command::Relay(a) => Box::pin(commands::relay::run(a)).await,
+                    Command::Ssh(a) => Box::pin(commands::ssh::run(a)).await,
                     Command::Migrate(a) => commands::migrate::run(&cli.config, &a),
                     Command::Replay(a) => commands::replay::run(&a),
                 }

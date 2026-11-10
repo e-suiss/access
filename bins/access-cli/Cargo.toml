@@ -1,6 +1,6 @@
 [package]
 name = "access-cli"
-description = "Access operator and developer command line (OP-151 m.3 (h)): the schema migration job, and the admin, GitOps and replay commands."
+description = "Access operator and developer command line (OP-151 m.3 (h)): the schema migration job, the admin, GitOps and replay commands, and `ssh login` (IDP-32)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,11 +14,14 @@ path = "src/main.rs"
 
 [dependencies]
 access-crypto = { workspace = true }
+access-identity-oauth = { workspace = true }
 access-identity-risk = { workspace = true }
+access-identity-ssh = { workspace = true }
 access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 access-sdk = { workspace = true, features = ["std"] }
 access-store = { workspace = true }
+aws-lc-rs = { workspace = true }
 clap = { workspace = true, features = ["std", "derive", "help", "usage", "error-context"] }
 figment = { workspace = true, features = ["env", "toml"] }
 httparse = { workspace = true, features = ["std"] }
@@ -35,7 +38,6 @@ access-telemetry = { workspace = true }
 
 [dev-dependencies]
 access-identity-admin = { workspace = true }
-access-identity-oauth = { workspace = true }
 access-store = { workspace = true, features = ["testing"] }
 tokio = { workspace = true, features = ["macros", "rt", "sync"] }
 
