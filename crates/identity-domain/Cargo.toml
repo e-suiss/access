@@ -1,0 +1,38 @@
+[package]
+name = "access-identity-domain"
+description = "Custom domains of a realm (OP-156 m.3 (i)): DNS verification, the RP ID rule, an in-house ACME client with TLS-ALPN-01, and the certificates the TLS listener serves by SNI."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-crypto = { workspace = true }
+access-identity-webauthn = { workspace = true }
+access-kernel = { workspace = true }
+access-parse = { workspace = true }
+access-store = { workspace = true }
+suiss-crypto = { workspace = true, features = ["signer", "aead"] }
+httparse = { workspace = true, features = ["std"] }
+rustls = { workspace = true, features = ["aws_lc_rs", "std"] }
+rustls-pki-types = { workspace = true, features = ["std"] }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true }
+time = { workspace = true, features = ["std"] }
+tokio = { workspace = true, features = ["net", "io-util", "time", "sync"] }
+tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }
+tracing = { workspace = true, features = ["std"] }
+zeroize = { workspace = true, features = ["alloc", "std"] }
+
+[features]
+# The in-process ACME twin and the TLS-ALPN-01 probe (OP-156 m.3 (i)); tests only.
+testing = []
+
+[dev-dependencies]
+rustls-webpki = { workspace = true, features = ["aws-lc-rs", "std"] }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "io-util", "time", "sync"] }
+
+[lints]
+workspace = true

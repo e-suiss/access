@@ -393,6 +393,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-identity-domain"
+version = "0.4.0"
+dependencies = [
+ "access-crypto",
+ "access-identity-webauthn",
+ "access-parse",
+ "access-store",
+ "esuiss-access-kernel",
+ "esuiss-crypto",
+ "httparse",
+ "rustls",
+ "rustls-pki-types",
+ "rustls-webpki",
+ "serde_json",
+ "thiserror",
+ "time",
+ "tokio",
+ "tokio-rustls",
+ "tracing",
+ "zeroize",
+]
+
+[[package]]
 name = "access-identity-edge"
 version = "0.4.0"
 dependencies = [
