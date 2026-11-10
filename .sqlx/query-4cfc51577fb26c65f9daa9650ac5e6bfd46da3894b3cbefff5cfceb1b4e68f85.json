@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.mcp_tool_pins (tenant_id, realm_id, proxy, version, tools,\n                domain_id, decision_pos)\n         SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6\n           FROM access.mcp_tool_pins\n          WHERE tenant_id = $1 AND realm_id = $2 AND proxy = $3\n         RETURNING version AS \"version!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.mcp_tool_pins",
+            "name": "version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4cfc51577fb26c65f9daa9650ac5e6bfd46da3894b3cbefff5cfceb1b4e68f85"
+}
