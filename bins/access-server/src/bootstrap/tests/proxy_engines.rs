@@ -513,6 +513,10 @@ async fn run(under: Under) {
         )
         .await;
     }
+    assert!(
+        l.w.domains.derive().await.is_empty(),
+        "the derived index holds the Grant the check reads"
+    );
     let service = oauth(&l.w);
     let proxy: Arc<Forward> = Arc::new(Proxy::new(crate::proxy::ServerPorts {
         router: l.w.db.router.clone(),

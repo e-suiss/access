@@ -847,7 +847,7 @@ jobs:
       - name: The shared behaviour cases on every engine
         run: |
           SOFTHSM2_CONF="$(scripts/softhsm-local.sh)" \
-            cargo nextest run --locked -p access-server --run-ignored only -E 'test(proxy_engines)' --test-threads 1
+            cargo nextest run --locked -p access-server --run-ignored only -E 'test(proxy_engines)' --test-threads 1 --no-fail-fast
 
   # OP-68, F-6, F-7: the main image is built, pushed and signed only after every check above passed
   image:
