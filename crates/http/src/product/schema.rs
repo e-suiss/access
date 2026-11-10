@@ -163,6 +163,7 @@ mod developer;
 mod platform;
 mod records;
 mod ssf;
+mod stage11;
 mod stage6;
 
 fn components() -> Value {
@@ -176,6 +177,7 @@ fn components() -> Value {
         stage6::components(),
         ssf::components(),
         developer::components(),
+        stage11::components(),
     ] {
         if let (Value::Object(m), Value::Object(more)) = (&mut all, more) {
             m.extend(more);
@@ -274,6 +276,7 @@ fn other_components() -> Value {
                         "approval": { "type": "string" },
                         "approval_requests": { "type": "string" },
                         "pushed_authorization_request": { "type": "string" },
+                        "relay_status": { "type": "string" },
                     },
                 },
             }),
@@ -507,6 +510,7 @@ pub fn openapi() -> Value {
     stage6::paths(&mut paths, &common);
     ssf::paths(&mut paths);
     developer::paths(&mut paths);
+    stage11::paths(&mut paths);
     json!({
         "openapi": "3.1.1",
         "info": {

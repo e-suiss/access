@@ -2115,6 +2115,251 @@
           }
         }
       }
+    },
+    "/proxy/v1/check/{engine}": {
+      "get": {
+        "operationId": "proxyCheck",
+        "summary": "The forward-auth check of a registered proxy for one request, in the engine's own protocol (nginx auth_request, Traefik forwardAuth, Caddy forward_auth, Envoy ext_authz HTTP): a real AuthZEN evaluation, cached by session, application, method and path pattern for at most min(horizon, 30 s); unreachable means refused (IDP-30, OP-156 m.3 (l)).",
+        "x-suiss-status": "planned",
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-156 m.4).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "engine",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "nginx",
+                "traefik",
+                "caddy",
+                "envoy"
+              ]
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "proxyCheckPost",
+        "summary": "The same check for an engine that forwards the original method; the body is never read.",
+        "x-suiss-status": "planned",
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-156 m.4).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "engine",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "nginx",
+                "traefik",
+                "caddy",
+                "envoy"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "/relay/v1/iys-status": {
+      "post": {
+        "operationId": "relayIysStatus",
+        "summary": "Relay's report of an İYS consent record's registration state for a preference.changed event; it changes no preference (OP-156 m.3 (c)).",
+        "x-suiss-status": "planned",
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-156 m.4).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/relay-status": {
+      "get": {
+        "operationId": "getRelayStatus",
+        "summary": "{relay_lag_ms, notifications_delayed}: the age of the courier's oldest undelivered message, or null when none waits, and whether it is past 60 s; authority never waits on delivery (OP-156 m.3 (c), E30).",
+        "x-suiss-status": "planned",
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-156 m.4).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/eligibility:set": {
+      "post": {
+        "operationId": "eligibleSet",
+        "summary": "The holders of approve:<class> for {gate_class, resource, digest}: derived, records nothing, at most 1000 Parties, more marked truncated (OP-156 m.3 (t), E41).",
+        "x-suiss-status": "planned",
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-156 m.4).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EligibleSetRequest"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2725,6 +2970,9 @@
                 "type": "string"
               },
               "pushed_authorization_request": {
+                "type": "string"
+              },
+              "relay_status": {
                 "type": "string"
               }
             }
@@ -7859,6 +8107,51 @@
           },
           "render": {
             "type": "string"
+          }
+        }
+      },
+      "RelayStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "relay_lag_ms",
+          "notifications_delayed"
+        ],
+        "properties": {
+          "relay_lag_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "Age of the courier's oldest undelivered message in milliseconds; null when none waits."
+          },
+          "notifications_delayed": {
+            "type": "boolean",
+            "description": "Whether relay_lag_ms is past 60 s (OP-156 m.3 (c))."
+          }
+        }
+      },
+      "EligibleSetRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "gate_class",
+          "resource",
+          "digest"
+        ],
+        "properties": {
+          "gate_class": {
+            "type": "string",
+            "description": "The coordination Gate class."
+          },
+          "resource": {
+            "type": "string",
+            "description": "The resource the Gate is on."
+          },
+          "digest": {
+            "type": "string",
+            "description": "The digest the approval binds."
           }
         }
       }

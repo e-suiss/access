@@ -61,6 +61,8 @@ pub enum Endpoint {
     ApprovalRequests,
     /// `POST /par` on the realm (RFC 9126, OP-149 m.21 (c), m.29 (a)).
     PushedAuthorizationRequest,
+    /// `GET /access/v1/relay-status`: the courier's delivery lag (OP-156 m.3 (c)).
+    RelayStatus,
 }
 
 impl Endpoint {
@@ -88,6 +90,7 @@ impl Endpoint {
             Self::Approval => "approval",
             Self::ApprovalRequests => "approval_requests",
             Self::PushedAuthorizationRequest => "pushed_authorization_request",
+            Self::RelayStatus => "relay_status",
         }
     }
 
@@ -115,6 +118,7 @@ impl Endpoint {
             Self::Approval => "/v1/approve",
             Self::ApprovalRequests => "/v1/approve/requests",
             Self::PushedAuthorizationRequest => "/par",
+            Self::RelayStatus => "/access/v1/relay-status",
         }
     }
 

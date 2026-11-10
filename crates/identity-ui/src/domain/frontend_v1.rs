@@ -85,6 +85,16 @@ pub enum Owner {
     P10,
     /// Stage 10 P12: the OID4VCI person-attribute issuer and credential offers.
     P12,
+    /// Stage 11 Q5: push verification and approvers (OP-156 m.2).
+    Q5,
+    /// Stage 11 Q8: the SSH certificate authority.
+    Q8,
+    /// Stage 11 Q9: first-contact tokens.
+    Q9,
+    /// Stage 11 Q13: the Linux client.
+    Q13,
+    /// Stage 11 Q20: One's cloud key permission.
+    Q20,
 }
 
 /// One route.
@@ -1165,6 +1175,111 @@ pub const ROUTES: &[Route] = &[
         "/v1/account/credential-offers",
         "createCredentialOffer",
         "Makes a pre-authorized credential offer for one type, after the person's AAS.",
+    ),
+    planned(
+        Owner::Q5,
+        Verb::Post,
+        "/v1/push/challenge",
+        "createPushChallenge",
+        "Starts a push verification for the flow's second step: a 120 s single-use challenge sent by Relay to the person's approvers; the sign-in page shows the two-digit number from the RNG, which the push never carries. At most 3 pending per account in 10 minutes, none for 15 minutes after a refusal, none for an hour after 3 unanswered (OP-156 m.3 (d)).",
+    ),
+    planned(
+        Owner::Q5,
+        Verb::Post,
+        "/v1/push/answer",
+        "answerPushChallenge",
+        "The approver's answer: the push-challenge.cddl map {challenge, number, decision, device_key, pin_verified?} signed with its device key. A wrong number refuses; not_me makes a risk signal and a security notice. Push is AAL2 only and satisfies no Consequence Tier.",
+    ),
+    planned(
+        Owner::Q5,
+        Verb::Get,
+        "/v1/approvers",
+        "listApprovers",
+        "The person's approver devices: name, registered, last used.",
+    ),
+    planned(
+        Owner::Q5,
+        Verb::Post,
+        "/v1/approvers",
+        "registerApprover",
+        "Registers an approver's app-bound P-256 device key after a sign-in in the last 5 minutes, with the SEC18 cooldown; makes an authenticator_binding Claim (OP-156 m.3 (d)).",
+    ),
+    planned(
+        Owner::Q5,
+        Verb::Post,
+        "/v1/approvers/{device}/retire",
+        "retireApprover",
+        "Retires an approver device; nothing is deleted (OP-73).",
+    ),
+    planned(
+        Owner::Q9,
+        Verb::Post,
+        "/v1/first-contact/tokens",
+        "issueFirstContactTokens",
+        "Issues RFC 9578 type 2 first-contact tokens for blinded requests (first-contact.cddl), limited per identity; a token is anonymous and unlinkable and produces no authority (E58, OP-156 m.3 (z)).",
+    ),
+    planned(
+        Owner::Q8,
+        Verb::Post,
+        "/ssh/certificate",
+        "issueSshCertificate",
+        "Issues an OpenSSH user certificate for an ephemeral Ed25519 key as a projection.issue: principals, constraints and lifetime from the ssh.login Grant, at most 12 hours for a person and 1 hour for an agent, never past the horizon (OP-156 m.3 (o)).",
+    ),
+    planned(
+        Owner::Q8,
+        Verb::Get,
+        "/ssh/krl",
+        "getSshKrl",
+        "The realm's OpenSSH key revocation list.",
+    ),
+    planned(
+        Owner::Q8,
+        Verb::Get,
+        "/ssh/ca.pub",
+        "getSshCaKey",
+        "The realm's SSH user CA public key in authorized_keys form, for TrustedUserCAKeys.",
+    ),
+    planned(
+        Owner::Q13,
+        Verb::Post,
+        "/linux/v1/nss",
+        "linuxNss",
+        "A registered Linux host's NSS lookup (passwd, group, group list) for the daemon's cache, at most 12 hours and within the host's horizon (OP-156 m.3 (p)).",
+    ),
+    planned(
+        Owner::Q13,
+        Verb::Post,
+        "/linux/v1/auth",
+        "linuxAuth",
+        "A Linux console sign-in through a device code or an approver push, or a local FIDO2 assertion.",
+    ),
+    planned(
+        Owner::Q13,
+        Verb::Post,
+        "/linux/v1/sudo",
+        "linuxSudo",
+        "A sudo step-up, CT2 by default: a phishing-resistant authenticator; a push alone is not enough and nothing is served offline.",
+    ),
+    planned(
+        Owner::Q20,
+        Verb::Get,
+        "/v1/me/cloud-key-permissions",
+        "listCloudKeyPermissions",
+        "The person's cloud key permissions for One: purpose, classes, until, TEE measurement; the record holds no key or data (OP-156 m.3 (w)).",
+    ),
+    planned(
+        Owner::Q20,
+        Verb::Post,
+        "/v1/me/cloud-key-permissions",
+        "grantCloudKeyPermission",
+        "Grants One's cloud key permission as the device Instance's one.cloud_key.grant Exercise: purpose, classes, at most 24 hours, the TEE measurement and the Mandate that covers acting while the person is away.",
+    ),
+    planned(
+        Owner::Q20,
+        Verb::Post,
+        "/v1/me/cloud-key-permissions/{permission}/revoke",
+        "revokeCloudKeyPermission",
+        "Revokes a cloud key permission: one.cloud_key.revoke; the TEE copies must be destroyed before the work goes on.",
     ),
 ];
 

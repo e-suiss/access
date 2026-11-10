@@ -1830,7 +1830,8 @@ async fn serve(
             .merge(authorize)
             .merge(edge_calls)
             .merge(scim_calls)
-            .merge(declared(&Declarations::of(config.provider))),
+            .merge(declared(&Declarations::of(config.provider)))
+            .merge(access_http::stage11::router()),
     );
     let served = listen(
         config,

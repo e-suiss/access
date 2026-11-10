@@ -1957,6 +1957,229 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/push/challenge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Starts a push verification for the flow's second step: a 120 s single-use challenge sent by Relay to the person's approvers; the sign-in page shows the two-digit number from the RNG, which the push never carries. At most 3 pending per account in 10 minutes, none for 15 minutes after a refusal, none for an hour after 3 unanswered (OP-156 m.3 (d)). */
+        post: operations["createPushChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/push/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The approver's answer: the push-challenge.cddl map {challenge, number, decision, device_key, pin_verified?} signed with its device key. A wrong number refuses; not_me makes a risk signal and a security notice. Push is AAL2 only and satisfies no Consequence Tier. */
+        post: operations["answerPushChallenge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approvers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The person's approver devices: name, registered, last used. */
+        get: operations["listApprovers"];
+        put?: never;
+        /** Registers an approver's app-bound P-256 device key after a sign-in in the last 5 minutes, with the SEC18 cooldown; makes an authenticator_binding Claim (OP-156 m.3 (d)). */
+        post: operations["registerApprover"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approvers/{device}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retires an approver device; nothing is deleted (OP-73). */
+        post: operations["retireApprover"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/first-contact/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issues RFC 9578 type 2 first-contact tokens for blinded requests (first-contact.cddl), limited per identity; a token is anonymous and unlinkable and produces no authority (E58, OP-156 m.3 (z)). */
+        post: operations["issueFirstContactTokens"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ssh/certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issues an OpenSSH user certificate for an ephemeral Ed25519 key as a projection.issue: principals, constraints and lifetime from the ssh.login Grant, at most 12 hours for a person and 1 hour for an agent, never past the horizon (OP-156 m.3 (o)). */
+        post: operations["issueSshCertificate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ssh/krl": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The realm's OpenSSH key revocation list. */
+        get: operations["getSshKrl"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ssh/ca.pub": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The realm's SSH user CA public key in authorized_keys form, for TrustedUserCAKeys. */
+        get: operations["getSshCaKey"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/linux/v1/nss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A registered Linux host's NSS lookup (passwd, group, group list) for the daemon's cache, at most 12 hours and within the host's horizon (OP-156 m.3 (p)). */
+        post: operations["linuxNss"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/linux/v1/auth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A Linux console sign-in through a device code or an approver push, or a local FIDO2 assertion. */
+        post: operations["linuxAuth"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/linux/v1/sudo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** A sudo step-up, CT2 by default: a phishing-resistant authenticator; a push alone is not enough and nothing is served offline. */
+        post: operations["linuxSudo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/cloud-key-permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The person's cloud key permissions for One: purpose, classes, until, TEE measurement; the record holds no key or data (OP-156 m.3 (w)). */
+        get: operations["listCloudKeyPermissions"];
+        put?: never;
+        /** Grants One's cloud key permission as the device Instance's one.cloud_key.grant Exercise: purpose, classes, at most 24 hours, the TEE measurement and the Mandate that covers acting while the person is away. */
+        post: operations["grantCloudKeyPermission"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/cloud-key-permissions/{permission}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revokes a cloud key permission: one.cloud_key.revoke; the TEE copies must be destroyed before the work goes on. */
+        post: operations["revokeCloudKeyPermission"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5335,6 +5558,249 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    createPushChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    answerPushChallenge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listApprovers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    registerApprover: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    retireApprover: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    issueFirstContactTokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    issueSshCertificate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getSshKrl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getSshCaKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    linuxNss: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    linuxAuth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    linuxSudo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listCloudKeyPermissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    grantCloudKeyPermission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    revokeCloudKeyPermission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                permission: string;
+            };
             cookie?: never;
         };
         requestBody?: {

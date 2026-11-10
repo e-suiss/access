@@ -32,6 +32,8 @@ suiss-endpoints = {
   ? approval: https-url,
   ? approval_requests: https-url,
   ? pushed_authorization_request: https-url,
+  ; OP-156 m.3 (c): the courier's delivery lag, once served.
+  ? relay_status: https-url,
 }
 
 ; An absolute https URL in printable ASCII. A path variable is an RFC 6570 level 1 template
