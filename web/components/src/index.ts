@@ -19,3 +19,4 @@ export {
 export * as delegation from "./delegation/index.js";
 export * as agents from "./agents/index.js";
 export * as sso from "./sso/index.js";
+export * as work from "./work/index.js";

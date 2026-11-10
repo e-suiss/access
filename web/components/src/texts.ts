@@ -106,6 +106,10 @@ export const EN: Readonly<Record<string, string>> = {
     "To keep members in step, point your provider's provisioning at this address. An owner of the organization gives you its secret.",
   "sso_setup.save": "Save the connection",
   "sso_setup.finish": "Finish setup",
+  "work.badge": "Work",
+  "work.ends_with_commitment": "Ends with Work commitment { $commitment }",
+  "work.gate_not_updated": "Approval recorded (Access); gate not updated yet (Work)",
+  "attention.approvals_waiting": "{ $count } approvals waiting for you →",
 };
 
 /** Looks `key` up in `catalogue`, then in English; an unknown key shows as itself. */

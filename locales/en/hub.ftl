@@ -172,3 +172,7 @@ status-notifications_delayed = Notifications are delayed. What you changed still
 status-access_unavailable = Authority can't be changed right now. You can still ask the runtime to stop for now (Work control), if it supports it.
 offline-title = Working offline
 offline-remaining = { $voids } voids and { $amount } left until this till must go online
+# Q16 (OP-156 m.3 (t))
+work-badge = Work
+work-ends_with_commitment = Ends with Work commitment { $commitment }
+work-gate_not_updated = Approval recorded (Access); gate not updated yet (Work)

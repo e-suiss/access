@@ -4146,3 +4146,25 @@ surface = "mail"
 class = "notice"
 owner = "identity_plane"
 protected = false
+
+# Q16 (OP-156 m.3 (t))
+[[message]]
+key = "work-badge"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "work-ends_with_commitment"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "work-gate_not_updated"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false

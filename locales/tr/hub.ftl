@@ -172,3 +172,7 @@ status-notifications_delayed = Bildirimler gecikiyor. Yaptığın değişiklikle
 status-access_unavailable = Yetki şu anda değiştirilemiyor. Destekliyorsa çalışma ortamından şimdilik durmasını yine de isteyebilirsin (Work kontrolü).
 offline-title = Çevrimdışı çalışıyor
 offline-remaining = Bu kasa çevrimiçi olana kadar { $voids } iptal ve { $amount } kaldı
+# Q16 (OP-156 m.3 (t))
+work-badge = Work
+work-ends_with_commitment = Work taahhüdü { $commitment } ile biter
+work-gate_not_updated = Onay kaydedildi (Access); kapı henüz güncellenmedi (Work)
