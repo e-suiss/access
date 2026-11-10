@@ -650,6 +650,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-identity-ssh"
+version = "0.4.0"
+dependencies = [
+ "aws-lc-rs",
+ "esuiss-access-kernel",
+ "esuiss-crypto",
+ "thiserror",
+]
+
+[[package]]
 name = "access-identity-ui"
 version = "0.4.0"
 dependencies = [

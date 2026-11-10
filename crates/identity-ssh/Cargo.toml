@@ -1,0 +1,21 @@
+[package]
+name = "access-identity-ssh"
+description = "The realm SSH user certificate authority of the identity plane (IDP-32, OP-156 m.3 (o)): our own OpenSSH certificate and KRL encoders, the ssh.login action, and certificates as projections of its Grants."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-kernel = { workspace = true }
+suiss-crypto = { workspace = true, features = ["verify"] }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+aws-lc-rs = { workspace = true }
+suiss-crypto = { workspace = true, features = ["signer"] }
+
+[lints]
+workspace = true
