@@ -407,7 +407,7 @@ pub async fn world(seed: u8) -> World {
         db.app.clone(),
     );
     let app = access_http::harden(
-        access_http::edge::router_with(edge, Some(Arc::new(ldap))),
+        access_http::edge::router_with_ldap(edge, None, Some(Arc::new(ldap))),
         access_http::Limits::default(),
     );
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();

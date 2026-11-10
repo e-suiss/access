@@ -116,6 +116,17 @@ impl Idp {
                 c.w.db.app.clone(),
                 keks,
                 saml.clone(),
+                (
+                    Arc::new(access_crypto::opaque_id::IdKey::new(
+                        access_crypto::Secret::new([7; 32]),
+                    )),
+                    access_identity_edge::app::ldap::Certificates {
+                        revocation: Arc::new(access_identity_x509::app::Revocation::new(Arc::new(
+                            access_identity_x509::ports::NoFetch,
+                        ))),
+                        trust: Arc::new(access_identity_x509::ports::NoCaTrust),
+                    },
+                ),
             ),
             access_http::Limits::default(),
         );
