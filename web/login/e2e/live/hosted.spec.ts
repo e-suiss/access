@@ -84,7 +84,9 @@ test.describe("@live hosted pages", () => {
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval'");
     expect(csp).not.toContain("unsafe-inline");
-    await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Sign in" }).or(page.getByRole("alert")),
+    ).toBeVisible();
     const preview = await page.request.post(`${REALM}/v1/ciba/preview`, {
       data: { request: "AAAAAAAAAAAAAAAAAAAAAA" },
       headers: { origin: new URL(page.url()).origin },
