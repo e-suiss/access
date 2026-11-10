@@ -2227,6 +2227,15 @@ fn uint(v: u32) -> Value {
 /// The built-in preference topics, which a realm list may not repeat (OP-153 m.3 (ee)).
 const BUILT_IN_TOPICS: [&str; 3] = ["campaign", "newsletter", "product_news"];
 
+/// IDP-37 (4): `individual` or `merchant`.
+fn iys_recipient(t: &str) -> Result<(), Invalid> {
+    if ["individual", "merchant"].contains(&t) {
+        Ok(())
+    } else {
+        Err(Invalid::Body)
+    }
+}
+
 /// OP-153 m.3 (ee): at most 32 distinct topics of `^[a-z][a-z0-9_.-]{0,63}$`, none built in.
 fn preference_topics(topics: &[String]) -> Result<(), Invalid> {
     let word = |t: &str| {
@@ -2443,13 +2452,7 @@ impl Change {
             Self::GatewayKeytabPolicy(p) => p.check(),
             Self::GatewayKeytabEmergency { gateway, kvno } => gateway::emergency(gateway, *kvno),
             // IDP-37 (4)
-            Self::Iys { recipient_type, .. } => {
-                if ["individual", "merchant"].contains(&recipient_type.as_str()) {
-                    Ok(())
-                } else {
-                    Err(Invalid::Body)
-                }
-            }
+            Self::Iys { recipient_type, .. } => iys_recipient(recipient_type),
             // OP-153 m.3 (ee)
             Self::PreferenceTopics(topics) => preference_topics(topics),
             Self::AccountBind(_)

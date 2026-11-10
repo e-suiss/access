@@ -101,8 +101,8 @@ fn uuid(s: &str) -> Option<[u8; 16]> {
         return None;
     }
     let mut out = [0_u8; 16];
-    for (i, o) in out.iter_mut().enumerate() {
-        *o = u8::from_str_radix(hex.get(i * 2..i * 2 + 2)?, 16).ok()?;
+    for (o, pair) in out.iter_mut().zip(hex.as_bytes().chunks(2)) {
+        *o = u8::from_str_radix(core::str::from_utf8(pair).ok()?, 16).ok()?;
     }
     Some(out)
 }

@@ -15,6 +15,7 @@ use axum::body::Body;
 use axum::http::{Method, StatusCode};
 
 use super::management::{Console, console, now, send};
+
 use super::*;
 
 const WHO: Actor<'static> = Actor {
@@ -303,7 +304,12 @@ async fn first_contact_tokens_are_blind_unlinkable_limited_and_produce_no_author
         .unwrap();
     let dump = format!("{:?}", t.list_audit(200).await.unwrap());
     t.commit().await.unwrap();
-    let hex = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
+    let hex = |b: &[u8]| {
+        b.iter().fold(String::new(), |mut s, x| {
+            let _ = write!(s, "{x:02x}");
+            s
+        })
+    };
     for t in &tokens {
         assert!(!dump.contains(&hex(&t[2..34])) && !dump.contains(&hex(&t[98..])));
     }

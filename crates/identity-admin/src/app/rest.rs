@@ -1765,7 +1765,7 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                 recipient_type: match m.get("recipient_type") {
                     None => String::from("individual"),
                     Some(Json::String(t)) => t.clone(),
-                    Some(_) => return Err(Invalid::Body.into()),
+                    Some(_) => return Err(Invalid::Body),
                 },
             }
         }

@@ -62,6 +62,9 @@ mod tests {
     fn an_iys_host_is_found_and_the_word_alone_is_not() {
         assert_eq!(hits("let u = \"https://API.iys.org.tr/sps\";\n"), vec![1]);
         assert_eq!(hits("a\nhost = \"x.iys.gov.tr\"\n"), vec![2]);
-        assert!(hits("// İYS records go through Relay\nlet iys = true;\n").is_empty());
+        assert_eq!(
+            hits("// İYS records go through Relay\nlet iys = true;\n"),
+            Vec::<usize>::new()
+        );
     }
 }

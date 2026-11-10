@@ -25,6 +25,8 @@ use serde_json::{Value as Json, json};
 use tower::ServiceExt as _;
 
 use super::platform::{ISSUER, products};
+use core::fmt::Write as _;
+
 use super::*;
 
 const WHO: Actor<'static> = Actor {
@@ -33,7 +35,10 @@ const WHO: Actor<'static> = Actor {
 };
 
 fn uuid(b: &[u8; 16]) -> String {
-    let h: String = b.iter().map(|x| format!("{x:02x}")).collect();
+    let h = b.iter().fold(String::new(), |mut s, x| {
+        let _ = write!(s, "{x:02x}");
+        s
+    });
     format!(
         "{}-{}-{}-{}-{}",
         &h[..8],
