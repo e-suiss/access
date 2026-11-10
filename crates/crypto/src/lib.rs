@@ -9,6 +9,7 @@ pub mod jose;
 pub mod legacy_hash;
 pub mod migration_bundle;
 pub mod oauth;
+pub mod ocsp;
 pub mod opaque_id;
 pub mod platform;
 pub mod privacy_pass;

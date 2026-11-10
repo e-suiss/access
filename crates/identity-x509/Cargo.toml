@@ -1,0 +1,31 @@
+[package]
+name = "access-identity-x509"
+description = "X.509 client certificates of the identity plane (MD-8, OP-155 m.3 (m)): path validation with rustls-webpki, an in-house bounded OCSP client, CRLs through webpki, and fail-closed revocation."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-parse = { workspace = true }
+suiss-crypto = { workspace = true, features = ["verify"] }
+thiserror = { workspace = true }
+access-crypto = { workspace = true }
+rustls-webpki = { workspace = true, features = ["aws-lc-rs", "std"] }
+rustls-pki-types = { workspace = true, features = ["std"] }
+rcgen = { workspace = true, features = ["aws_lc_rs", "pem"], optional = true }
+time = { workspace = true, optional = true }
+
+[features]
+# Certificates, CRLs and OCSP responses made at test time (gitleaks-clean fixtures).
+testing = ["dep:rcgen", "dep:time"]
+
+[dev-dependencies]
+rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
+time = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[lints]
+workspace = true
