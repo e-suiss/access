@@ -178,10 +178,10 @@ struct Run {
 }
 
 impl Run {
-    fn new() -> Result<Self, ClientError> {
+    fn with_key(key: Es256Key) -> Result<Self, ClientError> {
         let (verifier, challenge) = pkce()?;
         Ok(Self {
-            key: Es256Key::generate()?,
+            key,
             verifier,
             challenge,
             state: random_text::<16>()?,
@@ -197,8 +197,23 @@ impl Run {
 /// [`ClientError`]; an answer that is not the flow's next step is
 /// [`ClientError::Unexpected`] with what Access said.
 pub async fn login(http: &Http, l: &Login<'_>) -> Result<Value, ClientError> {
+    login_keyed(http, l, Es256Key::generate()?)
+        .await
+        .map(|(tokens, _)| tokens)
+}
+
+/// [`login`] with `key` as the DPoP key the tokens are bound to; returns the key with them,
+/// for the requests that present the access token.
+///
+/// # Errors
+/// [`ClientError`].
+pub async fn login_keyed(
+    http: &Http,
+    l: &Login<'_>,
+    key: Es256Key,
+) -> Result<(Value, Es256Key), ClientError> {
     let issuer = Url::parse(l.issuer)?;
-    let run = Run::new()?;
+    let run = Run::with_key(key)?;
     let return_to = authorize(http, l, &issuer, &run).await?;
     let mut jar = sign_in(http, l.issuer, l.identifier, l.credential).await?;
     let instance = match l.device {
@@ -210,7 +225,7 @@ pub async fn login(http: &Http, l: &Login<'_>) -> Result<Value, ClientError> {
     if let (Some(i), Some(m)) = (instance, tokens.as_object_mut()) {
         m.insert(String::from("instance"), Value::from(i));
     }
-    Ok(tokens)
+    Ok((tokens, run.key))
 }
 
 /// Binds the signed-in session to the existing Instance of the user's known `device` key

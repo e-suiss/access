@@ -10,6 +10,7 @@ mod cloud;
 mod cross_org;
 mod local_agent;
 mod mcp_proxy;
+mod ssh;
 mod work_gate;
 
 use std::sync::atomic::AtomicUsize;

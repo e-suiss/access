@@ -5,15 +5,16 @@
 //! and every key's phase recorded: `ca.pub` names the keys servers trust, the KRL every key
 //! that no longer signs and every certificate whose projection's basis ended. A certificate is
 //! a `projection.issue` of the holder's `ssh.login` Grant: the draft is drawn from the Grant,
-//! the holder signs it with the Instance key its access token is bound to, the authority plane
-//! decides it, and only an ALLOW is encoded, held within the Grant, signed and recorded.
+//! the holder signs it with an Instance key of the Party its access token's account is bound
+//! to (§13.4 G54), the authority plane decides it, and only an ALLOW is encoded, held within
+//! the Grant, signed and recorded.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use access_http::problem::codes::realm as r;
 use access_http::ssh::{SshFront, SshReply};
-use access_identity_admin::ports::Decider;
+use access_identity_admin::ports::{Decider, Instances};
 use access_identity_events::domain::catalog::{CertificateHolder, IdentityEvent};
 use access_identity_oauth::app::oauth::RealmHolder;
 use access_identity_oauth::domain::authority::{ais_kid, parse_exercise};
@@ -34,7 +35,7 @@ use access_kernel::codec::Canonical as _;
 use access_kernel::combinator::{Capacity, Outcome};
 use access_kernel::digest::Digest;
 use access_kernel::json::{b64url_decode, b64url_encode};
-use access_kernel::meta::{ExerciseBasis, Payload};
+use access_kernel::meta::{ActorKind, ExerciseBasis, Payload};
 use access_kernel::model::{Id, ResourceSelector, Window};
 use access_kernel::validity::{ProfileClass, ProfileVariant};
 use access_store::Pool;
@@ -195,7 +196,7 @@ fn holding_json(basis: &ExerciseBasis) -> Value {
 
 impl<P> SshCa<P>
 where
-    P: SshGrants + Decider + Send + Sync + 'static,
+    P: SshGrants + Decider + Instances + Send + Sync + 'static,
 {
     pub(crate) const fn new(app: Pool, signer: PathBuf, plane: P) -> Self {
         Self { app, signer, plane }
@@ -306,12 +307,23 @@ where
         Ok((t, now))
     }
 
-    /// Whether `party` is one of the realm's agents.
-    async fn holder_of(t: &mut TenantTx, party: Id) -> Result<Holder, ()> {
-        Ok(if t.agent(party.0).await.map_err(|_| ())?.is_some() {
-            Holder::Agent
-        } else {
-            Holder::Person
+    /// Who holds a certificate of `holder` asked for by the account bound to `caller`, by the
+    /// Party's actor kind in the domain: the caller itself, or a live agent Party, which acts
+    /// for the caller; `None` for anyone else.
+    async fn holder_of(
+        &self,
+        domain: Digest,
+        caller: Id,
+        holder: Id,
+    ) -> Result<Option<Holder>, String> {
+        let kind = Instances::party(&self.plane, domain, holder)
+            .await
+            .map_err(|e| e.0)?;
+        Ok(match kind {
+            Some(k) if k.ended => None,
+            Some(k) if k.actor_kind == ActorKind::Agent => Some(Holder::Agent),
+            Some(_) if holder == caller => Some(Holder::Person),
+            _ => None,
         })
     }
 
@@ -339,7 +351,7 @@ where
         if m.keys().any(|k| {
             !matches!(
                 k.as_str(),
-                "host_group" | "public_key" | "principals" | "lifetime_s"
+                "host_group" | "public_key" | "principals" | "lifetime_s" | "agent"
             )
         }) {
             return Ok(SshReply::Refused(&r::INVALID_SSH_REQUEST));
@@ -363,8 +375,16 @@ where
             None => Some(None),
             Some(v) => v.as_u64().map(|s| Some(s.saturating_mul(1000))),
         };
-        let (Some(group), Some(key), Some(principals), Some(lifetime)) =
-            (group, key, principals, lifetime)
+        let agent = match m.get("agent") {
+            None => Some(None),
+            Some(a) => a
+                .as_str()
+                .and_then(|a| b64url_decode(a).ok())
+                .and_then(|a| <[u8; 16]>::try_from(a).ok())
+                .map(|a| Some(Id(a))),
+        };
+        let (Some(group), Some(key), Some(principals), Some(lifetime), Some(agent)) =
+            (group, key, principals, lifetime, agent)
         else {
             return Ok(SshReply::Refused(&r::INVALID_SSH_REQUEST));
         };
@@ -382,8 +402,11 @@ where
         else {
             return Ok(SshReply::Refused(&r::SSH_NOT_GRANTED));
         };
-        let party = Id(party);
-        let kind = Self::holder_of(&mut t, party).await.map_err(|()| "agent")?;
+        let caller = Id(party);
+        let party = agent.unwrap_or(caller);
+        let Some(kind) = self.holder_of(domain, caller, party).await? else {
+            return Ok(SshReply::Refused(&r::SSH_NOT_GRANTED));
+        };
         if !Self::live_group(&mut t, group)
             .await
             .map_err(|()| "groups")?
@@ -444,7 +467,11 @@ where
                     "intent": b64url_encode(&intent.to_bytes().map_err(|_| "intent")?),
                     "payload": b64url_encode(&payload.to_bytes().map_err(|_| "payload")?),
                     "basis": holding_json(&basis),
-                    "capacity": "own",
+                    "capacity": if party == caller {
+                        json!("own")
+                    } else {
+                        json!({ "for": b64url_encode(&caller.0) })
+                    },
                     "pep": IDENTITY_PEP,
                     "holder": kind.name(),
                 }
@@ -467,8 +494,7 @@ where
         let Ok(e) = parse_exercise(exercise) else {
             return Ok(SshReply::Refused(&r::INVALID_SSH_REQUEST));
         };
-        // §9.9.4
-        if ais_kid(&e.ais) != Some(holder.jkt) || e.capacity != Capacity::Own {
+        if ais_kid(&e.ais).is_none() {
             return Ok(SshReply::Refused(&r::INVALID_SSH_REQUEST));
         }
         let ExerciseBasis::Holding(basis) = e.basis else {
@@ -489,12 +515,21 @@ where
             .await
             .map_err(|err| err.to_string())?
             .map(Id);
-        if e.domain != domain || party != Some(basis.holder) {
+        let Some(caller) = party.filter(|_| e.domain == domain) else {
+            return Ok(SshReply::Refused(&r::INVALID_SSH_REQUEST));
+        };
+        let Some(kind) = self.holder_of(domain, caller, basis.holder).await? else {
+            return Ok(SshReply::Refused(&r::SSH_NOT_GRANTED));
+        };
+        // AG-24
+        let capacity = if basis.holder == caller {
+            Capacity::Own
+        } else {
+            Capacity::For(caller)
+        };
+        if e.capacity != capacity {
             return Ok(SshReply::Refused(&r::INVALID_SSH_REQUEST));
         }
-        let kind = Self::holder_of(&mut t, basis.holder)
-            .await
-            .map_err(|()| "agent")?;
         // OP-156 m.3 (o)
         let (group, key) = match projection::precheck(bounds, kind, now) {
             Ok(v) => v,
@@ -525,22 +560,30 @@ where
         let Some(grant) = grant else {
             return Ok(SshReply::Refused(&r::SSH_NOT_GRANTED));
         };
-        let verdict = self
-            .plane
-            .decide(Submission {
-                domain,
-                nonce: e.nonce.clone(),
-                intent: e.intent.clone(),
-                payload: Some(Box::new(e.payload.clone())),
-                basis: e.basis,
-                capacity: Capacity::Own,
-                ais: e.ais.clone(),
-                contributions: Vec::new(),
-                pep: String::from(IDENTITY_PEP),
-                actor: Some(basis.holder),
-            })
-            .await
-            .map_err(|err| err.0)?;
+        // IDP-32, G2
+        if let Err(err) = projection::derive(
+            &grant.authority,
+            bounds,
+            kind,
+            "-",
+            bounds.constraints.validity.until,
+        ) {
+            return Ok(refusal(err));
+        }
+        let verdict = Box::pin(self.plane.decide(Submission {
+            domain,
+            nonce: e.nonce.clone(),
+            intent: e.intent.clone(),
+            payload: Some(Box::new(e.payload.clone())),
+            basis: e.basis,
+            capacity,
+            ais: e.ais.clone(),
+            contributions: Vec::new(),
+            pep: String::from(IDENTITY_PEP),
+            actor: Some(basis.holder),
+        }))
+        .await
+        .map_err(|err| err.0)?;
         let committed = match verdict {
             Verdict::Committed(c) if !c.replayed => c,
             Verdict::Committed(_) | Verdict::Refused { .. } => {
@@ -571,12 +614,12 @@ where
         if p.public_key != key || p.host_group != group {
             return Ok(SshReply::Refused(&r::INVALID_SSH_REQUEST));
         }
-        let issued = match certify(
+        let issued = match Box::pin(certify(
             &SignerCa(&self.signer),
             &OsRandom,
             *realm.realm.as_bytes(),
             &p,
-        )
+        ))
         .await
         {
             Ok(i) => i,
@@ -734,16 +777,16 @@ where
 
 impl<P> SshFront for SshCa<P>
 where
-    P: SshGrants + Decider + Send + Sync + 'static,
+    P: SshGrants + Decider + Instances + Send + Sync + 'static,
 {
     async fn ca_pub(&self, realm: &RealmEntry) -> Result<Option<String>, ()> {
-        self.ca_lines(realm).await.map_err(|e| {
+        Box::pin(self.ca_lines(realm)).await.map_err(|e| {
             tracing::warn!(error = %e, "ssh ca.pub unavailable");
         })
     }
 
     async fn krl(&self, realm: &RealmEntry) -> Result<Vec<u8>, ()> {
-        self.krl_bytes(realm).await.map_err(|e| {
+        Box::pin(self.krl_bytes(realm)).await.map_err(|e| {
             tracing::warn!(error = %e, "ssh krl unavailable");
         })
     }
@@ -751,10 +794,10 @@ where
     async fn certificate(&self, realm: &RealmEntry, holder: RealmHolder, body: Value) -> SshReply {
         let done = match body.get("exercise").and_then(Value::as_str) {
             Some(x) if body.as_object().is_some_and(|m| m.len() == 1) => {
-                self.issue(realm, &holder, x).await
+                Box::pin(self.issue(realm, &holder, x)).await
             }
             Some(_) => Ok(SshReply::Refused(&r::INVALID_SSH_REQUEST)),
-            None => self.draft(realm, &holder, &body).await,
+            None => Box::pin(self.draft(realm, &holder, &body)).await,
         };
         done.unwrap_or_else(unavailable)
     }

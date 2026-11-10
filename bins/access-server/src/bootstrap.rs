@@ -1362,7 +1362,14 @@ where
                     if is_platform {
                         vec![access_identity_admin::domain::provision::catalog(party)]
                     } else {
-                        catalog.map(|s| vec![s.catalog(party)]).unwrap_or_default()
+                        // OP-156 m.3 (o)
+                        catalog
+                            .map(|s| s.catalog(party))
+                            .into_iter()
+                            .chain(std::iter::once(
+                                access_identity_ssh::domain::schema::catalog(party),
+                            ))
+                            .collect()
                     },
                     genesis_acceptances(catalog, accepted.map(|(_, (_, issuer))| *issuer)),
                 )

@@ -83,7 +83,7 @@ pub(super) fn oauth_router(w: &World) -> (axum::Router, Pings) {
         },
         pings: Arc::clone(&pings),
     };
-    let router = access_http::oauth::router(OAuth::new(crate::oauth::ServerEnv {
+    let service = Arc::new(OAuth::new(crate::oauth::ServerEnv {
         saml: std::sync::Arc::new(access_identity_oauth::ports::profile::NoSamlAssertions),
         client_certificates: Arc::new(access_identity_oauth::ports::profile::NoClientCertificates),
         db: PgOAuth::with_reader(w.db.app.clone(), w.db.reader.clone()),
@@ -111,6 +111,13 @@ pub(super) fn oauth_router(w: &World) -> (axum::Router, Pings) {
         ciba: Arc::new(ciba),
         geo: Arc::new(access_identity_oauth::ports::oauth::NoGeo),
     }));
+    let router = access_http::oauth::shared_router(service.clone());
+    // OP-156 m.3 (o)
+    let ssh = access_http::ssh::router(
+        service,
+        crate::ssh::SshCa::new(w.db.app.clone(), w.identity_signer.clone(), w.plane.clone()),
+    );
+    let router = router.merge(ssh);
     let discovery = access_http::realm::router(access_identity_oauth::app::Discovery::new(
         PgDirectory::new(w.db.router.clone()).with_facts(w.db.app.clone()),
         SignerKeys::new(w.identity_signer.clone()),
