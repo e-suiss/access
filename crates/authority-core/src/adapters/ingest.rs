@@ -189,6 +189,31 @@ where
                 result = Err(e);
             }
         }
+        // OP-156 m.3 (k), INV-32
+        if let Ok(done) = &result
+            && let (
+                ClaimVerdict::Admitted {
+                    position, claim, ..
+                },
+                Some(l),
+            ) = (&done.verdict, &done.lifecycle)
+            && let Err(e) = access_store::resources::insert_incarnation(
+                &self.setup.sequencer,
+                &DomainId::from_bytes(sub.domain.0),
+                &access_store::resources::IncarnationRow {
+                    namespace: l.resource.namespace.clone(),
+                    path: l.resource.path.clone(),
+                    incarnation: l.resource.incarnation,
+                    event: String::from(l.event.name()),
+                    claim: claim.0,
+                    issuer: done.issuer.0,
+                    pos: *position,
+                },
+            )
+            .await
+        {
+            result = Err(e.into());
+        }
         if matches!(result, Err(CoreError::Sequencer(_) | CoreError::Store(_))) {
             *guard = None;
         }

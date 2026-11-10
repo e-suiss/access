@@ -53,7 +53,26 @@ pub fn encode(report: &Report) -> Out {
         Report::Sources(s) => sources(s),
         Report::AgentStatus(s) => agent_status(s),
         Report::Outcome(o) => outcome(o),
+        Report::Incarnations(i) => incarnations(i),
     }
+}
+
+/// OP-156 m.3 (k), INV-32
+fn incarnations(i: &access_authority_core::app::resources::Incarnations) -> Out {
+    json!({
+        "type": "resource-incarnation",
+        "namespace": i.namespace,
+        "path": i.path,
+        "highest": i.highest,
+        "facts": i.facts.iter().map(|f| json!({
+            "incarnation": f.incarnation,
+            "event": f.event,
+            "claim": id(&f.claim),
+            "issuer": id(&f.issuer),
+            "position": f.pos,
+        })).collect::<Vec<_>>(),
+        "advisory": true,
+    })
 }
 
 /// A horizon as JSON, absent when it is unbounded: the largest exact JSON integer is 2^53 - 1.

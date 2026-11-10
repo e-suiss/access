@@ -2060,6 +2060,7 @@ mod proofs;
 pub mod publishing;
 pub mod recovery;
 mod regime;
+pub mod resources;
 pub mod roles;
 pub mod sources;
 pub mod vault;

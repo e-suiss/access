@@ -701,7 +701,7 @@ pub fn decode_search(
                     .map_err(|_| AdpError("query"))?,
             ),
         },
-        _ => return Err(AdpError("search")),
+        _ => later(kind, &mut q)?,
     };
     q.done()?;
     let decoded = context(&mut ctx, intent)?;
@@ -713,6 +713,32 @@ pub fn decode_search(
         .transpose()?
         .filter(|t| !t.is_empty());
     Ok((decoded, query, page))
+}
+
+/// The search kinds of later stages; any other kind is not a search.
+fn later(kind: &str, q: &mut Obj<'_>) -> R<Query> {
+    match kind {
+        // OP-156 m.3 (k)
+        "resource-incarnation" => incarnation(q),
+        _ => Err(AdpError("search")),
+    }
+}
+
+/// The resource of a `resource-incarnation` search: `{namespace, path}` (OP-156 m.3 (k)).
+fn incarnation(q: &mut Obj<'_>) -> R<Query> {
+    let Json::Array(items) = q.req("path", "query")? else {
+        return Err(AdpError("query"));
+    };
+    if items.is_empty() || items.len() > 32 {
+        return Err(AdpError("query"));
+    }
+    Ok(Query::ResourceIncarnation {
+        namespace: text(q.req("namespace", "query")?, "query")?,
+        path: items
+            .iter()
+            .map(|i| text(i, "query"))
+            .collect::<R<Vec<_>>>()?,
+    })
 }
 
 /// The change of a `change-impact` search: a role move or a `policy.set` candidate.

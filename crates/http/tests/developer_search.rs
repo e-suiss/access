@@ -363,3 +363,44 @@ fn a_rule_shaped_row_carries_its_selection_state() {
     assert!(r[3].get("selection").is_none());
     assert!(r[0].get("member").is_none());
 }
+
+// OP-156 m.3 (k), INV-32
+#[test]
+fn the_incarnation_kind_decodes_and_reports() {
+    assert_eq!(
+        decode(
+            "resource-incarnation",
+            r#"{"namespace": "ride", "path": ["vehicles", "34-abc-12"]}"#
+        ),
+        Ok(Query::ResourceIncarnation {
+            namespace: "ride".to_owned(),
+            path: vec!["vehicles".to_owned(), "34-abc-12".to_owned()],
+        })
+    );
+    for bad in [
+        r#"{"namespace": "ride", "path": []}"#,
+        r#"{"namespace": "ride"}"#,
+        r#"{"namespace": "ride", "path": [1]}"#,
+        r#"{"namespace": "ride", "path": ["v"], "extra": 1}"#,
+    ] {
+        assert!(decode("resource-incarnation", bad).is_err(), "{bad}");
+    }
+    let report = access_authority_core::app::resources::Incarnations {
+        namespace: "ride".to_owned(),
+        path: vec!["v".to_owned()],
+        highest: Some(1),
+        facts: vec![access_authority_core::app::resources::Fact {
+            incarnation: 1,
+            event: "reincarnate".to_owned(),
+            claim: Id([4; 16]),
+            issuer: Id([5; 16]),
+            pos: 9,
+        }],
+    };
+    let json = access_http::adp::report::encode(&Report::Incarnations(report));
+    assert_eq!(json["type"], "resource-incarnation");
+    assert_eq!(json["highest"], 1);
+    assert_eq!(json["facts"][0]["event"], "reincarnate");
+    assert_eq!(json["facts"][0]["position"], 9);
+    assert_eq!(json["advisory"], true);
+}

@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.resource_incarnations\n           (domain_id, namespace, path, incarnation, event, claim_id, issuer_id, pos)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "TextArray",
+        "Int8",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "31d5b95efa329100155b6579fdfa04bf44644d976bc0d8aabe211c9067a43fc4"
+}

@@ -85,6 +85,27 @@ pub trait Reader {
         let _ = (audience, now);
         std::future::ready(Ok(None))
     }
+    /// The highest incarnation an admitted `resource_lifecycle` Claim named for the resource
+    /// (OP-156 m.3 (k)). A reader without the registry is unavailable, so the ingest of such a
+    /// Claim fails closed.
+    fn highest_incarnation(
+        &self,
+        namespace: &str,
+        path: &[String],
+    ) -> impl Future<Output = Result<Option<u64>, CoreError>> + Send {
+        let _ = (namespace, path);
+        std::future::ready(Err(CoreError::Unavailable("incarnations")))
+    }
+    /// Every recorded lifecycle fact of the resource, in record order (OP-156 m.3 (k));
+    /// unavailable by default.
+    fn incarnations(
+        &self,
+        namespace: &str,
+        path: &[String],
+    ) -> impl Future<Output = Result<Vec<crate::app::resources::Fact>, CoreError>> + Send {
+        let _ = (namespace, path);
+        std::future::ready(Err(CoreError::Unavailable("incarnations")))
+    }
     /// How many offline-class projections of `holder` are open at `now` (§13.7.4); 0 by
     /// default.
     fn open_offline(

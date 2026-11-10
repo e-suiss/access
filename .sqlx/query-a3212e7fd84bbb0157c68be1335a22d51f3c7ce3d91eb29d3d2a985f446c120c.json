@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT max(incarnation) FROM access.resource_incarnations\n          WHERE domain_id = $1 AND namespace = $2 AND path = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "max",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a3212e7fd84bbb0157c68be1335a22d51f3c7ce3d91eb29d3d2a985f446c120c"
+}

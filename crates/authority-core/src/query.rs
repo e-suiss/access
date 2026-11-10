@@ -125,6 +125,14 @@ pub enum Query {
         /// The intent the viewer holds; it must be the Exercise's.
         envelope: Box<IntentEnvelope>,
     },
+    /// The lifecycle facts declared for one resource and its highest incarnation (OP-156 m.3
+    /// (k), INV-32); the domain's auditors only.
+    ResourceIncarnation {
+        /// The resource's namespace.
+        namespace: String,
+        /// Its path.
+        path: Vec<String>,
+    },
 }
 
 /// The change a `change-impact` search previews.
@@ -179,6 +187,8 @@ pub enum Report {
     AgentStatus(crate::app::agent_status::AgentStatus),
     /// L6: an Exercise's reported outcome.
     Outcome(Box<crate::app::outcome::Outcome>),
+    /// OP-156 m.3 (k): one resource's incarnations.
+    Incarnations(crate::app::resources::Incarnations),
 }
 
 /// Search kinds declared and not served yet, each owned by its lane: `discovery` (Stage 9 L3,
@@ -219,6 +229,7 @@ impl Query {
             Self::Activity { .. } => "activity",
             Self::AgentStatus => "agent-status",
             Self::Outcome { .. } => "outcome",
+            Self::ResourceIncarnation { .. } => "resource-incarnation",
         }
     }
 
@@ -238,6 +249,7 @@ impl Query {
                 | Self::Changes { .. }
                 | Self::BulkImpact { .. }
                 | Self::Sources
+                | Self::ResourceIncarnation { .. }
         )
     }
 }
@@ -635,6 +647,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 vec![Report::Bulk(self.bulk_impact(revoke, now).await?)]
             }
             Query::Sources => vec![Report::Sources(self.sources(now).await?)],
+            // OP-156 m.3 (k)
+            Query::ResourceIncarnation { namespace, path } => {
+                vec![Report::Incarnations(
+                    self.incarnations(namespace, path).await?,
+                )]
+            }
             _ => Vec::new(),
         };
         Ok(Found {

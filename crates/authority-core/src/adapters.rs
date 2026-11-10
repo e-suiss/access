@@ -134,6 +134,37 @@ impl Reader for PgReader {
         Ok(access_store::offline::profile_for(&self.pool, &self.domain, audience, now).await?)
     }
 
+    async fn highest_incarnation(
+        &self,
+        namespace: &str,
+        path: &[String],
+    ) -> Result<Option<u64>, CoreError> {
+        Ok(
+            access_store::resources::highest_incarnation(&self.pool, &self.domain, namespace, path)
+                .await?,
+        )
+    }
+
+    async fn incarnations(
+        &self,
+        namespace: &str,
+        path: &[String],
+    ) -> Result<Vec<crate::app::resources::Fact>, CoreError> {
+        Ok(
+            access_store::resources::incarnations(&self.pool, &self.domain, namespace, path)
+                .await?
+                .into_iter()
+                .map(|r| crate::app::resources::Fact {
+                    incarnation: r.incarnation,
+                    event: r.event,
+                    claim: Id(r.claim),
+                    issuer: Id(r.issuer),
+                    pos: r.pos,
+                })
+                .collect(),
+        )
+    }
+
     async fn open_offline(&self, holder: &Id, now: u64) -> Result<u64, CoreError> {
         Ok(access_store::offline::open_offline(&self.pool, &self.domain, &holder.0, now).await?)
     }

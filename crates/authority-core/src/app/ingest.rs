@@ -38,6 +38,9 @@ pub struct Ingested {
     pub ended: Vec<Id>,
     /// The end of the Claim's validity, milliseconds; 0 for a refused submission.
     pub until: u64,
+    /// The resource lifecycle fact of a `resource_lifecycle` Claim, to be kept in the
+    /// incarnation registry once admitted (OP-156 m.3 (k)).
+    pub lifecycle: Option<crate::app::resources::Lifecycle>,
 }
 
 impl Ingested {
@@ -52,6 +55,7 @@ impl Ingested {
             quota: None,
             ended: Vec::new(),
             until: 0,
+            lifecycle: None,
         }
     }
 }
@@ -102,25 +106,16 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let issuer = v.statement.issuer;
         let class = v.statement.class.clone();
         let until = v.statement.validity.until;
+        let body = v.body.as_ref().map(|(b, _)| b.as_slice());
         // L2-CLM-4
-        if let Some(state) = self
-            .get(&mut snap, &meta::key(kind::CLAIM, &id))
-            .await?
-            .and_then(|s| ClaimState::from_value(&s).ok())
-        {
-            return Ok(Ingested {
-                verdict: ClaimVerdict::Admitted {
-                    claim: id,
-                    position: state.since,
-                    replayed: true,
-                },
-                issuer,
-                class,
-                quota: None,
-                ended: Vec::new(),
-                until,
-            });
+        if let Some(done) = self.replayed(&mut snap, id, &v, body).await? {
+            return Ok(done);
         }
+        // OP-156 m.3 (k), INV-32, E14
+        let lifecycle = match self.lifecycle_gate(&v.statement, body).await? {
+            Ok(l) => l,
+            Err(r) => return Ok(Ingested::refused(r)),
+        };
         for _ in 0..MAX_RETRIES {
             let mut snap = Snapshot::default();
             let pos = self
@@ -178,6 +173,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         quota,
                         ended,
                         until,
+                        lifecycle,
                     });
                 }
                 Err(e) if e.is_retry() => {
@@ -190,6 +186,37 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Err(CoreError::Rejected(
             access_kernel::combinator::Rejection::Fuel,
         ))
+    }
+
+    /// The answer for a Claim already recorded: admitted as a replay at its first position
+    /// (L2-CLM-4); `None` for a new one.
+    async fn replayed(
+        &self,
+        snap: &mut Snapshot,
+        id: Id,
+        v: &Verified,
+        body: Option<&[u8]>,
+    ) -> Result<Option<Ingested>, CoreError> {
+        let Some(state) = self
+            .get(snap, &meta::key(kind::CLAIM, &id))
+            .await?
+            .and_then(|s| ClaimState::from_value(&s).ok())
+        else {
+            return Ok(None);
+        };
+        Ok(Some(Ingested {
+            verdict: ClaimVerdict::Admitted {
+                claim: id,
+                position: state.since,
+                replayed: true,
+            },
+            issuer: v.statement.issuer,
+            class: v.statement.class.clone(),
+            quota: None,
+            ended: Vec::new(),
+            until: v.statement.validity.until,
+            lifecycle: crate::app::resources::recorded(&v.statement, body),
+        }))
     }
 
     /// The `claim` record of an ingest: without the raw carrier of an external one (§10.1.2

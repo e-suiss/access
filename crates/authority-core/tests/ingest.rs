@@ -184,12 +184,13 @@ fn grant(holder: &SubjectSelector, actions: &[&str], namespace: &str) -> Value {
     ])
 }
 
-fn genesis(acceptances: Vec<Value>) -> BTreeMap<String, Opened> {
+/// The Genesis of these tests: two Grants, then `extra`, as a sorted set.
+fn genesis_with(acceptances: Vec<Value>, extra: Vec<Value>) -> BTreeMap<String, Opened> {
     let opened = |value| Opened {
         value,
         salt: [3; 32],
     };
-    let grants = vec![
+    let mut grants = vec![
         grant(
             &SubjectSelector::Public,
             &["party_register", "instance_create"],
@@ -197,6 +198,10 @@ fn genesis(acceptances: Vec<Value>) -> BTreeMap<String, Opened> {
         ),
         grant(&SubjectSelector::Party(ALICE), &["read"], "access.party"),
     ];
+    if !extra.is_empty() {
+        grants.extend(extra);
+        grants.sort_by_key(|g| dcbor::encode(g, Limits::CEILING).unwrap());
+    }
     let mut keyed: Vec<(Vec<u8>, Value)> = acceptances
         .into_iter()
         .map(|v| (dcbor::encode(&v, Limits::CEILING).unwrap(), v))
@@ -263,9 +268,19 @@ fn binding() -> Bound {
 }
 
 async fn setup(db: &TestDb, acceptances: Vec<Value>) -> (Core, Digest) {
-    let d = create_genesis(&db.sequencer, TENANT, genesis(acceptances), 1_000)
-        .await
-        .unwrap();
+    setup_with(db, acceptances, Vec::new()).await
+}
+
+/// [`setup`] over [`genesis_with`].
+async fn setup_with(db: &TestDb, acceptances: Vec<Value>, extra: Vec<Value>) -> (Core, Digest) {
+    let d = create_genesis(
+        &db.sequencer,
+        TENANT,
+        genesis_with(acceptances, extra),
+        1_000,
+    )
+    .await
+    .unwrap();
     let log = PgLog::new(db.sequencer.clone(), d, TENANT, "t".to_owned(), TTL);
     let leader = Leader::acquire(log, d, EventKey::new(Secret::new([5; 32])))
         .await
@@ -1430,4 +1445,314 @@ async fn a_dropped_realm_key_signs_nothing_admitted_after_its_cutoff() {
         .await
         .unwrap();
     assert!(matches!(v.verdict, ClaimVerdict::Admitted { .. }), "{v:?}");
+}
+
+/// A `resource_lifecycle` Claim of BOB, the domain product, about `ride/vehicles/<id>`
+/// (`product-seam.cddl`): its value is the body digest and the body travels with it.
+fn lifecycle(
+    d: Digest,
+    id: &str,
+    incarnation: u64,
+    event: &str,
+    issued_at: u64,
+) -> ClaimSubmission {
+    let body = Value::Map(vec![
+        (Value::text("namespace"), Value::text("ride")),
+        (
+            Value::text("path"),
+            Value::Array(vec![Value::text("vehicles"), Value::text(id)]),
+        ),
+        (Value::text("incarnation"), Value::Unsigned(incarnation)),
+        (Value::text("event"), Value::text(event)),
+    ]);
+    let tagged = dcbor::encode(
+        &Value::Array(vec![Value::text("resource_lifecycle"), body.clone()]),
+        Limits::CEILING,
+    )
+    .unwrap();
+    let digest =
+        suiss_crypto::digest::context_digest(access_kernel::claim::body::BODY_CONTEXT, &tagged);
+    let mut s = statement(
+        d,
+        BOB,
+        BOB,
+        "resource_lifecycle",
+        EqValue::Bytes(digest.0.to_vec()),
+    );
+    s.issued_at = issued_at;
+    let mut sub = signed(&s, BOB_KEY);
+    sub.body = Some(dcbor::encode(&body, Limits::CEILING).unwrap());
+    sub
+}
+
+fn ingest_domains(db: &TestDb, d: Digest) -> Domains<Listed, Bound, Counter, Fixed> {
+    Domains::new(Setup {
+        sequencer: db.sequencer.clone(),
+        app: db.app.clone(),
+        keys: Listed(d),
+        holder: "ingest".to_owned(),
+        ttl: TTL,
+        binding: binding(),
+        salts: Counter(40),
+        clock: Fixed,
+        deriver: db.deriver.clone(),
+        signer: None,
+        api_base: "https://api.example".to_owned(),
+        analysis: std::sync::Arc::new(access_authority_core::ports::NoAnalysis),
+    })
+}
+
+/// A `resource-incarnation` search by the key `seed`, over the meta-anchor.
+fn search_incoming(d: Digest, nonce: u8, seed: u8) -> Incoming {
+    let mut r = request(
+        d,
+        nonce,
+        ExerciseBasis::Anchor(meta::meta_anchor(&d)),
+        Payload::InstanceTerminate { instance: ROOT },
+    );
+    r.mode = Mode::Check;
+    r.intent.action = action("read");
+    r.intent.resources = vec![ResourceRef {
+        namespace: "access.search".to_owned(),
+        path: vec!["resource-incarnation".to_owned()],
+        incarnation: 0,
+    }];
+    r.intent.opaque = BTreeMap::new();
+    r.payload = None;
+    let digest = access_kernel::intent::intent_digest(&r.intent).unwrap();
+    let ais = Ais {
+        domain: d,
+        nonce: r.nonce.clone(),
+        intent: digest,
+        mode: r.mode,
+        pep: PEP.to_owned(),
+        capacity: r.capacity,
+        basis: r.basis,
+        iat: NOW,
+        exercise: None,
+    };
+    Incoming {
+        ais: Some(cose(ais.to_bytes().unwrap(), CONTENT_TYPE, seed)),
+        request: r,
+        pep: PEP.to_owned(),
+        requester: None,
+        explain: false,
+        status: None,
+        context: None,
+    }
+}
+
+// INV-32, E14, OP-156 m.3 (k), §7.9.10.4
+#[tokio::test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one resource's lifecycle from create to reincarnation, its registry and its search"
+)]
+async fn a_reused_incarnation_is_refused_at_ingest() {
+    let db = fresh().await.unwrap();
+    let (core, d) = setup(
+        &db,
+        vec![acceptance(
+            BOB,
+            "predicate-input",
+            &["resource_lifecycle"],
+            vec![],
+        )],
+    )
+    .await;
+    let mut core = core;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (7, 8)).await;
+    core.release().await.unwrap();
+    let domains = ingest_domains(&db, d);
+    let admitted = |v: &ClaimVerdict| matches!(v, ClaimVerdict::Admitted { .. });
+    let reused = |v: &ClaimVerdict| matches!(v, ClaimVerdict::Rejected { code } if code == "incarnation-reused");
+    let created = lifecycle(d, "34-abc-12", 0, "create", NOW);
+    let v = domains.record(created.clone(), false).await.unwrap();
+    assert!(admitted(&v), "{v:?}");
+    let again = domains
+        .record(lifecycle(d, "34-abc-12", 0, "create", NOW + 1), false)
+        .await
+        .unwrap();
+    assert!(reused(&again), "{again:?}");
+    let other = domains
+        .record(lifecycle(d, "35-xyz-99", 0, "create", NOW + 1), false)
+        .await
+        .unwrap();
+    assert!(admitted(&other), "{other:?}");
+    let deleted = domains
+        .record(lifecycle(d, "34-abc-12", 0, "delete", NOW + 2), false)
+        .await
+        .unwrap();
+    assert!(admitted(&deleted), "{deleted:?}");
+    let back = domains
+        .record(lifecycle(d, "34-abc-12", 0, "reincarnate", NOW + 3), false)
+        .await
+        .unwrap();
+    assert!(reused(&back), "{back:?}");
+    let next = domains
+        .record(lifecycle(d, "34-abc-12", 1, "reincarnate", NOW + 3), false)
+        .await
+        .unwrap();
+    assert!(admitted(&next), "{next:?}");
+    let replayed = domains.record(created, false).await.unwrap();
+    assert!(
+        matches!(replayed, ClaimVerdict::Admitted { replayed: true, .. }),
+        "{replayed:?}"
+    );
+    let path = vec!["vehicles".to_owned(), "34-abc-12".to_owned()];
+    let rows =
+        access_store::resources::incarnations(&db.app, &DomainId::from_bytes(d.0), "ride", &path)
+            .await
+            .unwrap();
+    assert_eq!(
+        rows.iter()
+            .map(|r| (r.incarnation, r.event.as_str()))
+            .collect::<Vec<_>>(),
+        [(0, "create"), (0, "delete"), (1, "reincarnate")]
+    );
+    assert!(rows.iter().all(|r| r.issuer == BOB.0));
+    assert_eq!(
+        access_store::resources::highest_incarnation(
+            &db.app,
+            &DomainId::from_bytes(d.0),
+            "ride",
+            &path
+        )
+        .await
+        .unwrap(),
+        Some(1)
+    );
+    let query = access_authority_core::query::Query::ResourceIncarnation {
+        namespace: "ride".to_owned(),
+        path: path.clone(),
+    };
+    let (hits, _) = domains
+        .search(&search_incoming(d, 70, ROOT_KEY), &query, None)
+        .await
+        .unwrap();
+    let [access_authority_core::query::Hit::Report(report)] = hits.as_slice() else {
+        panic!("{hits:?}");
+    };
+    let access_authority_core::query::Report::Incarnations(found) = &**report else {
+        panic!("{report:?}");
+    };
+    assert_eq!(found.highest, Some(1));
+    assert_eq!(found.facts.len(), 3);
+    let (others, _) = domains
+        .search(&search_incoming(d, 71, BOB_KEY), &query, None)
+        .await
+        .unwrap();
+    assert!(others.is_empty(), "the domain's auditors only");
+    let mut broken = lifecycle(d, "36", 0, "create", NOW);
+    broken.body = Some(vec![0xa0]);
+    let v = domains.record(broken, false).await.unwrap();
+    assert!(
+        matches!(&v, ClaimVerdict::Rejected { code } if code == "claim-value"),
+        "{v:?}"
+    );
+    domains.release().await;
+}
+
+// INV-32
+#[tokio::test]
+async fn an_unaccepted_lifecycle_claim_is_held_and_reserves_nothing() {
+    let db = fresh().await.unwrap();
+    let (core, d) = setup(
+        &db,
+        vec![acceptance(ALICE, "predicate-input", &["kyc"], vec![])],
+    )
+    .await;
+    core.release().await.unwrap();
+    let domains = ingest_domains(&db, d);
+    let held = domains
+        .record(lifecycle(d, "34-abc-12", 5, "create", NOW), false)
+        .await
+        .unwrap();
+    assert!(matches!(held, ClaimVerdict::Quarantined { .. }), "{held:?}");
+    let path = vec!["vehicles".to_owned(), "34-abc-12".to_owned()];
+    assert_eq!(
+        access_store::resources::highest_incarnation(
+            &db.app,
+            &DomainId::from_bytes(d.0),
+            "ride",
+            &path
+        )
+        .await
+        .unwrap(),
+        None
+    );
+    domains.release().await;
+}
+
+fn vehicle(incarnation: u64) -> ResourceRef {
+    ResourceRef {
+        namespace: "access.party".to_owned(),
+        path: vec!["vehicles".to_owned(), "34-abc-12".to_owned()],
+        incarnation,
+    }
+}
+
+/// A Grant held by `holder` for `action` on exactly `resource`.
+fn exact_grant(holder: Id, action_name: &str, resource: &ResourceRef) -> Value {
+    let Value::Map(mut entries) = grant(&SubjectSelector::Party(holder), &[action_name], "ride")
+    else {
+        panic!()
+    };
+    for (k, v) in &mut entries {
+        if *k == Value::text("authority") {
+            let mut a = CanonicalAuthority::from_value(v).unwrap();
+            a.authority.resource = ResourceSelector::Exact(resource.clone());
+            *v = a.to_value();
+        }
+    }
+    Value::Map(entries)
+}
+
+// E14, INV-32, §7.9.10.4
+#[tokio::test]
+async fn a_grant_on_one_incarnation_does_not_cover_the_next() {
+    let db = fresh().await.unwrap();
+    let exact = exact_grant(ALICE, "read", &vehicle(1));
+    let mut sorted = [
+        grant(
+            &SubjectSelector::Public,
+            &["party_register", "instance_create"],
+            "access.party",
+        ),
+        grant(&SubjectSelector::Party(ALICE), &["read"], "access.party"),
+        exact.clone(),
+    ];
+    sorted.sort_by_key(|g| dcbor::encode(g, Limits::CEILING).unwrap());
+    let index = u64::try_from(sorted.iter().position(|g| *g == exact).unwrap()).unwrap();
+    let (mut core, d) = setup_with(
+        &db,
+        vec![acceptance(ALICE, "predicate-input", &["kyc"], vec![])],
+        vec![exact],
+    )
+    .await;
+    let mut ask = async |incarnation: u64, nonce: u8| {
+        let basis = ExerciseBasis::Holding(HoldingRef {
+            grant: meta::object_id(&d, kind::GRANT, index),
+            holder: ALICE,
+            since: 0,
+        });
+        let mut r = request(
+            d,
+            nonce,
+            basis,
+            Payload::InstanceTerminate { instance: ALICE },
+        );
+        r.intent.action = action("read");
+        r.intent.resources = vec![vehicle(incarnation)];
+        r.intent.opaque = BTreeMap::new();
+        r.payload = None;
+        send(&mut core, r, ALICE_KEY)
+            .await
+            .unwrap()
+            .decision
+            .outcome
+    };
+    assert_eq!(ask(1, 90).await, Outcome::Allow);
+    assert_eq!(ask(2, 91).await, Outcome::Deny);
+    assert_eq!(ask(0, 92).await, Outcome::Deny);
 }

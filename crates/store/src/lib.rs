@@ -58,6 +58,7 @@ pub mod publications;
 pub mod realm_binding;
 pub mod recovery;
 pub mod relay;
+pub mod resources;
 pub mod risk;
 pub mod saml;
 pub mod sandbox;
