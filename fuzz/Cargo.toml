@@ -79,3 +79,9 @@ name = "saml_request"
 path = "fuzz_targets/saml_request.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "spnego_read"
+path = "fuzz_targets/spnego_read.rs"
+test = false
+doc = false
