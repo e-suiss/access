@@ -147,3 +147,79 @@ fn ssh_keygen_finds_revoked_certificates_in_our_krl() {
         "{out}"
     );
 }
+
+fn ed25519_seed() -> ([u8; 32], Ed25519Public) {
+    use aws_lc_rs::signature::KeyPair as _;
+    let seed: [u8; 32] = random();
+    let pair = aws_lc_rs::signature::Ed25519KeyPair::from_seed_unchecked(&seed).unwrap();
+    let public = <[u8; 32]>::try_from(pair.public_key().as_ref()).unwrap();
+    (seed, Ed25519Public(public))
+}
+
+// OP-156 m.3 (o)
+#[test]
+fn ssh_keygen_reads_the_ephemeral_private_key_file() {
+    use access_identity_ssh::domain::holder::private_key_file;
+    use std::os::unix::fs::PermissionsExt as _;
+    let at = dir("private");
+    let (seed, key) = ed25519_seed();
+    let check = u32::from_be_bytes(random());
+    std::fs::write(
+        at.join("id"),
+        private_key_file(&seed, &key, "p@acme", check).unwrap(),
+    )
+    .unwrap();
+    std::fs::set_permissions(at.join("id"), std::fs::Permissions::from_mode(0o600)).unwrap();
+    let (ok, out) = keygen(&["-y", "-f", "id"], &at);
+    assert!(ok, "{out}");
+    assert_eq!(
+        out.split_whitespace().nth(1),
+        key.line("").split_whitespace().nth(1)
+    );
+}
+
+// OP-156 m.3 (o)
+#[test]
+fn ssh_agent_takes_the_key_and_its_certificate_for_a_lifetime() {
+    use std::io::{Read as _, Write as _};
+    use std::os::unix::net::UnixStream;
+
+    use access_identity_ssh::domain::cert::Certificate;
+    use access_identity_ssh::domain::holder::{AGENT_SUCCESS, add_identity};
+    let at = dir("agent");
+    let socket = at.join("agent.sock");
+    let _ = std::fs::remove_file(&socket);
+    let started = Command::new("ssh-agent")
+        .arg("-a")
+        .arg(&socket)
+        .output()
+        .expect("ssh-agent runs");
+    assert!(started.status.success());
+    let text = String::from_utf8_lossy(&started.stdout).into_owned();
+    let pid = text
+        .split(';')
+        .find_map(|p| p.trim().strip_prefix("SSH_AGENT_PID="))
+        .unwrap()
+        .to_owned();
+    let (ca, _) = SoftSigner::generate_ed25519().unwrap();
+    let (seed, key) = ed25519_seed();
+    let line = certificate(&ca, key, 77);
+    let cert = Certificate::of_line(&line).unwrap();
+    let mut s = UnixStream::connect(&socket).unwrap();
+    s.write_all(&add_identity(&cert, &seed, &key, "p@acme", 300).unwrap())
+        .unwrap();
+    let mut answer = [0_u8; 5];
+    s.read_exact(&mut answer).unwrap();
+    let listed = Command::new("ssh-add")
+        .arg("-L")
+        .env("SSH_AUTH_SOCK", &socket)
+        .output()
+        .unwrap();
+    let _ = Command::new("kill").arg(&pid).status();
+    assert_eq!(answer[4], AGENT_SUCCESS);
+    let listed = String::from_utf8_lossy(&listed.stdout).into_owned();
+    assert!(
+        listed.contains("ssh-ed25519-cert-v01@openssh.com"),
+        "{listed}"
+    );
+}

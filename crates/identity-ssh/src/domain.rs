@@ -2,6 +2,7 @@
 
 pub mod cert;
 pub mod change;
+pub mod holder;
 pub mod key;
 pub mod krl;
 pub mod projection;
