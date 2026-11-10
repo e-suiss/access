@@ -603,7 +603,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             Some(c) => Some(c),
             None => self.recovery_binding(req, actor, at).await?,
         };
-        let signals = self.signals(actor, req, &resolved, at).await?;
+        let signals = Box::pin(self.signals(actor, req, &resolved, at)).await?;
         let frame = Frame {
             intent_digest: digest,
             exercise,
@@ -1515,7 +1515,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 Some(c) => Some(c),
                 None => self.recovery_binding(req, actor, now).await?,
             };
-            let signals = self.signals(actor, req, &resolved, now).await?;
+            let signals = Box::pin(self.signals(actor, req, &resolved, now)).await?;
             let records = u64::try_from(resolved.claims.len())
                 .map_err(|_| CoreError::Protocol("proofs"))?
                 .saturating_add(u64::from(!open))

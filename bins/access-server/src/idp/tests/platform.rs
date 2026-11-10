@@ -251,7 +251,7 @@ fn meets_schema(value: &Json, name: &str) {
 /// The platform realm, the Work platform client with an ES256 client key, service key
 /// `SERVICE_SEED` and an event receiver, and the platform API over the real authority plane.
 async fn product(w: &World) -> (Product, TenantId, RealmId) {
-    let (mut ps, pt, pr) = products(w, &[("work", SERVICE_SEED)]).await;
+    let (mut ps, pt, pr) = Box::pin(products(w, &[("work", SERVICE_SEED)])).await;
     (ps.remove(0), pt, pr)
 }
 
@@ -330,7 +330,7 @@ pub(super) async fn products(w: &World, named: &[(&str, u8)]) -> (Vec<Product>, 
 async fn a_platform_product_pairs_with_a_tenant_by_signing_its_own_exercises() {
     // TN-50, CR-24, OP-62
     let w = World::new().await;
-    let (p, _, _) = product(&w).await;
+    let (p, _, _) = Box::pin(product(&w)).await;
     let (t2, r2, d2) = w.realm("acme").await;
     let tnt = p.tenant(t2);
     let challenges = format!("/access/v1/tenants/{tnt}/pairing/challenges");
@@ -431,7 +431,7 @@ async fn a_platform_product_pairs_with_a_tenant_by_signing_its_own_exercises() {
 async fn the_platform_api_takes_a_fresh_client_assertion() {
     // §10.4.5, TN-30
     let w = World::new().await;
-    let (p, _, _) = product(&w).await;
+    let (p, _, _) = Box::pin(product(&w)).await;
     let (t2, _, _) = w.realm("acme").await;
     let path = format!("/access/v1/tenants/{}/pairing/challenges", p.tenant(t2));
     let (s, v) = p.call_as("POST", &path, None, None).await;
@@ -477,7 +477,7 @@ async fn the_platform_api_takes_a_fresh_client_assertion() {
 async fn pairing_opens_one_push_stream_the_client_manages() {
     // §8.1.1
     let w = World::new().await;
-    let (p, _, _) = product(&w).await;
+    let (p, _, _) = Box::pin(product(&w)).await;
     let (t2, _, _) = w.realm("acme").await;
     let (t3, _, _) = w.realm("beta").await;
     let first = p.pair(&p.tenant(t2)).await;
@@ -601,7 +601,11 @@ async fn a_third_party_product_holds_the_same_platform_role_as_work() {
     // OP-149 m.4, m.17 (e), m.19 (d), (e), (f), CT2, §9.13.2
     let w = World::new().await;
     let third = "acme-ledger";
-    let (ps, pt, _) = products(&w, &[("work", SERVICE_SEED), (third, SERVICE_SEED + 2)]).await;
+    let (ps, pt, _) = Box::pin(products(
+        &w,
+        &[("work", SERVICE_SEED), (third, SERVICE_SEED + 2)],
+    ))
+    .await;
     let (t2, r2, d2) = w.realm("acme").await;
     let tnt = ps[0].tenant(t2);
     let challenges = format!("/access/v1/tenants/{tnt}/pairing/challenges");
@@ -729,7 +733,7 @@ async fn a_third_party_product_holds_the_same_platform_role_as_work() {
 async fn a_paired_product_reads_its_tenant_with_its_assertion() {
     // MD-10, OP-141 m.22 (f)
     let w = World::new().await;
-    let (p, _, _) = product(&w).await;
+    let (p, _, _) = Box::pin(product(&w)).await;
     let (t2, r2, _) = w.realm("acme").await;
     let tnt = p.tenant(t2);
     let paired = p.pair(&tnt).await;

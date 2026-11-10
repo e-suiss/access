@@ -100,7 +100,7 @@ async fn post(app: &axum::Router, bearer: &str, body: &Json) -> (StatusCode, Jso
 )]
 async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
     let w = World::new().await;
-    let (ps, _, _) = products(&w, &[("relay", 61), ("work", 62)]).await;
+    let (ps, _, _) = Box::pin(products(&w, &[("relay", 61), ("work", 62)])).await;
     let (tenant, realm_id, d) = w.realm("shop").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     let kek = Arc::new(SoftKek::new("realm-kek", [5; 32]));

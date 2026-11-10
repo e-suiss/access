@@ -91,7 +91,7 @@ async fn account(w: &World, (tenant, realm): (TenantId, RealmId), email: &str) -
 }
 
 async fn ready(slug: &str) -> (World, (TenantId, RealmId), Digest, [u8; 16]) {
-    ready_with(slug, None).await
+    Box::pin(ready_with(slug, None)).await
 }
 
 async fn ready_with(
@@ -1492,7 +1492,7 @@ async fn a_guardianship_is_recorded_under_its_decision_and_ends_at_majority_unsi
 #[tokio::test]
 async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_can_cancel() {
     use access_identity_admin::app::transfers::{NOT_THE_TRANSFER, OWNER_ONLY, TRANSFER_WAITING};
-    let (w, at, d, founder) = ready_with("org-handover", Some(0)).await;
+    let (w, at, d, founder) = Box::pin(ready_with("org-handover", Some(0))).await;
     let org = create_org(&w, at, d, founder).await;
     onboard(&w.plane, d, ALICE, ALICE_KEY).await;
     let bob = account(&w, at, "bob@acme.example").await;
@@ -2031,7 +2031,7 @@ async fn the_governing_domain_accepts_the_new_account_actions() {
     use access_identity_admin::domain::accounts::{
         AccountBind, AccountImport, GuardianshipRecord, MigrationExport,
     };
-    let (w, at, d, founder) = ready_with("r1-catalog", Some(0)).await;
+    let (w, at, d, founder) = Box::pin(ready_with("r1-catalog", Some(0))).await;
     let changes = [
         Change::AccountBind(AccountBind {
             subject: founder,
