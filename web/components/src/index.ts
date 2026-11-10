@@ -20,3 +20,7 @@ export * as delegation from "./delegation/index.js";
 export * as agents from "./agents/index.js";
 export * as sso from "./sso/index.js";
 export * as work from "./work/index.js";
+// OP-156 m.3 (v)
+export * as payment from "./payment/index.js";
+export * as offline from "./offline/index.js";
+export * as delegationPage from "./delegation-page/index.js";

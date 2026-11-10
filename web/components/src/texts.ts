@@ -110,6 +110,46 @@ export const EN: Readonly<Record<string, string>> = {
   "work.ends_with_commitment": "Ends with Work commitment { $commitment }",
   "work.gate_not_updated": "Approval recorded (Access); gate not updated yet (Work)",
   "attention.approvals_waiting": "{ $count } approvals waiting for you →",
+  // Q18 (OP-156 m.3 (v))
+  "status.notifications_delayed": "Notifications are delayed. What you changed still took effect.",
+  "status.access_unavailable":
+    "Authority can't be changed right now. You can still ask the runtime to stop for now (Work control), if it supports it.",
+  "source.sync_from_hr": "Sync from HR ({ $issuer })",
+  "limit.authority": "Authority limit (Access): { $limit }",
+  "limit.financial": "Financial limit (Pay): { $limit }",
+  "limit.held": "{ $amount } held by Pay",
+  "offline.title": "Working offline",
+  "offline.since": "Offline since { $time }",
+  "offline.until": "Can act offline until { $time }, if it follows its declared offline profile",
+  "offline.remaining": "{ $voids } voids and { $amount } left until this till must go online",
+  "offline.ended": "The offline period ended at { $time }. This till must go online to continue.",
+  "merchants.title": "Merchants that can charge you",
+  "merchants.limit": "Up to { $amount } each { $period }",
+  "merchants.stop": "Stop charges",
+  "merchants.none": "No merchant can charge you.",
+  "merchants.agreement": "See the payment agreement",
+  "merchants.agent_badge": "AI agent · acting for { $merchant }",
+  "merchants.save_card":
+    "Let { $merchant } charge your card: up to { $amount } per order, until { $time }, only for orders you place",
+  "merchants.save_card_confirm": "Let { $merchant } charge my card",
+  "merchants.based_on": "{ $agreement } · based on your delegation to { $merchant } ({ $limit })",
+  "merchants.cancel_separately":
+    "Stopping charges here and cancelling the payment agreement in Pay are two separate steps.",
+  "merchants.scheme_consent":
+    "{ $consent } is managed in Pay · linked to your delegation to { $merchant }",
+  "merchants.not_explained": "What { $merchant } decides inside its own business isn't shown here.",
+  "period.transaction": "order",
+  "period.day": "day",
+  "period.month": "month",
+  "payment.one_time_title": "One-time payment",
+  "payment.one_time_confirm":
+    "Pay { $amount } to { $merchant } once. Nothing more can be charged with this.",
+  "payment.purpose": "For { $purpose }",
+  "payment.pay": "Pay once",
+  "payment.not_one_time":
+    "This request would let { $merchant } charge you again. It can't be paid here as a one-time payment.",
+  "action.cancel": "Cancel",
+  "action.revoke": "Revoke",
 };
 
 /** Looks `key` up in `catalogue`, then in English; an unknown key shows as itself. */
