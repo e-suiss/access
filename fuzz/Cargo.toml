@@ -16,6 +16,12 @@ libfuzzer-sys = "=0.4.13"
 access-kernel = { package = "esuiss-access-kernel", path = "../crates/kernel" }
 suiss-crypto = { package = "esuiss-crypto", path = "../crates/suiss-crypto", default-features = false, features = ["verify"] }
 suiss-restriction = { package = "esuiss-restriction", path = "../crates/suiss-restriction" }
+access-crypto = { path = "../crates/crypto" }
+access-edge-core = { path = "../crates/edge-core", default-features = false }
+access-internal-api = { path = "../crates/internal-api" }
+access-parse = { path = "../crates/parse" }
+miniz_oxide = { version = "=0.9.1", default-features = false, features = ["with-alloc"] }
+quick-xml = { version = "=0.42.0", default-features = false }
 
 [profile.release]
 debug = 1
@@ -65,5 +71,11 @@ doc = false
 [[bin]]
 name = "restriction_compile"
 path = "fuzz_targets/restriction_compile.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "saml_request"
+path = "fuzz_targets/saml_request.rs"
 test = false
 doc = false
