@@ -1047,7 +1047,7 @@ pub const ROUTES: &[Route] = &[
         "submitSsoSetup",
         "Submits a wizard step: the identity provider's metadata or a test sign-in; enacting the connection stays the organization root's idp.upstream.register.",
     ),
-    planned(
+    live(
         Owner::P6,
         Verb::Get,
         "/.well-known/openid-federation",

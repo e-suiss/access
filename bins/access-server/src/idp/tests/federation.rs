@@ -269,4 +269,148 @@ mod admin {
         let s = settings(&w, t, r).await;
         assert!(!s.enabled && !s.ta_enabled && !s.registration_open);
     }
+
+    /// The realm signer as the discovery routes reach it.
+    struct Federated<'a>(&'a Opened);
+
+    impl access_identity_oauth::ports::Keys for Federated<'_> {
+        async fn ping(&self) -> Result<(), access_identity_oauth::ports::Unavailable> {
+            Ok(())
+        }
+
+        async fn jwks(
+            &self,
+            _: RealmId,
+        ) -> Result<String, access_identity_oauth::ports::Unavailable> {
+            Err(access_identity_oauth::ports::Unavailable)
+        }
+
+        async fn federation_jwks(
+            &self,
+            realm: RealmId,
+        ) -> Result<String, access_identity_oauth::ports::Unavailable> {
+            match self.0.ask(SignerRequest::FederationJwks(SignerRealm(
+                *realm.as_bytes(),
+            ))) {
+                SignerResponse::Jwks(d) => Ok(d),
+                _ => Err(access_identity_oauth::ports::Unavailable),
+            }
+        }
+
+        async fn sign_federation(
+            &self,
+            realm: RealmId,
+            typ: &str,
+            payload: &[u8],
+            at: u64,
+        ) -> Result<String, access_identity_oauth::ports::Unavailable> {
+            match self.0.ask(SignerRequest::SignFederation {
+                realm: SignerRealm(*realm.as_bytes()),
+                typ: String::from(typ),
+                payload: payload.to_vec(),
+                at,
+            }) {
+                SignerResponse::Signed { token, .. } => Ok(token),
+                _ => Err(access_identity_oauth::ports::Unavailable),
+            }
+        }
+    }
+
+    async fn get(router: &axum::Router, host: &str, path: &str) -> (u16, String, String) {
+        use tower::ServiceExt as _;
+        let r = router
+            .clone()
+            .oneshot(
+                axum::http::Request::get(path)
+                    .header(axum::http::header::HOST, host)
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = r.status().as_u16();
+        let ct = r
+            .headers()
+            .get(axum::http::header::CONTENT_TYPE)
+            .map(|v| v.to_str().unwrap().to_owned())
+            .unwrap_or_default();
+        let body = axum::body::to_bytes(r.into_body(), 1 << 20).await.unwrap();
+        (status, ct, String::from_utf8(body.to_vec()).unwrap())
+    }
+
+    // IDP-19, OP-155 m.3 (j), §10.7.1 rules 1 and 5, MD-6, Ek B 4748, 5083
+    #[tokio::test]
+    async fn a_leaf_publishes_its_entity_configuration_with_its_federation_key() {
+        use access_identity_oauth::adapters::PgDirectory;
+        let w = World::new().await;
+        let (t, r, d) = w.realm("oidf-leaf").await;
+        onboard(&w.plane, d, ROOT, ROOT_KEY).await;
+        let real_now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+        let real_now = u64::try_from(real_now).unwrap();
+        let keys: &'static Opened = Box::leak(Box::default());
+        keys.at(real_now);
+        let entry = access_store::tenancy::route_by_slug(&w.db.router, "oidf-leaf")
+            .await
+            .unwrap()
+            .unwrap();
+        let issuer = entry.issuer.clone();
+        let rest = issuer.strip_prefix("https://").unwrap();
+        let host = rest.split('/').next().unwrap().to_owned();
+        let path = format!(
+            "{}/.well-known/openid-federation",
+            rest.strip_prefix(host.as_str()).unwrap()
+        );
+        let router = access_http::realm::router(access_identity_oauth::app::Discovery::new(
+            PgDirectory::new(w.db.router.clone()).with_facts(w.db.app.clone()),
+            Federated(keys),
+        ));
+        let (status, _, _) = get(&router, &host, &path).await;
+        assert_eq!(status, 404, "a realm that is no leaf publishes nothing");
+        apply(
+            &w,
+            (t, r),
+            d,
+            FederationChange::Enable {
+                authority_hints: vec![String::from(TA)],
+            },
+            2,
+        )
+        .await;
+        let (status, ct, jwt) = get(&router, &host, &path).await;
+        assert_eq!(status, 200, "{jwt}");
+        assert_eq!(ct, "application/entity-statement+jwt");
+        let ec =
+            access_identity_oidf::statement::verify_configuration(&jwt, &issuer, real_now).unwrap();
+        assert_eq!(ec.authority_hints, vec![String::from(TA)]);
+        assert!(ec.metadata_of("openid_provider").is_some());
+        let entity = ec.metadata_of("federation_entity").unwrap();
+        assert!(
+            entity.get("federation_fetch_endpoint").is_none()
+                && entity.get("federation_list_endpoint").is_none(),
+            "a leaf serves no fetch or list"
+        );
+        let open = SignerRequest::Open {
+            realm: SignerRealm(*r.as_bytes()),
+            alg: access_crypto::jose::JwsAlg::Es256,
+        };
+        assert_eq!(keys.ask(open), SignerResponse::Opened);
+        let SignerResponse::Jwks(jose) = keys.ask(SignerRequest::Jwks(SignerRealm(*r.as_bytes())))
+        else {
+            panic!("no realm keys");
+        };
+        let kid = ec.jwks.first().unwrap().kid.clone().unwrap();
+        assert!(
+            !jose.contains(&kid),
+            "the token key never signs an entity statement"
+        );
+        apply(&w, (t, r), d, FederationChange::Registration(true), 3).await;
+        let (_, _, jwt) = get(&router, &host, &path).await;
+        let ec =
+            access_identity_oidf::statement::verify_configuration(&jwt, &issuer, real_now).unwrap();
+        let op = ec.metadata_of("openid_provider").unwrap();
+        assert!(op.get("federation_registration_endpoint").is_some());
+    }
 }

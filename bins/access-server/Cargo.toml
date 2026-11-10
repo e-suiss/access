@@ -14,6 +14,7 @@ access-authority-core = { path = "../../crates/authority-core" }
 access-authority-sequencer = { path = "../../crates/authority-sequencer" }
 access-crypto = { workspace = true }
 access-http = { workspace = true }
+access-identity-oidf = { workspace = true }
 access-identity-account = { workspace = true }
 access-identity-federation = { workspace = true }
 access-identity-vault = { workspace = true }

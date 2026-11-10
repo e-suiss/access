@@ -75,7 +75,50 @@ where
             );
         }
     }
+    // OP-155 m.3 (j), IDP-19
+    r = r
+        .route(
+            "/.well-known/openid-federation",
+            get(|s: Shared<D, K>, u: Uri, h: HeaderMap| entity_configuration(s, None, u, h)),
+        )
+        .route(
+            "/realms/{slug}/.well-known/openid-federation",
+            get(
+                |s: Shared<D, K>, Path(slug): Path<String>, u: Uri, h: HeaderMap| {
+                    entity_configuration(s, Some(slug), u, h)
+                },
+            ),
+        );
     r.with_state(shared)
+}
+
+/// The realm issuer's OpenID Federation entity configuration (§10.7.1 rule 1): a leaf serves
+/// it, signed with the realm's `federation` key; a realm that is no leaf has none.
+async fn entity_configuration<D: Directory, K: Keys>(
+    State(s): Shared<D, K>,
+    slug: Option<String>,
+    uri: Uri,
+    headers: HeaderMap,
+) -> Response {
+    use access_identity_oauth::app::oidf::OidfReply;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
+    match s
+        .entity_configuration(authority(&uri, &headers), slug.as_deref(), now)
+        .await
+    {
+        OidfReply::Statement(jwt) => (
+            [(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static(access_identity_oidf::statement::CONTENT_TYPE),
+            )],
+            jwt,
+        )
+            .into_response(),
+        OidfReply::NotFound => respond(Reply::NotFound),
+        OidfReply::Unavailable => respond(Reply::Unavailable),
+    }
 }
 
 /// The request's authority: the `Host` header, or the HTTP/2 `:authority`. It only selects a
