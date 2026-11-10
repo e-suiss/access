@@ -157,6 +157,7 @@ deny = [
     # OP-155 m.3 (d), (u)
     { crate = "quick-xml", wrappers = ["access-parser-worker"], reason = "OP-155 m.3 (d): XML is parsed only in the parser worker" },
     { crate = "samael", reason = "OP-155 m.3 (d): C XML security chain" },
+    { crate = "bergshamra", reason = "OP-155 m.6 (a): the full crate pulls kryptering, x509-cert/der and CR-14 RSA/PQ crates; C14N and XMLDSig verification are the parser worker's own" },
     { crate = "kryptering", reason = "OP-155 m.3 (d), (u): SAML signatures use identity-signer keys" },
     { crate = "x509-cert", reason = "OP-155 m.3 (u): rustls-webpki and the in-house bounded DER reader" },
     { crate = "scim_v2", reason = "OP-155 m.3 (g), (u): own SCIM model" },

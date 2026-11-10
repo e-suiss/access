@@ -1,0 +1,28 @@
+[package]
+name = "access-identity-saml"
+description = "The sans-I/O SAML 2.0 identity provider and WS-Federation layer of Access (§10.6.1, §10.6.5, OP-155 m.3 (d), (e), (f)): service provider registrations, interop profiles, request decisions, canonical assertions, responses and metadata, bindings and the edge bodies of the SAML gateway."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-edge-core = { workspace = true }
+access-parse = { workspace = true }
+aws-lc-rs = { workspace = true }
+miniz_oxide = { workspace = true }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+suiss-crypto = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true, features = ["std", "parse", "serde"] }
+
+[dev-dependencies]
+rcgen = { workspace = true, features = ["aws_lc_rs"] }
+rustls-pki-types = { workspace = true, features = ["std"] }
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

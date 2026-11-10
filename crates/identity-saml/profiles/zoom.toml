@@ -1,0 +1,18 @@
+# Interop profile (IDP-28, IDP-40, conformance/cddl/interop-profile.cddl): format differences only.
+v = 1
+profile = "saml.zoom"
+protocol = "saml"
+counterpart = "Zoom"
+revision = 1
+template = "zoom"
+
+[[tolerances]]
+rule = "saml.sign_response"
+value = true
+test = "identity_saml::profile::tests::every_shipped_profile_loads"
+source = "support.zoom.com KB0060673"
+
+[[tolerances]]
+rule = "saml.encrypt_assertion"
+value = "optional"
+test = "identity_saml::profile::tests::every_shipped_profile_loads"

@@ -41,6 +41,7 @@ access-identity-x509 = { path = "crates/identity-x509", default-features = false
 access-identity-scim = { path = "crates/identity-scim", default-features = false }
 access-identity-vc = { path = "crates/identity-vc", default-features = false }
 access-identity-oidf = { path = "crates/identity-oidf", default-features = false }
+access-identity-saml = { path = "crates/identity-saml", default-features = false }
 access-edge-core = { path = "crates/edge-core", default-features = false }
 access-authority-ingest = { path = "crates/authority-ingest", default-features = false }
 access-sdk = { package = "esuiss-access-sdk", path = "sdks/rust/access", version = "=0.4.0", default-features = false }

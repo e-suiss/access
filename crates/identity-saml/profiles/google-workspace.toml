@@ -1,0 +1,12 @@
+# Interop profile (IDP-28, IDP-40, conformance/cddl/interop-profile.cddl): format differences only.
+v = 1
+profile = "saml.google_workspace"
+protocol = "saml"
+counterpart = "Google Workspace"
+revision = 1
+template = "google-workspace"
+
+[[tolerances]]
+rule = "saml.nameid_format"
+value = "email"
+test = "identity_saml::profile::tests::every_shipped_profile_loads"

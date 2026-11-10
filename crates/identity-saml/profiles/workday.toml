@@ -1,0 +1,13 @@
+# Interop profile (IDP-28, IDP-40, conformance/cddl/interop-profile.cddl): format differences only.
+v = 1
+profile = "saml.workday"
+protocol = "saml"
+counterpart = "Workday"
+revision = 1
+template = "workday"
+
+[[tolerances]]
+rule = "saml.key_info_certificate"
+value = true
+test = "identity_saml::profile::tests::every_shipped_profile_loads"
+source = "saml-doc.okta.com (secondary)"

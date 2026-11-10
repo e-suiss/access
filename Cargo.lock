@@ -442,6 +442,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-identity-saml"
+version = "0.4.0"
+dependencies = [
+ "access-edge-core",
+ "access-parse",
+ "aws-lc-rs",
+ "esuiss-crypto",
+ "miniz_oxide",
+ "rcgen",
+ "rustls-pki-types",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "toml 1.1.6+spec-1.1.0",
+]
+
+[[package]]
 name = "access-identity-scim"
 version = "0.4.0"
 dependencies = [

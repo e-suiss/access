@@ -1,0 +1,23 @@
+# Interop profile (IDP-28, IDP-40, conformance/cddl/interop-profile.cddl): format differences only.
+v = 1
+profile = "saml.salesforce"
+protocol = "saml"
+counterpart = "Salesforce"
+revision = 1
+template = "salesforce"
+
+[[tolerances]]
+rule = "saml.sign_assertion"
+value = true
+test = "identity_saml::profile::tests::salesforce_requires_the_assertion_signature_and_its_audience"
+source = "help.salesforce.com sf.sso_saml_validation_errors"
+
+[[tolerances]]
+rule = "saml.audience_value"
+value = "https://saml.salesforce.com"
+test = "identity_saml::profile::tests::salesforce_requires_the_assertion_signature_and_its_audience"
+
+[[tolerances]]
+rule = "saml.encrypt_assertion"
+value = "optional"
+test = "identity_saml::profile::tests::every_shipped_profile_loads"

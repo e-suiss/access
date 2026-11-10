@@ -1,0 +1,18 @@
+# Interop profile (IDP-28, IDP-40, conformance/cddl/interop-profile.cddl): format differences only.
+v = 1
+profile = "saml.atlassian"
+protocol = "saml"
+counterpart = "Atlassian Cloud"
+revision = 1
+template = "atlassian"
+
+[[tolerances]]
+rule = "saml.sign_assertion"
+value = true
+test = "identity_saml::profile::tests::atlassian_requires_the_assertion_signature_and_email"
+source = "support.atlassian.com SAML SSO"
+
+[[tolerances]]
+rule = "saml.nameid_format"
+value = "email"
+test = "identity_saml::profile::tests::atlassian_requires_the_assertion_signature_and_email"

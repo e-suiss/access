@@ -1,0 +1,13 @@
+# Interop profile (IDP-28, IDP-40, conformance/cddl/interop-profile.cddl): format differences only.
+v = 1
+profile = "saml.servicenow"
+protocol = "saml"
+counterpart = "ServiceNow"
+revision = 1
+template = "servicenow"
+
+[[tolerances]]
+rule = "saml.encrypt_assertion"
+value = "optional"
+test = "identity_saml::profile::tests::every_shipped_profile_loads"
+source = "servicenow.com/docs Yokohama SAML 2.0 SSO"
