@@ -1196,7 +1196,7 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "rotateScimSecret"
         | "retireScimClient"
         | "registerScimTarget"
-        | "retireScimTarget" => (Settings, w(false)),
+        | "retireScimTarget"
         | "putFrontchannelLogout" => (Settings, w(false)),
         "revokeAllAgentInstances" => (Agents, Shape::RevokeAll),
         // OP-154 m.3 (t)
