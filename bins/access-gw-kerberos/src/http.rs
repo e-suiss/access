@@ -135,8 +135,21 @@ impl Endpoint {
 
     async fn read_token(&self, token: Vec<u8>) -> Result<Token, ()> {
         match self.parser.parse(Op::SpnegoRead, token).await {
-            Ok(Reply::Ok { output, .. }) => Token::decode(&output).map_err(|_| ()),
-            _ => Err(()),
+            Ok(Reply::Ok { output, .. }) => Token::decode(&output).map_err(|_| {
+                crate::log("negotiate: the parser summary does not decode");
+            }),
+            Ok(Reply::Refused(code)) => {
+                crate::log(&format!("negotiate: the parser refused the token: {code}"));
+                Err(())
+            }
+            Ok(_) => {
+                crate::log("negotiate: the parser worker failed");
+                Err(())
+            }
+            Err(_) => {
+                crate::log("negotiate: the parser is unavailable");
+                Err(())
+            }
         }
     }
 
@@ -151,6 +164,7 @@ impl Endpoint {
             return Outcome::Fallback;
         }
         let Some(raw) = spnego::authorization(value) else {
+            crate::log("negotiate: the Authorization header is not a Negotiate token");
             self.audit("edge.kerberos.token.refused").await;
             return Outcome::Fallback;
         };
@@ -165,7 +179,13 @@ impl Endpoint {
                 self.audit("edge.kerberos.ntlm.refused").await;
                 return Outcome::Fallback;
             }
-            Err(Refusal::Spn | Refusal::Enctype | Refusal::Kvno) => {
+            Err(r @ (Refusal::Spn | Refusal::Enctype | Refusal::Kvno)) => {
+                crate::log(&format!(
+                    "negotiate: refused ({r:?}): sname {}, etype {}, kvno {:?}",
+                    token.spn(),
+                    token.etype,
+                    token.kvno
+                ));
                 self.audit("edge.kerberos.token.refused").await;
                 return Outcome::Fallback;
             }
@@ -174,6 +194,9 @@ impl Endpoint {
         let krb5 = token.krb5.clone();
         let accepted = tokio::task::spawn_blocking(move || acceptor.accept(&krb5)).await;
         let Ok(Ok(accepted)) = accepted else {
+            if let Ok(Err(e)) = &accepted {
+                crate::log(&format!("negotiate: the acceptor refused: {e:?}"));
+            }
             self.audit("edge.kerberos.accept.refused").await;
             return Outcome::Fallback;
         };
@@ -189,7 +212,12 @@ impl Endpoint {
         };
         let subject = match self.core.raw(Call::Authenticate, &q.encode()).await {
             Ok(body) => Authenticated::decode(&body).ok().and_then(|a| a.subject),
-            Err(_) => None,
+            Err(e) => {
+                crate::log(&format!(
+                    "negotiate: access-server refused the acceptance: {e}"
+                ));
+                None
+            }
         };
         let Some(subject) = subject else {
             return Outcome::Fallback;
