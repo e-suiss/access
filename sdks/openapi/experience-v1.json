@@ -254,6 +254,29 @@
             "minimum": 0,
             "type": "integer"
           },
+          "attention": {
+            "additionalProperties": false,
+            "properties": {
+              "count": {
+                "description": "How many approvals the coordinator says wait; Access keeps no queue (IA-1, X6).",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "href": {
+                "description": "The coordinator's Needs Attention URL (`idp.realm.coordinator`), https.",
+                "type": "string"
+              },
+              "text": {
+                "const": "attention.approvals_waiting"
+              }
+            },
+            "required": [
+              "href",
+              "count",
+              "text"
+            ],
+            "type": "object"
+          },
           "changes": {
             "description": "Changes (IA-2).",
             "items": {

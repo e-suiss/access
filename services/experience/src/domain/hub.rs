@@ -376,6 +376,7 @@ pub fn assemble(viewer: &str, depth: Depth, now: u64, domains: &[DomainReads]) -
         activity: Vec::new(),
         changes: Vec::new(),
         notices: vec![String::from(texts::NOT_SHOWN)],
+        attention: None,
     };
     for d in domains {
         let label = d.domain.label.as_ref().filter(|_| show);
@@ -449,6 +450,8 @@ pub fn assemble(viewer: &str, depth: Depth, now: u64, domains: &[DomainReads]) -
         .sort_by(|a, b| b.at.cmp(&a.at).then(b.pos.cmp(&a.pos)));
     hub
 }
+
+pub mod attention;
 
 #[cfg(test)]
 mod tests;

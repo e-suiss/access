@@ -147,6 +147,14 @@ export interface components {
             activity: components["schemas"]["ActivityRow"][];
             /** @description When it was assembled. */
             as_of: number;
+            attention?: {
+                /** @description How many approvals the coordinator says wait; Access keeps no queue (IA-1, X6). */
+                count: number;
+                /** @description The coordinator's Needs Attention URL (`idp.realm.coordinator`), https. */
+                href: string;
+                /** @constant */
+                text: "attention.approvals_waiting";
+            };
             /** @description Changes (IA-2). */
             changes: components["schemas"]["ChangeRow"][];
             /** @enum {string} */

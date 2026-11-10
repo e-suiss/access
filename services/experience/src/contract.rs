@@ -442,6 +442,22 @@ pub struct Hub {
     pub changes: Vec<ChangeRow>,
     /// Notices, always including `hub.not_shown_unconnected` (§8.17.7.2).
     pub notices: Vec<String>,
+    /// The one link to the coordinator's Needs Attention (§8.17.6.5, OP-156 m.3 (t)); absent
+    /// when the realm names no coordinator or nothing waits.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attention: Option<Attention>,
+}
+
+/// "N approvals waiting for you →": a link to the coordinator, whose count it is; Access keeps
+/// no queue (IA-1, X6).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Attention {
+    /// The coordinator's Needs Attention URL, `https`.
+    pub href: String,
+    /// How many approvals the coordinator says wait.
+    pub count: u64,
+    /// The text key, `attention.approvals_waiting`.
+    pub text: String,
 }
 
 /// One server-sent event (OP-153 m.3 (v)): a hint to read again, never the data.
@@ -708,6 +724,14 @@ fn rows() -> Map<String, Value> {
                 "activity": list(&r("ActivityRow"), "Uses (S6)."),
                 "changes": list(&r("ChangeRow"), "Changes (IA-2)."),
                 "notices": list(&json!({ "type": "string" }), "Always includes `hub.not_shown_unconnected`."),
+                "attention": object(
+                    &json!({
+                        "href": text("The coordinator's Needs Attention URL (`idp.realm.coordinator`), https."),
+                        "count": uint("How many approvals the coordinator says wait; Access keeps no queue (IA-1, X6)."),
+                        "text": { "const": "attention.approvals_waiting" },
+                    }),
+                    &["href", "count", "text"],
+                ),
             }),
             &["as_of", "depth", "domains", "show_domains", "acting_for_you", "shared_from_you", "your_authority", "roots", "activity", "changes", "notices"],
         ),
