@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.scim_resources\n            SET external_index = $5, display_name = $6, body = $7::text::jsonb, body_nonce = $8,\n                body_ciphertext = $9, version = $10, modified_at = clock_timestamp()\n          WHERE tenant_id = $1 AND realm_id = $2 AND resource_id = $3 AND client_name = $4\n            AND deleted_at IS NULL AND version = $11",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Text",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c99d8c212733a658a9444855bc9cbed8c3928059bf4b8b90fb3ee31020089dac"
+}

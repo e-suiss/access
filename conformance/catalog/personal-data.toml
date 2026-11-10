@@ -174,3 +174,21 @@ basis = "contract"
 portable = "observed"
 export = false
 note = "Upstream access and refresh tokens of a connected account; never exported or shown (OP-154 m.3 (t), TN-79)."
+
+[[field]]
+column = "access.scim_resources.body_ciphertext"
+vault = "profile"
+retention = "profile"
+basis = "contract"
+portable = "observed"
+export = true
+note = "A SCIM User's attributes as its provisioning client sent them (OP-155 m.3 (g)); never a password."
+
+[[field]]
+column = "access.scim_resources.external_index"
+vault = "none"
+retention = "profile"
+basis = "contract"
+portable = "derived"
+export = false
+note = "Keyed blind index of the client's externalId; the externalId itself is in the sealed body."

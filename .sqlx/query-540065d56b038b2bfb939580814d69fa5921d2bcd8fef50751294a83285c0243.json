@@ -1,0 +1,43 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT resource_id, subject_id AS \"subject_id!\" FROM access.scim_resources\n          WHERE tenant_id = $1 AND realm_id = $2 AND client_name = $3 AND kind = 'user'\n            AND deleted_at IS NULL AND resource_id = ANY($4) AND subject_id IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "resource_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.scim_resources",
+            "name": "resource_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.scim_resources",
+            "name": "subject_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "540065d56b038b2bfb939580814d69fa5921d2bcd8fef50751294a83285c0243"
+}

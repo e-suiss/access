@@ -1,0 +1,37 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.scim_targets (tenant_id, realm_id, name, version, state, base_url,\n                secret_nonce, secret_sealed, kek_id, domain_id, decision_pos)\n         SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8, $9, $10\n           FROM access.scim_targets WHERE tenant_id = $1 AND realm_id = $2 AND name = $3\n         RETURNING version AS \"version!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.scim_targets",
+            "name": "version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f8990076a1dec03a67618e7e5ec183fabf935e5bc4cede7cf156e6430563a262"
+}

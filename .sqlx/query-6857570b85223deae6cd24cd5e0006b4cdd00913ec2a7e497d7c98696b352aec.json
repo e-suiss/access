@@ -1,0 +1,101 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ON (name) name, version, state, secret_sha256, profile, issuer, decision_pos\n           FROM access.scim_clients WHERE tenant_id = $1 AND realm_id = $2\n          ORDER BY name, version DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.scim_clients",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.scim_clients",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.scim_clients",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "secret_sha256",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.scim_clients",
+            "name": "secret_sha256"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "profile",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.scim_clients",
+            "name": "profile"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "issuer",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.scim_clients",
+            "name": "issuer"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.scim_clients",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "6857570b85223deae6cd24cd5e0006b4cdd00913ec2a7e497d7c98696b352aec"
+}

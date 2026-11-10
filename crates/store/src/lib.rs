@@ -55,6 +55,7 @@ pub mod recovery;
 pub mod relay;
 pub mod risk;
 pub mod sandbox;
+pub mod scim;
 pub mod scope;
 pub mod sessions;
 pub mod ssf;

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT 1 AS \"one!\" FROM access.scim_resources\n              WHERE tenant_id = $1 AND realm_id = $2 AND client_name = $3 AND kind = $4\n                AND external_index = $5 AND deleted_at IS NULL AND resource_id <> $6",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "one!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "502944fb9b9a382b40c9a4875b08d77e8019098b79cf182e9dad37e3e9b26fa5"
+}
