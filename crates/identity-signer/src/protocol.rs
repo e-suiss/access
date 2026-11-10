@@ -144,6 +144,8 @@ pub enum Request {
         /// Signing time; within the signer's clock skew of its own clock.
         at: u64,
     },
+    /// A request about the realm's SAML keys (OP-155 m.3 (d)).
+    Saml(crate::saml::SamlRequest),
 }
 
 /// The identity signer's answer.
@@ -192,6 +194,8 @@ pub enum Response {
         /// Its RFC 7638 `kid`.
         kid: [u8; 32],
     },
+    /// An answer about the realm's SAML keys.
+    Saml(crate::saml::SamlResponse),
     /// A refusal, by stable code.
     Error(String),
 }
@@ -419,6 +423,7 @@ impl Request {
                     ("step", Value::text(r.step.name())),
                 ]),
             )]),
+            Self::Saml(s) => map(vec![("saml", s.to_value())]),
         }
     }
 
@@ -515,6 +520,9 @@ impl Request {
                 at: uint(s.get("at"))?,
             });
         }
+        if let Some(s) = v.get("saml") {
+            return Ok(Self::Saml(crate::saml::SamlRequest::from_value(s)?));
+        }
         let s = v.get("sign").ok_or(FrameError::Malformed)?;
         Ok(Self::Sign {
             realm: realm(s.get("realm"))?,
@@ -562,6 +570,7 @@ impl Response {
                     ("kid", Value::Bytes(kid.to_vec())),
                 ]),
             )]),
+            Self::Saml(s) => map(vec![("saml", s.to_value())]),
             Self::Error(code) => map(vec![("error", Value::text(code))]),
         }
     }
@@ -612,6 +621,9 @@ impl Response {
         }
         if let Some(d) = v.get("rekeyed") {
             return Ok(Self::Rekeyed(text(Some(d))?));
+        }
+        if let Some(s) = v.get("saml") {
+            return Ok(Self::Saml(crate::saml::SamlResponse::from_value(s)?));
         }
         Ok(Self::Error(text(v.get("error"))?))
     }

@@ -15,6 +15,7 @@ pub mod issuer;
 pub mod ports;
 pub mod protocol;
 pub mod purpose;
+pub mod saml;
 pub mod service;
 
 /// Why the signer refused.

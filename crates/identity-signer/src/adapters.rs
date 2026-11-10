@@ -26,6 +26,9 @@ const SEAL_CONTEXT: &[u8] = b"access/identity-signer/realm-key";
 /// Binds a sealed `rsa-id` key to its purpose (OP-155 m.3 (k)).
 const RSA_ID_CONTEXT: &[u8] = b"access/identity-signer/rsa-id";
 
+/// Binds a sealed SAML key to its purpose (OP-155 m.3 (d)).
+const SAML_CONTEXT: &[u8] = b"access/identity-signer/saml";
+
 /// Creates realm keys on aws-lc-rs and seals each PKCS#8 document under its own DEK, wrapped
 /// by the realm's KEK; the plaintext never leaves memory (CR-21 m.3).
 pub struct SealedFactory<K> {
@@ -89,6 +92,14 @@ impl<K: Kek> KeyFactory for SealedFactory<K> {
     fn load_rsa_id(&mut self, sealed: &[u8]) -> Result<access_crypto::rsa_id::RsaIdKey, SignError> {
         let doc = self.open(RSA_ID_CONTEXT, sealed)?;
         access_crypto::rsa_id::RsaIdKey::from_pkcs8(doc.expose()).map_err(|_| SignError::Key)
+    }
+
+    fn seal_document(&mut self, doc: &Secret<Vec<u8>>) -> Result<Vec<u8>, SignError> {
+        self.seal(SAML_CONTEXT, doc.expose())
+    }
+
+    fn open_document(&mut self, sealed: &[u8]) -> Result<Secret<Vec<u8>>, SignError> {
+        self.open(SAML_CONTEXT, sealed)
     }
 
     fn generate(&mut self, alg: JwsAlg) -> Result<Generated, SignError> {
@@ -223,6 +234,20 @@ impl Vault for DirVault {
         std::fs::write(&tmp, bytes).map_err(|_| VaultError)?;
         std::fs::rename(&tmp, self.dir.join(rsa_id_file(realm))).map_err(|_| VaultError)
     }
+
+    fn saml(&mut self, realm: &Realm) -> Result<Option<Vec<u8>>, VaultError> {
+        match std::fs::read(self.dir.join(saml_file(realm))) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(_) => Err(VaultError),
+        }
+    }
+
+    fn put_saml(&mut self, realm: &Realm, bytes: &[u8]) -> Result<(), VaultError> {
+        let tmp = self.dir.join(format!("{}.saml.tmp", hex(realm)));
+        std::fs::write(&tmp, bytes).map_err(|_| VaultError)?;
+        std::fs::rename(&tmp, self.dir.join(saml_file(realm))).map_err(|_| VaultError)
+    }
 }
 
 /// A realm's `rsa-id` key file; not `.cbor`, so it is never read as a realm key set.
@@ -232,6 +257,11 @@ fn rsa_id_file(realm: &Realm) -> String {
         hex(realm),
         crate::purpose::KeyPurpose::RsaId.label()
     )
+}
+
+/// A realm's SAML key file; not `.cbor`, so it is never read as a realm key set.
+fn saml_file(realm: &Realm) -> String {
+    format!("{}.{}.key", hex(realm), crate::saml::LABEL)
 }
 
 /// A realm's Claim issuer key file; not `.cbor`, so it is never read as a realm key set.

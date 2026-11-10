@@ -45,6 +45,30 @@ pub trait KeyFactory {
         let _ = sealed;
         Err(SignError::Key)
     }
+
+    /// Seals a private key document made elsewhere in the signer (a SAML key, OP-155 m.3 (d)).
+    ///
+    /// # Errors
+    /// [`SignError::Key`] when this factory cannot seal one.
+    fn seal_document(
+        &mut self,
+        doc: &suiss_crypto::secret::Secret<Vec<u8>>,
+    ) -> Result<Vec<u8>, SignError> {
+        let _ = doc;
+        Err(SignError::Key)
+    }
+
+    /// Opens a document [`Self::seal_document`] sealed.
+    ///
+    /// # Errors
+    /// [`SignError::Key`].
+    fn open_document(
+        &mut self,
+        sealed: &[u8],
+    ) -> Result<suiss_crypto::secret::Secret<Vec<u8>>, SignError> {
+        let _ = sealed;
+        Err(SignError::Key)
+    }
 }
 
 /// Why the vault failed.
@@ -113,6 +137,24 @@ pub trait Vault {
         realm: &crate::protocol::Realm,
         bytes: &[u8],
     ) -> Result<(), VaultError> {
+        let _ = (realm, bytes);
+        Err(VaultError)
+    }
+
+    /// The stored SAML keys of `realm`, if any were made (OP-155 m.3 (d)).
+    ///
+    /// # Errors
+    /// [`VaultError`].
+    fn saml(&mut self, realm: &crate::protocol::Realm) -> Result<Option<Vec<u8>>, VaultError> {
+        let _ = realm;
+        Ok(None)
+    }
+
+    /// Replaces the stored SAML keys of `realm`.
+    ///
+    /// # Errors
+    /// [`VaultError`] when this vault keeps none.
+    fn put_saml(&mut self, realm: &crate::protocol::Realm, bytes: &[u8]) -> Result<(), VaultError> {
         let _ = (realm, bytes);
         Err(VaultError)
     }

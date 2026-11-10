@@ -508,7 +508,9 @@ version = "0.4.0"
 dependencies = [
  "access-crypto",
  "access-internal-api",
+ "access-parse",
  "access-telemetry",
+ "aws-lc-rs",
  "esuiss-access-kernel",
  "esuiss-crypto",
  "thiserror",

@@ -40,6 +40,7 @@ pub struct Service<F, V> {
     issuers: BTreeMap<Realm, IssuerKey>,
     rsa_ids: BTreeMap<Realm, access_crypto::rsa_id::RsaIdKey>,
     federation: BTreeMap<Realm, Keyring>,
+    saml: BTreeMap<Realm, crate::saml::Ring>,
 }
 
 /// The JWS types only a realm's `federation` key signs, and the realm JOSE key never does
@@ -228,6 +229,7 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             issuers: BTreeMap::new(),
             rsa_ids: BTreeMap::new(),
             federation: BTreeMap::new(),
+            saml: BTreeMap::new(),
         };
         for (realm, alg, policy, saved, federation) in all.iter().filter_map(|b| restored(b)) {
             let policy = policy.unwrap_or(s.policy);
@@ -509,6 +511,7 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             r @ (Request::FederationJwks(_) | Request::SignFederation { .. }) => {
                 self.handle_federation(r, now, draw)
             }
+            Request::Saml(r) => self.handle_saml(&r, now),
             other => self.handle_issuer(&other, now),
         }
     }
@@ -659,6 +662,61 @@ fn with_rsa(jwks: &str, rsa: Option<&str>) -> String {
         Some(head) if head.ends_with('[') => format!("{head}{rsa}]}}"),
         Some(head) => format!("{head},{rsa}]}}"),
         None => String::from(jwks),
+    }
+}
+
+impl<F: KeyFactory, V: Vault> Service<F, V> {
+    /// Answers a SAML key request (OP-155 m.3 (d)); a change the vault cannot keep is an
+    /// outage and is not answered as done.
+    fn handle_saml(&mut self, request: &crate::saml::SamlRequest, now: u64) -> Response {
+        use crate::saml::{Ring, SamlKeyError, SamlRequest, SamlResponse};
+        let realm = request.realm();
+        if !self.saml.contains_key(&realm) {
+            let ring = match self.vault.saml(&realm) {
+                Ok(Some(stored)) => match Ring::restore(realm, &stored, &mut self.factory) {
+                    Ok(r) => r,
+                    Err(e) => return Response::Error(String::from(e.code())),
+                },
+                Ok(None) => Ring::new(realm),
+                Err(_) => return Response::Error(String::from(SamlKeyError::Stored.code())),
+            };
+            self.saml.insert(realm, ring);
+        }
+        let Some(ring) = self.saml.get_mut(&realm) else {
+            return Response::Error(String::from(SamlKeyError::Stored.code()));
+        };
+        let changed = match request {
+            SamlRequest::Keys(_) => Ok(false),
+            SamlRequest::Open { alg, .. } => ring.open(*alg, now, &mut self.factory),
+            SamlRequest::Rotate { alg, step, .. } => ring
+                .rotate(*alg, *step, now, &mut self.factory)
+                .map(|()| true),
+            SamlRequest::Sign { sig, data, .. } => {
+                return match ring.sign(*sig, data) {
+                    Ok((signature, info)) => Response::Saml(SamlResponse::Signed {
+                        signature,
+                        cert: info.cert.clone(),
+                        kid: info.kid,
+                    }),
+                    Err(e) => Response::Error(String::from(e.code())),
+                };
+            }
+        };
+        match changed {
+            Ok(true) => {
+                let kept = ring
+                    .stored()
+                    .is_some_and(|b| self.vault.put_saml(&realm, &b).is_ok());
+                if !kept {
+                    self.saml.remove(&realm);
+                    return Response::Error(String::from(SamlKeyError::Stored.code()));
+                }
+            }
+            Ok(false) => {}
+            Err(e) => return Response::Error(String::from(e.code())),
+        }
+        let keys = self.saml.get(&realm).map(Ring::keys).unwrap_or_default();
+        Response::Saml(SamlResponse::Keys(keys))
     }
 }
 
