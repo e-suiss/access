@@ -98,7 +98,8 @@ CREATE TABLE access.saml_flows (
   PRIMARY KEY (tenant_id, realm_id, flow_hash),
   FOREIGN KEY (tenant_id, realm_id) REFERENCES access.realms (tenant_id, realm_id)
 );
-CREATE UNIQUE INDEX saml_flows_handle ON access.saml_flows (handle_hash) WHERE handle_hash IS NOT NULL;
+CREATE UNIQUE INDEX saml_flows_handle ON access.saml_flows (tenant_id, realm_id, handle_hash)
+  WHERE handle_hash IS NOT NULL;
 
 -- the raw values and the creation of a flow never change; a decided flow is final
 CREATE FUNCTION access.saml_flow_transition() RETURNS trigger
