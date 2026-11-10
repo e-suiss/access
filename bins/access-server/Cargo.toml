@@ -58,6 +58,7 @@ tracing = { workspace = true, features = ["std"] }
 zeroize = { workspace = true, features = ["alloc", "std"] }
 
 [dev-dependencies]
+access-identity-domain = { workspace = true, features = ["testing"] }
 access-experience = { workspace = true }
 access-executor = { path = "../../services/executor", features = ["testing"] }
 access-vc-verifier = { path = "../../services/vc-verifier", features = ["testing"] }

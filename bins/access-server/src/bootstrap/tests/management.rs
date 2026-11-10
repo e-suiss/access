@@ -1168,6 +1168,7 @@ mod consent;
 mod cross_app;
 mod dcr;
 mod device;
+mod domains;
 mod gateways;
 mod organizations;
 mod resources;

@@ -54,6 +54,7 @@ mod accounts;
 mod agents;
 mod certificate;
 mod claims;
+mod domains;
 mod extensions;
 mod federation;
 mod governance;
