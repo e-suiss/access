@@ -2064,6 +2064,7 @@ pub mod management;
 pub mod outcome;
 pub mod projection;
 mod proofs;
+pub mod proxy;
 pub mod publishing;
 pub mod recovery;
 mod regime;

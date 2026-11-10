@@ -46,6 +46,7 @@ mod audit;
 mod binding;
 mod consent;
 mod projection;
+mod proxy;
 mod reconcile;
 mod ssh;
 mod vault;
