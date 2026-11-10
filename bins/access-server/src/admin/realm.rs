@@ -105,6 +105,7 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::SamlSps => Kind::SamlSps,
         ResourceKind::SshHostGroups => Kind::SshHostGroups,
         ResourceKind::Proxies => Kind::Proxies,
+        ResourceKind::ExportSinks => Kind::ExportSinks,
         ResourceKind::ProtectedResources => Kind::ProtectedResources,
         ResourceKind::TrustAnchors => Kind::TrustAnchors,
         ResourceKind::SsoEnforcementPreviews => Kind::SsoPreview,

@@ -501,6 +501,16 @@ pub enum Invalid {
     /// An SSH CA body that is not `{"enabled"}` or an empty rotation (OP-156 m.3 (o)).
     #[error("invalid SSH CA change")]
     SshCa,
+    /// An export sink whose name, adapter, endpoint, settings or secret do not fit, or that
+    /// Access may not reach (OP-156 m.3 (s)).
+    #[error("invalid export sink")]
+    ExportSink,
+    /// No live export sink by that name.
+    #[error("no such export sink")]
+    NoExportSink,
+    /// The name was registered before; it is not reused (OP-73).
+    #[error("export sink exists")]
+    ExportSinkExists,
     /// An SSH server group that is not a name of lower-case letters, digits and `-` with a
     /// short description.
     #[error("invalid SSH server group")]
@@ -610,6 +620,9 @@ impl Invalid {
             Self::SamlSpExists => "saml-sp-exists",
             Self::SamlCertificate => "invalid-saml-certificate-policy",
             Self::SshCa => "invalid-ssh-ca",
+            Self::ExportSink => "invalid-export-sink",
+            Self::NoExportSink => "no-such-export-sink",
+            Self::ExportSinkExists => "export-sink-exists",
             Self::SshHostGroup => "invalid-ssh-host-group",
             Self::NoSshHostGroup => "no-such-ssh-host-group",
             Self::SshHostGroupExists => "ssh-host-group-exists",
@@ -1880,6 +1893,8 @@ pub enum Change {
     Ssh(access_identity_ssh::domain::change::SshChange),
     /// `idp.proxy.*` but `mcp_pin` (OP-156 m.3 (a), (l)).
     Proxy(access_identity_proxy::domain::registration::ProxyChange),
+    /// `idp.export.*` (OP-156 m.3 (a), (s)).
+    Export(access_identity_export::domain::sink::ExportChange),
     /// `idp.client.resource_register` (AG-8, OP-154 m.3 (a)).
     ResourceRegister(ProtectedResource),
     /// `idp.client.cross_app_connection` (CT2, OP-154 m.3 (a), (n)).
@@ -2361,6 +2376,7 @@ impl Change {
             Self::Domain(d) => d.action(),
             Self::Ssh(s) => s.action(),
             Self::Proxy(p) => p.action(),
+            Self::Export(e) => e.action(),
             Self::ResourceRegister(_) => IdpAction::ClientResourceRegister,
             Self::CrossAppConnection(_) => IdpAction::ClientCrossAppConnection,
             Self::CrossAppConnectionRetire(_) => IdpAction::ClientCrossAppConnectionRetire,
@@ -2450,6 +2466,7 @@ impl Change {
             Self::Domain(d) => d.check(),
             Self::Ssh(s) => s.check().map_err(ssh_invalid),
             Self::Proxy(p) => p.check().map_err(|_| Invalid::Proxy),
+            Self::Export(e) => e.check().map_err(|_| Invalid::ExportSink),
             Self::ResourceRegister(r) => r.check(),
             Self::CrossAppConnection(c) => c.check(),
             Self::CrossAppConnectionRetire(name) => {
@@ -2624,6 +2641,7 @@ impl Change {
             Self::Domain(d) => d.body(),
             Self::Ssh(s) => s.body(),
             Self::Proxy(p) => p.body(),
+            Self::Export(e) => e.body(),
             Self::DeviceCode(on) | Self::Hrd(on) | Self::SecurityNotices(on) | Self::Push(on) => {
                 Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))])
             }
@@ -2814,6 +2832,7 @@ impl Change {
             Self::Domain(d) => path.extend(d.path()),
             Self::Ssh(s) => path.extend(s.path()),
             Self::Proxy(p) => path.extend(p.path()),
+            Self::Export(e) => path.extend(e.path()),
             Self::ResourceRegister(r) => {
                 path.extend([String::from("resource"), r.resource.clone()]);
             }

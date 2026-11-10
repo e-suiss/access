@@ -197,6 +197,8 @@ pub enum ResourceKind {
     SshHostGroups,
     /// Forward-auth proxies, by name (OP-156 m.3 (l)).
     Proxies,
+    /// Export sinks of the read-only SIEM projection, by name (OP-156 m.3 (s)).
+    ExportSinks,
     /// Protected resources and MCP servers, by canonical URI (AG-8).
     ProtectedResources,
     /// OpenID Federation trust anchors, by their entity identifier's base64url (OP-155 m.3 (j)).
@@ -232,6 +234,7 @@ impl ResourceKind {
             Self::SamlSps => "saml-sps",
             Self::SshHostGroups => "ssh-host-groups",
             Self::Proxies => "proxies",
+            Self::ExportSinks => "export-sinks",
             Self::ProtectedResources => "protected-resources",
             Self::TrustAnchors => "trust-anchors",
             Self::SsoEnforcementPreviews => "sso-enforcement-previews",

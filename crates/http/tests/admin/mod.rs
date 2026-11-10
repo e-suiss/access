@@ -221,6 +221,7 @@ fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
         ResourceKind::SamlSps => json!({ "name": key, "entity_id": "https://sp.test",
                                          "status": "live" }),
         ResourceKind::CustomDomains => json!({ "host": key, "status": "pending" }),
+        ResourceKind::ExportSinks => json!({ "name": key, "adapter": "otlp", "status": "live" }),
         ResourceKind::SshHostGroups => json!({ "name": key, "description": "Web",
                                                "status": "live", "version": 1 }),
         ResourceKind::Proxies => json!({ "name": key, "host": "wiki.shop.example",

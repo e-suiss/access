@@ -216,6 +216,12 @@ pub enum Op {
     RetireProxy,
     /// `putProxyPlainHeaders`: `idp.proxy.plain_headers` or `plain_headers_close`.
     PutProxyPlainHeaders,
+    /// `registerExportSink`: `idp.export.sink_register` (OP-156 m.3 (s)).
+    RegisterExportSink,
+    /// `putExportSink`: `idp.export.sink_update`, keyed by the sink's name.
+    PutExportSink,
+    /// `retireExportSink`: `idp.export.sink_retire`, keyed by the sink's name.
+    RetireExportSink,
     /// `putDcrPolicy`: `idp.client.dcr_policy`, or `dcr_policy_tighten` (OP-154 m.3 (j)).
     PutDcrPolicy,
     /// `putFederation`: `idp.federation.enable` or `disable` (OP-155 m.3 (j)).
@@ -378,6 +384,9 @@ impl Op {
             "putProxy" => Self::PutProxy,
             "retireProxy" => Self::RetireProxy,
             "putProxyPlainHeaders" => Self::PutProxyPlainHeaders,
+            "registerExportSink" => Self::RegisterExportSink,
+            "putExportSink" => Self::PutExportSink,
+            "retireExportSink" => Self::RetireExportSink,
             "putDcrPolicy" => Self::PutDcrPolicy,
             "putFederation" => Self::PutFederation,
             "addTrustAnchor" => Self::AddTrustAnchor,
@@ -976,6 +985,26 @@ fn ssh_change(
     }))
 }
 
+/// The `idp.export.*` change of an export sink operation (OP-156 m.3 (s)), `None` for any other.
+fn export_change(
+    op: Op,
+    key: Option<&str>,
+    body: &Json,
+) -> Result<Option<access_identity_export::domain::sink::ExportChange>, Invalid> {
+    use access_identity_export::domain::sink::ExportChange;
+    let mut own = obj(body)?.clone();
+    own.remove(VALIDITY);
+    own.remove("ais");
+    let body = Json::Object(own);
+    let sink = |_| Invalid::ExportSink;
+    Ok(Some(match op {
+        Op::RegisterExportSink => ExportChange::register(&body).map_err(sink)?,
+        Op::PutExportSink => ExportChange::update(key_of(key)?, &body).map_err(sink)?,
+        Op::RetireExportSink => ExportChange::retire(key_of(key)?, &body).map_err(sink)?,
+        _ => return Ok(None),
+    }))
+}
+
 /// The `idp.proxy.*` change of a proxy operation (OP-156 m.3 (l)), `None` for any other.
 fn proxy_change(
     op: Op,
@@ -1113,6 +1142,9 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
     }
     if let Some(p) = proxy_change(op, key, body)? {
         return Ok(Change::Proxy(p));
+    }
+    if let Some(e) = export_change(op, key, body)? {
+        return Ok(Change::Export(e));
     }
     Ok(match op {
         Op::CreateOrganization => {
@@ -1566,7 +1598,10 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         | Op::RegisterProxy
         | Op::PutProxy
         | Op::RetireProxy
-        | Op::PutProxyPlainHeaders => return Err(Invalid::Body),
+        | Op::PutProxyPlainHeaders
+        | Op::RegisterExportSink
+        | Op::PutExportSink
+        | Op::RetireExportSink => return Err(Invalid::Body),
         // OP-153 m.18 (e), m.25 (b)
         Op::BindAccount => {
             only(
@@ -2340,6 +2375,8 @@ pub enum Kind {
     SshHostGroups,
     /// The forward-auth proxies by name (OP-156 m.3 (l)).
     Proxies,
+    /// The export sinks by name, with their delivery state (OP-156 m.3 (s)).
+    ExportSinks,
     /// The protected resources by canonical URI (AG-8).
     ProtectedResources,
     /// The trust anchors by the base64url of their entity identifier (OP-155 m.3 (j)).
@@ -2796,6 +2833,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-156 m.3 (l)
             (Kind::Proxies, _) => Read {
                 items: super::proxy::list(t, key).await?,
+                last: None,
+            },
+            // OP-156 m.3 (s)
+            (Kind::ExportSinks, _) => Read {
+                items: super::export_sinks::list(t, key).await?,
                 last: None,
             },
             (Kind::Socials, _) => {

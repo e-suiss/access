@@ -52,7 +52,10 @@ pub const fn id_member(kind: ResourceKind) -> &'static str {
         ResourceKind::Hooks => "hook_id",
         ResourceKind::Webhooks => "webhook_id",
         ResourceKind::Agents => "agent",
-        ResourceKind::SamlSps | ResourceKind::SshHostGroups | ResourceKind::Proxies => "name",
+        ResourceKind::SamlSps
+        | ResourceKind::SshHostGroups
+        | ResourceKind::Proxies
+        | ResourceKind::ExportSinks => "name",
         ResourceKind::CustomDomains => "host",
         _ => "client_id",
     }

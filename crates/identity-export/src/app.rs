@@ -167,7 +167,7 @@ impl<W: Wire, K: RealmKek> Pass<'_, W, K> {
                         // OP-44
                         if rows.iter().any(|r| r.event_type != BATCH_SENT) {
                             t.audit(&AuditEvent {
-                                event_type: BATCH_SENT,
+                                event_type: "export.batch_sent",
                                 actor: ACTOR,
                                 target: &s.name,
                                 correlation: "-",
@@ -231,7 +231,7 @@ impl<W: Wire, K: RealmKek> Pass<'_, W, K> {
     ) -> Result<(), StoreError> {
         // OP-41
         t.audit(&AuditEvent {
-            event_type: SINK_FAILED,
+            event_type: "export.sink_failed",
             actor: ACTOR,
             target: &s.name,
             correlation: "-",

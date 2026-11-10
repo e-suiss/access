@@ -5,6 +5,7 @@ pub mod accounts;
 pub mod agents;
 mod custom_domains;
 pub mod domains;
+mod export_sinks;
 pub mod federation;
 pub mod household;
 pub mod issuer;
@@ -489,6 +490,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Ssh(s) => ssh::current(t, s).await?,
             // OP-156 m.3 (l)
             Change::Proxy(p) => proxy::current(t, p).await?,
+            // OP-156 m.3 (s)
+            Change::Export(e) => export_sinks::current(t, e, declared).await?,
             // OP-154 m.3 (j)
             Change::DcrPolicy { policy, loosens } => {
                 let current =
@@ -1758,6 +1761,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Ssh(s) => ssh::write(t, bound, s).await?,
             // OP-156 m.3 (l)
             Change::Proxy(p) => proxy::write(t, bound, p).await?,
+            // OP-156 m.3 (s)
+            Change::Export(e) => export_sinks::write(t, bound, e, self.vault).await?,
             Change::DeviceCode(on) => {
                 t.put_device_code(bound, *on).await?;
                 true

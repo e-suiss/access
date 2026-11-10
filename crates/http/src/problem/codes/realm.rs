@@ -727,3 +727,18 @@ pub const INVALID_FORWARDED_REQUEST: Code = code(
     "Bad Request",
     "The forward-auth check does not name the request it asks about: the engine's method, URI and host headers are missing or malformed; the request is refused (OP-156 m.3 (l)).",
 );
+/// An export sink whose name, adapter, endpoint, settings or secret do not fit, or that Access
+/// may not reach (OP-156 m.3 (s)).
+pub const INVALID_EXPORT_SINK: Code = code(
+    "invalid-export-sink",
+    400,
+    "Bad Request",
+    "An export sink has a lower-case name, an adapter (s3_parquet, otlp, collector or syslog), an https endpoint on port 443 or one the operator declared (host:port on 6514 for syslog), the settings of its adapter or preset and, where the adapter needs one, a secret; no sampling or filter setting exists (OP-156 m.3 (s), OP-44).",
+);
+/// The export sink name was registered before; it is not reused (OP-73).
+pub const EXPORT_SINK_EXISTS: Code = code(
+    "export-sink-exists",
+    409,
+    "Conflict",
+    "An export sink with this name was registered before; a retired sink keeps its name and its cursor (OP-73).",
+);

@@ -486,7 +486,7 @@ const STAGE10: [Route; 45] = [
 
 /// The Stage 11 realm routes, declared before their lanes serve them (OP-156 m.4): each answers
 /// `501 not-yet-served` behind its permission until its lane fills the handler.
-const STAGE11: [Route; 42] = [
+const STAGE11: [Route; 38] = [
     list(
         "/admin/v1/realms/{slug}/proxies",
         "listProxies",
@@ -636,29 +636,6 @@ const STAGE11: [Route; 42] = [
         "/admin/v1/realms/{slug}/hr-connectors/{connector}/retire",
         "retireHrConnector",
         "Retires an HR connector: idp.hr.connector_retire.",
-    ),
-    list(
-        "/admin/v1/realms/{slug}/export-sinks",
-        "listExportSinks",
-        "The realm's export sinks for the read-only SIEM projection and their cursors; a copy, not the record (OP-156 m.3 (s)).",
-    ),
-    write(
-        Verb::Post,
-        "/admin/v1/realms/{slug}/export-sinks",
-        "registerExportSink",
-        "Registers an export sink (OCSF Parquet on S3, OTLP logs, HTTP collector, syslog CEF or LEEF): idp.export.sink_register.",
-    ),
-    write(
-        Verb::Put,
-        "/admin/v1/realms/{slug}/export-sinks/{sink}",
-        "putExportSink",
-        "Replaces an export sink's configuration: idp.export.sink_update.",
-    ),
-    write(
-        Verb::Post,
-        "/admin/v1/realms/{slug}/export-sinks/{sink}/retire",
-        "retireExportSink",
-        "Retires an export sink: idp.export.sink_retire.",
     ),
     list(
         "/admin/v1/realms/{slug}/signal-sources",
@@ -1318,6 +1295,30 @@ const BASE: &[Route] = &[
         "bindDomainIssuer",
         "Binds the issuer or passkey RP ID to a verified custom domain, irreversibly (§10.2.4, TN-16): idp.domain.issuer_bind (reserved).",
     ),
+    // OP-156 m.3 (s)
+    list(
+        "/admin/v1/realms/{slug}/export-sinks",
+        "listExportSinks",
+        "The realm's export sinks for the read-only SIEM projection and their cursors; a copy, not the record (OP-156 m.3 (s)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/export-sinks",
+        "registerExportSink",
+        "Registers an export sink (OCSF Parquet on S3, OTLP logs, HTTP collector, syslog CEF or LEEF): idp.export.sink_register.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/export-sinks/{sink}",
+        "putExportSink",
+        "Replaces an export sink's configuration: idp.export.sink_update.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/export-sinks/{sink}/retire",
+        "retireExportSink",
+        "Retires an export sink: idp.export.sink_retire.",
+    ),
 ];
 
 /// How a row is served.
@@ -1560,6 +1561,14 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "getProxy" => (Proxies, Shape::Get),
         "registerProxy" => (Proxies, CREATE),
         "putProxy" | "retireProxy" | "putProxyPlainHeaders" => (Proxies, w(false)),
+        // OP-156 m.3 (s)
+        "listExportSinks" => (
+            ResourceKind::ExportSinks,
+            Shape::List(&["name", "adapter", "status"]),
+        ),
+        "registerExportSink" => (ResourceKind::ExportSinks, CREATE),
+        "putExportSink" => (ResourceKind::ExportSinks, w(true)),
+        "retireExportSink" => (ResourceKind::ExportSinks, w(false)),
         // OP-155 m.3 (i)
         "previewSsoEnforcement" => (SsoEnforcementPreviews, Shape::Get),
         "enforceOrganizationSso" | "liftOrganizationSso" | "createOrganizationSetupLink" => {
@@ -1783,6 +1792,8 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::ProxyExists => &r::PROXY_EXISTS,
             Invalid::ProxyClient => &r::INVALID_PROXY_CLIENT,
             Invalid::ProxyDirectlyReachable => &r::PROXY_REACHABLE_DIRECTLY,
+            Invalid::ExportSink => &r::INVALID_EXPORT_SINK,
+            Invalid::ExportSinkExists => &r::EXPORT_SINK_EXISTS,
             Invalid::NoClient
             | Invalid::NoAgent
             | Invalid::NoKey
@@ -1800,6 +1811,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             | Invalid::NoSamlSp
             | Invalid::NoSshHostGroup
             | Invalid::NoProxy
+            | Invalid::NoExportSink
             | Invalid::NoCrossAppConnection
             | Invalid::NoScimClient
             | Invalid::NoGateway

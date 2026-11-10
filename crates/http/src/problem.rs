@@ -456,6 +456,8 @@ pub const CODES: &[Code] = &[
     codes::realm::INVALID_SAML_CERTIFICATE_POLICY,
     codes::realm::INVALID_GATEWAY,
     codes::realm::INVALID_CUSTOM_DOMAIN,
+    codes::realm::INVALID_EXPORT_SINK,
+    codes::realm::EXPORT_SINK_EXISTS,
     codes::realm::ISSUER_FIXED,
     codes::realm::INVITATIONS_CLOSED_BY_SCIM,
     codes::realm::INVALID_SETUP_LINK,

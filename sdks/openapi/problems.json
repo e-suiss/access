@@ -690,6 +690,20 @@
       "description": "A custom domain is a lower-case host below a registrable domain, outside the deployment's base domain and never localhost; one bound as the issuer or passkey RP ID is never retired (OP-156 m.3 (i))."
     },
     {
+      "code": "invalid-export-sink",
+      "type": "urn:suiss:access:problem:invalid-export-sink",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "An export sink has a lower-case name, an adapter (s3_parquet, otlp, collector or syslog), an https endpoint on port 443 or one the operator declared (host:port on 6514 for syslog), the settings of its adapter or preset and, where the adapter needs one, a secret; no sampling or filter setting exists (OP-156 m.3 (s), OP-44)."
+    },
+    {
+      "code": "export-sink-exists",
+      "type": "urn:suiss:access:problem:export-sink-exists",
+      "status": 409,
+      "title": "Conflict",
+      "description": "An export sink with this name was registered before; a retired sink keeps its name and its cursor (OP-73)."
+    },
+    {
       "code": "issuer-fixed",
       "type": "urn:suiss:access:problem:issuer-fixed",
       "status": 409,
