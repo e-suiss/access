@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.linux_ids (tenant_id, realm_id, kind, name, id)\n             SELECT $1, $2, $3, $4, GREATEST(COALESCE(MAX(id) + 1, $5), $5)\n               FROM access.linux_ids\n              WHERE tenant_id = $1 AND realm_id = $2\n             ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "11947b4dabd9a9e6a3c9b619c0fb79039cc7fbf468de7eea2bf295573ebf266f"
+}

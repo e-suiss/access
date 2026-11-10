@@ -48,6 +48,7 @@ pub mod issuer;
 pub mod iys;
 pub mod jobs;
 pub mod ldap;
+pub mod linux;
 pub mod locks;
 pub mod oauth;
 pub mod offline;

@@ -1,0 +1,149 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ON (name) name, state, host_group, certificate, nss_ttl_s,\n                    console_ttl_s, sudo_ct, shell, break_glass, version, decision_pos\n               FROM access.linux_hosts\n              WHERE tenant_id = $1 AND realm_id = $2\n              ORDER BY name, version DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.linux_hosts",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.linux_hosts",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "host_group",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.linux_hosts",
+            "name": "host_group"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "certificate",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.linux_hosts",
+            "name": "certificate"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "nss_ttl_s",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.linux_hosts",
+            "name": "nss_ttl_s"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "console_ttl_s",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.linux_hosts",
+            "name": "console_ttl_s"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "sudo_ct",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "access.linux_hosts",
+            "name": "sudo_ct"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "shell",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.linux_hosts",
+            "name": "shell"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "break_glass",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.linux_hosts",
+            "name": "break_glass"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.linux_hosts",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.linux_hosts",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "fe8a14b094fe5e2db29e3ce06464cff27c229876c5b2c01ad5c1fbf964783c22"
+}
