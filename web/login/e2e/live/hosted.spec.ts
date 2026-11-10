@@ -149,4 +149,19 @@ test.describe("@live hosted pages", () => {
       page.getByText("If an account exists for these details, we've sent instructions."),
     ).toBeVisible();
   });
+
+  // TN-95, §8.13, OP-155 m.3 (h), Ek B 4678, 4731
+  test("@live an upstream connection the realm does not hold is not served and changes nothing", async ({
+    page,
+  }) => {
+    const start = await page.request.get(`${REALM}/v1/login/upstream/no-such-connection`, {
+      maxRedirects: 0,
+    });
+    expect(start.status()).toBe(404);
+    expect((await start.json())["code"]).toBe("no-such-provider");
+    const metadata = await page.request.get(
+      `${REALM}/v1/login/upstream/no-such-connection/saml/metadata`,
+    );
+    expect(metadata.status()).toBe(404);
+  });
 });

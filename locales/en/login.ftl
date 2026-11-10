@@ -150,3 +150,4 @@ vc-present_request = This asks for: { $claims }
 action-open_wallet = Open wallet
 vc-present_failed = Your wallet's answer couldn't be used. Try again.
 consent-trust_mark = { $mark } says this about the app. Access shows it as extra information; it doesn't replace your answer.
+action-sign_in_with = Sign in with { $provider }

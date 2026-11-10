@@ -791,6 +791,20 @@ async fn an_accepted_connection_signs_in_just_in_time_and_its_claims_carry_only_
     e.connection("corp", CORP, &corp(), true).await;
     e.says("emp-1", Some("ada@corp.example"));
     let mut w = e.browser(1);
+    // TN-95
+    let flow = w.send("POST", "/v1/login/flows", None).await;
+    assert_eq!(flow.status, StatusCode::CREATED, "{}", flow.code());
+    let nodes = flow.json()["nodes"].clone();
+    let button = nodes
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["type"] == "provider" && n["provider"] == "corp")
+        .cloned()
+        .unwrap_or_else(|| panic!("{nodes}"));
+    assert_eq!(button["label"]["id"], "action.sign_in_with");
+    assert_eq!(button["label"]["text"], "Sign in with Corp");
+    assert_eq!(button["href"], "/v1/login/upstream/corp");
     let start = w
         .send(
             "GET",

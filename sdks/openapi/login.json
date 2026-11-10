@@ -677,7 +677,8 @@
           "vc.present_request",
           "action.open_wallet",
           "vc.present_failed",
-          "consent.trust_mark"
+          "consent.trust_mark",
+          "action.sign_in_with"
         ]
       },
       "Text": {

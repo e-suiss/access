@@ -150,3 +150,4 @@ vc-present_request = İstenenler: { $claims }
 action-open_wallet = Cüzdanı aç
 vc-present_failed = Cüzdanının cevabı kullanılamadı. Yeniden dene.
 consent-trust_mark = { $mark } bu uygulama hakkında bunu söylüyor. Access bunu ek bilgi olarak gösterir; senin cevabının yerini tutmaz.
+action-sign_in_with = { $provider } ile giriş yap

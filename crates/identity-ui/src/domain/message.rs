@@ -399,11 +399,14 @@ pub enum TextId {
     /// P6: a federation trust mark badge; extra information only, it approves nothing (OP-155 m.3 (j)).
     #[serde(rename = "consent.trust_mark")]
     ConsentTrustMark,
+    /// P4: an enterprise upstream connection's button; never "Trusted provider" (TN-95, Ek B 4678).
+    #[serde(rename = "action.sign_in_with")]
+    SignInWith,
 }
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 131] = [
+    pub const ALL: [Self; 132] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -535,6 +538,7 @@ impl TextId {
         Self::OpenWallet,
         Self::VcPresentFailed,
         Self::ConsentTrustMark,
+        Self::SignInWith,
     ];
 
     /// The stable id on the wire.
@@ -673,6 +677,7 @@ impl TextId {
             Self::OpenWallet => "action.open_wallet",
             Self::VcPresentFailed => "vc.present_failed",
             Self::ConsentTrustMark => "consent.trust_mark",
+            Self::SignInWith => "action.sign_in_with",
         }
     }
 
@@ -871,6 +876,7 @@ impl TextId {
             Self::ConsentTrustMark => {
                 "{ $mark } says this about the app. Access shows it as extra information; it doesn't replace your answer."
             }
+            Self::SignInWith => "Sign in with { $provider }",
         }
     }
 

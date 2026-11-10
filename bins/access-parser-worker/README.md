@@ -50,6 +50,7 @@ Each refusal is a stable code (`xml-doctype`, `der-too-large`, ...).
 |---|---|
 | `saml.request` | Reads an `AuthnRequest` or `LogoutRequest` (alone, or in an ECP SOAP body), verifies its enveloped signature with the service provider's pinned certificates and returns the request's facts |
 | `saml.redirect` | Verifies a detached HTTP-Redirect signature over the octets as received |
+| `saml.assertion` | Reads an upstream identity provider's `Response` or bare `Assertion`, requires exactly one assertion signed with one of the provider's pinned certificates, and returns that assertion's facts |
 
 The message is read once, into one tree. Duplicate identifiers refuse the whole document. The one
 `ds:Signature` must be a direct child of the request and its one `Reference` must name that

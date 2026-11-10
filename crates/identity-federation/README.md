@@ -46,9 +46,39 @@ a fresh five-minute ES256 assertion with it for every code exchange.
 
 ## Any other provider
 
-- An OpenID provider a realm registers (`idp.upstream.register`) is found through its discovery
-  document, whose `issuer` must be the registered one; its ID tokens are checked against the
-  registered JWKS. Its addresses carry no assurance.
 - An OAuth 2.0 provider without ID tokens is one more preset file: the operator puts it in the
   directory `social.presets_dir` names, and realms enable it like a shipped preset. A file whose
   id is already taken stops the server at start-up.
+
+## Enterprise connections
+
+A realm registers an enterprise identity provider (Entra, Okta, Google Workspace, Keycloak, ADFS,
+e-Devlet, an operator's mobile signature service) as a connection. Registering it and trusting
+it are two separate, reserved decisions; until the governing domain accepts the connection's
+issuer, it signs nobody in.
+
+- **Its own profile.** OpenID Connect or SAML 2.0; the subject key (`sub`, or Entra's
+  `[tid, oid]`); client authentication, `private_key_jwt` with a key of the realm unless a secret
+  method is chosen; an optional preset; the organization it belongs to.
+- **Algorithms from discovery.** The discovery document's `issuer` must be the registered one.
+  ID token algorithms are the upstream's, cut down to ES256 and RS256: never `none`, never HMAC.
+- **RFC 9207.** The authorization response's `iss` must be the issuer, and must be present when
+  the upstream says it sends it.
+- **`ui_locales`** is passed on only when the upstream lists the language.
+- **SAML.** Access signs its `AuthnRequest`; the Response is read in the parser worker and only
+  an assertion signed with one of the IdP's pinned certificates counts. An unsolicited Response
+  is refused unless the connection opens it. Each assertion is used once.
+- **Keys, not addresses.** A person is `(issuer, subject)`. When a known address arrives with a
+  new subject from the same connection, nothing is relinked: a conflict is recorded, the account
+  holder is told, and only an explicit link after signing in again resolves it.
+- **Assurance.** An upstream's `acr`, `amr` or `AuthnContextClassRef` counts only through the
+  connection's assurance map; without one the lowest class applies. An upstream never satisfies
+  a confirmation tier.
+- **Evidence, not content.** The raw ID token or assertion is sealed under the person's own key;
+  Claims carry only its digest. A national identity number (TCKN) is sealed with it and appears
+  only as a keyed digest.
+- **Cut-off.** When the governing domain stops accepting an issuer, its sign-ins stop and the
+  sessions it opened end.
+
+Upstream presets (`presets/upstream/*.toml`) are data: e-Devlet and operator mobile signature
+need no provider-specific client.

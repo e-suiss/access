@@ -556,7 +556,54 @@ where
                 provider: row.preset,
             });
         }
+        // TN-95, OP-155 m.3 (h), Ek B 4678
+        for (name, display) in self.upstream_buttons(kit).await {
+            ui.nodes.push(Node::Provider {
+                label: crate::domain::message::Text {
+                    id: TextId::SignInWith,
+                    text: format!("Sign in with {display}"),
+                },
+                href: format!("/v1/login/upstream/{name}"),
+                provider: name,
+            });
+        }
         reply
+    }
+
+    /// The realm's active upstream connections that sign anyone in: not an organization's,
+    /// which home realm discovery names (TN-98), with the name on their button.
+    async fn upstream_buttons(&self, kit: &RealmKit) -> Vec<(String, String)> {
+        use access_identity_federation::domain::connection::Profile;
+        let rows = async {
+            let mut t =
+                access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let rows = access_store::idp::realm::upstreams(&mut t, "", 32).await?;
+            t.commit().await?;
+            Ok::<_, access_store::StoreError>(rows)
+        };
+        let Ok(rows) = rows.await else {
+            return Vec::new();
+        };
+        rows.into_iter()
+            .filter(|r| r.active)
+            .filter_map(|r| {
+                let p =
+                    Profile::stored(r.profile.as_deref(), r.client_secret_ref.is_some()).ok()?;
+                if p.organization.is_some() {
+                    return None;
+                }
+                let display =
+                    p.display_name
+                        .clone()
+                        .or_else(|| {
+                            p.preset.as_deref().and_then(
+                            access_identity_federation::domain::connection::UpstreamPreset::get,
+                        ).map(|x| x.display_name.clone())
+                        })
+                        .unwrap_or_else(|| r.name.clone());
+                Some((r.name, display))
+            })
+            .collect()
     }
 
     /// `POST /v1/login/flows`: a new flow at the identifier step, with discoverable passkey

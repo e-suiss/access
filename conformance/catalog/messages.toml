@@ -3509,6 +3509,14 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "action-sign_in_with"
+text_id = "action.sign_in_with"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "ldap_credentials-title"
 surface = "account"
 class = "settings"
