@@ -2080,6 +2080,7 @@ mod signals;
 pub mod sim_change;
 pub mod sources;
 pub mod ssh;
+pub mod templates;
 pub mod vault;
 mod workload;
 
