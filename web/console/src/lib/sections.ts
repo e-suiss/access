@@ -26,6 +26,7 @@ export const SCREENS = {
     "ssh",
     "siem",
     "linux",
+    "proxy",
     "sign-in",
   ],
   developer: ["schemas", "integrations", "lab", "logs"],
@@ -78,6 +79,8 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
     idp("linux", "host_retire"),
     idp("linux", "offline_policy"),
   ],
+  // OP-156 m.3 (l), (m)
+  proxy: [idp("proxy", "register"), idp("proxy", "retire"), idp("proxy", "plain_headers")],
   "sign-in": [
     idp("realm", "signin_policy"),
     idp("realm", "branding"),

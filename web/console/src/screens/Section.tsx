@@ -11,6 +11,7 @@ import * as Au from "./Audit.js";
 import * as D from "./Developer.js";
 import * as O from "./Organizations.js";
 import type { Ctx } from "./parts.js";
+import { Proxy } from "./Proxy.js";
 import { SignInSettings } from "./SignInSettings.js";
 import { Export as SiemExport } from "./Export.js";
 import { Linux } from "./Linux.js";
@@ -31,6 +32,7 @@ export const SCREEN_TITLE: Readonly<Record<Screen, Key>> = {
   ssh: "screenSsh",
   siem: "screenSiem",
   linux: "screenLinux",
+  proxy: "screenProxy",
   "sign-in": "screenSignIn",
   schemas: "screenSchemas",
   integrations: "screenIntegrations",
@@ -86,6 +88,8 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
       return <SiemExport ctx={ctx} />;
     case "linux":
       return <Linux ctx={ctx} />;
+    case "proxy":
+      return <Proxy ctx={ctx} />;
     case "sign-in":
       return <SignInSettings ctx={ctx} />;
     case "schemas":

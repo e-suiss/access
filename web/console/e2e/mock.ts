@@ -151,6 +151,9 @@ const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   retireLinuxHost: ["idp.linux", "host_retire"],
   putLinuxOfflinePolicy: ["idp.linux", "offline_policy"],
   putLinuxBreakGlassPolicy: ["idp.linux", "break_glass_policy"],
+  registerProxy: ["idp.proxy", "register"],
+  retireProxy: ["idp.proxy", "retire"],
+  putProxyPlainHeaders: ["idp.proxy", "plain_headers"],
 };
 
 export interface Write {
