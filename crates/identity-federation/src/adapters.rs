@@ -39,6 +39,30 @@ impl ProviderHttp for OutboundProviders {
             .map_err(|_| Unreachable)?;
         Ok((a.status, a.body))
     }
+
+    async fn post_form_authorized(
+        &self,
+        url: &str,
+        form: &str,
+        authorization: &str,
+    ) -> Result<Answer, Unreachable> {
+        let headers = [
+            ("Accept", String::from(JSON)),
+            ("Authorization", String::from(authorization)),
+        ];
+        let a = self
+            .0
+            .post_reading(
+                url,
+                "application/x-www-form-urlencoded",
+                &headers,
+                form.as_bytes(),
+                MAX_ANSWER,
+            )
+            .await
+            .map_err(|_| Unreachable)?;
+        Ok((a.status, a.body))
+    }
 }
 
 /// The operator's own presets: every `*.toml` file directly under `dir`, in the shipped

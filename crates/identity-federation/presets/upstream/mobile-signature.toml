@@ -1,0 +1,10 @@
+# OP-155 m.3 (h), §10.2.5, §10.9.1: operator-based mobile signature (TR), modelled as an upstream
+# assertion of the operator's identity service; assurance only through the connection's
+# assurance map. The TCKN is sealed with the raw assertion and only its keyed digest enters a
+# Claim.
+id = "mobile-signature"
+display_name = "Mobile signature"
+logo = "mobile-signature"
+scopes = ["msisdn"]
+subject = ["sub"]
+national_id = "tckn"

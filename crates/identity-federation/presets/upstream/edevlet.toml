@@ -1,0 +1,9 @@
+# OP-155 m.3 (h), IDP-34, TN-95: e-Devlet Kapısı for public sector realms, as data. The
+# connection's own discovery, keys and Acceptance do the rest; no provider-specific client.
+# The TCKN is sealed with the raw assertion and only its keyed digest enters a Claim.
+id = "edevlet"
+display_name = "e-Devlet"
+logo = "edevlet"
+scopes = ["kimlik"]
+subject = ["sub"]
+national_id = "tckn"

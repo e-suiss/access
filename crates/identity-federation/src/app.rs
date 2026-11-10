@@ -10,13 +10,15 @@ use serde_json::Value;
 
 use crate::domain::apple::AppleKey;
 use crate::domain::key::identity_key;
-use crate::domain::preset::{ClientAuth, EmailAssurance, Preset, Presets, Protocol, ResponseMode};
+use crate::domain::preset::{ClientAuth, EmailAssurance, Preset, Presets, Protocol};
 use crate::domain::rules::{ClientRefusal, client_allowed};
 use crate::domain::token::{
     Expect, MAX_ANSWER, ProviderEmail, Secrets, TokenError, check_id_token, email_of, token_answer,
     token_form,
 };
 use crate::ports::{ProviderHttp, SocialSecrets, Unreachable};
+
+pub mod connection;
 
 /// A shared development client the operator configured for one preset (`social.dev_clients`,
 /// OP-153 m.3 (l)); accepted only in a sandbox realm.
@@ -51,6 +53,9 @@ pub enum FederationError {
     /// An answer of the provider was refused.
     #[error("refused: {0}")]
     Refused(TokenError),
+    /// An enterprise connection's discovery or profile does not fit (OP-155 m.3 (h)).
+    #[error("connection: {0}")]
+    Connection(crate::domain::connection::ConnectionError),
 }
 
 impl From<Unreachable> for FederationError {
@@ -206,64 +211,6 @@ impl<H: ProviderHttp, S: SocialSecrets> Federation<'_, H, S> {
             return Err(FederationError::Refused(TokenError::Answer));
         }
         serde_json::from_slice(&body).map_err(|_| FederationError::Refused(TokenError::Answer))
-    }
-
-    /// The profile of an upstream OIDC provider the realm registered (`idp.upstream.register`,
-    /// TN-95): its discovery document must name the registered issuer; its JWKS is the
-    /// registered one. Its addresses carry no assurance.
-    ///
-    /// # Errors
-    /// [`FederationError`].
-    pub async fn upstream(
-        &self,
-        name: &str,
-        issuer: &str,
-        jwks_uri: &str,
-    ) -> Result<Preset, FederationError> {
-        let url = format!(
-            "{}/.well-known/openid-configuration",
-            issuer.trim_end_matches('/')
-        );
-        let (status, body) = self.http.get_json(&url, None).await?;
-        if status != 200 || body.len() > MAX_ANSWER {
-            return Err(FederationError::Unavailable);
-        }
-        let doc: Value = serde_json::from_slice(&body).map_err(|_| FederationError::Unavailable)?;
-        let text = |n: &str| doc.get(n).and_then(Value::as_str).map(String::from);
-        if text("issuer").as_deref() != Some(issuer) {
-            return Err(FederationError::Refused(TokenError::Issuer));
-        }
-        let (Some(authorization_endpoint), Some(token_endpoint)) =
-            (text("authorization_endpoint"), text("token_endpoint"))
-        else {
-            return Err(FederationError::Unavailable);
-        };
-        let p = Preset {
-            id: name.into(),
-            display_name: name.into(),
-            protocol: Protocol::Oidc,
-            issuer: issuer.into(),
-            authorization_endpoint,
-            token_endpoint,
-            jwks_uri: Some(jwks_uri.into()),
-            userinfo_endpoint: None,
-            emails_endpoint: None,
-            scopes: vec!["openid".into(), "email".into(), "profile".into()],
-            logo: "oidc".into(),
-            subject: vec!["sub".into()],
-            algorithms: vec!["RS256".into(), "ES256".into()],
-            response_mode: ResponseMode::Query,
-            client_auth: ClientAuth::SecretPost,
-            email: EmailAssurance::None,
-        };
-        if [&p.authorization_endpoint, &p.token_endpoint]
-            .iter()
-            .all(|u| crate::domain::https(u))
-        {
-            Ok(p)
-        } else {
-            Err(FederationError::Unavailable)
-        }
     }
 }
 
