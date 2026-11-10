@@ -1,0 +1,31 @@
+[package]
+name = "access-identity-scim"
+description = "The SCIM 2.0 server and outbound client of the identity plane (IDP-23, IDP-29, OP-155 m.3 (g)): own model, PATCH engine, filters, paging, tolerance profiles, SETs; provisioning is a Claim source, never a grant."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-crypto = { workspace = true }
+access-identity-account = { workspace = true }
+access-identity-events = { workspace = true }
+access-internal-api = { workspace = true }
+access-kernel = { workspace = true }
+access-parse = { workspace = true }
+access-store = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
+suiss-crypto = { workspace = true }
+thiserror = { workspace = true }
+time = { workspace = true, features = ["std", "formatting", "parsing"] }
+tracing = { workspace = true, features = ["std"] }
+
+[dev-dependencies]
+access-identity-account = { workspace = true, features = ["testing"] }
+access-store = { workspace = true, features = ["testing"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

@@ -278,6 +278,10 @@ pub(crate) const HMAC_ALLOWED: &[(&str, &str)] = &[
         "TN-85, OP-153 m.11 (h): an imported hash's HMAC pepper, recomputed only to verify the source identity provider's stored hash",
     ),
     (
+        "crates/crypto/src/scim_cursor.rs",
+        "CR-3 (b): RFC 9865 SCIM cursors, issued and checked by the same SCIM server (OP-155 m.3 (g))",
+    ),
+    (
         "crates/crypto/src/webhook.rs",
         "OP-149 m.4: Standard Webhooks signatures; two-party like client_secret_jwt (CR-3): one secret per subscription, between Access and that one receiver",
     ),

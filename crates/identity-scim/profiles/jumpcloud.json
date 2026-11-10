@@ -1,0 +1,26 @@
+{
+  "v": 1,
+  "profile": "scim.jumpcloud",
+  "protocol": "scim",
+  "counterpart": "JumpCloud",
+  "revision": 1,
+  "template": "jumpcloud",
+  "tolerances": [
+    {
+      "rule": "scim.patch_path_case_insensitive",
+      "test": "scim_profiles::jumpcloud::urn_path_case"
+    },
+    {
+      "rule": "scim.filter_attribute_case_insensitive",
+      "test": "scim_profiles::jumpcloud::urn_filter_case"
+    },
+    {
+      "rule": "scim.enterprise_extension_flattened",
+      "test": "scim_profiles::jumpcloud::flat_enterprise_attributes"
+    },
+    {
+      "rule": "scim.no_etag",
+      "test": "scim_profiles::jumpcloud::no_etag"
+    }
+  ]
+}

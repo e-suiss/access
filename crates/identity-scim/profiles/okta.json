@@ -1,0 +1,26 @@
+{
+  "v": 1,
+  "profile": "scim.okta",
+  "protocol": "scim",
+  "counterpart": "Okta",
+  "revision": 1,
+  "template": "okta",
+  "tolerances": [
+    {
+      "rule": "scim.content_type_json",
+      "test": "scim_profiles::okta::plain_json_body"
+    },
+    {
+      "rule": "scim.ignore_unknown_attributes",
+      "test": "scim_profiles::okta::custom_attributes_dropped"
+    },
+    {
+      "rule": "scim.user_name_case_insensitive",
+      "test": "scim_profiles::okta::user_name_filter_ignores_case"
+    },
+    {
+      "rule": "scim.no_etag",
+      "test": "scim_profiles::okta::no_etag"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "v": 1,
+  "profile": "scim.entra",
+  "protocol": "scim",
+  "counterpart": "Microsoft Entra ID",
+  "revision": 1,
+  "template": "entra",
+  "tolerances": [
+    {
+      "rule": "scim.aad_opt_scim_062020",
+      "value": true,
+      "test": "scim_profiles::entra::opt_flag",
+      "source": "Entra provisioning: aadOptscim062020 feature flag"
+    },
+    {
+      "rule": "scim.patch_op_case_insensitive",
+      "test": "scim_profiles::entra::ops_in_title_case"
+    },
+    {
+      "rule": "scim.patch_bool_as_string",
+      "test": "scim_profiles::entra::active_false_as_text"
+    },
+    {
+      "rule": "scim.patch_remove_member_by_value",
+      "value": ["members"],
+      "test": "scim_profiles::entra::remove_member_by_value"
+    },
+    {
+      "rule": "scim.empty_value_clears",
+      "test": "scim_profiles::entra::empty_value_clears"
+    },
+    {
+      "rule": "scim.group_members_omitted",
+      "test": "scim_profiles::entra::group_list_without_members"
+    },
+    {
+      "rule": "scim.no_etag",
+      "test": "scim_profiles::entra::no_etag"
+    }
+  ]
+}

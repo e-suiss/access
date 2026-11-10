@@ -17,6 +17,7 @@ pub mod projection;
 pub mod pseudonym;
 pub mod random;
 pub mod realm_index;
+pub mod scim_cursor;
 pub mod sd_jwt;
 pub mod secret_file;
 pub mod token;

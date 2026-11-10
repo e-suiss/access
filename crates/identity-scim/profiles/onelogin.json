@@ -1,0 +1,26 @@
+{
+  "v": 1,
+  "profile": "scim.onelogin",
+  "protocol": "scim",
+  "counterpart": "OneLogin",
+  "revision": 1,
+  "template": "onelogin",
+  "tolerances": [
+    {
+      "rule": "scim.patch_single_value_array",
+      "test": "scim_profiles::onelogin::single_value_array"
+    },
+    {
+      "rule": "scim.active_as_string",
+      "test": "scim_profiles::onelogin::active_as_text"
+    },
+    {
+      "rule": "scim.missing_schemas",
+      "test": "scim_profiles::onelogin::body_without_schemas"
+    },
+    {
+      "rule": "scim.no_etag",
+      "test": "scim_profiles::onelogin::no_etag"
+    }
+  ]
+}

@@ -425,6 +425,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-identity-scim"
+version = "0.4.0"
+dependencies = [
+ "access-crypto",
+ "access-identity-account",
+ "access-identity-events",
+ "access-internal-api",
+ "access-parse",
+ "access-store",
+ "esuiss-access-kernel",
+ "esuiss-crypto",
+ "serde_json",
+ "thiserror",
+ "time",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "access-identity-session"
 version = "0.4.0"
 dependencies = [
