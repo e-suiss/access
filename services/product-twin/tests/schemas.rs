@@ -39,6 +39,8 @@ fn every_seam_schema_loads_on_kernel_types_alone() {
         [
             "commerce",
             "health",
+            "one",
+            "one.cloud_key",
             "pay",
             "relay.interrupt",
             "ride",

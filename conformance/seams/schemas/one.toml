@@ -1,0 +1,25 @@
+# Suiss One (§7.9.6, OP-156 m.3 (w)): the personal agent. One is a Party like any other and
+# acts only for the person within the Grants the person gave it (FOR(user), INV-4); the
+# person's cloud key permission is `one.cloud_key`. No new Kernel primitive.
+product = "Suiss One"
+namespace = "one"
+catalog_version = 1
+truth = ["memory", "plan", "personal preference"]
+
+[[actions]]
+name = "message"
+major = 1
+effect_class = "irreversible"
+reversibility = "irreversible"
+params = { recipient = "id" }
+classes = { recipient = "recipient" }
+resource_types = ["conversation"]
+render = "Send a message to {recipient}"
+
+[[actions]]
+name = "consolidate"
+major = 1
+effect_class = "reversible"
+reversibility = "reversible"
+resource_types = ["memory"]
+render = "Tidy up memory while you're away"

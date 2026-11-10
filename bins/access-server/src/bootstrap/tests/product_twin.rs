@@ -30,6 +30,7 @@ use tower::ServiceExt as _;
 use super::*;
 
 mod critical_interrupt;
+mod one;
 
 /// The PEP name the twin's client certificate authenticates as (L1-ADP-2).
 const TWIN_PEP: &str = "cHJvZHVjdC10d2luLWNlcnRpZmljYXRlLXRodW1icHJpbnQ";
@@ -185,18 +186,34 @@ impl Seam {
     /// The deployment with the platform products `products`, each a twin paired with `seams`;
     /// the first is the seam's own, the others come back with their Parties.
     async fn open_many(label: &str, products: &[&str]) -> (Self, Vec<(ProductTwin, Id)>) {
+        let (seam, others, _) = Self::open_with(label, products).await;
+        (seam, others)
+    }
+
+    /// [`Self::open`], and the product's own copy of its service key: what its own code signs
+    /// its own statements with.
+    async fn open_keyed(label: &str, product: &str) -> (Self, SoftSigner) {
+        let (seam, _, own) = Self::open_with(label, &[product]).await;
+        (seam, own)
+    }
+
+    async fn open_with(
+        label: &str,
+        products: &[&str],
+    ) -> (Self, Vec<(ProductTwin, Id)>, SoftSigner) {
         let (w, signer) = World::open(label, true).await;
         let signer = signer.unwrap();
         schedule(&signer);
+        let mut own = None;
         let keys: Vec<(SoftSigner, SoftSigner)> = products
             .iter()
             .map(|_| {
-                (
-                    SoftSigner::generate_ed25519().unwrap().0,
-                    SoftSigner::generate_p256().unwrap().0,
-                )
+                let (service, pkcs8) = SoftSigner::generate_ed25519().unwrap();
+                own.get_or_insert_with(|| SoftSigner::ed25519_from_pkcs8(&pkcs8).unwrap());
+                (service, SoftSigner::generate_p256().unwrap().0)
             })
             .collect();
+        let own = own.unwrap();
         let plan = Plan {
             products: products
                 .iter()
@@ -309,6 +326,7 @@ impl Seam {
                 party,
             },
             twins,
+            own,
         )
     }
 

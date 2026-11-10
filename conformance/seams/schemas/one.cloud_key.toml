@@ -1,0 +1,28 @@
+# One's cloud key permission (OP-156 m.3 (w), E59): the person's device Instance grants a
+# checked TEE the DEKs of named user-keyed classes for one purpose, for at most 24 hours and
+# never past the Mandate that covers acting while the person is away, and revokes it. Access
+# keeps a content-free record. No new Kernel primitive.
+product = "Suiss One"
+namespace = "one.cloud_key"
+catalog_version = 1
+truth = ["which TEE holds the wrapped DEKs", "whether it destroyed them"]
+
+[[actions]]
+name = "grant"
+major = 1
+effect_class = "reversible"
+reversibility = "reversible"
+params = { purpose = "text", classes = "text", window = "opaque", tee_measurement = "bytes", job_key = "bytes", mandate = "bytes" }
+classes = { purpose = "choice", classes = "choice", window = "opaque", tee_measurement = "opaque", job_key = "opaque", mandate = "opaque" }
+resource_types = ["data"]
+render = "Let a checked cloud environment open {classes} for {purpose}"
+
+[[actions]]
+name = "revoke"
+major = 1
+effect_class = "reversible"
+reversibility = "reversible"
+params = { permission = "bytes" }
+classes = { permission = "opaque" }
+resource_types = ["data"]
+render = "Stop cloud use of your data"
