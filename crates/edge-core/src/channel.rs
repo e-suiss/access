@@ -32,9 +32,9 @@ pub enum ChannelError {
         /// The problem's stable code.
         code: String,
     },
-    /// No answer: connection, TLS, I/O or the deadline failed.
-    #[error("edge channel unavailable")]
-    Unavailable,
+    /// No answer: connection, TLS, I/O or the deadline failed; names the step and its cause.
+    #[error("edge channel unavailable: {0}")]
+    Unavailable(String),
     /// The answer is not HTTP/1.1 or is larger than allowed.
     #[error("malformed answer")]
     Malformed,
@@ -136,26 +136,29 @@ impl Channel {
     pub async fn call(&self, call: Call, body: &[u8]) -> Result<Vec<u8>, ChannelError> {
         tokio::time::timeout(DEADLINE, self.exchange(call, body))
             .await
-            .map_err(|_| ChannelError::Unavailable)?
+            .map_err(|_| ChannelError::Unavailable(format!("no answer within {DEADLINE:?}")))?
     }
 
     async fn exchange(&self, call: Call, body: &[u8]) -> Result<Vec<u8>, ChannelError> {
-        let down = |_| ChannelError::Unavailable;
-        let tcp = TcpStream::connect(&self.addr).await.map_err(down)?;
+        let tcp = TcpStream::connect(&self.addr)
+            .await
+            .map_err(down("connect"))?;
         let mut tls = self
             .connector
             .connect(self.name.clone(), tcp)
             .await
-            .map_err(down)?;
+            .map_err(down("tls"))?;
         let head = format!(
             "POST {} HTTP/1.1\r\nHost: {}\r\nContent-Type: {CONTENT_TYPE}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
             call.path(),
             self.host,
             body.len()
         );
-        tls.write_all(head.as_bytes()).await.map_err(down)?;
-        tls.write_all(body).await.map_err(down)?;
-        tls.flush().await.map_err(down)?;
+        tls.write_all(head.as_bytes())
+            .await
+            .map_err(down("write"))?;
+        tls.write_all(body).await.map_err(down("write"))?;
+        tls.flush().await.map_err(down("write"))?;
         let limit = MAX_HEAD.saturating_add(call.max_answer());
         let mut answer = Vec::new();
         let mut chunk = [0_u8; 8192];
@@ -164,7 +167,7 @@ impl Channel {
                 Ok(0) => break,
                 Ok(n) => n,
                 Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-                Err(_) => return Err(ChannelError::Unavailable),
+                Err(e) => return Err(down("read")(e)),
             };
             if answer.len().saturating_add(n) > limit {
                 return Err(ChannelError::Malformed);
@@ -173,6 +176,10 @@ impl Channel {
         }
         parse_within(&answer, call.max_answer())
     }
+}
+
+fn down(step: &'static str) -> impl Fn(std::io::Error) -> ChannelError {
+    move |e| ChannelError::Unavailable(format!("{step}: {e}"))
 }
 
 /// Reads one HTTP/1.1 answer with a `Content-Length` body.
