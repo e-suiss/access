@@ -11,3 +11,6 @@
 837c3941f41e26bc9adf8f487f98082eae2d3320:crates/identity-attest/src/app.rs:generic-api-key:221
 # F-13: a bench input JWT with a placeholder signature ("signature") over {"sub":"agent"}
 8f8e991a7e8518f5413ba973823e877fba919bde:crates/kernel/benches/agent_tokens.rs:jwt:48
+# F-13: the OpenSSH private key file writer's PEM armour line and its test assertion; no key material is committed
+8732a727e452d516e28d597a230b34cb20f2e4a1:crates/identity-ssh/src/domain/holder.rs:private-key:65
+8732a727e452d516e28d597a230b34cb20f2e4a1:crates/identity-ssh/src/domain/holder.rs:private-key:109
