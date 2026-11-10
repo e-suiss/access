@@ -3624,8 +3624,15 @@
         "operationId": "getSsoSetup",
         "summary": "What a one-use, 72-hour organization setup link opens: the organization and the wizard's steps (OP-155 m.3 (i)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -3640,15 +3647,21 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       },
       "post": {
         "operationId": "submitSsoSetup",
         "summary": "Submits a wizard step: the identity provider's metadata or a test sign-in; enacting the connection stays the organization root's idp.upstream.register.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -3672,8 +3685,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/.well-known/openid-federation": {

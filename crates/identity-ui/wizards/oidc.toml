@@ -1,0 +1,26 @@
+# SSO setup wizard (TN-134, OP-155 m.3 (i)): any OpenID Connect provider.
+v = 1
+provider = "oidc"
+name = "Other OpenID Connect provider"
+protocols = ["oidc"]
+scim = true
+
+[[steps]]
+action = "copy"
+value = "redirect_uri"
+field = "Redirect URI"
+
+[[steps]]
+action = "paste"
+input = "issuer"
+field = "Issuer"
+
+[[steps]]
+action = "paste"
+input = "client_id"
+field = "Client ID"
+
+[[steps]]
+action = "copy"
+value = "scim_base_url"
+field = "SCIM 2.0 base URL"

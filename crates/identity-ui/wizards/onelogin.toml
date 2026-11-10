@@ -1,0 +1,61 @@
+# SSO setup wizard (TN-134, OP-155 m.3 (i)): data steps only.
+v = 1
+provider = "onelogin"
+name = "OneLogin"
+protocols = ["saml", "oidc"]
+scim = true
+
+[[steps]]
+action = "open"
+place = "Administration > Applications > Add App"
+
+[[steps]]
+protocol = "saml"
+action = "copy"
+value = "entity_id"
+field = "Audience (EntityID)"
+
+[[steps]]
+protocol = "saml"
+action = "copy"
+value = "acs_url"
+field = "ACS (Consumer) URL"
+
+[[steps]]
+protocol = "saml"
+action = "paste"
+input = "entity_id"
+field = "Issuer URL"
+
+[[steps]]
+protocol = "saml"
+action = "paste"
+input = "metadata_url"
+field = "SAML Metadata URL"
+
+[[steps]]
+protocol = "oidc"
+action = "copy"
+value = "redirect_uri"
+field = "Redirect URI's"
+
+[[steps]]
+protocol = "oidc"
+action = "paste"
+input = "client_id"
+field = "Client ID"
+
+[[steps]]
+protocol = "oidc"
+action = "paste"
+input = "issuer"
+field = "Issuer URL"
+
+[[steps]]
+action = "open"
+place = "Provisioning > Enable provisioning"
+
+[[steps]]
+action = "copy"
+value = "scim_base_url"
+field = "SCIM Base URL"

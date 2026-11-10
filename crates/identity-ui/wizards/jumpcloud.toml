@@ -1,0 +1,61 @@
+# SSO setup wizard (TN-134, OP-155 m.3 (i)): data steps only.
+v = 1
+provider = "jumpcloud"
+name = "JumpCloud"
+protocols = ["saml", "oidc"]
+scim = true
+
+[[steps]]
+action = "open"
+place = "Admin Portal > SSO Applications > Add New Application > Custom Application"
+
+[[steps]]
+protocol = "saml"
+action = "copy"
+value = "entity_id"
+field = "SP Entity ID"
+
+[[steps]]
+protocol = "saml"
+action = "copy"
+value = "acs_url"
+field = "ACS URLs"
+
+[[steps]]
+protocol = "saml"
+action = "paste"
+input = "entity_id"
+field = "IdP Entity ID"
+
+[[steps]]
+protocol = "saml"
+action = "paste"
+input = "metadata_url"
+field = "IdP metadata URL"
+
+[[steps]]
+protocol = "oidc"
+action = "copy"
+value = "redirect_uri"
+field = "Redirect URIs"
+
+[[steps]]
+protocol = "oidc"
+action = "paste"
+input = "client_id"
+field = "Client ID"
+
+[[steps]]
+protocol = "oidc"
+action = "paste"
+input = "issuer"
+field = "Issuer"
+
+[[steps]]
+action = "open"
+place = "Identity Management > SCIM"
+
+[[steps]]
+action = "copy"
+value = "scim_base_url"
+field = "Base URL"

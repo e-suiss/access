@@ -1033,14 +1033,14 @@ pub const ROUTES: &[Route] = &[
         "upstreamSamlMetadata",
         "Access's SP metadata for one SAML upstream connection.",
     ),
-    planned(
+    live(
         Owner::P5,
         Verb::Get,
         "/v1/sso-setup/{link}",
         "getSsoSetup",
         "What a one-use, 72-hour organization setup link opens: the organization and the wizard's steps (OP-155 m.3 (i)).",
     ),
-    planned(
+    live(
         Owner::P5,
         Verb::Post,
         "/v1/sso-setup/{link}",

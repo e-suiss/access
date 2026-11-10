@@ -1,0 +1,36 @@
+# SSO setup wizard (TN-134, OP-155 m.3 (i)): any SAML 2.0 identity provider.
+v = 1
+provider = "saml"
+name = "Other SAML 2.0 provider"
+protocols = ["saml"]
+scim = true
+
+[[steps]]
+action = "copy"
+value = "entity_id"
+field = "Service provider entity ID (audience)"
+
+[[steps]]
+action = "copy"
+value = "acs_url"
+field = "Assertion Consumer Service URL (HTTP-POST)"
+
+[[steps]]
+action = "copy"
+value = "metadata_url"
+field = "Service provider metadata URL"
+
+[[steps]]
+action = "paste"
+input = "entity_id"
+field = "Identity provider entity ID"
+
+[[steps]]
+action = "paste"
+input = "metadata_url"
+field = "Identity provider metadata URL"
+
+[[steps]]
+action = "copy"
+value = "scim_base_url"
+field = "SCIM 2.0 base URL"

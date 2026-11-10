@@ -10,4 +10,5 @@ pub mod locale;
 pub mod message;
 pub mod node;
 pub mod schema;
+pub mod sso_setup;
 pub mod submission;

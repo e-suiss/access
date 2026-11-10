@@ -28,6 +28,7 @@ mod saml;
 pub mod shell;
 pub mod signup;
 pub mod social;
+pub mod sso_setup;
 pub mod upstream;
 pub mod vault;
 pub mod workloads;

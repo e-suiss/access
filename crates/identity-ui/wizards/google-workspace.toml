@@ -1,0 +1,30 @@
+# SSO setup wizard (TN-134, OP-155 m.3 (i)): data steps only.
+v = 1
+provider = "google-workspace"
+name = "Google Workspace"
+protocols = ["saml"]
+scim = false
+
+[[steps]]
+action = "open"
+place = "Admin console > Apps > Web and mobile apps > Add app > Add custom SAML app"
+
+[[steps]]
+action = "paste"
+input = "entity_id"
+field = "Entity ID"
+
+[[steps]]
+action = "paste"
+input = "metadata_url"
+field = "IdP metadata (download and host it at an https URL)"
+
+[[steps]]
+action = "copy"
+value = "acs_url"
+field = "ACS URL"
+
+[[steps]]
+action = "copy"
+value = "entity_id"
+field = "Entity ID (service provider details)"

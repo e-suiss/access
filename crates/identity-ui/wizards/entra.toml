@@ -1,0 +1,73 @@
+# SSO setup wizard (TN-134, OP-155 m.3 (i)): data steps only. `copy` hands the administrator one
+# of Access's values for the named field in the provider's console; `paste` asks for one of the
+# provider's values; `open` names where in the console the next steps happen.
+v = 1
+provider = "entra"
+name = "Microsoft Entra ID"
+protocols = ["saml", "oidc"]
+scim = true
+
+[[steps]]
+action = "open"
+place = "Microsoft Entra admin center > Enterprise applications > New application > Create your own application"
+
+[[steps]]
+protocol = "saml"
+action = "open"
+place = "Single sign-on > SAML > Basic SAML Configuration"
+
+[[steps]]
+protocol = "saml"
+action = "copy"
+value = "entity_id"
+field = "Identifier (Entity ID)"
+
+[[steps]]
+protocol = "saml"
+action = "copy"
+value = "acs_url"
+field = "Reply URL (Assertion Consumer Service URL)"
+
+[[steps]]
+protocol = "saml"
+action = "paste"
+input = "metadata_url"
+field = "App Federation Metadata Url"
+
+[[steps]]
+protocol = "saml"
+action = "paste"
+input = "entity_id"
+field = "Microsoft Entra Identifier"
+
+[[steps]]
+protocol = "oidc"
+action = "open"
+place = "App registrations > New registration"
+
+[[steps]]
+protocol = "oidc"
+action = "copy"
+value = "redirect_uri"
+field = "Redirect URI (Web)"
+
+[[steps]]
+protocol = "oidc"
+action = "paste"
+input = "client_id"
+field = "Application (client) ID"
+
+[[steps]]
+protocol = "oidc"
+action = "paste"
+input = "issuer"
+field = "OpenID Connect metadata document (issuer)"
+
+[[steps]]
+action = "open"
+place = "Provisioning > Get started > Automatic"
+
+[[steps]]
+action = "copy"
+value = "scim_base_url"
+field = "Tenant URL"

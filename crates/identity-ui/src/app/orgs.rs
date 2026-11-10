@@ -251,10 +251,26 @@ where
             }));
             return r;
         }
+        // TN-95, Ek B 4873
+        let scim_bound = match t.scim_sources(org.id).await {
+            Ok(s) => !s.is_empty(),
+            Err(e) => return store_failed(&e),
+        };
+        if scim_bound {
+            return self.invitation_to_request(t, &org, row.id, me).await;
+        }
         match t.accept_invitation(row.id, me).await {
             Ok(true) => {}
             Ok(false) => return Reply::problem(INVITATION_GONE),
             Err(e) => return store_failed(&e),
+        }
+        // TN-94, OP-155 m.3 (i)
+        let enforced = match t.sso_enforcement(org.id).await {
+            Ok(e) => e.is_some_and(|e| e.enforced),
+            Err(e) => return store_failed(&e),
+        };
+        if enforced && let Err(e) = t.end_sessions(me).await {
+            return store_failed(&e);
         }
         // TN-89 (3), (10), OP-153 m.3 (o)
         if let Err(e) = t
@@ -285,6 +301,43 @@ where
                 "owner": false,
                 "role": { "name": row.role.0, "version": row.role.1 },
                 "role_grant": "pending",
+                "sign_in": if enforced { "sso" } else { "kept" },
+            }),
+        )
+    }
+
+    /// An invitation to an organization whose SCIM source answers for its membership becomes an
+    /// access request its administrators decide; the invitation is spent (TN-95).
+    async fn invitation_to_request(
+        &self,
+        mut t: TenantTx,
+        org: &access_store::orgs::OrgRow,
+        invitation: [u8; 16],
+        me: [u8; 16],
+    ) -> Reply {
+        match t.revoke_invitation(invitation).await {
+            Ok(true) => {}
+            Ok(false) => return Reply::problem(INVITATION_GONE),
+            Err(e) => return store_failed(&e),
+        }
+        let asked = match t.access_requested(org.id, me).await {
+            Ok(a) => a,
+            Err(e) => return store_failed(&e),
+        };
+        if !asked && let Err(e) = t.insert_access_request(org.id, me).await {
+            return store_failed(&e);
+        }
+        if let Err(e) = t.commit().await {
+            return store_failed(&e);
+        }
+        Reply::json(
+            202,
+            json!({
+                "organization": {
+                    "id": b64url_encode(&org.party),
+                    "display_name": org.display_name,
+                },
+                "status": "requested",
             }),
         )
     }
@@ -429,8 +482,18 @@ where
         if member || asked {
             return Reply::problem(ALREADY_MEMBER);
         }
+        // TN-95
+        let scim_bound = match t.scim_sources(org.id).await {
+            Ok(s) => !s.is_empty(),
+            Err(e) => return store_failed(&e),
+        };
         // TN-90, TN-109
-        match autojoin_domain(&mut t, &kit, me, org.id).await {
+        let autojoin = if scim_bound {
+            Ok(None)
+        } else {
+            autojoin_domain(&mut t, &kit, me, org.id).await
+        };
+        match autojoin {
             Ok(Some(address)) => {
                 let joined = t
                     .open_member(
