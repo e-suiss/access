@@ -21,6 +21,7 @@ extern crate alloc;
 extern crate std;
 
 pub mod agent;
+pub mod approver;
 pub mod auth;
 pub mod authorize;
 #[cfg(feature = "mcp")]
