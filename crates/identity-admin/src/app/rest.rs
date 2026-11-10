@@ -208,6 +208,14 @@ pub enum Op {
     RegisterSshHostGroup,
     /// `retireSshHostGroup`: `idp.ssh.host_group_retire`, keyed by the group's name.
     RetireSshHostGroup,
+    /// `registerProxy`: `idp.proxy.register` (OP-156 m.3 (l)).
+    RegisterProxy,
+    /// `putProxy`: `idp.proxy.update`.
+    PutProxy,
+    /// `retireProxy`: `idp.proxy.retire`.
+    RetireProxy,
+    /// `putProxyPlainHeaders`: `idp.proxy.plain_headers` or `plain_headers_close`.
+    PutProxyPlainHeaders,
     /// `putDcrPolicy`: `idp.client.dcr_policy`, or `dcr_policy_tighten` (OP-154 m.3 (j)).
     PutDcrPolicy,
     /// `putFederation`: `idp.federation.enable` or `disable` (OP-155 m.3 (j)).
@@ -366,6 +374,10 @@ impl Op {
             "replaceSshCa" => Self::ReplaceSshCa,
             "registerSshHostGroup" => Self::RegisterSshHostGroup,
             "retireSshHostGroup" => Self::RetireSshHostGroup,
+            "registerProxy" => Self::RegisterProxy,
+            "putProxy" => Self::PutProxy,
+            "retireProxy" => Self::RetireProxy,
+            "putProxyPlainHeaders" => Self::PutProxyPlainHeaders,
             "putDcrPolicy" => Self::PutDcrPolicy,
             "putFederation" => Self::PutFederation,
             "addTrustAnchor" => Self::AddTrustAnchor,
@@ -964,6 +976,27 @@ fn ssh_change(
     }))
 }
 
+/// The `idp.proxy.*` change of a proxy operation (OP-156 m.3 (l)), `None` for any other.
+fn proxy_change(
+    op: Op,
+    key: Option<&str>,
+    body: &Json,
+) -> Result<Option<access_identity_proxy::domain::registration::ProxyChange>, Invalid> {
+    use access_identity_proxy::domain::registration::ProxyChange;
+    let mut own = obj(body)?.clone();
+    own.remove(VALIDITY);
+    own.remove("ais");
+    let body = Json::Object(own);
+    let bad = |_| Invalid::Proxy;
+    Ok(Some(match op {
+        Op::RegisterProxy => ProxyChange::register(&body).map_err(bad)?,
+        Op::PutProxy => ProxyChange::update(key_of(key)?, &body).map_err(bad)?,
+        Op::RetireProxy => ProxyChange::retire(key_of(key)?, &body).map_err(bad)?,
+        Op::PutProxyPlainHeaders => ProxyChange::plain_headers(key_of(key)?, &body).map_err(bad)?,
+        _ => return Ok(None),
+    }))
+}
+
 /// A hook's or webhook's id from its external id; anything else is `missing`.
 fn extension_id(ids: &IdKey, prefix: &str, s: &str, missing: Invalid) -> Result<[u8; 16], Invalid> {
     ids.decode(prefix, s).map_err(|_| missing)
@@ -1077,6 +1110,9 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
     }
     if let Some(s) = ssh_change(op, key, body)? {
         return Ok(Change::Ssh(s));
+    }
+    if let Some(p) = proxy_change(op, key, body)? {
+        return Ok(Change::Proxy(p));
     }
     Ok(match op {
         Op::CreateOrganization => {
@@ -1526,7 +1562,11 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         | Op::RotateSshCa
         | Op::ReplaceSshCa
         | Op::RegisterSshHostGroup
-        | Op::RetireSshHostGroup => return Err(Invalid::Body),
+        | Op::RetireSshHostGroup
+        | Op::RegisterProxy
+        | Op::PutProxy
+        | Op::RetireProxy
+        | Op::PutProxyPlainHeaders => return Err(Invalid::Body),
         // OP-153 m.18 (e), m.25 (b)
         Op::BindAccount => {
             only(
@@ -2298,6 +2338,8 @@ pub enum Kind {
     SamlSps,
     /// The SSH server groups by name (OP-156 m.3 (o)).
     SshHostGroups,
+    /// The forward-auth proxies by name (OP-156 m.3 (l)).
+    Proxies,
     /// The protected resources by canonical URI (AG-8).
     ProtectedResources,
     /// The trust anchors by the base64url of their entity identifier (OP-155 m.3 (j)).
@@ -2749,6 +2791,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-156 m.3 (o)
             (Kind::SshHostGroups, _) => Read {
                 items: super::ssh::list(t, key).await?,
+                last: None,
+            },
+            // OP-156 m.3 (l)
+            (Kind::Proxies, _) => Read {
+                items: super::proxy::list(t, key).await?,
                 last: None,
             },
             (Kind::Socials, _) => {

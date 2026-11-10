@@ -20,6 +20,7 @@ access-identity-saml = { workspace = true }
 access-identity-vault = { workspace = true }
 access-identity-hooks = { workspace = true }
 access-identity-oauth = { workspace = true }
+access-identity-proxy = { workspace = true }
 access-identity-risk = { workspace = true }
 access-identity-scim = { workspace = true }
 access-identity-signer = { path = "../identity-signer" }

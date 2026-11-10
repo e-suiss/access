@@ -685,3 +685,45 @@ pub const SSH_DENIED: Code = code(
     "Forbidden",
     "The authority decision on the certificate's projection.issue is not ALLOW: it was denied or waits on an action such as a fresh sign-in or an approval; the decision is in `decision` (OP-156 m.3 (o)).",
 );
+/// A proxy registration outside the rules (OP-156 m.3 (l)).
+pub const INVALID_PROXY: Code = code(
+    "invalid-proxy",
+    400,
+    "Bad Request",
+    "The proxy needs a name of a lower-case letter followed by up to 62 lower-case letters, digits and hyphens, an engine of nginx, traefik, caddy or envoy, an application host, an http(s) upstream, a client_id, the proxy's transport identity (the base64url of its certificate or DPoP key thumbprint), an action, a resource namespace and 1 to 64 path patterns (OP-156 m.3 (l)).",
+);
+/// The proxy name was registered before; it is not reused (OP-73).
+pub const PROXY_EXISTS: Code = code(
+    "proxy-exists",
+    409,
+    "Conflict",
+    "A proxy with this name was registered before; a retired proxy's name is never reused (OP-73).",
+);
+/// The proxy's client is not live, or does not list the application host's callback.
+pub const INVALID_PROXY_CLIENT: Code = code(
+    "invalid-proxy-client",
+    400,
+    "Bad Request",
+    "The proxy's client_id names no live client of the realm that lists https://{host}/access-proxy/v1/callback as a redirect URI (OP-156 m.3 (l)).",
+);
+/// The application answers outside the proxy, so plain identity headers stay off.
+pub const PROXY_REACHABLE_DIRECTLY: Code = code(
+    "proxy-reachable-directly",
+    409,
+    "Conflict",
+    "The setup check reached the application's upstream directly, so anyone could send it X-Access-User; plain identity headers stay off until the application answers only through the proxy (IDP-30 (3), OP-156 m.3 (l)).",
+);
+/// The asking proxy has no live registration for the application host (IDP-30, B22).
+pub const PROXY_UNREGISTERED: Code = code(
+    "proxy-unregistered",
+    401,
+    "Unauthorized",
+    "The forward-auth check came without a proxy transport identity, or none registered for this application host; register the proxy with idp.proxy.register (IDP-30, OP-156 m.3 (l)).",
+);
+/// The engine's forwarded request cannot be read (OP-156 m.3 (l)).
+pub const INVALID_FORWARDED_REQUEST: Code = code(
+    "invalid-forwarded-request",
+    400,
+    "Bad Request",
+    "The forward-auth check does not name the request it asks about: the engine's method, URI and host headers are missing or malformed; the request is refused (OP-156 m.3 (l)).",
+);

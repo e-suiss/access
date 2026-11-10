@@ -511,6 +511,21 @@ pub enum Invalid {
     /// The name was registered before; it is not reused (OP-73).
     #[error("SSH server group exists")]
     SshHostGroupExists,
+    /// A proxy registration outside the rules (OP-156 m.3 (l)).
+    #[error("invalid proxy")]
+    Proxy,
+    /// No live proxy by that name.
+    #[error("no such proxy")]
+    NoProxy,
+    /// The proxy name was registered before; it is not reused (OP-73).
+    #[error("proxy exists")]
+    ProxyExists,
+    /// The proxy's client is not live or lacks the callback as a redirect URI.
+    #[error("invalid proxy client")]
+    ProxyClient,
+    /// The application answers outside the proxy: plain headers stay off (OP-156 m.3 (l)).
+    #[error("application reachable outside the proxy")]
+    ProxyDirectlyReachable,
     /// A gateway registration that is not a gateway name, kind and certificate digest, or a
     /// retirement of a gateway that is not live.
     #[error("invalid gateway")]
@@ -598,6 +613,11 @@ impl Invalid {
             Self::SshHostGroup => "invalid-ssh-host-group",
             Self::NoSshHostGroup => "no-such-ssh-host-group",
             Self::SshHostGroupExists => "ssh-host-group-exists",
+            Self::Proxy => "invalid-proxy",
+            Self::NoProxy => "no-such-proxy",
+            Self::ProxyExists => "proxy-exists",
+            Self::ProxyClient => "invalid-proxy-client",
+            Self::ProxyDirectlyReachable => "proxy-reachable-directly",
             Self::Gateway => "invalid-gateway",
             Self::DisplayName => "invalid-display-name",
             Self::RedirectUri | Self::RedirectUris => "invalid-redirect-uri",
@@ -1858,6 +1878,8 @@ pub enum Change {
     Domain(custom_domain::DomainChange),
     /// `idp.ssh.*` (OP-156 m.3 (a), (o)).
     Ssh(access_identity_ssh::domain::change::SshChange),
+    /// `idp.proxy.*` but `mcp_pin` (OP-156 m.3 (a), (l)).
+    Proxy(access_identity_proxy::domain::registration::ProxyChange),
     /// `idp.client.resource_register` (AG-8, OP-154 m.3 (a)).
     ResourceRegister(ProtectedResource),
     /// `idp.client.cross_app_connection` (CT2, OP-154 m.3 (a), (n)).
@@ -2338,6 +2360,7 @@ impl Change {
             Self::Saml(s) => s.action(),
             Self::Domain(d) => d.action(),
             Self::Ssh(s) => s.action(),
+            Self::Proxy(p) => p.action(),
             Self::ResourceRegister(_) => IdpAction::ClientResourceRegister,
             Self::CrossAppConnection(_) => IdpAction::ClientCrossAppConnection,
             Self::CrossAppConnectionRetire(_) => IdpAction::ClientCrossAppConnectionRetire,
@@ -2426,6 +2449,7 @@ impl Change {
             Self::Saml(s) => s.check(),
             Self::Domain(d) => d.check(),
             Self::Ssh(s) => s.check().map_err(ssh_invalid),
+            Self::Proxy(p) => p.check().map_err(|_| Invalid::Proxy),
             Self::ResourceRegister(r) => r.check(),
             Self::CrossAppConnection(c) => c.check(),
             Self::CrossAppConnectionRetire(name) => {
@@ -2599,6 +2623,7 @@ impl Change {
             Self::Saml(s) => s.body(),
             Self::Domain(d) => d.body(),
             Self::Ssh(s) => s.body(),
+            Self::Proxy(p) => p.body(),
             Self::DeviceCode(on) | Self::Hrd(on) | Self::SecurityNotices(on) | Self::Push(on) => {
                 Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))])
             }
@@ -2788,6 +2813,7 @@ impl Change {
             Self::Saml(s) => path.extend(s.path()),
             Self::Domain(d) => path.extend(d.path()),
             Self::Ssh(s) => path.extend(s.path()),
+            Self::Proxy(p) => path.extend(p.path()),
             Self::ResourceRegister(r) => {
                 path.extend([String::from("resource"), r.resource.clone()]);
             }

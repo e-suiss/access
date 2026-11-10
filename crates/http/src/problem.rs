@@ -491,6 +491,12 @@ pub const CODES: &[Code] = &[
     codes::realm::SSH_LIFETIME,
     codes::realm::INVALID_SSH_REQUEST,
     codes::realm::SSH_DENIED,
+    codes::realm::INVALID_PROXY,
+    codes::realm::PROXY_EXISTS,
+    codes::realm::INVALID_PROXY_CLIENT,
+    codes::realm::PROXY_REACHABLE_DIRECTLY,
+    codes::realm::PROXY_UNREGISTERED,
+    codes::realm::INVALID_FORWARDED_REQUEST,
 ];
 
 /// The type URI of `code`.

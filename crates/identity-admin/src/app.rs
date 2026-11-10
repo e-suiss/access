@@ -12,6 +12,7 @@ pub mod org_flows;
 pub mod orgs;
 pub mod platform;
 pub mod provision;
+pub mod proxy;
 pub mod relay;
 pub mod rest;
 pub mod saml;
@@ -486,6 +487,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Saml(s) => saml::current(t, s).await?,
             // OP-156 m.3 (o)
             Change::Ssh(s) => ssh::current(t, s).await?,
+            // OP-156 m.3 (l)
+            Change::Proxy(p) => proxy::current(t, p).await?,
             // OP-154 m.3 (j)
             Change::DcrPolicy { policy, loosens } => {
                 let current =
@@ -1753,6 +1756,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             // OP-156 m.3 (o)
             Change::Ssh(s) => ssh::write(t, bound, s).await?,
+            // OP-156 m.3 (l)
+            Change::Proxy(p) => proxy::write(t, bound, p).await?,
             Change::DeviceCode(on) => {
                 t.put_device_code(bound, *on).await?;
                 true

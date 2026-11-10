@@ -223,6 +223,8 @@ fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
         ResourceKind::CustomDomains => json!({ "host": key, "status": "pending" }),
         ResourceKind::SshHostGroups => json!({ "name": key, "description": "Web",
                                                "status": "live", "version": 1 }),
+        ResourceKind::Proxies => json!({ "name": key, "host": "wiki.shop.example",
+                                         "status": "live" }),
         ResourceKind::Agents => json!({ "agent": key, "display_name": "Helper",
                                         "agent_kind": "cloud", "status": "active",
                                         "sponsors": [], "instances": [] }),
