@@ -34,8 +34,7 @@ fn j(s: &str) -> Json {
 
 fn rp_metadata(id: &str) -> Json {
     j(&format!(
-        r#"{{"openid_relying_party":{{"client_name":"Federated","redirect_uris":["{}/cb"]}}}}"#,
-        id
+        r#"{{"openid_relying_party":{{"client_name":"Federated","redirect_uris":["{id}/cb"]}}}}"#
     ))
 }
 

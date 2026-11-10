@@ -12,7 +12,7 @@ use access_store::Pool;
 use access_store::identity::TenantTx;
 
 /// How often the chains are re-resolved (PD: a quarter of the freshness window).
-pub(crate) const REFRESH_EVERY: Duration = Duration::from_secs(900);
+pub(crate) const REFRESH_EVERY: Duration = Duration::from_mins(15);
 
 /// Runs the refresher until the task is aborted.
 pub(crate) async fn refresh_run(app: Pool, router: Pool, outbound: Outbound) {

@@ -209,18 +209,17 @@ impl<E: Env> OAuth<E> {
         {
             return Ok(Some(Ok(())));
         }
-        let resolved = match offered {
-            Some(tc) => chain::parse_trust_chain_json(tc.as_bytes()).and_then(|jwts| {
+        let resolved = if let Some(tc) = offered {
+            chain::parse_trust_chain_json(tc.as_bytes()).and_then(|jwts| {
                 let refs: Vec<&str> = jwts.iter().map(String::as_str).collect();
                 chain::verify_chain(&refs, &anchors, now)
-            }),
-            None => {
-                let fetch = crate::adapters::oidf::GuardedFetch {
-                    documents: self.env.documents(),
-                    realm: realm.realm,
-                };
-                access_identity_oidf::app::resolve(&fetch, id, anchors, now).await
-            }
+            })
+        } else {
+            let fetch = crate::adapters::oidf::GuardedFetch {
+                documents: self.env.documents(),
+                realm: realm.realm,
+            };
+            access_identity_oidf::app::resolve(&fetch, id, anchors, now).await
         };
         let snapshot = resolved
             .ok()

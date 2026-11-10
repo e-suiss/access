@@ -2,8 +2,8 @@
 //! signed, nothing committed (gitleaks-clean fixtures).
 
 use access_kernel::json::{Json, b64url_encode};
-use aws_lc_rs::rand::SystemRandom;
-use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair};
+use suiss_crypto::cose::PublicKey;
+use suiss_crypto::signer::{Signer, SoftSigner};
 
 use crate::build::{self, Configuration, Subordinate};
 use crate::chain::TrustAnchor;
@@ -11,7 +11,7 @@ use crate::statement::{ENTITY_TYP, Jwk, parse_jwks};
 
 /// A generated P-256 signing key with its `kid`.
 pub struct Key {
-    pair: EcdsaKeyPair,
+    pair: SoftSigner,
     /// Its `kid`.
     pub kid: String,
 }
@@ -21,7 +21,7 @@ impl Key {
     #[must_use]
     pub fn new(kid: &str) -> Option<Self> {
         Some(Self {
-            pair: EcdsaKeyPair::generate(&ECDSA_P256_SHA256_FIXED_SIGNING).ok()?,
+            pair: SoftSigner::generate_p256().ok()?.0,
             kid: String::from(kid),
         })
     }
@@ -29,8 +29,10 @@ impl Key {
     /// Its public JWKS.
     #[must_use]
     pub fn jwks(&self) -> Json {
-        build::jwks_json(&[(self.kid.clone(), self.pair.public_key().as_ref().to_vec())])
-            .unwrap_or(Json::Null)
+        let PublicKey::P256(sec1) = self.pair.public_key() else {
+            return Json::Null;
+        };
+        build::jwks_json(&[(self.kid.clone(), sec1)]).unwrap_or(Json::Null)
     }
 
     /// Its public keys.
@@ -50,8 +52,8 @@ impl Key {
         );
         let sig = self
             .pair
-            .sign(&SystemRandom::new(), input.as_bytes())
-            .map(|s| b64url_encode(s.as_ref()))
+            .sign(input.as_bytes())
+            .map(|s| b64url_encode(&s))
             .unwrap_or_default();
         format!("{input}.{sig}")
     }

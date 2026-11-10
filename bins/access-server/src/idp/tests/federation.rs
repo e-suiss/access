@@ -19,7 +19,7 @@ const ENTITY: &str = "https://issuer.federation.example";
 fn verdict(i: &Issued) -> Option<&ClaimVerdict> {
     match i {
         Issued::Answered { verdict, .. } => Some(verdict),
-        _ => None,
+        Issued::Unplaced(_) => None,
     }
 }
 
@@ -273,6 +273,7 @@ mod admin {
     /// The realm signer as the discovery routes reach it.
     struct Federated<'a>(&'a Opened);
 
+    #[expect(clippy::unused_async_trait_impl, reason = "a fake of an async port")]
     impl access_identity_oauth::ports::Keys for Federated<'_> {
         async fn ping(&self) -> Result<(), access_identity_oauth::ports::Unavailable> {
             Ok(())
@@ -338,7 +339,7 @@ mod admin {
         (status, ct, String::from_utf8(body.to_vec()).unwrap())
     }
 
-    // IDP-19, OP-155 m.3 (j), §10.7.1 rules 1 and 5, MD-6, Ek B 4748, 5083
+    // IDP-19, OP-155 m.3 (j), §10.7.1, MD-6, Ek B 4748, 5083
     #[tokio::test]
     async fn a_leaf_publishes_its_entity_configuration_with_its_federation_key() {
         use access_identity_oauth::adapters::PgDirectory;

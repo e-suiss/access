@@ -419,6 +419,7 @@ dependencies = [
  "access-crypto",
  "aws-lc-rs",
  "esuiss-access-kernel",
+ "esuiss-crypto",
  "thiserror",
 ]
 

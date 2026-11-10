@@ -57,7 +57,9 @@ pub fn admits(f: &Fact, now_ms: u64) -> bool {
 }
 
 /// Whether every tracked row that names the issuer admits it; an untracked issuer is not gated.
-#[must_use]
+///
+/// # Errors
+/// [`REFUSAL`].
 pub fn gate(facts: &[Fact], now_ms: u64) -> Result<(), Refusal> {
     if facts.iter().all(|f| admits(f, now_ms)) {
         Ok(())

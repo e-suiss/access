@@ -10,10 +10,10 @@ publish = false
 
 [features]
 # run-time federations for other crates' tests
-testing = ["dep:aws-lc-rs"]
+testing = ["dep:suiss-crypto"]
 
 [dependencies]
-aws-lc-rs = { workspace = true, optional = true }
+suiss-crypto = { workspace = true, optional = true, features = ["signer"] }
 access-crypto = { workspace = true }
 access-kernel = { workspace = true }
 thiserror = { workspace = true }
