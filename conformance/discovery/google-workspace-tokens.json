@@ -1,0 +1,24 @@
+{
+  "kind": "admin#directory#tokenList",
+  "etag": "\"synthetic\"",
+  "items": [
+    {
+      "kind": "admin#directory#token",
+      "clientId": "100000000001-registered.apps.googleusercontent.com",
+      "displayText": "Suiss One",
+      "anonymous": false,
+      "nativeApp": false,
+      "userKey": "200000000000000000001",
+      "scopes": ["https://www.googleapis.com/auth/calendar.readonly"]
+    },
+    {
+      "kind": "admin#directory#token",
+      "clientId": "100000000002-unknown.apps.googleusercontent.com",
+      "displayText": "Inbox Autopilot",
+      "anonymous": false,
+      "nativeApp": false,
+      "userKey": "200000000000000000001",
+      "scopes": ["https://mail.google.com/", "https://www.googleapis.com/auth/drive"]
+    }
+  ]
+}

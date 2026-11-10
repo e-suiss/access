@@ -1,0 +1,21 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#oauth2PermissionGrants",
+  "value": [
+    {
+      "id": "c3ludGhldGljLWdyYW50LTE",
+      "clientId": "00000000-0000-4000-8000-000000000001",
+      "consentType": "Principal",
+      "principalId": "00000000-0000-4000-8000-0000000000aa",
+      "resourceId": "00000000-0000-4000-8000-0000000000ff",
+      "scope": "Mail.ReadWrite offline_access"
+    },
+    {
+      "id": "c3ludGhldGljLWdyYW50LTI",
+      "clientId": "00000000-0000-4000-8000-000000000002",
+      "consentType": "AllPrincipals",
+      "principalId": null,
+      "resourceId": "00000000-0000-4000-8000-0000000000ff",
+      "scope": "Files.Read.All"
+    }
+  ]
+}

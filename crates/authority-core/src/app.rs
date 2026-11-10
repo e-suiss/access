@@ -2056,6 +2056,7 @@ pub mod audit;
 mod binding;
 pub mod commitment;
 pub mod consent;
+pub mod discovery;
 mod events;
 pub mod export;
 pub mod faces;
