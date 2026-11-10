@@ -222,6 +222,8 @@ pub enum Op {
     PutFederationRegistration,
     /// `putDeviceCode`: `idp.realm.device_code`, or `device_code_close` (OP-154 m.3 (p)).
     PutDeviceCode,
+    /// `putPush`: `idp.realm.push`, or `push_close` (OP-156 m.3 (d)).
+    PutPush,
     /// `putCiba`: `idp.realm.ciba`, or `ciba_close` (OP-155 m.3 (l)).
     PutCiba,
     /// `putCoordinator`: `idp.realm.coordinator` (OP-156 m.3 (t)).
@@ -367,6 +369,7 @@ impl Op {
             "putFederationAuthority" => Self::PutFederationAuthority,
             "putFederationRegistration" => Self::PutFederationRegistration,
             "putDeviceCode" => Self::PutDeviceCode,
+            "putPush" => Self::PutPush,
             "putCiba" => Self::PutCiba,
             "putCoordinator" => Self::PutCoordinator,
             "createCrossAppConnection" => Self::CreateCrossAppConnection,
@@ -1634,6 +1637,11 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         Op::PutDeviceCode => {
             only(m, &["enabled"])?;
             Change::DeviceCode(flag(m, "enabled")?)
+        }
+        // OP-156 m.3 (d)
+        Op::PutPush => {
+            only(m, &["enabled"])?;
+            Change::Push(flag(m, "enabled")?)
         }
         // OP-155 m.3 (l)
         Op::PutCiba => {

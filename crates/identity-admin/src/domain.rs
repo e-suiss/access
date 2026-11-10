@@ -1867,6 +1867,9 @@ pub enum Change {
     /// `idp.realm.device_code` (`true`, CT2) or `device_code_close` (`false`, CT1), RFC 8628
     /// (OP-154 m.3 (a), (p)).
     DeviceCode(bool),
+    /// `idp.realm.push` (`true`, CT2) or `push_close` (`false`, CT1): push verification with
+    /// number matching as a second step (OP-156 m.3 (d)).
+    Push(bool),
     /// `idp.realm.ciba` (CT2) or `ciba_close` (CT1): CIBA as an invitation, poll and ping
     /// (OP-155 m.3 (l), IDP-14).
     Ciba(CibaSetting),
@@ -2292,6 +2295,8 @@ impl Change {
             Self::CrossAppConnectionRetire(_) => IdpAction::ClientCrossAppConnectionRetire,
             Self::DeviceCode(true) => IdpAction::RealmDeviceCode,
             Self::DeviceCode(false) => IdpAction::RealmDeviceCodeClose,
+            Self::Push(true) => IdpAction::RealmPush,
+            Self::Push(false) => IdpAction::RealmPushClose,
             Self::Ciba(c) if c.enabled => IdpAction::RealmCiba,
             Self::Ciba(_) => IdpAction::RealmCibaClose,
             Self::Coordinator(_) => IdpAction::RealmCoordinator,
@@ -2400,6 +2405,7 @@ impl Change {
             | Self::OrgSsoEnforce(_)
             | Self::FrontchannelLogout
             | Self::DeviceCode(_)
+            | Self::Push(_)
             | Self::MtlsAliases(_)
             | Self::Hrd(_)
             | Self::CspMode { .. }
@@ -2539,7 +2545,7 @@ impl Change {
             Self::Saml(s) => s.body(),
             Self::Domain(d) => d.body(),
             Self::Ssh(s) => s.body(),
-            Self::DeviceCode(on) | Self::Hrd(on) | Self::SecurityNotices(on) => {
+            Self::DeviceCode(on) | Self::Hrd(on) | Self::SecurityNotices(on) | Self::Push(on) => {
                 Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))])
             }
             Self::Ciba(c) => c.to_value(),
@@ -2727,6 +2733,7 @@ impl Change {
             Self::DcrPolicy { .. }
             | Self::DeviceCode(_)
             | Self::SecurityNotices(_)
+            | Self::Push(_)
             | Self::Ciba(_)
             | Self::Coordinator(_)
             | Self::CertificateLogin(_)

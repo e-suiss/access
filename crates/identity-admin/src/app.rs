@@ -779,6 +779,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::CimdPolicy(_)
             | Change::SecurityNotices(_)
             | Change::DeviceCode(_)
+            | Change::Push(_)
             | Change::Ciba(_)
             | Change::Coordinator(_)
             | Change::CertificateLogin(_)
@@ -1752,6 +1753,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Ssh(s) => ssh::write(t, bound, s).await?,
             Change::DeviceCode(on) => {
                 t.put_device_code(bound, *on).await?;
+                true
+            }
+            // OP-156 m.3 (d)
+            Change::Push(on) => {
+                t.put_push(bound, *on).await?;
                 true
             }
             // OP-155 m.3 (l)

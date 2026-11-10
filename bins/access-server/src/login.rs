@@ -241,6 +241,7 @@ struct Settings {
     rp_id: Option<String>,
     related: Vec<String>,
     verified: Vec<String>,
+    push: bool,
 }
 
 /// A kit and the settings it was built from.
@@ -299,12 +300,15 @@ impl HsmKits {
         let verified = access_store::custom_domains::verified_hosts(&mut t)
             .await
             .map_err(|_| Unavailable)?;
+        // OP-156 m.3 (d)
+        let push = t.push_enabled().await.map_err(|_| Unavailable)?;
         t.commit().await.map_err(|_| Unavailable)?;
         Ok(Settings {
             signin,
             rp_id,
             related,
             verified,
+            push,
         })
     }
 
@@ -372,7 +376,10 @@ impl HsmKits {
                     .collect::<Result<_, _>>()?,
             },
             webauthn: RealmPolicy::default(),
-            auth: signin.apply(AuthPolicy::DEFAULT),
+            auth: AuthPolicy {
+                push: settings.push,
+                ..signin.apply(AuthPolicy::DEFAULT)
+            },
             lifetimes: self.lifetimes,
             signin,
         })

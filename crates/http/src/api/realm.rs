@@ -1472,6 +1472,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         // OP-156 m.3 (c)
         | "putSecurityNotices"
         | "putCiba"
+        // OP-156 m.3 (d)
+        | "putPush"
         | "putCertificateLogin"
         | "putMtlsAliases"
         // OP-155 m.3 (f), (o)
