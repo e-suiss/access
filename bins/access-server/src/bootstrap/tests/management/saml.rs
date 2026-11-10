@@ -730,3 +730,41 @@ async fn metadata_is_signed_and_ws_federation_issues_a_token() {
     assert_eq!(r.status(), StatusCode::BAD_REQUEST);
     idp.c.w.domains.release().await;
 }
+
+// IDP-15, IDP-40, Ek B 5004
+#[tokio::test]
+async fn the_saml_idp_suite_finds_no_standards_fault_in_a_real_response_or_metadata() {
+    use saml_idp_suite::response::{Expectations, all_ok, check_metadata, check_response};
+
+    let idp = Idp::new("saml-suite").await;
+    let (r, md) = idp.get("/realms/acme/saml/metadata", false).await;
+    assert_eq!(r.status(), StatusCode::OK, "{md}");
+    let entity = saml_idp_suite::xml::parse(&md)
+        .unwrap()
+        .root
+        .attr("entityID")
+        .unwrap()
+        .to_owned();
+    let findings = check_metadata(&md, &entity);
+    assert!(all_ok(&findings), "{findings:#?}");
+
+    idp.register(sp("gamma", serde_json::json!({}))).await;
+    let gamma = "https://gamma.sp.test/metadata";
+    let acs = "https://gamma.sp.test/acs";
+    let (r, page) = idp.sso(idp.facts(gamma, "_g1", acs), true).await;
+    assert_eq!(r.status(), StatusCode::OK, "{page}");
+    let findings = check_response(
+        &response_xml(&page),
+        &Expectations {
+            idp_entity: entity,
+            sp_entity: String::from(gamma),
+            acs: String::from(acs),
+            request_id: Some(String::from("_g1")),
+            now: i64::try_from(now() / 1000).unwrap(),
+            skew: 180,
+            max_validity: 600,
+        },
+    );
+    assert!(all_ok(&findings), "{findings:#?}");
+    idp.c.w.domains.release().await;
+}

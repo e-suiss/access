@@ -787,6 +787,7 @@ dependencies = [
  "quick-xml",
  "rcgen",
  "rustix",
+ "saml-idp-suite",
  "tokio",
 ]
 
@@ -858,6 +859,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "rustls-webpki",
+ "saml-idp-suite",
  "serde",
  "serde_json",
  "thiserror",
@@ -4173,6 +4175,10 @@ checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
 ]
+
+[[package]]
+name = "saml-idp-suite"
+version = "0.1.0"
 
 [[package]]
 name = "schemars"

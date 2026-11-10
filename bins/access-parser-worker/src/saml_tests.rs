@@ -561,3 +561,64 @@ fn an_unsigned_tampered_wrapped_encrypted_or_failed_assertion_is_refused() {
         Err("signature-no-key")
     );
 }
+
+/// The worker as the neutral SAML `IdP` suite sees it: a request is accepted when the worker
+/// returns its facts.
+struct SuiteTarget(Context);
+
+impl saml_idp_suite::request::Target for SuiteTarget {
+    fn submit(&mut self, xml: &str) -> saml_idp_suite::request::Outcome {
+        use saml_idp_suite::request::{Outcome, Seen};
+        match run(&self.0, xml) {
+            Ok(f) => Outcome::Accepted(Seen {
+                id: f.id,
+                issuer: f.issuer,
+                acs: f.acs_url,
+            }),
+            Err(code) => Outcome::Refused(String::from(code)),
+        }
+    }
+}
+
+struct SuiteSigner(Sp);
+
+impl saml_idp_suite::request::Signer for SuiteSigner {
+    fn sign(&mut self, t: &saml_idp_suite::request::Template) -> Result<String, String> {
+        let head = format!(
+            r#"<samlp:AuthnRequest xmlns:samlp="{SAMLP_NS}" AssertionConsumerServiceURL="{}" Destination="{}" ID="{}" IssueInstant="2026-11-10T10:00:00Z" Version="2.0">"#,
+            t.acs, t.destination, t.id
+        );
+        let issuer = format!(
+            r#"<saml:Issuer xmlns:saml="{SAML_NS}">{}</saml:Issuer>"#,
+            t.issuer
+        );
+        let body = format!("{head}{issuer}{POLICY}{TAIL}");
+        let sig = self.0.signature(&t.id, &body);
+        Ok(format!("{head}{issuer}{sig}{POLICY}{TAIL}"))
+    }
+}
+
+// IDI-8, §10.6.1, Ek B 5004
+#[test]
+fn the_saml_idp_suite_request_corpus_is_refused_or_answered_for_the_signed_values() {
+    let sp = sp();
+    let mut target = SuiteTarget(ctx(&sp));
+    let mut signer = SuiteSigner(sp);
+    let results = saml_idp_suite::request::run(
+        &mut target,
+        &mut signer,
+        &saml_idp_suite::request::Options {
+            issuer: String::from("https://sp.test"),
+            acs: String::from("https://sp.test/acs"),
+            destination: String::from("https://idp.test/sso"),
+            signature_required: true,
+            replay: false,
+            size_limit: Some(crate::parse::MAX_XML),
+        },
+    )
+    .unwrap();
+    assert!(results.len() >= 15, "{results:?}");
+    for r in &results {
+        assert!(r.passed, "{} ({}): {}", r.name, r.class, r.detail);
+    }
+}

@@ -72,6 +72,7 @@ aws-lc-rs = { workspace = true }
 ed25519-dalek = { workspace = true }
 http-body-util = { workspace = true }
 rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
+saml-idp-suite = { workspace = true }
 suiss-crypto = { workspace = true, features = ["testing"] }
 suiss-ledger = { workspace = true }
 tower = { workspace = true, features = ["util"] }

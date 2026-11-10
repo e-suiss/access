@@ -63,6 +63,8 @@ pub(crate) fn classify(dir: &str) -> Option<Class> {
         ("sdks", n) if !n.is_empty() => Class::Sdk,
         ("services", n) if !n.is_empty() => Class::Service,
         ("xtask", "") => Class::Tooling,
+        // OP-155 m.3 (q), Ek B 5004
+        ("tools", n) if !n.is_empty() && !n.contains('/') => Class::Tooling,
         _ => return None,
     };
     Some(class)
@@ -317,6 +319,30 @@ mod tests {
                 member(from, &[("crates/restriction-analysis", None)]),
             ]);
             assert_eq!(bad.len(), 1, "{from}");
+        }
+    }
+
+    // OP-155 m.3 (q), Ek B 5004
+    #[test]
+    fn a_standalone_tool_depends_on_no_access_crate() {
+        let ok = run(&[
+            member("tools/saml-idp-suite", &[]),
+            member(
+                "bins/access-parser-worker",
+                &[("tools/saml-idp-suite", Some("dev"))],
+            ),
+        ]);
+        assert!(ok.is_empty());
+        for to in [
+            "crates/kernel",
+            "crates/suiss-crypto",
+            "crates/identity-saml",
+        ] {
+            let bad = run(&[
+                member(to, &[]),
+                member("tools/saml-idp-suite", &[(to, None)]),
+            ]);
+            assert_eq!(bad.len(), 1, "{to}");
         }
     }
 

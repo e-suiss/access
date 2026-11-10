@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "bins/*", "services/*", "sdks/bindings/wasm", "sdks/bindings/uniffi", "sdks/rust/*", "xtask"]
+members = ["crates/*", "bins/*", "services/*", "tools/*", "sdks/bindings/wasm", "sdks/bindings/uniffi", "sdks/rust/*", "xtask"]
 # OP-155 m.3 (o): its own workspace, lock file and supply-chain run; Linux CI only
 exclude = ["bins/access-gw-kerberos"]
 
@@ -49,6 +49,8 @@ access-identity-directory = { path = "crates/identity-directory", default-featur
 access-authority-ingest = { path = "crates/authority-ingest", default-features = false }
 access-sdk = { package = "esuiss-access-sdk", path = "sdks/rust/access", version = "=0.4.0", default-features = false }
 access-experience = { path = "services/experience", default-features = false }
+# OP-155 m.3 (q), Ek B 5004
+saml-idp-suite = { path = "tools/saml-idp-suite", default-features = false }
 access-verifier = { package = "esuiss-access-verifier", path = "sdks/rust/verifier", version = "=0.4.0", default-features = false }
 
 # F-2

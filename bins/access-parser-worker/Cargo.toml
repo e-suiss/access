@@ -23,6 +23,7 @@ rustix = { workspace = true, features = ["std", "net", "process", "time"] }
 [dev-dependencies]
 aws-lc-rs = { workspace = true }
 rcgen = { workspace = true, features = ["aws_lc_rs"] }
+saml-idp-suite = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net", "io-util", "time"] }
 
 [lints]
