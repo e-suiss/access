@@ -333,6 +333,58 @@ pub trait OAuthTx: Send {
     ) -> impl Future<Output = Result<(u64, u64), Unavailable>> + Send;
     /// The realm's DCR policy (`idp.client.dcr_policy`, OP-154 m.3 (j)); off when never decided.
     fn dcr_policy(&mut self) -> impl Future<Output = Result<DcrPolicyRow, Unavailable>> + Send;
+    /// The realm's OpenID Federation settings (OP-155 m.3 (j)); off when never decided.
+    fn federation(
+        &mut self,
+    ) -> impl Future<Output = Result<access_store::oidf::FederationSettingsRow, Unavailable>> + Send
+    {
+        async { Ok(access_store::oidf::FederationSettingsRow::default()) }
+    }
+    /// The trust anchors the realm ever named, each at its newest version.
+    fn trust_anchors(
+        &mut self,
+    ) -> impl Future<Output = Result<Vec<access_store::oidf::TrustAnchorRow>, Unavailable>> + Send
+    {
+        async { Ok(Vec::new()) }
+    }
+    /// The live OIDF client of `client_id`.
+    fn oidf_client(
+        &mut self,
+        client_id: &str,
+    ) -> impl Future<Output = Result<Option<access_store::oidf::OidfClientRow>, Unavailable>> + Send
+    {
+        let _ = client_id;
+        async { Ok(None) }
+    }
+    /// Keeps a resolved OIDF client: refreshes `existing`, or records a new one.
+    fn put_oidf_client(
+        &mut self,
+        existing: Option<[u8; 16]>,
+        client_id: &str,
+        snapshot: &access_store::oidf::OidfSnapshot<'_>,
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send {
+        let _ = (existing, client_id, snapshot);
+        async { Err(Unavailable) }
+    }
+    /// Retires a live OIDF client, once.
+    fn retire_oidf_client(
+        &mut self,
+        client: [u8; 16],
+        reason: &str,
+        now_ms: u64,
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send {
+        let _ = (client, reason, now_ms);
+        async { Err(Unavailable) }
+    }
+    /// Records a registration request object's replay key; `false` when it was seen.
+    fn oidf_jti_first(
+        &mut self,
+        replay_key: &[u8; 32],
+        exp_ms: u64,
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send {
+        let _ = (replay_key, exp_ms);
+        async { Err(Unavailable) }
+    }
     /// Whether a live cross-app connection lets `client_id` ask for an ID-JAG for `audience`
     /// and `resource` (`idp.client.cross_app_connection`, OP-154 m.3 (n)).
     fn cross_app_connected(

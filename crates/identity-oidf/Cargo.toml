@@ -8,7 +8,12 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[features]
+# run-time federations for other crates' tests
+testing = ["dep:aws-lc-rs"]
+
 [dependencies]
+aws-lc-rs = { workspace = true, optional = true }
 access-crypto = { workspace = true }
 access-kernel = { workspace = true }
 thiserror = { workspace = true }

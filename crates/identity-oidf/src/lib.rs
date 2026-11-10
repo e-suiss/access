@@ -17,3 +17,6 @@ pub use chain::{Chain, ChainError, Resolver, Step, TrustAnchor};
 pub use policy::PolicyError;
 pub use statement::{EntityStatement, Jwk, OidfError};
 pub use trust_mark::TrustMark;
+
+#[cfg(feature = "testing")]
+pub mod testing;

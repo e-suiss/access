@@ -5,6 +5,7 @@
 pub mod backchannel;
 pub mod dpop;
 pub mod oauth;
+pub mod oidf;
 
 use crate::domain::issuer::{IssuerStyle, PATH_PREFIX, RealmBase, check_slug};
 use crate::domain::metadata::{self, Document, SERVED, Served};

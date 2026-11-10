@@ -519,6 +519,65 @@ impl OAuthTx for PgOAuthTx {
         self.0.dcr_policy().await.map_err(down)
     }
 
+    async fn federation(
+        &mut self,
+    ) -> Result<access_store::oidf::FederationSettingsRow, Unavailable> {
+        self.0.federation_settings().await.map_err(down)
+    }
+
+    async fn trust_anchors(
+        &mut self,
+    ) -> Result<Vec<access_store::oidf::TrustAnchorRow>, Unavailable> {
+        self.0.trust_anchors().await.map_err(down)
+    }
+
+    async fn oidf_client(
+        &mut self,
+        client_id: &str,
+    ) -> Result<Option<access_store::oidf::OidfClientRow>, Unavailable> {
+        self.0.oidf_client(client_id).await.map_err(down)
+    }
+
+    async fn put_oidf_client(
+        &mut self,
+        existing: Option<[u8; 16]>,
+        client_id: &str,
+        snapshot: &access_store::oidf::OidfSnapshot<'_>,
+    ) -> Result<(), Unavailable> {
+        match existing {
+            Some(c) => self.0.refresh_oidf_client(c, snapshot).await.map_err(down),
+            None => self
+                .0
+                .insert_oidf_client(client_id, snapshot)
+                .await
+                .map(|_| ())
+                .map_err(down),
+        }
+    }
+
+    async fn retire_oidf_client(
+        &mut self,
+        client: [u8; 16],
+        reason: &str,
+        now_ms: u64,
+    ) -> Result<(), Unavailable> {
+        self.0
+            .retire_oidf_client(client, reason, now_ms)
+            .await
+            .map_err(down)
+    }
+
+    async fn oidf_jti_first(
+        &mut self,
+        replay_key: &[u8; 32],
+        exp_ms: u64,
+    ) -> Result<bool, Unavailable> {
+        self.0
+            .oidf_jti_first(replay_key, exp_ms)
+            .await
+            .map_err(down)
+    }
+
     async fn cross_app_connected(
         &mut self,
         client_id: &str,

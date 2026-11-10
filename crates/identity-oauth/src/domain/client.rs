@@ -68,6 +68,9 @@ pub enum TrustLevel {
     Cimd,
     /// Registered dynamically under the realm's DCR profile (RFC 7591, OP-154 m.3 (j)).
     Dcr,
+    /// Resolved through an OpenID Federation trust chain (IDP-19, OP-155 m.3 (j)); with or
+    /// without a trust mark it still asks the person (IDP-20).
+    Oidf,
 }
 
 impl TrustLevel {
@@ -78,6 +81,7 @@ impl TrustLevel {
             Self::Registered => "registered",
             Self::Cimd => "cimd",
             Self::Dcr => "dcr",
+            Self::Oidf => "oidf",
         }
     }
 }

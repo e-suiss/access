@@ -53,6 +53,17 @@ pub trait Directory: Send + Sync {
         let _ = realm;
         async { Ok(Facts::default()) }
     }
+
+    /// The realm's OpenID Federation settings (OP-155 m.3 (j)); `None` while it is not a leaf. A
+    /// directory that cannot tell knows of none.
+    fn federation(
+        &self,
+        realm: &RealmEntry,
+    ) -> impl Future<Output = Result<Option<access_store::oidf::FederationSettingsRow>, Unavailable>>
+    + Send {
+        let _ = realm;
+        async { Ok(None) }
+    }
 }
 
 /// What a directory knows of a realm beyond its route.
@@ -90,4 +101,27 @@ pub trait Keys: Send + Sync {
 
     /// The current JWKS of `realm`, opening its key set on first use.
     fn jwks(&self, realm: RealmId) -> impl Future<Output = Result<String, Unavailable>> + Send;
+
+    /// The realm's OpenID Federation JWKS, its `federation` key set made on first use
+    /// (OP-155 m.3 (j)). A signer without one is unavailable.
+    fn federation_jwks(
+        &self,
+        realm: RealmId,
+    ) -> impl Future<Output = Result<String, Unavailable>> + Send {
+        let _ = realm;
+        async { Err(Unavailable) }
+    }
+
+    /// Signs `payload` as a compact JWS of the federation type `typ` with the realm's
+    /// `federation` key (OP-155 m.3 (j)).
+    fn sign_federation(
+        &self,
+        realm: RealmId,
+        typ: &str,
+        payload: &[u8],
+        at: u64,
+    ) -> impl Future<Output = Result<String, Unavailable>> + Send {
+        let _ = (realm, typ, payload, at);
+        async { Err(Unavailable) }
+    }
 }

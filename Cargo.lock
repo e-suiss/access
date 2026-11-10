@@ -388,6 +388,7 @@ dependencies = [
  "access-identity-account",
  "access-identity-attest",
  "access-identity-hooks",
+ "access-identity-oidf",
  "access-identity-session",
  "access-identity-signer",
  "access-identity-x509",

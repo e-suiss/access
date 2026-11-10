@@ -8,6 +8,7 @@ pub mod clients;
 pub mod dpop;
 pub mod hooks;
 pub mod oauth;
+pub mod oidf;
 pub mod outbound;
 
 use std::path::PathBuf;
@@ -118,6 +119,13 @@ impl Directory for PgDirectory {
             secret_post: legacy.iter().any(|m| m == "client_secret_post"),
             secret_jwt: legacy.iter().any(|m| m == "client_secret_jwt"),
         })
+    }
+
+    async fn federation(
+        &self,
+        realm: &RealmEntry,
+    ) -> Result<Option<access_store::oidf::FederationSettingsRow>, Unavailable> {
+        oidf::settings(self.app.as_ref(), realm).await
     }
 }
 
@@ -331,6 +339,35 @@ impl Keys for SignerKeys {
         }
         match self.ask(&Request::Jwks(realm)).await? {
             Response::Jwks(doc) => Ok(doc),
+            _ => Err(Unavailable),
+        }
+    }
+
+    async fn federation_jwks(&self, realm: RealmId) -> Result<String, Unavailable> {
+        match self
+            .ask(&Request::FederationJwks(Realm(*realm.as_bytes())))
+            .await?
+        {
+            Response::Jwks(doc) => Ok(doc),
+            _ => Err(Unavailable),
+        }
+    }
+
+    async fn sign_federation(
+        &self,
+        realm: RealmId,
+        typ: &str,
+        payload: &[u8],
+        at: u64,
+    ) -> Result<String, Unavailable> {
+        let request = Request::SignFederation {
+            realm: Realm(*realm.as_bytes()),
+            typ: String::from(typ),
+            payload: payload.to_vec(),
+            at,
+        };
+        match self.ask(&request).await? {
+            Response::Signed { token, .. } => Ok(token),
             _ => Err(Unavailable),
         }
     }
