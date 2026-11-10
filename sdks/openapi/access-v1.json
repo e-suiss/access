@@ -2373,6 +2373,114 @@
         }
       }
     },
+    "/proxy/v1/mcp/tools": {
+      "post": {
+        "operationId": "mcpGatewayTools",
+        "summary": "{host, tools: [{name, pin}]}: which of the tools the MCP server lists now stand pinned by idp.proxy.mcp_pin; a pin is the base64url SHA-256 of the RFC 8785 form of the tool's name, description, inputSchema and annotations (AG-42, OP-156 m.3 (n)).",
+        "x-suiss-served": true,
+        "responses": {
+          "400": {
+            "description": "invalid-mcp-call: not one commit of the agent's own statement on a tool of this proxy; nothing was decided.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "proxy-unregistered: no proxy transport identity, or none registered for the MCP server's host.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access is unreachable; the gateway shows and calls nothing (MD-8).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "{pinned: [name]}: the tools that stand pinned with the definition the gateway sees; the others are not shown.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/proxy/v1/mcp/calls": {
+      "post": {
+        "operationId": "mcpGatewayCall",
+        "summary": "{host, tool, pin, evaluation}: one tool call, the evaluation being the AuthZEN evaluation body of the agent's own commit statement with the gateway as PEP; the actor is the agent's Instance (AG-42, E17, OP-156 m.3 (n)).",
+        "x-suiss-served": true,
+        "responses": {
+          "400": {
+            "description": "invalid-mcp-call: not one commit of the agent's own statement on a tool of this proxy; nothing was decided.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "proxy-unregistered: no proxy transport identity, or none registered for the MCP server's host.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access is unreachable; the gateway shows and calls nothing (MD-8).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The ADP's answer to the evaluation, as it gave it; the call is audited once as mcp_gateway.call with its decision, tool and pin, never its arguments.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "mcp-tool-unpinned: the tool changed or is new; blocked before any decision until pinned again, audited as mcp_gateway.tool_blocked.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/access/v1/relay-status": {
       "get": {
         "operationId": "getRelayStatus",

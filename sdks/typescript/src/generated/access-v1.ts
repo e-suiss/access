@@ -467,6 +467,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/proxy/v1/mcp/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** {host, tools: [{name, pin}]}: which of the tools the MCP server lists now stand pinned by idp.proxy.mcp_pin; a pin is the base64url SHA-256 of the RFC 8785 form of the tool's name, description, inputSchema and annotations (AG-42, OP-156 m.3 (n)). */
+        post: operations["mcpGatewayTools"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/proxy/v1/mcp/calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** {host, tool, pin, evaluation}: one tool call, the evaluation being the AuthZEN evaluation body of the agent's own commit statement with the gateway as PEP; the actor is the agent's Instance (AG-42, E17, OP-156 m.3 (n)). */
+        post: operations["mcpGatewayCall"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/access/v1/relay-status": {
         parameters: {
             query?: never;
@@ -3944,6 +3978,109 @@ export interface operations {
                 content?: never;
             };
             /** @description Access is unreachable; the request is refused (MD-8). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    mcpGatewayTools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description {pinned: [name]}: the tools that stand pinned with the definition the gateway sees; the others are not shown. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description invalid-mcp-call: not one commit of the agent's own statement on a tool of this proxy; nothing was decided. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description proxy-unregistered: no proxy transport identity, or none registered for the MCP server's host. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Access is unreachable; the gateway shows and calls nothing (MD-8). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    mcpGatewayCall: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The ADP's answer to the evaluation, as it gave it; the call is audited once as mcp_gateway.call with its decision, tool and pin, never its arguments. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            /** @description invalid-mcp-call: not one commit of the agent's own statement on a tool of this proxy; nothing was decided. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description proxy-unregistered: no proxy transport identity, or none registered for the MCP server's host. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description mcp-tool-unpinned: the tool changed or is new; blocked before any decision until pinned again, audited as mcp_gateway.tool_blocked. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Access is unreachable; the gateway shows and calls nothing (MD-8). */
             503: {
                 headers: {
                     [name: string]: unknown;

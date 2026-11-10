@@ -90,9 +90,70 @@ fn proxy_paths(paths: &mut Map<String, Value>) {
     );
 }
 
-/// Every declared route of [`PLANNED`], the served relay status (OP-156 m.3 (c)) and the forward-auth checks.
+/// The MCP gateway's questions, served (AG-42, OP-156 m.3 (n)).
+fn mcp_paths(paths: &mut Map<String, Value>) {
+    let refused = [
+        (
+            "400",
+            "invalid-mcp-call: not one commit of the agent's own statement on a tool of this proxy; nothing was decided.",
+        ),
+        (
+            "401",
+            "proxy-unregistered: no proxy transport identity, or none registered for the MCP server's host.",
+        ),
+        (
+            "503",
+            "Access is unreachable; the gateway shows and calls nothing (MD-8).",
+        ),
+    ];
+    let mut tools = problems(&refused);
+    tools.insert(
+        "200".into(),
+        json!({
+            "description": "{pinned: [name]}: the tools that stand pinned with the definition the gateway sees; the others are not shown.",
+            "content": { "application/json": { "schema": { "type": "object" } } },
+        }),
+    );
+    paths.insert(
+        crate::mcp_gateway::TOOLS_PATH.into(),
+        json!({ "post": {
+            "operationId": "mcpGatewayTools",
+            "summary": "{host, tools: [{name, pin}]}: which of the tools the MCP server lists now stand pinned by idp.proxy.mcp_pin; a pin is the base64url SHA-256 of the RFC 8785 form of the tool's name, description, inputSchema and annotations (AG-42, OP-156 m.3 (n)).",
+            "x-suiss-served": true,
+            "responses": Value::Object(tools),
+        }}),
+    );
+    let mut calls = problems(&refused);
+    calls.insert(
+        "200".into(),
+        json!({
+            "description": "The ADP's answer to the evaluation, as it gave it; the call is audited once as mcp_gateway.call with its decision, tool and pin, never its arguments.",
+            "content": { "application/json": { "schema": { "type": "object" } } },
+        }),
+    );
+    calls.insert(
+        "409".into(),
+        json!({
+            "description": "mcp-tool-unpinned: the tool changed or is new; blocked before any decision until pinned again, audited as mcp_gateway.tool_blocked.",
+            "content": { "application/problem+json": { "schema": r("Problem") } },
+        }),
+    );
+    paths.insert(
+        crate::mcp_gateway::CALLS_PATH.into(),
+        json!({ "post": {
+            "operationId": "mcpGatewayCall",
+            "summary": "{host, tool, pin, evaluation}: one tool call, the evaluation being the AuthZEN evaluation body of the agent's own commit statement with the gateway as PEP; the actor is the agent's Instance (AG-42, E17, OP-156 m.3 (n)).",
+            "x-suiss-served": true,
+            "responses": Value::Object(calls),
+        }}),
+    );
+}
+
+/// Every declared route of [`PLANNED`], the served relay status (OP-156 m.3 (c)), the forward-auth
+/// checks and the MCP gateway's questions.
 pub(super) fn paths(paths: &mut Map<String, Value>) {
     proxy_paths(paths);
+    mcp_paths(paths);
     let mut responses = problems(&[("503", "Temporarily unavailable; retry.")]);
     responses.insert(
         "200".into(),
