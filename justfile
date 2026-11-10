@@ -432,7 +432,7 @@ kerberos:
         cargo fmt --check
         cargo clippy --locked --all-targets -- -D warnings
         cargo test --locked
-        cargo deny --locked --manifest-path Cargo.toml check --config ../../deny.toml
+        cargo deny --locked --manifest-path Cargo.toml --config ../../deny.toml check
         cargo vet --locked
         cargo build --locked
     )

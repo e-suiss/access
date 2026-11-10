@@ -548,6 +548,8 @@ NOT_IMPLEMENTED = {
     "webhook.sign": "transport signature profile (TN-136, E42), not Kernel semantics; checked by crates/crypto webhook tests",
     "meta_payload.json": "JSON transport form of Kernel meta payloads (L1-ADP-17); the CBOR semantics are checked by the core vectors, the JSON mapping by crates/http payload tests",
     "agent.answer": "agent SDK reading of an ADP answer (OP-154 m.13), not Kernel semantics; checked by the Rust and TypeScript SDK vector tests",
+    "adp.cbor": "CBOR transport form of ADP documents (OP-155 m.19 (a)), not Kernel semantics; checked by crates/http adp::cbor tests",
+    "approval.mapping": "vendor approval policies mapped to RequirementTerm (§5.9, OP-155 m.19 (e)); checked on the real store by authority-core commit tests",
 }
 
 # Third-party raw data sets without an `operation`; the Kernel's own tests read them.
