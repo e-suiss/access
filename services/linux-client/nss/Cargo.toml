@@ -11,6 +11,9 @@ publish = false
 [lib]
 name = "nss_access"
 crate-type = ["cdylib"]
+# OP-156 m.3 (p): no test harness; the shell is exercised through glibc and Linux-PAM on CI
+test = false
+doctest = false
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # OP-156 m.3 (p), (z): our own C ABI shell; R-2 allowlisted

@@ -41,8 +41,8 @@ struct PamConv {
     appdata_ptr: *mut c_void,
 }
 
-#[link(name = "pam")]
-// SAFETY: Linux-PAM's own functions, called with the handle PAM gave this module.
+// SAFETY: Linux-PAM's own functions, called with the handle PAM gave this module; they resolve
+// from libpam, which the process loading the module has loaded (no link-time libpam).
 unsafe extern "C" {
     fn pam_get_user(pamh: *mut c_void, user: *mut *const c_char, prompt: *const c_char) -> c_int;
     fn pam_get_item(pamh: *const c_void, item: c_int, out: *mut *const c_void) -> c_int;
@@ -87,13 +87,18 @@ fn show(pamh: *mut c_void, message: &str) {
     let mut list = [&raw const msg];
     let mut resp: *mut PamResponse = std::ptr::null_mut();
     let _ = f(1, list.as_mut_ptr(), &raw mut resp, appdata_ptr);
-    if !resp.is_null() {
-        // SAFETY: the application allocated one response with malloc for our one message; it
-        // is ours to free, its text first.
-        unsafe {
-            libc::free((*resp).resp.cast());
-            libc::free(resp.cast());
-        }
+    // SAFETY: `as_ref` yields a reference only when the application stored a non-null
+    // response; it allocated that one `pam_response` with malloc for our one message, and it
+    // stays valid until we free it below.
+    let Some(answer) = (unsafe { resp.as_ref() }) else {
+        return;
+    };
+    let text = answer.resp;
+    // SAFETY: both blocks came from the application's malloc and are ours to free once;
+    // `free` accepts a null text.
+    unsafe {
+        libc::free(text.cast());
+        libc::free(resp.cast());
     }
 }
 

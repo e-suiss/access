@@ -9,10 +9,7 @@ WORKDIR /src
 ENV RUSTUP_TOOLCHAIN=1.99.0 \
     CARGO_TERM_COLOR=never \
     RUSTFLAGS="--remap-path-prefix=/src=/access --remap-path-prefix=/usr/local/cargo=/cargo"
-RUN apt-get update \
- && apt-get install -y --no-install-recommends libpam0g-dev \
- && rm -rf /var/lib/apt/lists/* \
- && cargo install --locked cargo-auditable --version 0.7.6
+RUN cargo install --locked cargo-auditable --version 0.7.6
 COPY . .
 RUN cargo auditable build --release --locked \
       --package access-linux-client --package access-linux-nss --package access-linux-pam \

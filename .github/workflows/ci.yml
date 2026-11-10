@@ -719,8 +719,8 @@ jobs:
         with:
           cache-key: test
           tools: nextest
-      - name: SoftHSM, pamtester and the PAM library
-        run: sudo apt-get install --yes --no-install-recommends softhsm2 pamtester libpam0g-dev
+      - name: SoftHSM and pamtester
+        run: sudo apt-get install --yes --no-install-recommends softhsm2 pamtester
       - name: The modules build alone and install into glibc and PAM
         run: |
           cargo clippy --locked -p access-linux-nss -p access-linux-pam -p access-linux-module --all-targets -- -D warnings
