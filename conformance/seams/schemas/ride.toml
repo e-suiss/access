@@ -1,0 +1,30 @@
+# Suiss Ride (§7.9.10.3): a hypothetical transport product. It needs a `ride.*` schema, a driver
+# membership Claim selecting drivers into a rule-shaped Grant, and an agent's trip budget of at
+# most 300 TRY. No new Kernel primitive.
+product = "Suiss Ride"
+namespace = "ride"
+catalog_version = 1
+truth = ["trip", "driver eligibility", "fare", "location"]
+
+[[actions]]
+name = "request"
+major = 1
+effect_class = "reversible"
+consumption_bearing = true
+params = { fare = "amount" }
+classes = { fare = "amount" }
+resource_types = ["trip"]
+render = "Request a ride for {fare}"
+
+[[actions]]
+name = "accept"
+major = 1
+effect_class = "reversible"
+resource_types = ["trip"]
+render = "Accept a ride"
+
+[[claims]]
+class = "ride_driver"
+value = "bool"
+use = "subject-selection"
+meaning = "The subject is an active Suiss Ride driver."

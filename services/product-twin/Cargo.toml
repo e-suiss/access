@@ -1,6 +1,6 @@
 [package]
 name = "access-product-twin"
-description = "A Suiss product twin for tests: a third-party product built only on the public SDK and Kernel, registered as a Party with its own issuer key and Acceptance."
+description = "Product twin kit (OP-156 m.2 Q1, §7.9.10.3, PI-14): a domain product built on the public crates alone that registers its own Party, publishes its schema, issues its Claims and enforces Access decisions as its own PEP; it writes no authority."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,14 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-# OP-156 m.2 Q1, E24, PI-14: the public SDK and Kernel only
+# OP-156 m.2 Q1, OP-62, B21, E24
+access-kernel = { workspace = true }
+access-sdk = { workspace = true, features = ["std"] }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+suiss-crypto = { workspace = true, features = ["signer"] }
+thiserror = { workspace = true, features = ["std"] }
+toml = { workspace = true, features = ["std", "parse", "serde"] }
 
 [lints]
 workspace = true

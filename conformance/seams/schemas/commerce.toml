@@ -1,0 +1,4 @@
+# Suiss Commerce seam schema (OP-156 m.3 (u)): its actions and Claim classes come with lane Q17.
+product = "Suiss Commerce"
+namespace = "commerce"
+catalog_version = 1

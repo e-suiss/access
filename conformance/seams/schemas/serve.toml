@@ -1,0 +1,4 @@
+# Suiss Serve seam schema (OP-156 m.3 (u)): its actions and Claim classes come with lane Q17.
+product = "Suiss Serve"
+namespace = "serve"
+catalog_version = 1

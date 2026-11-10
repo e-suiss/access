@@ -1,0 +1,37 @@
+# Suiss Health (§7.9.10.3, §7.9.15): a hypothetical appointment and record product. It needs a
+# `health.*` schema with the `disclose` core class for sharing a record, a guardian Claim, and the
+# patient's own self-anchor as the explicit root of the patient's records. No new Kernel
+# primitive.
+product = "Suiss Health"
+namespace = "health"
+catalog_version = 1
+truth = ["patient record", "appointment", "clinical eligibility"]
+
+[[actions]]
+name = "read"
+major = 1
+effect_class = "none"
+resource_types = ["record"]
+render = "Read a health record"
+
+[[actions]]
+name = "share"
+major = 1
+effect_class = "irreversible"
+params = { recipient = "id" }
+classes = { recipient = "recipient" }
+resource_types = ["record"]
+render = "Share a health record with {recipient}"
+
+[[actions]]
+name = "book"
+major = 1
+effect_class = "reversible"
+resource_types = ["appointment"]
+render = "Book an appointment"
+
+[[claims]]
+class = "health_guardian"
+value = "text"
+use = "subject-selection"
+meaning = "The subject is the legal guardian of the patient the value names."
