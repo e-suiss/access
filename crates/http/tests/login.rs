@@ -25,7 +25,7 @@ use access_crypto::envelope::SoftKek;
 use access_crypto::opaque_id::IdKey;
 use access_crypto::totp::{TotpAlgorithm, hotp, step_of};
 use access_crypto::webauthn::DecoyKey;
-use access_http::login::{Assets, Peer, me_router, router};
+use access_http::login::{Assets, Peer, ldap_credentials_router, me_router, router};
 use access_identity_account::adapters::pg::PgAccounts;
 use access_identity_account::adapters::system::SystemEntropy;
 use access_identity_account::app::accounts::{
@@ -546,6 +546,10 @@ async fn env_legacy(
         hosted.clone(),
         Some(assets),
     )
+    .merge(ldap_credentials_router(
+        Discovery::new(Dir(entry.clone()), NoKeys),
+        hosted.clone(),
+    ))
     .merge(me_router(
         Discovery::new(Dir(entry), NoKeys),
         hosted,
@@ -4521,6 +4525,75 @@ async fn n5_end_this_sign_in_ends_only_the_other_device() {
     let expired = here.get("/v1/sessions/current").await;
     assert_eq!(expired.status, StatusCode::UNAUTHORIZED);
     assert_eq!(expired.json()["reason"], "expired");
+}
+
+// OP-155 m.3 (n), IDP-16
+#[tokio::test]
+async fn directory_app_passwords_are_managed_in_s11() {
+    let e = env(97, "p10-a", AuthPolicy::DEFAULT).await;
+    e.account("lc@example.com").await;
+    let mut stranger = e.browser("s");
+    assert_eq!(
+        stranger.get("/v1/account/ldap-credentials").await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    let mut b = e.browser("b");
+    assert_eq!(b.sign_in("lc@example.com").await.step(), "complete");
+    let none = b.get("/v1/account/ldap-credentials").await;
+    assert_eq!(none.status, StatusCode::OK);
+    assert_eq!(none.json()["credentials"].as_array().unwrap().len(), 0);
+    let made = b
+        .post(
+            "/v1/account/ldap-credentials",
+            Some(json!({ "application": "Thunderbird" })),
+        )
+        .await;
+    assert_eq!(
+        made.status,
+        StatusCode::CREATED,
+        "{}",
+        String::from_utf8_lossy(&made.body)
+    );
+    let made = made.json();
+    let id = made["id"].as_str().unwrap().to_owned();
+    assert!(id.starts_with("ldc_"));
+    assert_eq!(made["password"].as_str().unwrap().len(), 66);
+    assert_eq!(made["bind_dn"], "dn=token");
+    let listed = b.get("/v1/account/ldap-credentials").await.json();
+    let one = &listed["credentials"][0];
+    assert_eq!(one["id"], id.as_str());
+    assert_eq!(one["application"], "Thunderbird");
+    assert!(one.get("password").is_none());
+    assert!(one["last_used_at"].is_null());
+    let bad = b
+        .post(
+            "/v1/account/ldap-credentials",
+            Some(json!({ "application": "  " })),
+        )
+        .await;
+    assert_eq!(bad.status, StatusCode::BAD_REQUEST);
+    assert_eq!(bad.json()["code"], "invalid-application-name");
+    let path = format!("/v1/account/ldap-credentials/{id}/revoke");
+    assert_eq!(b.post(&path, None).await.status, StatusCode::NO_CONTENT);
+    assert_eq!(
+        b.get("/v1/account/ldap-credentials").await.json()["credentials"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+    assert_eq!(b.post(&path, None).await.status, StatusCode::NOT_FOUND);
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let kinds = tx.outbox_kinds().await.unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(
+        kinds
+            .iter()
+            .filter(|k| *k == "relay.message.ldap_credential_changed.v1")
+            .count(),
+        2,
+        "{kinds:?}"
+    );
 }
 
 // TN-99, TN-68, OP-148
