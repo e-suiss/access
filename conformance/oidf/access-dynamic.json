@@ -1,0 +1,34 @@
+{
+  "alias": "access-dynamic",
+  "description": "Access realm acme with DCR open to the suite's redirect host behind an initial access token made by the target at run time (OP-154 m.3 (j), OP-155 m.3 (q))",
+  "server": {
+    "discoveryUrl": "https://acme.id.test:9443/.well-known/openid-configuration"
+  },
+  "client": {
+    "client_name": "OIDF dynamic 1",
+    "initial_access_token": "$runtime:dcr_iat"
+  },
+  "client2": {
+    "client_name": "OIDF dynamic 2",
+    "initial_access_token": "$runtime:dcr_iat"
+  },
+  "browser": [
+    {
+      "match": "https://acme.id.test:9443/authorize*",
+      "tasks": [
+        {
+          "task": "Verify Complete",
+          "match": "*/test/a/access-dynamic/callback*",
+          "commands": [
+            [
+              "wait",
+              "id",
+              "submission_complete",
+              10
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

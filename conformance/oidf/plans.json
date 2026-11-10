@@ -3,12 +3,17 @@
   "plans": [
     {
       "name": "oidcc-basic-certification-test-plan",
-      "variant": { "server_metadata": "discovery", "client_registration": "static_client" },
-      "config": "access-oidcc.json"
+      "variant": {
+        "server_metadata": "discovery",
+        "client_registration": "static_client"
+      },
+      "config": "access-oidcc.json",
+      "group": "core"
     },
     {
       "name": "oidcc-config-certification-test-plan",
-      "config": "access-oidcc.json"
+      "config": "access-oidcc.json",
+      "group": "core"
     },
     {
       "name": "fapi2-security-profile-final-test-plan",
@@ -21,7 +26,94 @@
         "fapi_response_mode": "plain_response"
       },
       "config": "access-fapi2.json",
-      "redirect_uri": "https://localhost.emobix.co.uk:8443/test/a/access-fapi2/callback"
+      "redirect_uri": "https://localhost.emobix.co.uk:8443/test/a/access-fapi2/callback",
+      "group": "fapi2"
+    },
+    {
+      "name": "fapi2-message-signing-final-test-plan",
+      "group": "fapi2",
+      "variant": {
+        "client_auth_type": "private_key_jwt",
+        "sender_constrain": "dpop",
+        "openid": "openid_connect",
+        "fapi_profile": "plain_fapi",
+        "fapi_request_method": "signed_non_repudiation",
+        "fapi_response_mode": "jarm"
+      },
+      "config": "access-fapi2-ms.json",
+      "redirect_uri": "https://localhost.emobix.co.uk:8443/test/a/access-fapi2-ms/callback"
+    },
+    {
+      "id": "fapi-ciba-id1-test-plan:poll",
+      "name": "fapi-ciba-id1-test-plan",
+      "group": "ciba",
+      "variant": {
+        "client_auth_type": "private_key_jwt",
+        "fapi_ciba_profile": "plain_fapi",
+        "ciba_mode": "poll",
+        "client_registration": "static_client"
+      },
+      "config": "access-ciba.json"
+    },
+    {
+      "id": "fapi-ciba-id1-test-plan:ping",
+      "name": "fapi-ciba-id1-test-plan",
+      "group": "ciba",
+      "variant": {
+        "client_auth_type": "private_key_jwt",
+        "fapi_ciba_profile": "plain_fapi",
+        "ciba_mode": "ping",
+        "client_registration": "static_client"
+      },
+      "config": "access-ciba.json"
+    },
+    {
+      "name": "oidcc-dynamic-certification-test-plan",
+      "group": "dynamic",
+      "variant": {
+        "response_type": "code"
+      },
+      "config": "access-dynamic.json",
+      "redirect_uri": "https://localhost.emobix.co.uk:8443/test/a/access-dynamic/callback"
+    },
+    {
+      "name": "oidcc-rp-initiated-logout-certification-test-plan",
+      "group": "logout",
+      "variant": {
+        "response_type": "code",
+        "client_registration": "static_client"
+      },
+      "config": "access-logout.json",
+      "redirect_uri": "https://localhost.emobix.co.uk:8443/test/a/access-logout/callback"
+    },
+    {
+      "name": "oidcc-backchannel-rp-initiated-logout-certification-test-plan",
+      "group": "logout",
+      "variant": {
+        "response_type": "code",
+        "client_registration": "static_client"
+      },
+      "config": "access-logout.json",
+      "redirect_uri": "https://localhost.emobix.co.uk:8443/test/a/access-logout/callback"
+    },
+    {
+      "name": "oidcc-frontchannel-rp-initiated-logout-certification-test-plan",
+      "group": "logout",
+      "variant": {
+        "response_type": "code",
+        "client_registration": "static_client"
+      },
+      "config": "access-logout.json",
+      "redirect_uri": "https://localhost.emobix.co.uk:8443/test/a/access-logout/callback"
+    },
+    {
+      "name": "openid-federation-deployed-entity-test-plan",
+      "group": "federation",
+      "variant": {
+        "server_metadata": "discovery",
+        "client_registration": "automatic"
+      },
+      "config": "access-federation.json"
     }
   ]
 }

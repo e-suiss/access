@@ -1,0 +1,51 @@
+{
+  "alias": "access-logout",
+  "description": "Access realm acme, OIDF RP-initiated, back-channel and front-channel logout (OP-155 m.3 (q)); the client secrets are made by the target at run time",
+  "server": {
+    "discoveryUrl": "https://acme.id.test:9443/.well-known/openid-configuration"
+  },
+  "client": {
+    "client_id": "cli_c0nfjjjjjjjjjjjjjjjjjjjjjj",
+    "client_secret": "$runtime:secret.logout-1"
+  },
+  "client2": {
+    "client_id": "cli_c0nfkkkkkkkkkkkkkkkkkkkkkk",
+    "client_secret": "$runtime:secret.logout-2"
+  },
+  "browser": [
+    {
+      "match": "https://acme.id.test:9443/authorize*",
+      "tasks": [
+        {
+          "task": "Verify Complete",
+          "match": "*/test/a/access-logout/callback*",
+          "commands": [
+            [
+              "wait",
+              "id",
+              "submission_complete",
+              10
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "match": "https://acme.id.test:9443/end-session*",
+      "tasks": [
+        {
+          "task": "Logout",
+          "match": "*/test/a/access-logout/post_logout_redirect*",
+          "commands": [
+            [
+              "wait",
+              "id",
+              "submission_complete",
+              10
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

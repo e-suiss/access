@@ -1,13 +1,24 @@
-"""OIDF conformance suite driver (OP-146 I11, §14.8 SA-T2, B9): runs the test plans of
-conformance/oidf/plans.json against the suite's REST API, one module at a time, and writes a
-summary and each plan's export.
+"""OIDF conformance suite driver (OP-146 I11, §14.8 SA-T2, B9, OP-155 m.3 (q)): runs the test
+plans of conformance/oidf/plans.json against the suite's REST API, one module at a time, and
+writes a summary, each plan's export and the expected list each plan would record.
 
-  oidf-conformance.py <suite-base-url> <conformance/oidf dir> <out dir> [--report-only]
+  oidf-conformance.py <suite-base-url> <conformance/oidf dir> <out dir>
+      [--group <name>] [--runtime <file>] [--target-ca <file>] [--release] [--report-only]
+
+--group runs only the plans of that group. A config string "$runtime:<name>" becomes the value
+<name> of the JSON file the conformance target wrote at start (--runtime: its run-time client
+keys, secrets and initial access token); "$entity-jwks:<url>" becomes the jwks of the entity
+statement at <url>, fetched over TLS trusting only the target's certificate (--target-ca).
+
+A plan is a breaking gate once expected.json lists it (OP-155 m.3 (q)). Until then it is in its
+first run: its failures are reported, and the list to record is written to
+expected-candidate.json. --release refuses a plan without a recorded list.
 
 Uses only the standard library. The suite runs in development mode on the runner with its own
 self-signed certificate, so its API is called without certificate verification.
 """
 
+import base64
 import json
 import pathlib
 import ssl
@@ -100,8 +111,40 @@ def run_module(base, plan_id, module):
     }
 
 
-def run_plan(base, directory, plan, out):
-    config = (directory / plan["config"]).read_text()
+def plan_key(plan):
+    return plan.get("id", plan["name"])
+
+
+def fetch_entity_jwks(url, target_ca):
+    context = ssl.create_default_context(cafile=target_ca)
+    with urllib.request.urlopen(url, context=context, timeout=30) as response:
+        jwt = response.read().decode().strip()
+    payload = jwt.split(".")[1]
+    payload += "=" * (-len(payload) % 4)
+    return json.loads(base64.urlsafe_b64decode(payload))["jwks"]
+
+
+def substitute(value, runtime, target_ca):
+    """OP-155 m.3 (q): run-time values replace their placeholders; an unknown one fails."""
+    if isinstance(value, dict):
+        return {k: substitute(v, runtime, target_ca) for k, v in value.items()}
+    if isinstance(value, list):
+        return [substitute(v, runtime, target_ca) for v in value]
+    if isinstance(value, str) and value.startswith("$runtime:"):
+        name = value[len("$runtime:"):]
+        if name not in runtime:
+            fail(f"the conformance target wrote no run-time value {name}")
+        return runtime[name]
+    if isinstance(value, str) and value.startswith("$entity-jwks:"):
+        if not target_ca:
+            fail("$entity-jwks needs --target-ca")
+        return fetch_entity_jwks(value[len("$entity-jwks:"):], target_ca)
+    return value
+
+
+def run_plan(base, directory, plan, out, runtime=None, target_ca=None):
+    raw = json.loads((directory / plan["config"]).read_text())
+    config = json.dumps(substitute(raw, runtime or {}, target_ca))
     variant = plan.get("variant")
     status, body = call(
         "POST",
@@ -114,11 +157,20 @@ def run_plan(base, directory, plan, out):
     plan_id = created["id"]
     results = [run_module(base, plan_id, m) for m in created.get("modules", [])]
     for r in results:
-        print(f"{plan['name']} {r['module']} {r.get('variant') or ''}: {r['status']} {r['result']}")
+        print(f"{plan_key(plan)} {r['module']} {r.get('variant') or ''}: {r['status']} {r['result']}")
     status, export = call("GET", api(base, f"plan/export/{plan_id}"))
     if status == 200:
         (out / f"{plan['name']}-{plan_id}.zip").write_bytes(export)
-    return {"plan": plan["name"], "id": plan_id, "variant": variant, "modules": results}
+    return {"plan": plan_key(plan), "id": plan_id, "variant": variant, "modules": results}
+
+
+def option(argv, name):
+    if name in argv:
+        i = argv.index(name)
+        if i + 1 < len(argv):
+            return argv[i + 1]
+        fail(f"{name} needs a value")
+    return None
 
 
 def main(argv):
@@ -127,15 +179,27 @@ def main(argv):
     base = argv[1] if argv[1].endswith("/") else argv[1] + "/"
     directory = pathlib.Path(argv[2])
     out = pathlib.Path(argv[3])
-    report_only = "--report-only" in argv[4:]
+    flags = argv[4:]
+    report_only = "--report-only" in flags
+    release = "--release" in flags
+    group = option(flags, "--group")
+    runtime_path = option(flags, "--runtime")
+    target_ca = option(flags, "--target-ca")
+    runtime = json.loads(pathlib.Path(runtime_path).read_text()) if runtime_path else {}
     out.mkdir(parents=True, exist_ok=True)
     plans = json.loads((directory / "plans.json").read_text())["plans"]
+    plans = [p for p in plans if group is None or p.get("group") == group]
+    if not plans:
+        fail(f"no plan in group {group}")
     wait_ready(base)
-    summary = [run_plan(base, directory, p, out) for p in plans]
+    summary = [run_plan(base, directory, p, out, runtime, target_ca) for p in plans]
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     expected_path = directory / "expected.json"
     expected = json.loads(expected_path.read_text())["plans"] if expected_path.exists() else {}
-    bad, notes = classify(summary, expected)
+    bad, notes, candidate = classify(summary, expected, release)
+    (out / "expected-candidate.json").write_text(
+        json.dumps({"plans": candidate}, indent=2, sort_keys=True) + "\n"
+    )
     for line in notes:
         print(line)
     total = sum(len(p["modules"]) for p in summary)
@@ -148,21 +212,31 @@ def main(argv):
         sys.exit(1)
 
 
-def classify(summary, expected):
+def classify(summary, expected, release=False):
     """OP-152 m.5 (j): a module passes only when it finished PASSED or WARNING; SKIPPED, REVIEW
-    and every other outcome fail unless expected.json lists the module with its reason."""
-    bad, notes = [], []
+    and every other outcome fail unless expected.json lists the module with its reason.
+    OP-155 m.3 (q): a plan expected.json does not list is in its first run; its failures are
+    only reported, unless this is a release."""
+    bad, notes, candidate = [], [], {}
     for p in summary:
+        recorded = p["plan"] in expected
         known = expected.get(p["plan"], {})
+        failed = candidate.setdefault(p["plan"], {})
         for m in p["modules"]:
             passed = m["status"] == "FINISHED" and m["result"] in PASS
+            if not passed:
+                failed[m["module"]] = known.get(m["module"], f"first run: {m['status']} {m['result']}")
             if passed and m["module"] in known:
                 notes.append(f"::warning::{p['plan']}/{m['module']} now passes; remove it from expected.json")
             elif not passed and m["module"] in known:
                 notes.append(f"{p['plan']}/{m['module']}: expected failure ({known[m['module']]})")
-            elif not passed:
+            elif not passed and recorded:
                 bad.append(f"{p['plan']}/{m['module']}: {m['status']} {m['result']}")
-    return bad, notes
+            elif not passed:
+                notes.append(f"::warning::{p['plan']}/{m['module']}: first run, {m['status']} {m['result']}")
+        if not recorded and release:
+            bad.append(f"{p['plan']}: no recorded expected list; a release needs one (OP-155 m.3 (q))")
+    return bad, notes, candidate
 
 
 if __name__ == "__main__":

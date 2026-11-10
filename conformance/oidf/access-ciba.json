@@ -1,0 +1,22 @@
+{
+  "alias": "access-ciba",
+  "description": "Access realm acme with CIBA on, OIDF FAPI-CIBA in poll and ping mode (OP-155 m.3 (l), (q)); the client keys are made by the target at run time",
+  "server": {
+    "discoveryUrl": "https://acme.id.test:9443/.well-known/openid-configuration"
+  },
+  "client": {
+    "client_id": "cli_c0nfgggggggggggggggggggggg",
+    "scope": "openid",
+    "hint_type": "login_hint",
+    "hint_value": "$runtime:login_hint",
+    "jwks": "$runtime:jwks.ciba-1"
+  },
+  "client2": {
+    "client_id": "cli_c0nfhhhhhhhhhhhhhhhhhhhhhh",
+    "scope": "openid",
+    "jwks": "$runtime:jwks.ciba-2"
+  },
+  "resource": {
+    "resourceUrl": "https://acme.id.test:9443/userinfo"
+  }
+}

@@ -31,6 +31,7 @@
     },
     "oidcc-config-certification-test-plan": {
       "oidcc-discovery-endpoint-verification": "OP-146 m.18 (b): RS256 is not offered until stage 10"
-    }
+    },
+    "fapi2-security-profile-final-test-plan": {}
   }
 }

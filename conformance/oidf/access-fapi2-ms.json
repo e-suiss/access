@@ -1,0 +1,39 @@
+{
+  "alias": "access-fapi2-ms",
+  "description": "Access realm acme, OIDF FAPI 2.0 Message Signing: signed request objects through PAR, JARM, DPoP, private_key_jwt (OP-155 m.3 (q)); the client keys are made by the target at run time",
+  "server": {
+    "discoveryUrl": "https://acme.id.test:9443/.well-known/openid-configuration"
+  },
+  "client": {
+    "client_id": "cli_c0nfeeeeeeeeeeeeeeeeeeeeee",
+    "scope": "openid",
+    "jwks": "$runtime:jwks.fapi2-ms-1"
+  },
+  "client2": {
+    "client_id": "cli_c0nfffffffffffffffffffffff",
+    "scope": "openid",
+    "jwks": "$runtime:jwks.fapi2-ms-2"
+  },
+  "resource": {
+    "resourceUrl": "https://acme.id.test:9443/userinfo"
+  },
+  "browser": [
+    {
+      "match": "https://acme.id.test:9443/authorize*",
+      "tasks": [
+        {
+          "task": "Verify Complete",
+          "match": "*/test/a/access-fapi2-ms/callback*",
+          "commands": [
+            [
+              "wait",
+              "id",
+              "submission_complete",
+              10
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

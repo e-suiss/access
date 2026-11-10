@@ -577,8 +577,8 @@ pub fn temp(name: &str) -> PathBuf {
     dir
 }
 
-/// A signer whose key sets for `realms` were opened two hours ago, so they are past their
-/// publish lead and sign now (MD-6, SAI-46).
+/// A signer whose key sets for `realms`, the federation sets too, were opened two hours ago, so
+/// they are past their publish lead and sign now (MD-6, SAI-46).
 pub fn signer(dir: &Path, realms: &[RealmId]) -> PathBuf {
     let mut service = Service::start(
         SealedFactory::new(SoftKek::new("realm-kek", [7; 32])),
@@ -596,6 +596,12 @@ pub fn signer(dir: &Path, realms: &[RealmId]) -> PathBuf {
             7,
         );
         assert_eq!(opened, Response::Opened);
+        // OP-155 m.3 (j)
+        let _ = service.handle(
+            Request::FederationJwks(SignerRealm(*r.as_bytes())),
+            now_ms() - 2 * HOUR,
+            7,
+        );
     }
     service.tick(now_ms(), 7);
     let path = dir.join("s.sock");
@@ -764,7 +770,7 @@ pub fn new_key() -> EcdsaKeyPair {
 }
 
 /// An extra client: `client_id`, method, secret (the public JWKS for `private_key_jwt`) and
-/// redirect URIs.
+/// redirect URIs; its logout URIs are the conformance suite's, next to its first redirect URI.
 pub type Extra = (String, String, String, Vec<String>);
 
 /// Spare ALLOWs of every realm's domain, after its clients' registrations.
@@ -846,6 +852,14 @@ impl Cluster {
                     keys.0.lock().unwrap().insert(jwks, s.clone().into_bytes());
                 }
                 row.redirect_uris.clone_from(uris);
+                // OP-155 m.3 (q)
+                row.post_logout_redirect_uris = uris
+                    .iter()
+                    .map(|u| u.replace("/callback", "/post_logout_redirect"))
+                    .collect();
+                row.backchannel_logout_uri = uris
+                    .first()
+                    .map(|u| u.replace("/callback", "/backchannel_logout"));
                 rows.push(row);
             }
             for (i, row) in rows.iter().enumerate() {
