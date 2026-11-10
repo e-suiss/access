@@ -1184,3 +1184,489 @@ ocsf_class = 3002
 ocsf_activity = 1
 caep = ""
 webhook = false
+
+# ---------------------------------------------------------------- identity: Stage 11 Q2: Relay seam (OP-156 m.3 (c))
+
+[[event]]
+event = "relay.resent"
+plane = "identity"
+class = "notification"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "relay.undelivered"
+plane = "identity"
+class = "notification"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+# ---------------------------------------------------------------- identity: Stage 11 Q4: custom domains and ACME (OP-156 m.3 (i))
+
+[[event]]
+event = "domain.verified"
+plane = "identity"
+class = "configuration"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "domain.verification_failed"
+plane = "identity"
+class = "configuration"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "acme.certificate_issued"
+plane = "identity"
+class = "configuration"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "acme.order_failed"
+plane = "identity"
+class = "configuration"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+# ---------------------------------------------------------------- identity: Stage 11 Q5: push verification and approvers (OP-156 m.3 (d))
+
+[[event]]
+event = "push.challenge_sent"
+plane = "identity"
+class = "authentication"
+outcome = "unknown"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "push.approved"
+plane = "identity"
+class = "authentication"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "push.denied"
+plane = "identity"
+class = "authentication"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "push.not_me"
+plane = "identity"
+class = "detection"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "push.held"
+plane = "identity"
+class = "authentication"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "approver.registered"
+plane = "identity"
+class = "credential"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 1
+caep = "credential-change"
+webhook = false
+
+[[event]]
+event = "approver.retired"
+plane = "identity"
+class = "credential"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 4
+caep = "credential-change"
+webhook = false
+
+# ---------------------------------------------------------------- identity: Stage 11 Q6: payment-grade authentication (OP-156 m.3 (e), (f), (g))
+
+[[event]]
+event = "sms.code_sent"
+plane = "identity"
+class = "authentication"
+outcome = "unknown"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "sms.refused"
+plane = "identity"
+class = "authentication"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "spc.approved"
+plane = "identity"
+class = "authentication"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "spc.mismatch"
+plane = "identity"
+class = "authentication"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+# ---------------------------------------------------------------- identity: Stage 11 Q7, Q12: forward-auth, Access Proxy and the MCP gateway (OP-156 m.3 (l), (n))
+
+[[event]]
+event = "proxy.sign_in"
+plane = "identity"
+class = "authentication"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "proxy.plain_headers_refused"
+plane = "identity"
+class = "configuration"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "mcp_gateway.call"
+plane = "identity"
+class = "decision"
+outcome = "unknown"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "mcp_gateway.tool_blocked"
+plane = "identity"
+class = "decision"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+# ---------------------------------------------------------------- identity: Stage 11 Q8: the SSH certificate authority (OP-156 m.3 (o))
+
+[[event]]
+event = "ssh.certificate_issued"
+plane = "identity"
+class = "credential"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "ssh.krl_published"
+plane = "identity"
+class = "credential"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+# ---------------------------------------------------------------- identity: Stage 11 Q9: İYS and first-contact tokens (OP-156 m.3 (c), (z))
+
+[[event]]
+event = "iys.recorded"
+plane = "identity"
+class = "consent"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "iys.failed"
+plane = "identity"
+class = "consent"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "first_contact.tokens_issued"
+plane = "identity"
+class = "token"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "first_contact.limit_reached"
+plane = "identity"
+class = "token"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+# ---------------------------------------------------------------- identity: Stage 11 Q10: export and SIEM (OP-156 m.3 (s))
+
+[[event]]
+event = "export.batch_sent"
+plane = "identity"
+class = "audit-access"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "export.sink_failed"
+plane = "identity"
+class = "audit-access"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+# ---------------------------------------------------------------- identity: Stage 11 Q13: the Linux client (OP-156 m.3 (p))
+
+[[event]]
+event = "linux.signin"
+plane = "identity"
+class = "authentication"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "linux.signin_failed"
+plane = "identity"
+class = "authentication"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "linux.offline_signin"
+plane = "identity"
+class = "authentication"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "linux.sudo"
+plane = "identity"
+class = "authentication"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "linux.break_glass"
+plane = "identity"
+class = "authentication"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+# ---------------------------------------------------------------- identity: Stage 11 Q14: HR-driven lifecycle (OP-156 m.3 (q))
+
+[[event]]
+event = "hr.imported"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "hr.record_applied"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "hr.connector_pulled"
+plane = "identity"
+class = "account"
+outcome = "unknown"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+# ---------------------------------------------------------------- identity: Stage 11 Q15: signal sources (OP-156 m.3 (r))
+
+[[event]]
+event = "signal.claim_ingested"
+plane = "identity"
+class = "detection"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 2004
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "signal.refused"
+plane = "identity"
+class = "detection"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 2004
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+# ---------------------------------------------------------------- identity: Stage 11 Q20: One's cloud key permission (OP-156 m.3 (w))
+
+[[event]]
+event = "cloud_key.granted"
+plane = "identity"
+class = "consent"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "cloud_key.revoked"
+plane = "identity"
+class = "consent"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "cloud_key.destroyed"
+plane = "identity"
+class = "consent"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false

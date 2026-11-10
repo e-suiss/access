@@ -513,3 +513,181 @@ severity = "warn"
 since = "unreleased"
 fields = ["error"]
 ocsf = "application_error"
+
+# OP-156 m.4: Stage 11, declared ahead of their lanes
+
+[[event]]
+name = "relay.courier.lease"
+plane = "ops"
+severity = "info"
+since = "unreleased"
+fields = ["epoch", "held"]
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "relay.courier.lag"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["lag_ms"]
+ocsf = "application_error"
+
+[[event]]
+name = "relay.delivery.failed"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["kind", "status"]
+ocsf = "application_error"
+
+[[event]]
+name = "doorbell.publish.failed"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["error"]
+ocsf = "application_error"
+
+[[event]]
+name = "doorbell.unavailable"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["error"]
+ocsf = "application_error"
+
+[[event]]
+name = "domain.recheck.failed"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "application_error"
+
+[[event]]
+name = "acme.renewal.failed"
+plane = "ops"
+severity = "error"
+since = "unreleased"
+fields = ["reason", "days_left"]
+ocsf = "application_error"
+
+[[event]]
+name = "push.fatigue.held"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "authentication"
+
+[[event]]
+name = "proxy.check.refused"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["engine", "reason"]
+ocsf = "authorize_session"
+
+[[event]]
+name = "proxy.cache.flushed"
+plane = "ops"
+severity = "debug"
+since = "unreleased"
+fields = ["reason", "entries"]
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "mcp_gateway.tool.changed"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = ["server", "tools"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "ssh.krl.published"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["serials"]
+ocsf = "entity_management"
+
+[[event]]
+name = "linux.cache.expired"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["kind"]
+ocsf = "application_error"
+
+[[event]]
+name = "linux.daemon.unavailable"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["error"]
+ocsf = "application_error"
+
+[[event]]
+name = "hr.job.run"
+plane = "ops"
+severity = "info"
+since = "unreleased"
+fields = ["due", "applied"]
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "hr.connector.failed"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["vendor", "reason"]
+ocsf = "application_error"
+
+[[event]]
+name = "export.sink.failed"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["adapter", "status"]
+ocsf = "application_error"
+
+[[event]]
+name = "export.cursor.lag"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["adapter", "lag_s"]
+ocsf = "application_error"
+
+[[event]]
+name = "hibp.mirror.refreshed"
+plane = "ops"
+severity = "info"
+since = "unreleased"
+fields = ["ranges"]
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "hibp.mirror.refresh_failed"
+plane = "ops"
+severity = "error"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "application_error"
+
+[[event]]
+name = "signal.source.refused"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["kind", "reason"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "iys.status.failed"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["status"]
+ocsf = "application_error"

@@ -71,6 +71,53 @@ fn written() -> BTreeSet<String> {
     out
 }
 
+/// Events declared ahead of their lanes (OP-156 m.4): in the taxonomy, written by nothing yet. A
+/// lane that writes one takes it off this list.
+const UNPRODUCED: &[&str] = &[
+    "relay.resent",
+    "relay.undelivered",
+    "domain.verified",
+    "domain.verification_failed",
+    "acme.certificate_issued",
+    "acme.order_failed",
+    "push.challenge_sent",
+    "push.approved",
+    "push.denied",
+    "push.not_me",
+    "push.held",
+    "approver.registered",
+    "approver.retired",
+    "sms.code_sent",
+    "sms.refused",
+    "spc.approved",
+    "spc.mismatch",
+    "proxy.sign_in",
+    "proxy.plain_headers_refused",
+    "mcp_gateway.call",
+    "mcp_gateway.tool_blocked",
+    "ssh.certificate_issued",
+    "ssh.krl_published",
+    "iys.recorded",
+    "iys.failed",
+    "first_contact.tokens_issued",
+    "first_contact.limit_reached",
+    "export.batch_sent",
+    "export.sink_failed",
+    "linux.signin",
+    "linux.signin_failed",
+    "linux.offline_signin",
+    "linux.sudo",
+    "linux.break_glass",
+    "hr.imported",
+    "hr.record_applied",
+    "hr.connector_pulled",
+    "signal.claim_ingested",
+    "signal.refused",
+    "cloud_key.granted",
+    "cloud_key.revoked",
+    "cloud_key.destroyed",
+];
+
 // OP-41, OP-47, §17.8.1
 #[test]
 fn the_taxonomy_is_compiled_in_and_well_formed() {
@@ -98,8 +145,24 @@ fn op_41_every_written_audit_event_is_in_the_taxonomy() {
     let unused: Vec<_> = known
         .difference(&written)
         .filter(|e| !e.starts_with("authority.decision."))
+        .filter(|e| !UNPRODUCED.contains(&e.as_str()))
         .collect();
     assert!(unused.is_empty(), "never written: {unused:?}");
+}
+
+// OP-41, OP-156 m.4
+#[test]
+fn op_41_an_unproduced_event_is_declared_and_not_yet_written() {
+    let t = taxonomy().unwrap();
+    let known: BTreeSet<&str> = t.events.iter().map(|e| e.event.as_str()).collect();
+    let written = written();
+    for name in UNPRODUCED {
+        assert!(known.contains(name), "{name} is not in the taxonomy");
+        assert!(
+            !written.contains(*name),
+            "{name} is written now: take it off UNPRODUCED"
+        );
+    }
 }
 
 // OP-41
