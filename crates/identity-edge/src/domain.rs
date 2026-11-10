@@ -4,6 +4,7 @@
 use std::collections::BTreeMap;
 
 pub mod directory;
+pub mod kerberos;
 
 use access_internal_api::edge::{GatewayKind, GatewayUri};
 use access_kernel::claim::body::AuthMethod;
@@ -59,6 +60,16 @@ pub enum Refusal {
     Bind,
     /// An LDAP paging cookie of another search, tampered with or expired.
     Cookie,
+    /// A `RadSec` client that is not registered with the RADIUS gateway (OP-155 m.3 (f)).
+    RadiusClient,
+    /// A Kerberos gateway without a keytab policy (OP-155 m.3 (o)).
+    Keytab,
+    /// A ticket for another SPN than the keytab policy's.
+    Spn,
+    /// A ticket under an enctype other than AES256.
+    Enctype,
+    /// A ticket under a key version below the floor, superseded or overdue for rotation.
+    Kvno,
 }
 
 impl Refusal {
@@ -75,6 +86,11 @@ impl Refusal {
             Self::Malformed => "edge-malformed",
             Self::Bind => "edge-bind",
             Self::Cookie => "edge-cookie",
+            Self::RadiusClient => "edge-radius-client",
+            Self::Keytab => "edge-keytab",
+            Self::Spn => "edge-spn",
+            Self::Enctype => "edge-enctype",
+            Self::Kvno => "edge-kvno",
         }
     }
 }

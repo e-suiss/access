@@ -9,10 +9,12 @@ use std::sync::Arc;
 
 use access_identity_edge::EdgeError;
 use access_identity_edge::app::{Edge, Registry, Vaults};
-use access_identity_edge::domain::Gateway;
+use access_identity_edge::domain::{Gateway, Refusal};
+use access_internal_api::edge::kerberos::Authenticate as KerberosAuth;
+use access_internal_api::edge::radius::Authenticate as RadiusAuth;
 use access_internal_api::edge::{
-    Audit, CONTENT_TYPE, Call, GatewayUri, IssueClaim, MAX_BODY, PREFIX, SubjectLookup,
-    decode_hello_request,
+    Audit, CONTENT_TYPE, Call, GatewayKind, GatewayUri, IssueClaim, MAX_BODY, PREFIX,
+    SubjectLookup, decode_hello_request,
 };
 use axum::Router;
 use axum::body::Bytes;
@@ -24,7 +26,9 @@ use axum::routing::post;
 
 use crate::Problem;
 
+pub mod kerberos;
 pub mod ldap;
+pub mod radius;
 
 /// The gateway a connection's verified client certificate names (OP-155 m.3 (c)).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -73,8 +77,21 @@ pub trait SessionAttest: Send + Sync {
 
 struct Shared<R, V> {
     edge: Edge<R, V>,
-    saml: Option<Arc<dyn SessionAttest>>,
-    ldap: Option<Arc<dyn ldap::LdapCalls>>,
+    protocols: Protocols,
+}
+
+/// The protocol calls of each gateway kind (OP-155 m.3 (c), (n), (f), (o)); a kind without its
+/// calls answers `edge-call-not-served`.
+#[derive(Clone, Default)]
+pub struct Protocols {
+    /// The SAML gateway's `session_attest`.
+    pub saml: Option<Arc<dyn SessionAttest>>,
+    /// The LDAP gateway's `authenticate` and `directory_read`.
+    pub ldap: Option<Arc<dyn ldap::LdapCalls>>,
+    /// The RADIUS gateway's `authenticate`.
+    pub radius: Option<Arc<dyn radius::RadiusCalls>>,
+    /// The Kerberos gateway's `authenticate`.
+    pub kerberos: Option<Arc<dyn kerberos::KerberosCalls>>,
 }
 
 /// The edge calls over `edge`.
@@ -105,11 +122,27 @@ where
     R: Registry + 'static,
     V: Vaults + 'static,
 {
+    router_protocols(
+        edge,
+        Protocols {
+            saml,
+            ldap,
+            ..Protocols::default()
+        },
+    )
+}
+
+/// The edge calls over `edge`, with each gateway kind's protocol calls.
+pub fn router_protocols<R, V>(edge: Edge<R, V>, protocols: Protocols) -> Router
+where
+    R: Registry + 'static,
+    V: Vaults + 'static,
+{
     let mut path = String::from(PREFIX);
     path.push_str("{call}");
     Router::new()
         .route(&path, post(handle::<R, V>))
-        .with_state(Arc::new(Shared { edge, saml, ldap }))
+        .with_state(Arc::new(Shared { edge, protocols }))
 }
 
 fn problem(status: StatusCode, code: &'static str) -> Response {
@@ -163,7 +196,7 @@ async fn handle<R: Registry, V: Vaults>(
     };
     if call == Call::SessionAttest {
         // IDI-7, §13.2
-        let done = match (&shared.saml, gateway.uri.kind) {
+        let done = match (&shared.protocols.saml, gateway.uri.kind) {
             (Some(s), access_internal_api::edge::GatewayKind::Saml) => {
                 s.attest(&gateway, &body).await
             }
@@ -177,9 +210,41 @@ async fn handle<R: Registry, V: Vaults>(
             Err(e) => refused(&e),
         };
     }
-    if let Some(l) = &shared.ldap
-        && let Some(done) = ldap::answer(l.as_ref(), &gateway, call, &body).await
-    {
+    let served = match gateway.uri.kind {
+        GatewayKind::Radius => match &shared.protocols.radius {
+            Some(r) if call == Call::Authenticate => Some(match RadiusAuth::decode(&body) {
+                Ok(q) => r
+                    .authenticate(&gateway, &q)
+                    .await
+                    .map(|a| a.encode())
+                    .map_err(Some),
+                Err(_) => Err(None),
+            }),
+            _ if call == Call::DirectoryRead => {
+                Some(Err(Some(EdgeError::Refused(Refusal::Method))))
+            }
+            _ => None,
+        },
+        GatewayKind::Kerberos => match &shared.protocols.kerberos {
+            Some(k) if call == Call::Authenticate => Some(match KerberosAuth::decode(&body) {
+                Ok(q) => k
+                    .authenticate(&gateway, &q)
+                    .await
+                    .map(|a| a.encode())
+                    .map_err(Some),
+                Err(_) => Err(None),
+            }),
+            _ if call == Call::DirectoryRead => {
+                Some(Err(Some(EdgeError::Refused(Refusal::Method))))
+            }
+            _ => None,
+        },
+        GatewayKind::Ldap | GatewayKind::Saml => match &shared.protocols.ldap {
+            Some(l) => ldap::answer(l.as_ref(), &gateway, call, &body).await,
+            None => None,
+        },
+    };
+    if let Some(done) = served {
         return match done {
             Ok(body) => cbor(body),
             Err(Some(e)) => refused(&e),
