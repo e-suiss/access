@@ -214,6 +214,11 @@ pub enum Invalid {
     /// that is not a SHA-256 digest, or a domain that is not a DNS name.
     #[error("invalid dcr policy")]
     DcrPolicy,
+    /// A client profile outside OP-155 m.3 (k): FAPI 2.0 for a client that cannot hold it, a
+    /// legacy method without a registered secret, an algorithm or encryption key the realm
+    /// cannot serve, or an upstream name out of shape.
+    #[error("invalid client profile")]
+    ClientProfile,
     /// A cross-app connection outside OP-154 m.3 (n): a name, client, audience, resource or
     /// scope out of shape, or a subject policy other than `pairwise`.
     #[error("invalid cross-app connection")]
@@ -522,6 +527,7 @@ impl Invalid {
             Self::ClientExists => "client-exists",
             Self::ProtectedResource => "invalid-protected-resource",
             Self::DcrPolicy => "invalid-dcr-policy",
+            Self::ClientProfile => "invalid-client-profile",
             Self::CrossAppConnection => "invalid-cross-app-connection",
             Self::NoCrossAppConnection => "no-such-cross-app-connection",
             Self::ResourceExists => "protected-resource-exists",
@@ -1771,6 +1777,16 @@ pub enum Change {
     },
     /// `idp.org.member_remove` (OP-153 m.3 (p)).
     OrgMemberRemove(OrgMember),
+    /// One change to a client's high-assurance or legacy profile (OP-155 m.3 (k)).
+    ClientProfile {
+        /// The client.
+        client: ClientId,
+        /// What changes.
+        delta: ProfileDelta,
+    },
+    /// `idp.realm.frontchannel_logout` (CT2): the realm's clients may opt in to front-channel
+    /// logout (IDP-24, OP-155 m.3 (k)).
+    FrontchannelLogout,
     /// `idp.org.invite` (TN-89, OP-153 m.3 (o)).
     OrgInvite(OrgInvite),
     /// `idp.org.update`: the organization's name or home realm discovery (TN-98).
@@ -2116,6 +2132,8 @@ impl Change {
             Self::DeviceCode(false) => IdpAction::RealmDeviceCodeClose,
             Self::CertificateLogin(_) => IdpAction::RealmCertificateLogin,
             Self::MtlsAliases(_) => IdpAction::RealmMtlsAliases,
+            Self::ClientProfile { delta, .. } => delta.action(),
+            Self::FrontchannelLogout => IdpAction::RealmFrontchannelLogout,
             Self::DcrPolicy { loosens: true, .. } => IdpAction::ClientDcrPolicy,
             Self::DcrPolicy { loosens: false, .. } => IdpAction::ClientDcrPolicyTighten,
             Self::CspMode { loosens: false, .. } => IdpAction::RealmCspMode,
@@ -2191,6 +2209,8 @@ impl Change {
                 }
             }
             Self::CertificateLogin(c) => c.check(),
+            Self::ClientProfile { delta, .. } => delta.check(),
+            Self::FrontchannelLogout => Ok(()),
             Self::AccountBind(_)
             | Self::DeviceCode(_)
             | Self::MtlsAliases(_)
@@ -2325,6 +2345,13 @@ impl Change {
             Self::DeviceCode(on) => Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))]),
             Self::CertificateLogin(c) => c.to_value(),
             Self::MtlsAliases(on) => Value::Map(vec![(Value::text("published"), Value::Bool(*on))]),
+            Self::ClientProfile { client, delta } => Value::Map(vec![
+                (Value::text("client_id"), Value::text(client.as_str())),
+                (Value::text("profile"), delta.to_value()),
+            ]),
+            Self::FrontchannelLogout => {
+                Value::Map(vec![(Value::text("enabled"), Value::Bool(true))])
+            }
             Self::DcrPolicy { policy, .. } => Value::Map(vec![
                 (Value::text("enabled"), Value::Bool(policy.enabled)),
                 (
@@ -2474,7 +2501,11 @@ impl Change {
             Self::DcrPolicy { .. }
             | Self::DeviceCode(_)
             | Self::CertificateLogin(_)
-            | Self::MtlsAliases(_) => path.push(String::from("realm")),
+            | Self::MtlsAliases(_)
+            | Self::FrontchannelLogout => path.push(String::from("realm")),
+            Self::ClientProfile { client, .. } => {
+                path.extend([String::from("client"), String::from(client.as_str())]);
+            }
         }
         ResourceRef {
             namespace: String::from(RESOURCE_NAMESPACE),
@@ -2516,3 +2547,115 @@ pub const fn raises(new: &Argon2Params, current: &Argon2Params) -> bool {
 
 #[cfg(test)]
 mod tests;
+
+/// One change to a client's high-assurance or legacy profile (OP-155 m.3 (k)); applied over
+/// the client's current profile and checked against its registration before it is written.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ProfileDelta {
+    /// Under FAPI 2.0 (`idp.client.profile`, CT1), or out of it (`profile_loosen`, CT2).
+    Fapi2(bool),
+    /// `client_secret_post` (`idp.client.auth_method_legacy`, CT2).
+    SecretPost,
+    /// RS256 identity assertions opted in and the ID token algorithm (`idp.client.alg_rs256`,
+    /// CT2); `None` keeps the realm's algorithm.
+    SigningAlg(Option<access_identity_oauth::domain::fapi::IdAlg>),
+    /// JWE towards the client (`idp.client.encryption`, CT1).
+    Encryption(access_identity_oauth::domain::fapi::Encryption),
+    /// The SAML 2.0 bearer grant from the accepted upstream named (`idp.client.saml_bearer`,
+    /// CT2).
+    SamlBearer(String),
+    /// The legacy bearer exception (`idp.client.legacy_bearer`, CT2).
+    LegacyBearer,
+}
+
+impl ProfileDelta {
+    /// The `idp.client.*` action.
+    #[must_use]
+    pub const fn action(&self) -> IdpAction {
+        match self {
+            Self::Fapi2(true) => IdpAction::ClientProfile,
+            Self::Fapi2(false) => IdpAction::ClientProfileLoosen,
+            Self::SecretPost => IdpAction::ClientAuthMethodLegacy,
+            Self::SigningAlg(_) => IdpAction::ClientAlgRs256,
+            Self::Encryption(_) => IdpAction::ClientEncryption,
+            Self::SamlBearer(_) => IdpAction::ClientSamlBearer,
+            Self::LegacyBearer => IdpAction::ClientLegacyBearer,
+        }
+    }
+
+    /// Checks the change on its own: an encryption key the realm can use for the chosen
+    /// algorithm and at least one thing to encrypt (CR-4), an upstream name in shape.
+    ///
+    /// # Errors
+    /// [`Invalid::ClientProfile`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        let ok = match self {
+            Self::Encryption(e) => {
+                (e.id_token || e.userinfo || e.jarm)
+                    && access_identity_oauth::domain::jwe::encryption_key(e.jwks.as_bytes(), e.alg)
+                        .is_some()
+            }
+            Self::SamlBearer(name) => {
+                (1..=63).contains(&name.len())
+                    && name.starts_with(|c: char| c.is_ascii_lowercase())
+                    && name
+                        .bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+            }
+            Self::Fapi2(_) | Self::SecretPost | Self::SigningAlg(_) | Self::LegacyBearer => true,
+        };
+        if ok {
+            Ok(())
+        } else {
+            Err(Invalid::ClientProfile)
+        }
+    }
+
+    /// The client's next profile.
+    #[must_use]
+    pub fn apply(
+        &self,
+        current: &access_identity_oauth::domain::fapi::ClientProfile,
+    ) -> access_identity_oauth::domain::fapi::ClientProfile {
+        use access_identity_oauth::domain::fapi::{IdAlg, LegacyAuth};
+        let mut next = current.clone();
+        match self {
+            Self::Fapi2(on) => next.fapi2 = *on,
+            Self::SecretPost => next.legacy = Some(LegacyAuth::SecretPost),
+            Self::SigningAlg(alg) => {
+                next.rs256 = *alg == Some(IdAlg::Rs256);
+                next.id_alg = *alg;
+            }
+            Self::Encryption(e) => next.encryption = Some(e.clone()),
+            Self::SamlBearer(u) => next.saml_bearer = Some(u.clone()),
+            Self::LegacyBearer => next.legacy_bearer = true,
+        }
+        next
+    }
+
+    /// The change as the intent carries it.
+    #[must_use]
+    pub fn to_value(&self) -> Value {
+        let one = |k: &str, v: Value| Value::Map(vec![(Value::text(k), v)]);
+        match self {
+            Self::Fapi2(on) => one("fapi2", Value::Bool(*on)),
+            Self::SecretPost => one(
+                "token_endpoint_auth_method",
+                Value::text(access_identity_oauth::domain::fapi::CLIENT_SECRET_POST),
+            ),
+            Self::SigningAlg(alg) => one(
+                "id_token_signed_response_alg",
+                Value::text(alg.map_or("realm", |a| a.name())),
+            ),
+            Self::Encryption(e) => Value::Map(vec![
+                (Value::text("alg"), Value::text(e.alg.name())),
+                (Value::text("jwks"), Value::text(&e.jwks)),
+                (Value::text("id_token"), Value::Bool(e.id_token)),
+                (Value::text("userinfo"), Value::Bool(e.userinfo)),
+                (Value::text("jarm"), Value::Bool(e.jarm)),
+            ]),
+            Self::SamlBearer(u) => one("saml_upstream", Value::text(u)),
+            Self::LegacyBearer => one("legacy_bearer", Value::Bool(true)),
+        }
+    }
+}

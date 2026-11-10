@@ -190,6 +190,20 @@ pub enum Op {
     RegisterScimTarget,
     /// `retireScimTarget`: `idp.scim.outbound_retire`.
     RetireScimTarget,
+    /// `putClientProfile`: `idp.client.profile`, or `profile_loosen` (OP-155 m.3 (k)).
+    PutClientProfile,
+    /// `putClientLegacyAuthentication`: `idp.client.auth_method_legacy`.
+    PutClientLegacyAuthentication,
+    /// `putClientSigningAlg`: `idp.client.alg_rs256`.
+    PutClientSigningAlg,
+    /// `putClientEncryption`: `idp.client.encryption`.
+    PutClientEncryption,
+    /// `putClientSamlBearer`: `idp.client.saml_bearer`.
+    PutClientSamlBearer,
+    /// `putClientLegacyBearer`: `idp.client.legacy_bearer`.
+    PutClientLegacyBearer,
+    /// `putFrontchannelLogout`: `idp.realm.frontchannel_logout`.
+    PutFrontchannelLogout,
 }
 
 impl Op {
@@ -269,6 +283,13 @@ impl Op {
             "retireScimClient" => Self::RetireScimClient,
             "registerScimTarget" => Self::RegisterScimTarget,
             "retireScimTarget" => Self::RetireScimTarget,
+            "putClientProfile" => Self::PutClientProfile,
+            "putClientLegacyAuthentication" => Self::PutClientLegacyAuthentication,
+            "putClientSigningAlg" => Self::PutClientSigningAlg,
+            "putClientEncryption" => Self::PutClientEncryption,
+            "putClientSamlBearer" => Self::PutClientSamlBearer,
+            "putClientLegacyBearer" => Self::PutClientLegacyBearer,
+            "putFrontchannelLogout" => Self::PutFrontchannelLogout,
             _ => return None,
         })
     }
@@ -648,6 +669,65 @@ fn seconds(m: &Map<String, Json>, k: &str, default_ms: u64) -> Result<u64, Inval
     }
 }
 
+/// The profile change a client profile operation asks for (OP-155 m.3 (k)). `client_secret_jwt`
+/// needs the realm KEK to seal its secret and is refused here until a write path holds one.
+fn profile_delta(op: Op, m: &Map<String, Json>) -> Result<crate::domain::ProfileDelta, Invalid> {
+    use crate::domain::ProfileDelta;
+    use access_identity_oauth::domain::fapi::{Encryption, IdAlg};
+    let bad = |_| Invalid::ClientProfile;
+    Ok(match op {
+        Op::PutClientProfile => {
+            only(m, &["profile"])?;
+            match text(m, "profile")? {
+                "fapi2" => ProfileDelta::Fapi2(true),
+                "baseline" => ProfileDelta::Fapi2(false),
+                _ => return Err(Invalid::ClientProfile),
+            }
+        }
+        Op::PutClientLegacyAuthentication => {
+            only(m, &["token_endpoint_auth_method"])?;
+            match text(m, "token_endpoint_auth_method")? {
+                access_identity_oauth::domain::fapi::CLIENT_SECRET_POST => ProfileDelta::SecretPost,
+                _ => return Err(Invalid::ClientProfile),
+            }
+        }
+        Op::PutClientSigningAlg => {
+            only(m, &["id_token_signed_response_alg"])?;
+            match opt_text(m, "id_token_signed_response_alg")? {
+                None => ProfileDelta::SigningAlg(None),
+                Some(a) => ProfileDelta::SigningAlg(Some(
+                    IdAlg::from_name(a).ok_or(Invalid::ClientProfile)?,
+                )),
+            }
+        }
+        Op::PutClientEncryption => {
+            only(m, &["alg", "jwks", "id_token", "userinfo", "jarm"])?;
+            let alg = access_crypto::jwe::KeyAlg::from_name(text(m, "alg")?)
+                .ok_or(Invalid::ClientProfile)?;
+            let jwks = m.get("jwks").ok_or(Invalid::ClientProfile)?;
+            ProfileDelta::Encryption(Encryption {
+                alg,
+                jwks: serde_json::to_string(jwks).map_err(bad)?,
+                id_token: flag(m, "id_token")?,
+                userinfo: flag(m, "userinfo")?,
+                jarm: flag(m, "jarm")?,
+            })
+        }
+        Op::PutClientSamlBearer => {
+            only(m, &["upstream"])?;
+            ProfileDelta::SamlBearer(String::from(text(m, "upstream")?))
+        }
+        Op::PutClientLegacyBearer => {
+            only(m, &["enabled"])?;
+            if !flag(m, "enabled")? {
+                return Err(Invalid::ClientProfile);
+            }
+            ProfileDelta::LegacyBearer
+        }
+        _ => return Err(Invalid::Body),
+    })
+}
+
 fn key_of(key: Option<&str>) -> Result<&str, Invalid> {
     key.ok_or(Invalid::Body)
 }
@@ -904,6 +984,23 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         Op::RotateClientSecret => {
             only(m, &[])?;
             Change::ClientSecretRotate(ClientId::parse(key_of(key)?)?)
+        }
+        // OP-155 m.3 (k)
+        Op::PutClientProfile
+        | Op::PutClientLegacyAuthentication
+        | Op::PutClientSigningAlg
+        | Op::PutClientEncryption
+        | Op::PutClientSamlBearer
+        | Op::PutClientLegacyBearer => Change::ClientProfile {
+            client: ClientId::parse(key_of(key)?)?,
+            delta: profile_delta(op, m)?,
+        },
+        Op::PutFrontchannelLogout => {
+            only(m, &["enabled"])?;
+            if !flag(m, "enabled")? {
+                return Err(Invalid::ClientProfile);
+            }
+            Change::FrontchannelLogout
         }
         Op::PutGroup => {
             only(m, &["name", "display_name", "membership_issuer", "status"])?;

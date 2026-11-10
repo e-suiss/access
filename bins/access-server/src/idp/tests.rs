@@ -58,6 +58,7 @@ mod extensions;
 mod governance;
 mod orgs;
 mod platform;
+mod profiles;
 mod records;
 mod resources;
 mod scim;

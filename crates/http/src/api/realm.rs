@@ -1211,6 +1211,14 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
             Shape::List(&["resource", "display_name"]),
         ),
         "registerProtectedResource" => (ProtectedResources, CREATE),
+        // OP-155 m.3 (k)
+        "putClientProfile"
+        | "putClientLegacyAuthentication"
+        | "putClientSigningAlg"
+        | "putClientEncryption"
+        | "putClientSamlBearer"
+        | "putClientLegacyBearer" => (Clients, w(false)),
+        "putFrontchannelLogout" => (Settings, w(false)),
         o if declared(o) => (Settings, Shape::Planned(planned_body(o))),
         "listClients" => (
             Clients,
@@ -1354,6 +1362,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::SessionPolicy => &r::INVALID_SESSION_POLICY,
             Invalid::ProtectedResource => &r::INVALID_PROTECTED_RESOURCE,
             Invalid::DcrPolicy => &r::INVALID_DCR_POLICY,
+            Invalid::ClientProfile => &r::INVALID_CLIENT_PROFILE,
             Invalid::CrossAppConnection => &r::INVALID_CROSS_APP_CONNECTION,
             Invalid::ClientExists
             | Invalid::GroupExists

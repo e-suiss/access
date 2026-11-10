@@ -392,6 +392,13 @@ pub const INVALID_DCR_POLICY: Code = code(
     "Bad Request",
     "A DCR policy names whether registration is open, at most 64 redirect domains and at most 16 initial access tokens as unpadded base64url SHA-256 digests; an open policy names at least one (OP-154 m.3 (j)).",
 );
+/// A client profile outside OP-155 m.3 (k).
+pub const INVALID_CLIENT_PROFILE: Code = code(
+    "invalid-client-profile",
+    400,
+    "Bad Request",
+    "A client profile names FAPI 2.0 only for a confidential private_key_jwt or mutual TLS client without RS256 or the bearer exception, client_secret_post only over a registered secret, an ID token algorithm the realm serves, an encryption key for ECDH-ES+A256KW or RSA-OAEP-256 and something to encrypt, or an upstream by name (OP-155 m.3 (k)).",
+);
 /// A cross-app connection outside OP-154 m.3 (n).
 pub const INVALID_CROSS_APP_CONNECTION: Code = code(
     "invalid-cross-app-connection",

@@ -694,6 +694,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::DeviceCode(_)
             | Change::CertificateLogin(_)
             | Change::MtlsAliases(_)
+            | Change::FrontchannelLogout
+            | Change::ClientProfile { .. }
             | Change::MapperSet { .. }
             | Change::JoseAlg(_)
             | Change::Branding(_)
@@ -1635,6 +1637,15 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 t.put_mtls_aliases(bound, *on).await?;
                 true
             }
+            // IDP-24, OP-155 m.3 (k)
+            Change::FrontchannelLogout => {
+                access_store::client_profiles::enable_frontchannel(t, bound).await?;
+                true
+            }
+            // OP-155 m.3 (k), IDP-12
+            Change::ClientProfile { client, delta } => {
+                write_profile(t, bound, client, delta).await?
+            }
             Change::DcrPolicy { policy, .. } => {
                 t.put_dcr_policy(
                     bound,
@@ -2563,4 +2574,30 @@ pub async fn jose_alg(app: &Pool, tenant: TenantId, realm: RealmId) -> Result<Jo
     let s = idp::settings(&mut t).await?.ok_or(AdminError::NoRealm)?;
     t.commit().await?;
     JoseAlg::from_name(&s.jose_alg).ok_or(AdminError::Store(access_store::StoreError::Corrupt))
+}
+
+/// Writes the next profile of `client` (OP-155 m.3 (k)): `delta` over its current profile,
+/// checked against its registration (IDP-12, §10.4.3) before it is stored.
+async fn write_profile(
+    t: &mut TenantTx,
+    bound: &idp::Bound,
+    client: &ClientId,
+    delta: &crate::domain::ProfileDelta,
+) -> Result<bool, AdminError> {
+    use access_identity_oauth::domain::client::Client;
+    use access_identity_oauth::domain::fapi::{ClientProfile, check};
+    let row = idp::client(t, client.as_str())
+        .await?
+        .ok_or(Invalid::NoClient)?;
+    let uuid = row.client_uuid;
+    let registered = Client::from_row(row).ok_or(Invalid::NoClient)?;
+    let current = match access_store::client_profiles::profile(t, uuid).await? {
+        Some(r) => ClientProfile::from_row(r)
+            .ok_or(AdminError::Store(access_store::StoreError::Corrupt))?,
+        None => ClientProfile::default(),
+    };
+    let next = delta.apply(&current);
+    check(&registered.auth, &next).map_err(|_| Invalid::ClientProfile)?;
+    access_store::client_profiles::put_profile(t, bound, uuid, &next.to_row()).await?;
+    Ok(true)
 }
