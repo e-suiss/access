@@ -2425,6 +2425,7 @@ impl Change {
 
     /// The resource it changes: `idp:[slug, kind, …]`.
     #[must_use]
+    #[expect(clippy::too_many_lines, reason = "one arm per change")]
     pub fn resource(&self, slug: &str) -> ResourceRef {
         let mut path = vec![String::from(slug)];
         match self {

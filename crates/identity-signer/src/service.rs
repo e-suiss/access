@@ -405,6 +405,7 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
     }
 
     /// Answers one request at `now`; `draw` is a random value for a new key's jitter.
+    #[expect(clippy::too_many_lines, reason = "one arm per request of the protocol")]
     pub fn handle(&mut self, request: Request, now: u64, draw: u64) -> Response {
         match request {
             Request::Ping => Response::Pong,
