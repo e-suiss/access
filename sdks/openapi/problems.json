@@ -655,6 +655,34 @@
       "description": "The vault Resource is malformed: an upstream the catalog does not have or an own upstream outside the catalog format, a client secret that is not a secret:// reference, a scope the upstream does not offer, a mapped action outside the Resource's scopes or in the access or idp namespaces, or an executor that is not a certificate thumbprint (OP-154 m.3 (t))."
     },
     {
+      "code": "invalid-saml-sp",
+      "type": "urn:suiss:access:problem:invalid-saml-sp",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The SAML service provider registration is malformed: an entity ID that is not a bounded URI, an ACS that is not exact https or not HTTP-POST, a certificate that is not base64 DER, signed requests without a pinned certificate, encryption without an encryption certificate, nothing signed, an e-mail NameID without a template that asks for it, a duplicated attribute, or a registration its template's profile refuses (OP-155 m.3 (e))."
+    },
+    {
+      "code": "saml-sp-exists",
+      "type": "urn:suiss:access:problem:saml-sp-exists",
+      "status": 409,
+      "title": "Conflict",
+      "description": "A SAML service provider with this name or entity ID was registered before; a retired registration's name and entity ID are never reused (OP-73)."
+    },
+    {
+      "code": "invalid-saml-certificate-policy",
+      "type": "urn:suiss:access:problem:invalid-saml-certificate-policy",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The SAML certificate policy keeps each rotation phase at least 14 days, rotates every 30 to 1825 days and names rsa-3072 or p-256 (OP-155 m.3 (e))."
+    },
+    {
+      "code": "invalid-gateway",
+      "type": "urn:suiss:access:problem:invalid-gateway",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The gateway registration needs a kind (saml, ldap, kerberos or radius), a name of lower-case letters, digits and hyphens, and the SHA-256 of its client certificate in hex; only a live gateway can be retired (OP-155 m.3 (c))."
+    },
+    {
       "code": "invalid-protected-resource",
       "type": "urn:suiss:access:problem:invalid-protected-resource",
       "status": 400,

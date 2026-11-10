@@ -115,21 +115,40 @@ authenticate-answer = {
   ? subject: subject-id,                ; present exactly when the credential checked out
 }
 
-; --- session_attest (planned, P2) ---------------------------------------------------------
+; --- session_attest (P2, OP-155 m.3 (c), IDI-7) ------------------------------------------
 
-; access-server binds the browser endpoints and keeps the cookies; it forwards a request to the
-; gateway with an opaque one-use handle, which the gateway redeems here.
-session-attest-request = {
+; access-server binds the browser endpoints and keeps the cookies; it forwards each request to
+; the SAML gateway with a one-use handle. The gateway asks for the pinned certificates of the
+; entity its message names (`sp`), has the parser worker verify the message, then redeems the
+; handle with the verified facts (`issue`). access-server decides and keeps the outcome in its
+; own flow; a handle that names no open flow of the realm is refused with `edge-attest`. Only a
+; `saml` gateway may call it.
+session-attest-request = session-attest-sp / session-attest-issue
+
+session-attest-sp = {
+  op: "sp",
   realm: realm-slug,
-  handle: bstr .size 32,
+  entity: tstr .size (1..1024),
 }
 
-session-attest-answer = {
-  subject: subject-id,
-  sid: bstr .size (16..64),             ; the session reference SLO names; never the session id
-  auth_time: uint,
-  aal: 1 / 2 / 3,
-  expires_at: uint,                     ; SessionNotOnOrAfter never passes it
+session-attest-issue = {
+  op: "issue",
+  realm: realm-slug,
+  handle: bstr .size 32,
+  redirect_signed: bool,                ; a detached Redirect signature verified by the worker
+  ? facts: bstr,                        ; parser-worker.cddl saml-facts, when a message was read
+}
+
+session-attest-answer = session-attest-sp-answer / session-attest-decided
+
+session-attest-sp-answer = {
+  found: bool,
+  certs: [* bstr .size (1..8192)],      ; at most 8 pinned certificates
+  requests_signed: bool,
+}
+
+session-attest-decided = {
+  decided: true,
 }
 
 ; --- directory_read (planned, P10) --------------------------------------------------------

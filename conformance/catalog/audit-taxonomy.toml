@@ -145,6 +145,30 @@ ocsf_activity = 1
 caep = ""
 webhook = false
 
+# OP-155 m.3 (d), §10.6.1, Golden SAML (HL-35): every signature the realm's SAML key makes
+[[event]]
+event = "saml.signed"
+plane = "identity"
+class = "authentication"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+# §10.6.1: a Scoping RequesterID, recorded by its digest; Access never proxies
+[[event]]
+event = "saml.requester"
+plane = "identity"
+class = "authentication"
+outcome = "unknown"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
 [[event]]
 event = "login.totp.succeeded"
 plane = "identity"
