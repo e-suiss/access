@@ -77,7 +77,9 @@ CREATE INDEX proxy_sessions_sid ON access.proxy_sessions (tenant_id, realm_id, s
 
 -- OP-73: a row is never removed; only its use or end is written, once
 CREATE FUNCTION access.proxy_session_rules() RETURNS trigger
-  LANGUAGE plpgsql AS $$
+  LANGUAGE plpgsql
+  SET search_path = pg_catalog
+  AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN
     RAISE EXCEPTION 'proxy sessions are not deleted' USING ERRCODE = 'check_violation';
