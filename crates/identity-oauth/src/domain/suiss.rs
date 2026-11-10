@@ -217,6 +217,18 @@ pub fn endpoints(issuer: &Issuer, s: &Settings, served: &[Endpoint]) -> BTreeMap
 /// The document of the realm `issuer`.
 #[must_use]
 pub fn document(issuer: &Issuer, s: &Settings, served: &[Endpoint]) -> String {
+    document_with(issuer, s, served, None)
+}
+
+/// The document of the realm `issuer`, naming the coordinator's Needs Attention endpoint when
+/// the realm named one (`suiss_coordinator`, OP-156 m.3 (t)).
+#[must_use]
+pub fn document_with(
+    issuer: &Issuer,
+    s: &Settings,
+    served: &[Endpoint],
+    coordinator: Option<&str>,
+) -> String {
     let mut m = Map::new();
     m.insert("suiss_configuration_version".into(), VERSION.into());
     m.insert("issuer".into(), issuer.as_str().into());
@@ -232,6 +244,9 @@ pub fn document(issuer: &Issuer, s: &Settings, served: &[Endpoint]) -> String {
     );
     m.insert("suiss_products".into(), json!(s.products));
     m.insert("endpoints".into(), json!(endpoints(issuer, s, served)));
+    if let Some(url) = coordinator {
+        m.insert("suiss_coordinator".into(), json!({ "attention": url }));
+    }
     Value::Object(m).to_string()
 }
 

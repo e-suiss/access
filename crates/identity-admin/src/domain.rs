@@ -1831,6 +1831,9 @@ pub enum Change {
     /// `idp.realm.ciba` (CT2) or `ciba_close` (CT1): CIBA as an invitation, poll and ping
     /// (OP-155 m.3 (l), IDP-14).
     Ciba(CibaSetting),
+    /// `idp.realm.coordinator` (CT2): the coordinator's public Needs Attention endpoint the hub
+    /// links pending approvals to, or none (OP-156 m.3 (t), §8.17.6.5).
+    Coordinator(Option<String>),
     /// `idp.realm.certificate_login` (CT2): certificate, PIV and CAC sign-in, turned on, changed
     /// or off (OP-155 m.3 (m)).
     CertificateLogin(certificate::CertificateLogin),
@@ -2242,6 +2245,7 @@ impl Change {
             Self::DeviceCode(false) => IdpAction::RealmDeviceCodeClose,
             Self::Ciba(c) if c.enabled => IdpAction::RealmCiba,
             Self::Ciba(_) => IdpAction::RealmCibaClose,
+            Self::Coordinator(_) => IdpAction::RealmCoordinator,
             Self::CertificateLogin(_) => IdpAction::RealmCertificateLogin,
             Self::GatewayRadiusClientRegister(_) => IdpAction::GatewayRadiusClientRegister,
             Self::GatewayKeytabPolicy(_) => IdpAction::GatewayKeytabPolicy,
@@ -2334,6 +2338,14 @@ impl Change {
             Self::UpstreamAssuranceMap { map, .. } => map.check().map_err(|_| Invalid::Upstream),
             Self::ClientProfile { delta, .. } => delta.check(),
             Self::Ciba(c) => c.check(),
+            // OP-156 m.3 (t)
+            Self::Coordinator(url) => {
+                if url.as_deref().is_none_or(ciba::endpoint_ok) {
+                    Ok(())
+                } else {
+                    Err(Invalid::Body)
+                }
+            }
             Self::GatewayRadiusClientRegister(c) => c.check(),
             Self::GatewayKeytabPolicy(p) => p.check(),
             Self::GatewayKeytabEmergency { gateway, kvno } => gateway::emergency(gateway, *kvno),
@@ -2480,6 +2492,11 @@ impl Change {
                 Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))])
             }
             Self::Ciba(c) => c.to_value(),
+            Self::Coordinator(url) => Value::Map(
+                url.iter()
+                    .map(|u| (Value::text("attention_url"), Value::text(u)))
+                    .collect(),
+            ),
             Self::CertificateLogin(c) => c.to_value(),
             Self::GatewayRadiusClientRegister(c) => c.to_value(),
             Self::GatewayKeytabPolicy(p) => p.to_value(),
@@ -2655,6 +2672,7 @@ impl Change {
             Self::DcrPolicy { .. }
             | Self::DeviceCode(_)
             | Self::Ciba(_)
+            | Self::Coordinator(_)
             | Self::CertificateLogin(_)
             | Self::MtlsAliases(_)
             | Self::Hrd(_)

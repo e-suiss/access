@@ -1495,7 +1495,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         // OP-155 m.3 (a), (c), (e), m.6 (h)
         | "putSamlCertificatePolicy"
         | "replaceSamlCertificate"
-        | "retireGateway" => (Settings, w(false)),
+        | "retireGateway"
+        // OP-156 m.3 (t)
+        | "putCoordinator" => (Settings, w(false)),
         "revokeAllAgentInstances" => (Agents, Shape::RevokeAll),
         // OP-154 m.3 (t)
         "listVaultResources" => (

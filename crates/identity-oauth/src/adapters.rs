@@ -130,6 +130,18 @@ impl Directory for PgDirectory {
         })
     }
 
+    async fn coordinator(&self, realm: &RealmEntry) -> Result<Option<String>, Unavailable> {
+        let Some(app) = &self.app else {
+            return Ok(None);
+        };
+        let mut t = TenantTx::begin(app, realm.tenant, realm.realm)
+            .await
+            .map_err(|_| Unavailable)?;
+        let url = t.coordinator().await.map_err(|_| Unavailable)?;
+        t.commit().await.map_err(|_| Unavailable)?;
+        Ok(url)
+    }
+
     async fn federation(
         &self,
         realm: &RealmEntry,

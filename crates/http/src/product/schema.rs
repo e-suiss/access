@@ -254,6 +254,10 @@ fn other_components() -> Value {
                     "required": ["ssf_configuration", "webhooks"],
                 },
                 "suiss_products": { "type": "object", "additionalProperties": { "type": "string" } },
+                "suiss_coordinator": object(
+                    &json!({ "attention": text("The coordinator's public Needs Attention endpoint the realm named (`idp.realm.coordinator`, OP-156 m.3 (t)); `GET` with `party` answers `{count, href}`. Access keeps no queue.") }),
+                    &["attention"],
+                ),
                 "endpoints": {
                     "type": "object",
                     "additionalProperties": false,

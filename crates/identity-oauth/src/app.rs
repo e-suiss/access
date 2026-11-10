@@ -227,9 +227,21 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
                 .jwks(realm.realm)
                 .await
                 .map_or(Reply::Unavailable, Reply::Jwks),
-            Document::SuissConfiguration => self.suiss.as_ref().map_or(Reply::NotFound, |s| {
-                Reply::Suiss(suiss::document(&realm.issuer, s, suiss::SERVED))
-            }),
+            Document::SuissConfiguration => {
+                let Some(s) = self.suiss.as_ref() else {
+                    return Reply::NotFound;
+                };
+                // OP-156 m.3 (t)
+                let Ok(coordinator) = self.directory.coordinator(&realm).await else {
+                    return Reply::Unavailable;
+                };
+                Reply::Suiss(suiss::document_with(
+                    &realm.issuer,
+                    s,
+                    suiss::SERVED,
+                    coordinator.as_deref(),
+                ))
+            }
         }
     }
 

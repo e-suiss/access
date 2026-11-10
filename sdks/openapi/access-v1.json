@@ -2912,6 +2912,19 @@
               "type": "string"
             }
           },
+          "suiss_coordinator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "attention"
+            ],
+            "properties": {
+              "attention": {
+                "type": "string",
+                "description": "The coordinator's public Needs Attention endpoint the realm named (`idp.realm.coordinator`, OP-156 m.3 (t)); `GET` with `party` answers `{count, href}`. Access keeps no queue."
+              }
+            }
+          },
           "endpoints": {
             "type": "object",
             "additionalProperties": false,

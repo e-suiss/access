@@ -658,6 +658,10 @@ export interface components {
             suiss_products: {
                 [key: string]: string;
             };
+            suiss_coordinator?: {
+                /** @description The coordinator's public Needs Attention endpoint the realm named (`idp.realm.coordinator`, OP-156 m.3 (t)); `GET` with `party` answers `{count, href}`. Access keeps no queue. */
+                attention: string;
+            };
             endpoints: {
                 adp?: string;
                 key_lookup?: string;

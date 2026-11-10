@@ -773,6 +773,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::CimdPolicy(_)
             | Change::DeviceCode(_)
             | Change::Ciba(_)
+            | Change::Coordinator(_)
             | Change::CertificateLogin(_)
             | Change::MtlsAliases(_)
             | Change::Hrd(_)
@@ -1744,6 +1745,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     },
                 )
                 .await?;
+                true
+            }
+            // OP-156 m.3 (t)
+            Change::Coordinator(url) => {
+                t.put_coordinator(bound, url.as_deref()).await?;
                 true
             }
             // OP-155 m.3 (m)

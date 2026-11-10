@@ -64,6 +64,16 @@ pub trait Directory: Send + Sync {
         async { Ok(Facts::default()) }
     }
 
+    /// The coordinator Needs Attention endpoint the realm names (`idp.realm.coordinator`,
+    /// OP-156 m.3 (t)); a directory that cannot tell knows of none.
+    fn coordinator(
+        &self,
+        realm: &RealmEntry,
+    ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send {
+        let _ = realm;
+        async { Ok(None) }
+    }
+
     /// The realm's OpenID Federation settings (OP-155 m.3 (j)); `None` while it is not a leaf. A
     /// directory that cannot tell knows of none.
     fn federation(

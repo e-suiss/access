@@ -210,6 +210,8 @@ pub enum Op {
     PutDeviceCode,
     /// `putCiba`: `idp.realm.ciba`, or `ciba_close` (OP-155 m.3 (l)).
     PutCiba,
+    /// `putCoordinator`: `idp.realm.coordinator` (OP-156 m.3 (t)).
+    PutCoordinator,
     /// `createCrossAppConnection`: `idp.client.cross_app_connection` (OP-154 m.3 (n)).
     CreateCrossAppConnection,
     /// `retireCrossAppConnection`: `idp.client.cross_app_connection_retire`.
@@ -345,6 +347,7 @@ impl Op {
             "putFederationRegistration" => Self::PutFederationRegistration,
             "putDeviceCode" => Self::PutDeviceCode,
             "putCiba" => Self::PutCiba,
+            "putCoordinator" => Self::PutCoordinator,
             "createCrossAppConnection" => Self::CreateCrossAppConnection,
             "retireCrossAppConnection" => Self::RetireCrossAppConnection,
             "putCertificateLogin" => Self::PutCertificateLogin,
@@ -1601,6 +1604,15 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                 enabled: flag(m, "enabled")?,
                 login_hint: flag(m, "login_hint")?,
                 ping,
+            })
+        }
+        // OP-156 m.3 (t)
+        Op::PutCoordinator => {
+            only(m, &["attention_url"])?;
+            Change::Coordinator(match m.get("attention_url") {
+                None | Some(Json::Null) => None,
+                Some(Json::String(u)) => Some(u.clone()),
+                Some(_) => return Err(Invalid::Body),
             })
         }
         // OP-155 m.3 (m)

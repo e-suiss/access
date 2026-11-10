@@ -24,6 +24,7 @@ pub mod commitments;
 pub mod connect;
 pub mod consents;
 pub mod console;
+pub mod coordinator;
 pub mod cross_app;
 pub mod custom_domains;
 pub mod dcr;
