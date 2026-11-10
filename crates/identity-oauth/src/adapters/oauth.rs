@@ -100,6 +100,86 @@ impl OAuthTx for PgOAuthTx {
             .map_err(down)
     }
 
+    async fn ciba_settings(&mut self) -> Result<access_store::ciba::CibaSettingsRow, Unavailable> {
+        self.0.ciba_settings().await.map_err(down)
+    }
+
+    async fn insert_ciba(
+        &mut self,
+        c: &access_store::ciba::NewCibaRequest<'_>,
+    ) -> Result<[u8; 16], Unavailable> {
+        self.0.insert_ciba(c).await.map_err(down)
+    }
+
+    async fn ciba_by_handle(
+        &mut self,
+        handle_hash: &[u8; 32],
+    ) -> Result<Option<access_store::ciba::CibaRequestRow>, Unavailable> {
+        self.0.ciba_by_handle(handle_hash).await.map_err(down)
+    }
+
+    async fn ciba(
+        &mut self,
+        id: [u8; 16],
+    ) -> Result<Option<access_store::ciba::CibaRequestRow>, Unavailable> {
+        self.0.ciba(id).await.map_err(down)
+    }
+
+    async fn ciba_answered(
+        &mut self,
+        domain: &[u8; 32],
+        nonce: &[u8],
+        contribution: &[u8; 32],
+    ) -> Result<bool, Unavailable> {
+        self.0
+            .ciba_answered(domain, nonce, contribution)
+            .await
+            .map_err(down)
+    }
+
+    async fn poll_ciba(
+        &mut self,
+        id: [u8; 16],
+        now_ms: u64,
+        interval_s: u32,
+    ) -> Result<(), Unavailable> {
+        self.0.poll_ciba(id, now_ms, interval_s).await.map_err(down)
+    }
+
+    async fn decide_ciba(
+        &mut self,
+        id: [u8; 16],
+        approved: Option<([u8; 16], [u8; 32])>,
+        now_ms: u64,
+    ) -> Result<bool, Unavailable> {
+        self.0.decide_ciba(id, approved, now_ms).await.map_err(down)
+    }
+
+    async fn ping_ciba(&mut self, id: [u8; 16], now_ms: u64) -> Result<(), Unavailable> {
+        self.0.ping_ciba(id, now_ms).await.map_err(down)
+    }
+
+    async fn use_ciba(&mut self, id: [u8; 16], now_ms: u64) -> Result<bool, Unavailable> {
+        self.0.use_ciba(id, now_ms).await.map_err(down)
+    }
+
+    async fn pairwise_subject(
+        &mut self,
+        sector: [u8; 16],
+        value: &str,
+    ) -> Result<Option<[u8; 16]>, Unavailable> {
+        self.0.pairwise_subject(sector, value).await.map_err(down)
+    }
+
+    async fn approval_by_uri(
+        &mut self,
+        request_uri: &str,
+    ) -> Result<Option<access_store::approvals::ApprovalRow>, Unavailable> {
+        access_store::approvals::approval_by_uri(&mut self.0, request_uri)
+            .await
+            .map_err(down)
+    }
+
     async fn workload_clients(
         &mut self,
     ) -> Result<Vec<access_store::workloads::WorkloadClient>, Unavailable> {

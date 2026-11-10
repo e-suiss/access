@@ -169,6 +169,7 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
                     cimd: facts.cimd,
                     dcr: facts.dcr,
                     device_code: facts.device_code,
+                    ciba: facts.ciba,
                     mtls_port: self.mtls_port.filter(|_| facts.mtls_aliases),
                     frontchannel: facts.frontchannel,
                     secret_post: facts.secret_post,

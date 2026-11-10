@@ -83,6 +83,8 @@ pub struct Facts {
     pub dcr: bool,
     /// Whether the realm offers the device authorization grant (`idp.realm.device_code`).
     pub device_code: bool,
+    /// Whether the realm offers CIBA (`idp.realm.ciba`, OP-155 m.3 (l)).
+    pub ciba: bool,
     /// Whether the realm publishes `mtls_endpoint_aliases` (`idp.realm.mtls_aliases`, OP-155
     /// m.3 (m)).
     pub mtls_aliases: bool,

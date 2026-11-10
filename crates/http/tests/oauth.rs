@@ -314,7 +314,7 @@ async fn the_device_authorization_endpoint_is_absent_until_the_realm_enables_it(
 
 // OP-155 m.3 (l), m.4
 #[tokio::test]
-async fn the_backchannel_authentication_endpoint_is_declared_and_not_yet_served() {
+async fn the_backchannel_authentication_endpoint_is_off_until_the_realm_turns_it_on() {
     for (path, host) in [
         ("/bc-authorize", "acme.id.test"),
         ("/realms/beta/bc-authorize", "id.test"),
@@ -327,7 +327,14 @@ async fn the_backchannel_authentication_endpoint_is_declared_and_not_yet_served(
                 .unwrap(),
         )
         .await;
-        assert_eq!(r.status(), StatusCode::NOT_IMPLEMENTED, "{path}");
+        assert!(
+            matches!(
+                r.status(),
+                StatusCode::NOT_FOUND | StatusCode::SERVICE_UNAVAILABLE
+            ),
+            "{path}: {}",
+            r.status()
+        );
     }
     let elsewhere = send(
         Request::post("/bc-authorize")
@@ -348,4 +355,25 @@ async fn the_backchannel_authentication_endpoint_is_declared_and_not_yet_served(
     )
     .unwrap();
     assert!(m.get("backchannel_authentication_endpoint").is_none());
+    // IDP-14, Ek B 5043
+    let on: serde_json::Value = serde_json::from_str(
+        &access_identity_oauth::domain::metadata::authorization_server_of(
+            &issuer,
+            &access_identity_oauth::domain::metadata::SERVED,
+            &access_identity_oauth::domain::metadata::RealmFacts {
+                ciba: true,
+                ..access_identity_oauth::domain::metadata::RealmFacts::default()
+            },
+        ),
+    )
+    .unwrap();
+    assert_eq!(
+        on["backchannel_authentication_endpoint"],
+        "https://acme.id.test/bc-authorize"
+    );
+    assert_eq!(
+        on["backchannel_token_delivery_modes_supported"],
+        serde_json::json!(["poll", "ping"])
+    );
+    assert_eq!(on["backchannel_user_code_parameter_supported"], false);
 }

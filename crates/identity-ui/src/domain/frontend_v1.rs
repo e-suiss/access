@@ -1089,14 +1089,14 @@ pub const ROUTES: &[Route] = &[
         "oidfRegister",
         "Explicit OIDF client registration, when the realm opened it.",
     ),
-    planned(
+    live(
         Owner::P8,
         Verb::Post,
         "/v1/ciba/preview",
         "previewCiba",
         "What a CIBA request asks: the client's name, the binding message and the scope, for the person's Approval Surface (OP-155 m.3 (l)).",
     ),
-    planned(
+    live(
         Owner::P8,
         Verb::Post,
         "/v1/ciba/approval",

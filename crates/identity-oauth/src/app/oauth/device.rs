@@ -1,7 +1,8 @@
 //! The device authorization grant (RFC 8628, OP-154 m.3 (p), TN-35): off unless the realm
 //! decided `idp.realm.device_code`. A registered client asks at `/device_authorization`; the
 //! person enters the user code on the verification page, a trusted surface of its own that
-//! shows the client, the scope and the IP prefix and country the request came from, and
+//! shows the client, the scope and the IP prefix and country the request came from (the country
+//! only when the operator supplied an IP-range list, never a placeholder), and
 //! approves or declines while signed in. The device polls `/token`; its tokens are DPoP-bound.
 
 use std::net::IpAddr;
@@ -72,7 +73,7 @@ pub fn device_csrf(cookie: &str, entered: &str) -> Option<String> {
 }
 
 impl<E: Env> OAuth<E> {
-    async fn signed_in(
+    pub(super) async fn signed_in(
         &self,
         tx: &mut <E::Db as OAuthDb>::Tx,
         cookie: Option<&str>,
@@ -135,6 +136,10 @@ impl<E: Env> OAuth<E> {
             ));
         }
         let prefix = peer.map_or_else(|| String::from("unknown"), ip_prefix);
+        // OP-155 m.3 (l), §10.4.1
+        let country = peer
+            .and_then(|ip| self.env.geo().country(ip))
+            .and_then(|c| String::from_utf8(c.to_vec()).ok());
         let code = self.random::<32>()?;
         let mut user = None;
         for _ in 0..4 {
@@ -149,7 +154,7 @@ impl<E: Env> OAuth<E> {
                     client: client.uuid,
                     scope,
                     ip_prefix: &prefix,
-                    country: None,
+                    country: country.as_deref(),
                     now_ms: now,
                     expires_ms: now.saturating_add(LIFETIME_MS),
                     interval_s: INTERVAL_S,

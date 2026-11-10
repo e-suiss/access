@@ -94,6 +94,8 @@ pub const TOKEN_EXCHANGE_GRANT: &str = "urn:ietf:params:oauth:grant-type:token-e
 pub const JWT_BEARER_GRANT: &str = "urn:ietf:params:oauth:grant-type:jwt-bearer";
 /// Grant type of RFC 7522.
 pub const SAML2_BEARER_GRANT: &str = "urn:ietf:params:oauth:grant-type:saml2-bearer";
+/// Grant type of OpenID CIBA Core 1.0 (OP-155 m.3 (l)).
+pub const CIBA_GRANT: &str = "urn:openid:params:grant-type:ciba";
 
 /// What the realm's authorization server serves; the metadata declares nothing else (§10.4.6).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -130,6 +132,7 @@ pub const SERVED: Served = Served {
         Endpoint::Introspect,
         Endpoint::EndSession,
         Endpoint::DeviceAuthorization,
+        Endpoint::BackchannelAuthentication,
     ],
     features: &[
         Feature::Dpop,
@@ -210,6 +213,9 @@ pub struct RealmFacts {
     /// The realm lets its clients opt in to front-channel logout (`idp.realm.frontchannel_logout`);
     /// without it nothing about front-channel logout is declared (IDP-24, OP-155 m.3 (k)).
     pub frontchannel: bool,
+    /// The realm offers CIBA (`idp.realm.ciba`); without it neither its endpoint, its grant type
+    /// nor its delivery modes are declared (OP-155 m.3 (l)).
+    pub ciba: bool,
     /// An active client opted in to `client_secret_post`; without one it is not declared.
     pub secret_post: bool,
     /// An active client opted in to `client_secret_jwt`; without one it is not declared.
@@ -222,7 +228,7 @@ pub struct RealmFacts {
 
 /// The endpoints `mtls_endpoint_aliases` names on the mTLS listener (RFC 8705 §5): those a
 /// client authenticates at or presents a certificate-bound token to.
-const MTLS_ALIASED: [(Endpoint, &str); 6] = [
+const MTLS_ALIASED: [(Endpoint, &str); 7] = [
     (Endpoint::Token, "token_endpoint"),
     (Endpoint::Par, "pushed_authorization_request_endpoint"),
     (Endpoint::Revoke, "revocation_endpoint"),
@@ -231,6 +237,10 @@ const MTLS_ALIASED: [(Endpoint, &str); 6] = [
     (
         Endpoint::DeviceAuthorization,
         "device_authorization_endpoint",
+    ),
+    (
+        Endpoint::BackchannelAuthentication,
+        "backchannel_authentication_endpoint",
     ),
 ];
 
@@ -293,7 +303,33 @@ fn grant_types(served: &Served, facts: &RealmFacts) -> Vec<&'static str> {
     if served.feature(Feature::JwtBearer) {
         grants.push(JWT_BEARER_GRANT);
     }
+    // OP-155 m.3 (l)
+    if served.has(Endpoint::BackchannelAuthentication) && facts.ciba {
+        grants.push(CIBA_GRANT);
+    }
     grants
+}
+
+/// The CIBA members (OP-155 m.3 (l), IDP-14): poll and ping, never push; no user code; signed
+/// authentication requests with the client assertion algorithms.
+fn ciba_members(m: &mut Map<String, Value>, served: &Served, facts: &RealmFacts) {
+    if !(served.has(Endpoint::BackchannelAuthentication) && facts.ciba) {
+        return;
+    }
+    m.insert(
+        "backchannel_token_delivery_modes_supported".into(),
+        json!(["poll", "ping"]),
+    );
+    m.insert(
+        "backchannel_user_code_parameter_supported".into(),
+        Value::Bool(false),
+    );
+    if served.feature(Feature::Jar) {
+        m.insert(
+            "backchannel_authentication_request_signing_alg_values_supported".into(),
+            json!(CLIENT_ASSERTION_ALGS),
+        );
+    }
 }
 
 /// The agent members of the AS metadata (§11.11.1, §11.21.5): ID-JAG as an identity chaining
@@ -480,8 +516,13 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
             "backchannel_authentication_endpoint",
         ),
     ] {
-        // OP-154 m.3 (dd)
-        if served.has(e) && (e != Endpoint::DeviceAuthorization || facts.device_code) {
+        // OP-154 m.3 (dd), OP-155 m.3 (l)
+        let realm_on = match e {
+            Endpoint::DeviceAuthorization => facts.device_code,
+            Endpoint::BackchannelAuthentication => facts.ciba,
+            _ => true,
+        };
+        if served.has(e) && realm_on {
             m.insert(key.into(), issuer.endpoint(e.path()).into());
         }
     }
@@ -492,6 +533,7 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
         );
     }
     realm_endpoints(&mut m, issuer, facts);
+    ciba_members(&mut m, served, facts);
     // §11.3.3, AG-3
     if served.feature(Feature::ClientIdMetadataDocument) && facts.cimd {
         m.insert(

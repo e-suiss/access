@@ -14,6 +14,7 @@ mod admin;
 mod bootstrap;
 mod certificate;
 mod checkpoints;
+mod ciba;
 mod claims;
 mod config;
 mod console;
@@ -734,8 +735,10 @@ fn lockdown(config: &Config) -> Lockdown {
         .identity
         .as_ref()
         .and_then(|i| i.outbound_ca_file.as_ref());
+    let geo = config.identity.as_ref().and_then(|i| i.geo_csv.as_ref());
     for file in anchors
         .into_iter()
+        .chain(geo)
         .chain(&signup.bot_secret_file)
         .chain(&signup.privacy_pass_key_files)
         .chain(
@@ -1232,10 +1235,31 @@ where
         + access_identity_oauth::ports::oauth::WorkloadTrust
         + access_identity_oauth::ports::oauth::GrantStanding
         + access_identity_x509::ports::CaTrust
+        + access_identity_ui::ports::Approvals
         + Clone
         + 'static,
 {
     let identity = config.identity.as_ref().ok_or("no identity section")?;
+    // OP-155 m.3 (l)
+    let ciba = Arc::new(ciba::ServerCiba {
+        plane: projections.clone(),
+        app: app.clone(),
+        keks: login::RealmKeks::new(nonce_keys.clone()),
+        ids: tenant_ids.clone(),
+        outbound: outbound.clone(),
+    });
+    let geo: Arc<dyn access_identity_oauth::ports::oauth::GeoLookup + Sync> =
+        match &identity.geo_csv {
+            Some(path) => {
+                let text =
+                    std::fs::read_to_string(path).map_err(|e| format!("identity.geo_csv: {e}"))?;
+                Arc::new(
+                    ciba::CsvGeo::parse(&text)
+                        .map_err(|line| format!("identity.geo_csv: line {line}"))?,
+                )
+            }
+            None => Arc::new(access_identity_oauth::ports::oauth::NoGeo),
+        };
     // RFC 8705 §2.1, OP-155 m.3 (k), (m)
     let client_certificates = Arc::new(
         access_identity_oauth::adapters::certificates::X509ClientCertificates::new(
@@ -1277,6 +1301,8 @@ where
         management,
         claims,
         client_certificates,
+        ciba,
+        geo,
     };
     Ok(oauth_router(OAuth::new(env)))
 }

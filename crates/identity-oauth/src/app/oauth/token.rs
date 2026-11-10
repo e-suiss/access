@@ -121,8 +121,12 @@ fn admitted(grant_type: Option<&str>) -> Result<bool, Reply> {
     };
     // OP-154 m.3 (p)
     let device = grant_type == Some(DEVICE_CODE_GRANT) && SERVED.has(Endpoint::DeviceAuthorization);
+    // OP-155 m.3 (l)
+    let ciba = grant_type == Some(crate::domain::metadata::CIBA_GRANT)
+        && SERVED.has(Endpoint::BackchannelAuthentication);
     if agent
         || device
+        || ciba
         || matches!(
             grant_type,
             Some("authorization_code" | "refresh_token" | "client_credentials")
@@ -204,6 +208,19 @@ impl<E: Env> OAuth<E> {
         if grant_type == Some(DEVICE_CODE_GRANT) {
             let mut tx = self.begin(realm).await?;
             let on = tx.device_code_enabled().await?;
+            tx.commit().await?;
+            if !on {
+                return Ok(Reply::oauth_error(
+                    400,
+                    "unsupported_grant_type",
+                    "the grant type is not supported",
+                ));
+            }
+        }
+        // OP-155 m.3 (l)
+        if grant_type == Some(crate::domain::metadata::CIBA_GRANT) {
+            let mut tx = self.begin(realm).await?;
+            let on = tx.ciba_settings().await?.enabled;
             tx.commit().await?;
             if !on {
                 return Ok(Reply::oauth_error(
@@ -303,6 +320,9 @@ impl<E: Env> OAuth<E> {
         let mut tx = self.begin(realm).await?;
         let reply = if grant_type == Some(DEVICE_CODE_GRANT) {
             self.device_token(&mut tx, realm, &client, params, proof.jkt, now)
+                .await?
+        } else if grant_type == Some(crate::domain::metadata::CIBA_GRANT) {
+            self.ciba_token(&mut tx, realm, &client, params, proof.jkt, now)
                 .await?
         } else if grant_type == Some("authorization_code") {
             self.exchange(

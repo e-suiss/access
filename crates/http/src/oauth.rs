@@ -19,6 +19,7 @@ use axum::routing::{get, post};
 use crate::Problem;
 
 pub mod approval;
+mod ciba;
 mod device;
 mod register;
 
@@ -87,6 +88,7 @@ pub fn router<E: Env>(service: OAuth<E>) -> Router {
     r.merge(approval::routes::<E>())
         .merge(register::routes::<E>())
         .merge(device::routes::<E>())
+        .merge(ciba::routes::<E>())
         .with_state(shared)
 }
 
@@ -318,6 +320,19 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
                     client_chain: req.chain.as_deref().unwrap_or(&[]),
                 },
                 req.peer,
+            )
+            .await
+        }
+        // OP-155 m.3 (l)
+        Endpoint::BackchannelAuthentication => {
+            s.backchannel_authentication(
+                &realm,
+                &p,
+                TokenHttp {
+                    authorization,
+                    dpop: &[],
+                    client_chain: req.chain.as_deref().unwrap_or(&[]),
+                },
             )
             .await
         }

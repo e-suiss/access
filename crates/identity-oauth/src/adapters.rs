@@ -99,6 +99,7 @@ impl Directory for PgDirectory {
             .is_some_and(|s| s.cimd_enabled);
         let dcr = t.dcr_policy().await.map_err(|_| Unavailable)?.enabled;
         let device_code = t.device_code_enabled().await.map_err(|_| Unavailable)?;
+        let ciba = t.ciba_settings().await.map_err(|_| Unavailable)?.enabled;
         let mtls_aliases = t.mtls_aliases().await.map_err(|_| Unavailable)?;
         // IDP-24, OP-155 m.3 (k)
         let frontchannel = access_store::client_profiles::frontchannel_enabled(&mut t)
@@ -114,6 +115,7 @@ impl Directory for PgDirectory {
             cimd,
             dcr,
             device_code,
+            ciba,
             mtls_aliases,
             frontchannel,
             secret_post: legacy.iter().any(|m| m == "client_secret_post"),

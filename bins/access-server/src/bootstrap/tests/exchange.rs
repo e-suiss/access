@@ -533,6 +533,8 @@ impl Realm {
                 None,
             )),
             claims: std::sync::Arc::new(access_identity_oauth::ports::oauth::NoClaims),
+            ciba: std::sync::Arc::new(access_identity_oauth::ports::oauth::NoCiba),
+            geo: std::sync::Arc::new(access_identity_oauth::ports::oauth::NoGeo),
         }));
         Self {
             w,

@@ -3783,8 +3783,15 @@
         "operationId": "previewCiba",
         "summary": "What a CIBA request asks: the client's name, the binding message and the scope, for the person's Approval Surface (OP-155 m.3 (l)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -3798,8 +3805,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/ciba/approval": {
@@ -3807,8 +3813,15 @@
         "operationId": "approveCiba",
         "summary": "Approves or declines a CIBA request with the person's AAS; the client learns it by poll or ping.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -3822,8 +3835,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/login/certificate": {

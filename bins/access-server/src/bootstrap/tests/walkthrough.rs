@@ -5,6 +5,7 @@
 //! one speaks only the standard bindings (PI-13): `AuthZEN` evaluation, OAuth 2.0 and its
 //! extensions, and `.well-known` discovery.
 
+mod ciba;
 mod cloud;
 mod cross_org;
 mod local_agent;
@@ -34,7 +35,13 @@ pub(super) fn standard(path: &str) -> bool {
         || realm.is_some_and(|r| {
             matches!(
                 r,
-                "/token" | "/authorize" | "/par" | "/introspect" | "/revoke" | "/jwks"
+                "/token"
+                    | "/authorize"
+                    | "/par"
+                    | "/introspect"
+                    | "/revoke"
+                    | "/jwks"
+                    | "/bc-authorize"
             )
         })
 }
@@ -170,6 +177,10 @@ pub(super) struct Desk {
     pub(super) runtime: Runtime,
     pub(super) instance: Id,
     pub(super) adp: Recorded,
+    /// A client of the deployment without a client certificate: the agent's OAuth client.
+    pub(super) agent_http: Http,
+    /// The CIBA pings the realm sent (OP-155 m.3 (l)).
+    pub(super) pings: ciba::Pings,
     token: KeyStore,
     stop: Option<tokio::sync::oneshot::Sender<()>>,
 }
@@ -287,6 +298,9 @@ impl Desk {
                     issuer: String::from("https://access.test"),
                 },
             ));
+        // OP-155 m.3 (l)
+        let (oauth, pings) = ciba::oauth_router(&w);
+        let app = app.merge(oauth);
         let config = access_http::tls::server_config(
             tls.server_cert.as_bytes(),
             tls.server_key.as_bytes(),
@@ -307,6 +321,7 @@ impl Desk {
         };
         let leaf = leaf_der(&identity.chain_pem).unwrap();
         let http = Http::new(tls.ca.as_bytes(), Some(&identity), Some(addr)).unwrap();
+        let agent_http = Http::new(tls.ca.as_bytes(), None, Some(addr)).unwrap();
         {
             let passkey_key = token.signer(local::TEST_PASSKEY_LABEL).unwrap();
             let (rp_id, origin) = relying_party(&user.issuer).unwrap();
@@ -362,6 +377,8 @@ impl Desk {
             runtime,
             instance,
             adp,
+            agent_http,
+            pings,
             token,
             stop: Some(stop),
         }

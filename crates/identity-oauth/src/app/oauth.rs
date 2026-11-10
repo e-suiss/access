@@ -8,6 +8,7 @@
 mod approval;
 mod authority;
 mod authorize;
+pub mod ciba;
 mod client_auth;
 pub mod clients;
 pub mod dcr;
@@ -57,6 +58,7 @@ pub use crate::app::oauth::approval::{
     ApprovalDraft, ApprovalView, CONSENT_STATE_TTL_MS, NotApproved, consent_csrf,
 };
 pub use crate::app::oauth::authorize::{REQUEST_CONTEXT, consent_resource};
+pub use crate::app::oauth::ciba::{CibaRefused, CibaView, ciba_csrf};
 pub use crate::app::oauth::device::{DeviceRefused, DeviceView, device_csrf};
 pub use crate::app::oauth::token::TokenHttp;
 
@@ -139,6 +141,16 @@ pub trait Env: Send + Sync + 'static {
     /// authority plane, so consent is always asked for again.
     fn standing(&self) -> &(dyn crate::ports::oauth::GrantStanding + Sync) {
         &crate::ports::oauth::NoStanding
+    }
+    /// What CIBA needs beyond the realm's rows (OP-155 m.3 (l)); none unless the server wires
+    /// the authority plane, Relay and the guarded outbound client, so nothing can be invited.
+    fn ciba(&self) -> &(dyn crate::ports::oauth::CibaServices + Sync) {
+        &crate::ports::oauth::NoCiba
+    }
+    /// The country an IP address is in (OP-155 m.3 (l)); none unless the operator supplied a
+    /// list, so the device page shows no country.
+    fn geo(&self) -> &(dyn crate::ports::oauth::GeoLookup + Sync) {
+        &crate::ports::oauth::NoGeo
     }
     /// The issuers whose assertions the token endpoint takes as Claim input (OP-154 m.3 (m),
     /// (q)); none unless the server wires the authority plane, so every assertion is refused.

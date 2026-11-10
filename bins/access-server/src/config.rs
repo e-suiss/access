@@ -391,6 +391,10 @@ pub(crate) struct Identity {
     /// SAML and WS-Federation sign-in answers that the service is unavailable.
     #[serde(default)]
     pub(crate) saml_gateway: Option<String>,
+    /// The operator's IP-range → country list for the device verification page, one `cidr,CC`
+    /// per line (OP-155 m.3 (l)). Without it the page shows no country.
+    #[serde(default)]
+    pub(crate) geo_csv: Option<PathBuf>,
 }
 
 /// The services a domain verification reads (TN-90, OP-153 m.3 (o)).
@@ -813,6 +817,7 @@ mod tests {
                     rdap_url: "https://rdap.example/domain/".to_owned(),
                 }),
                 saml_gateway: None,
+                geo_csv: None,
             }),
             suiss: Some(Suiss {
                 region: "eu-central".to_owned(),
@@ -1029,6 +1034,7 @@ mod tests {
                     outbound_ca_file: None,
                     org_domains: None,
                     saml_gateway: None,
+                    geo_csv: None,
                 }),
                 ..with_tls()
             };

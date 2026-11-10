@@ -101,6 +101,10 @@ pub(crate) struct ServerEnv<P> {
     /// (RFC 8705 §2.1, OP-155 m.3 (k), (m)).
     pub(crate) client_certificates:
         Arc<dyn access_identity_oauth::ports::profile::ClientCertificates + Sync>,
+    /// CIBA's invitations, openings, free hints and pings (OP-155 m.3 (l)).
+    pub(crate) ciba: Arc<dyn access_identity_oauth::ports::oauth::CibaServices + Sync>,
+    /// The operator's IP-range → country list for the device page, or none (OP-155 m.3 (l)).
+    pub(crate) geo: Arc<dyn access_identity_oauth::ports::oauth::GeoLookup + Sync>,
 }
 
 impl<P: Projections + 'static> Env for ServerEnv<P> {
@@ -183,6 +187,14 @@ impl<P: Projections + 'static> Env for ServerEnv<P> {
     fn workload_trust(&self) -> &(dyn access_identity_oauth::ports::oauth::WorkloadTrust + Sync) {
         &*self.workload_trust
     }
+    fn ciba(&self) -> &(dyn access_identity_oauth::ports::oauth::CibaServices + Sync) {
+        &*self.ciba
+    }
+
+    fn geo(&self) -> &(dyn access_identity_oauth::ports::oauth::GeoLookup + Sync) {
+        &*self.geo
+    }
+
     fn standing(&self) -> &(dyn access_identity_oauth::ports::oauth::GrantStanding + Sync) {
         &*self.standing
     }

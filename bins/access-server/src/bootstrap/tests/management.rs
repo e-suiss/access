@@ -387,6 +387,8 @@ pub(super) async fn console_with(label: &str, with_adp: bool, plan: &Plan) -> Co
         management: Arc::new(crate::admin::tokens::PlaneHolders(w.plane.clone(), None)),
         claims: Arc::new(access_identity_oauth::ports::oauth::NoClaims),
         issuers: Arc::new(w.plane.clone()),
+        ciba: Arc::new(access_identity_oauth::ports::oauth::NoCiba),
+        geo: Arc::new(access_identity_oauth::ports::oauth::NoGeo),
     }));
     let management = crate::admin::router(
         (String::from(ORIGIN), w.identity_signer.clone()),

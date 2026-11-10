@@ -452,6 +452,95 @@ pub trait OAuthTx: Send {
     fn frontchannel_enabled(&mut self) -> impl Future<Output = Result<bool, Unavailable>> + Send;
     /// The legacy token endpoint methods some active client of the realm opted in to.
     fn legacy_methods(&mut self) -> impl Future<Output = Result<Vec<String>, Unavailable>> + Send;
+    /// The realm's CIBA setting (`idp.realm.ciba`, OP-155 m.3 (l)); off unless the store serves
+    /// it.
+    fn ciba_settings(
+        &mut self,
+    ) -> impl Future<Output = Result<access_store::ciba::CibaSettingsRow, Unavailable>> + Send {
+        async { Ok(access_store::ciba::CibaSettingsRow::default()) }
+    }
+    /// Keeps a backchannel request; its id.
+    fn insert_ciba(
+        &mut self,
+        _c: &access_store::ciba::NewCibaRequest<'_>,
+    ) -> impl Future<Output = Result<[u8; 16], Unavailable>> + Send {
+        async { Err(Unavailable) }
+    }
+    /// The backchannel request of an `auth_req_id` digest, locked.
+    fn ciba_by_handle(
+        &mut self,
+        _handle_hash: &[u8; 32],
+    ) -> impl Future<Output = Result<Option<access_store::ciba::CibaRequestRow>, Unavailable>> + Send
+    {
+        async { Err(Unavailable) }
+    }
+    /// The backchannel request `id`, locked.
+    fn ciba(
+        &mut self,
+        _id: [u8; 16],
+    ) -> impl Future<Output = Result<Option<access_store::ciba::CibaRequestRow>, Unavailable>> + Send
+    {
+        async { Err(Unavailable) }
+    }
+    /// Whether a nonce or a contribution already answered an approved backchannel request.
+    fn ciba_answered(
+        &mut self,
+        _domain: &[u8; 32],
+        _nonce: &[u8],
+        _contribution: &[u8; 32],
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send {
+        async { Err(Unavailable) }
+    }
+    /// Notes a poll and the interval it leaves.
+    fn poll_ciba(
+        &mut self,
+        _id: [u8; 16],
+        _now_ms: u64,
+        _interval_s: u32,
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send {
+        async { Err(Unavailable) }
+    }
+    /// Records the person's answer once.
+    fn decide_ciba(
+        &mut self,
+        _id: [u8; 16],
+        _approved: Option<([u8; 16], [u8; 32])>,
+        _now_ms: u64,
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send {
+        async { Err(Unavailable) }
+    }
+    /// Notes that the client was pinged.
+    fn ping_ciba(
+        &mut self,
+        _id: [u8; 16],
+        _now_ms: u64,
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send {
+        async { Err(Unavailable) }
+    }
+    /// Redeems an approved backchannel request once.
+    fn use_ciba(
+        &mut self,
+        _id: [u8; 16],
+        _now_ms: u64,
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send {
+        async { Err(Unavailable) }
+    }
+    /// The subject whose pairwise value in `sector` is `value` (MD-10).
+    fn pairwise_subject(
+        &mut self,
+        _sector: [u8; 16],
+        _value: &str,
+    ) -> impl Future<Output = Result<Option<[u8; 16]>, Unavailable>> + Send {
+        async { Err(Unavailable) }
+    }
+    /// The request pushed to the realm's Approval Surface under `request_uri`.
+    fn approval_by_uri(
+        &mut self,
+        _request_uri: &str,
+    ) -> impl Future<Output = Result<Option<access_store::approvals::ApprovalRow>, Unavailable>> + Send
+    {
+        async { Err(Unavailable) }
+    }
     /// Commits.
     fn commit(self) -> impl Future<Output = Result<(), Unavailable>> + Send;
 }
@@ -826,6 +915,106 @@ impl GrantStanding for NoStanding {
 
     fn issued(&self, _: [u8; 32], _: [u8; 32]) -> Held<'_, Option<IssuedGrant>> {
         Box::pin(async { Ok(None) })
+    }
+}
+
+/// A CIBA invitation to the person's Approval Surface (OP-155 m.3 (l), E42): the client's name,
+/// its binding message and the link, never the intent (§11.14.2).
+#[derive(Clone, PartialEq, Eq)]
+pub struct CibaInvite {
+    /// The tenant.
+    pub tenant: TenantId,
+    /// The realm.
+    pub realm: RealmId,
+    /// The person.
+    pub subject: [u8; 16],
+    /// The `https` link to the Approval Surface.
+    pub link: String,
+    /// The client's name.
+    pub client: String,
+    /// The binding message.
+    pub binding_message: Option<String>,
+    /// When the request expires, Unix ms.
+    pub expires_at_ms: u64,
+}
+
+impl core::fmt::Debug for CibaInvite {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("CibaInvite")
+            .field("expires_at_ms", &self.expires_at_ms)
+            .finish_non_exhaustive()
+    }
+}
+
+/// What the decision point recorded when it asked for an approval of an intent (§9.14.1 step 1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CibaOpening {
+    /// The intent's consequence tier, 0 to 3.
+    pub tier: u8,
+    /// The end of the intent's validity, Unix ms, when the render names it.
+    pub valid_until: Option<u64>,
+}
+
+/// What CIBA needs beyond the realm's rows (OP-155 m.3 (l)): whether the decision point still
+/// asks for an approval of an intent, the Relay invitation, the free `login_hint` lookup, and
+/// the ping to the client.
+pub trait CibaServices: Send + Sync {
+    /// The consequence tier the decision point recorded when it asked for an approval of
+    /// `intent` in `domain` (§9.14.1 step 1); `None` when nothing waits on it.
+    fn opening(&self, domain: [u8; 32], intent: [u8; 32]) -> Held<'_, Option<CibaOpening>>;
+
+    /// Queues the person's Relay `CibaInvite`.
+    fn invite(&self, invite: CibaInvite) -> Held<'_, ()>;
+
+    /// The person a free `login_hint` names in the realm, if one does.
+    fn login_hint(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        hint: String,
+    ) -> Held<'_, Option<[u8; 16]>>;
+
+    /// CIBA Core §10.2: tells the client at `endpoint` with its bearer `token` that the request
+    /// `auth_req_id` was answered; `false` when it could not be told.
+    fn ping(&self, endpoint: String, token: String, auth_req_id: String) -> Held<'_, bool>;
+}
+
+/// No CIBA services: nothing waits, nobody is invited, no hint names anyone, no ping leaves.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoCiba;
+
+impl CibaServices for NoCiba {
+    fn opening(&self, _: [u8; 32], _: [u8; 32]) -> Held<'_, Option<CibaOpening>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn invite(&self, _: CibaInvite) -> Held<'_, ()> {
+        Box::pin(async { Err(Unavailable) })
+    }
+
+    fn login_hint(&self, _: TenantId, _: RealmId, _: String) -> Held<'_, Option<[u8; 16]>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn ping(&self, _: String, _: String, _: String) -> Held<'_, bool> {
+        Box::pin(async { Ok(false) })
+    }
+}
+
+/// The country an IP address is in, for the device verification page (OP-155 m.3 (l), §10.4.1):
+/// an ISO 3166-1 alpha-2 code, or nothing when unknown.
+pub trait GeoLookup: Send + Sync {
+    /// The country of `ip`.
+    fn country(&self, ip: std::net::IpAddr) -> Option<[u8; 2]>;
+}
+
+/// The default: no country is known, so the page shows none.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoGeo;
+
+impl GeoLookup for NoGeo {
+    fn country(&self, _: std::net::IpAddr) -> Option<[u8; 2]> {
+        None
     }
 }
 

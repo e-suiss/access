@@ -471,10 +471,11 @@ async fn allowed_receipt(
 }
 
 /// Runs the approval and returns `{instance, exercise, contribution, claim, step_up,
-/// render_digest, receipt}`: the device Instance the approval session was bound to, the allowed
-/// Exercise with its verified receipt when this client exercised the intent, the contribution
-/// Exercise, the approver's `authentication` Claim and the render digest either way, and whether
-/// the opening asked for a step-up that the Claim met (OP-149 m.33 (c)).
+/// render_digest, request_uri, receipt}`: the device Instance the approval session was bound to,
+/// the allowed Exercise with its verified receipt when this client exercised the intent, the
+/// contribution Exercise, the approver's `authentication` Claim, the render digest and the pushed
+/// request's `request_uri` either way, and whether the opening asked for a step-up that the
+/// Claim met (OP-149 m.33 (c)).
 ///
 /// # Errors
 /// [`ClientError`]; a decision the surface or the ADP refuses with is
@@ -506,6 +507,7 @@ pub async fn approve(http: &Http, a: &Approve<'_>) -> Result<Value, ClientError>
         "step_up": opening.as_ref().is_some_and(|o| o.step_up),
         "render_digest": render_digest,
         "render_digest_verified": render_digest == b64url_encode(&my_digest.0),
+        "request_uri": request_uri,
     });
     if let Some(opening) = opening {
         let (exercise_id, receipt) =
