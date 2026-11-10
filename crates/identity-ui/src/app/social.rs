@@ -107,7 +107,9 @@ fn refused(e: FederationError) -> Reply {
             title: "This sign-in option isn't set up for this site yet",
             retry_after_s: None,
         }),
-        FederationError::Refused(_) => Reply::problem(SOCIAL_FAILED),
+        FederationError::Refused(_) | FederationError::Connection(_) => {
+            Reply::problem(SOCIAL_FAILED)
+        }
     }
 }
 
@@ -138,16 +140,12 @@ where
         social: &Social<H, S>,
         provider: &str,
     ) -> Result<(Enabled, bool), Reply> {
-        let fed = federation(social);
         let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
             .await
             .map_err(|_| unavailable())?;
         let sandbox = t.realm_is_sandbox().await.map_err(|_| unavailable())?;
         let row = t
             .social_provider(provider)
-            .await
-            .map_err(|_| unavailable())?;
-        let upstream = access_store::idp::realm::upstream(&mut t, provider)
             .await
             .map_err(|_| unavailable())?;
         t.commit().await.map_err(|_| unavailable())?;
@@ -165,24 +163,7 @@ where
                 sandbox,
             ));
         }
-        // TN-95, IDP-31 (1)
-        match upstream.filter(|u| u.active && u.client_secret_ref.is_some()) {
-            Some(u) => {
-                let preset = fed
-                    .upstream(&u.name, &u.issuer, &u.jwks_uri)
-                    .await
-                    .map_err(refused)?;
-                Ok((
-                    Enabled {
-                        preset,
-                        client_id: Some(u.client_id),
-                        secret_ref: u.client_secret_ref,
-                    },
-                    sandbox,
-                ))
-            }
-            None => Err(Reply::problem(NO_PROVIDER)),
-        }
+        Err(Reply::problem(NO_PROVIDER))
     }
 
     /// The session's subject and its last authentication time, fresh within `max_age_ms`.
@@ -321,7 +302,27 @@ where
         {
             return r;
         }
-        match self.begin_social(entry, b, provider, true, social).await {
+        let begun = match self.begin_social(entry, b, provider, true, social).await {
+            Err(r) if matches!(&r.body, Body::Problem(p) if p.code == NO_PROVIDER.code) => {
+                // TN-66, OP-155 m.3 (h)
+                match self.fresh(&kit, b, Some(LINK_FRESHNESS_MS)).await {
+                    Ok((subject, _)) => {
+                        self.begin_upstream(
+                            &kit,
+                            b,
+                            provider,
+                            Some(subject),
+                            social,
+                            super::upstream::StartQuery::default(),
+                        )
+                        .await
+                    }
+                    Err(r) => Err(r),
+                }
+            }
+            other => other,
+        };
+        match begun {
             Ok((url, cookie)) => Reply::json(200, json!({ "redirect_to": url })).cookie(cookie),
             Err(r) => r,
         }
