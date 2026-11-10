@@ -1,6 +1,8 @@
 -- OP-156 m.3 (r): one row per idp.signal.source_register or source_retire. A signal source is a
 -- Claim issuer (KYC, MDM, risk, DLP); its Claims count only once the domain accepts them. A
 -- retired name is never reused; nothing is deleted (OP-73).
+SET LOCAL ROLE access_migrator;
+
 CREATE TABLE access.signal_sources (
   tenant_id uuid NOT NULL,
   realm_id uuid NOT NULL,
@@ -37,3 +39,5 @@ CREATE POLICY tenant_scope ON access.signal_sources AS RESTRICTIVE TO access_app
   USING (tenant_id = (SELECT access.tenant_scope()) AND realm_id = (SELECT access.realm_scope()))
   WITH CHECK (tenant_id = (SELECT access.tenant_scope()) AND realm_id = (SELECT access.realm_scope()));
 GRANT SELECT, INSERT ON access.signal_sources TO access_app;
+
+RESET ROLE;

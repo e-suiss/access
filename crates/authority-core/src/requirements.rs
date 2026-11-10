@@ -357,7 +357,7 @@ mod tests {
             .collect()
     }
 
-    // MUST-NEVER-14, §2.7, OP-142, Ek B 4644
+    // MUST-NEVER-14, §2.7, OP-142, Ek B 4644, OP-156 m.3 (r)
     #[test]
     fn no_decision_input_has_room_for_private_context() {
         assert_eq!(
@@ -384,7 +384,17 @@ mod tests {
             .collect();
         assert_eq!(
             names,
-            ["now", "action", "capacity", "untrusted", "actor", "tier"]
+            [
+                "now",
+                "action",
+                "capacity",
+                "untrusted",
+                "actor",
+                "tier",
+                "risk",
+                "posture",
+                "labels"
+            ]
         );
         let opaque: BTreeMap<String, access_kernel::digest::Digest> = BTreeMap::new();
         let envelope = access_kernel::intent::IntentEnvelope {
