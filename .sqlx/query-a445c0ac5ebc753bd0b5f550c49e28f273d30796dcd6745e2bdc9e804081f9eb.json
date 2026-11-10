@@ -1,0 +1,144 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ON (s.name) s.name, s.state, s.kind, s.provider, s.issuer, s.format,\n                      s.transmitter, s.expected_interval_s, s.version, s.decision_pos,\n                      (SELECT (EXTRACT(EPOCH FROM MIN(f.created_at)) * 1000)::bigint\n                         FROM access.signal_sources f\n                        WHERE f.tenant_id = s.tenant_id AND f.realm_id = s.realm_id\n                          AND f.name = s.name) AS \"created_ms!\"\n                 FROM access.signal_sources s\n                WHERE s.tenant_id = $1 AND s.realm_id = $2\n                ORDER BY s.name, s.version DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.signal_sources",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.signal_sources",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.signal_sources",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "provider",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.signal_sources",
+            "name": "provider"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "issuer",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.signal_sources",
+            "name": "issuer"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "format",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.signal_sources",
+            "name": "format"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "transmitter",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.signal_sources",
+            "name": "transmitter"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "expected_interval_s",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.signal_sources",
+            "name": "expected_interval_s"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.signal_sources",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.signal_sources",
+            "name": "decision_pos"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "created_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "a445c0ac5ebc753bd0b5f550c49e28f273d30796dcd6745e2bdc9e804081f9eb"
+}

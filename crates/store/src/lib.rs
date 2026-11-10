@@ -76,6 +76,7 @@ pub mod sandbox;
 pub mod scim;
 pub mod scope;
 pub mod sessions;
+pub mod signals;
 pub mod ssf;
 pub mod ssh;
 pub mod status;

@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.signal_sources (tenant_id, realm_id, name, version, state, kind,\n                    provider, issuer, format, transmitter, expected_interval_s, domain_id,\n                    decision_pos)\n             SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8, $9, $10, $11,\n                    $12\n               FROM access.signal_sources\n              WHERE tenant_id = $1 AND realm_id = $2 AND name = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Text",
+        "Text",
+        "Int4",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "19163fc4b0fb4c77eedf970b7d8abbe459fa8845202b178839f9df530e4a789a"
+}
