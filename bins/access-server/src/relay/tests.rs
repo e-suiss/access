@@ -189,7 +189,7 @@ impl World {
     }
 }
 
-// E42, OP-156 m.3 (c), Ek B 5401, 5393: the server's courier takes the outbox to Relay
+// E42, OP-156 m.3 (c)
 #[tokio::test]
 async fn the_server_courier_delivers_to_relay_once_relay_is_confirmed() {
     let w = world().await;
@@ -227,8 +227,7 @@ async fn the_server_courier_delivers_to_relay_once_relay_is_confirmed() {
     assert!(lease.is_some(), "a stopped server gives the lease up");
 }
 
-// E42 m.5, INV-24, OP-156 m.3 (c): a Relay that is not this Access's gets nothing; the change
-// that queued the message is in force, the message waits and the lag shows it
+// E42 m.5, INV-24, OP-156 m.3 (c)
 #[tokio::test]
 async fn an_unconfirmed_relay_gets_nothing_and_messages_wait() {
     let w = world().await;
@@ -266,7 +265,7 @@ async fn an_unconfirmed_relay_gets_nothing_and_messages_wait() {
     assert!(!ready.failing().await.contains(&"outbox.consumers"));
 }
 
-// OP-156 m.3 (c), Relay E-81
+// OP-156 m.3 (c)
 #[test]
 fn the_discovery_document_must_name_this_access_and_relay() {
     let relay = "https://relay.test";
@@ -314,7 +313,7 @@ fn the_discovery_document_must_name_this_access_and_relay() {
     );
 }
 
-// TI-9, OP-156 m.3 (c): no credential, no start
+// TI-9, OP-156 m.3 (c)
 #[tokio::test]
 async fn the_server_does_not_start_without_the_relay_credential() {
     let twin = RelayTwin::start(&random_hex(), ISSUER).await;
@@ -370,8 +369,7 @@ impl access_identity_events::ports::Transport for ToTwin {
     }
 }
 
-// Ek B 5293, TN-136, E42 (4), OP-156 m.3 (c): Relay takes Access's authority events as an
-// ordinary webhook receiver, on the Suiss webhook profile and with no privilege
+// TN-136, E42, OP-156 m.3 (c)
 #[tokio::test]
 #[expect(
     clippy::too_many_lines,

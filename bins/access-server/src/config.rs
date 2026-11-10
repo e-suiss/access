@@ -1188,7 +1188,7 @@ mod tests {
         assert!(bad(|s| s.region = "EU".to_owned()));
         assert!(bad(|s| s.region = "-eu".to_owned()));
         assert!(bad(|s| s.relay = "http://relay.example".to_owned()));
-        // OP-156 m.3 (c): no Relay tenant, no start
+        // OP-156 m.3 (c)
         assert!(bad(|s| s.relay_platform.tenant = String::new()));
         assert!(bad(|s| s.relay_platform.tenant = "a tenant".to_owned()));
         assert!(bad(|s| s.management_api = "https://api.example/".to_owned()));

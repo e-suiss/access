@@ -1371,7 +1371,7 @@ async fn a_node_whose_term_ended_sends_nothing_more() {
     assert!(!e.term.due(START_MS + 1_000, TTL));
 }
 
-// OP-156 m.3 (c): two nodes running at once, one sends
+// OP-156 m.3 (c)
 #[tokio::test]
 async fn of_two_running_nodes_only_one_sends() {
     let e = env(42, "rn-l3").await;
@@ -1487,7 +1487,7 @@ async fn shredded_or_expired_content_is_not_resent() {
     ));
 }
 
-// OP-156 m.3 (c): the age of the oldest waiting message
+// OP-156 m.3 (c)
 #[tokio::test]
 async fn the_lag_is_the_age_of_the_oldest_waiting_message() {
     let e = env(45, "rn-g1").await;
@@ -1539,7 +1539,7 @@ fn twin_relay(twin: &RelayTwin, token: &str, timeout: Duration) -> HttpRelay {
     relay
 }
 
-// OP-156 m.3 (c), OP-146 m.4 (b): the twin answers as Relay does
+// OP-156 m.3 (c), OP-146 m.4 (b)
 #[tokio::test]
 async fn the_relay_twin_validates_and_answers_like_relay() {
     let token = random_token();
@@ -1604,7 +1604,7 @@ async fn the_relay_twin_validates_and_answers_like_relay() {
     assert_eq!(twin.discovery()["events_endpoint"], twin.events_url());
 }
 
-// OP-156 m.3 (c), E42: the courier against the twin over HTTPS
+// OP-156 m.3 (c), E42
 #[tokio::test]
 async fn the_courier_delivers_to_the_twin() {
     let e = env(46, "rn-t1").await;
