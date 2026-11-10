@@ -1,0 +1,10 @@
+{
+  "TicketId": "",
+  "RequestingUser": "alice",
+  "SafeName": "prod",
+  "ObjectName": "db-1-root",
+  "MachineAddress": "db-1",
+  "RequestedOperation": "Connect",
+  "Reason": "INC-4211 restore the payroll replica",
+  "Valid": "false"
+}

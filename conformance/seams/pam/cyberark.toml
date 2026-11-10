@@ -1,0 +1,15 @@
+# CyberArk Privileged Access Manager, through a ticketing system integration (IDP-39 (1), OP-156
+# m.3 (x)). The integration is the PEP: when a user connects to an account, it asks Access with
+# the user's own Actor Intent Statement, carried beside the request, and answers the vault's
+# ticket check from the decision. The ticket is the release Exercise; CyberArk keeps the
+# credential, the session and its recording.
+vendor = "CyberArk"
+integration = "ticketing system integration"
+recorded = "recorded/cyberark-ticket-validation.json"
+action = "pam.session.open"
+resource_namespace = "pam.host"
+resource_path = ["/SafeName", "/MachineAddress"]
+user = "/RequestingUser"
+reason = "/Reason"
+allow = { set = "/Valid", to = "true", exercise = "/TicketId" }
+refuse = { set = "/Valid", to = "false" }

@@ -1,0 +1,16 @@
+# A privileged access management product (Teleport, CyberArk, …) as a seam (E22, IDP-39 (1),
+# OP-156 m.3 (x)). The PAM keeps the session, its recording and its account vault; Access decides
+# who may open which session, on which condition and for how long. The session opens only for the
+# Exercise Access allowed, and the PAM records that Exercise with it.
+product = "PAM"
+namespace = "pam.session"
+catalog_version = 1
+truth = ["session", "session recording", "account vault", "target host"]
+
+[[actions]]
+name = "open"
+major = 1
+effect_class = "reversible"
+reversibility = "reversible"
+resource_types = ["host"]
+render = "Open a privileged session"

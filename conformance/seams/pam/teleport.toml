@@ -1,0 +1,15 @@
+# Teleport, through an access request plugin (IDP-39 (1), OP-156 m.3 (x)). The plugin is the PEP:
+# for each access request it asks Access with the requesting user's own Actor Intent Statement,
+# carried beside the request, and sets the request's state from the answer. Teleport opens the
+# session only for an approved request and keeps its recording; the SSH certificate comes from
+# the realm's Access SSH CA (`access ssh login`).
+vendor = "Teleport"
+integration = "access request plugin"
+recorded = "recorded/teleport-access-request.json"
+action = "pam.session.open"
+resource_namespace = "pam.host"
+resource_path = ["/spec/resource_ids/0/cluster", "/spec/resource_ids/0/name"]
+user = "/spec/user"
+reason = "/spec/request_reason"
+allow = { set = "/spec/state", to = "APPROVED", exercise = "/metadata/annotations/suiss.access~1exercise" }
+refuse = { set = "/spec/state", to = "DENIED" }

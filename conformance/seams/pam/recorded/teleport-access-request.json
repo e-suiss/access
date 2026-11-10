@@ -1,0 +1,18 @@
+{
+  "kind": "access_request",
+  "version": "v3",
+  "metadata": {
+    "name": "0b8f5c3e-7a51-4c1e-9a2b-3d4e5f607182",
+    "annotations": {}
+  },
+  "spec": {
+    "user": "alice",
+    "roles": ["db-admin"],
+    "resource_ids": [
+      { "cluster": "prod", "kind": "node", "name": "db-1" }
+    ],
+    "state": "PENDING",
+    "request_reason": "INC-4211 restore the payroll replica",
+    "max_duration": "2026-11-11T12:00:00Z"
+  }
+}
