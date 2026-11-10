@@ -2523,6 +2523,7 @@ mod mcp;
 mod privacy;
 mod product_twin;
 mod proxy;
+mod proxy_engines;
 mod recovery;
 mod recovery_authority;
 mod sample_agent;

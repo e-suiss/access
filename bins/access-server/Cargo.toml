@@ -71,6 +71,8 @@ access-product-twin = { path = "../../services/product-twin" }
 # OP-156 m.3 (p)
 access-linux-client = { path = "../../services/linux-client" }
 access-linux-module = { path = "../../services/linux-client/module" }
+# OP-156 m.3 (m)
+access-proxy = { path = "../../services/proxy" }
 access-sdk = { workspace = true, features = ["mcp"] }
 access-authority-signer = { path = "../../crates/authority-signer" }
 access-crypto = { workspace = true, features = ["testing"] }

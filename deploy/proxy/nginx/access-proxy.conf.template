@@ -1,0 +1,54 @@
+# Access in front of one application with Nginx auth_request (IDP-30 (1), OP-156 m.3 (l)).
+# Nginx is not packaged; this is the documented example. The official nginx image fills the
+# ${ACCESS_PROXY_*} values from its environment when the file is placed in /etc/nginx/templates/.
+# Every request asks Access's /proxy/v1/check/nginx with the proxy's client certificate; Access
+# answers 2xx (allow, with Access-Identity), 401 with Location and Set-Cookie (sign in) or 403.
+# Anything else, including no answer, is a refusal.
+
+server {
+    listen ${ACCESS_PROXY_LISTEN} ssl;
+    server_name ${ACCESS_PROXY_APP_HOST};
+
+    ssl_certificate ${ACCESS_PROXY_APP_CERT};
+    ssl_certificate_key ${ACCESS_PROXY_APP_KEY};
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location = /_access_check {
+        internal;
+        proxy_pass ${ACCESS_PROXY_ACCESS_URL}/proxy/v1/check/nginx;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header X-Original-Method $request_method;
+        proxy_set_header X-Original-URI $request_uri;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header Cookie $http_cookie;
+        proxy_ssl_certificate ${ACCESS_PROXY_CERT};
+        proxy_ssl_certificate_key ${ACCESS_PROXY_KEY};
+        proxy_ssl_trusted_certificate ${ACCESS_PROXY_ACCESS_CA};
+        proxy_ssl_verify on;
+        proxy_ssl_server_name on;
+        proxy_ssl_name ${ACCESS_PROXY_ACCESS_HOST};
+        proxy_ssl_protocols TLSv1.3;
+        proxy_connect_timeout 2s;
+        proxy_read_timeout 2s;
+    }
+
+    location @access_sign_in {
+        add_header Set-Cookie $access_set_cookie always;
+        add_header Cache-Control no-store always;
+        return 302 $access_location;
+    }
+
+    location / {
+        auth_request /_access_check;
+        auth_request_set $access_identity $upstream_http_access_identity;
+        auth_request_set $access_location $upstream_http_location;
+        auth_request_set $access_set_cookie $upstream_http_set_cookie;
+        error_page 401 = @access_sign_in;
+
+        proxy_set_header Access-Identity $access_identity;
+        proxy_set_header X-Access-User "";
+        proxy_set_header X-Access-Email "";
+        proxy_pass ${ACCESS_PROXY_UPSTREAM};
+    }
+}
