@@ -6,6 +6,7 @@
 //! (`sdks/openapi/frontend.json`).
 
 pub mod assets;
+mod certificate;
 mod did;
 mod idempotency;
 mod me;
@@ -26,6 +27,7 @@ use axum::Router;
 use axum::routing::{delete, get, patch, post, put};
 
 pub use assets::{Assets, AssetsError};
+pub use certificate::router as certificate_router;
 pub use did::router as did_router;
 pub use idempotency::{CAPACITY as IDEMPOTENCY_CAPACITY, RETENTION as IDEMPOTENCY_RETENTION};
 pub use me::router as me_router;

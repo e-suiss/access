@@ -70,6 +70,10 @@ pub fn levels(v: &AssuranceVector) -> BTreeMap<String, u64> {
 #[must_use]
 pub fn method(factors: &[Factor]) -> Option<(AuthMethod, Option<PasskeyDetail>)> {
     let pick = |m: MethodClass| factors.iter().find(|f| f.method == m);
+    // OP-155 m.3 (m)
+    if certificate(factors).is_some() {
+        return Some((AuthMethod::X509, None));
+    }
     if let Some(f) = pick(MethodClass::Passkey) {
         return Some((AuthMethod::Webauthn, f.webauthn));
     }
@@ -77,6 +81,15 @@ pub fn method(factors: &[Factor]) -> Option<(AuthMethod, Option<PasskeyDetail>)>
         return Some((AuthMethod::Totp, None));
     }
     pick(MethodClass::Password).map(|_| (AuthMethod::Password, None))
+}
+
+/// The thumbprint of a certificate step (OP-155 m.3 (m)).
+#[must_use]
+pub fn certificate(factors: &[Factor]) -> Option<[u8; 32]> {
+    factors
+        .iter()
+        .filter(|f| matches!(f.method, MethodClass::SmartCard | MethodClass::Certificate))
+        .find_map(|f| f.certificate)
 }
 
 /// The details of a passkey step: the assertion's facts and the digest of what was presented.
@@ -121,7 +134,9 @@ pub(crate) async fn signed_in<T: SessionTx>(
             be: p.be,
             bs: p.bs,
         }),
-        evidence: passkey.map(|p| Digest(p.evidence)),
+        evidence: passkey
+            .map(|p| Digest(p.evidence))
+            .or_else(|| certificate(&state.factors).map(Digest)),
         bind: Bind::Session(signed.session),
     });
     emit(tx, &order).await?;

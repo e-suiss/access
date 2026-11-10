@@ -90,7 +90,7 @@ pub struct LeafSpec<'a> {
     pub serial: u8,
     /// Whether it is for server authentication only.
     pub server_only: bool,
-    /// Whether it expired a day before [`NOW`].
+    /// Whether it expired a day before the CA's time.
     pub expired: bool,
 }
 
@@ -106,12 +106,14 @@ pub struct Issued {
 pub struct Ca {
     /// Its certificate.
     pub der: Vec<u8>,
+    /// The time its certificates are made valid around, Unix seconds.
+    pub now: u64,
     issuer: Issuer<'static, KeyPair>,
     key: KeyPair,
     key_bits: Vec<u8>,
 }
 
-fn ca_params(cn: &str) -> CertificateParams {
+fn ca_params(cn: &str, now: u64) -> CertificateParams {
     let mut p = CertificateParams::new(Vec::<String>::new()).unwrap();
     let mut dn = DistinguishedName::new();
     dn.push(DnType::CommonName, cn);
@@ -122,8 +124,8 @@ fn ca_params(cn: &str) -> CertificateParams {
         KeyUsagePurpose::CrlSign,
         KeyUsagePurpose::DigitalSignature,
     ];
-    p.not_before = at(NOW - 30 * DAY);
-    p.not_after = at(NOW + 3650 * DAY);
+    p.not_before = at(now - 30 * DAY);
+    p.not_after = at(now + 3650 * DAY);
     p.key_identifier_method = KeyIdMethod::Sha256;
     p
 }
@@ -152,19 +154,25 @@ fn revocation_pointers(p: &mut CertificateParams, ocsp: Option<&str>, crl: Optio
 }
 
 impl Ca {
-    /// A self-signed root.
+    /// A self-signed root valid around [`NOW`].
     pub fn root(cn: &str) -> Self {
-        let key = KeyPair::generate().unwrap();
-        let params = ca_params(cn);
-        let cert = params.self_signed(&key).unwrap();
-        Self::of(cert.der().to_vec(), params, key)
+        Self::root_at(cn, NOW)
     }
 
-    fn of(der: Vec<u8>, params: CertificateParams, key: KeyPair) -> Self {
+    /// A self-signed root valid around `now` (Unix seconds).
+    pub fn root_at(cn: &str, now: u64) -> Self {
+        let key = KeyPair::generate().unwrap();
+        let params = ca_params(cn, now);
+        let cert = params.self_signed(&key).unwrap();
+        Self::of(cert.der().to_vec(), params, key, now)
+    }
+
+    fn of(der: Vec<u8>, params: CertificateParams, key: KeyPair, now: u64) -> Self {
         let key_bits = Cert::parse(&der).unwrap().public_key.to_vec();
         let own = KeyPair::try_from(key.serialize_der().as_slice()).unwrap();
         Self {
             der,
+            now,
             issuer: Issuer::new(params, key),
             key: own,
             key_bits,
@@ -174,10 +182,10 @@ impl Ca {
     /// An intermediate CA under this one, with its revocation pointers.
     pub fn intermediate(&self, cn: &str, ocsp: Option<&str>, crl: Option<&str>) -> Self {
         let key = KeyPair::generate().unwrap();
-        let mut params = ca_params(cn);
+        let mut params = ca_params(cn, self.now);
         revocation_pointers(&mut params, ocsp, crl);
         let cert = params.signed_by(&key, &self.issuer).unwrap();
-        Self::of(cert.der().to_vec(), params, key)
+        Self::of(cert.der().to_vec(), params, key, self.now)
     }
 
     /// A client certificate under this CA.
@@ -221,11 +229,11 @@ impl Ca {
         }
         revocation_pointers(&mut p, s.ocsp, s.crl);
         if s.expired {
-            p.not_before = at(NOW - 30 * DAY);
-            p.not_after = at(NOW - DAY);
+            p.not_before = at(self.now - 30 * DAY);
+            p.not_after = at(self.now - DAY);
         } else {
-            p.not_before = at(NOW - DAY);
-            p.not_after = at(NOW + 365 * DAY);
+            p.not_before = at(self.now - DAY);
+            p.not_after = at(self.now + 365 * DAY);
         }
         let cert = p.signed_by(&key, &self.issuer).unwrap();
         Issued {
@@ -251,8 +259,8 @@ impl Ca {
             &oid_arcs("1.3.6.1.5.5.7.48.1.5"),
             vec![der::NULL, 0],
         ));
-        p.not_before = at(NOW - DAY);
-        p.not_after = at(NOW + 30 * DAY);
+        p.not_before = at(self.now - DAY);
+        p.not_after = at(self.now + 30 * DAY);
         let cert = p.signed_by(&key, &self.issuer).unwrap();
         Issued {
             der: cert.der().to_vec(),
@@ -369,10 +377,15 @@ pub struct OcspAnswer {
 impl OcspAnswer {
     /// A current answer: issued an hour before [`NOW`], next update a day after.
     pub const fn current(status: Status) -> Self {
+        Self::current_at(status, NOW)
+    }
+
+    /// A current answer at `now`: issued an hour before, next update a day after.
+    pub const fn current_at(status: Status, now: u64) -> Self {
         Self {
             status,
-            this_update: NOW - 3600,
-            next_update: Some(NOW + DAY),
+            this_update: now - 3600,
+            next_update: Some(now + DAY),
             tamper: false,
         }
     }

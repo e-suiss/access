@@ -12,6 +12,7 @@
 
 mod account;
 mod approve;
+pub mod certificate;
 mod credential;
 pub mod devices;
 pub mod did;

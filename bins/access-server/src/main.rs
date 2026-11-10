@@ -12,6 +12,7 @@
 
 mod admin;
 mod bootstrap;
+mod certificate;
 mod checkpoints;
 mod claims;
 mod config;
@@ -852,6 +853,11 @@ async fn identity(
         SignerKeys::new(identity.signer.clone()),
     )
     .with_suiss(suiss.settings(api_base));
+    // OP-155 m.3 (m)
+    let discovery = match config.mtls_port() {
+        Some(port) => discovery.with_mtls(port),
+        None => discovery,
+    };
     // OP-148, OP-138, MD-8
     let mut report = startup::Report::default();
     report.record(
@@ -1633,6 +1639,12 @@ async fn serve(
         prepared.account_assets,
         limits,
     );
+    // OP-155 m.3 (m)
+    let certificate_login = access_http::login::certificate_router(
+        RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
+        hosted.clone(),
+        certificate::certificates(prepared.outbound.clone(), Arc::new(idp_plane.clone())),
+    );
     let me = frontend(
         config,
         tenants_pool.clone(),
@@ -1653,7 +1665,7 @@ async fn serve(
         adp.merge(products)
             .merge(platform)
             .merge(realms)
-            .merge(sign_in.merge(me))
+            .merge(sign_in.merge(me).merge(certificate_login))
             .merge(account_pages)
             .merge(authorize)
             .merge(edge_calls)
@@ -1743,7 +1755,7 @@ async fn listen(
     // OP-155 m.3 (m)
     let mtls_served = match (listeners.mtls.map(nonblocking).transpose()?, mtls) {
         (Some(l), Some(c)) => {
-            tracing::info!(mtls_listen = ?config.mtls_listen, mtls_port = ?config.mtls_port(), "mTLS listener (TLS 1.3)");
+            tracing::info!(mtls_listen = ?config.mtls_listen, "mTLS listener (TLS 1.3)");
             Some(access_http::tls::serve_mtls(
                 l,
                 c.clone(),

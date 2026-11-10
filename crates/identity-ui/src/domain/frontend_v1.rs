@@ -1103,7 +1103,7 @@ pub const ROUTES: &[Route] = &[
         "approveCiba",
         "Approves or declines a CIBA request with the person's AAS; the client learns it by poll or ping.",
     ),
-    planned(
+    live(
         Owner::P9,
         Verb::Get,
         "/login/certificate",

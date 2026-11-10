@@ -72,6 +72,25 @@ where
             .await
     }
 
+    /// Opens the login flow of `subject` who presented a client certificate on the mTLS
+    /// listener, checked by the caller: path, CA Acceptance, revocation and mapping (OP-155
+    /// m.3 (m)); `factor` is [`Factor::certificate`].
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub async fn certificate(
+        &self,
+        subject: [u8; 16],
+        factor: Factor,
+        device: Option<&str>,
+        correlation: &str,
+    ) -> Result<Opened, SessionError> {
+        if factor.certificate.is_none() {
+            return Err(SessionError::Corrupt);
+        }
+        self.open_with(subject, factor, device, correlation).await
+    }
+
     async fn open_with(
         &self,
         subject: [u8; 16],

@@ -435,10 +435,11 @@ async fn the_mtls_listener_gives_the_request_the_public_host() {
 // OP-155 m.3 (k)
 #[tokio::test]
 async fn a_forwarded_certificate_header_never_reaches_a_route() {
-    let forwarded: String = access_http::tls::FORWARDED_CERT_HEADERS
-        .iter()
-        .map(|n| format!("{n}: MIIB\r\n"))
-        .collect();
+    let mut forwarded = String::new();
+    for n in access_http::tls::FORWARDED_CERT_HEADERS {
+        forwarded.push_str(n);
+        forwarded.push_str(": MIIB\r\n");
+    }
     let head = format!(
         "GET /forwarded HTTP/1.1\r\nHost: localhost\r\n{forwarded}Connection: close\r\n\r\n"
     );

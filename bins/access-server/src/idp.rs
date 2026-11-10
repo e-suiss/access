@@ -239,6 +239,39 @@ where
     }
 }
 
+// §10.2.5, OP-155 m.3 (m)
+impl<K, B, S, C> access_identity_x509::ports::CaTrust for Plane<K, B, S, C>
+where
+    K: Keys + Send + Sync + 'static,
+    B: Binding + Clone + Send + Sync + 'static,
+    S: Salts + Clone + Send + Sync + 'static,
+    C: Clock + Clone + Send + Sync + 'static,
+{
+    fn accepted(
+        &self,
+        domain: [u8; 32],
+        issuer: [u8; 16],
+    ) -> access_identity_x509::ports::Held<'_> {
+        Box::pin(async move {
+            let class = access_kernel::claim::body::Class::IdentityBinding(
+                access_kernel::claim::body::BindingKind::Person,
+            )
+            .name();
+            self.domains
+                .issuer_accepted(
+                    Digest(domain),
+                    Id(issuer),
+                    (access_kernel::claim::ACTOR_BINDING, &class),
+                )
+                .await
+                .map_err(|e| {
+                    tracing::warn!(event = "login.certificate.trust.unavailable", outcome = "error", error = %e, "CA acceptance unavailable");
+                    access_identity_x509::ports::Unavailable
+                })
+        })
+    }
+}
+
 // §11.6 rule 1, P58, EI-18, OP-154 m.3 (k)
 impl<K, B, S, C> access_identity_oauth::ports::oauth::GrantStanding for Plane<K, B, S, C>
 where

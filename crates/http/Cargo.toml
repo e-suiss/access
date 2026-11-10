@@ -21,6 +21,7 @@ access-identity-edge = { workspace = true }
 access-identity-session = { workspace = true }
 access-identity-ui = { workspace = true }
 access-identity-vault = { workspace = true }
+access-identity-x509 = { workspace = true }
 access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 suiss-crypto = { workspace = true, features = ["aead", "verify"] }

@@ -1389,7 +1389,10 @@ where
         // OP-148, §7.9.8, E42, SEC18
         if unknown_device && matches!(l.state.purpose, Purpose::Login) {
             let method = match l.state.factors.first().map(|f| f.method) {
-                Some(MethodClass::Passkey) => SignInMethod::Passkey,
+                // OP-155 m.3 (m)
+                Some(MethodClass::Passkey | MethodClass::SmartCard | MethodClass::Certificate) => {
+                    SignInMethod::Passkey
+                }
                 Some(MethodClass::EmailOtp | MethodClass::Totp | MethodClass::RecoveryCode) => {
                     SignInMethod::Otp
                 }

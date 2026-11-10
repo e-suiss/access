@@ -26,6 +26,12 @@ pub enum MethodClass {
     AppControlled,
     /// A social or upstream provider's checked assertion (IDP-31, OP-153 m.3 (l)): AAL1, no CT.
     Federated,
+    /// A client certificate whose issuer policy the realm mapped as hardware-bound PIV, CAC or
+    /// smart card, presented on the mTLS listener (OP-155 m.3 (m)).
+    SmartCard,
+    /// Any other client certificate presented on the mTLS listener: a software key (OP-155
+    /// m.3 (m)).
+    Certificate,
 }
 
 impl MethodClass {
@@ -41,6 +47,8 @@ impl MethodClass {
             Self::Push => "mca",
             Self::AppControlled => "pin",
             Self::Federated => "fed",
+            Self::SmartCard => "sc",
+            Self::Certificate => "swk",
         }
     }
 }
@@ -161,6 +169,10 @@ pub struct Factor {
     /// What a passkey's assertion showed, for its `authentication` Claim (§10.1.2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub webauthn: Option<PasskeyDetail>,
+    /// A client certificate's SHA-256 thumbprint, for its `authentication` Claim (OP-155
+    /// m.3 (m)).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub certificate: Option<[u8; 32]>,
 }
 
 /// What a passkey assertion showed (§10.1.2 WebAuthn row): the AAGUID hint, the counter, the
@@ -196,6 +208,7 @@ impl Factor {
             credential: None,
             at_ms,
             webauthn: None,
+            certificate: None,
         }
     }
 
@@ -234,6 +247,35 @@ impl Factor {
     #[must_use]
     pub fn federated(at_ms: u64) -> Self {
         Self::base(MethodClass::Federated, vec![FactorKind::Possession], at_ms)
+    }
+
+    /// A client certificate on the mTLS listener (§10.2.5, OP-155 m.3 (m)): channel binding, so
+    /// phishing resistant. A certificate whose issuer policy the realm mapped as hardware-bound
+    /// PIV is a device-bound key activated by the card's PIN (AAL3, CT3); any other is a software
+    /// key of one category, which never reaches CT3.
+    #[must_use]
+    pub fn certificate(thumbprint: [u8; 32], hardware_bound: bool, at_ms: u64) -> Self {
+        let (method, kinds, binding) = if hardware_bound {
+            (
+                MethodClass::SmartCard,
+                vec![FactorKind::Possession, FactorKind::Knowledge],
+                BindingStrength::DeviceBound,
+            )
+        } else {
+            (
+                MethodClass::Certificate,
+                vec![FactorKind::Possession],
+                BindingStrength::None,
+            )
+        };
+        Self {
+            phishing: Some(PhishingProof::ChannelBinding),
+            binding,
+            uv: hardware_bound,
+            replay_resistant: true,
+            certificate: Some(thumbprint),
+            ..Self::base(method, kinds, at_ms)
+        }
     }
 
     /// An e-mail code or link (§10.2.2): AAL1, no CT.
@@ -435,6 +477,28 @@ mod tests {
     use super::*;
 
     const T: u64 = 1_000;
+
+    // OP-155 m.3 (m), §10.3.1, IDP-8, Ek B 4671
+    #[test]
+    fn a_software_certificate_never_reaches_ct3() {
+        let soft = [Factor::certificate([7; 32], false, T)];
+        let v = vector(&soft);
+        assert_eq!(v.aal, Aal::Aal1);
+        assert!(v.phishing_resistant);
+        assert!(!v.hardware_bound);
+        assert_eq!(ct_ceiling(&soft), CtCeiling::Ct1);
+        assert_eq!(soft[0].method.amr(), "swk");
+        let with_password = [Factor::password(T), soft[0].clone()];
+        assert_eq!(vector(&with_password).aal, Aal::Aal2);
+        assert_eq!(ct_ceiling(&with_password), CtCeiling::Ct1);
+        let piv = [Factor::certificate([7; 32], true, T)];
+        let v = vector(&piv);
+        assert_eq!(v.aal, Aal::Aal3);
+        assert!(v.hardware_bound && v.uv && v.phishing_resistant);
+        assert_eq!(ct_ceiling(&piv), CtCeiling::Ct3);
+        assert_eq!(piv[0].method.amr(), "sc");
+        assert_eq!(piv[0].certificate, Some([7; 32]));
+    }
 
     // §10.1.6, §10.2, §10.3.1, IDP-8
     #[test]

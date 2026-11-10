@@ -465,3 +465,27 @@ severity = "warn"
 since = "unreleased"
 fields = []
 ocsf = "detection_finding"
+
+[[event]]
+name = "login.certificate.refused"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "authentication"
+
+[[event]]
+name = "login.certificate.fetch"
+plane = "ops"
+severity = "info"
+since = "unreleased"
+fields = []
+ocsf = "application_error"
+
+[[event]]
+name = "login.certificate.trust.unavailable"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["error"]
+ocsf = "application_error"

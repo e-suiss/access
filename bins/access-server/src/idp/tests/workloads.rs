@@ -43,7 +43,7 @@ fn meta_intent(payload: &Payload) -> IntentEnvelope {
 }
 
 /// The root's `acceptance_establish` of `content` on the meta anchor.
-async fn establish(w: &World, d: Digest, nonce: u8, content: Value) -> Verdict {
+pub(super) async fn establish(w: &World, d: Digest, nonce: u8, content: Value) -> Verdict {
     let payload = Payload::AcceptanceEstablish(content);
     let intent = meta_intent(&payload);
     let basis = ExerciseBasis::Anchor(meta::meta_anchor(&d));
@@ -70,7 +70,7 @@ async fn establish(w: &World, d: Digest, nonce: u8, content: Value) -> Verdict {
         .unwrap()
 }
 
-fn issuer_gate(issuer: Id, use_: &str, classes: &[&str]) -> Value {
+pub(super) fn issuer_gate(issuer: Id, use_: &str, classes: &[&str]) -> Value {
     Value::Map(vec![
         (Value::text("issuer"), issuer.to_value()),
         (Value::text("use"), Value::text(use_)),

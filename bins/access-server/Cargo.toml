@@ -17,6 +17,7 @@ access-http = { workspace = true }
 access-identity-account = { workspace = true }
 access-identity-federation = { workspace = true }
 access-identity-vault = { workspace = true }
+access-identity-x509 = { workspace = true }
 access-identity-admin = { workspace = true }
 access-identity-events = { workspace = true }
 access-identity-oauth = { workspace = true }
@@ -44,6 +45,8 @@ thiserror = { workspace = true, features = ["std"] }
 time = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "signal", "time"] }
 tower = { workspace = true, features = ["util"] }
+rustls = { workspace = true, features = ["aws_lc_rs", "std"] }
+tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }
 tracing = { workspace = true, features = ["std"] }
 zeroize = { workspace = true, features = ["alloc", "std"] }
 
@@ -55,6 +58,7 @@ access-authority-signer = { path = "../../crates/authority-signer" }
 access-crypto = { workspace = true, features = ["testing"] }
 access-identity-account = { workspace = true, features = ["testing"] }
 access-identity-signer = { path = "../../crates/identity-signer" }
+access-identity-x509 = { workspace = true, features = ["testing"] }
 access-local-client = { path = "../access-local-client" }
 access-store = { workspace = true, features = ["testing"] }
 aws-lc-rs = { workspace = true }
@@ -64,6 +68,8 @@ rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
 suiss-crypto = { workspace = true, features = ["testing"] }
 suiss-ledger = { workspace = true }
 tower = { workspace = true, features = ["util"] }
+rustls = { workspace = true, features = ["aws_lc_rs", "std"] }
+tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }
 
 [lints]
 workspace = true
