@@ -841,6 +841,49 @@ dependencies = [
 [[package]]
 name = "access-linux-client"
 version = "0.4.0"
+dependencies = [
+ "access-linux-module",
+ "ed25519-dalek",
+ "esuiss-access-kernel",
+ "esuiss-access-sdk",
+ "esuiss-access-verifier",
+ "esuiss-crypto",
+ "httparse",
+ "miniz_oxide",
+ "rustix",
+ "rustls",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-rustls",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "access-linux-module"
+version = "0.4.0"
+dependencies = [
+ "esuiss-crypto",
+ "thiserror",
+]
+
+[[package]]
+name = "access-linux-nss"
+version = "0.4.0"
+dependencies = [
+ "access-linux-module",
+ "libc",
+]
+
+[[package]]
+name = "access-linux-pam"
+version = "0.4.0"
+dependencies = [
+ "access-linux-module",
+ "libc",
+]
 
 [[package]]
 name = "access-local-client"
@@ -976,6 +1019,8 @@ dependencies = [
  "access-identity-webauthn",
  "access-identity-x509",
  "access-internal-api",
+ "access-linux-client",
+ "access-linux-module",
  "access-local-client",
  "access-product-twin",
  "access-store",

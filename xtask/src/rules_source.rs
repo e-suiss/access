@@ -926,16 +926,18 @@ pub(crate) fn check_todo(root: &Path) -> Result<Vec<Violation>, String> {
 const UNSAFE: &str = "unsafe-allowlist";
 
 /// Crates that may contain `unsafe` (R-2): the aws-lc and HSM/PKCS#11 wrapper,
-/// the sandbox and the Kerberos gateway.
+/// the sandbox, the Kerberos gateway and the Linux client's NSS and PAM shells (OP-156 m.3 (p)).
 pub(crate) const UNSAFE_ALLOWED: &[&str] = &[
     "crates/crypto",
     "crates/suiss-crypto",
     "crates/suiss-sandbox",
     "bins/access-gw-kerberos",
+    "services/linux-client/nss",
+    "services/linux-client/pam",
 ];
 
-/// R-2: total `unsafe` lines in the allowlisted crates.
-pub(crate) const UNSAFE_LINE_BUDGET: usize = 500;
+/// R-2: total `unsafe` lines in the allowlisted crates (OP-156 m.3 (p): 500 → 650).
+pub(crate) const UNSAFE_LINE_BUDGET: usize = 650;
 
 /// An `unsafe` use: its line and how many lines its block spans.
 #[derive(Debug, PartialEq, Eq)]

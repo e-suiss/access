@@ -123,6 +123,19 @@ fn published(root: &Path, dir: &str) -> bool {
     })
 }
 
+/// Whether `to` is a crate of the same service as `dir` (`services/<name>/…`): a service's own
+/// sub-crates, such as the Linux client's NSS and PAM shells (OP-156 m.3 (p)).
+pub(crate) fn same_service(dir: &str, to: &str) -> bool {
+    let service = |p: &str| {
+        let mut parts = p.split('/');
+        match (parts.next(), parts.next()) {
+            (Some("services"), Some(name)) if !name.is_empty() => Some(name.to_owned()),
+            _ => None,
+        }
+    };
+    service(dir).is_some_and(|s| service(to) == Some(s))
+}
+
 /// One service as the declaration lists it.
 struct Service {
     name: String,
@@ -181,7 +194,7 @@ pub(crate) fn check_metadata(root: &Path, md: &Metadata) -> Vec<Violation> {
         for dep in pkg.deps.iter().filter(|d| d.kind != DepKind::Dev) {
             let Some(path) = &dep.path else { continue };
             let to = rel(root, path);
-            if dir.starts_with("services/") && !published(root, &to) {
+            if dir.starts_with("services/") && !published(root, &to) && !same_service(&dir, &to) {
                 out.push(v(
                     &manifest,
                     format!(
@@ -364,6 +377,27 @@ pub(crate) fn write(root: &Path) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    // OP-156 m.3 (p), PI-14
+    #[test]
+    fn a_service_may_use_its_own_sub_crates_only() {
+        assert!(super::same_service(
+            "services/linux-client/pam",
+            "services/linux-client/module"
+        ));
+        assert!(super::same_service(
+            "services/linux-client",
+            "services/linux-client/module"
+        ));
+        assert!(!super::same_service(
+            "services/proxy",
+            "services/linux-client/module"
+        ));
+        assert!(!super::same_service(
+            "services/linux-client",
+            "crates/store"
+        ));
+    }
+
     use super::*;
     use crate::supply_chain::metadata::fixture::{member, metadata};
     use crate::supply_chain::metadata::parse;

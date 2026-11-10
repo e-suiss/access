@@ -1,0 +1,17 @@
+[package]
+name = "access-linux-module"
+description = "The Access Linux client's socket channel as the NSS and PAM modules speak it: the linux-client.cddl messages, their frames and a blocking client of the access-linuxd socket that refuses whenever the daemon does not answer."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+
+[dependencies]
+# OP-156 m.3 (p), OP-62: public crates only
+suiss-crypto = { workspace = true, features = ["verify"] }
+thiserror = { workspace = true, features = ["std"] }
+
+[lints]
+workspace = true

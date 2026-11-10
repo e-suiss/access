@@ -184,6 +184,13 @@ pub(crate) fn check_metadata(root: &Path, md: &Metadata) -> Vec<Violation> {
                 });
                 continue;
             };
+            // OP-156 m.3 (p)
+            if from == Class::Service
+                && to == Class::Service
+                && crate::rules::privileged::same_service(&dir, &dep_dir)
+            {
+                continue;
+            }
             if !allowed(from, to) {
                 out.push(Violation {
                     rule: RULE,

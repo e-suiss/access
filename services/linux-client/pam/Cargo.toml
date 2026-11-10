@@ -1,0 +1,46 @@
+[package]
+name = "access-linux-pam"
+description = "The Access Linux client's PAM module, pam_access.so: a C ABI shell over access-linux-module that signs in and steps up through access-linuxd and refuses whenever the daemon does not answer."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+repository.workspace = true
+publish = false
+
+[lib]
+name = "pam_access"
+crate-type = ["cdylib"]
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# OP-156 m.3 (p), (z): our own C ABI shell; R-2 allowlisted
+access-linux-module = { path = "../module" }
+libc = { workspace = true }
+
+# R-2, OP-156 m.3 (p): the workspace lints with unsafe_code = "deny" for the C ABI; every block
+# carries a SAFETY comment
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "deny"
+unreachable_pub = "deny"
+unused_must_use = "deny"
+rust_2024_compatibility = { level = "deny", priority = -1 }
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+panic = "deny"
+unimplemented = "deny"
+todo = "deny"
+unreachable = "deny"
+arithmetic_side_effects = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+mem_forget = "deny"
+undocumented_unsafe_blocks = "deny"
