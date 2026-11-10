@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: access-proxy
+  labels:
+    app.kubernetes.io/name: access-proxy
+    app.kubernetes.io/part-of: access
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: access-proxy
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: access-proxy
+        app.kubernetes.io/part-of: access
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: access-proxy
+      containers:
+        - name: access-proxy
+          # OP-49: the digest comes from kustomization.yaml
+          image: ghcr.io/e-suiss/access-proxy-envoy@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
+          args: ["--config", "/etc/access-proxy/access-proxy.toml"]
+          ports:
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+          readinessProbe:
+            tcpSocket: { port: https }
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket: { port: https }
+            periodSeconds: 10
+          volumeMounts:
+            - name: config
+              mountPath: /etc/access-proxy/access-proxy.toml
+              subPath: access-proxy.toml
+              readOnly: true
+            # OP-156 m.15 (a): Access names the proxy by this client certificate
+            - name: access-client
+              mountPath: /etc/access-proxy/access
+              readOnly: true
+            - name: apps-tls
+              mountPath: /etc/access-proxy/apps
+              readOnly: true
+            # the rendered engine configuration (Envoy /tmp, Caddy /config) and Caddy's /data
+            - name: rendered
+              mountPath: /tmp
+            - name: rendered
+              mountPath: /config
+              subPath: config
+            - name: rendered
+              mountPath: /data
+              subPath: data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: [ALL]
+      volumes:
+        - name: config
+          configMap:
+            name: access-proxy
+        - name: access-client
+          secret:
+            secretName: access-proxy-client
+        - name: apps-tls
+          secret:
+            secretName: access-proxy-apps-tls
+        - name: rendered
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi

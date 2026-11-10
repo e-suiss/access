@@ -805,6 +805,50 @@ jobs:
         if: always()
         run: scripts/ci/nats-env.sh down
 
+  # IDP-30 (2), B22, OP-156 m.3 (m), m.15 (i), Ek B 5203, 5304, 5360: Envoy, Caddy, Traefik and
+  # Nginx (the digests deploy/proxy/engines.env pins) in front of the real forward-auth path on
+  # real Postgres and SoftHSM, each running the shared cases of services/proxy/tests/behaviour
+  proxy-engines:
+    name: proxy-engines
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336 # 18.6-trixie
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+          POSTGRES_INITDB_ARGS: --auth=scram-sha-256 --data-checksums
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://postgres:ci-only-not-a-secret@localhost:5432/postgres
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: test
+          tools: nextest
+      - name: SoftHSM
+        run: sudo apt-get install --yes --no-install-recommends softhsm2
+      - name: The four engine images
+        run: scripts/ci/proxy-engines.sh pull
+      - name: The shared behaviour cases on every engine
+        run: |
+          SOFTHSM2_CONF="$(scripts/softhsm-local.sh)" \
+            cargo nextest run --locked -p access-server --run-ignored only -E 'test(proxy_engines)' --test-threads 1
+
   # OP-68, F-6, F-7: the main image is built, pushed and signed only after every check above passed
   image:
     name: image
@@ -825,6 +869,7 @@ jobs:
       - ssh-ca
       - linux-client
       - export-sinks
+      - proxy-engines
       - uniffi-kotlin
       - uniffi-swift
       - bench-instructions

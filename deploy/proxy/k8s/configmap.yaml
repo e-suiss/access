@@ -1,0 +1,23 @@
+# IDP-30 (2): the one file. The engine renders from it at start; editing it and restarting the
+# pods is the only way to change what the proxy guards. Who may reach what is decided in Access.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: access-proxy
+data:
+  access-proxy.toml: |
+    [access]
+    url = "https://access.example.com:8443"
+    ca = "/etc/access-proxy/access/ca.crt"
+    certificate = "/etc/access-proxy/access/tls.crt"
+    key = "/etc/access-proxy/access/tls.key"
+
+    [listen]
+    address = "0.0.0.0:8443"
+    certificate = "/etc/access-proxy/apps/tls.crt"
+    key = "/etc/access-proxy/apps/tls.key"
+
+    [[app]]
+    policy = "wiki"
+    host = "wiki.example.com"
+    upstream = "http://wiki.wiki.svc.cluster.local:8080"

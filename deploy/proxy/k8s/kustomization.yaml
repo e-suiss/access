@@ -1,0 +1,17 @@
+# IDP-30 (2), B22, OP-156 m.3 (m): Access Proxy in front of one or more applications. The engine is
+# the image: -proxy-envoy (default) or -proxy-caddy; access-proxy.toml stays the same for both.
+# To run Caddy, set the image below to ghcr.io/e-suiss/access-proxy-caddy and its digest.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: access-proxy
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - poddisruptionbudget.yaml
+  - networkpolicy.yaml
+images:
+  # OP-49: pinned by digest; replace with the released digest
+  - name: ghcr.io/e-suiss/access-proxy-envoy
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000

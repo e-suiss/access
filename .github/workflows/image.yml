@@ -570,3 +570,83 @@ jobs:
       - name: Stop
         if: always()
         run: $COMPOSE down --volumes
+
+  # IDP-30 (2), B22, OP-156 m.3 (m), F-5, F-6, F-7, Ek B 5203, 5347: the Access Proxy images, the
+  # official Envoy and Caddy images pinned by digest with access-proxy added; each gets a
+  # CycloneDX SBOM that names the engine and its version, checked against the built image
+  proxy-images:
+    name: proxy-images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: true
+      matrix:
+        engine: [envoy, caddy]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache: "false"
+          tools: cosign
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Tag
+        id: tag
+        env:
+          SHA: ${{ github.sha }}
+        run: echo "tag=main-${SHA::7}" >> "$GITHUB_OUTPUT"
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/proxy/Dockerfile
+          target: ${{ matrix.engine }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE }}-proxy-${{ matrix.engine }}:${{ steps.tag.outputs.tag }}
+          provenance: false
+          sbom: false
+      - name: SBOM with the engine version
+        env:
+          ENGINE: ${{ matrix.engine }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          docker pull "$IMAGE-proxy-$ENGINE@$DIGEST"
+          deploy/proxy/sbom.sh "$ENGINE" "$IMAGE-proxy-$ENGINE@$DIGEST" "$RUNNER_TEMP/sbom.cdx.json"
+      - name: Sign the image and attest its SBOM (F-7)
+        env:
+          ENGINE: ${{ matrix.engine }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          cosign sign --yes "$IMAGE-proxy-$ENGINE@$DIGEST"
+          cosign attest --yes --type cyclonedx --predicate "$RUNNER_TEMP/sbom.cdx.json" "$IMAGE-proxy-$ENGINE@$DIGEST"
+      - name: Image provenance (F-6)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}-proxy-${{ matrix.engine }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      - name: Summary
+        env:
+          ENGINE: ${{ matrix.engine }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            echo "### ${IMAGE}-proxy-${ENGINE}"
+            echo
+            echo "\`${IMAGE}-proxy-${ENGINE}@${DIGEST}\`"
+            echo
+            jq -r '.components[] | "- \(.name) \(.version)"' "$RUNNER_TEMP/sbom.cdx.json"
+          } >> "$GITHUB_STEP_SUMMARY"
