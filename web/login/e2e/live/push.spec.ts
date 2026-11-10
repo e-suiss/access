@@ -13,7 +13,11 @@ test.describe("@live push verification", () => {
     expect(r?.status()).toBe(200);
     const origin = new URL(page.url()).origin;
     const flow = await page.request.post(`${REALM}/v1/login/flows`, {
-      headers: { origin, "idempotency-key": crypto.randomUUID() },
+      headers: {
+        origin,
+        "content-type": "application/json",
+        "idempotency-key": crypto.randomUUID(),
+      },
     });
     expect(flow.status()).toBe(201);
     const handle = ((await flow.json()) as { flow: string }).flow;

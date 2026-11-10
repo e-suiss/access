@@ -7,6 +7,7 @@ docs
 deploy
 !deploy/compose/access
 !deploy/realm-templates
+!deploy/linux-client
 target
 **/target
 node_modules
