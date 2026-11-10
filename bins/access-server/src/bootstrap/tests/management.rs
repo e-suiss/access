@@ -1167,6 +1167,7 @@ mod consent;
 mod cross_app;
 mod dcr;
 mod device;
+mod gateways;
 mod organizations;
 mod resources;
 mod saml;
