@@ -157,6 +157,14 @@ pub enum Pending {
         /// A link was really sent (the identifier has an account).
         live: bool,
     },
+    /// A push verification is out to the account's approvers (OP-156 m.3 (d)): a second step
+    /// only, resumed by the approver's signed answer.
+    Push {
+        /// The stored digest of the challenge id.
+        challenge: [u8; 32],
+        /// Absolute end: 120 s after it was sent.
+        expires_ms: u64,
+    },
 }
 
 impl Pending {
@@ -166,6 +174,7 @@ impl Pending {
         match self {
             Self::EmailCode { .. } => MethodClass::EmailOtp,
             Self::MagicLink { .. } => MethodClass::MagicLink,
+            Self::Push { .. } => MethodClass::Push,
         }
     }
 
@@ -173,7 +182,9 @@ impl Pending {
     #[must_use]
     pub const fn expires_ms(&self) -> u64 {
         match self {
-            Self::EmailCode { expires_ms, .. } | Self::MagicLink { expires_ms, .. } => *expires_ms,
+            Self::EmailCode { expires_ms, .. }
+            | Self::MagicLink { expires_ms, .. }
+            | Self::Push { expires_ms, .. } => *expires_ms,
         }
     }
 }
@@ -328,7 +339,34 @@ impl FlowState {
     /// # Errors
     /// [`FlowRejection::NotAllowed`].
     pub fn suspend(&mut self, pending: Pending) -> Result<(), FlowRejection> {
-        if self.first_done() || !matches!(self.purpose, Purpose::Login) || self.identifier.is_none()
+        if matches!(pending, Pending::Push { .. })
+            || self.first_done()
+            || !matches!(self.purpose, Purpose::Login)
+            || self.identifier.is_none()
+        {
+            return Err(FlowRejection::NotAllowed);
+        }
+        self.pending = Some(pending);
+        Ok(())
+    }
+
+    /// Suspends the flow on a push verification (TN-102, OP-156 m.3 (d)). Push is a second step
+    /// only: a first step must be done, it must not be push already, and the subject is known.
+    ///
+    /// # Errors
+    /// [`FlowRejection::NotAllowed`].
+    pub fn suspend_second(&mut self, pending: Pending) -> Result<(), FlowRejection> {
+        let pushed = self.factors.iter().any(|f| f.method == MethodClass::Push);
+        if !matches!(pending, Pending::Push { .. })
+            || !self.first_done()
+            || pushed
+            || self.subject.is_none()
+            || matches!(
+                self.purpose,
+                Purpose::EnrollTotp { .. }
+                    | Purpose::RegisterPasskey { .. }
+                    | Purpose::InstanceKey { .. }
+            )
         {
             return Err(FlowRejection::NotAllowed);
         }
@@ -459,6 +497,38 @@ mod tests {
                 digest: None,
                 expires_ms: 9,
                 attempts_left: 1
+            }),
+            Err(FlowRejection::NotAllowed)
+        );
+    }
+
+    // OP-156 m.3 (d), TN-102
+    #[test]
+    fn push_suspends_only_a_second_step() {
+        let mut f = login();
+        let push = Pending::Push {
+            challenge: [3; 32],
+            expires_ms: 9_000,
+        };
+        assert_eq!(f.suspend(push.clone()), Err(FlowRejection::NotAllowed));
+        assert_eq!(
+            f.suspend_second(push.clone()),
+            Err(FlowRejection::NotAllowed)
+        );
+        f.record(S, Factor::password(1)).unwrap_or_default();
+        assert_eq!(f.suspend_second(push.clone()), Ok(()));
+        assert_eq!(
+            f.take_pending(MethodClass::EmailOtp, 2_000),
+            Err(FlowRejection::NoPending)
+        );
+        assert_eq!(
+            f.take_pending(MethodClass::Push, 9_000),
+            Err(FlowRejection::Expired)
+        );
+        assert_eq!(
+            f.suspend_second(Pending::MagicLink {
+                expires_ms: 9,
+                live: true
             }),
             Err(FlowRejection::NotAllowed)
         );

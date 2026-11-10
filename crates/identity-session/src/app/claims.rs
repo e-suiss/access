@@ -91,6 +91,10 @@ pub fn method(factors: &[Factor]) -> Option<(AuthMethod, Option<PasskeyDetail>)>
     if pick(MethodClass::Totp).is_some() {
         return Some((AuthMethod::Totp, None));
     }
+    // OP-156 m.3 (d)
+    if pick(MethodClass::Push).is_some() {
+        return Some((AuthMethod::DeviceKey, None));
+    }
     pick(MethodClass::Password).map(|_| (AuthMethod::Password, None))
 }
 

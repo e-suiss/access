@@ -4089,8 +4089,15 @@
         "operationId": "createPushChallenge",
         "summary": "Starts a push verification for the flow's second step: a 120 s single-use challenge sent by Relay to the person's approvers; the sign-in page shows the two-digit number from the RNG, which the push never carries. At most 3 pending per account in 10 minutes, none for 15 minutes after a refusal, none for an hour after 3 unanswered (OP-156 m.3 (d)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -4104,8 +4111,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/push/answer": {
@@ -4113,8 +4119,15 @@
         "operationId": "answerPushChallenge",
         "summary": "The approver's answer: the push-challenge.cddl map {challenge, number, decision, device_key, pin_verified?} signed with its device key. A wrong number refuses; not_me makes a risk signal and a security notice. Push is AAL2 only and satisfies no Consequence Tier.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -4128,8 +4141,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/approvers": {
@@ -4137,21 +4149,34 @@
         "operationId": "listApprovers",
         "summary": "The person's approver devices: name, registered, last used.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       },
       "post": {
         "operationId": "registerApprover",
         "summary": "Registers an approver's app-bound P-256 device key after a sign-in in the last 5 minutes, with the SEC18 cooldown; makes an authenticator_binding Claim (OP-156 m.3 (d)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -4165,8 +4190,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/approvers/{device}/retire": {
@@ -4174,8 +4198,15 @@
         "operationId": "retireApprover",
         "summary": "Retires an approver device; nothing is deleted (OP-73).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -4199,8 +4230,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/first-contact/tokens": {

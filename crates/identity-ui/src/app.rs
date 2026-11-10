@@ -23,6 +23,7 @@ mod me;
 pub mod orgs;
 pub mod pages;
 pub mod privacy;
+pub mod push;
 pub mod recovery;
 mod saml;
 pub mod shell;
@@ -47,6 +48,7 @@ use access_identity_oauth::ports::RealmEntry;
 use access_identity_session::SessionError;
 use access_identity_session::adapters::OsRandom;
 use access_identity_session::adapters::passkeys::PgPasskeys;
+use access_identity_session::app::push::{PushEnd, PushPoll};
 use access_identity_session::app::signin::{Identify, LinkOutcome, LinkPreview, PasswordStep};
 use access_identity_session::app::{
     Auth, CODE_NOT_ACCEPTED, FLOW_GONE, FlowRef, Refusal, Step as Outcome,
@@ -214,6 +216,12 @@ enum Current {
     Authenticate(String),
     Email(EmailWait),
     Second(SecondFactors),
+    /// OP-156 m.3 (d): a push waits; the page shows the number until the end.
+    Push(u8, u64),
+    /// OP-156 m.3 (d): the push ended without an approval; the second step again, with why.
+    PushEnded(SecondFactors, TextId),
+    /// OP-156 m.3 (d): "This wasn't me" stopped the sign-in.
+    Stopped,
     Done(Reply),
 }
 
@@ -486,7 +494,16 @@ fn shape_bare(kit: &RealmKit, flow: &FlowId, current: &Current) -> Option<Ui> {
             .with_email(email(kit))
             .with_first_steps(kit.auth.password, kit.auth.passkey),
         Current::Email(wait) => Ui::email_sent(flow.clone(), *wait, &reqs),
-        Current::Second(offered) => Ui::second_factor(flow.clone(), *offered, Some(blank), &reqs),
+        Current::Second(offered) | Current::PushEnded(offered, _) => {
+            Ui::second_factor(flow.clone(), *offered, Some(blank), &reqs)
+        }
+        Current::Push(number, expires_ms) => Ui::push_sent(
+            flow.clone(),
+            *number,
+            crate::domain::frontend::rfc3339(*expires_ms),
+            &reqs,
+        ),
+        Current::Stopped => Ui::push_stopped(flow.clone(), &reqs),
         Current::Done(_) => return None,
     })
 }
@@ -866,6 +883,8 @@ where
                 .send_email(&fref, MethodClass::MagicLink, corr)
                 .await
                 .map_err(|e| failed(&e))?,
+            // OP-156 m.3 (d)
+            (Method::Push, _) => return self.push_step(auth, kit, b, &flow, &fref, current).await,
             _ => return Err(Reply::problem(INVALID_SUBMISSION)),
         };
         self.outcome(auth, kit, b, &flow, &fref, outcome).await
@@ -945,10 +964,29 @@ where
         b: &Browser<'_>,
         fref: &FlowRef<'_>,
     ) -> Result<Current, Reply> {
-        let step = auth
-            .resume(fref, b.correlation)
+        // OP-156 m.3 (d), TN-102
+        let mut ended = None;
+        let step = match auth
+            .poll_push(fref, b.correlation)
             .await
-            .map_err(|e| failed(&e))?;
+            .map_err(|e| failed(&e))?
+        {
+            PushPoll::Step(s) => s,
+            PushPoll::Waiting { number, expires_ms } => {
+                return Ok(Current::Push(number, expires_ms));
+            }
+            PushPoll::Ended(PushEnd::NotMe) => return Ok(Current::Stopped),
+            PushPoll::Ended(end) => {
+                ended = Some(if end == PushEnd::Expired {
+                    TextId::PushExpired
+                } else {
+                    TextId::PushDenied
+                });
+                auth.resume(fref, b.correlation)
+                    .await
+                    .map_err(|e| failed(&e))?
+            }
+        };
         Ok(match step {
             Outcome::Continue { enrolled: None, .. } => match typed(b, fref.handle) {
                 Some(id) => Current::Authenticate(id),
@@ -956,14 +994,24 @@ where
             },
             Outcome::Continue {
                 enrolled: Some(e), ..
-            } => Current::Second(SecondFactors {
-                totp: e.totp,
-                recovery_code: e.recovery_codes,
-                passkey: e.passkeys,
-            }),
+            } => {
+                let offered = SecondFactors {
+                    totp: e.totp,
+                    recovery_code: e.recovery_codes,
+                    passkey: e.passkeys,
+                    push: e.push,
+                };
+                match ended {
+                    Some(why) => Current::PushEnded(offered, why),
+                    None => Current::Second(offered),
+                }
+            }
             Outcome::Suspended {
                 method: MethodClass::MagicLink,
             } => Current::Email(EmailWait::Link),
+            Outcome::Suspended {
+                method: MethodClass::Push,
+            } => Current::Done(Reply::problem(FLOW_GONE)),
             Outcome::Suspended { .. } => Current::Email(EmailWait::Code),
             Outcome::SignedIn(s) => {
                 let flow = flow_id(fref.handle)?;
@@ -1042,6 +1090,24 @@ where
                 };
                 Ui::second_factor(flow.clone(), offered, passkey, &reqs)
             }
+            // OP-156 m.3 (d)
+            Current::PushEnded(offered, why) => {
+                let passkey = if offered.passkey {
+                    Some(fresh(None).await?)
+                } else {
+                    None
+                };
+                let mut ui = Ui::second_factor(flow.clone(), offered, passkey, &reqs);
+                ui.messages.push(Message::error(why));
+                ui
+            }
+            Current::Push(number, expires_ms) => Ui::push_sent(
+                flow.clone(),
+                number,
+                crate::domain::frontend::rfc3339(expires_ms),
+                &reqs,
+            ),
+            Current::Stopped => Ui::push_stopped(flow.clone(), &reqs),
         };
         Ok(Reply::ui(status, ui))
     }
@@ -1071,7 +1137,7 @@ where
             return Err(Reply::problem(p));
         }
         let current = self.current(auth, kit, b, fref).await?;
-        let second = matches!(current, Current::Second(_));
+        let second = matches!(current, Current::Second(_) | Current::PushEnded(..));
         let mut reply = self.render(auth, kit, flow, fref, current, 401).await?;
         if let Body::Ui(ui) = &mut reply.body {
             let id = if !second {
@@ -1105,6 +1171,7 @@ where
                     totp: e.totp,
                     recovery_code: e.recovery_codes,
                     passkey: e.passkeys,
+                    push: e.push,
                 };
                 let passkey = if e.passkeys {
                     match auth
@@ -1228,6 +1295,7 @@ fn steps(method: Method) {
         Method::RecoveryCode => "recovery_code",
         Method::EmailCode => "email_code",
         Method::MagicLink => "magic_link",
+        Method::Push => "push",
         _ => return,
     };
     SIGN_IN_FACTORS.incr([factor]);

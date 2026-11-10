@@ -261,6 +261,7 @@ mod tests {
                 totp: true,
                 recovery_code: false,
                 passkey: false,
+                push: false,
             },
             None,
             &[],

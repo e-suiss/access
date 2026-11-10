@@ -76,6 +76,7 @@ fn examples() -> Vec<(&'static str, Ui)> {
         totp: true,
         recovery_code: true,
         passkey: false,
+        push: false,
     };
     vec![
         ("identifier", identifier.clone()),

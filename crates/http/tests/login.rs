@@ -15,6 +15,9 @@
 #[path = "../../identity-webauthn/tests/support/mod.rs"]
 mod support;
 
+#[path = "login/push.rs"]
+mod push;
+
 use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -25,7 +28,7 @@ use access_crypto::envelope::SoftKek;
 use access_crypto::opaque_id::IdKey;
 use access_crypto::totp::{TotpAlgorithm, hotp, step_of};
 use access_crypto::webauthn::DecoyKey;
-use access_http::login::{Assets, Peer, ldap_credentials_router, me_router, router};
+use access_http::login::{Assets, Peer, ldap_credentials_router, me_router, push_router, router};
 use access_identity_account::adapters::pg::PgAccounts;
 use access_identity_account::adapters::system::SystemEntropy;
 use access_identity_account::app::accounts::{
@@ -116,8 +119,15 @@ impl BreachRanges for Corpus {
 /// kind, `Require-Recipient-Valid-Since` and subject.
 type Sent = Vec<(&'static str, Option<u64>, [u8; 16])>;
 
+/// A push as the Relay seam saw it: the device address, then every text the body carries.
+type Pushed = Vec<(String, Vec<String>)>;
+
 #[derive(Clone, Default)]
-struct Outbox(Arc<Mutex<Vec<String>>>, Arc<Mutex<Sent>>);
+struct Outbox(
+    Arc<Mutex<Vec<String>>>,
+    Arc<Mutex<Sent>>,
+    Arc<Mutex<Pushed>>,
+);
 
 struct Recording<'a>(&'a Outbox);
 
@@ -130,8 +140,29 @@ impl Notifier for Recording<'_> {
         let secret = match &m.body {
             Body::Otp { code, .. } => code.expose().clone(),
             Body::MagicLink { link, .. } => link.expose().clone(),
+            Body::PushApproval { challenge, .. } => challenge.expose().clone(),
             _ => String::new(),
         };
+        if let (
+            access_identity_account::notify::message::Address::Device(d),
+            Body::PushApproval {
+                challenge,
+                application,
+                action,
+                location,
+                expires_at_ms,
+            },
+        ) = (&m.to, &m.body)
+        {
+            let mut texts = vec![
+                challenge.expose().clone(),
+                application.clone(),
+                action.clone(),
+                expires_at_ms.to_string(),
+            ];
+            texts.extend(location.clone());
+            self.0.2.lock().unwrap().push((d.clone(), texts));
+        }
         self.0.0.lock().unwrap().push(secret);
         self.0
             .1
@@ -547,6 +578,10 @@ async fn env_legacy(
         Some(assets),
     )
     .merge(ldap_credentials_router(
+        Discovery::new(Dir(entry.clone()), NoKeys),
+        hosted.clone(),
+    ))
+    .merge(push_router(
         Discovery::new(Dir(entry.clone()), NoKeys),
         hosted.clone(),
     ))

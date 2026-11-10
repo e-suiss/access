@@ -34,7 +34,7 @@ pub trait Random: Send + Sync {
 
 /// The account transaction plus the flow and session tables, and the SL2 risk tables in the
 /// same unit of work (TN-46).
-pub trait SessionTx: AccountTx + RiskTx {
+pub trait SessionTx: AccountTx + RiskTx + PushTx {
     /// Stores a flow.
     fn insert_flow(
         &mut self,
@@ -243,6 +243,57 @@ pub trait SessionTx: AccountTx + RiskTx {
 
 /// A session and its subject.
 pub type SessionOf = ([u8; 16], [u8; 16]);
+
+pub use access_store::push::{DeviceKeyRow, NewPushChallenge, PushChallengeRow, PushHistoryRow};
+
+/// The approver keys and push challenges in the same unit of work (OP-156 m.3 (d)).
+pub trait PushTx {
+    /// The subject's active approver keys.
+    fn approvers(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<Vec<DeviceKeyRow>, SessionError>> + Send;
+    /// The active approver key with `thumbprint`, locked.
+    fn approver_by_thumbprint(
+        &mut self,
+        thumbprint: &[u8; 32],
+    ) -> impl Future<Output = Result<Option<DeviceKeyRow>, SessionError>> + Send;
+    /// Records that the approver `id` answered.
+    fn approver_seen(
+        &mut self,
+        id: [u8; 16],
+    ) -> impl Future<Output = Result<(), SessionError>> + Send;
+    /// Keeps a push challenge.
+    fn insert_push_challenge(
+        &mut self,
+        c: &NewPushChallenge<'_>,
+    ) -> impl Future<Output = Result<(), SessionError>> + Send;
+    /// The push challenge of `hash`, locked.
+    fn push_challenge(
+        &mut self,
+        hash: &[u8; 32],
+    ) -> impl Future<Output = Result<Option<PushChallengeRow>, SessionError>> + Send;
+    /// Records the one answer of challenge `id`; `false` when already answered.
+    fn decide_push_challenge(
+        &mut self,
+        id: [u8; 16],
+        decision: &str,
+        at_ms: u64,
+        device: [u8; 16],
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// Marks the approved challenge `id` as taken by its flow.
+    fn use_push_challenge(
+        &mut self,
+        id: [u8; 16],
+        at_ms: u64,
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// The subject's challenges made since `since_ms`, newest first.
+    fn push_history(
+        &mut self,
+        subject: [u8; 16],
+        since_ms: u64,
+    ) -> impl Future<Output = Result<Vec<PushHistoryRow>, SessionError>> + Send;
+}
 
 /// Opens session transactions in one realm.
 pub trait SessionDb: AccountDb<Tx: SessionTx> {}

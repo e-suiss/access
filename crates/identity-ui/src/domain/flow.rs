@@ -182,6 +182,10 @@ pub enum ContractError {
 }
 
 /// Which second factors the step offers.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each second factor the step offers is one flag"
+)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SecondFactors {
     /// TOTP.
@@ -190,6 +194,8 @@ pub struct SecondFactors {
     pub recovery_code: bool,
     /// A passkey: possession and UV after the password (IDP-8, §10.2 AAL2 table).
     pub passkey: bool,
+    /// A push to the account's approvers (OP-156 m.3 (d)).
+    pub push: bool,
 }
 
 /// Which e-mail first steps the realm offers (TN-102). Realm policy, never the account.
@@ -455,6 +461,12 @@ impl Ui {
                 label: TextId::Verify.into(),
             });
         }
+        if offered.push {
+            nodes.push(Node::Submit {
+                method: Method::Push,
+                label: TextId::SendPush.into(),
+            });
+        }
         if offered.recovery_code {
             nodes.push(Node::input(
                 FieldName::RecoveryCode,
@@ -469,6 +481,44 @@ impl Ui {
             });
         }
         Self::new(flow, Step::SecondFactor, policy, nodes)
+    }
+
+    /// A push waits for the approver (OP-156 m.3 (d), TN-102): the number to type, a check that
+    /// submits [`Method::Push`] again, and the way back. The client polls the flow until
+    /// `expires_at`.
+    #[must_use]
+    pub fn push_sent(flow: FlowId, number: u8, expires_at: String, policy: &[Requirement]) -> Self {
+        let mut label = Text::from(TextId::PushNumber);
+        label.text = label
+            .text
+            .replace("{ $number }", &number.to_string())
+            .replace("{ $approver }", "your approver app");
+        let nodes = vec![
+            Node::PushNumber {
+                number,
+                label,
+                expires_at,
+            },
+            Node::Submit {
+                method: Method::Restart,
+                label: TextId::Restart.into(),
+            },
+        ];
+        let mut ui = Self::new(flow, Step::SecondFactor, policy, nodes);
+        ui.messages.push(Message::info(TextId::PushWaiting));
+        ui
+    }
+
+    /// The sign-in was stopped by a "This wasn't me" answer: only starting again is left.
+    #[must_use]
+    pub fn push_stopped(flow: FlowId, policy: &[Requirement]) -> Self {
+        let nodes = vec![Node::Submit {
+            method: Method::Restart,
+            label: TextId::Restart.into(),
+        }];
+        let mut ui = Self::new(flow, Step::SecondFactor, policy, nodes);
+        ui.messages.push(Message::error(TextId::PushNotMe));
+        ui
     }
 
     /// Done: every requirement is met.
@@ -641,6 +691,7 @@ mod tests {
             totp: false,
             recovery_code: false,
             passkey: true,
+            push: false,
         };
         let ui = Ui::second_factor(flow(), offered, Some(options(&[])), &[]);
         assert!(
@@ -715,6 +766,7 @@ mod tests {
                     totp: true,
                     recovery_code: true,
                     passkey: false,
+                    push: false,
                 },
                 None,
                 &policy

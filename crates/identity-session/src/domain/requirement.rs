@@ -36,6 +36,8 @@ pub struct AuthPolicy {
     pub magic_link: bool,
     /// Days a device marker skips the second step (X33); `None` disables it.
     pub remember_device_days: Option<u32>,
+    /// Push verification as a second step (`idp.realm.push`, OP-156 m.3 (d)); off by default.
+    pub push: bool,
 }
 
 impl AuthPolicy {
@@ -48,10 +50,15 @@ impl AuthPolicy {
         email_otp: true,
         magic_link: true,
         remember_device_days: Some(30),
+        push: false,
     };
 }
 
 /// What the account has enrolled, known only after the first step.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each second factor the account holds is one flag"
+)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Enrolled {
     /// An active TOTP credential.
@@ -60,13 +67,16 @@ pub struct Enrolled {
     pub recovery_codes: bool,
     /// Live passkeys.
     pub passkeys: bool,
+    /// An active approver, in a realm that offers push (OP-156 m.3 (d)).
+    #[serde(default)]
+    pub push: bool,
 }
 
 impl Enrolled {
     /// Whether any second factor is enrolled.
     #[must_use]
     pub const fn second_factor(&self) -> bool {
-        self.totp || self.passkeys
+        self.totp || self.passkeys || self.push
     }
 }
 

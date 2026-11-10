@@ -1923,6 +1923,11 @@ async fn serve(
         RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
         hosted.clone(),
     );
+    // OP-156 m.3 (d)
+    let push = access_http::login::push_router(
+        RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
+        hosted.clone(),
+    );
     // OP-155 m.3 (i), TN-134
     let sso_setup = access_http::login::sso_setup_router(
         RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
@@ -1959,6 +1964,7 @@ async fn serve(
             .merge(realms)
             .merge(sign_in.merge(me).merge(certificate_login))
             .merge(ldap_credentials)
+            .merge(push)
             .merge(sso_setup)
             .merge(account_pages)
             .merge(authorize)

@@ -74,13 +74,6 @@ fn written() -> BTreeSet<String> {
 /// Events declared ahead of their lanes (OP-156 m.4): in the taxonomy, written by nothing yet. A
 /// lane that writes one takes it off this list.
 const UNPRODUCED: &[&str] = &[
-    "push.challenge_sent",
-    "push.approved",
-    "push.denied",
-    "push.not_me",
-    "push.held",
-    "approver.registered",
-    "approver.retired",
     "sms.code_sent",
     "sms.refused",
     "spc.approved",

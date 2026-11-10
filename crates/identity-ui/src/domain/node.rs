@@ -170,11 +170,13 @@ pub enum Method {
     Link,
     /// Acknowledge new recovery codes (OP-153 m.3 (d)).
     Acknowledge,
+    /// Send a push verification to the account's approvers, or check on it (OP-156 m.3 (d)).
+    Push,
 }
 
 impl Method {
     /// All methods.
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 19] = [
         Self::Identifier,
         Self::Password,
         Self::Passkey,
@@ -193,6 +195,7 @@ impl Method {
         Self::AcceptInvitation,
         Self::Link,
         Self::Acknowledge,
+        Self::Push,
     ];
 
     /// The wire name.
@@ -217,6 +220,7 @@ impl Method {
             Self::AcceptInvitation => "accept_invitation",
             Self::Link => "link",
             Self::Acknowledge => "acknowledge",
+            Self::Push => "push",
         }
     }
 }
@@ -425,6 +429,17 @@ pub enum Node {
         /// action of the contract.
         href: String,
     },
+    /// Q5: the number to type into the approver while a push waits (OP-156 m.3 (d)). Only the
+    /// sign-in page shows it; the push never carries it. The client polls the flow until
+    /// `expires_at`.
+    PushNumber {
+        /// Two digits, 10 to 99.
+        number: u8,
+        /// Caption, with `{ $number }` filled.
+        label: Text,
+        /// RFC 3339.
+        expires_at: String,
+    },
 }
 
 impl Node {
@@ -435,7 +450,10 @@ impl Node {
             Self::Input { method, .. } | Self::Submit { method, .. } => Some(*method),
             Self::PasskeyGet { .. } | Self::PasskeyAutofill { .. } => Some(Method::Passkey),
             Self::PasskeyCreate { .. } => Some(Method::PasskeyRegister),
-            Self::PasskeySignal { .. } | Self::Option { .. } | Self::Provider { .. } => None,
+            Self::PasskeySignal { .. }
+            | Self::Option { .. }
+            | Self::Provider { .. }
+            | Self::PushNumber { .. } => None,
         }
     }
 

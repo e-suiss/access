@@ -272,6 +272,7 @@ dependencies = [
  "aws-lc-rs",
  "axum",
  "esuiss-access-kernel",
+ "esuiss-access-sdk",
  "esuiss-crypto",
  "http-body-util",
  "hyper-util",

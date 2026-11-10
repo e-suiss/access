@@ -1176,35 +1176,35 @@ pub const ROUTES: &[Route] = &[
         "createCredentialOffer",
         "Makes a pre-authorized credential offer for one type, after the person's AAS.",
     ),
-    planned(
+    live(
         Owner::Q5,
         Verb::Post,
         "/v1/push/challenge",
         "createPushChallenge",
         "Starts a push verification for the flow's second step: a 120 s single-use challenge sent by Relay to the person's approvers; the sign-in page shows the two-digit number from the RNG, which the push never carries. At most 3 pending per account in 10 minutes, none for 15 minutes after a refusal, none for an hour after 3 unanswered (OP-156 m.3 (d)).",
     ),
-    planned(
+    live(
         Owner::Q5,
         Verb::Post,
         "/v1/push/answer",
         "answerPushChallenge",
         "The approver's answer: the push-challenge.cddl map {challenge, number, decision, device_key, pin_verified?} signed with its device key. A wrong number refuses; not_me makes a risk signal and a security notice. Push is AAL2 only and satisfies no Consequence Tier.",
     ),
-    planned(
+    live(
         Owner::Q5,
         Verb::Get,
         "/v1/approvers",
         "listApprovers",
         "The person's approver devices: name, registered, last used.",
     ),
-    planned(
+    live(
         Owner::Q5,
         Verb::Post,
         "/v1/approvers",
         "registerApprover",
         "Registers an approver's app-bound P-256 device key after a sign-in in the last 5 minutes, with the SEC18 cooldown; makes an authenticator_binding Claim (OP-156 m.3 (d)).",
     ),
-    planned(
+    live(
         Owner::Q5,
         Verb::Post,
         "/v1/approvers/{device}/retire",

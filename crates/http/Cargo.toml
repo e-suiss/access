@@ -50,6 +50,8 @@ tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
 access-identity-domain = { workspace = true, features = ["testing"] }
+# OP-156 m.3 (d): the approver's side of push, as an app embeds it
+access-sdk = { workspace = true }
 access-crypto = { workspace = true, features = ["testing"] }
 access-identity-account = { workspace = true, features = ["testing"] }
 access-identity-hooks = { workspace = true }

@@ -1121,6 +1121,11 @@ where
                 .credentials(subject, crate::adapters::passkeys::WEBAUTHN)
                 .await?
                 .is_empty(),
+            // OP-156 m.3 (d)
+            push: self.policy.push
+                && !crate::ports::PushTx::approvers(tx, subject)
+                    .await?
+                    .is_empty(),
         })
     }
 

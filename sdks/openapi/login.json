@@ -541,7 +541,8 @@
           "dont_share",
           "accept_invitation",
           "link",
-          "acknowledge"
+          "acknowledge",
+          "push"
         ]
       },
       "TextId": {

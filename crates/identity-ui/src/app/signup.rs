@@ -390,6 +390,7 @@ where
                                 totp: e.totp,
                                 recovery_code: e.recovery_codes,
                                 passkey: e.passkeys,
+                                push: e.push,
                             },
                             None,
                             &reqs,
