@@ -1,0 +1,113 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT claim_id, issuer_id, subject_id, connector, app, name, scopes, pos\n           FROM access.discovered_apps WHERE domain_id = $1\n          ORDER BY pos DESC, claim_id LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "claim_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.discovered_apps",
+            "name": "claim_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "issuer_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.discovered_apps",
+            "name": "issuer_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "subject_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.discovered_apps",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "connector",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.discovered_apps",
+            "name": "connector"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "app",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.discovered_apps",
+            "name": "app"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.discovered_apps",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "scopes",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.discovered_apps",
+            "name": "scopes"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.discovered_apps",
+            "name": "pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "edcbd7bfcec9c6c03a9460ed0b7e8a24adaf1ff66643fc9f11291ffa3809339d"
+}

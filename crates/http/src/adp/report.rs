@@ -54,7 +54,24 @@ pub fn encode(report: &Report) -> Out {
         Report::AgentStatus(s) => agent_status(s),
         Report::Outcome(o) => outcome(o),
         Report::Incarnations(i) => incarnations(i),
+        Report::Shadow(d) => shadow(d),
     }
+}
+
+/// AG-43, OP-156 m.4 Q20
+fn shadow(d: &access_authority_core::app::discovery::Shadow) -> Out {
+    json!({
+        "type": "discovery",
+        "connector": d.connector,
+        "app": d.app,
+        "name": d.name,
+        "scopes": d.scopes,
+        "grants": d.grants,
+        "registered": !d.unregistered(),
+        "accounted_by": d.accounted_by.iter().map(id).collect::<Vec<_>>(),
+        "claims": d.claims.iter().map(id).collect::<Vec<_>>(),
+        "advisory": true,
+    })
 }
 
 /// OP-156 m.3 (k), INV-32

@@ -30,6 +30,7 @@ use tower::ServiceExt as _;
 use super::*;
 
 mod critical_interrupt;
+mod discovery;
 mod one;
 
 /// The PEP name the twin's client certificate authenticates as (L1-ADP-2).

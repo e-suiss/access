@@ -720,6 +720,14 @@ fn later(kind: &str, q: &mut Obj<'_>) -> R<Query> {
     match kind {
         // OP-156 m.3 (k)
         "resource-incarnation" => incarnation(q),
+        // AG-43, OP-156 m.4 Q20
+        "discovery" => Ok(Query::Discovery {
+            unregistered: match q.opt("unregistered") {
+                None => false,
+                Some(Json::Bool(b)) => *b,
+                Some(_) => return Err(AdpError("query")),
+            },
+        }),
         // E41, OP-156 m.3 (t)
         "eligible-set" => Ok(Query::EligibleSet {
             gate_class: crate::adp::eligibility::gate_class(q.req("gate_class", "query")?)?,

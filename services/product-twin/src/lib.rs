@@ -8,6 +8,7 @@
 //! own effects and asks Access before each one ([`twin`]). It never writes an Anchor, a Grant or
 //! an Acceptance: its only effect on authority is a Claim a domain chose to accept.
 
+pub mod discovery;
 pub mod schema;
 pub mod twin;
 pub mod wire;

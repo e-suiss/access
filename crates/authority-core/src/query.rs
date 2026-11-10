@@ -144,6 +144,12 @@ pub enum Query {
         /// Its path.
         path: Vec<String>,
     },
+    /// The applications discovery connectors reported and the live agent or system Parties
+    /// that account for each (AG-43, OP-156 m.4 Q20); the domain's auditors only, advisory.
+    Discovery {
+        /// Only those no one accounts for.
+        unregistered: bool,
+    },
 }
 
 /// The change a `change-impact` search previews.
@@ -200,14 +206,15 @@ pub enum Report {
     Outcome(Box<crate::app::outcome::Outcome>),
     /// OP-156 m.3 (k): one resource's incarnations.
     Incarnations(crate::app::resources::Incarnations),
+    /// AG-43: one discovered application.
+    Shadow(crate::app::discovery::Shadow),
 }
 
-/// Search kinds declared and not served yet, each owned by its lane: `discovery` (Stage 9 L3,
-/// auditor-only and advisory, OP-154 m.3 (z)), `federation-chain` (Stage 10 P6, each OIDF
+/// Search kinds declared and not served yet, each owned by its lane: `federation-chain` (Stage 10 P6, each OIDF
 /// issuer's chain state and lapse, OP-155 m.3 (j)) and `scim-sync` (Stage 10 P3, inbound and
 /// outbound SCIM provisioning results, OP-155 m.3 (g)). A search of one answers
 /// `501 not-yet-served` (OP-154 m.4, OP-155 m.4, OP-156 m.4).
-pub const RESERVED_KINDS: [&str; 3] = ["discovery", "federation-chain", "scim-sync"];
+pub const RESERVED_KINDS: [&str; 2] = ["federation-chain", "scim-sync"];
 
 /// The most Parties an eligible set names; more are marked truncated (OP-156 m.3 (t)).
 pub const ELIGIBLE_MAX: usize = 1000;
@@ -236,6 +243,7 @@ impl Query {
             Self::AgentStatus => "agent-status",
             Self::Outcome { .. } => "outcome",
             Self::ResourceIncarnation { .. } => "resource-incarnation",
+            Self::Discovery { .. } => "discovery",
             Self::EligibleSet { .. } => "eligible-set",
         }
     }
@@ -257,6 +265,7 @@ impl Query {
                 | Self::BulkImpact { .. }
                 | Self::Sources
                 | Self::ResourceIncarnation { .. }
+                | Self::Discovery { .. }
         )
     }
 }
@@ -715,6 +724,13 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     self.incarnations(namespace, path).await?,
                 )]
             }
+            // AG-43, OP-156 m.4 Q20
+            Query::Discovery { unregistered } => self
+                .discovery(*unregistered)
+                .await?
+                .into_iter()
+                .map(Report::Shadow)
+                .collect(),
             _ => Vec::new(),
         };
         Ok(Found {

@@ -16,7 +16,8 @@ product-seam-claim = ["commitment_active", commitment-active] /
   ["sim_change", sim-change] /
   ["resource_lifecycle", resource-lifecycle] /
   ["pay_limit", pay-limit] /
-  ["funds_available", funds-available]
+  ["funds_available", funds-available] /
+  ["discovered_app", discovered-app]
 
 ; A Work commitment a commitment-scoped Grant is held under (`WhileCondition::ClaimHeld`,
 ; OP-156 m.3 (t)). An affirmative `false` ends the Grant; a later `true` never revives it (E14).
@@ -106,6 +107,18 @@ funds-available = {
   currency: currency,
   amount_minor: uint,
   available: bool,
+}
+
+; Q20 (OP-156 m.4, appended): one third-party application's access in a connected service, as a
+; discovery connector read it (AG-39, AG-43). The subject is the Party the access belongs to; an
+; access granted for everyone names the connector itself. Never authority: the `discovery`
+; search reports the applications no registered agent or system Party accounts for.
+discovered-app = {
+  connector: "google-workspace" / "microsoft-graph",
+  app: tstr .size (1..512),         ; the application's client id in that service
+  ? name: tstr .size (1..512),
+  ? principal: tstr .size (1..512), ; whose access it is in the service
+  scopes: [* tstr],
 }
 
 ref = tstr .regexp "[a-z0-9][a-z0-9._:-]{0,127}"

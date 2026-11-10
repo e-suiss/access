@@ -31,6 +31,7 @@ pub mod custom_domains;
 pub mod dcr;
 pub mod derived;
 pub mod device;
+pub mod discovered_apps;
 pub mod dpop;
 pub mod edge;
 pub mod ephemeral;

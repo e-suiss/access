@@ -70,3 +70,7 @@ None of them writes an Anchor, a Grant or an Acceptance, and Access holds no mon
 ## License
 
 Apache-2.0
+
+## Discovery connector
+
+`discovery` parses the answers of the services a discovery connector reads (Google Workspace `users.tokens.list`, Microsoft Graph `oauth2PermissionGrants`) into application grants. Each grant is issued as a `discovered_app` Claim with its body, and Access's `discovery` search reports the applications no registered agent or system Party accounts for. Recorded, scrubbed answers are in `conformance/discovery/`.

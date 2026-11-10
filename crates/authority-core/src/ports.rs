@@ -106,6 +106,15 @@ pub trait Reader {
         let _ = (namespace, path);
         std::future::ready(Err(CoreError::Unavailable("incarnations")))
     }
+    /// The newest `limit` accesses discovery connectors reported (OP-156 m.4 Q20), in record
+    /// order; unavailable by default.
+    fn discovered(
+        &self,
+        limit: u32,
+    ) -> impl Future<Output = Result<Vec<crate::app::discovery::Row>, CoreError>> + Send {
+        let _ = limit;
+        std::future::ready(Err(CoreError::Unavailable("discovered")))
+    }
     /// How many offline-class projections of `holder` are open at `now` (§13.7.4); 0 by
     /// default.
     fn open_offline(

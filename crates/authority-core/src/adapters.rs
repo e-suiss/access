@@ -169,6 +169,28 @@ impl Reader for PgReader {
         )
     }
 
+    async fn discovered(&self, limit: u32) -> Result<Vec<crate::app::discovery::Row>, CoreError> {
+        Ok(
+            access_store::discovered_apps::list(&self.pool, &self.domain, limit)
+                .await?
+                .into_iter()
+                .map(|r| crate::app::discovery::Row {
+                    app: crate::app::discovery::Discovered {
+                        connector: r.connector,
+                        app: r.app,
+                        name: r.name,
+                        principal: None,
+                        scopes: r.scopes.into_iter().collect(),
+                    },
+                    claim: Id(r.claim),
+                    issuer: Id(r.issuer),
+                    subject: Id(r.subject),
+                    pos: r.pos,
+                })
+                .collect(),
+        )
+    }
+
     async fn open_offline(&self, holder: &Id, now: u64) -> Result<u64, CoreError> {
         Ok(access_store::offline::open_offline(&self.pool, &self.domain, &holder.0, now).await?)
     }

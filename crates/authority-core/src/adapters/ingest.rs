@@ -193,6 +193,11 @@ where
                     self.keep_sim_change(sub.domain, done, (*position, *claim), body)
                         .await
                 }
+                // AG-43, OP-156 m.4 Q20
+                crate::app::discovery::CLASS => {
+                    self.keep_discovered(sub.domain, done, (*position, *claim), body)
+                        .await
+                }
                 _ => Ok(()),
             };
             if let Err(e) = kept {
@@ -254,6 +259,35 @@ where
                 pos,
                 last_change_ms,
                 checked_ms,
+            },
+        )
+        .await?)
+    }
+
+    /// Records an admitted `discovered_app` Claim whose disclosed body matches its value, for the
+    /// `discovery` search; any other body records nothing.
+    async fn keep_discovered(
+        &self,
+        domain: Digest,
+        done: &Ingested,
+        (pos, claim): (u64, Id),
+        body: &[u8],
+    ) -> Result<(), CoreError> {
+        let Some(d) = crate::app::discovery::decode(done.value.as_ref(), body) else {
+            return Ok(());
+        };
+        Ok(access_store::discovered_apps::insert(
+            &self.setup.sequencer,
+            &DomainId::from_bytes(domain.0),
+            &access_store::discovered_apps::DiscoveredRow {
+                claim: claim.0,
+                issuer: done.issuer.0,
+                subject: done.subject.0,
+                connector: d.connector,
+                app: d.app,
+                name: d.name,
+                scopes: d.scopes.into_iter().collect(),
+                pos,
             },
         )
         .await?)
