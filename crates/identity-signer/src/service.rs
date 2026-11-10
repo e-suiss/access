@@ -42,6 +42,7 @@ pub struct Service<F, V> {
     federation: BTreeMap<Realm, Keyring>,
     saml: BTreeMap<Realm, crate::saml::Ring>,
     acme: Option<crate::acme::AcmeKey>,
+    ssh: BTreeMap<Realm, crate::ssh::Ring>,
 }
 
 /// The JWS types only a realm's `federation` key signs, and the realm JOSE key never does
@@ -232,6 +233,7 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             federation: BTreeMap::new(),
             saml: BTreeMap::new(),
             acme: None,
+            ssh: BTreeMap::new(),
         };
         for (realm, alg, policy, saved, federation) in all.iter().filter_map(|b| restored(b)) {
             let policy = policy.unwrap_or(s.policy);
@@ -515,6 +517,7 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             }
             Request::Saml(r) => self.handle_saml(&r, now),
             Request::Acme(r) => self.handle_acme(&r),
+            Request::Ssh(r) => self.handle_ssh(&r, now),
             other => self.handle_issuer(&other, now),
         }
     }
@@ -748,6 +751,57 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
         }
         let keys = self.saml.get(&realm).map(Ring::keys).unwrap_or_default();
         Response::Saml(SamlResponse::Keys(keys))
+    }
+}
+
+impl<F: KeyFactory, V: Vault> Service<F, V> {
+    /// Answers an SSH CA key request (OP-156 m.3 (o)); a change the vault cannot keep is an
+    /// outage and is not answered as done.
+    fn handle_ssh(&mut self, request: &crate::ssh::SshRequest, now: u64) -> Response {
+        use crate::ssh::{Ring, SshKeyError, SshRequest, SshResponse};
+        let realm = request.realm();
+        if !self.ssh.contains_key(&realm) {
+            let ring = match self.vault.ssh(&realm) {
+                Ok(Some(stored)) => match Ring::restore(realm, &stored, &mut self.factory) {
+                    Ok(r) => r,
+                    Err(e) => return Response::Error(String::from(e.code())),
+                },
+                Ok(None) => Ring::new(realm),
+                Err(_) => return Response::Error(String::from(SshKeyError::Stored.code())),
+            };
+            self.ssh.insert(realm, ring);
+        }
+        let Some(ring) = self.ssh.get_mut(&realm) else {
+            return Response::Error(String::from(SshKeyError::Stored.code()));
+        };
+        let changed = match request {
+            SshRequest::Keys(_) => Ok(false),
+            SshRequest::Open(_) => ring.open(now, &mut self.factory),
+            SshRequest::Rotate { step, .. } => {
+                ring.rotate(*step, now, &mut self.factory).map(|()| true)
+            }
+            SshRequest::Sign { key, data, .. } => {
+                return match ring.sign(key, data) {
+                    Ok(signature) => Response::Ssh(SshResponse::Signed(signature)),
+                    Err(e) => Response::Error(String::from(e.code())),
+                };
+            }
+        };
+        match changed {
+            Ok(true) => {
+                let kept = ring
+                    .stored()
+                    .is_some_and(|b| self.vault.put_ssh(&realm, &b).is_ok());
+                if !kept {
+                    self.ssh.remove(&realm);
+                    return Response::Error(String::from(SshKeyError::Stored.code()));
+                }
+            }
+            Ok(false) => {}
+            Err(e) => return Response::Error(String::from(e.code())),
+        }
+        let keys = self.ssh.get(&realm).map(Ring::keys).unwrap_or_default();
+        Response::Ssh(SshResponse::Keys(keys))
     }
 }
 

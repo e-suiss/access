@@ -158,4 +158,22 @@ pub trait Vault {
         let _ = (realm, bytes);
         Err(VaultError)
     }
+
+    /// The stored SSH CA keys of `realm`, if any were made (OP-156 m.3 (o)).
+    ///
+    /// # Errors
+    /// [`VaultError`].
+    fn ssh(&mut self, realm: &crate::protocol::Realm) -> Result<Option<Vec<u8>>, VaultError> {
+        let _ = realm;
+        Ok(None)
+    }
+
+    /// Replaces the stored SSH CA keys of `realm`.
+    ///
+    /// # Errors
+    /// [`VaultError`] when this vault keeps none.
+    fn put_ssh(&mut self, realm: &crate::protocol::Realm, bytes: &[u8]) -> Result<(), VaultError> {
+        let _ = (realm, bytes);
+        Err(VaultError)
+    }
 }

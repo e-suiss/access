@@ -148,6 +148,8 @@ pub enum Request {
     Saml(crate::saml::SamlRequest),
     /// A request about the cell's ACME account key (OP-156 m.3 (i)).
     Acme(crate::acme::AcmeRequest),
+    /// A request about the realm's SSH CA keys (OP-156 m.3 (o)).
+    Ssh(crate::ssh::SshRequest),
 }
 
 /// The identity signer's answer.
@@ -200,6 +202,8 @@ pub enum Response {
     Saml(crate::saml::SamlResponse),
     /// An answer about the cell's ACME account key.
     Acme(crate::acme::AcmeResponse),
+    /// An answer about the realm's SSH CA keys.
+    Ssh(crate::ssh::SshResponse),
     /// A refusal, by stable code.
     Error(String),
 }
@@ -429,6 +433,7 @@ impl Request {
             )]),
             Self::Saml(s) => map(vec![("saml", s.to_value())]),
             Self::Acme(a) => map(vec![("acme", a.to_value())]),
+            Self::Ssh(s) => map(vec![("ssh", s.to_value())]),
         }
     }
 
@@ -532,6 +537,9 @@ impl Request {
         if let Some(a) = v.get("acme") {
             return Ok(Self::Acme(crate::acme::AcmeRequest::from_value(a)?));
         }
+        if let Some(s) = v.get("ssh") {
+            return Ok(Self::Ssh(crate::ssh::SshRequest::from_value(s)?));
+        }
         let s = v.get("sign").ok_or(FrameError::Malformed)?;
         Ok(Self::Sign {
             realm: realm(s.get("realm"))?,
@@ -581,6 +589,7 @@ impl Response {
             )]),
             Self::Saml(s) => map(vec![("saml", s.to_value())]),
             Self::Acme(a) => map(vec![("acme", a.to_value())]),
+            Self::Ssh(s) => map(vec![("ssh", s.to_value())]),
             Self::Error(code) => map(vec![("error", Value::text(code))]),
         }
     }
@@ -637,6 +646,9 @@ impl Response {
         }
         if let Some(a) = v.get("acme") {
             return Ok(Self::Acme(crate::acme::AcmeResponse::from_value(a)?));
+        }
+        if let Some(s) = v.get("ssh") {
+            return Ok(Self::Ssh(crate::ssh::SshResponse::from_value(s)?));
         }
         Ok(Self::Error(text(v.get("error"))?))
     }

@@ -248,6 +248,20 @@ impl Vault for DirVault {
         std::fs::write(&tmp, bytes).map_err(|_| VaultError)?;
         std::fs::rename(&tmp, self.dir.join(saml_file(realm))).map_err(|_| VaultError)
     }
+
+    fn ssh(&mut self, realm: &Realm) -> Result<Option<Vec<u8>>, VaultError> {
+        match std::fs::read(self.dir.join(ssh_file(realm))) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(_) => Err(VaultError),
+        }
+    }
+
+    fn put_ssh(&mut self, realm: &Realm, bytes: &[u8]) -> Result<(), VaultError> {
+        let tmp = self.dir.join(format!("{}.ssh-ca.tmp", hex(realm)));
+        std::fs::write(&tmp, bytes).map_err(|_| VaultError)?;
+        std::fs::rename(&tmp, self.dir.join(ssh_file(realm))).map_err(|_| VaultError)
+    }
 }
 
 /// A realm's `rsa-id` key file; not `.cbor`, so it is never read as a realm key set.
@@ -262,6 +276,11 @@ fn rsa_id_file(realm: &Realm) -> String {
 /// A realm's SAML key file; not `.cbor`, so it is never read as a realm key set.
 fn saml_file(realm: &Realm) -> String {
     format!("{}.{}.key", hex(realm), crate::saml::LABEL)
+}
+
+/// A realm's SSH CA key file; not `.cbor`, so it is never read as a realm key set.
+fn ssh_file(realm: &Realm) -> String {
+    format!("{}.{}.key", hex(realm), crate::ssh::LABEL)
 }
 
 /// A realm's Claim issuer key file; not `.cbor`, so it is never read as a realm key set.

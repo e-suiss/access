@@ -18,6 +18,7 @@ pub mod protocol;
 pub mod purpose;
 pub mod saml;
 pub mod service;
+pub mod ssh;
 
 /// Why the signer refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
