@@ -80,6 +80,15 @@ export class AccountMock {
   linked: { link: string; provider: string; linked_at_ms: number; verified_at_ms: number }[] = [
     { link: "bGluazE", provider: "google", linked_at_ms: 1_790_000_000_000, verified_at_ms: 0 },
   ];
+  /** OP-156 m.3 (d): the person's approvers. */
+  approvers: { id: string; name: string; device_key: string; registered_at: string }[] = [
+    {
+      id: "apv_phone",
+      name: "Ada's phone",
+      device_key: "A".repeat(43),
+      registered_at: "2026-11-01T10:00:00Z",
+    },
+  ];
   /** S11: connected apps. */
   apps: { client_id: string; app: string; claims: string[]; since_ms: number }[] = [
     { client_id: "cli_shop", app: "Shop", claims: ["email", "name"], since_ms: 1_790_000_000_000 },
@@ -140,8 +149,31 @@ export class AccountMock {
       (r) => this.s11(r),
     );
     await context.route(/\/v1\/(sessions|me)(\/|$)/, (r) => this.s10(r));
+    await context.route(/\/v1\/approvers(\/|$)/, (r) => this.approversRoute(r));
     await context.route(/\/v1\/account\/vault\/connections/, (r) => this.vaultRoute(r));
     await context.route(/\/v1\/account\/agent-connections/, (r) => this.agentsRoute(r));
+  }
+
+  private async approversRoute(r: Route): Promise<void> {
+    this.record(r);
+    const reply = (status: number, body?: unknown) =>
+      r.fulfill({
+        status,
+        contentType: "application/json",
+        body: body === undefined ? "" : JSON.stringify(body),
+      });
+    if (!this.signedIn) return reply(401, { code: "session-required" });
+    const path = new URL(r.request().url()).pathname;
+    if (r.request().method() === "GET") {
+      return reply(200, {
+        approvers: this.approvers.map((a) => ({ ...a, last_used_at: null })),
+      });
+    }
+    const id = /\/v1\/approvers\/([^/]+)\/retire$/.exec(path)?.[1];
+    if (id === undefined) return reply(404, { code: "not-found" });
+    if (this.freshNeeded) return reply(401, { code: "step-up-required" });
+    this.approvers = this.approvers.filter((a) => a.id !== id);
+    return reply(204);
   }
 
   private async agentsRoute(r: Route): Promise<void> {

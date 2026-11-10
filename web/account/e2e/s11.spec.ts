@@ -148,3 +148,15 @@ test("a lost sign-in says only to sign in again (§8.13)", async ({ page, bff })
   await page.getByRole("button", { name: "Remove: Laptop" }).click();
   await expect(alerted(page)).toHaveText("Please sign in again to continue.");
 });
+
+// OP-156 m.3 (d): approvers register themselves from their app; here they are seen and removed
+test("approvers are listed and removed", async ({ page }) => {
+  await page.goto("/account/");
+  const approvers = page.getByTestId("approvers");
+  await expect(approvers).toContainText("Apps on your phone that can approve your sign-ins");
+  await expect(approvers.getByTestId("approver-row")).toHaveCount(1);
+  await expect(approvers).toContainText("Ada's phone");
+  await approvers.getByRole("button", { name: "Remove: Ada's phone" }).click();
+  await expect(approvers.getByTestId("said")).toHaveText("Removed.");
+  await expect(approvers).toContainText("No approvers yet.");
+});
