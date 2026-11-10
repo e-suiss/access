@@ -32,6 +32,11 @@ const ALLOWLIST: &[(&str, &str, &str)] = &[
         "rustls names its custom verifier traits `danger`; the LDAP gateway's verifier checks only that the client holds the certificate's key (TLS 1.3 handshake signature) and bounds the chain, then access-server runs the realm's certificate sign-in rules (path, Acceptance, revocation) before anyone is bound (OP-155 m.3 (n))",
     ),
     (
+        "bins/access-gw-radius/src/server.rs",
+        "danger",
+        "rustls names its custom verifier traits `danger`; the RADIUS gateway's verifier requires a client certificate, checks that the client holds its key (TLS 1.3 handshake signature) and bounds the chain, then access-server answers only a certificate registered with the gateway by idp.gateway.radius_client_register (OP-155 m.3 (f))",
+    ),
+    (
         "xtask/src/rules_ui_terms.rs",
         "dangerously",
         "React's dangerouslySetInnerHTML, named only so `ui-text-nodes` can forbid it (TN-131)",
