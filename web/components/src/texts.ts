@@ -94,6 +94,18 @@ export const EN: Readonly<Record<string, string>> = {
   "suggestion.not_applied": "Nothing changes until you review and give the exact delegation.",
   "action.review_delegation": "Review the exact delegation",
   "action.not_now": "Not now",
+  // TN-134, OP-155 m.3 (i): the SSO setup portal's login TextIds
+  "sso_setup.title": "Set up sign-in for { $organization }",
+  "sso_setup.choose_provider": "Choose your identity provider",
+  "sso_setup.configure": "Copy these values into { $provider }, then paste its details here.",
+  "sso_setup.test": "Sign in once to test the connection.",
+  "sso_setup.done": "The connection works. An owner of { $organization } can now turn it on.",
+  "sso_setup.link_expired": "This setup link has expired or was already used. Ask for a new one.",
+  "sso_setup.domains": "Prove you own these domains: publish each TXT record shown here.",
+  "sso_setup.scim":
+    "To keep members in step, point your provider's provisioning at this address. An owner of the organization gives you its secret.",
+  "sso_setup.save": "Save the connection",
+  "sso_setup.finish": "Finish setup",
 };
 
 /** Looks `key` up in `catalogue`, then in English; an unknown key shows as itself. */
