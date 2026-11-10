@@ -530,6 +530,84 @@ async fn unsolicited_sso_needs_the_opt_in() {
         .await;
     assert_eq!(r.status(), StatusCode::BAD_REQUEST);
     assert!(page.contains("saml-relay-state"));
+
+    // IDP-28, IDP-40, Ek B 4779, 4780, 4935
+    let mut slack = sp("slack", serde_json::json!({ "template": "slack" }));
+    slack["entity_id"] = serde_json::json!("https://slack.com");
+    let w = idp
+        .c
+        .rest_write(
+            &Method::POST,
+            "/admin/v1/realms/acme/saml-sps",
+            ("registerSamlSp", None),
+            slack.clone(),
+            None,
+        )
+        .await;
+    assert_eq!(w.status, StatusCode::BAD_REQUEST, "{}", w.body);
+    assert_eq!(w.body["code"], "invalid-saml-sp");
+    slack["attributes"] = serde_json::json!([{ "name": "User.Email", "source": "email" }]);
+    idp.register(slack).await;
+    let list = idp.c.admin_get("/admin/v1/realms/acme/saml-sps").await;
+    let item = list.body["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["name"] == "slack")
+        .unwrap()
+        .clone();
+    assert_eq!(item["nameid_format"], "persistent");
+    assert_eq!(item["status"], "live");
+    idp.c.w.domains.release().await;
+}
+
+// §10.6.1 SLO, MD-7, Ek B 4782, 4761: single logout signs the user out locally with an epoch
+// step, answers the SP with a signed HTTP-Redirect LogoutResponse saying PartialLogout, and the
+// old session vouches for nothing after.
+#[tokio::test]
+async fn single_logout_signs_out_locally_and_answers_the_sp() {
+    let idp = Idp::new("saml-slo").await;
+    idp.register(sp(
+        "gone",
+        serde_json::json!({ "slo": [{ "url": "https://gone.sp.test/slo", "binding": "redirect" }] }),
+    ))
+    .await;
+    let entity = "https://gone.sp.test/metadata";
+    let logout = Facts {
+        kind: Kind::Logout,
+        acs_url: None,
+        protocol_binding: None,
+        requester_ids: vec![],
+        name_id: Some(String::from("opaque")),
+        session_indexes: vec![String::from("_s1")],
+        ..idp.facts(entity, "_l1", "")
+    };
+    *idp.script.lock().unwrap() = Some(Ok(logout));
+    let message = binding_value(b"<samlp:LogoutRequest/>");
+    let (r, _) = idp
+        .get(
+            &format!("/realms/acme/saml/slo?SAMLRequest={message}&RelayState=back"),
+            true,
+        )
+        .await;
+    assert_eq!(r.status(), StatusCode::SEE_OTHER);
+    let to = location(&r);
+    assert!(
+        to.starts_with("https://gone.sp.test/slo?SAMLResponse="),
+        "{to}"
+    );
+    assert!(to.contains("&RelayState=back&SigAlg=") && to.contains("&Signature="));
+    let cleared = r.headers().get_all(header::SET_COOKIE).iter().any(|v| {
+        v.to_str()
+            .unwrap()
+            .starts_with(&format!("{SESSION_COOKIE}=;"))
+    });
+    assert!(cleared);
+    let (r, _) = idp
+        .sso(idp.facts(entity, "_g1", "https://gone.sp.test/acs"), true)
+        .await;
+    assert_eq!(r.status(), StatusCode::SEE_OTHER);
+    assert!(location(&r).contains("/login?return_to="));
     idp.c.w.domains.release().await;
 }
 
