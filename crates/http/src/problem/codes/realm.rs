@@ -551,3 +551,33 @@ pub const NOT_THE_HANDOVER: Code = code(
     "Conflict",
     "The signed change is not this organization's handover to that recipient (TN-91).",
 );
+/// A SAML service provider registration outside §10.6.1 or its template's interop profile
+/// (OP-155 m.3 (e)).
+pub const INVALID_SAML_SP: Code = code(
+    "invalid-saml-sp",
+    400,
+    "Bad Request",
+    "The SAML service provider registration is malformed: an entity ID that is not a bounded URI, an ACS that is not exact https or not HTTP-POST, a certificate that is not base64 DER, signed requests without a pinned certificate, encryption without an encryption certificate, nothing signed, an e-mail NameID without a template that asks for it, a duplicated attribute, or a registration its template's profile refuses (OP-155 m.3 (e)).",
+);
+/// The name or entity ID was registered before; neither is reused (OP-73).
+pub const SAML_SP_EXISTS: Code = code(
+    "saml-sp-exists",
+    409,
+    "Conflict",
+    "A SAML service provider with this name or entity ID was registered before; a retired registration's name and entity ID are never reused (OP-73).",
+);
+/// A SAML certificate policy whose phases are shorter than 14 days, or an unknown algorithm.
+pub const INVALID_SAML_CERTIFICATE_POLICY: Code = code(
+    "invalid-saml-certificate-policy",
+    400,
+    "Bad Request",
+    "The SAML certificate policy keeps each rotation phase at least 14 days, rotates every 30 to 1825 days and names rsa-3072 or p-256 (OP-155 m.3 (e)).",
+);
+/// A gateway registration that is not a kind, a gateway name and a certificate digest, or the
+/// retirement of a gateway that is not live (OP-155 m.3 (c)).
+pub const INVALID_GATEWAY: Code = code(
+    "invalid-gateway",
+    400,
+    "Bad Request",
+    "The gateway registration needs a kind (saml, ldap, kerberos or radius), a name of lower-case letters, digits and hyphens, and the SHA-256 of its client certificate in hex; only a live gateway can be retired (OP-155 m.3 (c)).",
+);

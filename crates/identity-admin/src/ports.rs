@@ -77,6 +77,27 @@ pub trait RealmKeys: Send + Sync {
         party: [u8; 16],
     ) -> impl Future<Output = Result<PublicKey, Unavailable>> + Send;
 
+    /// Opens the realm's SAML signing key (P-256 when `p256`, else RSA-3072) on the first
+    /// registration that needs it (MD-6, OP-155 m.3 (d)); repeating it changes nothing.
+    fn saml_open(
+        &self,
+        realm: RealmId,
+        p256: bool,
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send {
+        let _ = (realm, p256);
+        async { Err(Unavailable(String::from("no SAML keys"))) }
+    }
+
+    /// Replaces the realm's SAML signing key at once (`idp.saml.cert_emergency`).
+    fn saml_emergency(
+        &self,
+        realm: RealmId,
+        p256: bool,
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send {
+        let _ = (realm, p256);
+        async { Err(Unavailable(String::from("no SAML keys"))) }
+    }
+
     /// Signs the JSON `claims` as a compact JWS of `typ` with the realm's token key at `at`, Unix
     /// ms: a realm-signed binding offer (OP-153 m.18 (e)). Without a signer nothing is offered.
     fn sign_jws(

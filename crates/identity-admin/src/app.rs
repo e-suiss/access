@@ -12,6 +12,7 @@ pub mod orgs;
 pub mod platform;
 pub mod provision;
 pub mod rest;
+pub mod saml;
 mod scim;
 mod signals;
 pub mod transfers;
@@ -450,6 +451,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Scim(s) => scim::current(t, s).await?,
             // OP-155 m.3 (j)
             Change::Federation(f) => federation::current(t, f).await?,
+            // OP-155 m.3 (a), (e)
+            Change::Saml(s) => saml::current(t, s).await?,
             // OP-154 m.3 (j)
             Change::DcrPolicy { policy, loosens } => {
                 let current =
@@ -1319,6 +1322,14 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::KeyPolicy(policy) => self.keys.set_policy(p.realm, *policy).await,
             Change::KeyRotate { retire } => self.keys.rotate(p.realm, *retire).await,
             Change::KeyDrop { kid, .. } => self.keys.drop_key(p.realm, *kid).await,
+            // MD-6, OP-155 m.3 (d), (e)
+            Change::Saml(
+                crate::domain::saml::SamlChange::Register(_, sp)
+                | crate::domain::saml::SamlChange::Update(_, sp),
+            ) => self.keys.saml_open(p.realm, sp.alg().ecdsa()).await,
+            Change::Saml(crate::domain::saml::SamlChange::CertEmergency { p256 }) => {
+                self.keys.saml_emergency(p.realm, *p256).await
+            }
             _ => Ok(()),
         };
         done.map_err(|e| AdminError::Unavailable(e.0))
@@ -1620,6 +1631,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             // OP-155 m.3 (j)
             Change::Federation(f) => federation::write(t, bound, f).await?,
+            // OP-155 m.3 (a), (e), m.6 (h)
+            Change::Saml(s) => saml::write(t, bound, s).await?,
             Change::DeviceCode(on) => {
                 t.put_device_code(bound, *on).await?;
                 true

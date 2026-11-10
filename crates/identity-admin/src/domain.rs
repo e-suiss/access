@@ -33,6 +33,7 @@ pub mod provision;
 pub use access_identity_risk::domain::mode::ProtectionMode;
 
 pub mod realm;
+pub mod saml;
 pub mod scim;
 
 pub use realm::{
@@ -472,6 +473,22 @@ pub enum Invalid {
     /// No live trust anchor by that entity identifier.
     #[error("no such trust anchor")]
     NoTrustAnchor,
+    /// A SAML service provider registration outside §10.6.1 or its template's profile.
+    #[error("invalid SAML service provider")]
+    SamlSp,
+    /// No live SAML service provider registration by that name.
+    #[error("no such SAML service provider")]
+    NoSamlSp,
+    /// The name or entity ID was registered before; neither is reused (OP-73).
+    #[error("SAML service provider exists")]
+    SamlSpExists,
+    /// A SAML certificate policy with a phase shorter than 14 days, or an unknown algorithm.
+    #[error("invalid SAML certificate policy")]
+    SamlCertificate,
+    /// A gateway registration that is not a gateway name, kind and certificate digest, or a
+    /// retirement of a gateway that is not live.
+    #[error("invalid gateway")]
+    Gateway,
     /// N5: a Related Origins list that is not `https` origins, names more than five
     /// registrable labels with the RP ID, or an origin outside the realm's verified domains
     /// (TN-18, OP-153 m.3 (u)).
@@ -524,6 +541,11 @@ impl Invalid {
             Self::NoVaultResource => "no-such-vault-resource",
             Self::Federation => "invalid-federation",
             Self::NoTrustAnchor => "no-such-trust-anchor",
+            Self::SamlSp => "invalid-saml-sp",
+            Self::NoSamlSp => "no-such-saml-sp",
+            Self::SamlSpExists => "saml-sp-exists",
+            Self::SamlCertificate => "invalid-saml-certificate-policy",
+            Self::Gateway => "invalid-gateway",
             Self::DisplayName => "invalid-display-name",
             Self::RedirectUri | Self::RedirectUris => "invalid-redirect-uri",
             Self::JwksUri => "invalid-jwks-uri",
@@ -1763,6 +1785,8 @@ pub enum Change {
     Scim(scim::ScimChange),
     /// `idp.federation.*` (OP-155 m.3 (a), (j)).
     Federation(federation::FederationChange),
+    /// `idp.saml.*` and `idp.gateway.register`/`retire` (OP-155 m.3 (a), m.6 (h)).
+    Saml(saml::SamlChange),
     /// `idp.client.resource_register` (AG-8, OP-154 m.3 (a)).
     ResourceRegister(ProtectedResource),
     /// `idp.client.cross_app_connection` (CT2, OP-154 m.3 (a), (n)).
@@ -2137,6 +2161,7 @@ impl Change {
             Self::Vault(v) => v.action(),
             Self::Scim(s) => s.action(),
             Self::Federation(f) => f.action(),
+            Self::Saml(s) => s.action(),
             Self::ResourceRegister(_) => IdpAction::ClientResourceRegister,
             Self::CrossAppConnection(_) => IdpAction::ClientCrossAppConnection,
             Self::CrossAppConnectionRetire(_) => IdpAction::ClientCrossAppConnectionRetire,
@@ -2205,6 +2230,7 @@ impl Change {
             Self::Vault(v) => v.check().map_err(|_| Invalid::VaultResource),
             Self::Scim(s) => s.check(),
             Self::Federation(f) => f.check().map_err(|_| Invalid::Federation),
+            Self::Saml(s) => s.check(),
             Self::ResourceRegister(r) => r.check(),
             Self::CrossAppConnection(c) => c.check(),
             Self::CrossAppConnectionRetire(name) => {
@@ -2356,6 +2382,7 @@ impl Change {
             Self::Vault(v) => v.body(),
             Self::Scim(s) => s.body(),
             Self::Federation(f) => f.body(),
+            Self::Saml(s) => s.body(),
             Self::DeviceCode(on) => Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))]),
             Self::CertificateLogin(c) => c.to_value(),
             Self::MtlsAliases(on) => Value::Map(vec![(Value::text("published"), Value::Bool(*on))]),
@@ -2507,6 +2534,7 @@ impl Change {
             Self::Vault(v) => path.extend(v.path()),
             Self::Scim(s) => path.extend(s.path()),
             Self::Federation(f) => path.extend(f.path()),
+            Self::Saml(s) => path.extend(s.path()),
             Self::ResourceRegister(r) => {
                 path.extend([String::from("resource"), r.resource.clone()]);
             }

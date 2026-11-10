@@ -1162,8 +1162,8 @@ const fn put(section: &'static str) -> Shape {
 pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
     use ResourceKind::{
         Accounts, AgentSponsors, Agents, Analytics, Clients, Deliveries, Groups, Hooks,
-        Organizations, ProtectedResources, Settings, Signals, SocialProviders, TrustAnchors,
-        UpstreamIdps, VaultResources, Webhooks,
+        Organizations, ProtectedResources, SamlSps, Settings, Signals, SocialProviders,
+        TrustAnchors, UpstreamIdps, VaultResources, Webhooks,
     };
     const CREATE: Shape = Shape::Write {
         patch: None,
@@ -1203,7 +1203,11 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "addTrustAnchor"
         | "removeTrustAnchor"
         | "putFederationAuthority"
-        | "putFederationRegistration" => (Settings, w(false)),
+        | "putFederationRegistration"
+        // OP-155 m.3 (a), (c), (e), m.6 (h)
+        | "putSamlCertificatePolicy"
+        | "replaceSamlCertificate"
+        | "retireGateway" => (Settings, w(false)),
         "revokeAllAgentInstances" => (Agents, Shape::RevokeAll),
         // OP-154 m.3 (t)
         "listVaultResources" => (
@@ -1230,6 +1234,13 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
             TrustAnchors,
             Shape::List(&["anchor", "entity_id", "status"]),
         ),
+        // OP-155 m.3 (a), (c), (e), m.6 (h)
+        "listSamlSps" => (SamlSps, Shape::List(&["name", "entity_id", "status"])),
+        "getSamlSp" => (SamlSps, Shape::Get),
+        "registerSamlSp" => (SamlSps, CREATE),
+        "putSamlSp" => (SamlSps, w(true)),
+        "retireSamlSp" => (SamlSps, w(false)),
+        "registerGateway" => (Settings, CREATE),
         o if declared(o) => (Settings, Shape::Planned(planned_body(o))),
         "listClients" => (
             Clients,
@@ -1422,6 +1433,10 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::AgentTemplate => &r::INVALID_AGENT_TEMPLATE,
             Invalid::Workload => &r::INVALID_WORKLOAD_CLIENT,
             Invalid::VaultResource => &r::INVALID_VAULT_RESOURCE,
+            Invalid::SamlSp => &r::INVALID_SAML_SP,
+            Invalid::SamlSpExists => &r::SAML_SP_EXISTS,
+            Invalid::SamlCertificate => &r::INVALID_SAML_CERTIFICATE_POLICY,
+            Invalid::Gateway => &r::INVALID_GATEWAY,
             Invalid::NoClient
             | Invalid::NoAgent
             | Invalid::NoKey
@@ -1436,6 +1451,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             | Invalid::NoSocial
             | Invalid::NoVaultResource
             | Invalid::NoTrustAnchor
+            | Invalid::NoSamlSp
             | Invalid::NoCrossAppConnection
             | Invalid::NoScimClient
             | Invalid::NoDomain => &codes::NOT_FOUND,

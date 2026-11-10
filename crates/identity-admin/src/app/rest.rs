@@ -168,6 +168,20 @@ pub enum Op {
     PutVaultReleaseMode,
     /// `registerProtectedResource`: `idp.client.resource_register` (AG-8).
     RegisterProtectedResource,
+    /// `registerSamlSp`: `idp.saml.sp_register` (OP-155 m.3 (a), (e)).
+    RegisterSamlSp,
+    /// `putSamlSp`: `idp.saml.sp_update`.
+    PutSamlSp,
+    /// `retireSamlSp`: `idp.saml.sp_retire`.
+    RetireSamlSp,
+    /// `putSamlCertificatePolicy`: `idp.saml.cert_policy`.
+    PutSamlCertificatePolicy,
+    /// `replaceSamlCertificate`: `idp.saml.cert_emergency` (reserved).
+    ReplaceSamlCertificate,
+    /// `registerGateway`: `idp.gateway.register` (OP-155 m.3 (c), m.6 (h)).
+    RegisterGateway,
+    /// `retireGateway`: `idp.gateway.retire`.
+    RetireGateway,
     /// `putDcrPolicy`: `idp.client.dcr_policy`, or `dcr_policy_tighten` (OP-154 m.3 (j)).
     PutDcrPolicy,
     /// `putFederation`: `idp.federation.enable` or `disable` (OP-155 m.3 (j)).
@@ -282,6 +296,13 @@ impl Op {
             "disableVaultResource" => Self::DisableVaultResource,
             "putVaultReleaseMode" => Self::PutVaultReleaseMode,
             "registerProtectedResource" => Self::RegisterProtectedResource,
+            "registerSamlSp" => Self::RegisterSamlSp,
+            "putSamlSp" => Self::PutSamlSp,
+            "retireSamlSp" => Self::RetireSamlSp,
+            "putSamlCertificatePolicy" => Self::PutSamlCertificatePolicy,
+            "replaceSamlCertificate" => Self::ReplaceSamlCertificate,
+            "registerGateway" => Self::RegisterGateway,
+            "retireGateway" => Self::RetireGateway,
             "putDcrPolicy" => Self::PutDcrPolicy,
             "putFederation" => Self::PutFederation,
             "addTrustAnchor" => Self::AddTrustAnchor,
@@ -822,6 +843,30 @@ fn federation_change(
     }))
 }
 
+/// The `idp.saml.*` or `idp.gateway.*` change of a SAML or gateway operation (OP-155 m.3 (a)),
+/// `None` for any other.
+fn saml_change(
+    op: Op,
+    key: Option<&str>,
+    body: &Json,
+) -> Result<Option<crate::domain::saml::SamlChange>, Invalid> {
+    use crate::domain::saml::SamlChange;
+    let mut own = obj(body)?.clone();
+    own.remove(VALIDITY);
+    own.remove("ais");
+    let body = Json::Object(own);
+    Ok(Some(match op {
+        Op::RegisterSamlSp => SamlChange::register(&body)?,
+        Op::PutSamlSp => SamlChange::update(key_of(key)?, &body)?,
+        Op::RetireSamlSp => SamlChange::retire(key_of(key)?, &body)?,
+        Op::PutSamlCertificatePolicy => SamlChange::cert_policy(&body)?,
+        Op::ReplaceSamlCertificate => SamlChange::cert_emergency(&body)?,
+        Op::RegisterGateway => SamlChange::gateway_register(&body)?,
+        Op::RetireGateway => SamlChange::gateway_retire(key_of(key)?, &body)?,
+        _ => return Ok(None),
+    }))
+}
+
 /// A hook's or webhook's id from its external id; anything else is `missing`.
 fn extension_id(ids: &IdKey, prefix: &str, s: &str, missing: Invalid) -> Result<[u8; 16], Invalid> {
     ids.decode(prefix, s).map_err(|_| missing)
@@ -903,6 +948,9 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
     }
     if let Some(f) = federation_change(op, key, body)? {
         return Ok(Change::Federation(f));
+    }
+    if let Some(s) = saml_change(op, key, body)? {
+        return Ok(Change::Saml(s));
     }
     Ok(match op {
         Op::CreateOrganization => {
@@ -1276,7 +1324,14 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         | Op::AddTrustAnchor
         | Op::RemoveTrustAnchor
         | Op::PutFederationAuthority
-        | Op::PutFederationRegistration => return Err(Invalid::Body),
+        | Op::PutFederationRegistration
+        | Op::RegisterSamlSp
+        | Op::PutSamlSp
+        | Op::RetireSamlSp
+        | Op::PutSamlCertificatePolicy
+        | Op::ReplaceSamlCertificate
+        | Op::RegisterGateway
+        | Op::RetireGateway => return Err(Invalid::Body),
         // OP-153 m.18 (e), m.25 (b)
         Op::BindAccount => {
             only(
@@ -1868,6 +1923,8 @@ pub enum Kind {
     AgentSponsors,
     /// The vault Resources by name (OP-154 m.3 (t)): never a client secret.
     VaultResources,
+    /// The SAML service providers and WS-Federation relying parties by name (OP-155 m.3 (e)).
+    SamlSps,
     /// The protected resources by canonical URI (AG-8).
     ProtectedResources,
     /// The trust anchors by the base64url of their entity identifier (OP-155 m.3 (j)).
@@ -2242,6 +2299,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-154 m.3 (t)
             (Kind::VaultResources, _) => Read {
                 items: super::vault::list(t, key).await?,
+                last: None,
+            },
+            // OP-155 m.3 (e)
+            (Kind::SamlSps, _) => Read {
+                items: super::saml::list(t, key).await?,
                 last: None,
             },
             (Kind::Socials, _) => {

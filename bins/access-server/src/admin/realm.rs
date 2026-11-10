@@ -102,6 +102,7 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::Agents => Kind::Agents,
         ResourceKind::AgentSponsors => Kind::AgentSponsors,
         ResourceKind::VaultResources => Kind::VaultResources,
+        ResourceKind::SamlSps => Kind::SamlSps,
         ResourceKind::ProtectedResources => Kind::ProtectedResources,
         ResourceKind::TrustAnchors => Kind::TrustAnchors,
     }

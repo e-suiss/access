@@ -191,6 +191,8 @@ pub enum ResourceKind {
     AgentSponsors,
     /// Vault Resources, by name (OP-154 m.3 (t)).
     VaultResources,
+    /// SAML service providers and WS-Federation relying parties, by name (OP-155 m.3 (e)).
+    SamlSps,
     /// Protected resources and MCP servers, by canonical URI (AG-8).
     ProtectedResources,
     /// OpenID Federation trust anchors, by their entity identifier's base64url (OP-155 m.3 (j)).
@@ -217,6 +219,7 @@ impl ResourceKind {
             Self::Agents => "agents",
             Self::AgentSponsors => "agent-sponsors",
             Self::VaultResources => "vault-resources",
+            Self::SamlSps => "saml-sps",
             Self::ProtectedResources => "protected-resources",
             Self::TrustAnchors => "trust-anchors",
         }

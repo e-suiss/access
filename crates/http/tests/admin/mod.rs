@@ -215,6 +215,8 @@ fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
         ResourceKind::ProtectedResources => json!({ "resource": key, "display_name": "MCP" }),
         ResourceKind::TrustAnchors => json!({ "anchor": key, "entity_id": "https://ta.example",
                                               "status": "live" }),
+        ResourceKind::SamlSps => json!({ "name": key, "entity_id": "https://sp.test",
+                                         "status": "live" }),
         ResourceKind::Agents => json!({ "agent": key, "display_name": "Helper",
                                         "agent_kind": "cloud", "status": "active",
                                         "sponsors": [], "instances": [] }),

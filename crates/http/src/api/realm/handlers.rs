@@ -52,6 +52,7 @@ pub const fn id_member(kind: ResourceKind) -> &'static str {
         ResourceKind::Hooks => "hook_id",
         ResourceKind::Webhooks => "webhook_id",
         ResourceKind::Agents => "agent",
+        ResourceKind::SamlSps => "name",
         _ => "client_id",
     }
 }
