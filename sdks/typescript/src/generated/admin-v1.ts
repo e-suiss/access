@@ -2444,7 +2444,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The realm's Linux client hosts with their offline horizon and last contact (OP-156 m.3 (p)). */
+        /** The realm's Linux client hosts with their server group, offline limits and break-glass switch (OP-156 m.3 (p)). */
         get: operations["listLinuxHosts"];
         put?: never;
         /** Registers a Linux host of the Linux client: idp.linux.host_register. */
@@ -11282,7 +11282,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -11309,7 +11308,7 @@ export interface operations {
         };
         responses: {
             /** @description Committed: the Exercise record (TN-110). */
-            200: {
+            201: {
                 headers: {
                     "Request-Id": components["headers"]["Request-Id"];
                     "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
@@ -11327,7 +11326,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -11374,7 +11372,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -11421,7 +11418,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -11468,7 +11464,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };

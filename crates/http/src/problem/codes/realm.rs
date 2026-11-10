@@ -742,3 +742,38 @@ pub const EXPORT_SINK_EXISTS: Code = code(
     "Conflict",
     "An export sink with this name was registered before; a retired sink keeps its name and its cursor (OP-73).",
 );
+/// A Linux host registration or policy outside the rules (OP-156 m.3 (p)).
+pub const INVALID_LINUX_HOST: Code = code(
+    "invalid-linux-host",
+    400,
+    "Bad Request",
+    "A Linux host has a name and a live server group of a lower-case letter followed by up to 62 lower-case letters, digits and hyphens, the 43-character x5t#S256 of its client certificate, an absolute shell path and sudo at CT2 or CT3; it serves NSS data offline for at most 12 hours and reuses a console sign-in offline for at most 8 (OP-156 m.3 (p)).",
+);
+/// The Linux host name was registered before, or a live host has the certificate (OP-73).
+pub const LINUX_HOST_EXISTS: Code = code(
+    "linux-host-exists",
+    409,
+    "Conflict",
+    "A Linux host with this name was registered before, or a live host presents this client certificate; a retired host's name is never reused (OP-73).",
+);
+/// The client certificate names no live Linux host of the realm (OP-156 m.3 (p)).
+pub const LINUX_HOST_UNKNOWN: Code = code(
+    "linux-host-unknown",
+    403,
+    "Forbidden",
+    "The request did not come with the client certificate of a live Linux host of this realm, registered with idp.linux.host_register (OP-156 m.3 (p)).",
+);
+/// A malformed Linux client request (OP-156 m.3 (p)).
+pub const INVALID_LINUX_REQUEST: Code = code(
+    "invalid-linux-request",
+    400,
+    "Bad Request",
+    "The Linux NSS request is an empty JSON object; a sign-in is {user}, a sudo step-up {user, command} with the base64url SHA-256 of the command line, each with the person's DPoP-bound access token (OP-156 m.3 (p)).",
+);
+/// The sudo step-up's authentication is not strong or fresh enough (IDP-8, OP-156 m.3 (p)).
+pub const LINUX_STEP_UP: Code = code(
+    "linux-step-up",
+    403,
+    "Forbidden",
+    "sudo needs a sign-in in the last 5 minutes with a phishing-resistant, user-verifying authenticator (CT2; CT3 also device-bound and non-custodial); a push or a password alone is not enough (IDP-8, OP-156 m.3 (p)).",
+);

@@ -55,7 +55,8 @@ pub const fn id_member(kind: ResourceKind) -> &'static str {
         ResourceKind::SamlSps
         | ResourceKind::SshHostGroups
         | ResourceKind::Proxies
-        | ResourceKind::ExportSinks => "name",
+        | ResourceKind::ExportSinks
+        | ResourceKind::LinuxHosts => "name",
         ResourceKind::CustomDomains => "host",
         _ => "client_id",
     }

@@ -499,6 +499,11 @@ pub const CODES: &[Code] = &[
     codes::realm::PROXY_REACHABLE_DIRECTLY,
     codes::realm::PROXY_UNREGISTERED,
     codes::realm::INVALID_FORWARDED_REQUEST,
+    codes::realm::INVALID_LINUX_HOST,
+    codes::realm::LINUX_HOST_EXISTS,
+    codes::realm::LINUX_HOST_UNKNOWN,
+    codes::realm::INVALID_LINUX_REQUEST,
+    codes::realm::LINUX_STEP_UP,
 ];
 
 /// The type URI of `code`.

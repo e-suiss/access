@@ -565,7 +565,7 @@ const STAGE11: [Route; 38] = [
     list(
         "/admin/v1/realms/{slug}/linux-hosts",
         "listLinuxHosts",
-        "The realm's Linux client hosts with their offline horizon and last contact (OP-156 m.3 (p)).",
+        "The realm's Linux client hosts with their server group, offline limits and break-glass switch (OP-156 m.3 (p)).",
     ),
     write(
         Verb::Post,
@@ -1450,7 +1450,8 @@ const fn put(section: &'static str) -> Shape {
 pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
     use ResourceKind::{
         Accounts, AgentSponsors, Agents, Analytics, Clients, CustomDomains, Deliveries, Groups,
-        Hooks, Organizations, ProtectedResources, Proxies, RelayUndelivered, SamlSps, Settings,
+        Hooks, LinuxHosts, Organizations, ProtectedResources, Proxies, RelayUndelivered, SamlSps,
+        Settings,
         Signals, SocialProviders, SshHostGroups, SsoEnforcementPreviews, TrustAnchors,
         UpstreamIdps, VaultResources, Webhooks,
     };
@@ -1569,6 +1570,12 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "registerExportSink" => (ResourceKind::ExportSinks, CREATE),
         "putExportSink" => (ResourceKind::ExportSinks, w(true)),
         "retireExportSink" => (ResourceKind::ExportSinks, w(false)),
+        // OP-156 m.3 (p)
+        "listLinuxHosts" => (LinuxHosts, Shape::List(&["name", "status"])),
+        "registerLinuxHost" => (LinuxHosts, CREATE),
+        "retireLinuxHost" | "putLinuxOfflinePolicy" | "putLinuxBreakGlassPolicy" => {
+            (LinuxHosts, w(false))
+        }
         // OP-155 m.3 (i)
         "previewSsoEnforcement" => (SsoEnforcementPreviews, Shape::Get),
         "enforceOrganizationSso" | "liftOrganizationSso" | "createOrganizationSetupLink" => {
@@ -1794,6 +1801,8 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::ProxyDirectlyReachable => &r::PROXY_REACHABLE_DIRECTLY,
             Invalid::ExportSink => &r::INVALID_EXPORT_SINK,
             Invalid::ExportSinkExists => &r::EXPORT_SINK_EXISTS,
+            Invalid::LinuxHost => &r::INVALID_LINUX_HOST,
+            Invalid::LinuxHostExists => &r::LINUX_HOST_EXISTS,
             Invalid::NoClient
             | Invalid::NoAgent
             | Invalid::NoKey
@@ -1812,6 +1821,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             | Invalid::NoSshHostGroup
             | Invalid::NoProxy
             | Invalid::NoExportSink
+            | Invalid::NoLinuxHost
             | Invalid::NoCrossAppConnection
             | Invalid::NoScimClient
             | Invalid::NoGateway

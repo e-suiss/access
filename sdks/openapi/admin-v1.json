@@ -15898,7 +15898,7 @@
     "/admin/v1/realms/{slug}/linux-hosts": {
       "get": {
         "operationId": "listLinuxHosts",
-        "summary": "The realm's Linux client hosts with their offline horizon and last contact (OP-156 m.3 (p)).",
+        "summary": "The realm's Linux client hosts with their server group, offline limits and break-glass switch (OP-156 m.3 (p)).",
         "tags": [
           "realm"
         ],
@@ -15965,9 +15965,6 @@
           },
           "503": {
             "$ref": "#/components/responses/Unavailable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -16001,7 +15998,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "201": {
             "description": "Committed: the Exercise record (TN-110).",
             "headers": {
               "Request-Id": {
@@ -16045,9 +16042,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -16147,9 +16141,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -16249,9 +16240,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -16351,9 +16339,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,

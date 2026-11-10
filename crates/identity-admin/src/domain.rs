@@ -32,6 +32,7 @@ pub mod custom_domain;
 pub mod dns;
 pub mod federation;
 pub mod gateway;
+pub mod linux;
 pub mod org;
 pub mod provision;
 pub use access_identity_risk::domain::mode::ProtectionMode;
@@ -536,6 +537,17 @@ pub enum Invalid {
     /// The application answers outside the proxy: plain headers stay off (OP-156 m.3 (l)).
     #[error("application reachable outside the proxy")]
     ProxyDirectlyReachable,
+    /// A Linux host that is not a name, a live server group's name, a 43-character
+    /// `x5t#S256`, an absolute shell and `sudo` at CT2 or CT3, or offline limits past 12 and
+    /// 8 hours (OP-156 m.3 (p)).
+    #[error("invalid Linux host")]
+    LinuxHost,
+    /// No live Linux host by that name.
+    #[error("no such Linux host")]
+    NoLinuxHost,
+    /// The host name was registered before, or a live host has that certificate.
+    #[error("Linux host exists")]
+    LinuxHostExists,
     /// A gateway registration that is not a gateway name, kind and certificate digest, or a
     /// retirement of a gateway that is not live.
     #[error("invalid gateway")]
@@ -631,6 +643,9 @@ impl Invalid {
             Self::ProxyExists => "proxy-exists",
             Self::ProxyClient => "invalid-proxy-client",
             Self::ProxyDirectlyReachable => "proxy-reachable-directly",
+            Self::LinuxHost => "invalid-linux-host",
+            Self::NoLinuxHost => "no-such-linux-host",
+            Self::LinuxHostExists => "linux-host-exists",
             Self::Gateway => "invalid-gateway",
             Self::DisplayName => "invalid-display-name",
             Self::RedirectUri | Self::RedirectUris => "invalid-redirect-uri",
@@ -1895,6 +1910,8 @@ pub enum Change {
     Proxy(access_identity_proxy::domain::registration::ProxyChange),
     /// `idp.export.*` (OP-156 m.3 (a), (s)).
     Export(access_identity_export::domain::sink::ExportChange),
+    /// `idp.linux.*` (OP-156 m.3 (a), (p)).
+    Linux(linux::LinuxChange),
     /// `idp.client.resource_register` (AG-8, OP-154 m.3 (a)).
     ResourceRegister(ProtectedResource),
     /// `idp.client.cross_app_connection` (CT2, OP-154 m.3 (a), (n)).
@@ -2378,6 +2395,7 @@ impl Change {
             Self::Ssh(s) => s.action(),
             Self::Proxy(p) => p.action(),
             Self::Export(e) => e.action(),
+            Self::Linux(l) => l.action(),
             Self::ResourceRegister(_) => IdpAction::ClientResourceRegister,
             Self::CrossAppConnection(_) => IdpAction::ClientCrossAppConnection,
             Self::CrossAppConnectionRetire(_) => IdpAction::ClientCrossAppConnectionRetire,
@@ -2468,6 +2486,7 @@ impl Change {
             Self::Ssh(s) => s.check().map_err(ssh_invalid),
             Self::Proxy(p) => p.check().map_err(|_| Invalid::Proxy),
             Self::Export(e) => e.check().map_err(|_| Invalid::ExportSink),
+            Self::Linux(l) => l.check(),
             Self::ResourceRegister(r) => r.check(),
             Self::CrossAppConnection(c) => c.check(),
             Self::CrossAppConnectionRetire(name) => {
@@ -2643,6 +2662,7 @@ impl Change {
             Self::Ssh(s) => s.body(),
             Self::Proxy(p) => p.body(),
             Self::Export(e) => e.body(),
+            Self::Linux(l) => l.body(),
             Self::DeviceCode(on) | Self::Hrd(on) | Self::SecurityNotices(on) | Self::Push(on) => {
                 Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))])
             }
@@ -2834,6 +2854,7 @@ impl Change {
             Self::Ssh(s) => path.extend(s.path()),
             Self::Proxy(p) => path.extend(p.path()),
             Self::Export(e) => path.extend(e.path()),
+            Self::Linux(l) => path.extend(l.path()),
             Self::ResourceRegister(r) => {
                 path.extend([String::from("resource"), r.resource.clone()]);
             }

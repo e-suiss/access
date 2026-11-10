@@ -222,6 +222,14 @@ pub enum Op {
     PutExportSink,
     /// `retireExportSink`: `idp.export.sink_retire`, keyed by the sink's name.
     RetireExportSink,
+    /// `registerLinuxHost`: `idp.linux.host_register` (OP-156 m.3 (p)).
+    RegisterLinuxHost,
+    /// `retireLinuxHost`: `idp.linux.host_retire`, keyed by the host's name.
+    RetireLinuxHost,
+    /// `putLinuxOfflinePolicy`: `idp.linux.offline_policy`.
+    PutLinuxOfflinePolicy,
+    /// `putLinuxBreakGlassPolicy`: `idp.linux.break_glass_policy` (reserved).
+    PutLinuxBreakGlassPolicy,
     /// `putDcrPolicy`: `idp.client.dcr_policy`, or `dcr_policy_tighten` (OP-154 m.3 (j)).
     PutDcrPolicy,
     /// `putFederation`: `idp.federation.enable` or `disable` (OP-155 m.3 (j)).
@@ -387,6 +395,10 @@ impl Op {
             "registerExportSink" => Self::RegisterExportSink,
             "putExportSink" => Self::PutExportSink,
             "retireExportSink" => Self::RetireExportSink,
+            "registerLinuxHost" => Self::RegisterLinuxHost,
+            "retireLinuxHost" => Self::RetireLinuxHost,
+            "putLinuxOfflinePolicy" => Self::PutLinuxOfflinePolicy,
+            "putLinuxBreakGlassPolicy" => Self::PutLinuxBreakGlassPolicy,
             "putDcrPolicy" => Self::PutDcrPolicy,
             "putFederation" => Self::PutFederation,
             "addTrustAnchor" => Self::AddTrustAnchor,
@@ -1026,6 +1038,26 @@ fn proxy_change(
     }))
 }
 
+/// The `idp.linux.*` change of a Linux host operation (OP-156 m.3 (p)), `None` for any other.
+fn linux_change(
+    op: Op,
+    key: Option<&str>,
+    body: &Json,
+) -> Result<Option<crate::domain::linux::LinuxChange>, Invalid> {
+    use crate::domain::linux::LinuxChange;
+    let mut own = obj(body)?.clone();
+    own.remove(VALIDITY);
+    own.remove("ais");
+    let body = Json::Object(own);
+    Ok(Some(match op {
+        Op::RegisterLinuxHost => LinuxChange::register(&body)?,
+        Op::RetireLinuxHost => LinuxChange::retire(key_of(key)?, &body)?,
+        Op::PutLinuxOfflinePolicy => LinuxChange::offline_policy(key_of(key)?, &body)?,
+        Op::PutLinuxBreakGlassPolicy => LinuxChange::break_glass(key_of(key)?, &body)?,
+        _ => return Ok(None),
+    }))
+}
+
 /// A hook's or webhook's id from its external id; anything else is `missing`.
 fn extension_id(ids: &IdKey, prefix: &str, s: &str, missing: Invalid) -> Result<[u8; 16], Invalid> {
     ids.decode(prefix, s).map_err(|_| missing)
@@ -1145,6 +1177,9 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
     }
     if let Some(e) = export_change(op, key, body)? {
         return Ok(Change::Export(e));
+    }
+    if let Some(l) = linux_change(op, key, body)? {
+        return Ok(Change::Linux(l));
     }
     Ok(match op {
         Op::CreateOrganization => {
@@ -1601,7 +1636,11 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         | Op::PutProxyPlainHeaders
         | Op::RegisterExportSink
         | Op::PutExportSink
-        | Op::RetireExportSink => return Err(Invalid::Body),
+        | Op::RetireExportSink
+        | Op::RegisterLinuxHost
+        | Op::RetireLinuxHost
+        | Op::PutLinuxOfflinePolicy
+        | Op::PutLinuxBreakGlassPolicy => return Err(Invalid::Body),
         // OP-153 m.18 (e), m.25 (b)
         Op::BindAccount => {
             only(
@@ -2377,6 +2416,8 @@ pub enum Kind {
     Proxies,
     /// The export sinks by name, with their delivery state (OP-156 m.3 (s)).
     ExportSinks,
+    /// The Linux client hosts by name (OP-156 m.3 (p)).
+    LinuxHosts,
     /// The protected resources by canonical URI (AG-8).
     ProtectedResources,
     /// The trust anchors by the base64url of their entity identifier (OP-155 m.3 (j)).
@@ -2838,6 +2879,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-156 m.3 (s)
             (Kind::ExportSinks, _) => Read {
                 items: super::export_sinks::list(t, key).await?,
+                last: None,
+            },
+            // OP-156 m.3 (p)
+            (Kind::LinuxHosts, _) => Read {
+                items: super::linux::list(t, key).await?,
                 last: None,
             },
             (Kind::Socials, _) => {
