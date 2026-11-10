@@ -2301,6 +2301,7 @@ fn preference_topics(topics: &[String]) -> Result<(), Invalid> {
 impl Change {
     /// The action that authorizes it.
     #[must_use]
+    #[expect(clippy::too_many_lines, reason = "one arm per change")]
     pub fn action(&self) -> IdpAction {
         match self {
             // OP-156 m.3 (c)
