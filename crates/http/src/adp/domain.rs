@@ -606,10 +606,6 @@ pub fn decode_explain(body: &[u8], max_len: usize) -> R<(Decoded, Option<(u64, S
 ///
 /// # Errors
 /// [`AdpError`] names the protocol error.
-#[expect(
-    clippy::too_many_lines,
-    reason = "one arm per search kind, each reading its own query members"
-)]
 pub fn decode_search(
     body: &[u8],
     max_len: usize,
