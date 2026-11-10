@@ -1,0 +1,112 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT entity_id, issuer_id, tenant_id, realm_id, state, anchor, checked_ms, chain_exp_ms\n           FROM access.federation_issuer_state\n          WHERE domain_id = $1 AND untracked_ms IS NULL\n          ORDER BY entity_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "entity_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.federation_issuer_state",
+            "name": "entity_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "issuer_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.federation_issuer_state",
+            "name": "issuer_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.federation_issuer_state",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "realm_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.federation_issuer_state",
+            "name": "realm_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.federation_issuer_state",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "anchor",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.federation_issuer_state",
+            "name": "anchor"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "checked_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.federation_issuer_state",
+            "name": "checked_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "chain_exp_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.federation_issuer_state",
+            "name": "chain_exp_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "27d58d499ae85124569d0e69f55e8191a9e2024e7725cd80b95ef067530257de"
+}

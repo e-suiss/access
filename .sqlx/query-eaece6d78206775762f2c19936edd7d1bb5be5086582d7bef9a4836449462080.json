@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.federation_issuer_state (domain_id, entity_id, issuer_id, tenant_id,\n                realm_id, state, checked_ms, chain_exp_ms, tracked_ms)\n         VALUES ($1, $2, $3, $4, $5, 'pending', 0, 0, $6) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "Bytea",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eaece6d78206775762f2c19936edd7d1bb5be5086582d7bef9a4836449462080"
+}

@@ -1,0 +1,138 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT client_uuid, client_id, metadata, metadata_hash, anchor, trust_marks,\n                    registration, first_seen_ms, fetched_ms, chain_exp_ms\n               FROM access.oauth_oidf_clients\n              WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND retired_ms IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "client_uuid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_oidf_clients",
+            "name": "client_uuid"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_oidf_clients",
+            "name": "client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "metadata",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_oidf_clients",
+            "name": "metadata"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "metadata_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_oidf_clients",
+            "name": "metadata_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "anchor",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_oidf_clients",
+            "name": "anchor"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "trust_marks",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_oidf_clients",
+            "name": "trust_marks"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "registration",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_oidf_clients",
+            "name": "registration"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "first_seen_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_oidf_clients",
+            "name": "first_seen_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "fetched_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_oidf_clients",
+            "name": "fetched_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "chain_exp_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_oidf_clients",
+            "name": "chain_exp_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "523b2fa871924f6cf7e464c7726e4df34a079f560369e9b066f381178d87e641"
+}

@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ON (entity_id) entity_id, state, jwks\n               FROM access.idp_federation_trust_anchors\n              WHERE tenant_id = $1 AND realm_id = $2\n              ORDER BY entity_id, version DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "entity_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_federation_trust_anchors",
+            "name": "entity_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_federation_trust_anchors",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "jwks",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_federation_trust_anchors",
+            "name": "jwks"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "631a57727bf8da88040c5ee60d87a59e8033117d26a602ecbba060674ec83642"
+}

@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.federation_issuer_state\n            SET state = $3, anchor = $4, checked_ms = $5, chain_exp_ms = $6\n          WHERE domain_id = $1 AND entity_id = $2 AND untracked_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "002f9e106a27e8c31ecf906e0ea29551940d22227e6f30f6967103f5cf7683a6"
+}

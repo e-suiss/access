@@ -43,6 +43,7 @@ pub mod jobs;
 pub mod locks;
 pub mod oauth;
 pub mod offline;
+pub mod oidf;
 pub mod operational;
 pub mod org_authority;
 pub mod orgs;

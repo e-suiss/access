@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.oauth_oidf_clients\n                SET metadata = $4, metadata_hash = $5, anchor = $6, trust_marks = $7,\n                    fetched_ms = $8, chain_exp_ms = $9\n              WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Text",
+        "TextArray",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "39b428b9fc59c96d638c0c36ef29fe62a1855790b0441e4f47fc7cc51cfc8e2a"
+}

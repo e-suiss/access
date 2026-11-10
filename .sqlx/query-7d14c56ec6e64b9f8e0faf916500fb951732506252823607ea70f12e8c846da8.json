@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT client_id FROM access.oauth_oidf_clients\n              WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3 AND retired_ms IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_oidf_clients",
+            "name": "client_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7d14c56ec6e64b9f8e0faf916500fb951732506252823607ea70f12e8c846da8"
+}
