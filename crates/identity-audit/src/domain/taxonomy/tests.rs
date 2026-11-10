@@ -43,6 +43,7 @@ fn dotted(line: &str) -> Vec<String> {
 fn written() -> BTreeSet<String> {
     let mut files = Vec::new();
     sources(&root().join("crates"), &mut files);
+    sources(&root().join("bins"), &mut files);
     let mut out = BTreeSet::new();
     for f in files {
         let text = std::fs::read_to_string(&f).unwrap();

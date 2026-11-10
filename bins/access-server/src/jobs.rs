@@ -414,7 +414,7 @@ mod tests {
         .await
         .unwrap();
         t.audit(&AuditEvent {
-            event_type: "session.revoked",
+            event_type: "session.signed_out",
             actor: "adm_1",
             target: "usr_1",
             correlation: "req_1",
