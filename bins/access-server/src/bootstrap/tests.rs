@@ -2485,6 +2485,7 @@ mod provision {
 
 mod account;
 mod agent;
+mod authzen;
 mod catalog;
 mod exchange;
 mod executor;
