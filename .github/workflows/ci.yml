@@ -66,6 +66,9 @@ jobs:
           --health-retries 30
     env:
       DATABASE_URL: postgres://postgres:ci-only-not-a-secret@localhost:5432/postgres
+      # the workspace test build outgrew the runner's disk with full debug info
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
