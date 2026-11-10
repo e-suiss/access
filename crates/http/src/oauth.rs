@@ -206,9 +206,16 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
             .iter()
             .filter_map(|v| v.to_str().ok())
             .collect();
+        // RFC 8705 §3: only the certificate of this TLS connection, never a forwarded header
         return render(
-            s.userinfo(&realm, req.method.as_str(), authorization, &proofs)
-                .await,
+            s.userinfo_mtls(
+                &realm,
+                req.method.as_str(),
+                authorization,
+                &proofs,
+                req.chain.as_ref().map_or(&[], |c| &c.0),
+            )
+            .await,
         );
     }
     let Some(p) = params(&req) else {
@@ -231,7 +238,14 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
                 .iter()
                 .filter_map(|v| v.to_str().ok())
                 .collect();
-            s.par(&realm, &p, authorization, &proofs).await
+            s.par_mtls(
+                &realm,
+                &p,
+                authorization,
+                &proofs,
+                req.chain.as_ref().map_or(&[], |c| &c.0),
+            )
+            .await
         }
         Endpoint::Token => {
             let proofs: Vec<&str> = req
@@ -359,7 +373,76 @@ pub fn render(reply: Reply) -> Response {
             r
         }
         Reply::NotFound => crate::not_found_problem().into_response(),
+        // OP-155 m.3 (k)
+        Reply::FormPost { action, body } => form_post(&action, body),
+        // IDP-24
+        Reply::Page { body, frames } => page(&frames, body),
+        Reply::Jwt { body, dpop_nonce } => {
+            let mut r = (
+                StatusCode::OK,
+                [(
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_static("application/jwt"),
+                )],
+                body,
+            )
+                .into_response();
+            if let Some(n) = dpop_nonce.and_then(|n| HeaderValue::from_str(&n).ok()) {
+                r.headers_mut().insert("dpop-nonce", n);
+            }
+            r
+        }
     };
     no_store(&mut r);
+    r
+}
+
+/// The front-channel sign-out page: HTML that may only frame the clients' origins.
+fn page(frames: &[String], body: String) -> Response {
+    let csp = format!(
+        "default-src 'none'; frame-src {}; frame-ancestors 'none'",
+        frames.join(" ")
+    );
+    let Ok(csp) = HeaderValue::from_str(&csp) else {
+        return Problem::new(StatusCode::BAD_REQUEST, "invalid-frame", "Bad Request")
+            .into_response();
+    };
+    let mut r = (
+        StatusCode::OK,
+        [(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("text/html; charset=utf-8"),
+        )],
+        body,
+    )
+        .into_response();
+    r.headers_mut().insert(header::CONTENT_SECURITY_POLICY, csp);
+    r
+}
+
+/// The `form_post.jwt` page (JARM §2.3.4): HTML that may only post to the client's origin.
+fn form_post(action: &str, body: String) -> Response {
+    let origin = action
+        .split_once("://")
+        .map(|(scheme, rest)| {
+            let host = rest.split(['/', '?', '#']).next().unwrap_or_default();
+            format!("{scheme}://{host}")
+        })
+        .unwrap_or_default();
+    let csp = format!("default-src 'none'; form-action {origin}; frame-ancestors 'none'");
+    let Ok(csp) = HeaderValue::from_str(&csp) else {
+        return Problem::new(StatusCode::BAD_REQUEST, "invalid-redirect", "Bad Request")
+            .into_response();
+    };
+    let mut r = (
+        StatusCode::OK,
+        [(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("text/html; charset=utf-8"),
+        )],
+        body,
+    )
+        .into_response();
+    r.headers_mut().insert(header::CONTENT_SECURITY_POLICY, csp);
     r
 }

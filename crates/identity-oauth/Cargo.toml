@@ -28,6 +28,7 @@ tracing = { workspace = true, features = ["std"] }
 rustls = { workspace = true, features = ["aws_lc_rs", "std"] }
 tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }
 httparse = { workspace = true, features = ["std"] }
+zeroize = { workspace = true, features = ["alloc", "std"] }
 
 [dev-dependencies]
 access-crypto = { workspace = true, features = ["testing"] }

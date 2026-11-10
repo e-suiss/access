@@ -23,6 +23,7 @@ use crate::domain::client::Client;
 use crate::domain::dpop::{
     BindingError, Failure, Jkt, check_code_exchange, check_refresh, refresh_binding,
 };
+use crate::domain::fapi::Binding;
 use crate::domain::metadata::{
     DEVICE_CODE_GRANT, Endpoint, Feature, JWT_BEARER_GRANT, SERVED, TOKEN_EXCHANGE_GRANT,
 };
@@ -56,7 +57,7 @@ fn invalid_grant() -> Reply {
     Reply::oauth_error(400, "invalid_grant", "the grant is not valid")
 }
 
-fn binding(e: BindingError) -> Reply {
+fn binding_refused(e: BindingError) -> Reply {
     Reply::oauth_error(400, e.error(), "the DPoP key does not match the grant")
 }
 
@@ -256,6 +257,19 @@ impl<E: Env> OAuth<E> {
             Ok(p) => p,
             Err(Failure::Unavailable) => return Err(Unavailable),
             Err(f) => {
+                // OP-155 m.3 (k), RFC 8705 §3, Ek B 5090
+                if let Some(binding) = unproven_binding(&client, grant_type, http.dpop) {
+                    let mut tx = self.begin(realm).await?;
+                    let reply = if grant_type == Some("authorization_code") {
+                        self.exchange(&mut tx, realm, &client, params, binding, now)
+                            .await?
+                    } else {
+                        self.rotate(&mut tx, realm, &client, params, binding, now)
+                            .await?
+                    };
+                    tx.commit().await?;
+                    return Ok(reply);
+                }
                 let nonce = f.nonce().map(String::from);
                 let reply = if http.dpop.is_empty() {
                     Reply::oauth_error(400, "invalid_dpop_proof", "a DPoP proof is required")
@@ -289,11 +303,25 @@ impl<E: Env> OAuth<E> {
             self.device_token(&mut tx, realm, &client, params, proof.jkt, now)
                 .await?
         } else if grant_type == Some("authorization_code") {
-            self.exchange(&mut tx, realm, &client, params, proof.jkt, now)
-                .await?
+            self.exchange(
+                &mut tx,
+                realm,
+                &client,
+                params,
+                Binding::Dpop(proof.jkt),
+                now,
+            )
+            .await?
         } else {
-            self.rotate(&mut tx, realm, &client, params, proof.jkt, now)
-                .await?
+            self.rotate(
+                &mut tx,
+                realm,
+                &client,
+                params,
+                Binding::Dpop(proof.jkt),
+                now,
+            )
+            .await?
         };
         tx.commit().await?;
         Ok(reply.with_nonce(Some(proof.nonce)))
@@ -311,9 +339,10 @@ impl<E: Env> OAuth<E> {
         realm: &Realm,
         client: &Client,
         params: &Params,
-        jkt: Jkt,
+        binding: Binding,
         now: u64,
     ) -> Result<Reply, Unavailable> {
+        let jkt = binding.jkt();
         let Some(code) = params.get("code").and_then(decode32) else {
             return Ok(invalid_grant());
         };
@@ -345,8 +374,8 @@ impl<E: Env> OAuth<E> {
         if !verified {
             return Ok(invalid_grant());
         }
-        if let Err(e) = check_code_exchange(details.dpop_jkt.map(Jkt), Some(jkt)) {
-            return Ok(binding(e));
+        if let Err(e) = check_code_exchange(details.dpop_jkt.map(Jkt), jkt) {
+            return Ok(binding_refused(e));
         }
         if !resource_matches(params, &details.grant, realm) {
             return Ok(invalid_target());
@@ -359,18 +388,29 @@ impl<E: Env> OAuth<E> {
         else {
             return Ok(invalid_grant());
         };
-        let Ok(bound) = refresh_binding(client.client_type(), Some(jkt)) else {
-            return Ok(binding(BindingError::ProofRequired));
+        let Ok(bound) = refresh_binding(client.client_type(), jkt) else {
+            return Ok(binding_refused(BindingError::ProofRequired));
         };
         // TN-56, OP-153 m.3 (e)
         withhold_offline(tx, &mut details.grant.scope, session.subject, now).await?;
         let mut grant_details = details.grant.clone();
-        let projected = match self
-            .code_projection(realm, client, params, &mut grant_details, jkt)
-            .await?
-        {
-            Ok(p) => p,
-            Err(r) => return Ok(r),
+        // OP-155 m.3 (k)
+        let projected = match jkt {
+            Some(jkt) => match self
+                .code_projection(realm, client, params, &mut grant_details, jkt)
+                .await?
+            {
+                Ok(p) => p,
+                Err(r) => return Ok(r),
+            },
+            None if grant_details.authority.is_some()
+                || params
+                    .get(crate::domain::authority::DETAILS_PARAM)
+                    .is_some() =>
+            {
+                return Ok(binding_refused(BindingError::ProofRequired));
+            }
+            None => None,
         };
         let sid = self.random::<16>()?;
         let encoded = serde_json::to_vec(&grant_details).map_err(|_| Unavailable)?;
@@ -412,7 +452,7 @@ impl<E: Env> OAuth<E> {
                 client,
                 &grant,
                 &details.grant,
-                &jkt.text(),
+                &binding,
                 nonce,
                 now,
             )
@@ -429,9 +469,10 @@ impl<E: Env> OAuth<E> {
         realm: &Realm,
         client: &Client,
         params: &Params,
-        jkt: Jkt,
+        binding: Binding,
         now: u64,
     ) -> Result<Reply, Unavailable> {
+        let jkt = binding.jkt();
         let Some(token) = params.get("refresh_token").and_then(decode32) else {
             return Ok(invalid_grant());
         };
@@ -475,13 +516,16 @@ impl<E: Env> OAuth<E> {
         {
             return Ok(invalid_grant());
         }
-        if let Err(e) = check_refresh(grant.dpop_jkt.map(Jkt), Some(jkt)) {
-            return Ok(binding(e));
+        if let Err(e) = check_refresh(grant.dpop_jkt.map(Jkt), jkt) {
+            return Ok(binding_refused(e));
         }
         if !resource_matches(params, &details, realm) {
             return Ok(invalid_target());
         }
         if let (Some(a), Some(family)) = (&details.authority, details.family) {
+            let Some(jkt) = jkt else {
+                return Ok(binding_refused(BindingError::ProofRequired));
+            };
             // §9.9.3 rule 6, L19
             let asked = Asked {
                 params,
@@ -523,14 +567,34 @@ impl<E: Env> OAuth<E> {
                 ));
             }
         }
-        if !tx.rotate_refresh(&hash, signed(now)).await? {
+        // OP-155 m.3 (k)
+        let refresh = if client.profile.fapi2 {
+            false
+        } else if tx.rotate_refresh(&hash, signed(now)).await? {
+            true
+        } else {
             return Ok(invalid_grant());
-        }
+        };
         let body = self
-            .issue(tx, realm, client, &grant, &details, &jkt.text(), None, now)
+            .issue_with(
+                tx, realm, client, &grant, &details, &binding, None, refresh, now,
+            )
             .await?;
         Ok(Reply::json(200, &body))
     }
+}
+
+/// OP-155 m.3 (k), RFC 8705 §3, Ek B 4854, 5090: the binding of a code exchange or refresh
+/// sent without a DPoP proof: the certificate a mutual TLS client authenticated with, or no
+/// `cnf` for a client holding the legacy bearer exception. Anything else needs a proof.
+fn unproven_binding(client: &Client, grant_type: Option<&str>, dpop: &[&str]) -> Option<Binding> {
+    if !dpop.is_empty() || !matches!(grant_type, Some("authorization_code" | "refresh_token")) {
+        return None;
+    }
+    if let Some(x5t) = client.certificate {
+        return Some(Binding::Mtls(x5t));
+    }
+    (client.profile.legacy_bearer && !client.profile.fapi2).then_some(Binding::Bearer)
 }
 
 impl<E: Env> OAuth<E> {
@@ -597,7 +661,7 @@ impl<E: Env> OAuth<E> {
             return Ok(invalid_grant());
         };
         let Ok(bound) = refresh_binding(client.client_type(), Some(jkt)) else {
-            return Ok(binding(BindingError::ProofRequired));
+            return Ok(binding_refused(BindingError::ProofRequired));
         };
         if !tx.use_device_code(row.device_id, now).await? {
             return Ok(invalid_grant());
@@ -632,7 +696,16 @@ impl<E: Env> OAuth<E> {
             .await?;
         let grant = presented(tx, grant_id, session.subject, now).await?;
         let body = self
-            .issue(tx, realm, client, &grant, &details, &jkt.text(), None, now)
+            .issue(
+                tx,
+                realm,
+                client,
+                &grant,
+                &details,
+                &Binding::Dpop(jkt),
+                None,
+                now,
+            )
             .await?;
         Ok(Reply::json(200, &body))
     }

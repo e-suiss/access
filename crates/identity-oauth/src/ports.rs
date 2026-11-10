@@ -3,6 +3,7 @@
 
 pub mod dpop;
 pub mod oauth;
+pub mod profile;
 
 use std::future::Future;
 
@@ -74,6 +75,12 @@ pub struct Facts {
     /// Whether the realm publishes `mtls_endpoint_aliases` (`idp.realm.mtls_aliases`, OP-155
     /// m.3 (m)).
     pub mtls_aliases: bool,
+    /// Whether the realm lets its clients opt in to front-channel logout (IDP-24).
+    pub frontchannel: bool,
+    /// Whether an active client opted in to `client_secret_post` (OP-155 m.3 (k)).
+    pub secret_post: bool,
+    /// Whether an active client opted in to `client_secret_jwt` (OP-155 m.3 (k)).
+    pub secret_jwt: bool,
 }
 
 /// The realm keys the identity signer holds (CMP-22b, OP-143 m.9).

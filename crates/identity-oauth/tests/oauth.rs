@@ -1544,6 +1544,8 @@ async fn par_required_per_client_and_expiry() {
         authority: None,
         resource: None,
         claims: None,
+        response_mode: access_identity_oauth::domain::request::ResponseMode::Query,
+        signed: false,
     };
     let params = serde_json::to_vec(&request).unwrap();
     let at = now();

@@ -10,6 +10,35 @@ use serde_json::Value;
 
 use crate::support::{CB, Cluster, VERIFIER, body, error, location, now, query};
 
+// IDP-24, OP-155 m.3 (k), Ek B 5096, 5088, 5092: front-channel logout and the legacy secret
+// methods are declared only while the realm or one of its clients turned them on
+#[test]
+fn legacy_surfaces_are_declared_only_when_enabled() {
+    use access_identity_oauth::domain::metadata::{RealmFacts, authorization_server_of};
+    let issuer = Issuer::parse("https://acme.id.test").unwrap();
+    let off: Value = serde_json::from_str(&authorization_server_of(
+        &issuer,
+        &SERVED,
+        &RealmFacts::default(),
+    ))
+    .unwrap();
+    let methods = off["token_endpoint_auth_methods_supported"].to_string();
+    assert!(!methods.contains("client_secret_post") && !methods.contains("client_secret_jwt"));
+    assert!(methods.contains("tls_client_auth"));
+    assert!(off.get("frontchannel_logout_supported").is_none());
+    let on = RealmFacts {
+        frontchannel: true,
+        secret_post: true,
+        secret_jwt: true,
+        ..RealmFacts::default()
+    };
+    let m: Value = serde_json::from_str(&authorization_server_of(&issuer, &SERVED, &on)).unwrap();
+    assert_eq!(m["frontchannel_logout_supported"], true);
+    assert_eq!(m["frontchannel_logout_session_supported"], true);
+    let methods = m["token_endpoint_auth_methods_supported"].to_string();
+    assert!(methods.contains("client_secret_post") && methods.contains("client_secret_jwt"));
+}
+
 // TN-35 OP-154 m.3 (dd) (j) Ek B 4649
 #[test]
 fn device_code_and_registration_are_declared_only_when_the_realm_enabled_them() {
@@ -42,7 +71,11 @@ fn metadata_offers_no_forbidden_surface() {
     let text = authorization_server(&issuer, &SERVED);
     let m: Value = serde_json::from_str(&text).unwrap();
     assert_eq!(m["response_types_supported"], serde_json::json!(["code"]));
-    assert_eq!(m["response_modes_supported"], serde_json::json!(["query"]));
+    // OP-155 m.3 (k): JARM, never a fragment mode
+    assert_eq!(
+        m["response_modes_supported"],
+        serde_json::json!(["query", "jwt", "query.jwt", "form_post.jwt"])
+    );
     assert_eq!(
         m["code_challenge_methods_supported"],
         serde_json::json!(["S256"])
@@ -57,6 +90,7 @@ fn metadata_offers_no_forbidden_surface() {
             "urn:ietf:params:oauth:grant-type:jwt-bearer"
         ])
     );
+    // OP-155 m.3 (k): not advertised unless enabled
     for key in [
         "check_session_iframe",
         "frontchannel_logout_supported",
@@ -64,13 +98,21 @@ fn metadata_offers_no_forbidden_surface() {
         "token_binding_supported",
         "request_parameter_supported",
         "request_uri_parameter_supported",
-        "request_object_signing_alg_values_supported",
         "device_authorization_endpoint",
         "registration_endpoint",
         "mtls_endpoint_aliases",
     ] {
         assert!(m.get(key).is_none(), "{key} is declared");
     }
+    assert_eq!(
+        m["request_object_signing_alg_values_supported"],
+        serde_json::json!(["ES256", "RS256"])
+    );
+    assert!(
+        !m["id_token_encryption_alg_values_supported"]
+            .to_string()
+            .contains("RSA1_5")
+    );
     for forbidden in [
         "EdDSA",
         "HS256",

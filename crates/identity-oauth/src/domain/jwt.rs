@@ -305,7 +305,100 @@ pub fn verify_assertion(
     };
     verify_client_signature(alg, &key.key, parts.input.as_bytes(), &parts.signature)
         .map_err(|_| JwtError::Signature)?;
-    let c = &parts.payload;
+    assertion_claims(&parts.payload, rules)
+}
+
+/// A client-signed JWT whose signature verified: its claims and `typ`.
+pub(crate) struct ClientSigned {
+    pub(crate) claims: Json,
+    pub(crate) typ: Option<String>,
+}
+
+/// Verifies a client-signed JWT against the client's keys with an algorithm from the client's
+/// allowlist, never from the header alone (IDI-6, MD-3): ES256, and RS256 only when `rs256`.
+/// The header holds only `alg`, `kid` and `typ`.
+pub(crate) fn verify_client_jws(
+    token: &str,
+    keys: &[Jwk],
+    rs256: bool,
+) -> Result<ClientSigned, JwtError> {
+    let parts = split(token)?;
+    let header = members(&parts.header).ok_or(JwtError::Header)?;
+    let profiled = header
+        .iter()
+        .all(|(k, v)| matches!(k.as_str(), "alg" | "kid" | "typ") && v.as_str().is_some());
+    if !profiled {
+        return Err(JwtError::Header);
+    }
+    let alg = text(header, "alg")
+        .and_then(ClientAlg::from_name)
+        .filter(|a| ASSERTION_ALGS.contains(a) && (*a != ClientAlg::Rs256 || rs256))
+        .ok_or(JwtError::Algorithm)?;
+    let kid = text(header, "kid");
+    let candidates: Vec<&Jwk> = keys
+        .iter()
+        .filter(|k| kid.is_none_or(|id| k.kid.as_deref() == Some(id)))
+        .collect();
+    let [key] = candidates.as_slice() else {
+        return Err(JwtError::Key);
+    };
+    verify_client_signature(alg, &key.key, parts.input.as_bytes(), &parts.signature)
+        .map_err(|_| JwtError::Signature)?;
+    Ok(ClientSigned {
+        typ: text(header, "typ").map(String::from),
+        claims: parts.payload,
+    })
+}
+
+/// The `kid` an assertion's header names, read before its signature is checked.
+#[must_use]
+pub fn assertion_kid(token: &str) -> Option<String> {
+    let parts = split(token).ok()?;
+    parts
+        .header
+        .get("kid")
+        .and_then(Json::as_str)
+        .map(String::from)
+}
+
+/// Whether `keys` hold no key with the `kid` the assertion names: the authorization server then
+/// fetches the client's JWKS again, at most once a minute (§10.4.5, Ek B 5098).
+#[must_use]
+pub fn kid_unknown(token: &str, keys: &[Jwk]) -> bool {
+    assertion_kid(token).is_some_and(|kid| !keys.iter().any(|k| k.kid.as_deref() == Some(&kid)))
+}
+
+/// OP-148 m.16 (l), CR-3: verifies a `client_secret_jwt` assertion with the secret shared with
+/// that one client. The header holds `alg` (HS256) and optionally `typ` and `kid`; the claims
+/// follow [`verify_assertion`].
+///
+/// # Errors
+/// [`JwtError`].
+pub fn verify_secret_assertion(
+    token: &str,
+    secret: &[u8],
+    rules: &AssertionRules<'_>,
+) -> Result<Assertion, JwtError> {
+    let parts = split(token)?;
+    let header = members(&parts.header).ok_or(JwtError::Header)?;
+    let profiled = header
+        .iter()
+        .all(|(k, v)| matches!(k.as_str(), "alg" | "kid" | "typ") && v.as_str().is_some());
+    if !profiled {
+        return Err(JwtError::Header);
+    }
+    if text(header, "alg") != Some(access_crypto::client_secret_jwt::ALG) {
+        return Err(JwtError::Algorithm);
+    }
+    if text(header, "typ").is_some_and(|t| t != "JWT" && t != "client-authentication+jwt") {
+        return Err(JwtError::Header);
+    }
+    access_crypto::client_secret_jwt::verify(secret, parts.input.as_bytes(), &parts.signature)
+        .map_err(|_| JwtError::Signature)?;
+    assertion_claims(&parts.payload, rules)
+}
+
+fn assertion_claims(c: &Json, rules: &AssertionRules<'_>) -> Result<Assertion, JwtError> {
     let claim = |name: &str| c.get(name).and_then(Json::as_str);
     if claim("iss") != Some(rules.client_id) || claim("sub") != Some(rules.client_id) {
         return Err(JwtError::Claims);

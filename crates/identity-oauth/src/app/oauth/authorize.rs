@@ -15,11 +15,12 @@ use super::{
 use crate::app::dpop::DpopRequest;
 use crate::domain::client::Client;
 use crate::domain::dpop::Failure;
+use crate::domain::jarm;
 use crate::domain::login::return_to;
 use crate::domain::metadata::Endpoint;
 use crate::domain::request::{
-    AuthError, AuthRequest, Params, Prompt, REQUEST_URI_PREFIX, Unredirectable, code_redirect,
-    error_redirect, stage_one, stage_two,
+    AuthError, AuthRequest, Params, Prompt, REQUEST_URI_PREFIX, ResponseMode, Unredirectable,
+    code_redirect, error_redirect, stage_one, stage_two,
 };
 use crate::domain::tokens::{
     CODE_TTL_MS, CodeDetails, GrantDetails, INTERACTIVE_TTL_MS, PAR_TTL_MS, Signed, needs_login,
@@ -50,6 +51,23 @@ pub fn consent_resource(request: &AuthRequest) -> Option<&str> {
         .resource
         .as_deref()
         .or_else(|| request.authority.as_ref().map(|a| a.resource.as_str()))
+}
+
+/// Where and how an authorization response goes back.
+#[derive(Clone, Copy)]
+struct Answer<'a> {
+    redirect_uri: &'a str,
+    mode: ResponseMode,
+    state: Option<&'a str>,
+}
+
+/// What an authorization response says.
+#[derive(Clone, Copy)]
+enum Outcome<'a> {
+    /// The code.
+    Code(&'a str),
+    /// The error.
+    Error(AuthError),
 }
 
 /// The request a browser brings: parsed now, or stored earlier under a `request_uri`.
@@ -118,8 +136,8 @@ impl<E: Env> OAuth<E> {
         let Some(client) = client else {
             return Ok(Err(problem(Unredirectable::Client)));
         };
-        // RFC 9126 §6
-        if client.require_par {
+        // RFC 9126 §6, OP-155 m.3 (k)
+        if client.require_par || client.profile.fapi2 {
             return Ok(Err(Reply::Redirect(error_redirect(
                 redirect,
                 AuthError::PAR_REQUIRED,
@@ -144,12 +162,26 @@ impl<E: Env> OAuth<E> {
                 created_ms: now,
                 stored: None,
             })),
-            Err(e) => Ok(Err(Reply::Redirect(error_redirect(
-                redirect,
-                e,
-                params.get("state"),
-                &realm.issuer,
-            )))),
+            Err(e) => {
+                // OP-155 m.3 (k)
+                let mode = ResponseMode::parse(params.get("response_mode"))
+                    .unwrap_or_default()
+                    .max_jwt(client.profile.fapi2);
+                Ok(Err(self
+                    .answer(
+                        tx,
+                        realm,
+                        &client,
+                        Answer {
+                            redirect_uri: redirect,
+                            mode,
+                            state: params.get("state"),
+                        },
+                        Outcome::Error(e),
+                        now,
+                    )
+                    .await?))
+            }
         }
     }
 
@@ -191,28 +223,34 @@ impl<E: Env> OAuth<E> {
             })
             .transpose()?;
         let req = &l.request;
-        let back = |e: AuthError| {
-            Reply::Redirect(error_redirect(
-                &req.redirect_uri,
-                e,
-                req.state.as_deref(),
-                &realm.issuer,
-            ))
+        let back_to = Answer {
+            redirect_uri: &req.redirect_uri,
+            mode: req.response_mode,
+            state: req.state.as_deref(),
         };
         if let Some(reason) = needs_login(req, signed_in, l.created_ms, now) {
             if req.prompt == Prompt::None {
-                return Ok(back(AuthError::LOGIN_REQUIRED));
+                let members = Outcome::Error(AuthError::LOGIN_REQUIRED);
+                return self
+                    .answer(&mut tx, realm, &l.client, back_to, members, now)
+                    .await;
             }
             return self.to_login(tx, realm, &l, now, reason).await;
         }
         let (Some(session), Some(s)) = (session, signed_in) else {
-            return Ok(back(AuthError::LOGIN_REQUIRED));
+            let members = Outcome::Error(AuthError::LOGIN_REQUIRED);
+            return self
+                .answer(&mut tx, realm, &l.client, back_to, members, now)
+                .await;
         };
         // §11.6, P58, EI-18
         if l.client.approval_required() && !self.approved(&mut tx, &l, session.subject, now).await?
         {
             if req.prompt == Prompt::None {
-                return Ok(back(AuthError::CONSENT_REQUIRED));
+                let members = Outcome::Error(AuthError::CONSENT_REQUIRED);
+                return self
+                    .answer(&mut tx, realm, &l.client, back_to, members, now)
+                    .await;
             }
             return self
                 .to_login(
@@ -227,7 +265,10 @@ impl<E: Env> OAuth<E> {
         // OP-153 m.3 (z)
         if self.unshared(&mut tx, &l, session.subject).await? {
             if req.prompt == Prompt::None {
-                return Ok(back(AuthError::CONSENT_REQUIRED));
+                let members = Outcome::Error(AuthError::CONSENT_REQUIRED);
+                return self
+                    .answer(&mut tx, realm, &l.client, back_to, members, now)
+                    .await;
             }
             return self
                 .to_login(
@@ -273,13 +314,61 @@ impl<E: Env> OAuth<E> {
             expires_ms: signed(now.saturating_add(CODE_TTL_MS)),
         })
         .await?;
+        let code = b64url_encode(&code);
+        let reply = self
+            .answer(
+                &mut tx,
+                realm,
+                &l.client,
+                back_to,
+                Outcome::Code(&code),
+                now,
+            )
+            .await?;
         tx.commit().await?;
-        Ok(Reply::Redirect(code_redirect(
-            &req.redirect_uri,
-            &b64url_encode(&code),
-            req.state.as_deref(),
-            &realm.issuer,
-        )))
+        Ok(reply)
+    }
+
+    /// The authorization response (RFC 6749 §4.1.2, RFC 9207): the query with `iss`, or a JARM
+    /// response JWT signed with the client's algorithm and encrypted when it asked, in the
+    /// query or a posted form (OP-155 m.3 (k)).
+    async fn answer(
+        &self,
+        tx: &mut <E::Db as crate::ports::oauth::OAuthDb>::Tx,
+        realm: &Realm,
+        client: &Client,
+        to: Answer<'_>,
+        outcome: Outcome<'_>,
+        now: u64,
+    ) -> Result<Reply, Unavailable> {
+        if !to.mode.jwt() {
+            let uri = match outcome {
+                Outcome::Code(code) => {
+                    code_redirect(to.redirect_uri, code, to.state, &realm.issuer)
+                }
+                Outcome::Error(e) => error_redirect(to.redirect_uri, e, to.state, &realm.issuer),
+            };
+            return Ok(Reply::Redirect(uri));
+        }
+        let mut all: Vec<(&str, &str)> = match outcome {
+            Outcome::Code(code) => vec![("code", code)],
+            Outcome::Error(e) => vec![("error", e.error), ("error_description", e.description)],
+        };
+        if let Some(st) = to.state {
+            all.push(("state", st));
+        }
+        let claims = jarm::claims(&realm.issuer, &client.id, now, &all);
+        let encrypt = client.profile.encryption.as_ref().is_some_and(|e| e.jarm);
+        let response = self
+            .client_jwt(tx, realm, client, jarm::JARM_TYP, &claims, encrypt, now)
+            .await?;
+        Ok(match to.mode {
+            ResponseMode::FormPostJwt => Reply::FormPost {
+                action: String::from(to.redirect_uri),
+                body: jarm::form_post(to.redirect_uri, &response),
+            },
+            _ => Reply::Redirect(jarm::query(to.redirect_uri, &response)),
+        })
     }
 
     /// To the hosted login with the request stored for `reason`.
@@ -408,19 +497,41 @@ impl<E: Env> OAuth<E> {
         authorization: Option<&str>,
         dpop: &[&str],
     ) -> Reply {
-        match self.par_inner(realm, params, authorization, dpop).await {
-            Ok(r) => r,
-            Err(Unavailable) => Reply::Unavailable,
-        }
+        self.par_mtls(realm, params, authorization, dpop, &[]).await
     }
 
-    async fn par_inner(
+    /// [`Self::par`] over a connection that presented the client certificate `chain`, leaf
+    /// first (RFC 8705 §2, OP-155 m.3 (k)).
+    pub async fn par_mtls(
         &self,
         realm: &Realm,
         params: &Params,
         authorization: Option<&str>,
         dpop: &[&str],
+        chain: &[Vec<u8>],
+    ) -> Reply {
+        match self
+            .par_inner(realm, params, authorization, dpop, chain)
+            .await
+        {
+            Ok(r) => r,
+            Err(Unavailable) => Reply::Unavailable,
+        }
+    }
+
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the pushed request steps in the order they run"
+    )]
+    async fn par_inner(
+        &self,
+        realm: &Realm,
+        outer: &Params,
+        authorization: Option<&str>,
+        dpop: &[&str],
+        chain: &[Vec<u8>],
     ) -> Result<Reply, Unavailable> {
+        let params = outer;
         // IDP-1, AG-4
         if self.prepare_client(realm, params).await?.is_err() {
             return Ok(Reply::oauth_error(
@@ -435,7 +546,7 @@ impl<E: Env> OAuth<E> {
             authorization,
             params,
             endpoint: Endpoint::Par.path(),
-            chain: &[],
+            chain,
         };
         let client = match self.authenticate(&mut tx, realm, &req, now).await? {
             Ok(c) => c,
@@ -447,6 +558,31 @@ impl<E: Env> OAuth<E> {
                 ));
             }
         };
+        // RFC 9101, OP-155 m.3 (k)
+        let (inner, signed) = match outer.get("request") {
+            Some(object) => match self
+                .request_object(realm, &client, outer, object, now)
+                .await?
+            {
+                Ok(p) => (p, true),
+                Err(e) => {
+                    return Ok(Reply::oauth_error(
+                        400,
+                        "invalid_request_object",
+                        e.description(),
+                    ));
+                }
+            },
+            None if client.profile.fapi2 => {
+                return Ok(Reply::oauth_error(
+                    400,
+                    "invalid_request",
+                    "this client sends signed request objects",
+                ));
+            }
+            None => (outer.clone(), false),
+        };
+        let params = &inner;
         let Ok(redirect) = stage_one(params, Some(&client)) else {
             return Ok(Reply::oauth_error(
                 400,
@@ -464,6 +600,18 @@ impl<E: Env> OAuth<E> {
         if mcp_without_resource(&client, &request) {
             let e = AuthError::RESOURCE_REQUIRED;
             return Ok(Reply::oauth_error(400, e.error, e.description));
+        }
+        request.signed = signed;
+        // OP-155 m.3 (k)
+        if client.profile.fapi2 {
+            if params.get("response_mode") == Some("query") {
+                return Ok(Reply::oauth_error(
+                    400,
+                    "invalid_request",
+                    "this client receives signed authorization responses",
+                ));
+            }
+            request.response_mode = request.response_mode.max_jwt(true);
         }
         // RFC 9449 §10.1
         let mut nonce = None;

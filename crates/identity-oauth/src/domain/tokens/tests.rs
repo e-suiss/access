@@ -19,6 +19,8 @@ fn req(prompt: Prompt, max_age_s: Option<u64>, acr: &[&str]) -> AuthRequest {
         authority: None,
         resource: None,
         claims: None,
+        response_mode: crate::domain::request::ResponseMode::Query,
+        signed: false,
     }
 }
 

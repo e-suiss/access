@@ -72,6 +72,15 @@ pub enum Feature {
     /// JWT-SVID client authentication, `spiffe_jwt` (`draft-ietf-oauth-spiffe-client-auth` §4,
     /// OP-154 m.3 (r)).
     SpiffeClientAuth,
+    /// Signed request objects at `/par` (RFC 9101, OP-155 m.3 (k)).
+    Jar,
+    /// JWT Secured Authorization Response Mode (OP-155 m.3 (k)).
+    Jarm,
+    /// JWE of ID tokens, userinfo and JARM towards a client (CR-4, OP-155 m.3 (k)).
+    Jwe,
+    /// Mutual TLS client authentication and certificate-bound tokens (RFC 8705, OP-155 m.3
+    /// (k)).
+    Mtls,
 }
 
 /// Grant type of RFC 8628.
@@ -125,6 +134,10 @@ pub const SERVED: Served = Served {
         Feature::TokenExchange,
         Feature::JwtBearer,
         Feature::SpiffeClientAuth,
+        Feature::Jar,
+        Feature::Jarm,
+        Feature::Jwe,
+        Feature::Mtls,
     ],
 };
 
@@ -188,6 +201,13 @@ pub struct RealmFacts {
     /// The realm offers the device authorization grant (`idp.realm.device_code`); without it
     /// neither its endpoint nor its grant type is declared (TN-35, OP-154 m.3 (dd)).
     pub device_code: bool,
+    /// The realm lets its clients opt in to front-channel logout (`idp.realm.frontchannel_logout`);
+    /// without it nothing about front-channel logout is declared (IDP-24, OP-155 m.3 (k)).
+    pub frontchannel: bool,
+    /// An active client opted in to `client_secret_post`; without one it is not declared.
+    pub secret_post: bool,
+    /// An active client opted in to `client_secret_jwt`; without one it is not declared.
+    pub secret_jwt: bool,
     /// The port of the mTLS listener when the server runs one and the realm publishes its
     /// aliases (`idp.realm.mtls_aliases`); without it `mtls_endpoint_aliases` is absent
     /// (RFC 8705 §5, OP-155 m.3 (m)).
@@ -288,14 +308,83 @@ fn agent_members(m: &mut Map<String, Value>, served: &Served) {
 }
 
 /// The token endpoint's client authentication methods; the SPIFFE ones once served (OP-154
-/// m.3 (r)).
-fn auth_methods(served: &Served) -> Vec<&'static str> {
+/// m.3 (r)); mutual TLS once served, and a legacy secret method only while a client of the
+/// realm opted in to it (OP-155 m.3 (k)).
+fn auth_methods(served: &Served, facts: &RealmFacts) -> Vec<&'static str> {
+    use crate::domain::fapi::{
+        CLIENT_SECRET_JWT, CLIENT_SECRET_POST, SELF_SIGNED_TLS_CLIENT_AUTH, TLS_CLIENT_AUTH,
+    };
     let mut methods = vec!["none", "private_key_jwt", "client_secret_basic"];
     if served.feature(Feature::SpiffeClientAuth) {
         methods.push(crate::domain::client::SPIFFE_JWT);
         methods.push(crate::domain::client::SPIFFE_X509);
     }
+    if served.feature(Feature::Mtls) {
+        methods.push(TLS_CLIENT_AUTH);
+        methods.push(SELF_SIGNED_TLS_CLIENT_AUTH);
+    }
+    if facts.secret_post {
+        methods.push(CLIENT_SECRET_POST);
+    }
+    if facts.secret_jwt {
+        methods.push(CLIENT_SECRET_JWT);
+    }
     methods
+}
+
+/// JWE key management algorithms a client may choose; never `RSA1_5` (CR-4).
+const ENCRYPTION_ALGS: [&str; 2] = ["ECDH-ES+A256KW", "RSA-OAEP-256"];
+
+/// The high-assurance members (OP-155 m.3 (k)): JAR, JARM, JWE and mutual TLS, each once
+/// served; front-channel logout only when the realm turned it on (IDP-24).
+fn assurance_members(m: &mut Map<String, Value>, served: &Served, facts: &RealmFacts) {
+    let signing = json!(["ES256", "Ed25519", "RS256"]);
+    if served.feature(Feature::Jar) {
+        m.insert(
+            "request_object_signing_alg_values_supported".into(),
+            json!(CLIENT_ASSERTION_ALGS),
+        );
+    }
+    if served.feature(Feature::Jarm) {
+        m.insert(
+            "response_modes_supported".into(),
+            json!(["query", "jwt", "query.jwt", "form_post.jwt"]),
+        );
+        m.insert(
+            "authorization_signing_alg_values_supported".into(),
+            signing.clone(),
+        );
+    }
+    m.insert(
+        "id_token_signing_alg_values_supported".into(),
+        signing.clone(),
+    );
+    m.insert("userinfo_signing_alg_values_supported".into(), signing);
+    if served.feature(Feature::Jwe) {
+        for prefix in ["id_token", "userinfo", "authorization"] {
+            m.insert(
+                format!("{prefix}_encryption_alg_values_supported"),
+                json!(ENCRYPTION_ALGS),
+            );
+            m.insert(
+                format!("{prefix}_encryption_enc_values_supported"),
+                json!([access_crypto::jwe::ENC]),
+            );
+        }
+    }
+    if served.feature(Feature::Mtls) {
+        m.insert(
+            "tls_client_certificate_bound_access_tokens".into(),
+            Value::Bool(true),
+        );
+    }
+    if facts.frontchannel {
+        m.insert("frontchannel_logout_supported".into(), Value::Bool(true));
+        m.insert(
+            "frontchannel_logout_session_supported".into(),
+            Value::Bool(true),
+        );
+    }
 }
 
 /// The AS metadata of the realm `issuer` with what is known about the realm (`facts`).
@@ -353,7 +442,7 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
         );
         m.insert(
             "token_endpoint_auth_methods_supported".into(),
-            json!(auth_methods(served)),
+            json!(auth_methods(served, facts)),
         );
         m.insert(
             "token_endpoint_auth_signing_alg_values_supported".into(),
@@ -415,6 +504,9 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
         m.insert(DOMAIN_METADATA_MEMBER.into(), u.as_str().into());
     }
     mtls_aliases(&mut m, issuer, facts);
+    if served.has(Endpoint::Authorize) {
+        assurance_members(&mut m, served, facts);
+    }
     Value::Object(m).to_string()
 }
 

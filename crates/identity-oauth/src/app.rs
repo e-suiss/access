@@ -169,6 +169,9 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
                     dcr: facts.dcr,
                     device_code: facts.device_code,
                     mtls_port: self.mtls_port.filter(|_| facts.mtls_aliases),
+                    frontchannel: facts.frontchannel,
+                    secret_post: facts.secret_post,
+                    secret_jwt: facts.secret_jwt,
                 };
                 Reply::Metadata(metadata::authorization_server_of(
                     &realm.issuer,

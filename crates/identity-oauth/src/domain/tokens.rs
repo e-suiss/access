@@ -194,6 +194,22 @@ pub fn id_token_claims(
 /// `access_tenant` (OP-149 m.34 (a)); the realm's own does not.
 #[must_use]
 pub fn access_token_claims(f: &TokenFacts<'_>, scope: &str, jti: &str, jkt: &str) -> Vec<u8> {
+    bound_claims(f, scope, jti, Some(json!({ "jkt": jkt })))
+}
+
+/// [`access_token_claims`] with the grant's binding (OP-155 m.3 (k), RFC 8705 §3): `cnf.jkt`,
+/// `cnf.x5t#S256`, or no `cnf` for the legacy bearer exception of one client (TN-27).
+#[must_use]
+pub fn bound_access_token_claims(
+    f: &TokenFacts<'_>,
+    scope: &str,
+    jti: &str,
+    binding: &crate::domain::fapi::Binding,
+) -> Vec<u8> {
+    bound_claims(f, scope, jti, binding.confirmation())
+}
+
+fn bound_claims(f: &TokenFacts<'_>, scope: &str, jti: &str, cnf: Option<Value>) -> Vec<u8> {
     let mut claims = json!({
         "iss": f.issuer.as_str(),
         "sub": f.sub,
@@ -207,10 +223,14 @@ pub fn access_token_claims(f: &TokenFacts<'_>, scope: &str, jti: &str, jkt: &str
         "rev": f.rev,
         "auth_time": secs(f.auth_time_ms),
         "acr": acr(f.aal),
-        "cnf": { "jkt": jkt },
     });
-    if let (Some(tenant), Value::Object(m)) = (f.tenant, &mut claims) {
-        m.insert("access_tenant".into(), tenant.into());
+    if let Value::Object(m) = &mut claims {
+        if let Some(cnf) = cnf {
+            m.insert("cnf".into(), cnf);
+        }
+        if let Some(tenant) = f.tenant {
+            m.insert("access_tenant".into(), tenant.into());
+        }
     }
     claims.to_string().into_bytes()
 }

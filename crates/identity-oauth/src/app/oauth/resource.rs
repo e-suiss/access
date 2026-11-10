@@ -16,6 +16,7 @@ use super::{
 use crate::app::dpop::DpopRequest;
 use crate::domain::client::Client;
 use crate::domain::dpop::{DpopProfile, Failure, Jkt};
+use crate::domain::fapi::Binding;
 use crate::domain::jwt::{SKEW_MS, realm_key_set};
 use crate::domain::metadata::Endpoint;
 use crate::domain::request::Params;
@@ -24,6 +25,9 @@ use crate::ports::Unavailable;
 use access_internal_api::projections::Projections as _;
 
 use crate::ports::oauth::{OAuthTx, TokenSigner};
+
+/// `typ` of a signed userinfo answer (OIDC Core §5.3.2).
+pub(crate) const USERINFO_TYP: &str = "JWT";
 
 /// A verified access token of this realm: a grant's protocol-scope token (`sid`) or a client's
 /// service token for a product (no `sid`, `access_tenant`; OP-149 m.31 (a), m.34 (b)).
@@ -37,7 +41,9 @@ pub(crate) struct AccessToken {
     /// The `tnt_` tenant: of a service token always, of a grant's token when its audience is a
     /// product (OP-149 m.34 (a)).
     pub(crate) access_tenant: Option<String>,
-    pub(crate) jkt: Jkt,
+    /// How it is bound: DPoP, a client certificate, or the legacy bearer exception (OP-155
+    /// m.3 (k)).
+    pub(crate) binding: Binding,
     pub(crate) scope: String,
     pub(crate) exp: i64,
     pub(crate) iat: i64,
@@ -96,17 +102,29 @@ impl<E: Env> OAuth<E> {
         let sid = text(&c, "sid")
             .and_then(|s| b64url_decode(&s).ok())
             .and_then(|s| <[u8; 16]>::try_from(s).ok());
-        let jkt = c
-            .get("cnf")
-            .and_then(|cnf| cnf.get("jkt"))
-            .and_then(Json::as_str)
-            .and_then(|j| Jkt::parse(j).ok());
+        // TN-27, RFC 8705 §3, OP-155 m.3 (k)
+        let binding = match c.get("cnf") {
+            None => Some(Binding::Bearer),
+            Some(cnf) => match (cnf.get("jkt"), cnf.get("x5t#S256")) {
+                (Some(j), None) => j
+                    .as_str()
+                    .and_then(|j| Jkt::parse(j).ok())
+                    .map(Binding::Dpop),
+                (None, Some(x)) => x
+                    .as_str()
+                    .and_then(|x| b64url_decode(x).ok())
+                    .and_then(|x| <[u8; 32]>::try_from(x).ok())
+                    .map(Binding::Mtls),
+                _ => None,
+            },
+        };
         let access_tenant = text(&c, "access_tenant");
-        let (Some(sub), Some(client_id), Some(jkt)) = (text(&c, "sub"), text(&c, "client_id"), jkt)
+        let (Some(sub), Some(client_id), Some(binding)) =
+            (text(&c, "sub"), text(&c, "client_id"), binding)
         else {
             return Ok(None);
         };
-        if sid.is_none() && access_tenant.is_none() {
+        if sid.is_none() && (access_tenant.is_none() || binding.jkt().is_none()) {
             return Ok(None);
         }
         Ok(Some(AccessToken {
@@ -115,7 +133,7 @@ impl<E: Env> OAuth<E> {
             client_id,
             sid,
             access_tenant,
-            jkt,
+            binding,
             scope: text(&c, "scope").unwrap_or_default(),
             exp: c.get("exp").and_then(Json::as_int).unwrap_or(0),
             iat: c.get("iat").and_then(Json::as_int).unwrap_or(0),
@@ -148,9 +166,25 @@ impl<E: Env> OAuth<E> {
         authorization: Option<&str>,
         dpop: &[&str],
     ) -> Reply {
+        self.userinfo_mtls(realm, method, authorization, dpop, &[])
+            .await
+    }
+
+    /// [`Self::userinfo`] over a connection that presented the client certificate `chain`,
+    /// leaf first: a certificate-bound token is taken only with the certificate it names
+    /// (RFC 8705 §3); a client holding the legacy bearer exception may send its token as
+    /// `Bearer` (OP-155 m.3 (k), Ek B 5090).
+    pub async fn userinfo_mtls(
+        &self,
+        realm: &Realm,
+        method: &str,
+        authorization: Option<&str>,
+        dpop: &[&str],
+        chain: &[Vec<u8>],
+    ) -> Reply {
         let profile = self.env.dpop().clone();
         match self
-            .userinfo_inner(realm, method, authorization, dpop, &profile)
+            .userinfo_inner(realm, method, authorization, dpop, chain, &profile)
             .await
         {
             Ok(r) => r,
@@ -164,6 +198,7 @@ impl<E: Env> OAuth<E> {
         method: &str,
         authorization: Option<&str>,
         dpop: &[&str],
+        chain: &[Vec<u8>],
         profile: &DpopProfile,
     ) -> Result<Reply, Unavailable> {
         let challenge = |error: &str| {
@@ -178,13 +213,16 @@ impl<E: Env> OAuth<E> {
             dpop_nonce: self.nonce(realm, Role::ResourceServer),
             challenge: challenge(error),
         };
-        let Some(token) = authorization
+        let Some((scheme, token)) = authorization
             .and_then(|a| a.split_once(' '))
-            .filter(|(scheme, _)| scheme.eq_ignore_ascii_case("dpop"))
-            .map(|(_, t)| t.trim())
+            .map(|(scheme, t)| (scheme, t.trim()))
         else {
             return Ok(unauthorized("invalid_token"));
         };
+        let dpop_scheme = scheme.eq_ignore_ascii_case("dpop");
+        if !dpop_scheme && !scheme.eq_ignore_ascii_case("bearer") {
+            return Ok(unauthorized("invalid_token"));
+        }
         let now = self.now()?;
         // RFC 9068 §4, AG-8
         let Some((at, sid)) = self
@@ -196,30 +234,45 @@ impl<E: Env> OAuth<E> {
             return Ok(unauthorized("invalid_token"));
         };
         let uri = realm.issuer.endpoint(Endpoint::Userinfo.path());
-        let proof = self
-            .dpop(
-                realm,
-                Role::ResourceServer,
-                &DpopRequest {
-                    proofs: dpop,
-                    method,
-                    uri: &uri,
-                    access_token: Some(token),
-                    bound: Some(at.jkt),
-                },
-            )
-            .await;
-        let nonce = match proof {
-            Ok(p) => p.nonce,
-            Err(Failure::Unavailable) => return Err(Unavailable),
-            Err(f) => {
-                return Ok(Reply::Json {
-                    status: f.status(Role::ResourceServer),
-                    body: json!({ "error": f.error() }).to_string(),
-                    dpop_nonce: f.nonce().map(String::from),
-                    challenge: f.challenge(Role::ResourceServer, profile),
-                });
+        let nonce = match (at.binding, dpop_scheme) {
+            (Binding::Dpop(jkt), true) => {
+                let proof = self
+                    .dpop(
+                        realm,
+                        Role::ResourceServer,
+                        &DpopRequest {
+                            proofs: dpop,
+                            method,
+                            uri: &uri,
+                            access_token: Some(token),
+                            bound: Some(jkt),
+                        },
+                    )
+                    .await;
+                match proof {
+                    Ok(p) => Some(p.nonce),
+                    Err(Failure::Unavailable) => return Err(Unavailable),
+                    Err(f) => {
+                        return Ok(Reply::Json {
+                            status: f.status(Role::ResourceServer),
+                            body: json!({ "error": f.error() }).to_string(),
+                            dpop_nonce: f.nonce().map(String::from),
+                            challenge: f.challenge(Role::ResourceServer, profile),
+                        });
+                    }
+                }
             }
+            // RFC 8705 §3
+            (Binding::Mtls(x5t), false)
+                if chain
+                    .first()
+                    .is_some_and(|leaf| access_crypto::webauthn::sha256(leaf) == x5t) =>
+            {
+                None
+            }
+            // Ek B 5090
+            (Binding::Bearer, false) => None,
+            _ => return Ok(unauthorized("invalid_token")),
         };
         let mut tx = self.begin(realm).await?;
         let live = self.live_grant(&mut tx, &sid, now).await?;
@@ -232,9 +285,23 @@ impl<E: Env> OAuth<E> {
         let mut tx = self.begin(realm).await?;
         let client = tx.client_by_uuid(grant.client).await?;
         tx.commit().await?;
-        let Some(client) = client.and_then(crate::domain::client::Client::from_row) else {
+        let client = match client.and_then(crate::domain::client::Client::from_row) {
+            Some(c) => {
+                let mut tx = self.begin(realm).await?;
+                let c = self.profiled(&mut tx, c).await?;
+                tx.commit().await?;
+                c
+            }
+            None => None,
+        };
+        let Some(client) = client else {
             return Ok(unauthorized("invalid_token"));
         };
+        // OP-155 m.3 (k): the exception ends with the client's decision
+        if at.binding == Binding::Bearer && !(client.profile.legacy_bearer && !client.profile.fapi2)
+        {
+            return Ok(unauthorized("invalid_token"));
+        }
         // §10.4.6
         let mut body = self
             .released(
@@ -246,7 +313,27 @@ impl<E: Env> OAuth<E> {
             )
             .await?;
         body.insert(String::from("sub"), Value::from(at.sub));
-        Ok(Reply::json(200, &Value::Object(body)).with_nonce(Some(nonce)))
+        // OIDC Core §5.3.2, TN-14, CR-4
+        let encrypt = client
+            .profile
+            .encryption
+            .as_ref()
+            .is_some_and(|e| e.userinfo);
+        if client.profile.userinfo_signed || encrypt {
+            body.insert(String::from("iss"), Value::from(realm.issuer.as_str()));
+            body.insert(String::from("aud"), Value::from(client.id.as_str()));
+            let claims = Value::Object(body).to_string().into_bytes();
+            let mut tx = self.begin(realm).await?;
+            let jwt = self
+                .client_jwt(&mut tx, realm, &client, USERINFO_TYP, &claims, encrypt, now)
+                .await?;
+            tx.commit().await?;
+            return Ok(Reply::Jwt {
+                body: jwt,
+                dpop_nonce: nonce,
+            });
+        }
+        Ok(Reply::json(200, &Value::Object(body)).with_nonce(nonce))
     }
 
     /// The token `token` names when it is not a refresh token: an access token of this realm,
@@ -459,7 +546,7 @@ impl<E: Env> OAuth<E> {
             if at.access_tenant != tenant {
                 return Ok(active_false());
             }
-            m.insert("token_type".into(), "DPoP".into());
+            m.insert("token_type".into(), at.binding.token_type().into());
             m.insert("scope".into(), at.scope.into());
             m.insert("exp".into(), at.exp.into());
             m.insert("iat".into(), at.iat.into());
@@ -467,7 +554,9 @@ impl<E: Env> OAuth<E> {
             if let Some(t) = tenant {
                 m.insert("access_tenant".into(), t.into());
             }
-            m.insert("cnf".into(), json!({ "jkt": at.jkt.text() }));
+            if let Some(cnf) = at.binding.confirmation() {
+                m.insert("cnf".into(), cnf);
+            }
             if at.sub != sub {
                 return Ok(active_false());
             }

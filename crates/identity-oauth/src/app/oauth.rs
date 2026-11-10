@@ -15,6 +15,7 @@ pub mod device;
 mod exchange;
 mod logout;
 mod management;
+mod profile;
 mod resource;
 mod service;
 mod token;
@@ -35,14 +36,13 @@ use serde_json::{Value, json};
 
 use crate::app::dpop::{Accepted, DpopChecker, DpopRequest};
 use crate::domain::client::{
-    Client, ClientAuth, ClientAuthError, Presented, check_method, presented, previous_matches,
+    Client, ClientAuth, ClientAuthError, Presented, check_method, previous_matches,
 };
 use crate::domain::dpop::{DpopProfile, Failure};
 use crate::domain::jwt::{AssertionRules, assertion_subject, parse_jwks, verify_assertion};
 use crate::domain::request::Params;
 use crate::domain::tokens::{
-    ACCESS_TTL_MS, ACCESS_TYP, GrantDetails, ID_TYP, TokenFacts, access_token_claims,
-    id_token_claims,
+    ACCESS_TTL_MS, ACCESS_TYP, GrantDetails, ID_TYP, TokenFacts, id_token_claims,
 };
 use crate::ports::dpop::{Clock, ReplayCache};
 use crate::ports::oauth::{
@@ -155,6 +155,26 @@ pub trait Env: Send + Sync + 'static {
     fn workload_trust(&self) -> &(dyn crate::ports::oauth::WorkloadTrust + Sync) {
         &crate::ports::oauth::NoWorkloadTrust
     }
+    /// The realm's client certificate trust and revocation checks (OP-155 m.3 (m)); none
+    /// unless the server wires them, so every `tls_client_auth` client is refused.
+    fn client_certificates(&self) -> &(dyn crate::ports::profile::ClientCertificates + Sync) {
+        &crate::ports::profile::NoClientCertificates
+    }
+    /// The realm KEK that opens `client_secret_jwt` secrets (OP-148 m.16 (l)); none unless the
+    /// server wires it, so every such assertion is refused.
+    fn jwt_secrets(&self) -> &(dyn crate::ports::profile::JwtSecrets + Sync) {
+        &crate::ports::profile::NoJwtSecrets
+    }
+    /// SAML assertions verified in the parser worker (OP-155 m.3 (k)); none unless the server
+    /// wires them, so every SAML assertion is refused.
+    fn saml_assertions(&self) -> &(dyn crate::ports::profile::SamlAssertions + Sync) {
+        &crate::ports::profile::NoSamlAssertions
+    }
+    /// The realm's `jwe-enc` key (OP-155 m.3 (k)); none unless the server wires it, so every
+    /// encrypted request object is refused.
+    fn request_keys(&self) -> &(dyn crate::ports::profile::RequestKeys + Sync) {
+        &crate::ports::profile::NoRequestKeys
+    }
 }
 
 /// What an endpoint answers; the HTTP layer only renders it.
@@ -179,6 +199,29 @@ pub enum Reply {
         status: u16,
         /// Stable code.
         code: &'static str,
+    },
+    /// `200` with an HTML page that posts the authorization response to `action`
+    /// (`form_post.jwt`, OP-155 m.3 (k)).
+    FormPost {
+        /// Where the page posts.
+        action: String,
+        /// The page.
+        body: String,
+    },
+    /// `200` with a signed or encrypted JWT, `application/jwt`, `Cache-Control: no-store`
+    /// (OIDC Core §5.3.2, OP-155 m.3 (k)).
+    Jwt {
+        /// The JWT.
+        body: String,
+        /// `DPoP-Nonce` to send (TN-29).
+        dpop_nonce: Option<String>,
+    },
+    /// `200` with an HTML page that may frame only `frames` (front-channel logout, IDP-24).
+    Page {
+        /// The page.
+        body: String,
+        /// The origins it frames.
+        frames: Vec<String>,
     },
     /// `503 + Retry-After` (G50).
     Unavailable,
@@ -226,7 +269,13 @@ impl Reply {
 /// The authorization server of every realm.
 pub struct OAuth<E> {
     env: E,
+    refetched: std::sync::Mutex<std::collections::BTreeMap<[u8; 16], u64>>,
 }
+
+/// Shortest time between two JWKS fetches for an unknown `kid` of one client (§10.4.5).
+pub const JWKS_REFETCH_MS: u64 = 60_000;
+
+const REFETCH_ENTRIES: usize = 4096;
 
 /// A realm as a request reached it.
 pub type Realm = RealmEntry;
@@ -324,7 +373,32 @@ pub(crate) struct ClientRequest<'a> {
 impl<E: Env> OAuth<E> {
     /// The server over `env`.
     pub const fn new(env: E) -> Self {
-        Self { env }
+        Self {
+            env,
+            refetched: std::sync::Mutex::new(std::collections::BTreeMap::new()),
+        }
+    }
+
+    /// §10.4.5, Ek B 5098: whether the JWKS of client `client` may be fetched again for an
+    /// unknown `kid` now, at most once per [`JWKS_REFETCH_MS`]; a poisoned record refuses.
+    pub(crate) fn may_refetch(&self, client: [u8; 16], now: u64) -> bool {
+        let Ok(mut seen) = self.refetched.lock() else {
+            return false;
+        };
+        if seen
+            .get(&client)
+            .is_some_and(|at| now < at.saturating_add(JWKS_REFETCH_MS))
+        {
+            return false;
+        }
+        if seen.len() >= REFETCH_ENTRIES {
+            seen.retain(|_, at| now < at.saturating_add(JWKS_REFETCH_MS));
+        }
+        if seen.len() >= REFETCH_ENTRIES {
+            return false;
+        }
+        seen.insert(client, now);
+        true
     }
 
     /// Its environment.
@@ -408,9 +482,11 @@ impl<E: Env> OAuth<E> {
             return Ok(answer);
         }
         let p = req.params;
-        let presented = match presented(
+        // OP-155 m.3 (k)
+        let presented = match crate::domain::client::presented_with_secret(
             req.authorization,
             p.get("client_id"),
+            p.get("client_secret"),
             p.get("client_assertion_type"),
             p.get("client_assertion"),
         ) {
@@ -431,6 +507,12 @@ impl<E: Env> OAuth<E> {
         let Some(client) = self.client_of(tx, &client_id).await? else {
             return Ok(Err(ClientAuthError::Unknown));
         };
+        // RFC 8705 §2, OP-155 m.3 (k)
+        if let Some(tls) = client.profile.tls.clone() {
+            return self
+                .mtls_client(realm, client, &tls, &presented, req.chain, now)
+                .await;
+        }
         if let Err(e) = check_method(&client, &presented) {
             // CR-38
             let previous = match e {
@@ -442,7 +524,15 @@ impl<E: Env> OAuth<E> {
             }
         }
         if let Presented::Assertion { assertion, .. } = &presented {
-            let doc = match &client.auth {
+            // OP-148 m.16 (l)
+            if let Some(crate::domain::fapi::LegacyAuth::SecretJwt(sealed)) =
+                client.profile.legacy.clone()
+            {
+                return self
+                    .secret_jwt_client(tx, realm, client, &sealed, assertion, req, now)
+                    .await;
+            }
+            let mut doc = match &client.auth {
                 ClientAuth::PrivateKeyJwt { jwks_uri } => {
                     self.env.client_keys().fetch(jwks_uri).await?
                 }
@@ -451,9 +541,20 @@ impl<E: Env> OAuth<E> {
                     return Ok(Err(ClientAuthError::Method));
                 }
             };
-            let Ok(keys) = parse_jwks(&doc) else {
+            let Ok(mut keys) = parse_jwks(&doc) else {
                 return Ok(Err(ClientAuthError::Rejected));
             };
+            // §10.4.5, Ek B 5098
+            if let ClientAuth::PrivateKeyJwt { jwks_uri } = &client.auth
+                && crate::domain::jwt::kid_unknown(assertion, &keys)
+                && self.may_refetch(client.uuid, now)
+            {
+                doc = self.env.client_keys().refetch(jwks_uri).await?;
+                let Ok(fresh) = parse_jwks(&doc) else {
+                    return Ok(Err(ClientAuthError::Rejected));
+                };
+                keys = fresh;
+            }
             let endpoint = realm.issuer.endpoint(req.endpoint);
             let rules = AssertionRules {
                 client_id: &client.id,
@@ -508,8 +609,8 @@ impl<E: Env> OAuth<E> {
         tx.pairwise(subject, client, &candidate).await
     }
 
-    /// Issues the tokens of a grant: a rotated refresh token, the access token bound to `jkt`
-    /// and, for `openid`, the ID token (OP-146 m.5 (c)).
+    /// Issues the tokens of a grant: a rotated refresh token, the access token under
+    /// `binding` and, for `openid`, the ID token (OP-146 m.5 (c)).
     #[expect(clippy::too_many_arguments, reason = "the facts of one issuance")]
     pub(crate) async fn issue(
         &self,
@@ -518,13 +619,38 @@ impl<E: Env> OAuth<E> {
         client: &Client,
         grant: &GrantRow,
         details: &GrantDetails,
-        jkt: &str,
+        binding: &crate::domain::fapi::Binding,
         nonce: Option<&str>,
         now: u64,
     ) -> Result<Value, Unavailable> {
-        let refresh = self.random::<32>()?;
-        tx.insert_refresh(&refresh_digest(&refresh), grant.id, signed(now))
-            .await?;
+        self.issue_with(tx, realm, client, grant, details, binding, nonce, true, now)
+            .await
+    }
+
+    /// [`Self::issue`]; without `refresh` the client keeps the refresh token it holds (FAPI 2.0
+    /// refresh without rotation, OP-155 m.3 (k)). The ID token is signed with the client's
+    /// algorithm and encrypted when it asked (CR-4).
+    #[expect(clippy::too_many_arguments, reason = "the facts of one issuance")]
+    pub(crate) async fn issue_with(
+        &self,
+        tx: &mut <E::Db as OAuthDb>::Tx,
+        realm: &Realm,
+        client: &Client,
+        grant: &GrantRow,
+        details: &GrantDetails,
+        binding: &crate::domain::fapi::Binding,
+        nonce: Option<&str>,
+        refresh: bool,
+        now: u64,
+    ) -> Result<Value, Unavailable> {
+        let refresh = if refresh {
+            let token = self.random::<32>()?;
+            tx.insert_refresh(&refresh_digest(&token), grant.id, signed(now))
+                .await?;
+            Some(token)
+        } else {
+            None
+        };
         let sub = self.pairwise(tx, grant.subject, client.sector()).await?;
         let sid = b64url_encode(&grant.sid);
         let tenant = if details.resource.is_some() {
@@ -553,25 +679,35 @@ impl<E: Env> OAuth<E> {
                 realm.realm,
                 alg,
                 ACCESS_TYP,
-                &access_token_claims(&facts, &details.scope, &jti, jkt),
+                &crate::domain::tokens::bound_access_token_claims(
+                    &facts,
+                    &details.scope,
+                    &jti,
+                    binding,
+                ),
                 now,
             )
             .await?;
         let mut body = json!({
             "access_token": access,
-            "token_type": "DPoP",
+            "token_type": binding.token_type(),
             "expires_in": ACCESS_TTL_MS / 1000,
-            "refresh_token": b64url_encode(&refresh),
             "scope": details.scope,
         });
+        if let (Some(token), Value::Object(m)) = (refresh, &mut body) {
+            m.insert("refresh_token".into(), b64url_encode(&token).into());
+        }
         if details.openid {
             let claims = self
                 .id_claims(realm, client, &facts, details, grant.subject, nonce)
                 .await?;
+            let encrypt = client
+                .profile
+                .encryption
+                .as_ref()
+                .is_some_and(|e| e.id_token);
             let id = self
-                .env
-                .signer()
-                .sign(realm.realm, alg, ID_TYP, &claims, now)
+                .client_jwt(tx, realm, client, ID_TYP, &claims, encrypt, now)
                 .await?;
             if let Value::Object(m) = &mut body {
                 m.insert("id_token".into(), id.into());
@@ -607,13 +743,15 @@ impl<E: Env> OAuth<E> {
             now_ms: now,
             rev: grant.session_epoch,
         };
-        let alg = tx.jose_alg().await?;
         let claims = self
             .id_claims(realm, client, &facts, details, grant.subject, nonce)
             .await?;
-        self.env
-            .signer()
-            .sign(realm.realm, alg, ID_TYP, &claims, now)
+        let encrypt = client
+            .profile
+            .encryption
+            .as_ref()
+            .is_some_and(|e| e.id_token);
+        self.client_jwt(tx, realm, client, ID_TYP, &claims, encrypt, now)
             .await
     }
 

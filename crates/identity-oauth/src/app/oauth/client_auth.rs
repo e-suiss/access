@@ -9,7 +9,9 @@
 //! about the registration's agent Party; the key's own `instance_create` then stands on that
 //! Claim alone, and the Instance still needs a Grant to act.
 
+mod mtls;
 mod presentation;
+mod secret;
 mod spiffe;
 
 use crate::app::oauth::{ClientRequest, TokenHttp};

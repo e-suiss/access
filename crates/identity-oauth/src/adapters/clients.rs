@@ -115,6 +115,13 @@ impl ClientKeys for HttpClientKeys {
         self.keep(jwks_uri, &answer.body, self.policy.keep_s(answer.max_age_s));
         Ok(answer.body)
     }
+
+    async fn refetch(&self, jwks_uri: &str) -> Result<Vec<u8>, Unavailable> {
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.remove(jwks_uri);
+        }
+        self.fetch(jwks_uri).await
+    }
 }
 
 /// The class of a back-channel answer (OIDC Back-Channel Logout 1.0 §2.8).

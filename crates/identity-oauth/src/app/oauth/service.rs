@@ -228,7 +228,7 @@ impl<E: Env> OAuth<E> {
                 "token_type": "DPoP",
                 "exp": at.exp,
                 "iat": at.iat,
-                "cnf": { "jkt": at.jkt.text() },
+                "cnf": at.binding.confirmation(),
             }),
         ))
     }

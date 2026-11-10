@@ -48,6 +48,7 @@ impl Directory for Rows {
             dcr: false,
             device_code: false,
             mtls_aliases: n == 3,
+            ..crate::ports::Facts::default()
         })
     }
 }

@@ -79,6 +79,27 @@ impl OAuthDb for PgOAuth {
 }
 
 impl OAuthTx for PgOAuthTx {
+    async fn client_profile(
+        &mut self,
+        client: [u8; 16],
+    ) -> Result<Option<access_store::client_profiles::ClientProfileRow>, Unavailable> {
+        access_store::client_profiles::profile(&mut self.0, client)
+            .await
+            .map_err(down)
+    }
+
+    async fn frontchannel_enabled(&mut self) -> Result<bool, Unavailable> {
+        access_store::client_profiles::frontchannel_enabled(&mut self.0)
+            .await
+            .map_err(down)
+    }
+
+    async fn legacy_methods(&mut self) -> Result<Vec<String>, Unavailable> {
+        access_store::client_profiles::legacy_methods(&mut self.0)
+            .await
+            .map_err(down)
+    }
+
     async fn workload_clients(
         &mut self,
     ) -> Result<Vec<access_store::workloads::WorkloadClient>, Unavailable> {

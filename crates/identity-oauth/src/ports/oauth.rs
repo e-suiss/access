@@ -389,6 +389,17 @@ pub trait OAuthTx: Send {
         reason: &str,
         now_ms: u64,
     ) -> impl Future<Output = Result<u64, Unavailable>> + Send;
+    /// The newest high-assurance and legacy profile of client `client` (OP-155 m.3 (k)).
+    fn client_profile(
+        &mut self,
+        client: [u8; 16],
+    ) -> impl Future<
+        Output = Result<Option<access_store::client_profiles::ClientProfileRow>, Unavailable>,
+    > + Send;
+    /// Whether the realm lets its clients opt in to front-channel logout (IDP-24).
+    fn frontchannel_enabled(&mut self) -> impl Future<Output = Result<bool, Unavailable>> + Send;
+    /// The legacy token endpoint methods some active client of the realm opted in to.
+    fn legacy_methods(&mut self) -> impl Future<Output = Result<Vec<String>, Unavailable>> + Send;
     /// Commits.
     fn commit(self) -> impl Future<Output = Result<(), Unavailable>> + Send;
 }
@@ -458,12 +469,29 @@ pub trait TokenSigner: Send + Sync {
     ) -> impl Future<Output = Result<String, Unavailable>> + Send;
     /// The realm's JWKS, to read back its own tokens.
     fn jwks(&self, realm: RealmId) -> impl Future<Output = Result<String, Unavailable>> + Send;
+    /// Signs a JSON `payload` as an RS256 compact JWS of `typ` with the realm's `rsa-id` key,
+    /// made on first use (MD-6, OP-155 m.3 (k)); identity assertions only, never authority.
+    fn sign_rs256(
+        &self,
+        realm: RealmId,
+        typ: &str,
+        payload: &[u8],
+        at_ms: u64,
+    ) -> impl Future<Output = Result<String, Unavailable>> + Send {
+        let _ = (realm, typ, payload, at_ms);
+        std::future::ready(Err(Unavailable))
+    }
 }
 
 /// The JWKS a `private_key_jwt` client publishes (RFC 7523, §11.3.6).
 pub trait ClientKeys: Send + Sync {
     /// The document at `jwks_uri`.
     fn fetch(&self, jwks_uri: &str) -> impl Future<Output = Result<Vec<u8>, Unavailable>> + Send;
+    /// The document at `jwks_uri` fetched again past any cache, for an unknown `kid`
+    /// (§10.4.5); the caller limits how often.
+    fn refetch(&self, jwks_uri: &str) -> impl Future<Output = Result<Vec<u8>, Unavailable>> + Send {
+        self.fetch(jwks_uri)
+    }
 }
 
 /// The hosted login (I9) as `/authorize` and `/end-session` reach it.

@@ -1259,6 +1259,7 @@ pub fn status(r: &Reply) -> u16 {
     match r {
         Reply::Redirect(_) => 303,
         Reply::Json { status, .. } | Reply::Problem { status, .. } => *status,
+        Reply::FormPost { .. } | Reply::Jwt { .. } | Reply::Page { .. } => 200,
         Reply::Unavailable => 503,
         Reply::NotFound => 404,
     }

@@ -98,6 +98,13 @@ impl Directory for PgDirectory {
         let dcr = t.dcr_policy().await.map_err(|_| Unavailable)?.enabled;
         let device_code = t.device_code_enabled().await.map_err(|_| Unavailable)?;
         let mtls_aliases = t.mtls_aliases().await.map_err(|_| Unavailable)?;
+        // IDP-24, OP-155 m.3 (k)
+        let frontchannel = access_store::client_profiles::frontchannel_enabled(&mut t)
+            .await
+            .map_err(|_| Unavailable)?;
+        let legacy = access_store::client_profiles::legacy_methods(&mut t)
+            .await
+            .map_err(|_| Unavailable)?;
         t.commit().await.map_err(|_| Unavailable)?;
         Ok(Facts {
             public_sub_clients,
@@ -106,6 +113,9 @@ impl Directory for PgDirectory {
             dcr,
             device_code,
             mtls_aliases,
+            frontchannel,
+            secret_post: legacy.iter().any(|m| m == "client_secret_post"),
+            secret_jwt: legacy.iter().any(|m| m == "client_secret_jwt"),
         })
     }
 }

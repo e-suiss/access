@@ -210,7 +210,11 @@ impl<E: Env> OAuth<E> {
             ClientIdKind::Local if client_id.starts_with(crate::domain::dcr::CLIENT_PREFIX) => {
                 self.dcr_client_of(tx, client_id).await
             }
-            ClientIdKind::Local => Ok(tx.client(client_id).await?.and_then(Client::from_row)),
+            ClientIdKind::Local => match tx.client(client_id).await?.and_then(Client::from_row) {
+                // OP-155 m.3 (k)
+                Some(c) => self.profiled(tx, c).await,
+                None => Ok(None),
+            },
             ClientIdKind::Url => {
                 if client_id_url(client_id).is_err() {
                     return Ok(None);

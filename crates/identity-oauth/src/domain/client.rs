@@ -153,6 +153,10 @@ pub struct Client {
     pub rs256: bool,
     /// What its CIMD document said, for a CIMD client.
     pub cimd: Option<CimdFacts>,
+    /// Its high-assurance and legacy profile (OP-155 m.3 (k)).
+    pub profile: crate::domain::fapi::ClientProfile,
+    /// The `x5t#S256` of the certificate it authenticated with over mutual TLS (RFC 8705 §3).
+    pub certificate: Option<[u8; 32]>,
 }
 
 /// The sector of the realm's public `sub` (MD-10): no client has the nil id, so its values are
@@ -201,6 +205,8 @@ impl Client {
             trust: TrustLevel::Registered,
             rs256: false,
             cimd: None,
+            profile: crate::domain::fapi::ClientProfile::default(),
+            certificate: None,
         })
     }
 
@@ -234,6 +240,8 @@ impl Client {
             trust: TrustLevel::Cimd,
             rs256: doc.rs256,
             cimd: Some(facts),
+            profile: crate::domain::fapi::ClientProfile::default(),
+            certificate: None,
         }
     }
 
@@ -387,7 +395,14 @@ pub enum Presented {
         /// The secret, as sent.
         secret: String,
     },
-    /// A JWT bearer assertion (`private_key_jwt`).
+    /// The secret in the form body (`client_secret_post`, OP-155 m.3 (k)).
+    Post {
+        /// The client.
+        client_id: String,
+        /// The secret, as sent.
+        secret: String,
+    },
+    /// A JWT bearer assertion (`private_key_jwt`, or `client_secret_jwt` by opt-in).
     Assertion {
         /// The client, from `client_id` when present, else from the assertion's `sub`.
         client_id: Option<String>,
@@ -405,6 +420,11 @@ impl core::fmt::Debug for Presented {
                 .field("client_id", client_id)
                 .field("secret", &"[redacted]")
                 .finish(),
+            Self::Post { client_id, .. } => f
+                .debug_struct("Post")
+                .field("client_id", client_id)
+                .field("secret", &"[redacted]")
+                .finish(),
             Self::Assertion { client_id, .. } => f
                 .debug_struct("Assertion")
                 .field("client_id", client_id)
@@ -419,13 +439,15 @@ impl Presented {
     #[must_use]
     pub fn client_id(&self) -> Option<&str> {
         match self {
-            Self::Id(id) | Self::Basic { client_id: id, .. } => Some(id),
+            Self::Id(id) | Self::Basic { client_id: id, .. } | Self::Post { client_id: id, .. } => {
+                Some(id)
+            }
             Self::Assertion { client_id, .. } => client_id.as_deref(),
         }
     }
 }
 
-fn b64_std_decode(s: &str) -> Option<Vec<u8>> {
+pub(crate) fn b64_std_decode(s: &str) -> Option<Vec<u8>> {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let body = s.trim_end_matches('=');
     if !s.len().is_multiple_of(4) || s.len().saturating_sub(body.len()) > 2 {
@@ -480,6 +502,31 @@ pub fn presented(
     assertion_type: Option<&str>,
     assertion: Option<&str>,
 ) -> Result<Option<Presented>, ClientAuthError> {
+    presented_with_secret(authorization, client_id, None, assertion_type, assertion)
+}
+
+/// [`presented`] with a `client_secret` form parameter, which only a client that opted in to
+/// `client_secret_post` may send (OP-155 m.3 (k)); with any other credential it is refused.
+///
+/// # Errors
+/// [`ClientAuthError::Malformed`].
+pub fn presented_with_secret(
+    authorization: Option<&str>,
+    client_id: Option<&str>,
+    client_secret: Option<&str>,
+    assertion_type: Option<&str>,
+    assertion: Option<&str>,
+) -> Result<Option<Presented>, ClientAuthError> {
+    if let Some(secret) = client_secret {
+        let id = client_id.ok_or(ClientAuthError::Malformed)?;
+        if authorization.is_some() || assertion_type.is_some() || assertion.is_some() {
+            return Err(ClientAuthError::Malformed);
+        }
+        return Ok(Some(Presented::Post {
+            client_id: String::from(id),
+            secret: String::from(secret),
+        }));
+    }
     let basic = authorization
         .map(|h| {
             let (scheme, value) = h.split_once(' ').ok_or(ClientAuthError::Malformed)?;
@@ -520,6 +567,33 @@ pub fn presented(
 /// # Errors
 /// [`ClientAuthError`].
 pub fn check_method(client: &Client, presented: &Presented) -> Result<(), ClientAuthError> {
+    use crate::domain::fapi::LegacyAuth;
+    // OP-155 m.3 (k)
+    if client.profile.tls.is_some() {
+        return Err(ClientAuthError::Method);
+    }
+    match (&client.auth, &client.profile.legacy, presented) {
+        (
+            ClientAuth::SecretBasic { digest },
+            Some(LegacyAuth::SecretPost),
+            Presented::Post { secret, .. },
+        ) => {
+            return if secret_matches(digest, secret.as_bytes()) {
+                Ok(())
+            } else {
+                Err(ClientAuthError::Rejected)
+            };
+        }
+        (
+            ClientAuth::SecretBasic { .. },
+            Some(LegacyAuth::SecretJwt(_)),
+            Presented::Assertion { .. },
+        ) => {
+            return Ok(());
+        }
+        (_, Some(_), _) | (_, None, Presented::Post { .. }) => return Err(ClientAuthError::Method),
+        (_, None, _) => {}
+    }
     match (&client.auth, presented) {
         (ClientAuth::None, Presented::Id(_))
         | (
@@ -542,7 +616,14 @@ pub fn check_method(client: &Client, presented: &Presented) -> Result<(), Client
 #[must_use]
 pub fn previous_matches(client: &Client, previous: &[u8; 32], presented: &Presented) -> bool {
     match (&client.auth, presented) {
-        (ClientAuth::SecretBasic { .. }, Presented::Basic { secret, .. }) => {
+        (ClientAuth::SecretBasic { .. }, Presented::Basic { secret, .. })
+            if client.profile.legacy.is_none() =>
+        {
+            secret_matches(previous, secret.as_bytes())
+        }
+        (ClientAuth::SecretBasic { .. }, Presented::Post { secret, .. })
+            if client.profile.legacy == Some(crate::domain::fapi::LegacyAuth::SecretPost) =>
+        {
             secret_matches(previous, secret.as_bytes())
         }
         _ => false,

@@ -190,8 +190,7 @@ async fn authorization_request_downgrades_are_refused() {
         (vec![("response_type", "CODE")], "unsupported_response_type"),
         (vec![("response_mode", "fragment")], "invalid_request"),
         (vec![("response_mode", "form_post")], "invalid_request"),
-        (vec![("response_mode", "query.jwt")], "invalid_request"),
-        (vec![("response_mode", "jwt")], "invalid_request"),
+        (vec![("response_mode", "fragment.jwt")], "invalid_request"),
         (vec![("response_mode", "web_message")], "invalid_request"),
         (
             vec![("request", "eyJhbGciOiJub25lIn0.e30.")],

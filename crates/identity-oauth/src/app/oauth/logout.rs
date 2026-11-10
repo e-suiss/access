@@ -11,6 +11,7 @@ use access_kernel::verify::jws::{MAX_PAYLOAD, Origin, verify_compact};
 
 use super::{Env, OAuth, Realm, Reply, decode32, session_live, signed};
 use crate::domain::client::Client;
+use crate::domain::fapi::{frontchannel_page, frontchannel_uri, origin};
 use crate::domain::issuer::form_encode;
 use crate::domain::jwt::realm_key_set;
 use crate::domain::request::Params;
@@ -133,9 +134,52 @@ impl<E: Env> OAuth<E> {
                 self.env.pages().confirm_sign_out(&realm.issuer),
             ));
         }
+        // IDP-24, OP-155 m.3 (k)
+        let frames = if tx.frontchannel_enabled().await? {
+            self.frontchannel_frames(&mut tx, realm, session.id).await?
+        } else {
+            Vec::new()
+        };
         // G57, §10.4.6
         tx.end_session(session.id, signed(now), "logout").await?;
         tx.commit().await?;
-        Ok(Reply::Redirect(target))
+        if frames.is_empty() {
+            return Ok(Reply::Redirect(target));
+        }
+        let origins = frames.iter().filter_map(|f| origin(f)).collect();
+        Ok(Reply::Page {
+            body: frontchannel_page(&frames, &target),
+            frames: origins,
+        })
+    }
+
+    /// The front-channel logout URIs, with `iss` and `sid`, of the clients that opted in and
+    /// hold a live grant of the session (OIDC Front-Channel Logout §3, IDP-24).
+    async fn frontchannel_frames(
+        &self,
+        tx: &mut <E::Db as crate::ports::oauth::OAuthDb>::Tx,
+        realm: &Realm,
+        session: [u8; 16],
+    ) -> Result<Vec<String>, Unavailable> {
+        let mut out = Vec::new();
+        for g in tx.session_grants(session).await? {
+            let Some(row) = tx.client_by_uuid(g.client).await? else {
+                continue;
+            };
+            let Some(client) = Client::from_row(row) else {
+                continue;
+            };
+            let Some(client) = self.profiled(tx, client).await? else {
+                continue;
+            };
+            if let Some(uri) = &client.profile.frontchannel {
+                out.push(frontchannel_uri(
+                    uri,
+                    realm.issuer.as_str(),
+                    &access_kernel::json::b64url_encode(&g.sid),
+                ));
+            }
+        }
+        Ok(out)
     }
 }

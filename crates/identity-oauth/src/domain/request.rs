@@ -11,6 +11,8 @@ use crate::domain::dpop::{Jkt, authorization_request_jkt};
 use crate::domain::issuer::{Issuer, form_encode, with_iss};
 use crate::domain::scope;
 
+pub mod jar;
+
 /// `openid`: an ID token is issued (OIDC Core §3.1.2.1).
 pub const OPENID: &str = "openid";
 
@@ -79,6 +81,55 @@ pub struct AuthRequest {
     /// The OIDC `claims` request (OIDC Core §5.5, §10.4.6).
     #[serde(default)]
     pub claims: Option<crate::domain::claims_request::ClaimsAsk>,
+    /// How the response goes back (OAuth JARM, OP-155 m.3 (k)).
+    #[serde(default)]
+    pub response_mode: ResponseMode,
+    /// Whether it came as a signed request object (RFC 9101).
+    #[serde(default)]
+    pub signed: bool,
+}
+
+/// `response_mode` (OAuth 2.0 Multiple Response Types, JARM §2.3; OP-155 m.3 (k)): the query,
+/// or a signed response JWT in the query or a posted form. There is no implicit flow, so no
+/// fragment mode.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ResponseMode {
+    /// `query`.
+    #[default]
+    Query,
+    /// `query.jwt`, and `jwt` which means it for the code flow.
+    QueryJwt,
+    /// `form_post.jwt`.
+    FormPostJwt,
+}
+
+impl ResponseMode {
+    /// The mode of a `response_mode` value.
+    #[must_use]
+    pub fn parse(value: Option<&str>) -> Option<Self> {
+        match value {
+            None | Some("query") => Some(Self::Query),
+            Some("jwt" | "query.jwt") => Some(Self::QueryJwt),
+            Some("form_post.jwt") => Some(Self::FormPostJwt),
+            Some(_) => None,
+        }
+    }
+
+    /// Whether the response is a JARM JWT.
+    #[must_use]
+    pub const fn jwt(self) -> bool {
+        !matches!(self, Self::Query)
+    }
+
+    /// The mode a client under FAPI 2.0 Message Signing gets: the query becomes `query.jwt`
+    /// (OP-155 m.3 (k)); otherwise the mode as asked.
+    #[must_use]
+    pub const fn max_jwt(self, fapi2: bool) -> Self {
+        match self {
+            Self::Query if fapi2 => Self::QueryJwt,
+            other => other,
+        }
+    }
 }
 
 /// The authority an authorization request asks for: the one resource server and the RFC 9396
@@ -231,6 +282,11 @@ impl Params {
         Self::new(pairs)
     }
 
+    /// The parameter names, in order.
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.0.iter().map(|(k, _)| k.as_str())
+    }
+
     /// The value of `name`; an empty value counts as absent (RFC 6749 §3.1).
     #[must_use]
     pub fn get(&self, name: &str) -> Option<&str> {
@@ -315,11 +371,12 @@ pub fn stage_two(
         }
         None => return Err(AuthError::invalid_request("response_type is required")),
     }
-    if params.get("response_mode").is_some_and(|m| m != "query") {
+    // OP-155 m.3 (k)
+    let Some(response_mode) = ResponseMode::parse(params.get("response_mode")) else {
         return Err(AuthError::invalid_request(
-            "only response_mode=query is supported",
+            "response_mode is query, jwt, query.jwt or form_post.jwt",
         ));
-    }
+    };
     if params.get("request").is_some() {
         return Err(AuthError::new(
             "request_not_supported",
@@ -404,6 +461,8 @@ pub fn stage_two(
         authority,
         resource,
         claims,
+        response_mode,
+        signed: false,
     })
 }
 
