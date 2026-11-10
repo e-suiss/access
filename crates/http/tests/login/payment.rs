@@ -3,6 +3,13 @@
 //! app-controlled factor. The approver is the public SDK's `approver` module with a P-256 key
 //! that a test attestation CA certifies, as an Android app's key attestation would.
 
+#![allow(
+    clippy::similar_names,
+    clippy::unused_self,
+    clippy::needless_pass_by_value,
+    reason = "test code"
+)]
+
 use std::sync::OnceLock;
 use std::time::Duration;
 
@@ -417,7 +424,7 @@ async fn the_tr_profile_refuses_sms_at_sign_in_and_takes_it_for_activation() {
         String::from_utf8_lossy(&signed.body)
     );
 
-    // OP-156 m.3 (f): no fresh SIM signal, no code
+    // OP-156 m.3 (f)
     let blind = b.post("/v1/sms/activation", None).await;
     assert_eq!(blind.json()["code"], "sms-refused");
     e.sim_signal(s, e.now() - 200 * DAY_MS, e.now() - 25 * 60 * 60_000)
@@ -494,7 +501,7 @@ async fn only_an_attested_key_with_its_app_pin_is_the_app_controlled_factor() {
     let at = e.now();
     let challenge = attestation_challenge(&format!("https://{HOST}"), &app.thumbprint, at);
 
-    // L21: the attested key must be the approver's, for this approver's challenge, now
+    // L21
     let stranger = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256).unwrap();
     let other = b
         .post(
@@ -520,7 +527,7 @@ async fn only_an_attested_key_with_its_app_pin_is_the_app_controlled_factor() {
         .await;
     assert_eq!(stale.json()["code"], "attestation-stale");
 
-    // a plain push: the approver is not activated yet, so the step is push
+    // OP-156 m.3 (e), (g)
     let push_step = |e: &Env| {
         let (_, texts) = e.outbox.2.lock().unwrap().last().cloned().unwrap();
         <[u8; 32]>::try_from(b64url_decode(&texts[0]).unwrap()).unwrap()
@@ -763,7 +770,7 @@ const SPC: AuthPolicy = AuthPolicy {
     ..AuthPolicy::DEFAULT
 };
 
-// §9.4 G, §9.4.1, OP-156 m.3 (g), Ek B 5120
+// §9.4, §9.4.1, OP-156 m.3 (g), Ek B 5120
 #[tokio::test]
 async fn an_spc_assertion_counts_only_for_the_canonical_render() {
     use access_identity_account::domain::claims::Bind;
@@ -773,7 +780,7 @@ async fn an_spc_assertion_counts_only_for_the_canonical_render() {
     let mut a = e.approving("pay@example.com").await;
 
     let started = a.open(&e, 30).await;
-    // OP-156 m.3 (g): payment opens on the Approval Surface only
+    // OP-156 m.3 (g)
     let page =
         a.c.get(&format!(
             "/v1/approve?request={}&redirect_uri=https%3A%2F%2Fshop.example%2Fapproved&state=st-1",
@@ -804,7 +811,7 @@ async fn an_spc_assertion_counts_only_for_the_canonical_render() {
         json!({ "currency": "EUR", "value": "42.00" })
     );
     let statement = Approving::statement(&started);
-    // §9.4.1: one cent more is no confirmation
+    // §9.4.1
     let more = a.spc(&statement, &shown("42.01"));
     let refused = a.finish(&started, more, None).await;
     assert_eq!(refused.status, StatusCode::CONFLICT);
@@ -830,7 +837,7 @@ async fn an_spc_assertion_counts_only_for_the_canonical_render() {
     );
     assert_eq!(e.surface.contributions.lock().unwrap().len(), 1);
 
-    // OP-156 m.3 (g): a realm that did not open SPC takes none
+    // OP-156 m.3 (g)
     let closed = env(0x67, "q6-spc-off", AuthPolicy::DEFAULT).await;
     closed.account("pay@example.com").await;
     closed.surface.payment.store(true, Ordering::SeqCst);
@@ -857,7 +864,7 @@ fn app_factor(app: &App, statement: &[u8]) -> Value {
     })
 }
 
-// PSD2 RTS Art. 4, 5, §10.3.4, §18.2, H17, MD-11, SA-54, OP-156 m.3 (e), (g), Ek B 5116, 5341
+// §10.3.4, §18.2, H17, MD-11, SA-54, OP-156 m.3 (e), (g), Ek B 5116, 5341
 #[tokio::test]
 async fn a_tr_payment_approval_needs_two_independent_elements_bound_to_amount_and_payee() {
     let e = env(0x68, "q6-psd2", AuthPolicy { spc: true, ..TR }).await;
@@ -866,7 +873,7 @@ async fn a_tr_payment_approval_needs_two_independent_elements_bound_to_amount_an
     e.surface.tier.store(2, Ordering::SeqCst);
     let mut a = e.approving("emre@example.com").await;
 
-    // the app-controlled factor: an approver activated with the SMS activation code
+    // OP-156 m.3 (e), (g)
     e.sim_signal(s, e.now() - 200 * DAY_MS, e.now()).await;
     let sent = a.c.post("/v1/sms/activation", None).await;
     assert_eq!(
@@ -894,7 +901,7 @@ async fn a_tr_payment_approval_needs_two_independent_elements_bound_to_amount_an
     );
     e.advance(25 * 60 * 60_000);
 
-    // MD-11: the passkey alone, biometrics included, meets no CT2 here
+    // MD-11
     let started = a.open(&e, 40).await;
     let statement = Approving::statement(&started);
     let alone = assertion_json(&mut a.key, &a.id, &a.user, &statement);
@@ -902,13 +909,13 @@ async fn a_tr_payment_approval_needs_two_independent_elements_bound_to_amount_an
     assert_eq!(refused.json()["code"], "app-factor-required");
     assert!(e.surface.contributions.lock().unwrap().is_empty());
 
-    // dynamic linking: the app's factor over another statement does not count
+    // OP-156 m.3 (e), (g)
     let other = app_factor(&app, &[7; 32]);
     let credential = a.spc(&statement, &shown("42.00"));
     let wrong = a.finish(&started, credential, Some(other)).await;
     assert_eq!(wrong.json()["code"], "app-factor-refused");
 
-    // dynamic linking: the amount shown must be the statement's
+    // OP-156 m.3 (e), (g)
     let started = a.open(&e, 41).await;
     let statement = Approving::statement(&started);
     let credential = a.spc(&statement, &shown("43.00"));
@@ -917,7 +924,7 @@ async fn a_tr_payment_approval_needs_two_independent_elements_bound_to_amount_an
         .await;
     assert_eq!(changed.json()["code"], "spc-mismatch");
 
-    // possession (the passkey over H(AAS)) and knowledge (the app PIN over H(AAS))
+    // OP-156 m.3 (e), (g)
     let started = a.open(&e, 42).await;
     let statement = Approving::statement(&started);
     let credential = a.spc(&statement, &shown("42.00"));
@@ -934,7 +941,7 @@ async fn a_tr_payment_approval_needs_two_independent_elements_bound_to_amount_an
     let last = orders.last().unwrap();
     assert_eq!(last.assurance.get("app_controlled_factor"), Some(&1));
     assert_eq!(last.assurance.get("phishing_resistant"), Some(&1));
-    // MD-11: platform UV is no factor under the profile
+    // MD-11
     assert_eq!(last.assurance.get("uv"), Some(&0));
     assert_eq!(e.surface.contributions.lock().unwrap().len(), 1);
 }

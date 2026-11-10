@@ -209,7 +209,11 @@ pub(crate) fn mirror_refresh(
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, reason = "test code")]
+    #![allow(
+        clippy::unwrap_used,
+        clippy::unused_async_trait_impl,
+        reason = "test code"
+    )]
 
     use std::sync::atomic::{AtomicBool, Ordering};
 

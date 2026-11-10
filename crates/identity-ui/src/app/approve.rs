@@ -534,6 +534,10 @@ where
     /// `POST /v1/approve/flows/{flow}` (§9.14.1 A steps 3 and 4): the assertion over H(AAS)
     /// becomes the `authentication` Claim bound to the statement, issued at once, and the
     /// contribution is committed with the statement and the Claim.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one approval: statement, SPC, assertion, app factor, cooling, Claim, contribution"
+    )]
     pub async fn finish_approval<A, I, P: Approvals, Q: ApprovalClaims>(
         &self,
         devices: &Devices<A, I, P, Q>,

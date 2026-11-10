@@ -504,6 +504,10 @@ fn time_field(description: &str) -> Value {
 
 /// The schemas of this contract.
 #[must_use]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one schema table, read top to bottom"
+)]
 pub fn components() -> Value {
     json!({
         "BasisRef": {

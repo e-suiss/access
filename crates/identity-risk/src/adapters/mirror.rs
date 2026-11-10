@@ -15,7 +15,7 @@ use super::range_api::RangeApi;
 use crate::ports::RangeFetch;
 
 /// How often the mirror is refreshed.
-pub const REFRESH_EVERY: Duration = Duration::from_secs(24 * 60 * 60);
+pub const REFRESH_EVERY: Duration = Duration::from_hours(24);
 
 /// The directory of version directories.
 pub const VERSIONS: &str = "versions";
@@ -59,7 +59,10 @@ pub struct Downloaded {
 /// The directory of version `id` under the mirror `root`.
 #[must_use]
 pub fn version_dir(root: &Path, id: &[u8; 16]) -> PathBuf {
-    let name: String = id.iter().map(|b| format!("{b:02x}")).collect();
+    let name = id.iter().fold(String::new(), |mut s, b| {
+        let _ = std::fmt::Write::write_fmt(&mut s, format_args!("{b:02x}"));
+        s
+    });
     root.join(VERSIONS).join(name)
 }
 

@@ -406,6 +406,10 @@ where
     ///
     /// # Errors
     /// [`SessionError`].
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one answer: proof, decision, PIN declaration, signal and notice"
+    )]
     pub async fn answer_push(
         &self,
         answer: &[u8],

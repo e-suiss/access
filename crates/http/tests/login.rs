@@ -143,10 +143,9 @@ impl Notifier for Recording<'_> {
         m: &Message,
     ) -> impl Future<Output = Result<EventId, NotifyError>> + Send {
         let secret = match &m.body {
-            Body::Otp { code, .. } => code.expose().clone(),
+            Body::Otp { code, .. } | Body::SmsOtp { code, .. } => code.expose().clone(),
             Body::MagicLink { link, .. } => link.expose().clone(),
             Body::PushApproval { challenge, .. } => challenge.expose().clone(),
-            Body::SmsOtp { code, .. } => code.expose().clone(),
             _ => String::new(),
         };
         if let (

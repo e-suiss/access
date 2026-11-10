@@ -734,11 +734,11 @@ mod tests {
         }
         let passkey = Factor::passkey([1; 16], true, true, false, T);
         assert_eq!(
-            ct_ceiling_in(&[passkey.clone()], AssuranceProfile::TrPayment),
+            ct_ceiling_in(std::slice::from_ref(&passkey), AssuranceProfile::TrPayment),
             CtCeiling::Ct1
         );
         assert_eq!(
-            ct_ceiling_in(&[passkey.clone()], AssuranceProfile::Standard),
+            ct_ceiling_in(std::slice::from_ref(&passkey), AssuranceProfile::Standard),
             CtCeiling::Ct2
         );
         let both = [passkey, app];
@@ -754,7 +754,7 @@ mod tests {
     fn an_sms_code_is_an_aal2_second_factor_and_meets_no_ct() {
         let sms = Factor::sms(T);
         assert_eq!(sms.method.amr(), "sms");
-        assert_eq!(vector(&[sms.clone()]).aal, Aal::Aal1);
+        assert_eq!(vector(std::slice::from_ref(&sms)).aal, Aal::Aal1);
         let steps = [Factor::password(T), sms];
         assert_eq!(vector(&steps).aal, Aal::Aal2);
         assert!(!vector(&steps).phishing_resistant);

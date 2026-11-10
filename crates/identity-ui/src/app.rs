@@ -786,6 +786,7 @@ where
         self.drawn(&kit, reply).await
     }
 
+    #[expect(clippy::too_many_lines, reason = "one dispatch arm per method")]
     async fn submitted<N: Notifier + Sync>(
         &self,
         auth: &Signin<'_, C, N>,

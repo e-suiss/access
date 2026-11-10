@@ -89,10 +89,10 @@ impl RangeFetch for ToMock {
         let mut tcp = TcpStream::connect(("127.0.0.1", self.0))
             .await
             .map_err(|_| NoAnswer)?;
-        let extra: String = headers
-            .iter()
-            .map(|(n, v)| format!("{n}: {v}\r\n"))
-            .collect();
+        let extra = headers.iter().fold(String::new(), |mut s, (n, v)| {
+            let _ = std::fmt::Write::write_fmt(&mut s, format_args!("{n}: {v}\r\n"));
+            s
+        });
         let request = format!("GET {path} HTTP/1.1\r\nHost: ranges.test\r\n{extra}\r\n");
         tcp.write_all(request.as_bytes())
             .await

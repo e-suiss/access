@@ -774,10 +774,10 @@ impl Outbound {
         if !headers.iter().all(|(name, value)| header_ok(name, value)) {
             return Err(OutboundError::Url);
         }
-        let extra: String = headers
-            .iter()
-            .map(|(name, value)| format!("{name}: {value}\r\n"))
-            .collect();
+        let extra = headers.iter().fold(String::new(), |mut s, (name, value)| {
+            let _ = std::fmt::Write::write_fmt(&mut s, format_args!("{name}: {value}\r\n"));
+            s
+        });
         let request = format!(
             "GET {} HTTP/1.1\r\nHost: {}\r\nAccept: {accept}\r\n{extra}User-Agent: access\r\n\
              Accept-Encoding: identity\r\nConnection: close\r\n{}\r\n",
