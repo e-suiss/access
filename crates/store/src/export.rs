@@ -329,7 +329,10 @@ pub async fn notified(t: &mut TenantTx, id: [u8; 16]) -> Result<bool, StoreError
 }
 
 /// The realm's audit rows after `after` whose transactions have ended, in integration order,
-/// at most `limit` (OP-41, OP-44: every row, none sampled).
+/// at most `limit` (OP-41, OP-44: every row, none sampled). A row is returned only below every
+/// transaction still open at the snapshot that could write one: an open transaction counts
+/// unless it is a session of another database, which cannot write this table, so another
+/// database's long transaction does not hold the export back.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -340,11 +343,20 @@ pub async fn audit_after(
 ) -> Result<Vec<AuditRow>, StoreError> {
     let (tenant, realm) = scope(t)?;
     let rows = sqlx::query!(
-        r#"SELECT tenant_id, realm_id, (extract(epoch FROM at) * 1000)::bigint AS "at_ms!", id,
+        r#"WITH elsewhere AS (
+                  SELECT backend_xid::text::bigint AS x FROM pg_stat_activity
+                   WHERE backend_xid IS NOT NULL
+                     AND datid IS DISTINCT FROM (SELECT oid FROM pg_database
+                                                  WHERE datname = current_database())),
+                horizon AS (
+                  SELECT COALESCE(min(p.x), pg_snapshot_xmax(pg_current_snapshot())) AS h
+                    FROM pg_snapshot_xip(pg_current_snapshot()) AS p(x)
+                   WHERE (p.x::text::bigint % 4294967296) NOT IN (SELECT x FROM elsewhere))
+           SELECT tenant_id, realm_id, (extract(epoch FROM at) * 1000)::bigint AS "at_ms!", id,
                   xid::text::bigint AS "xid!", event_type, actor, target, correlation
              FROM access.identity_audit
             WHERE tenant_id = $1 AND realm_id = $2
-              AND xid < pg_snapshot_xmin(pg_current_snapshot())
+              AND xid < (SELECT h FROM horizon)
               AND (xid, id) > ($3::bigint::text::xid8, $4)
             ORDER BY xid, id
             LIMIT $5"#,
