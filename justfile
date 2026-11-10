@@ -437,7 +437,7 @@ kerberos:
         cargo build --locked
     )
     cargo build --locked -p access-parser-worker
-    bin="$(cargo test --locked -p access-edge-core --test channel --no-run --message-format=json | jq -r 'select(.executable != null and .target.name == "channel") | .executable')"
+    bin="$(cargo test --locked -p access-edge-core --test channel --no-run --message-format=json-render-diagnostics | jq -r 'select(.executable != null and .target.name == "channel") | .executable')"
     export ACCESS_TEST_GW_KERBEROS_BIN="$PWD/bins/access-gw-kerberos/target/debug/access-gw-kerberos"
     export ACCESS_TEST_PARSER_BIN="$PWD/target/debug/access-parser-worker"
     if [[ "$(id -u)" != 0 ]]; then

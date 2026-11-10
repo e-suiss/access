@@ -25,7 +25,7 @@ tokio = { workspace = true, features = ["net", "io-util", "time"] }
 tokio-rustls = { workspace = true, features = ["aws_lc_rs"], optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-rustix = { workspace = true, features = ["std", "net"] }
+rustix = { workspace = true, features = ["std", "net", "time"] }
 
 [dev-dependencies]
 access-http = { workspace = true }
