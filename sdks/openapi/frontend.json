@@ -1444,6 +1444,10 @@
           "options": {
             "type": "object",
             "description": "PublicKeyCredentialRequestOptionsJSON; the challenge is H(AAS) (§9.14.1 step 3). userVerification is required from CT2."
+          },
+          "spc": {
+            "type": "object",
+            "description": "Secure Payment Confirmation's request data (payeeName, payeeOrigin, total, instrument) from the canonical render, when the realm decided idp.realm.spc and the request is a payment; a payment.get assertion counts only when it shows exactly these (OP-156 m.3 (g))."
           }
         }
       },
@@ -1466,6 +1470,29 @@
           "state": {
             "type": "string",
             "description": "As GET /v1/approve."
+          },
+          "app_factor": {
+            "$ref": "#/components/schemas/AppFactorProof"
+          }
+        }
+      },
+      "AppFactorProof": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "device_key",
+          "signature"
+        ],
+        "properties": {
+          "device_key": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "The RFC 7638 thumbprint of an activated approver's key, 32 bytes."
+          },
+          "signature": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "ES256 r||s over dCBOR([\"access/approval-app-factor/v1\", issuer, H(AAS), true]): the app checked its own PIN; required for CT2 and CT3 under the TR payment profile (MD-11, OP-156 m.3 (e))."
           }
         }
       },

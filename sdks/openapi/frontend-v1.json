@@ -4233,6 +4233,76 @@
         }
       }
     },
+    "/v1/approvers/{device}/activate": {
+      "post": {
+        "operationId": "activateApprover",
+        "summary": "Makes an approver the app-controlled factor after a sign-in in the last 5 minutes: its key's Android key attestation or App Attest attestation for the challenge SHA-256(\"access/app-factor-attestation/v1\" 0x00 issuer 0x00 thumbprint at), and under the TR payment profile the SMS activation code (MD-11, OP-156 m.3 (e)).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "device",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sms/activation": {
+      "post": {
+        "operationId": "sendActivationSms",
+        "summary": "Texts the signed-in person a 6-digit activation code, 5 minutes, 3 tries, never to a line whose SIM changed in the last 90 days; the only SMS use of the TR payment profile (OP-156 m.3 (f)).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/first-contact/keys": {
       "get": {
         "operationId": "getFirstContactKeys",

@@ -2026,6 +2026,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/approvers/{device}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Makes an approver the app-controlled factor after a sign-in in the last 5 minutes: its key's Android key attestation or App Attest attestation for the challenge SHA-256("access/app-factor-attestation/v1" 0x00 issuer 0x00 thumbprint at), and under the TR payment profile the SMS activation code (MD-11, OP-156 m.3 (e)). */
+        post: operations["activateApprover"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sms/activation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Texts the signed-in person a 6-digit activation code, 5 minutes, 3 tries, never to a line whose SIM changed in the last 90 days; the only SMS use of the TR payment profile (OP-156 m.3 (f)). */
+        post: operations["sendActivationSms"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/first-contact/keys": {
         parameters: {
             query?: never;
@@ -5690,6 +5724,58 @@ export interface operations {
             path: {
                 device: string;
             };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    activateApprover: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    sendActivationSms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: {

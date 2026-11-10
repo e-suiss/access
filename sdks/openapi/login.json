@@ -548,7 +548,8 @@
           "link_code",
           "bot_token",
           "keep_signed_in",
-          "remember_device"
+          "remember_device",
+          "sms_code"
         ]
       },
       "Method": {
@@ -572,7 +573,9 @@
           "accept_invitation",
           "link",
           "acknowledge",
-          "push"
+          "push",
+          "send_sms",
+          "sms"
         ]
       },
       "TextId": {

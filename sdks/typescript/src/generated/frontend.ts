@@ -403,6 +403,8 @@ export interface components {
             render: components["schemas"]["RenderView"];
             /** @description PublicKeyCredentialRequestOptionsJSON; the challenge is H(AAS) (§9.14.1 step 3). userVerification is required from CT2. */
             options: Record<string, never>;
+            /** @description Secure Payment Confirmation's request data (payeeName, payeeOrigin, total, instrument) from the canonical render, when the realm decided idp.realm.spc and the request is a payment; a payment.get assertion counts only when it shows exactly these (OP-156 m.3 (g)). */
+            spc?: Record<string, never>;
         };
         ApprovalFinish: {
             /** @description The PublicKeyCredential JSON of the assertion (toJSON()), as a string or an object. */
@@ -411,6 +413,13 @@ export interface components {
             redirect_uri: string;
             /** @description As GET /v1/approve. */
             state: string;
+            app_factor?: components["schemas"]["AppFactorProof"];
+        };
+        AppFactorProof: {
+            /** @description The RFC 7638 thumbprint of an activated approver's key, 32 bytes. */
+            device_key: string;
+            /** @description ES256 r||s over dCBOR(["access/approval-app-factor/v1", issuer, H(AAS), true]): the app checked its own PIN; required for CT2 and CT3 under the TR payment profile (MD-11, OP-156 m.3 (e)). */
+            signature: string;
         };
         ApprovalFinished: {
             /** @description redirect_uri with exercise, render_digest, claim and state (OP-149 m.9, m.33 (c)). */
