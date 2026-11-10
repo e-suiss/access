@@ -1054,14 +1054,14 @@ pub const ROUTES: &[Route] = &[
         "oidfEntityConfiguration",
         "The realm issuer's OpenID Federation entity configuration, signed with its federation key (OP-155 m.3 (j)).",
     ),
-    planned(
+    live(
         Owner::P6,
         Verb::Get,
         "/federation/fetch",
         "oidfFetch",
         "Fetches a subordinate statement; served only in the intermediate or trust anchor role.",
     ),
-    planned(
+    live(
         Owner::P6,
         Verb::Get,
         "/federation/list",

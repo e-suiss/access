@@ -8,7 +8,7 @@ use access_kernel::json::{self, Json};
 
 use super::Discovery;
 use crate::domain::metadata;
-use crate::ports::{Directory, Keys, Unavailable};
+use crate::ports::{Directory, Keys, RealmEntry, Unavailable};
 
 /// How long an entity configuration is valid (PD, 24 hours).
 pub const CONFIGURATION_TTL_MS: u64 = 24 * 3_600_000;
@@ -35,6 +35,8 @@ const MAX_DOC: usize = 1 << 20;
 pub enum OidfReply {
     /// The signed entity configuration, `application/entity-statement+jwt`.
     Statement(String),
+    /// A JSON list of entity identifiers, `application/json`.
+    List(String),
     /// No realm here, or the realm is not a federation leaf.
     NotFound,
     /// The directory or the signer did not answer (fail-closed).
@@ -143,5 +145,93 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
             )
             .await?;
         Ok(Some(token))
+    }
+
+    /// The subordinates the realm's intermediate or trust anchor role vouches for; `None` while
+    /// the role is off (a leaf serves no fetch or list, §10.7.1 rule 1).
+    async fn subordinates(
+        &self,
+        authority: &str,
+        slug: Option<&str>,
+    ) -> Result<Option<(RealmEntry, Vec<(String, Json, Option<Json>)>)>, Unavailable> {
+        let Some(realm) = self.resolve(authority, slug).await? else {
+            return Ok(None);
+        };
+        let Some(fed) = self
+            .directory
+            .federation(&realm)
+            .await?
+            .filter(|f| f.enabled && f.ta_enabled)
+        else {
+            return Ok(None);
+        };
+        let Ok(Json::Array(list)) = json::parse(&fed.subordinates, MAX_DOC) else {
+            return Err(Unavailable);
+        };
+        let subs = list
+            .into_iter()
+            .filter_map(|s| {
+                let id = s.get("entity_id")?.as_str()?.to_owned();
+                let jwks = s.get("jwks")?.clone();
+                Some((id, jwks, s.get("metadata_policy").cloned()))
+            })
+            .collect();
+        Ok(Some((realm, subs)))
+    }
+
+    /// The list endpoint of the intermediate or trust anchor role (OIDF §8.2): the entity
+    /// identifiers of its subordinates, as JSON.
+    pub async fn federation_list(&self, authority: &str, slug: Option<&str>) -> OidfReply {
+        match self.subordinates(authority, slug).await {
+            Ok(Some((_, subs))) => {
+                let ids: Vec<String> = subs.into_iter().map(|(id, _, _)| id).collect();
+                OidfReply::List(build::list_response(&ids))
+            }
+            Ok(None) => OidfReply::NotFound,
+            Err(Unavailable) => OidfReply::Unavailable,
+        }
+    }
+
+    /// The fetch endpoint of the intermediate or trust anchor role (OIDF §8.1): its subordinate
+    /// statement about `sub`, signed with the realm's `federation` key at `now_ms`.
+    pub async fn federation_fetch(
+        &self,
+        authority: &str,
+        slug: Option<&str>,
+        sub: &str,
+        now_ms: u64,
+    ) -> OidfReply {
+        let found = match self.subordinates(authority, slug).await {
+            Ok(Some((realm, subs))) => subs
+                .into_iter()
+                .find(|(id, _, _)| id == sub)
+                .map(|s| (realm, s)),
+            Ok(None) => None,
+            Err(Unavailable) => return OidfReply::Unavailable,
+        };
+        let Some((realm, (id, jwks, policy))) = found else {
+            return OidfReply::NotFound;
+        };
+        let Ok(payload) = build::subordinate(&build::Subordinate {
+            iss: realm.issuer.as_str(),
+            sub: &id,
+            iat_ms: now_ms,
+            exp_ms: now_ms.saturating_add(CONFIGURATION_TTL_MS),
+            jwks: &jwks,
+            metadata_policy: policy.as_ref(),
+            metadata: None,
+            max_path_length: None,
+        }) else {
+            return OidfReply::Unavailable;
+        };
+        self.keys
+            .sign_federation(
+                realm.realm,
+                access_identity_oidf::statement::ENTITY_TYP,
+                payload.as_bytes(),
+                now_ms,
+            )
+            .await
+            .map_or(OidfReply::Unavailable, OidfReply::Statement)
     }
 }

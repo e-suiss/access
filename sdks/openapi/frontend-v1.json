@@ -3618,14 +3618,20 @@
         "operationId": "oidfFetch",
         "summary": "Fetches a subordinate statement; served only in the intermediate or trust anchor role.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/federation/list": {
@@ -3633,14 +3639,20 @@
         "operationId": "oidfList",
         "summary": "Lists subordinates; served only in the intermediate or trust anchor role.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/federation/resolve": {

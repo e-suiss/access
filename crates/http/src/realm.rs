@@ -89,7 +89,74 @@ where
                 },
             ),
         );
+    for (path, list) in [("/federation/fetch", false), ("/federation/list", true)] {
+        r = r
+            .route(
+                path,
+                get(move |s: Shared<D, K>, u: Uri, h: HeaderMap| {
+                    authority_role(s, None, u, h, list)
+                }),
+            )
+            .route(
+                &format!("/realms/{{slug}}{path}"),
+                get(
+                    move |s: Shared<D, K>, Path(slug): Path<String>, u: Uri, h: HeaderMap| {
+                        authority_role(s, Some(slug), u, h, list)
+                    },
+                ),
+            );
+    }
     r.with_state(shared)
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+}
+
+/// The fetch and list endpoints of the intermediate or trust anchor role (§10.7.1 rule 1): off
+/// by default, and not found while off.
+async fn authority_role<D: Directory, K: Keys>(
+    State(s): Shared<D, K>,
+    slug: Option<String>,
+    uri: Uri,
+    headers: HeaderMap,
+    list: bool,
+) -> Response {
+    let host = authority(&uri, &headers);
+    let reply = if list {
+        s.federation_list(host, slug.as_deref()).await
+    } else {
+        let sub = uri
+            .query()
+            .and_then(|q| access_identity_oauth::domain::request::Params::parse(q).ok())
+            .and_then(|p| p.get("sub").map(String::from));
+        let Some(sub) = sub else {
+            return Problem::new(StatusCode::BAD_REQUEST, "invalid-request", "Bad Request")
+                .into_response();
+        };
+        s.federation_fetch(host, slug.as_deref(), &sub, now_ms())
+            .await
+    };
+    oidf_reply(reply)
+}
+
+fn oidf_reply(reply: access_identity_oauth::app::oidf::OidfReply) -> Response {
+    use access_identity_oauth::app::oidf::OidfReply;
+    match reply {
+        OidfReply::Statement(jwt) => (
+            [(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static(access_identity_oidf::statement::CONTENT_TYPE),
+            )],
+            jwt,
+        )
+            .into_response(),
+        OidfReply::List(doc) => respond(Reply::Metadata(doc)),
+        OidfReply::NotFound => respond(Reply::NotFound),
+        OidfReply::Unavailable => respond(Reply::Unavailable),
+    }
 }
 
 /// The realm issuer's OpenID Federation entity configuration (§10.7.1 rule 1): a leaf serves
@@ -100,25 +167,10 @@ async fn entity_configuration<D: Directory, K: Keys>(
     uri: Uri,
     headers: HeaderMap,
 ) -> Response {
-    use access_identity_oauth::app::oidf::OidfReply;
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
-    match s
-        .entity_configuration(authority(&uri, &headers), slug.as_deref(), now)
-        .await
-    {
-        OidfReply::Statement(jwt) => (
-            [(
-                header::CONTENT_TYPE,
-                HeaderValue::from_static(access_identity_oidf::statement::CONTENT_TYPE),
-            )],
-            jwt,
-        )
-            .into_response(),
-        OidfReply::NotFound => respond(Reply::NotFound),
-        OidfReply::Unavailable => respond(Reply::Unavailable),
-    }
+    oidf_reply(
+        s.entity_configuration(authority(&uri, &headers), slug.as_deref(), now_ms())
+            .await,
+    )
 }
 
 /// The request's authority: the `Host` header, or the HTTP/2 `:authority`. It only selects a

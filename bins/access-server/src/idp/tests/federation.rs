@@ -412,6 +412,48 @@ mod admin {
             access_identity_oidf::statement::verify_configuration(&jwt, &issuer, real_now).unwrap();
         let op = ec.metadata_of("openid_provider").unwrap();
         assert!(op.get("federation_registration_endpoint").is_some());
+        // IDP-19, §10.7.1 rule 1, Ek B 4749, 5000
+        let base = path.trim_end_matches("/.well-known/openid-federation");
+        let list = format!("{base}/federation/list");
+        let fetch = format!("{base}/federation/fetch?sub=https%3A%2F%2Frp.federation.example");
+        assert_eq!(
+            get(&router, &host, &list).await.0,
+            404,
+            "the role is off by default"
+        );
+        assert_eq!(get(&router, &host, &fetch).await.0, 404);
+        let sub = Subordinate {
+            entity_id: String::from("https://rp.federation.example"),
+            jwks: access_crypto::jose::output::to_string(
+                &access_identity_oidf::testing::Key::new("rp")
+                    .unwrap()
+                    .jwks(),
+            ),
+            metadata_policy: Some(String::from(
+                r#"{"openid_relying_party":{"grant_types":{"subset_of":["authorization_code"]}}}"#,
+            )),
+        };
+        apply(&w, (t, r), d, FederationChange::TaEnable(vec![sub]), 4).await;
+        let (status, _, ids) = get(&router, &host, &list).await;
+        assert_eq!(status, 200);
+        assert_eq!(ids, r#"["https://rp.federation.example"]"#);
+        let (status, ct, statement) = get(&router, &host, &fetch).await;
+        assert_eq!(status, 200, "{statement}");
+        assert_eq!(ct, "application/entity-statement+jwt");
+        let s = access_identity_oidf::statement::verify_statement(&statement, &ec.jwks, real_now)
+            .unwrap();
+        assert_eq!(
+            (s.iss.as_str(), s.sub.as_str()),
+            (issuer.as_str(), "https://rp.federation.example")
+        );
+        assert!(s.metadata_policy.is_some());
+        let (_, _, jwt) = get(&router, &host, &path).await;
+        let ec =
+            access_identity_oidf::statement::verify_configuration(&jwt, &issuer, real_now).unwrap();
+        let entity = ec.metadata_of("federation_entity").unwrap();
+        assert!(entity.get("federation_fetch_endpoint").is_some());
+        let unknown = format!("{base}/federation/fetch?sub=https%3A%2F%2Fother.example");
+        assert_eq!(get(&router, &host, &unknown).await.0, 404);
     }
 
     /// Federation documents served in process, by URL.
