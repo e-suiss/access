@@ -212,7 +212,7 @@ impl<E: Env> OAuth<E> {
         id: &str,
     ) -> Result<Option<Result<(), Refusal>>, Unavailable> {
         use access_identity_oidf::chain::{self, FRESHNESS_MS};
-        // OIDF 1.0 §12.1.1.1: automatic registration carries its chain in the request object
+        // IDP-19, §10.7.1
         let object = params
             .get("request")
             .filter(|_| params.get("trust_chain").is_none());
