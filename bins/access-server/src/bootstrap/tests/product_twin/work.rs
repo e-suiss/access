@@ -139,6 +139,7 @@ impl Coordinator {
             ids: ids.clone(),
             declared: DeclaredTargets::default(),
             outbound: None,
+            wake: None,
         };
         let (platform, _) = crate::platform::routes(
             &pools,
