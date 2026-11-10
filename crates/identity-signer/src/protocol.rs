@@ -278,6 +278,7 @@ pub fn alg_of(name: &str) -> Option<JwsAlg> {
 }
 
 impl Request {
+    #[expect(clippy::too_many_lines, reason = "one arm per request of the protocol")]
     fn to_value(&self) -> Value {
         match self {
             Self::Ping => map(vec![("ping", Value::Bool(true))]),

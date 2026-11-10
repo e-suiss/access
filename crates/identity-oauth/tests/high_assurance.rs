@@ -10,6 +10,9 @@
     clippy::arithmetic_side_effects,
     clippy::indexing_slicing,
     clippy::too_many_lines,
+    clippy::many_single_char_names,
+    clippy::needless_pass_by_value,
+    clippy::unnecessary_to_owned,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
@@ -132,9 +135,7 @@ async fn realm_jws(a: &At<'_>, token: &str, typ: &str) -> Value {
     serde_json::from_slice(&v.payload).unwrap()
 }
 
-// IDP-12, OP-155 m.3 (k), Ek B 4717, 5044: a FAPI 2.0 client pushes a signed request, gets a
-// signed response, is sender-constrained and keeps its refresh token; a client_secret_*, RS256,
-// bearer or public client cannot hold the profile
+// IDP-12, OP-155 m.3 (k), Ek B 4717, 5044
 #[tokio::test]
 async fn fapi2_clients_are_held_to_the_profile() {
     let c = Cluster::new(&["ha-fapi"]).await;
@@ -143,7 +144,7 @@ async fn fapi2_clients_are_held_to_the_profile() {
         fapi2: true,
         ..ClientProfileRow::default()
     };
-    // IDP-12: RS256, a legacy secret method and the bearer exception never stand with FAPI 2.0
+    // IDP-12
     for bad in [
         ClientProfileRow {
             rs256: true,
@@ -162,7 +163,7 @@ async fn fapi2_clients_are_held_to_the_profile() {
     }
     a.set_profile('c', FAPI, &fapi).await.unwrap();
 
-    // RFC 9126 §6: no request at /authorize directly
+    // RFC 9126 §6
     let cookie = a.sign_in(now() - 1000).await;
     let to = location(
         &a.authorize(&[("client_id", a.f.keyed.as_str())], Some(&cookie))
@@ -170,7 +171,6 @@ async fn fapi2_clients_are_held_to_the_profile() {
     );
     assert_eq!(query(&to, "error"), "invalid_request", "{to}");
 
-    // RFC 9101: an unsigned pushed request is refused
     let plain = par(
         &a,
         &[
@@ -184,7 +184,6 @@ async fn fapi2_clients_are_held_to_the_profile() {
     .await;
     assert_eq!(error(&plain), "invalid_request");
 
-    // RFC 9101, JARM
     let object = request_object(&a, "");
     let pushed = body(&par(&a, &[("request", object.as_str())], &[]).await, 201);
     let to = redeem(&a, &a.f.keyed, pushed["request_uri"].as_str().unwrap()).await;
@@ -198,7 +197,7 @@ async fn fapi2_clients_are_held_to_the_profile() {
     let t = body(&keyed_exchange(&a, &code, true).await, 200);
     assert_eq!(t["token_type"], "DPoP");
 
-    // OP-155 m.3 (k): refresh without rotation
+    // OP-155 m.3 (k)
     let refresh = t["refresh_token"].as_str().unwrap().to_owned();
     let assertion = a.assertion(a.issuer());
     for _ in 0..2 {
@@ -220,14 +219,14 @@ async fn fapi2_clients_are_held_to_the_profile() {
     }
     let _ = assertion;
 
-    // TN-27: sender-constrained only
+    // TN-27
     let pushed = body(&par(&a, &[("request", object.as_str())], &[]).await, 201);
     let to = redeem(&a, &a.f.keyed, pushed["request_uri"].as_str().unwrap()).await;
     let jarm = realm_jws(&a, &query(&to, "response"), "JWT").await;
     let unbound = keyed_exchange(&a, jarm["code"].as_str().unwrap(), false).await;
     assert_eq!(error(&unbound), "invalid_dpop_proof");
 
-    // IDP-12: a client_secret_basic client is not taken under FAPI 2.0
+    // IDP-12
     a.set_profile('b', FAPI, &fapi).await.unwrap();
     let code = a.code(&a.f.public).await;
     let r = a
@@ -244,8 +243,7 @@ async fn fapi2_clients_are_held_to_the_profile() {
     assert_eq!(error(&r), "invalid_client");
 }
 
-// IDI-6, MD-3, Ek B 4707: a request object signed with an algorithm outside the client's
-// allowlist is refused; an encrypted one opens with the realm's jwe-enc key only
+// IDI-6, MD-3, Ek B 4707
 #[tokio::test]
 async fn request_objects_follow_the_client_allowlist() {
     let c = Cluster::new(&["ha-jar"]).await;
@@ -291,7 +289,7 @@ async fn request_objects_follow_the_client_allowlist() {
     let es256 = sign(&a.f.client_key, r#"{"alg":"ES256","kid":"e1"}"#, &payload);
     body(&par(&a, &[("request", es256.as_str())], &[]).await, 201);
 
-    // OP-155 m.3 (k): encrypted to the realm's jwe-enc key
+    // OP-155 m.3 (k)
     let realm_key = agreement::PrivateKey::generate(&ECDH_P256).unwrap();
     let realm_public = realm_key.compute_public_key().unwrap();
     let to = access_crypto::jwe::RecipientKey::P256(realm_public.as_ref().to_vec());
@@ -320,9 +318,7 @@ fn open(key: access_crypto::jwe::DecryptKey, jwe: &str) -> String {
     String::from_utf8(access_crypto::jwe::decrypt(&key, jwe).unwrap().plaintext).unwrap()
 }
 
-// CR-4, RR-36, Ek B 4708, 4725, 5103, 5105: the JARM response verifies with the realm's keys;
-// ID token, JARM and userinfo are encrypted to the client and decrypt with its key; RSA1_5 is
-// never stored
+// CR-4, RR-36, Ek B 4708, 4725, 5103, 5105
 #[tokio::test]
 async fn jarm_and_jwe_reach_the_client_only() {
     let c = Cluster::new(&["ha-jwe"]).await;
@@ -373,7 +369,6 @@ async fn jarm_and_jwe_reach_the_client_only() {
     let wrong = access_crypto::jwe::DecryptKey::P256(wrong);
     assert!(access_crypto::jwe::decrypt(&wrong, t["id_token"].as_str().unwrap()).is_err());
 
-    // OIDC Core §5.3.2
     let r = a.userinfo(t["access_token"].as_str().unwrap()).await;
     let Reply::Jwt { body: jwe, .. } = r else {
         panic!("{r:?}");
@@ -394,7 +389,7 @@ async fn jarm_and_jwe_reach_the_client_only() {
     assert!(page.contains("name=\"response\""));
 }
 
-// CR-4, Ek B 4726: RSA-OAEP-256 is one client's opt-in
+// CR-4, Ek B 4726
 #[tokio::test]
 async fn rsa_oaep_256_is_a_client_opt_in() {
     let c = Cluster::new(&["ha-oaep"]).await;
@@ -466,9 +461,7 @@ async fn mtls_exchange(a: &At<'_>, code: &str, chain: &[Vec<u8>]) -> Reply {
     .await
 }
 
-// RFC 8705 §2.1, §3, TN-32, MD-8, Ek B 4692, 4713, 5091, 4854: a PKI client authenticates with a
-// trusted, unrevoked certificate naming its one registered SAN; its token carries x5t#S256 and
-// fails at the resource with another certificate; a revoked or two-SAN certificate is refused
+// RFC 8705 §2.1, §3, TN-32, MD-8, Ek B 4692, 4713, 5091, 4854
 #[tokio::test]
 async fn mutual_tls_clients_bind_their_tokens_to_the_certificate() {
     let c = Cluster::new(&["ha-mtls"]).await;
@@ -478,7 +471,7 @@ async fn mutual_tls_clients_bind_their_tokens_to_the_certificate() {
         tls_name: Some((String::from("san_dns"), String::from("svc.example"))),
         ..ClientProfileRow::default()
     };
-    // §10.4.3: a public client binds with DPoP, never mutual TLS
+    // §10.4.3
     a.set_profile('a', UPDATE, &profile).await.unwrap();
     let r = a
         .token_over(
@@ -591,7 +584,7 @@ async fn mutual_tls_clients_bind_their_tokens_to_the_certificate() {
     );
 }
 
-// RFC 8705 §2.2, Ek B 4692: a self-signed client presents one of the certificates it registered
+// RFC 8705 §2.2, Ek B 4692
 #[tokio::test]
 async fn self_signed_clients_present_a_registered_certificate() {
     let c = Cluster::new(&["ha-self"]).await;
@@ -620,7 +613,7 @@ async fn self_signed_clients_present_a_registered_certificate() {
     );
 }
 
-// CR-38, OP-155 m.3 (k), Ek B 5088: client_secret_post is one client's opt-in
+// CR-38, OP-155 m.3 (k), Ek B 5088
 #[tokio::test]
 async fn client_secret_post_is_an_opt_in() {
     let c = Cluster::new(&["ha-post"]).await;
@@ -691,8 +684,7 @@ fn hs256(secret: &[u8], id: &str, aud: &str) -> String {
     format!("{input}.{}", b64url_encode(tag.as_ref()))
 }
 
-// CR-3, OP-148 m.16 (l), Ek B 5092: client_secret_jwt verifies with the secret the realm KEK
-// opens for that client only, once per jti
+// CR-3, OP-148 m.16 (l), Ek B 5092
 #[tokio::test]
 async fn client_secret_jwt_uses_the_sealed_secret() {
     let c = Cluster::new(&["ha-csj"]).await;
@@ -751,8 +743,7 @@ async fn client_secret_jwt_uses_the_sealed_secret() {
     );
 }
 
-// TN-27, OP-155 m.3 (k), Ek B 5090: the legacy bearer exception issues identity tokens without
-// cnf to one confidential client, never authority, and ends with that client's decision
+// TN-27, OP-155 m.3 (k), Ek B 5090
 #[tokio::test]
 async fn the_legacy_bearer_exception_is_one_clients() {
     let c = Cluster::new(&["ha-bear"]).await;
@@ -821,7 +812,7 @@ async fn the_legacy_bearer_exception_is_one_clients() {
     assert_eq!(support::status(&bearer(access).await), 401);
 }
 
-// §10.4.5, Ek B 5098: an unknown kid fetches the client's JWKS again at most once a minute
+// §10.4.5, Ek B 5098
 #[tokio::test]
 async fn an_unknown_kid_refetches_once_then_refuses() {
     let c = Cluster::new(&["ha-kid"]).await;
@@ -890,8 +881,7 @@ async fn an_unknown_kid_refetches_once_then_refuses() {
     assert_eq!(refetches(), 1);
 }
 
-// IDP-24, §10.4.6, Ek B 5096: front-channel logout frames each opted-in client with iss and sid,
-// only while the realm allows it; back-channel stays the default
+// IDP-24, §10.4.6, Ek B 5096
 #[tokio::test]
 async fn front_channel_logout_is_a_realm_and_client_opt_in() {
     let c = Cluster::new(&["ha-fcl"]).await;
@@ -931,9 +921,7 @@ async fn front_channel_logout_is_a_realm_and_client_opt_in() {
     assert!(page.contains(&expected), "{page}");
 }
 
-// CR-2, MD-3, MD-6, OP-125, Ek B 5093, 5094, 5103, 5104, 5106: a client that opted in gets RS256
-// ID tokens and JARM from the realm's RSA-3072 key, made on first use and published in the JWKS;
-// its access token stays on the realm's own algorithm, and the signature checks byte for byte
+// CR-2, MD-3, MD-6, OP-125, Ek B 5093, 5094, 5103, 5104, 5106
 #[tokio::test]
 async fn rs256_identity_assertions_are_a_client_opt_in() {
     let c = Cluster::new(&["ha-rs"]).await;
@@ -1008,7 +996,7 @@ async fn rs256_identity_assertions_are_a_client_opt_in() {
     }
 }
 
-// TN-14, Ek B 5095: userinfo is a JWT signed by the realm key when the client asks
+// TN-14, Ek B 5095
 #[tokio::test]
 async fn userinfo_can_be_signed_by_the_realm_key() {
     let c = Cluster::new(&["ha-ui"]).await;
@@ -1029,9 +1017,7 @@ async fn userinfo_can_be_signed_by_the_realm_key() {
     assert!(info["sub"].is_string());
 }
 
-// RFC 7522, OP-154 m.3 (m), OP-155 m.3 (k), Ek B 4703: a SAML 2.0 assertion is taken only from
-// the accepted upstream a client opted in to, verified in the worker, once; a broken signature
-// is refused, and an assertion is never a grant
+// RFC 7522, OP-154 m.3 (m), OP-155 m.3 (k), Ek B 4703
 #[tokio::test]
 async fn saml_assertions_are_one_clients_claim_input() {
     use access_identity_oauth::ports::profile::{SamlRefused, SamlSubject};

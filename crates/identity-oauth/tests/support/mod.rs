@@ -14,6 +14,7 @@
     clippy::must_use_candidate,
     clippy::too_many_lines,
     clippy::many_single_char_names,
+    clippy::type_complexity,
     reason = "test fixtures"
 )]
 
@@ -166,14 +167,14 @@ impl JwtSecrets for ScriptedSecrets {
         _: RealmId,
         _: [u8; 16],
         sealed: &'a access_store::client_profiles::SealedJwtSecret,
-    ) -> Held<'a, Option<zeroize::Zeroizing<Vec<u8>>>> {
+    ) -> Held<'a, Option<access_identity_oauth::ports::profile::Zeroizing<Vec<u8>>>> {
         let s = self
             .0
             .lock()
             .unwrap()
             .get(&sealed.ciphertext)
             .cloned()
-            .map(zeroize::Zeroizing::new);
+            .map(access_identity_oauth::ports::profile::Zeroizing::new);
         Box::pin(async move { Ok(s) })
     }
 }

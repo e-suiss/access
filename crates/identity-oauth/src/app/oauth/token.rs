@@ -465,6 +465,7 @@ impl<E: Env> OAuth<E> {
     /// RFC 6749 §6, TN-31: the refresh token rotates on every use; a rotated token presented
     /// again revokes the whole grant and raises the subject's `session_epoch`. A refresh never
     /// outlives the session it came from (G57, EP-2).
+    #[expect(clippy::too_many_lines, reason = "one refresh, its checks in order")]
     async fn rotate(
         &self,
         tx: &mut <E::Db as crate::ports::oauth::OAuthDb>::Tx,

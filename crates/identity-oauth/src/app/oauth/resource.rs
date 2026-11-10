@@ -192,6 +192,10 @@ impl<E: Env> OAuth<E> {
         }
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one userinfo request, its bindings and answer forms in order"
+    )]
     async fn userinfo_inner(
         &self,
         realm: &Realm,
@@ -270,7 +274,6 @@ impl<E: Env> OAuth<E> {
             {
                 None
             }
-            // Ek B 5090
             (Binding::Bearer, false) => None,
             _ => return Ok(unauthorized("invalid_token")),
         };
@@ -297,8 +300,8 @@ impl<E: Env> OAuth<E> {
         let Some(client) = client else {
             return Ok(unauthorized("invalid_token"));
         };
-        // OP-155 m.3 (k): the exception ends with the client's decision
-        if at.binding == Binding::Bearer && !(client.profile.legacy_bearer && !client.profile.fapi2)
+        // OP-155 m.3 (k)
+        if at.binding == Binding::Bearer && (!client.profile.legacy_bearer || client.profile.fapi2)
         {
             return Ok(unauthorized("invalid_token"));
         }
@@ -313,7 +316,6 @@ impl<E: Env> OAuth<E> {
             )
             .await?;
         body.insert(String::from("sub"), Value::from(at.sub));
-        // OIDC Core §5.3.2, TN-14, CR-4
         let encrypt = client
             .profile
             .encryption
@@ -458,6 +460,10 @@ impl<E: Env> OAuth<E> {
             .unwrap_or_else(|Unavailable| active_false())
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one introspection, each token kind in order"
+    )]
     async fn introspect_inner(
         &self,
         realm: &Realm,

@@ -282,7 +282,7 @@ mod tests {
         );
     }
 
-    // OP-125, OP-144: exact length; no leading-zero padding, no truncation
+    // OP-125, OP-144
     #[test]
     fn signature_length_is_exact() {
         let (key, _) = RsaIdKey::generate().unwrap();

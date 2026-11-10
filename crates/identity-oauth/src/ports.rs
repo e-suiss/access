@@ -61,6 +61,10 @@ pub trait Directory: Send + Sync {
     reason = "each flag is one realm decision the metadata declares"
 )]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is one realm decision the metadata declares"
+)]
 pub struct Facts {
     /// Active clients that read the realm's public `sub` (MD-10).
     pub public_sub_clients: u64,

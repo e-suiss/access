@@ -315,39 +315,14 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                 }
                 Response::Opened
             }
-            Request::Jwks(realm) => {
-                let rsa = self
-                    .rsa_id(realm)
-                    .map(access_crypto::rsa_id::RsaIdKey::public_jwk);
-                self.rings.get(&realm).map_or_else(
-                    || Response::Error(String::from(UNKNOWN_REALM)),
-                    |(_, ring)| Response::Jwks(with_rsa(ring.jwks(), rsa.as_deref())),
-                )
-            }
+            Request::Jwks(realm) => self.jwks(realm),
             // MD-6, CR-2, OP-155 m.3 (k)
             Request::SignRs256 {
                 realm,
                 typ,
                 payload,
                 at,
-            } => {
-                if at.abs_diff(now) > MAX_SKEW_MS {
-                    return Response::Error(String::from("signer-time"));
-                }
-                if !self.rings.contains_key(&realm) {
-                    return Response::Error(String::from(UNKNOWN_REALM));
-                }
-                let Some(key) = self.open_rsa_id(realm) else {
-                    return Response::Error(String::from("signer-outage"));
-                };
-                match key.sign_compact(&typ, &payload) {
-                    Ok(token) => Response::Signed {
-                        token,
-                        kid: *key.kid(),
-                    },
-                    Err(e) => Response::Error(String::from(e.code())),
-                }
-            }
+            } => self.sign_rs256(realm, &typ, &payload, at, now),
             Request::Sign {
                 realm,
                 typ,
@@ -480,6 +455,44 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             Some(k) if k.party() == party => Ok(k),
             Some(_) => Err(IssuerError::OtherIssuer),
             None => Err(IssuerError::Stored),
+        }
+    }
+
+    /// The realm's JWKS, its `rsa-id` key after the JOSE keys when it has one.
+    fn jwks(&mut self, realm: Realm) -> Response {
+        let rsa = self
+            .rsa_id(realm)
+            .map(access_crypto::rsa_id::RsaIdKey::public_jwk);
+        self.rings.get(&realm).map_or_else(
+            || Response::Error(String::from(UNKNOWN_REALM)),
+            |(_, ring)| Response::Jwks(with_rsa(ring.jwks(), rsa.as_deref())),
+        )
+    }
+
+    /// Signs `payload` as an RS256 JWS of `typ` with the realm's `rsa-id` key (MD-6, CR-2).
+    fn sign_rs256(
+        &mut self,
+        realm: Realm,
+        typ: &str,
+        payload: &[u8],
+        at: u64,
+        now: u64,
+    ) -> Response {
+        if at.abs_diff(now) > MAX_SKEW_MS {
+            return Response::Error(String::from("signer-time"));
+        }
+        if !self.rings.contains_key(&realm) {
+            return Response::Error(String::from(UNKNOWN_REALM));
+        }
+        let Some(key) = self.open_rsa_id(realm) else {
+            return Response::Error(String::from("signer-outage"));
+        };
+        match key.sign_compact(typ, payload) {
+            Ok(token) => Response::Signed {
+                token,
+                kid: *key.kid(),
+            },
+            Err(e) => Response::Error(String::from(e.code())),
         }
     }
 

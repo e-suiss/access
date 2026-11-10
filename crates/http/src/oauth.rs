@@ -206,7 +206,7 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
             .iter()
             .filter_map(|v| v.to_str().ok())
             .collect();
-        // RFC 8705 §3: only the certificate of this TLS connection, never a forwarded header
+        // RFC 8705 §3
         return render(
             s.userinfo_mtls(
                 &realm,

@@ -10,8 +10,7 @@ use serde_json::Value;
 
 use crate::support::{CB, Cluster, VERIFIER, body, error, location, now, query};
 
-// IDP-24, OP-155 m.3 (k), Ek B 5096, 5088, 5092: front-channel logout and the legacy secret
-// methods are declared only while the realm or one of its clients turned them on
+// IDP-24, OP-155 m.3 (k), Ek B 5096, 5088, 5092
 #[test]
 fn legacy_surfaces_are_declared_only_when_enabled() {
     use access_identity_oauth::domain::metadata::{RealmFacts, authorization_server_of};
@@ -71,7 +70,7 @@ fn metadata_offers_no_forbidden_surface() {
     let text = authorization_server(&issuer, &SERVED);
     let m: Value = serde_json::from_str(&text).unwrap();
     assert_eq!(m["response_types_supported"], serde_json::json!(["code"]));
-    // OP-155 m.3 (k): JARM, never a fragment mode
+    // OP-155 m.3 (k)
     assert_eq!(
         m["response_modes_supported"],
         serde_json::json!(["query", "jwt", "query.jwt", "form_post.jwt"])
@@ -90,7 +89,7 @@ fn metadata_offers_no_forbidden_surface() {
             "urn:ietf:params:oauth:grant-type:jwt-bearer"
         ])
     );
-    // OP-155 m.3 (k): not advertised unless enabled
+    // OP-155 m.3 (k)
     for key in [
         "check_session_iframe",
         "frontchannel_logout_supported",

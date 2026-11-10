@@ -1432,6 +1432,8 @@ impl Env {
                 id_token: Vec::new(),
                 userinfo: vec![String::from("locale")],
             }),
+            response_mode: access_identity_oauth::domain::request::ResponseMode::Query,
+            signed: false,
         };
         let handle = [u8::try_from(self.pos.load(Ordering::SeqCst)).unwrap(); 32];
         let hash = access_crypto::oauth::opaque_digest(

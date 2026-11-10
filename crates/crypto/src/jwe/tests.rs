@@ -40,7 +40,7 @@ fn ecdh_es_a256kw_round_trips() {
     );
 }
 
-// CR-4: RSA-OAEP-256 is the per-client opt-in
+// CR-4
 #[test]
 fn rsa_oaep_256_round_trips() {
     let (to, pkcs8) = rsa(KeySize::Rsa2048);
@@ -55,7 +55,7 @@ fn forged(header: &str, rest: &str) -> String {
     format!("{}.{rest}", b64url_encode(header.as_bytes()))
 }
 
-// CR-4: RSA1_5 is never accepted, whatever the key
+// CR-4
 #[test]
 fn rsa1_5_and_unknown_algorithms_are_refused() {
     let (_, pkcs8) = rsa(KeySize::Rsa2048);

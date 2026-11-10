@@ -63,7 +63,6 @@ impl<E: Env> OAuth<E> {
                 return Ok(Err(SamlRefusal::Invalid));
             }
         };
-        // RFC 7522 §3 #8
         let mut input = subject.issuer.as_bytes().to_vec();
         input.push(0);
         input.extend_from_slice(subject.id.as_bytes());

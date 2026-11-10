@@ -6,7 +6,7 @@
 
 use access_store::client_profiles::SealedJwtSecret;
 use access_store::identity::RealmId;
-use zeroize::Zeroizing;
+pub use zeroize::Zeroizing;
 
 pub use crate::domain::fapi::CertificateNames;
 use crate::ports::oauth::Held;

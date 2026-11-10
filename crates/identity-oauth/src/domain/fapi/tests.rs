@@ -19,7 +19,7 @@ fn fapi() -> ClientProfile {
     }
 }
 
-// IDP-12, OP-155 m.3 (k), Ek B 5044: confidential, private_key_jwt or mTLS, no RSA, no bearer
+// IDP-12, OP-155 m.3 (k), Ek B 5044
 #[test]
 fn fapi2_refuses_public_secret_rsa_and_bearer_clients() {
     assert_eq!(check(&keyed(), &fapi()), Ok(()));
@@ -50,7 +50,7 @@ fn fapi2_refuses_public_secret_rsa_and_bearer_clients() {
     assert_eq!(check(&secret(), &mtls), Ok(()));
 }
 
-// §10.4.3, Ek B 4854: browser, mobile and SPA clients bind with DPoP; M2M and FAPI either way
+// §10.4.3, Ek B 4854
 #[test]
 fn public_clients_never_use_mutual_tls() {
     let mtls = ClientProfile {

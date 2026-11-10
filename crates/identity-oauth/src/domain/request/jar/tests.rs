@@ -72,7 +72,7 @@ fn signed_request_objects_carry_the_request() {
     );
 }
 
-// IDI-6, MD-3: the algorithm comes from the client's allowlist, never the header alone
+// IDI-6, MD-3
 #[test]
 fn an_algorithm_outside_the_client_allowlist_is_refused() {
     let pair = RsaKeyPair::generate(KeySize::Rsa2048).unwrap();
