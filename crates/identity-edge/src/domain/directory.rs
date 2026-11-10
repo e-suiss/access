@@ -720,7 +720,7 @@ mod tests {
         assert_eq!(a, 65_536 + first % ((1 << 31) - 65_536));
     }
 
-    // §10.6.3: DN normalisation and escaping
+    // §10.6.3
     #[test]
     fn dns_normalise() {
         let d = Dn::parse(" UID = Ada ,OU=People, o=Corp").unwrap();
@@ -738,7 +738,7 @@ mod tests {
         );
     }
 
-    // §10.6.3: groupOfNames and posixGroup in one entry, memberOf operational
+    // §10.6.3
     #[test]
     fn the_tree_has_people_and_groups() {
         let t = tree();
@@ -766,7 +766,7 @@ mod tests {
         assert!(ops.attributes.iter().any(|(n, _)| n == "memberOf"));
     }
 
-    // §10.6.3: three-valued filters and the in-chain rule
+    // §10.6.3
     #[test]
     fn filters_evaluate() {
         let t = tree();

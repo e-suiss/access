@@ -649,9 +649,7 @@ fn paged(m: &LdapMsg) -> Option<Vec<u8>> {
     })
 }
 
-// §10.6.3, IDP-16, OP-155 m.3 (n): only the LDAP credential binds, as dn=token or under the
-// holder's DN; the realm issuer queues the ldap-bind authentication Claim; the tree, memberOf
-// and the in-chain rule
+// §10.6.3, IDP-16, OP-155 m.3 (n)
 #[tokio::test]
 async fn an_app_password_binds_and_reads_the_directory_tree() {
     let w = world(81).await;
@@ -769,7 +767,7 @@ async fn an_app_password_binds_and_reads_the_directory_tree() {
     );
 }
 
-// IDP-16, §10.6.3: a primary password never binds; only the LDAP credential class does
+// IDP-16, §10.6.3
 #[tokio::test]
 async fn a_primary_password_never_binds() {
     let w = world(82).await;
@@ -817,8 +815,7 @@ async fn a_primary_password_never_binds() {
     assert_eq!(code(&done), LdapResultCode::InsufficentAccessRights);
 }
 
-// §10.6.3, Ek B 4975, 5049: unauthenticated binds are refused, anonymous reads only the root DSE,
-// and neither DIGEST-MD5 nor SCRAM is offered
+// §10.6.3, Ek B 4975, 5049
 #[tokio::test]
 async fn anonymous_reads_only_the_root_dse() {
     let w = world(83).await;
@@ -908,7 +905,7 @@ async fn anonymous_reads_only_the_root_dse() {
     );
 }
 
-// IDP-16, Ek B 5048: the directory is read-only; writes answer unwillingToPerform (53)
+// IDP-16, Ek B 5048
 #[tokio::test]
 async fn writes_answer_unwilling_to_perform() {
     let w = world(84).await;
@@ -952,8 +949,7 @@ async fn writes_answer_unwilling_to_perform() {
     );
 }
 
-// IDP-16, Ek B 4797: StartTLS is off on LDAPS; on the StartTLS listener a simple bind without TLS
-// answers confidentialityRequired (13), and binds after StartTLS
+// IDP-16, Ek B 4797
 #[tokio::test]
 async fn a_plain_bind_without_tls_needs_confidentiality() {
     let w = world(85).await;
@@ -1002,7 +998,7 @@ async fn a_plain_bind_without_tls_needs_confidentiality() {
     assert_eq!(code(&m), LdapResultCode::OperationsError);
 }
 
-// §10.6.3, OP-155 m.3 (n): paged results with an HMAC'd opaque cookie; a tampered cookie is refused
+// §10.6.3, OP-155 m.3 (n)
 #[tokio::test]
 async fn paged_results_refuse_a_tampered_cookie() {
     let w = world(86).await;
@@ -1076,8 +1072,7 @@ async fn paged_results_refuse_a_tampered_cookie() {
     assert_eq!(code(&done), LdapResultCode::UnwillingToPerform);
 }
 
-// GHSA-qcxq-75wr-5cm8, OP-125, Ek B 5102: a deeply nested BER message is refused before decoding
-// and without recursion; an oversized length closes the connection before its body is read
+// GHSA-qcxq-75wr-5cm8, OP-125, Ek B 5102
 #[tokio::test]
 async fn hostile_ber_is_refused_before_decoding() {
     let w = world(87).await;
@@ -1105,8 +1100,7 @@ async fn hostile_ber_is_refused_before_decoding() {
     );
 }
 
-// §10.6.3, RFC 3062, Ek B 4799: a password modify changes only the LDAP credential just presented,
-// with a notice, a session_epoch bump and a new authenticator-binding Claim (SEC18 cooling)
+// §10.6.3, Ek B 4799
 #[tokio::test]
 async fn password_modify_replaces_only_the_ldap_credential() {
     let w = world(88).await;
@@ -1166,8 +1160,7 @@ async fn password_modify_replaces_only_the_ldap_credential() {
     );
 }
 
-// §10.6.3, Ek B 4798: SASL EXTERNAL with a client certificate the realm's certificate sign-in
-// accepts; revocation fails closed
+// §10.6.3, Ek B 4798
 #[tokio::test]
 async fn sasl_external_binds_with_an_accepted_certificate() {
     let w = world(89).await;
@@ -1227,7 +1220,7 @@ async fn sasl_external_binds_with_an_accepted_certificate() {
     assert_eq!(hits.len(), 1);
 }
 
-// §10.6.3: revoking an app password ends what its bind may read
+// §10.6.3
 #[tokio::test]
 async fn a_revoked_app_password_reads_nothing() {
     let w = world(90).await;

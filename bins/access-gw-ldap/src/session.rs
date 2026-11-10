@@ -351,7 +351,7 @@ impl<'a> Session<'a> {
         }
     }
 
-    // §10.6.3, RFC 3062: only the LDAP credential just presented changes
+    // §10.6.3
     async fn password(&mut self, id: i32, x: &LdapExtendedRequest) -> LdapMsg {
         let Some(bound) = self.bound.clone() else {
             return extended(id, LdapResultCode::InsufficentAccessRights, "bind first");

@@ -158,7 +158,7 @@ mod tests {
         inner
     }
 
-    // GHSA-qcxq-75wr-5cm8: a deeply nested message is refused without recursion
+    // GHSA-qcxq-75wr-5cm8
     #[test]
     fn deep_nesting_is_refused_without_recursion() {
         assert_eq!(check(&nested(MAX_DEPTH)), Ok(()));
@@ -168,7 +168,7 @@ mod tests {
         assert_eq!(check(&hostile), Err(BerError::TooDeep));
     }
 
-    // OP-155 m.3 (n), OP-125: the length is checked before the body is read
+    // OP-155 m.3 (n), OP-125
     #[test]
     fn oversized_messages_are_refused_from_the_header() {
         assert_eq!(frame_len(&[0x30]), Ok(None));
