@@ -70,6 +70,7 @@ fn config(twin: &RelayTwin, credential: PathBuf) -> Config {
             management_api: "https://api.access.test".to_owned(),
             products: BTreeMap::new(),
             platform_realm: None,
+            relay_product: None,
             relay_platform: RelayPlatform {
                 tenant: "access".to_owned(),
                 credential_file: credential,

@@ -1,8 +1,11 @@
 //! İYS consent records on the real plane and store (IDP-37 (4), B23, E42, OP-156 m.3 (c)): the
 //! realm's `idp.realm.iys` and `idp.realm.preference_topics` through commit, a preference change
-//! that hands Relay one sealed consent record per commercial channel, the event that names the
-//! channels and never the address, and Relay's reports through `POST /relay/v1/iys-status` under
-//! its platform client's RFC 7523 assertion, shown back in the person's preferences.
+//! that hands Relay one sealed consent record per commercial channel, carried by the courier
+//! into the Relay twin, the event that names the channels and never the address, and Relay's
+//! reports through `POST /relay/v1/iys-status` under its platform client's RFC 7523 assertion,
+//! shown back in the person's preferences.
+
+use std::os::unix::fs::PermissionsExt as _;
 
 use access_http::relay_callback::router as iys_router;
 use access_identity_account::adapters::pg::PgAccounts;
@@ -13,10 +16,16 @@ use access_identity_account::app::sealing::subject_key;
 use access_identity_account::app::{Actor, Realm};
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::status::AccountStatus;
+use access_identity_account::notify::courier::Courier;
+use access_identity_account::notify::delivery::Backoff;
 use access_identity_account::notify::envelope::parse;
+use access_identity_account::notify::http::{HttpRelay, HttpRelayConfig, RelayEndpoint};
 use access_identity_account::notify::message::{Address, Body, IysChannel, IysRecipient};
 use access_identity_account::notify::notifier::OutboxNotifier;
+use access_identity_account::notify::pg::PgCourierStore;
+use access_identity_account::notify::ports::RealmKeys;
 use access_identity_account::ports::{AccountDb as _, AccountTx as _};
+use access_identity_account::testing::relay::RelayTwin;
 use access_identity_admin::domain::Change;
 use axum::body::Body as HttpBody;
 use axum::http::{Request, StatusCode};
@@ -28,6 +37,22 @@ use super::platform::{ISSUER, products};
 use core::fmt::Write as _;
 
 use super::*;
+
+/// The realm KEK the test sealed with, for the courier.
+struct SoftKeys(Arc<SoftKek>);
+
+impl RealmKeys for SoftKeys {
+    fn kek(
+        &self,
+        _: TenantId,
+        _: RealmId,
+        kek_id: &str,
+    ) -> Option<Arc<dyn suiss_crypto::envelope::Kek + Send + Sync>> {
+        use suiss_crypto::envelope::Kek as _;
+        (self.0.id() == kek_id)
+            .then(|| self.0.clone() as Arc<dyn suiss_crypto::envelope::Kek + Send + Sync>)
+    }
+}
 
 const WHO: Actor<'static> = Actor {
     actor: "test",
@@ -226,6 +251,86 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
             IysChannel::Call => panic!("no call channel changed"),
         }
         ids.push((*channel, env.header.event.0));
+    }
+
+    // E42 (1), OP-156 m.3 (c)
+    let token = format!(
+        "{:032x}",
+        u128::from_be_bytes(access_crypto::random::bytes().unwrap())
+    );
+    let twin = RelayTwin::start(&token, "https://id.test").await;
+    let token_file = std::env::temp_dir().join(format!(
+        "q9-relay-{}",
+        uuid(&access_crypto::random::bytes().unwrap())
+    ));
+    std::fs::write(&token_file, &token).unwrap();
+    std::fs::set_permissions(&token_file, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let courier = Courier::new(
+        PgCourierStore {
+            reader: w.db.reader.clone(),
+            app: w.db.app.clone(),
+        },
+        HttpRelay::new(HttpRelayConfig {
+            endpoint: RelayEndpoint::parse(&twin.events_url()).unwrap(),
+            tls: twin.tls.clone(),
+            token_file: token_file.clone(),
+            timeout: Duration::from_secs(5),
+        })
+        .unwrap(),
+        SoftKeys(kek.clone()),
+        SystemClock,
+        IdKey::new(Secret::new([8; 32])),
+        Backoff::default(),
+    );
+    std::fs::remove_file(&token_file).unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    let delivered = loop {
+        let term = courier
+            .hold("q9", Duration::from_secs(10))
+            .await
+            .unwrap()
+            .unwrap();
+        courier.step(&term).await.unwrap();
+        let posts: Vec<_> = twin
+            .posts()
+            .into_iter()
+            .filter(|p| p.event["type"] == "relay.message.iys_consent.v1" && p.status == 202)
+            .collect();
+        if posts.len() == 2 {
+            break posts;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "not delivered in 20 s"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    for p in &delivered {
+        assert_eq!(p.schema_errors, Vec::<String>::new());
+        let d = &p.event["data"];
+        assert_eq!(d["recipient_type"], "individual");
+        assert_eq!(d["source"], "self_service");
+        assert!(d["consent_at"].is_string());
+        match d["channel"].as_str().unwrap() {
+            "sms" => {
+                assert_eq!(d["consent"], "approved");
+                assert_eq!(d["recipient"]["phone"], "+905551112233");
+            }
+            "email" => {
+                assert_eq!(d["consent"], "rejected");
+                assert_eq!(
+                    d["recipient"]["email"].as_str().unwrap().to_lowercase(),
+                    "ece@example.com"
+                );
+            }
+            other => panic!("{other}"),
+        }
+        let id = ids
+            .iter()
+            .find(|(c, _)| c.name() == d["channel"].as_str().unwrap())
+            .unwrap()
+            .1;
+        assert_eq!(p.id, uuid(&id), "Relay reports under the message id");
     }
 
     let prefs = privacy::preferences(&db, &realm, ece).await.unwrap();
