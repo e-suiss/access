@@ -41,6 +41,10 @@ pub struct Ingested {
     /// The resource lifecycle fact of a `resource_lifecycle` Claim, to be kept in the
     /// incarnation registry once admitted (OP-156 m.3 (k)).
     pub lifecycle: Option<crate::app::resources::Lifecycle>,
+    /// The Claim's subject.
+    pub subject: Id,
+    /// Its `value`.
+    pub value: Option<EqValue>,
 }
 
 impl Ingested {
@@ -56,6 +60,8 @@ impl Ingested {
             ended: Vec::new(),
             until: 0,
             lifecycle: None,
+            subject: Id([0; 16]),
+            value: None,
         }
     }
 }
@@ -174,6 +180,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         ended,
                         until,
                         lifecycle,
+                        subject: v.statement.subject,
+                        value: v.statement.value.clone(),
                     });
                 }
                 Err(e) if e.is_retry() => {
@@ -216,6 +224,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             ended: Vec::new(),
             until: v.statement.validity.until,
             lifecycle: crate::app::resources::recorded(&v.statement, body),
+            subject: v.statement.subject,
+            value: v.statement.value.clone(),
         }))
     }
 

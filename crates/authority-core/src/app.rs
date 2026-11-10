@@ -1744,6 +1744,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let mut single_use = Vec::new();
         if allowed {
             allow_effects(shape, evaluation, resolved, &mut effects, &mut single_use);
+            // EI-5, OP-156 m.3 (t)
+            effects.extend(commitment::binding(
+                &req.intent,
+                req.payload.as_ref(),
+                &shape.exercise,
+            ));
         }
         let effects = meta::sorted(effects);
         let mut reads: Vec<(Vec<u8>, u64)> = snapshot.read_set();
@@ -2044,6 +2050,7 @@ pub mod agents;
 pub mod approval;
 pub mod audit;
 mod binding;
+pub mod commitment;
 pub mod consent;
 mod events;
 pub mod export;

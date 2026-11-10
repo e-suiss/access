@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT commitment, pos, claim_id, issuer_id, subject_id\n           FROM access.commitment_terminations\n          WHERE domain_id = $1 AND commitment = $2 ORDER BY pos LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "commitment",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.commitment_terminations",
+            "name": "commitment"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.commitment_terminations",
+            "name": "pos"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "claim_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.commitment_terminations",
+            "name": "claim_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "issuer_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.commitment_terminations",
+            "name": "issuer_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "subject_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.commitment_terminations",
+            "name": "subject_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ca94c35a80e2fe713054f93a924b0ef78179eaf9e2cbc535423c24ddcbe1ee8b"
+}

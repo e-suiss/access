@@ -183,6 +183,11 @@ where
                 )
                 .await
                 .map(|_| ()),
+                // EI-5, OP-156 m.3 (t)
+                crate::app::commitment::CLASS => {
+                    self.keep_termination(sub.domain, done, (*position, *claim), body)
+                        .await
+                }
                 _ => Ok(()),
             };
             if let Err(e) = kept {
@@ -218,6 +223,34 @@ where
             *guard = None;
         }
         result
+    }
+
+    /// Records an admitted `commitment_active` Claim whose disclosed body says the commitment
+    /// ended, for the inventory (§8.17.7.2); a body that does not match the Claim's value, or an
+    /// active one, records nothing.
+    async fn keep_termination(
+        &self,
+        domain: Digest,
+        done: &Ingested,
+        (pos, claim): (u64, Id),
+        body: &[u8],
+    ) -> Result<(), CoreError> {
+        let Some((commitment, false)) = crate::app::commitment::decode(done.value.as_ref(), body)
+        else {
+            return Ok(());
+        };
+        Ok(access_store::commitments::record_termination(
+            &self.setup.sequencer,
+            &DomainId::from_bytes(domain.0),
+            &access_store::commitments::Termination {
+                commitment: commitment.0,
+                pos,
+                claim: claim.0,
+                issuer: done.issuer.0,
+                subject: done.subject.0,
+            },
+        )
+        .await?)
     }
 
     /// Keeps an admitted Verifier Profile body under the verifier it names, with the Claim's

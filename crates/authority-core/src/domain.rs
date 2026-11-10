@@ -440,8 +440,18 @@ fn hex16(id: &Id) -> String {
 /// The lineage of a basis as Kernel hops, from the Anchor down to the basis Grant; an ended
 /// Grant anywhere above makes the hops below it `Revoked` (INV-5).
 pub(crate) fn lineage_hops(
-    view: &dyn View,
+    view: &Snapshot,
     grant: &access_kernel::model::Id,
+) -> Option<(Vec<Hop>, BTreeSet<Capacity>)> {
+    lineage_hops_at(view, grant, None)
+}
+
+/// [`lineage_hops`] at `now`: a commitment-scoped Grant whose commitment is not active now
+/// is also `Lapsed` (EI-5, OP-156 m.3 (t)); without `now` only its terminal end is seen.
+pub(crate) fn lineage_hops_at(
+    view: &Snapshot,
+    grant: &access_kernel::model::Id,
+    now: Option<u64>,
 ) -> Option<(Vec<Hop>, BTreeSet<Capacity>)> {
     let mut chain = Vec::new();
     let mut at = *grant;
@@ -451,23 +461,25 @@ pub(crate) fn lineage_hops(
         }
         let g: GrantState = read(view, kind::GRANT, &at)?;
         let next = g.content.basis;
-        chain.push(g);
+        // EI-5
+        let scoped = crate::app::commitment::status(view, &at, &g, now);
+        chain.push((g, scoped));
         match next {
             GrantBasis::Anchor(a) => {
                 let anchor: AnchorState = read(view, kind::ANCHOR, &a)?;
                 chain.reverse();
                 let mut ended = anchor.ended.is_some();
-                let capacities = chain.last()?.content.agency.clone();
+                let capacities = chain.last()?.0.content.agency.clone();
                 let hops = chain
                     .into_iter()
-                    .map(|g| {
-                        ended |= g.ended.is_some();
+                    .map(|(g, scoped)| {
+                        ended |= g.ended.is_some() || scoped == Some(HopStatus::Revoked);
                         Hop {
                             authority: g.content.authority,
                             status: if ended {
                                 HopStatus::Revoked
                             } else {
-                                HopStatus::Active
+                                scoped.unwrap_or(HopStatus::Active)
                             },
                             conditions_hold: true,
                             budgets: Vec::new(),
@@ -594,7 +606,7 @@ pub(crate) fn accepted_schema(
 
 /// Whether every while-condition of a hop holds now (OP-141 m.33); what is not fetched yet is
 /// noted as missing and reads as not holding.
-fn conditions_hold(
+pub(crate) fn conditions_hold(
     view: &Snapshot,
     conditions: &BTreeSet<WhileCondition>,
     actor: Option<&Actor>,
@@ -623,6 +635,19 @@ fn conditions_hold(
 /// Whether `who` holds a current Claim of `class` that the Acceptance with digest `acceptance`
 /// admits (OP-141 m.33 (b)).
 fn claim_held(view: &Snapshot, class: &str, who: &Id, acceptance: &Digest, now: u64) -> bool {
+    claim_held_where(view, class, who, acceptance, now, |_| true)
+}
+
+/// Whether `who` holds a current Claim of `class` that the Acceptance with digest `acceptance`
+/// admits and whose statement passes `keep` (OP-141 m.33 (b), OP-156 m.3 (t)).
+pub(crate) fn claim_held_where(
+    view: &Snapshot,
+    class: &str,
+    who: &Id,
+    acceptance: &Digest,
+    now: u64,
+    keep: impl Fn(&Statement) -> bool,
+) -> bool {
     view.scan(&claim::member_prefix(class, who))
         .into_iter()
         .filter_map(|(_, v)| Id::from_value(&v).ok())
@@ -633,6 +658,7 @@ fn claim_held(view: &Snapshot, class: &str, who: &Id, acceptance: &Digest, now: 
                     && s.statement.subject == *who
                     && s.statement.validity.from <= now
                     && now <= s.statement.validity.until
+                    && keep(&s.statement)
             }) else {
                 return false;
             };
@@ -848,7 +874,7 @@ fn chain_ids(
 
 /// Whether `basis` still stands: its Anchor, or every Grant and the Anchor of its lineage, has
 /// not ended (INV-5). A record that cannot be read does not stand.
-pub(crate) fn basis_live(view: &dyn View, basis: &ExerciseBasis) -> bool {
+pub(crate) fn basis_live(view: &Snapshot, basis: &ExerciseBasis) -> bool {
     let grant = match basis {
         ExerciseBasis::Anchor(a) => {
             return read::<AnchorState>(view, kind::ANCHOR, a).is_some_and(|s| s.ended.is_none());
@@ -1620,6 +1646,28 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 });
             }
             Ok(out) => {
+                // EI-5, OP-156 m.3 (t)
+                let admissible = crate::app::commitment::admissible(snapshot, &req.intent, payload);
+                let missing = snapshot.missing();
+                if !missing.is_empty() {
+                    return Pass::Need(missing);
+                }
+                if !admissible {
+                    return Pass::Done(Evaluation {
+                        decision: deny(
+                            BlockerClass::NoCoveringAuthority,
+                            "commitment-ref",
+                            Resolver::Actor,
+                        ),
+                        effects: Vec::new(),
+                        draws: Vec::new(),
+                        releases: Vec::new(),
+                        expansion: false,
+                        action: None,
+                        foreign: None,
+                        agency: Vec::new(),
+                    });
+                }
                 // OP-153 m.10 (e), OP-152 m.5 (a)
                 if let ExerciseBasis::Holding(h) = req.basis {
                     let resolves =
@@ -1652,7 +1700,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                         .filter(|s| {
                             s.content.holder == access_kernel::model::SubjectSelector::Public
                         })
-                        .and_then(|_| lineage_hops(snapshot, &g));
+                        .and_then(|_| lineage_hops_at(snapshot, &g, Some(now)));
                     let missing = snapshot.missing();
                     if !missing.is_empty() {
                         return Pass::Need(missing);
@@ -1722,11 +1770,11 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                         actor.is_some_and(|a| a.party == h.holder)
                             && holding_matches(g, &h, held, foreign_pap.is_some())
                     })
-                    .and_then(|_| lineage_hops(snapshot, &h.grant))
+                    .and_then(|_| lineage_hops_at(snapshot, &h.grant, Some(now)))
                     .map(|hops| (hops, Some(h.grant))),
                 ExerciseBasis::Public(g) => read::<GrantState>(snapshot, kind::GRANT, &g)
                     .filter(|s| s.content.holder == access_kernel::model::SubjectSelector::Public)
-                    .and_then(|_| lineage_hops(snapshot, &g))
+                    .and_then(|_| lineage_hops_at(snapshot, &g, Some(now)))
                     .map(|hops| (hops, Some(g))),
             };
         // OP-141 m.26
