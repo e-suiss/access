@@ -9,10 +9,17 @@
 //! possession of the leaf's key; it reaches the routes as [`MtlsChain`], and certificate
 //! sign-in and client authentication decide trust. A proxy's forwarded certificate header is
 //! dropped on every listener: trust comes only from TLS that ends at access-server.
+//!
+//! The public listener picks its certificate by SNI ([`Sni`], OP-156 m.3 (i)): the operator's
+//! certificate for the names it covers, a realm's own certificate for each verified custom
+//! domain, and, only for a client that offers nothing but `acme-tls/1`, the TLS-ALPN-01
+//! challenge certificate of an open ACME order (RFC 8737). An SNI no certificate covers fails
+//! the handshake; a connection that negotiated `acme-tls/1` is closed after the handshake.
 
+use std::collections::HashMap;
 use std::future::Future;
 use std::io;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use access_kernel::json::b64url_encode;
@@ -24,8 +31,9 @@ use hyper_util::service::TowerToHyperService;
 use rustls::RootCertStore;
 pub use rustls::ServerConfig;
 use rustls::crypto::aws_lc_rs;
-use rustls::server::WebPkiClientVerifier;
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
+use rustls::server::{ClientHello, ResolvesServerCert, WebPkiClientVerifier};
+use rustls::sign::CertifiedKey;
 use rustls_pki_types::pem::PemObject as _;
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::net::TcpListener;
@@ -224,6 +232,246 @@ pub enum TlsError {
     Rustls(#[from] rustls::Error),
 }
 
+/// The ALPN protocols of the public listener: HTTP, and `acme-tls/1` for TLS-ALPN-01
+/// validations (RFC 8737 §6.2), which no ordinary client offers.
+const PUBLIC_ALPN: [&[u8]; 3] = [
+    b"h2",
+    b"http/1.1",
+    access_identity_domain::x509::ACME_TLS_ALPN,
+];
+
+/// A realm certificate for one custom domain: its chain (DER, leaf first) and PKCS#8 key.
+pub struct DomainCert {
+    /// The host.
+    pub host: String,
+    /// The chain, DER, leaf first.
+    pub chain: Vec<Vec<u8>>,
+    /// The key, PKCS#8.
+    pub key: zeroize::Zeroizing<Vec<u8>>,
+}
+
+/// An open challenge: its key authorization digest and the certificate that carries it.
+type Challenge = ([u8; 32], Arc<CertifiedKey>);
+
+/// The public listener's certificates by SNI (OP-156 m.3 (i)).
+pub struct Sni {
+    provider: Arc<rustls::crypto::CryptoProvider>,
+    default: Arc<CertifiedKey>,
+    default_leaf: CertificateDer<'static>,
+    domains: RwLock<HashMap<String, Arc<CertifiedKey>>>,
+    challenges: RwLock<HashMap<String, Challenge>>,
+}
+
+impl core::fmt::Debug for Sni {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Sni").finish_non_exhaustive()
+    }
+}
+
+/// A certified key; `checked` also proves the key matches the leaf, which webpki cannot read
+/// for a TLS-ALPN-01 certificate (its `acmeIdentifier` is critical) made with its key here.
+fn certified(
+    provider: &rustls::crypto::CryptoProvider,
+    chain: Vec<CertificateDer<'static>>,
+    key: PrivateKeyDer<'static>,
+    checked: bool,
+) -> Result<Arc<CertifiedKey>, TlsError> {
+    let key = provider.key_provider.load_private_key(key)?;
+    let ck = CertifiedKey::new(chain, key);
+    if checked {
+        ck.keys_match()?;
+    }
+    Ok(Arc::new(ck))
+}
+
+impl Sni {
+    /// The resolver over the operator's PEM chain and key, which serves every name it covers.
+    ///
+    /// # Errors
+    /// [`TlsError`].
+    pub fn new(chain_pem: &[u8], key_pem: &[u8]) -> Result<Arc<Self>, TlsError> {
+        let chain = CertificateDer::pem_slice_iter(chain_pem)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| TlsError::Certificates(e.to_string()))?;
+        let leaf = chain
+            .first()
+            .cloned()
+            .ok_or_else(|| TlsError::Certificates("no certificate".to_owned()))?;
+        let key =
+            PrivateKeyDer::from_pem_slice(key_pem).map_err(|e| TlsError::Key(e.to_string()))?;
+        // CR-12
+        let provider = Arc::new(aws_lc_rs::default_provider());
+        let default = certified(&provider, chain, key, true)?;
+        Ok(Arc::new(Self {
+            provider,
+            default,
+            default_leaf: leaf,
+            domains: RwLock::new(HashMap::new()),
+            challenges: RwLock::new(HashMap::new()),
+        }))
+    }
+
+    fn covered_by_default(&self, name: &str) -> bool {
+        let Ok(server) = rustls_pki_types::ServerName::try_from(name) else {
+            return false;
+        };
+        webpki::EndEntityCert::try_from(&self.default_leaf)
+            .is_ok_and(|c| c.verify_is_valid_for_subject_name(&server).is_ok())
+    }
+
+    /// Replaces the realm certificates served: one per verified custom domain. A certificate
+    /// whose key does not match its leaf is left out.
+    pub fn set_domains(&self, certs: Vec<DomainCert>) {
+        let mut map = HashMap::new();
+        for c in certs {
+            let chain = c.chain.into_iter().map(CertificateDer::from).collect();
+            let key = PrivateKeyDer::Pkcs8(c.key.to_vec().into());
+            match certified(&self.provider, chain, key, true) {
+                Ok(ck) => {
+                    map.insert(c.host.to_ascii_lowercase(), ck);
+                }
+                Err(error) => tracing::error!(%error, "custom domain certificate refused"),
+            }
+        }
+        if let Ok(mut d) = self.domains.write() {
+            *d = map;
+        }
+    }
+
+    /// The custom domains served now.
+    #[must_use]
+    pub fn domains(&self) -> Vec<String> {
+        let mut out: Vec<String> = self
+            .domains
+            .read()
+            .map(|d| d.keys().cloned().collect())
+            .unwrap_or_default();
+        out.sort();
+        out
+    }
+
+    /// Serves the TLS-ALPN-01 challenge certificate of `digest` for `host` (RFC 8737 §3),
+    /// signed by a key made for it.
+    ///
+    /// # Errors
+    /// [`TlsError`] when the key or certificate cannot be made.
+    pub fn publish_challenge(&self, host: &str, digest: [u8; 32]) -> Result<(), TlsError> {
+        let host = host.to_ascii_lowercase();
+        if let Ok(c) = self.challenges.read()
+            && c.get(&host).is_some_and(|(d, _)| *d == digest)
+        {
+            return Ok(());
+        }
+        let (key, pkcs8) = suiss_crypto::signer::SoftSigner::generate_p256()
+            .map_err(|e| TlsError::Key(e.to_string()))?;
+        let serial =
+            access_crypto::random::bytes::<16>().map_err(|e| TlsError::Key(e.to_string()))?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()
+            .and_then(|d| i64::try_from(d.as_secs()).ok())
+            .unwrap_or_default();
+        let cert = access_identity_domain::x509::alpn_challenge(&key, &host, &digest, &serial, now)
+            .map_err(|e| TlsError::Certificates(e.to_string()))?;
+        let ck = certified(
+            &self.provider,
+            vec![CertificateDer::from(cert)],
+            PrivateKeyDer::Pkcs8(pkcs8.expose().clone().into()),
+            false,
+        )?;
+        if let Ok(mut c) = self.challenges.write() {
+            c.insert(host, (digest, ck));
+        }
+        Ok(())
+    }
+
+    /// Stops serving the challenge of `host`.
+    pub fn withdraw_challenge(&self, host: &str) {
+        if let Ok(mut c) = self.challenges.write() {
+            c.remove(&host.to_ascii_lowercase());
+        }
+    }
+
+    /// Serves exactly the open challenges `open` (host, digest), as every node reads them.
+    pub fn set_challenges(&self, open: &[(String, [u8; 32])]) {
+        let keep: HashMap<String, [u8; 32]> = open.iter().cloned().collect();
+        if let Ok(mut c) = self.challenges.write() {
+            c.retain(|h, (d, _)| keep.get(h) == Some(d));
+        }
+        for (host, digest) in open {
+            if let Err(error) = self.publish_challenge(host, *digest) {
+                tracing::error!(%error, "TLS-ALPN-01 challenge not served");
+            }
+        }
+    }
+}
+
+impl ResolvesServerCert for Sni {
+    fn resolve(&self, hello: ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
+        let name = hello.server_name().map(str::to_ascii_lowercase);
+        let acme = hello.alpn().is_some_and(|mut protocols| {
+            protocols.any(|p| p == access_identity_domain::x509::ACME_TLS_ALPN)
+        });
+        // RFC 8737 §3
+        if acme {
+            let c = self.challenges.read().ok()?;
+            return c.get(&name?).map(|(_, ck)| ck.clone());
+        }
+        let Some(name) = name else {
+            return Some(self.default.clone());
+        };
+        if self.covered_by_default(&name) {
+            return Some(self.default.clone());
+        }
+        // OP-156 m.3 (i)
+        self.domains.read().ok()?.get(&name).cloned()
+    }
+}
+
+/// The public listener's TLS 1.3 configuration over `sni` (OP-156 m.3 (i)); with
+/// `client_ca_pem` as [`server_config`].
+///
+/// # Errors
+/// [`TlsError`].
+pub fn sni_server_config(
+    sni: Arc<Sni>,
+    client_ca_pem: Option<&[u8]>,
+) -> Result<Arc<ServerConfig>, TlsError> {
+    let provider = sni.provider.clone();
+    let builder = ServerConfig::builder_with_provider(provider.clone())
+        .with_protocol_versions(&[&rustls::version::TLS13])?;
+    let builder = match client_ca_pem {
+        None => builder.with_no_client_auth(),
+        Some(pem) => builder.with_client_cert_verifier(pep_or_svid(pem, provider)?),
+    };
+    let mut config = builder.with_cert_resolver(sni);
+    config.alpn_protocols = PUBLIC_ALPN.iter().map(|p| p.to_vec()).collect();
+    // OP-36
+    config.max_early_data_size = 0;
+    Ok(Arc::new(config))
+}
+
+fn pep_or_svid(
+    pem: &[u8],
+    provider: Arc<rustls::crypto::CryptoProvider>,
+) -> Result<Arc<dyn ClientCertVerifier>, TlsError> {
+    let mut roots = RootCertStore::empty();
+    for cert in CertificateDer::pem_slice_iter(pem) {
+        let cert = cert.map_err(|e| TlsError::ClientCa(e.to_string()))?;
+        roots
+            .add(cert)
+            .map_err(|e| TlsError::ClientCa(e.to_string()))?;
+    }
+    if roots.is_empty() {
+        return Err(TlsError::ClientCa("no certificate".to_owned()));
+    }
+    let verifier = WebPkiClientVerifier::builder_with_provider(Arc::new(roots), provider)
+        .allow_unauthenticated()
+        .build()
+        .map_err(|e| TlsError::ClientCa(e.to_string()))?;
+    Ok(Arc::new(PepOrSvid(verifier)))
+}
+
 /// A TLS 1.3-only server configuration for a PEM chain and key, read before the lockdown.
 /// With `client_ca_pem` the server asks for a client certificate chaining to it but does not
 /// require one (OP-141 m.18 (b)).
@@ -248,23 +496,7 @@ pub fn server_config(
         .with_protocol_versions(&[&rustls::version::TLS13])?;
     let builder = match client_ca_pem {
         None => builder.with_no_client_auth(),
-        Some(pem) => {
-            let mut roots = RootCertStore::empty();
-            for cert in CertificateDer::pem_slice_iter(pem) {
-                let cert = cert.map_err(|e| TlsError::ClientCa(e.to_string()))?;
-                roots
-                    .add(cert)
-                    .map_err(|e| TlsError::ClientCa(e.to_string()))?;
-            }
-            if roots.is_empty() {
-                return Err(TlsError::ClientCa("no certificate".to_owned()));
-            }
-            let verifier = WebPkiClientVerifier::builder_with_provider(Arc::new(roots), provider)
-                .allow_unauthenticated()
-                .build()
-                .map_err(|e| TlsError::ClientCa(e.to_string()))?;
-            builder.with_client_cert_verifier(Arc::new(PepOrSvid(verifier)))
-        }
+        Some(pem) => builder.with_client_cert_verifier(pep_or_svid(pem, provider)?),
     };
     let mut config = builder.with_single_cert(chain, key)?;
     config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
@@ -447,6 +679,11 @@ async fn serve_as(
                 }
             };
             drop(permit);
+            // RFC 8737 §3
+            if tls.get_ref().1.alpn_protocol() == Some(access_identity_domain::x509::ACME_TLS_ALPN)
+            {
+                return;
+            }
             let app = app
                 .layer(Extension(crate::login::Peer(peer.ip())))
                 .layer(tower::util::MapRequestLayer::new(move |r| inbound(r, mode)));
