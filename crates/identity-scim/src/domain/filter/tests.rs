@@ -45,7 +45,7 @@ fn filters_evaluate_over_the_schema() {
     assert!(!eval_text("nickName pr"));
 }
 
-// CR-10, CR-40, Ek B 4810: an attribute the client may not filter on is refused, not ignored
+// CR-10, CR-40, Ek B 4810
 #[test]
 fn unauthorised_and_unknown_attributes_are_refused() {
     for f in [

@@ -76,9 +76,9 @@ pub fn urn(name: &str) -> String {
 /// (TN-136, §12.4.2). Every catalog event has one now: preferences and document acceptances
 /// the preference center (IDP-37), organizations and their memberships `idp.org.*` and
 /// invitation acceptance (OP-153 m.4), agent suspension and sponsor assignment the agent
-/// registry's `idp.agent.*` (OP-154 m.3 (e), SI-21). The SCIM events wait for the SCIM server and
-/// `org.sso_enforced` for `idp.org.sso_enforce` (OP-155 m.3 (g), (i)).
-pub const UNPRODUCED: [&str; 3] = ["scim.provisioned", "scim.deprovisioned", "org.sso_enforced"];
+/// registry's `idp.agent.*` (OP-154 m.3 (e), SI-21), the SCIM events the SCIM server (OP-155 m.3
+/// (g)). `org.sso_enforced` waits for `idp.org.sso_enforce` (OP-155 m.3 (i)).
+pub const UNPRODUCED: [&str; 1] = ["org.sso_enforced"];
 
 /// Whether a webhook or stream may subscribe to `name`: a catalog event with a producer.
 #[must_use]

@@ -635,7 +635,7 @@ pub async fn groups_of(
 }
 
 /// An outbound SCIM target, its newest version.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct TargetRow {
     /// Its name.
     pub name: String,
@@ -643,10 +643,8 @@ pub struct TargetRow {
     pub live: bool,
     /// Its SCIM base URL.
     pub base_url: String,
-    /// Its sealed bearer secret: nonce and ciphertext.
-    pub secret: ([u8; 12], Vec<u8>),
-    /// The KEK that sealed it.
-    pub kek_id: String,
+    /// Its sealed bearer secret.
+    pub secret: crate::events::SealedKey,
 }
 
 /// What a target version stores.
@@ -657,9 +655,7 @@ pub struct TargetWrite<'a> {
     /// Its SCIM base URL.
     pub base_url: &'a str,
     /// Its sealed secret.
-    pub secret: (&'a [u8; 12], &'a [u8]),
-    /// The KEK that sealed it.
-    pub kek_id: &'a str,
+    pub secret: &'a crate::events::SealedKey,
     /// Whether it is live.
     pub live: bool,
 }
@@ -676,8 +672,8 @@ pub async fn put_target(
     let (tenant, realm) = scope(t)?;
     let v = sqlx::query_scalar!(
         r#"INSERT INTO access.scim_targets (tenant_id, realm_id, name, version, state, base_url,
-                secret_nonce, secret_sealed, kek_id, domain_id, decision_pos)
-         SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8, $9, $10
+                secret_wrapped_dek, secret_nonce, secret_sealed, kek_id, domain_id, decision_pos)
+         SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8, $9, $10, $11
            FROM access.scim_targets WHERE tenant_id = $1 AND realm_id = $2 AND name = $3
          RETURNING version AS "version!""#,
         tenant,
@@ -685,9 +681,10 @@ pub async fn put_target(
         w.name,
         if w.live { "live" } else { "retired" },
         w.base_url,
-        w.secret.0.as_slice(),
-        w.secret.1,
-        w.kek_id,
+        w.secret.wrapped_dek,
+        w.secret.nonce.as_slice(),
+        w.secret.ciphertext,
+        w.secret.kek_id,
         bound.domain.as_bytes().as_slice(),
         bound.position,
     )
@@ -703,7 +700,8 @@ pub async fn put_target(
 pub async fn targets(t: &mut TenantTx) -> Result<Vec<TargetRow>, StoreError> {
     let (tenant, realm) = scope(t)?;
     let rows = sqlx::query!(
-        "SELECT DISTINCT ON (name) name, state, base_url, secret_nonce, secret_sealed, kek_id
+        "SELECT DISTINCT ON (name) name, state, base_url, secret_wrapped_dek, secret_nonce,
+                secret_sealed, kek_id
            FROM access.scim_targets WHERE tenant_id = $1 AND realm_id = $2
           ORDER BY name, version DESC",
         tenant,
@@ -717,11 +715,12 @@ pub async fn targets(t: &mut TenantTx) -> Result<Vec<TargetRow>, StoreError> {
                 name: r.name,
                 live: r.state == "live",
                 base_url: r.base_url,
-                secret: (
-                    <[u8; 12]>::try_from(r.secret_nonce).map_err(|_| StoreError::Corrupt)?,
-                    r.secret_sealed,
-                ),
-                kek_id: r.kek_id,
+                secret: crate::events::SealedKey {
+                    kek_id: r.kek_id,
+                    wrapped_dek: r.secret_wrapped_dek,
+                    nonce: <[u8; 12]>::try_from(r.secret_nonce).map_err(|_| StoreError::Corrupt)?,
+                    ciphertext: r.secret_sealed,
+                },
             })
         })
         .collect()

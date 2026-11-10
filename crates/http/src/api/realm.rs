@@ -1190,7 +1190,13 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "putCertificateLogin"
         | "putMtlsAliases"
         | "createCrossAppConnection"
-        | "retireCrossAppConnection" => (Settings, w(false)),
+        | "retireCrossAppConnection"
+        // OP-155 m.3 (g)
+        | "registerScimClient"
+        | "rotateScimSecret"
+        | "retireScimClient"
+        | "registerScimTarget"
+        | "retireScimTarget" => (Settings, w(false)),
         "revokeAllAgentInstances" => (Agents, Shape::RevokeAll),
         // OP-154 m.3 (t)
         "listVaultResources" => (
@@ -1338,7 +1344,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::RelatedOrigins => &r::INVALID_RELATED_ORIGINS,
             Invalid::LocaleOverrides => &r::INVALID_LOCALE_OVERRIDES,
             Invalid::KeyPolicy => &r::INVALID_KEY_POLICY,
-            Invalid::Name => &r::INVALID_NAME,
+            Invalid::Name | Invalid::ScimClient => &r::INVALID_NAME,
             Invalid::MembershipIssuer => &r::INVALID_MEMBERSHIP_ISSUER,
             Invalid::Members => &r::INVALID_MEMBERS,
             Invalid::Upstream => &r::INVALID_UPSTREAM,
@@ -1410,6 +1416,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             | Invalid::NoSocial
             | Invalid::NoVaultResource
             | Invalid::NoCrossAppConnection
+            | Invalid::NoScimClient
             | Invalid::NoDomain => &codes::NOT_FOUND,
         },
         AdminError::Issuer(_) | AdminError::NoRealm => &codes::NOT_FOUND,

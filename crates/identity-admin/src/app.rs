@@ -11,6 +11,7 @@ pub mod orgs;
 pub mod platform;
 pub mod provision;
 pub mod rest;
+mod scim;
 mod signals;
 pub mod transfers;
 pub mod vault;
@@ -444,6 +445,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Agent(a) => agents::current(t, a).await?,
             // OP-154 m.3 (t)
             Change::Vault(v) => vault::current(t, v).await?,
+            // OP-155 m.3 (g)
+            Change::Scim(s) => scim::current(t, s).await?,
             // OP-154 m.3 (j)
             Change::DcrPolicy { policy, loosens } => {
                 let current =
@@ -1203,6 +1206,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 | Change::ClientRegister(_)
                 | Change::ClientSecretRotate(_)
                 | Change::UpstreamLink(_)
+                | Change::Scim(
+                    crate::domain::scim::ScimChange::ClientRegister { .. }
+                        | crate::domain::scim::ScimChange::TokenRotate(_)
+                )
         ) {
             return Ok(());
         }
@@ -1601,6 +1608,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::AccountTapIssue(_) => true,
             // OP-154 m.3 (t)
             Change::Vault(v) => vault::write(t, bound, v).await?,
+            // OP-155 m.3 (g)
+            Change::Scim(s) => {
+                secret = scim::write(t, bound, s, self.vault).await?;
+                true
+            }
             Change::DeviceCode(on) => {
                 t.put_device_code(bound, *on).await?;
                 true

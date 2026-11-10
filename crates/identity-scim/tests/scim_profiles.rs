@@ -41,14 +41,14 @@ mod entra {
 
     const P: &str = "scim.entra";
 
-    // IDP-23: Entra's aadOptscim062020 flag
+    // IDP-23
     #[test]
     fn opt_flag() {
         assert!(profile(P).has(Rule::AadOptScim062020));
         assert!(!Profile::strict().has(Rule::AadOptScim062020));
     }
 
-    // IDP-23: a recorded Entra user PATCH
+    // IDP-23
     #[test]
     fn ops_in_title_case() {
         let body = json!({ "schemas": [PATCH_SCHEMA], "Operations": [
@@ -61,7 +61,7 @@ mod entra {
         assert_eq!(r[ENTERPRISE]["department"], "Research");
     }
 
-    // IDP-23: Entra disables a user with "False"
+    // IDP-23
     #[test]
     fn active_false_as_text() {
         let body = json!({ "schemas": [PATCH_SCHEMA], "Operations": [
@@ -74,7 +74,7 @@ mod entra {
         );
     }
 
-    // IDP-23: Entra removes members by value list
+    // IDP-23
     #[test]
     fn remove_member_by_value() {
         let body = json!({ "schemas": [PATCH_SCHEMA], "Operations": [
@@ -99,7 +99,7 @@ mod entra {
         );
     }
 
-    // IDP-23: Entra clears an attribute with an empty value
+    // IDP-23
     #[test]
     fn empty_value_clears() {
         let mut u = user();
@@ -132,14 +132,14 @@ mod okta {
 
     const P: &str = "scim.okta";
 
-    // IDP-23: Okta posts application/json
+    // IDP-23
     #[test]
     fn plain_json_body() {
         assert!(profile(P).has(Rule::ContentTypeJson));
         assert!(!Profile::strict().has(Rule::ContentTypeJson));
     }
 
-    // IDP-23: a recorded Okta user creation with an app profile attribute
+    // IDP-23
     #[test]
     fn custom_attributes_dropped() {
         let body = json!({
@@ -289,8 +289,6 @@ mod jumpcloud {
     }
 }
 
-// IDP-40 (5): no profile names a rule outside format tolerance; the strict server keeps every
-// limit under every profile
 #[test]
 fn no_profile_widens_a_limit() {
     let deep = format!("{}userName pr{}", "(".repeat(33), ")".repeat(33));

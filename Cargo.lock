@@ -190,6 +190,7 @@ dependencies = [
  "access-identity-federation",
  "access-identity-hooks",
  "access-identity-oauth",
+ "access-identity-scim",
  "access-identity-session",
  "access-identity-signer",
  "access-identity-ui",
@@ -261,6 +262,7 @@ dependencies = [
  "access-identity-hooks",
  "access-identity-oauth",
  "access-identity-risk",
+ "access-identity-scim",
  "access-identity-signer",
  "access-identity-vault",
  "access-identity-webauthn",
@@ -441,6 +443,7 @@ dependencies = [
  "time",
  "tokio",
  "tracing",
+ "zeroize",
 ]
 
 [[package]]
@@ -697,6 +700,7 @@ dependencies = [
  "access-identity-hooks",
  "access-identity-oauth",
  "access-identity-risk",
+ "access-identity-scim",
  "access-identity-session",
  "access-identity-signer",
  "access-identity-ui",

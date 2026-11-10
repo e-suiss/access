@@ -842,6 +842,42 @@ impl Outbound {
         self.bounded(&target, request, max_body, None).await
     }
 
+    /// `method url` with the JSON `body` and extra `headers`, the answer body read up to
+    /// `max_body` bytes: a push of the outbound SCIM client (IDP-29, OP-155 m.3 (g)). A declared
+    /// delivery target is not reached this way; every rule above holds.
+    ///
+    /// # Errors
+    /// [`OutboundError`]; [`OutboundError::Url`] for a method that is not `POST`, `PUT`,
+    /// `PATCH` or `DELETE`.
+    pub async fn send_json(
+        &self,
+        method: &str,
+        url: &str,
+        headers: &[(&str, String)],
+        body: Option<&[u8]>,
+        max_body: usize,
+    ) -> Result<Answer, OutboundError> {
+        if !matches!(method, "POST" | "PUT" | "PATCH" | "DELETE") {
+            return Err(OutboundError::Url);
+        }
+        let target = Target::parse(url)?;
+        let mut request = post_request(
+            &target,
+            "application/scim+json",
+            headers,
+            body.unwrap_or_default(),
+        )?;
+        if method != "POST"
+            && let Some(rest) = request.strip_prefix(b"POST ".as_slice())
+        {
+            let mut out = method.as_bytes().to_vec();
+            out.push(b' ');
+            out.extend_from_slice(rest);
+            request = out;
+        }
+        self.bounded(&target, request, max_body, None).await
+    }
+
     /// `POST url` with a form body; only the status and headers are read.
     ///
     /// # Errors

@@ -13,4 +13,6 @@
 //! through the outbox; a target's answer is logged, and is a Claim only where a domain accepts
 //! that target as an issuer.
 
+pub mod app;
 pub mod domain;
+pub mod ports;

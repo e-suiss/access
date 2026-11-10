@@ -31,12 +31,15 @@ fn group() -> Value {
     })
 }
 
-#[expect(clippy::needless_pass_by_value, reason = "each case passes its json! literal")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "each case passes its json! literal"
+)]
 fn run(kind: Kind, r: &Value, o: Value) -> Result<Value, ScimError> {
     apply(kind, r, &ops(&o), &Profile::strict())
 }
 
-// IDP-23, Ek B 4808: add rules 1 and 2 (no path: each member added; a new attribute is added)
+// IDP-23, Ek B 4808
 #[test]
 fn add_without_path_adds_each_member() {
     let r = run(
@@ -49,7 +52,6 @@ fn add_without_path_adds_each_member() {
     assert_eq!(r["nickName"], "Babs");
 }
 
-// add rule 3: a complex attribute's sub-attributes are merged
 #[test]
 fn add_to_a_complex_attribute_merges() {
     let r = run(
@@ -64,7 +66,6 @@ fn add_to_a_complex_attribute_merges() {
     );
 }
 
-// add rule 4: a multi-valued attribute gains the new values
 #[test]
 fn add_to_a_multi_valued_attribute_appends() {
     let r = run(
@@ -76,7 +77,6 @@ fn add_to_a_multi_valued_attribute_appends() {
     assert_eq!(r["members"].as_array().unwrap().len(), 3);
 }
 
-// add rules 5 and 6: a single-valued attribute is replaced or set
 #[test]
 fn add_to_a_single_valued_attribute_replaces() {
     let r = run(
@@ -89,7 +89,6 @@ fn add_to_a_single_valued_attribute_replaces() {
     assert_eq!(r["title"], "x");
 }
 
-// add rule 7: the same value again changes nothing (so meta.lastModified stays)
 #[test]
 fn adding_a_value_already_there_is_a_no_op() {
     let g = group();
@@ -110,7 +109,7 @@ fn adding_a_value_already_there_is_a_no_op() {
     assert_eq!(r, u);
 }
 
-// IDP-23: remove without a target is noTarget; removing a non-member succeeds
+// IDP-23
 #[test]
 fn remove_targets() {
     let e = run(Kind::Group, &group(), json!([{ "op": "remove" }])).unwrap_err();
@@ -139,7 +138,7 @@ fn remove_targets() {
     assert_eq!(e.scim_type, Some(ScimType::InvalidValue));
 }
 
-// IDP-23: replace with a filter that matches nothing is noTarget
+// IDP-23
 #[test]
 fn replace_targets() {
     let e = run(
@@ -166,7 +165,7 @@ fn replace_targets() {
     assert_eq!(r["schemas"], json!([USER, ENTERPRISE]));
 }
 
-// IDP-23, Ek B 4808: one failing operation fails the request; the input is untouched
+// IDP-23, Ek B 4808
 #[test]
 fn a_failing_operation_fails_the_whole_request() {
     let u = user();
@@ -183,7 +182,7 @@ fn a_failing_operation_fails_the_whole_request() {
     assert!(u.get("title").is_none());
 }
 
-// IDP-23: paths outside the schema and passwords
+// IDP-23
 #[test]
 fn bad_paths() {
     let e = run(

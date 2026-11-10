@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO access.scim_targets (tenant_id, realm_id, name, version, state, base_url,\n                secret_nonce, secret_sealed, kek_id, domain_id, decision_pos)\n         SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8, $9, $10\n           FROM access.scim_targets WHERE tenant_id = $1 AND realm_id = $2 AND name = $3\n         RETURNING version AS \"version!\"",
+  "query": "INSERT INTO access.scim_targets (tenant_id, realm_id, name, version, state, base_url,\n                secret_wrapped_dek, secret_nonce, secret_sealed, kek_id, domain_id, decision_pos)\n         SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8, $9, $10, $11\n           FROM access.scim_targets WHERE tenant_id = $1 AND realm_id = $2 AND name = $3\n         RETURNING version AS \"version!\"",
   "describe": {
     "columns": [
       {
@@ -24,6 +24,7 @@
         "Text",
         "Bytea",
         "Bytea",
+        "Bytea",
         "Text",
         "Bytea",
         "Int8"
@@ -33,5 +34,5 @@
       false
     ]
   },
-  "hash": "f8990076a1dec03a67618e7e5ec183fabf935e5bc4cede7cf156e6430563a262"
+  "hash": "34d7734a0e1f5ffdd89530791cfe46bed4597de8bdd2e2f44611f6181ba84945"
 }

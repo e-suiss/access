@@ -32,6 +32,7 @@ pub mod provision;
 pub use access_identity_risk::domain::mode::ProtectionMode;
 
 pub mod realm;
+pub mod scim;
 
 pub use realm::{
     Binding, Group, Members, MembershipIssuer, Name, SessionPolicy, SigninMethod, SigninPolicy,
@@ -468,6 +469,12 @@ pub enum Invalid {
     /// (X35, XI-25, OP-153 m.3 (s)).
     #[error("bad locale overrides")]
     LocaleOverrides,
+    /// A SCIM client or target name, tolerance profile, URL or secret outside OP-155 m.3 (g).
+    #[error("invalid scim client")]
+    ScimClient,
+    /// No live SCIM client or target by that name.
+    #[error("no such scim client")]
+    NoScimClient,
 }
 
 impl Invalid {
@@ -566,6 +573,8 @@ impl Invalid {
             Self::RecoveryOption => "recovery-option-off",
             Self::SelfIssue => "self-issue-refused",
             Self::RecoveryGrace => "recovery-grace",
+            Self::ScimClient => "invalid-scim-client",
+            Self::NoScimClient => "no-such-scim-client",
         }
     }
 }
@@ -1735,6 +1744,8 @@ pub enum Change {
     Agent(agent::AgentChange),
     /// `idp.vault.*` (OP-154 m.3 (a), (t)).
     Vault(access_identity_vault::domain::resource::VaultChange),
+    /// `idp.scim.*` (OP-155 m.3 (a), (g)).
+    Scim(scim::ScimChange),
     /// `idp.client.resource_register` (AG-8, OP-154 m.3 (a)).
     ResourceRegister(ProtectedResource),
     /// `idp.client.cross_app_connection` (CT2, OP-154 m.3 (a), (n)).
@@ -2097,6 +2108,7 @@ impl Change {
             Self::GuardianshipRecord(_) => IdpAction::AccountGuardianshipRecord,
             Self::Agent(a) => a.action(),
             Self::Vault(v) => v.action(),
+            Self::Scim(s) => s.action(),
             Self::ResourceRegister(_) => IdpAction::ClientResourceRegister,
             Self::CrossAppConnection(_) => IdpAction::ClientCrossAppConnection,
             Self::CrossAppConnectionRetire(_) => IdpAction::ClientCrossAppConnectionRetire,
@@ -2161,6 +2173,7 @@ impl Change {
             Self::GuardianshipRecord(g) => g.check(),
             Self::Agent(a) => a.check(),
             Self::Vault(v) => v.check().map_err(|_| Invalid::VaultResource),
+            Self::Scim(s) => s.check(),
             Self::ResourceRegister(r) => r.check(),
             Self::CrossAppConnection(c) => c.check(),
             Self::CrossAppConnectionRetire(name) => {
@@ -2308,6 +2321,7 @@ impl Change {
             Self::GuardianshipRecord(g) => g.to_value(),
             Self::Agent(a) => a.body(),
             Self::Vault(v) => v.body(),
+            Self::Scim(s) => s.body(),
             Self::DeviceCode(on) => Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))]),
             Self::CertificateLogin(c) => c.to_value(),
             Self::MtlsAliases(on) => Value::Map(vec![(Value::text("published"), Value::Bool(*on))]),
@@ -2449,6 +2463,7 @@ impl Change {
             }
             Self::Agent(a) => path.extend(a.path()),
             Self::Vault(v) => path.extend(v.path()),
+            Self::Scim(s) => path.extend(s.path()),
             Self::ResourceRegister(r) => {
                 path.extend([String::from("resource"), r.resource.clone()]);
             }

@@ -1166,6 +1166,7 @@ mod dcr;
 mod device;
 mod organizations;
 mod resources;
+mod scim;
 mod settings;
 mod vault;
 mod walkthrough_enterprise;

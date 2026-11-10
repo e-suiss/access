@@ -20,7 +20,9 @@ serde_json = { workspace = true, features = ["std"] }
 suiss-crypto = { workspace = true }
 thiserror = { workspace = true }
 time = { workspace = true, features = ["std", "formatting", "parsing"] }
+tokio = { workspace = true, features = ["sync", "time"] }
 tracing = { workspace = true, features = ["std"] }
+zeroize = { workspace = true, features = ["alloc", "std"] }
 
 [dev-dependencies]
 access-identity-account = { workspace = true, features = ["testing"] }

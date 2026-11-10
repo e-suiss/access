@@ -31,6 +31,7 @@ mod platform;
 mod product;
 mod retention;
 mod risk;
+mod scim;
 mod startup;
 mod status;
 #[cfg(test)]
@@ -1484,6 +1485,7 @@ async fn serve(
     let admin_keks = keks.clone();
     let claim_keks = keks.clone();
     let edge_keks = keks.clone();
+    let scim_keks = keks.clone();
     let platform_pools = event_pools(&all, &cell_ids, &prepared.outbound);
     // TN-135, OP-151 m.3 (j)
     let hooks = oauth::hooks(all.app.clone(), prepared.outbound.clone(), keks.clone());
@@ -1517,6 +1519,20 @@ async fn serve(
     let sandbox_pool = router_pool.clone();
     // OP-155 m.3 (c), IDI-11
     let edge_calls = edge::routes(router_pool.clone(), app.clone(), edge_keks);
+    // OP-155 m.3 (g), IDP-23, IDP-29
+    let scim_ids = cell_ids.key().ok_or("no cell id key")?;
+    let scim_calls = scim::routes(
+        router_pool.clone(),
+        app.clone(),
+        scim_keks.clone(),
+        scim_ids.clone(),
+    )?;
+    let scim_outbound = scim::start(
+        (platform_pools.app.clone(), platform_pools.reader.clone()),
+        prepared.outbound.clone(),
+        scim_keks,
+        scim_ids,
+    )?;
     let realms = identity(config, router_pool, app.clone(), prepared.tls_names.clone()).await?;
     // OP-67 m.3, OP-138
     background.jwks.set(true);
@@ -1669,6 +1685,7 @@ async fn serve(
             .merge(account_pages)
             .merge(authorize)
             .merge(edge_calls)
+            .merge(scim_calls)
             .merge(declared(&Declarations::of(config.provider))),
     );
     let served = listen(
@@ -1683,6 +1700,7 @@ async fn serve(
     background.stop().await;
     checkpointing.stop();
     renewing.stop().await;
+    scim_outbound.stop().await;
     domains.release().await;
     served
 }

@@ -781,154 +781,154 @@ pub const ROUTES: &[Route] = &[
         "attestWorkload",
         "Android key or TPM 2.0 evidence that an Instance's own key lives in hardware, for the challenge of that Instance and time; the realm issuer's attestation_runtime Claim bound to the Instance follows and grants nothing (§5.9, OP-154 m.3 (s)).",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Get,
         "/scim/v2/Users",
         "scimListUsers",
         "SCIM: lists or filters Users; filter depth ≤ 32 and length ≤ 4 KB, at most 1000 results, pages of at most 200 with an HMAC'd RFC 9865 cursor (OP-155 m.3 (g)).",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Post,
         "/scim/v2/Users",
         "scimCreateUser",
         "SCIM: creates a User; the writes go through the account use cases and the client is a Claim source, never a grantor (IDP-23).",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Get,
         "/scim/v2/Users/{id}",
         "scimGetUser",
         "SCIM: one User; a deleted one answers 404.",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Put,
         "/scim/v2/Users/{id}",
         "scimReplaceUser",
         "SCIM: replaces a User.",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Patch,
         "/scim/v2/Users/{id}",
         "scimPatchUser",
         "SCIM: PATCH of a User, atomic: one failed operation fails them all.",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Delete,
         "/scim/v2/Users/{id}",
         "scimDeleteUser",
         "SCIM: soft-deletes a User with a tombstone; its id and externalId are never reused (INV-32, OP-73).",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Get,
         "/scim/v2/Groups",
         "scimListGroups",
         "SCIM: lists or filters Groups; filter depth ≤ 32 and length ≤ 4 KB, at most 1000 results, pages of at most 200 with an HMAC'd RFC 9865 cursor (OP-155 m.3 (g)).",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Post,
         "/scim/v2/Groups",
         "scimCreateGroup",
         "SCIM: creates a Group; the writes go through the account use cases and the client is a Claim source, never a grantor (IDP-23).",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Get,
         "/scim/v2/Groups/{id}",
         "scimGetGroup",
         "SCIM: one Group; a deleted one answers 404.",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Put,
         "/scim/v2/Groups/{id}",
         "scimReplaceGroup",
         "SCIM: replaces a Group.",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Patch,
         "/scim/v2/Groups/{id}",
         "scimPatchGroup",
         "SCIM: PATCH of a Group, atomic: one failed operation fails them all.",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Delete,
         "/scim/v2/Groups/{id}",
         "scimDeleteGroup",
         "SCIM: soft-deletes a Group with a tombstone; its id and externalId are never reused (INV-32, OP-73).",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Get,
         "/scim/v2/Devices",
         "scimListDevices",
         "SCIM: lists or filters Devices; filter depth ≤ 32 and length ≤ 4 KB, at most 1000 results, pages of at most 200 with an HMAC'd RFC 9865 cursor (OP-155 m.3 (g)).",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Post,
         "/scim/v2/Devices",
         "scimCreateDevice",
         "SCIM: creates a Device; the writes go through the account use cases and the client is a Claim source, never a grantor (IDP-23).",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Get,
         "/scim/v2/Devices/{id}",
         "scimGetDevice",
         "SCIM: one Device; a deleted one answers 404.",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Put,
         "/scim/v2/Devices/{id}",
         "scimReplaceDevice",
         "SCIM: replaces a Device.",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Patch,
         "/scim/v2/Devices/{id}",
         "scimPatchDevice",
         "SCIM: PATCH of a Device, atomic: one failed operation fails them all.",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Delete,
         "/scim/v2/Devices/{id}",
         "scimDeleteDevice",
         "SCIM: soft-deletes a Device with a tombstone; its id and externalId are never reused (INV-32, OP-73).",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Get,
         "/scim/v2/ServiceProviderConfig",
         "scimServiceProviderConfig",
         "SCIM: what the server supports; bulk.supported is false.",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Get,
         "/scim/v2/ResourceTypes",
         "scimResourceTypes",
         "SCIM: the resource types, User, Group and Device.",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Get,
         "/scim/v2/Schemas",
         "scimSchemas",
         "SCIM: the schemas and extensions the server knows.",
     ),
-    planned(
+    live(
         Owner::P3,
         Verb::Post,
         "/scim/v2/Bulk",

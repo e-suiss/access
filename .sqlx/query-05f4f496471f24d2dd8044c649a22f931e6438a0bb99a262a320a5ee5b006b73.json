@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT DISTINCT ON (name) name, state, base_url, secret_nonce, secret_sealed, kek_id\n           FROM access.scim_targets WHERE tenant_id = $1 AND realm_id = $2\n          ORDER BY name, version DESC",
+  "query": "SELECT DISTINCT ON (name) name, state, base_url, secret_wrapped_dek, secret_nonce,\n                secret_sealed, kek_id\n           FROM access.scim_targets WHERE tenant_id = $1 AND realm_id = $2\n          ORDER BY name, version DESC",
   "describe": {
     "columns": [
       {
@@ -38,6 +38,17 @@
       },
       {
         "ordinal": 3,
+        "name": "secret_wrapped_dek",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.scim_targets",
+            "name": "secret_wrapped_dek"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
         "name": "secret_nonce",
         "type_info": "Bytea",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "secret_sealed",
         "type_info": "Bytea",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "kek_id",
         "type_info": "Text",
         "origin": {
@@ -82,8 +93,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "ae4e1bcde3179163a529c8a5611fc54e7b49bc8e0fdf65f3b45a89e446253d86"
+  "hash": "05f4f496471f24d2dd8044c649a22f931e6438a0bb99a262a320a5ee5b006b73"
 }

@@ -180,6 +180,16 @@ pub enum Op {
     PutCertificateLogin,
     /// `putMtlsAliases`: `idp.realm.mtls_aliases` (OP-155 m.3 (m)).
     PutMtlsAliases,
+    /// `registerScimClient`: `idp.scim.client_register` (OP-155 m.3 (g)).
+    RegisterScimClient,
+    /// `rotateScimSecret`: `idp.scim.token_rotate`.
+    RotateScimSecret,
+    /// `retireScimClient`: `idp.scim.client_retire`.
+    RetireScimClient,
+    /// `registerScimTarget`: `idp.scim.outbound_register`.
+    RegisterScimTarget,
+    /// `retireScimTarget`: `idp.scim.outbound_retire`.
+    RetireScimTarget,
 }
 
 impl Op {
@@ -254,6 +264,11 @@ impl Op {
             "retireCrossAppConnection" => Self::RetireCrossAppConnection,
             "putCertificateLogin" => Self::PutCertificateLogin,
             "putMtlsAliases" => Self::PutMtlsAliases,
+            "registerScimClient" => Self::RegisterScimClient,
+            "rotateScimSecret" => Self::RotateScimSecret,
+            "retireScimClient" => Self::RetireScimClient,
+            "registerScimTarget" => Self::RegisterScimTarget,
+            "retireScimTarget" => Self::RetireScimTarget,
             _ => return None,
         })
     }
@@ -694,6 +709,46 @@ fn events(m: &Map<String, Json>) -> Result<Vec<String>, Invalid> {
     event_names(&list).map_err(|_| Invalid::WebhookEvents)
 }
 
+/// The `idp.scim.*` change of a SCIM operation (OP-155 m.3 (g)), `None` for any other.
+fn scim_change(
+    op: Op,
+    key: Option<&str>,
+    m: &Map<String, Json>,
+) -> Result<Option<crate::domain::scim::ScimChange>, Invalid> {
+    use crate::domain::scim::{ScimChange, TargetSecret};
+    let name = |k: Option<&str>| key_of(k).map(String::from);
+    Ok(Some(match op {
+        Op::RegisterScimClient => {
+            only(m, &["name", "profile"])?;
+            ScimChange::ClientRegister {
+                name: String::from(text(m, "name")?),
+                profile: opt_text(m, "profile")?.map(String::from),
+            }
+        }
+        Op::RotateScimSecret => {
+            only(m, &[])?;
+            ScimChange::TokenRotate(name(key)?)
+        }
+        Op::RetireScimClient => {
+            only(m, &[])?;
+            ScimChange::ClientRetire(name(key)?)
+        }
+        Op::RegisterScimTarget => {
+            only(m, &["name", "base_url", "bearer"])?;
+            ScimChange::OutboundRegister {
+                name: String::from(text(m, "name")?),
+                base_url: String::from(text(m, "base_url")?),
+                secret: TargetSecret::parse(text(m, "bearer")?)?,
+            }
+        }
+        Op::RetireScimTarget => {
+            only(m, &[])?;
+            ScimChange::OutboundRetire(name(key)?)
+        }
+        _ => return Ok(None),
+    }))
+}
+
 /// Compiles one write operation's body into its one [`Change`] (TN-110). `key` is the path's
 /// natural key; a create carries the `client_id` its prepare step assigned.
 ///
@@ -710,6 +765,9 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
     }
     if let Some(v) = vault_change(op, key, body)? {
         return Ok(Change::Vault(v));
+    }
+    if let Some(s) = scim_change(op, key, m)? {
+        return Ok(Change::Scim(s));
     }
     Ok(match op {
         Op::CreateOrganization => {
@@ -1056,7 +1114,12 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         | Op::DefineAgentTemplate
         | Op::PutVaultResource
         | Op::DisableVaultResource
-        | Op::PutVaultReleaseMode => return Err(Invalid::Body),
+        | Op::PutVaultReleaseMode
+        | Op::RegisterScimClient
+        | Op::RotateScimSecret
+        | Op::RetireScimClient
+        | Op::RegisterScimTarget
+        | Op::RetireScimTarget => return Err(Invalid::Body),
         // OP-153 m.18 (e), m.25 (b)
         Op::BindAccount => {
             only(
