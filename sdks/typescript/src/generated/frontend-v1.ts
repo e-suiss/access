@@ -2026,6 +2026,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/first-contact/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The realm's RFC 9578 issuer directory of first-contact token keys, the current 30-day key first and the previous one after it; public, as Relay and agents read it (E58, OP-156 m.3 (z)). */
+        get: operations["getFirstContactKeys"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/first-contact/tokens": {
         parameters: {
             query?: never;
@@ -5693,6 +5710,27 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    getFirstContactKeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     issueFirstContactTokens: {
         parameters: {
             query?: never;
@@ -5706,7 +5744,15 @@ export interface operations {
             };
         };
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
