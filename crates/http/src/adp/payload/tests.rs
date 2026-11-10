@@ -383,3 +383,23 @@ fn a_deep_value_is_refused() {
     }
     assert!(authority_set_from_json(&json!({ "actions": {}, "resource": j })).is_err());
 }
+
+// E47 (1), OP-156 m.4
+#[test]
+fn an_action_schema_carries_its_reversibility_and_absent_is_irreversible() {
+    use access_kernel::schema::Reversibility;
+    let base = serde_json::json!({ "name": "refund", "major": 1, "effect_class": "irreversible" });
+    let mut declared = base.clone();
+    declared["reversibility"] = serde_json::json!("compensable");
+    let a = super::action_schema_from_json(&declared).unwrap();
+    assert_eq!(a.reversibility, Some(Reversibility::Compensable));
+    assert_eq!(
+        super::action_schema_to_json(&a).unwrap()["reversibility"],
+        "compensable"
+    );
+    let absent = super::action_schema_from_json(&base).unwrap();
+    assert_eq!(absent.reversibility, None);
+    assert_eq!(absent.reversibility(), Reversibility::Irreversible);
+    declared["reversibility"] = serde_json::json!("undoable");
+    assert!(super::action_schema_from_json(&declared).is_err());
+}

@@ -239,6 +239,8 @@ static QUOTA: T = T::Struct(&[("count", &UINT, true), ("window_s", &UINT, true)]
 static PARAM_TYPE: T = T::Lit(&["amount", "int", "text", "bool", "bytes", "id", "opaque"]);
 static PARAM_TYPES: T = T::Dict(&PARAM_TYPE);
 static EFFECT_CLASS: T = T::Lit(&["none", "reversible", "irreversible"]);
+// E47 (1), OP-156 m.4: absent is irreversible (fail closed)
+static REVERSIBILITY: T = T::Lit(&["reversible", "compensable", "irreversible"]);
 static ACTION_SCHEMA: T = T::Struct(&[
     ("name", &TEXT, true),
     ("major", &UINT, true),
@@ -248,6 +250,7 @@ static ACTION_SCHEMA: T = T::Struct(&[
     ("params", &PARAM_TYPES, false),
     ("resource_types", &TEXT_SET, false),
     ("render", &TEXT, false),
+    ("reversibility", &REVERSIBILITY, false),
 ]);
 static ACTION_SCHEMAS: T = T::Set(&ACTION_SCHEMA);
 static SPP: T = T::Struct(&[

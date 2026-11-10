@@ -2014,6 +2014,8 @@ export interface components {
             /** @description A set: any order, no repeats; the canonical form sorts it. */
             resource_types?: string[];
             render?: string;
+            /** @enum {string} */
+            reversibility?: "reversible" | "compensable" | "irreversible";
         };
         RelayStatus: {
             /** @description Age of the courier's oldest undelivered message in milliseconds; null when none waits. */
