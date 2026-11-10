@@ -616,6 +616,30 @@ jobs:
         if: always()
         run: scripts/ci/edge-env.sh down
 
+  # OP-156 m.3 (i): the in-house ACME client against Pebble, its TLS-ALPN-01 validation answered
+  # by the real SNI listener; containers pinned by digest
+  acme-pebble:
+    name: acme-pebble
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: test
+          tools: nextest
+      - name: Pebble and challtestsrv
+        run: scripts/ci/pebble-env.sh up
+      - name: ACME client and SNI listener against Pebble
+        run: cargo nextest run --locked -p access-http --test pebble --run-ignored only
+      - name: Stop Pebble
+        if: always()
+        run: scripts/ci/pebble-env.sh down
+
   # OP-155 m.3 (o), RR-28: the Kerberos gateway's own workspace (lint, tests, cargo-deny,
   # cargo-vet), then SPNEGO end to end against an MIT KDC with the gateway and the parser worker
   # as real processes
@@ -697,6 +721,7 @@ jobs:
       - secrets
       - sandbox
       - edge-interop
+      - acme-pebble
       - kerberos
       - nats
       - uniffi-kotlin

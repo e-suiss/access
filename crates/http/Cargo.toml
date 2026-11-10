@@ -49,6 +49,7 @@ tower-http = { workspace = true, features = ["catch-panic", "limit", "timeout", 
 tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
+access-identity-domain = { workspace = true, features = ["testing"] }
 access-crypto = { workspace = true, features = ["testing"] }
 access-identity-account = { workspace = true, features = ["testing"] }
 access-identity-hooks = { workspace = true }
