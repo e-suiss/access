@@ -433,6 +433,7 @@ pub const CODES: &[Code] = &[
     codes::realm::INVALID_SECTOR_IDENTIFIER_URI,
     codes::realm::RESERVED_OPERATION,
     codes::realm::INVALID_JOSE_ALG,
+    codes::realm::INVALID_CERTIFICATE_LOGIN,
     codes::realm::INVALID_PROTECTION_MODE,
     codes::realm::INVALID_JOB,
     codes::realm::JOB_OPERATION_NOT_ALLOWED,

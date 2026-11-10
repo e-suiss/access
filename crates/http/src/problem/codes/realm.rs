@@ -264,6 +264,13 @@ pub const INVALID_JOSE_ALG: Code = code(
     "Bad Request",
     "The realm signs with ES256 or Ed25519; EdDSA is never named (MD-3, CR-5).",
 );
+/// A certificate sign-in setting outside its model (OP-155 m.3 (m)).
+pub const INVALID_CERTIFICATE_LOGIN: Code = code(
+    "invalid-certificate-login",
+    400,
+    "Bad Request",
+    "Certificate sign-in names its rule (san_email or san_upn), 1 to 16 distinct CA certificates as base64url DER of at most 8 KB while on, and at most 16 issuer policy OIDs in dotted form (OP-155 m.3 (m)).",
+);
 /// A protection mode outside its model; brute-force protection is always enforced.
 pub const INVALID_PROTECTION_MODE: Code = code(
     "invalid-protection-mode",

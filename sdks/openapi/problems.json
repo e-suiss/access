@@ -529,6 +529,13 @@
       "description": "The realm signs with ES256 or Ed25519; EdDSA is never named (MD-3, CR-5)."
     },
     {
+      "code": "invalid-certificate-login",
+      "type": "urn:suiss:access:problem:invalid-certificate-login",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "Certificate sign-in names its rule (san_email or san_upn), 1 to 16 distinct CA certificates as base64url DER of at most 8 KB while on, and at most 16 issuer policy OIDs in dotted form (OP-155 m.3 (m))."
+    },
+    {
       "code": "invalid-protection-mode",
       "type": "urn:suiss:access:problem:invalid-protection-mode",
       "status": 400,

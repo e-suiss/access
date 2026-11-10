@@ -689,6 +689,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             Change::CimdPolicy(_)
             | Change::DeviceCode(_)
+            | Change::CertificateLogin(_)
+            | Change::MtlsAliases(_)
             | Change::MapperSet { .. }
             | Change::JoseAlg(_)
             | Change::Branding(_)
@@ -1601,6 +1603,24 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Vault(v) => vault::write(t, bound, v).await?,
             Change::DeviceCode(on) => {
                 t.put_device_code(bound, *on).await?;
+                true
+            }
+            // OP-155 m.3 (m)
+            Change::CertificateLogin(c) => {
+                t.put_certificate_login(
+                    bound,
+                    &access_store::certificate::CertificateLoginRow {
+                        enabled: c.enabled,
+                        rule: String::from(c.rule.name()),
+                        anchors: c.anchors.clone(),
+                        piv_policies: c.piv_policies.iter().cloned().collect(),
+                    },
+                )
+                .await?;
+                true
+            }
+            Change::MtlsAliases(on) => {
+                t.put_mtls_aliases(bound, *on).await?;
                 true
             }
             Change::DcrPolicy { policy, .. } => {

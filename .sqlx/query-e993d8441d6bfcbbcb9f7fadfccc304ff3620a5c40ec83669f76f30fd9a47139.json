@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT enabled, rule, anchors, piv_policies FROM access.idp_certificate_login_settings\n              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.idp_certificate_login_settings",
+            "name": "enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "rule",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_certificate_login_settings",
+            "name": "rule"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "anchors",
+        "type_info": "ByteaArray",
+        "origin": {
+          "Table": {
+            "table": "access.idp_certificate_login_settings",
+            "name": "anchors"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "piv_policies",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.idp_certificate_login_settings",
+            "name": "piv_policies"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e993d8441d6bfcbbcb9f7fadfccc304ff3620a5c40ec83669f76f30fd9a47139"
+}

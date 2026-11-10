@@ -1187,6 +1187,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "defineAgentTemplate"
         | "putDcrPolicy"
         | "putDeviceCode"
+        | "putCertificateLogin"
+        | "putMtlsAliases"
         | "createCrossAppConnection"
         | "retireCrossAppConnection" => (Settings, w(false)),
         "revokeAllAgentInstances" => (Agents, Shape::RevokeAll),
@@ -1363,6 +1365,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::SectorIdentifier => &r::INVALID_SECTOR_IDENTIFIER_URI,
             Invalid::Reserved => &r::RESERVED_OPERATION,
             Invalid::JoseAlg => &r::INVALID_JOSE_ALG,
+            Invalid::CertificateLogin => &r::INVALID_CERTIFICATE_LOGIN,
             Invalid::ProtectionMode => &r::INVALID_PROTECTION_MODE,
             Invalid::ExtensionTarget => &r::INVALID_EXTENSION_TARGET,
             Invalid::Hook => &r::INVALID_HOOK,

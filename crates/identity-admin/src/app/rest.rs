@@ -176,6 +176,10 @@ pub enum Op {
     CreateCrossAppConnection,
     /// `retireCrossAppConnection`: `idp.client.cross_app_connection_retire`.
     RetireCrossAppConnection,
+    /// `putCertificateLogin`: `idp.realm.certificate_login` (OP-155 m.3 (m)).
+    PutCertificateLogin,
+    /// `putMtlsAliases`: `idp.realm.mtls_aliases` (OP-155 m.3 (m)).
+    PutMtlsAliases,
 }
 
 impl Op {
@@ -248,6 +252,8 @@ impl Op {
             "putDeviceCode" => Self::PutDeviceCode,
             "createCrossAppConnection" => Self::CreateCrossAppConnection,
             "retireCrossAppConnection" => Self::RetireCrossAppConnection,
+            "putCertificateLogin" => Self::PutCertificateLogin,
+            "putMtlsAliases" => Self::PutMtlsAliases,
             _ => return None,
         })
     }
@@ -1167,6 +1173,31 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         Op::PutDeviceCode => {
             only(m, &["enabled"])?;
             Change::DeviceCode(flag(m, "enabled")?)
+        }
+        // OP-155 m.3 (m)
+        Op::PutCertificateLogin => {
+            only(m, &["enabled", "rule", "anchors", "piv_policies"])?;
+            let rule = access_identity_x509::domain::login::Rule::parse(text(m, "rule")?)
+                .ok_or(Invalid::CertificateLogin)?;
+            let anchors = texts(m, "anchors")?
+                .into_iter()
+                .map(|a| {
+                    access_kernel::json::b64url_decode(a).map_err(|_| Invalid::CertificateLogin)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Change::CertificateLogin(crate::domain::certificate::CertificateLogin {
+                enabled: flag(m, "enabled")?,
+                rule,
+                anchors,
+                piv_policies: texts(m, "piv_policies")?
+                    .into_iter()
+                    .map(String::from)
+                    .collect(),
+            })
+        }
+        Op::PutMtlsAliases => {
+            only(m, &["published"])?;
+            Change::MtlsAliases(flag(m, "published")?)
         }
         // OP-154 m.3 (j)
         Op::PutDcrPolicy => {

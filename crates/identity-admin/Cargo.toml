@@ -20,6 +20,7 @@ access-identity-oauth = { workspace = true }
 access-identity-risk = { workspace = true }
 access-identity-signer = { path = "../identity-signer" }
 access-identity-webauthn = { workspace = true }
+access-identity-x509 = { workspace = true }
 access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 access-store = { workspace = true }
@@ -32,6 +33,7 @@ zeroize = { workspace = true, features = ["alloc", "std"] }
 tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
+access-identity-x509 = { workspace = true, features = ["testing"] }
 
 [lints]
 workspace = true

@@ -25,6 +25,7 @@ use suiss_crypto::rotation::Policy;
 
 pub mod accounts;
 pub mod agent;
+pub mod certificate;
 pub mod dns;
 pub mod org;
 pub mod provision;
@@ -308,6 +309,10 @@ pub enum Invalid {
     /// (OP-150 m.11 (b)).
     #[error("reserved operation")]
     Reserved,
+    /// A certificate sign-in setting with no CA while on, too many CAs or policies, a CA that
+    /// is not a readable certificate, or a policy that is not a dotted OID (OP-155 m.3 (m)).
+    #[error("bad certificate sign-in setting")]
+    CertificateLogin,
     /// A JOSE algorithm the realm cannot take: `ES256` or `Ed25519` (MD-3, CR-5).
     #[error("bad JOSE algorithm")]
     JoseAlg,
@@ -543,6 +548,7 @@ impl Invalid {
             Self::PublicSub => "public-sub-not-opted-in",
             Self::SectorIdentifier => "invalid-sector-identifier-uri",
             Self::Reserved => "reserved-operation",
+            Self::CertificateLogin => "invalid-certificate-login",
             Self::ProtectionMode => "invalid-protection-mode",
             Self::JoseAlg => "invalid-jose-alg",
             Self::ExtensionTarget => "invalid-extension-target",
@@ -1738,6 +1744,12 @@ pub enum Change {
     /// `idp.realm.device_code` (`true`, CT2) or `device_code_close` (`false`, CT1), RFC 8628
     /// (OP-154 m.3 (a), (p)).
     DeviceCode(bool),
+    /// `idp.realm.certificate_login` (CT2): certificate, PIV and CAC sign-in, turned on, changed
+    /// or off (OP-155 m.3 (m)).
+    CertificateLogin(certificate::CertificateLogin),
+    /// `idp.realm.mtls_aliases` (CT2): whether the realm publishes `mtls_endpoint_aliases`
+    /// (OP-155 m.3 (m), §10.4.3).
+    MtlsAliases(bool),
     /// `idp.client.dcr_policy`, or `dcr_policy_tighten` when it only narrows (OP-154 m.3 (j));
     /// `loosens` is resolved against the realm's current policy before the decision.
     DcrPolicy {
@@ -2090,6 +2102,8 @@ impl Change {
             Self::CrossAppConnectionRetire(_) => IdpAction::ClientCrossAppConnectionRetire,
             Self::DeviceCode(true) => IdpAction::RealmDeviceCode,
             Self::DeviceCode(false) => IdpAction::RealmDeviceCodeClose,
+            Self::CertificateLogin(_) => IdpAction::RealmCertificateLogin,
+            Self::MtlsAliases(_) => IdpAction::RealmMtlsAliases,
             Self::DcrPolicy { loosens: true, .. } => IdpAction::ClientDcrPolicy,
             Self::DcrPolicy { loosens: false, .. } => IdpAction::ClientDcrPolicyTighten,
             Self::CspMode { loosens: false, .. } => IdpAction::RealmCspMode,
@@ -2163,8 +2177,10 @@ impl Change {
                     Err(Invalid::DcrPolicy)
                 }
             }
+            Self::CertificateLogin(c) => c.check(),
             Self::AccountBind(_)
             | Self::DeviceCode(_)
+            | Self::MtlsAliases(_)
             | Self::CspMode { .. }
             | Self::OrgInviteRevoke { .. }
             | Self::SocialDisable(_)
@@ -2293,6 +2309,8 @@ impl Change {
             Self::Agent(a) => a.body(),
             Self::Vault(v) => v.body(),
             Self::DeviceCode(on) => Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))]),
+            Self::CertificateLogin(c) => c.to_value(),
+            Self::MtlsAliases(on) => Value::Map(vec![(Value::text("published"), Value::Bool(*on))]),
             Self::DcrPolicy { policy, .. } => Value::Map(vec![
                 (Value::text("enabled"), Value::Bool(policy.enabled)),
                 (
@@ -2438,7 +2456,10 @@ impl Change {
             | Self::CrossAppConnectionRetire(name) => {
                 path.extend([String::from("cross-app"), name.clone()]);
             }
-            Self::DcrPolicy { .. } | Self::DeviceCode(_) => path.push(String::from("realm")),
+            Self::DcrPolicy { .. }
+            | Self::DeviceCode(_)
+            | Self::CertificateLogin(_)
+            | Self::MtlsAliases(_) => path.push(String::from("realm")),
         }
         ResourceRef {
             namespace: String::from(RESOURCE_NAMESPACE),
