@@ -1,0 +1,31 @@
+; Forward-auth decision and application token, version 1 (RFC 8610; OP-156 m.3 (l), (m), (n),
+; IDP-30). The application token is a JWS (`typ: access-app+jwt`, ES256, the realm JOSE key);
+; its claims set is JSON and is described here as the equivalent data model.
+
+; The answer of `/proxy/v1/check/{engine}` as the proxy caches it: keyed by session,
+; application, method and path pattern, for at most min(horizon, 30 s).
+proxy-decision = {
+  outcome: "allow" / "deny" / "sign_in",
+  decision: tstr .size (1..128),    ; the decision id
+  ttl_s: 0..30,
+  ? app_token: tstr .size (1..8192),
+}
+
+app-token-header = {
+  alg: "ES256",
+  typ: "access-app+jwt",
+  kid: tstr .size (1..128),
+}
+
+app-token-claims = {
+  iss: tstr .size (1..2048),
+  sub: tstr .size (1..128),         ; pairwise per application
+  aud: tstr .size (1..2048),        ; the application
+  iat: uint,
+  exp: uint,                        ; at most iat + 60
+  jti: tstr .size (16..64),
+  decision: tstr .size (1..128),
+  ? acr: tstr .size (1..128),
+  ? amr: [* tstr],
+  ? compliance: tstr .size (1..512), ; the `Access-Compliance` statement
+}

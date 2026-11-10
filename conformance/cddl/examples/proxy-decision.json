@@ -1,0 +1,25 @@
+{
+  "cases": [
+    {
+      "cbor": "a46574746c5f73181e676f7574636f6d6565616c6c6f77686465636973696f6e696465635f3031485a58696170705f746f6b656e6b65794a2e6533302e736967",
+      "edn": "{\"outcome\": \"allow\", \"decision\": \"dec_01HZX\", \"ttl_s\": 30, \"app_token\": \"eyJ.e30.sig\"}",
+      "id": "allow",
+      "valid": true
+    },
+    {
+      "cbor": "a36574746c5f7300676f7574636f6d65677369676e5f696e686465636973696f6e696465635f3031485a59",
+      "edn": "{\"outcome\": \"sign_in\", \"decision\": \"dec_01HZY\", \"ttl_s\": 0}",
+      "id": "sign-in",
+      "valid": true
+    },
+    {
+      "edn": "{\"outcome\": \"allow\", \"decision\": \"dec_01HZX\", \"ttl_s\": 60}",
+      "id": "ttl-over-30",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "proxy.cddl"
+  ],
+  "contract": "proxy-decision"
+}

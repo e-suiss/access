@@ -1,0 +1,22 @@
+; First-contact tokens, version 1 (RFC 8610; OP-156 m.3 (z), E58, Ek B 4495).
+; RFC 9578 token type 0x0002 (blind RSA-2048, RSASSA-PSS SHA-384). The wire forms are the
+; RFC's binary structs; these maps are their equivalent data model. A token is anonymous,
+; unlinkable, limited per identity, and produces no authority.
+
+first-contact-request = {
+  token_type: 2,
+  truncated_key_id: 0..255,         ; last byte of the issuer key id
+  blinded_msg: bstr .size 256,
+}
+
+first-contact-response = {
+  blind_sig: bstr .size 256,
+}
+
+first-contact-token = {
+  token_type: 2,
+  nonce: bstr .size 32,
+  challenge_digest: bstr .size 32,
+  token_key_id: bstr .size 32,
+  authenticator: bstr .size 256,
+}

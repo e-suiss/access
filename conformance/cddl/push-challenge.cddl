@@ -1,0 +1,12 @@
+; Push verification answer, version 1 (RFC 8610; OP-156 m.3 (d), (e), §10.2.3, IDP-4, TN-100).
+; Deterministic CBOR (RFC 8949 §4.2.1). The approver signs this map with its device key
+; (`access.identity_device_keys`, P-256, ES256 over the dCBOR bytes). The push itself never
+; carries the number: the sign-in page shows it and the person types it into the approver.
+
+push-answer = {
+  challenge: bstr .size 32,         ; the challenge id from the RNG; 120 s, single use
+  ? number: 10..99,                 ; the number typed in; required unless the decision is a refusal
+  decision: "approve" / "deny" / "not_me",
+  device_key: bstr .size 32,        ; JWK thumbprint (RFC 7638) of the signing device key
+  ? pin_verified: bool,             ; the app-controlled factor's declaration (MD-11)
+}

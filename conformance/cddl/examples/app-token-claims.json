@@ -1,0 +1,19 @@
+{
+  "cases": [
+    {
+      "cbor": "a9636163726461616c3263616d72826368776b647573657263617564781968747470733a2f2f77696b692e61636d652e6578616d706c65636578701a6955b6e4636961741a6955b6a863697373781b68747470733a2f2f61636d652e6163636573732e6578616d706c65636a7469703031485a583451384d324e36543042356373756268705f376633613963686465636973696f6e696465635f3031485a58",
+      "edn": "{\"iss\": \"https://acme.access.example\", \"sub\": \"p_7f3a9c\", \"aud\": \"https://wiki.acme.example\", \"iat\": 1767225000, \"exp\": 1767225060, \"jti\": \"01HZX4Q8M2N6T0B5\", \"decision\": \"dec_01HZX\", \"acr\": \"aal2\", \"amr\": [\"hwk\", \"user\"]}",
+      "id": "claims",
+      "valid": true
+    },
+    {
+      "edn": "{\"iss\": \"https://acme.access.example\", \"sub\": \"p_7f3a9c\", \"aud\": \"https://wiki.acme.example\", \"iat\": 1767225000, \"exp\": 1767225060, \"jti\": \"01HZX4Q8M2N6T0B5\"}",
+      "id": "claims-without-decision",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "proxy.cddl"
+  ],
+  "contract": "app-token-claims"
+}

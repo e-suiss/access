@@ -1,0 +1,116 @@
+{
+  "cases": [
+    {
+      "cbor": "8271636f6d6d69746d656e745f616374697665a266616374697665f56a636f6d6d69746d656e7458200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "edn": "[\"commitment_active\", {\"commitment\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"active\": true}]",
+      "id": "commitment-active",
+      "valid": true
+    },
+    {
+      "cbor": "8271636f6d6d69746d656e745f616374697665a266616374697665f46a636f6d6d69746d656e7458200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "edn": "[\"commitment_active\", {\"commitment\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"active\": false}]",
+      "id": "commitment-ended",
+      "valid": true
+    },
+    {
+      "edn": "[\"commitment_active\", {\"active\": true}]",
+      "id": "commitment-without-digest",
+      "valid": false
+    },
+    {
+      "cbor": "82706f726465725f726566756e6461626c65a3656f726465726a6f726465722d3130343265756e74696c1b0000019b76d180406a726566756e6461626c65f5",
+      "edn": "[\"order_refundable\", {\"order\": \"order-1042\", \"refundable\": true, \"until\": 1767225000000}]",
+      "id": "order-refundable",
+      "valid": true
+    },
+    {
+      "cbor": "82686f6e5f7368696674a365756e74696c1b0000019b76d18040686c6f636174696f6e7073746f72652d697374616e62756c2d33686f6e5f7368696674f5",
+      "edn": "[\"on_shift\", {\"location\": \"store-istanbul-3\", \"on_shift\": true, \"until\": 1767225000000}]",
+      "id": "on-shift",
+      "valid": true
+    },
+    {
+      "cbor": "82716964656e746974795f70726f6f66696e67a46369616c02666d6574686f646c646f63756d656e745f6e66636870726f76696465726b6964762e6578616d706c656b76657269666965645f61741b0000019b76d18040",
+      "edn": "[\"identity_proofing\", {\"provider\": \"idv.example\", \"method\": \"document_nfc\", \"ial\": 2, \"verified_at\": 1767225000000}]",
+      "id": "identity-proofing-ial",
+      "valid": true
+    },
+    {
+      "cbor": "82716964656e746974795f70726f6f66696e67a4666d6574686f64636569646870726f76696465726b6569642e6578616d706c65696c6f615f656964617364686967686b76657269666965645f61741b0000019b76d18040",
+      "edn": "[\"identity_proofing\", {\"provider\": \"eid.example\", \"method\": \"eid\", \"loa_eidas\": \"high\", \"verified_at\": 1767225000000}]",
+      "id": "identity-proofing-eidas",
+      "valid": true
+    },
+    {
+      "edn": "[\"identity_proofing\", {\"provider\": \"idv.example\", \"method\": \"document\", \"verified_at\": 1767225000000}]",
+      "id": "identity-proofing-without-level",
+      "valid": false
+    },
+    {
+      "cbor": "826b706f73747572655f6d646da4676d616e61676564f56870726f76696465726861636d652d6d646d69636f6d706c69616e74f56973746174656d656e74781a4469736b20656e637279707465642c204f532063757272656e74",
+      "edn": "[\"posture_mdm\", {\"managed\": true, \"compliant\": true, \"provider\": \"acme-mdm\", \"statement\": \"Disk encrypted, OS current\"}]",
+      "id": "posture-mdm",
+      "valid": true
+    },
+    {
+      "cbor": "826d7269736b5f65787465726e616ca2656c6576656c64686967686c726561736f6e5f636c6173737363726564656e7469616c2d7374756666696e67",
+      "edn": "[\"risk_external\", {\"level\": \"high\", \"reason_class\": \"credential-stuffing\"}]",
+      "id": "risk-external",
+      "valid": true
+    },
+    {
+      "edn": "[\"risk_external\", {\"level\": \"allow\", \"reason_class\": \"none\"}]",
+      "id": "risk-external-allow-level",
+      "valid": false
+    },
+    {
+      "cbor": "826a646174615f6c6162656ca2656c6162656c6c636f6e666964656e7469616c66736368656d656861636d652d646c70",
+      "edn": "[\"data_label\", {\"label\": \"confidential\", \"scheme\": \"acme-dlp\"}]",
+      "id": "data-label",
+      "valid": true
+    },
+    {
+      "cbor": "826a73696d5f6368616e6765a26a636865636b65645f61741b0000019b77086ec06e6c6173745f6368616e67655f61741b0000019b76d18040",
+      "edn": "[\"sim_change\", {\"last_change_at\": 1767225000000, \"checked_at\": 1767228600000}]",
+      "id": "sim-change",
+      "valid": true
+    },
+    {
+      "cbor": "82727265736f757263655f6c6966656379636c65a46470617468826876656869636c65736933342d6162632d3132656576656e746b7265696e6361726e617465696e616d65737061636564726964656b696e6361726e6174696f6e02",
+      "edn": "[\"resource_lifecycle\", {\"namespace\": \"ride\", \"path\": [\"vehicles\", \"34-abc-12\"], \"incarnation\": 2, \"event\": \"reincarnate\"}]",
+      "id": "resource-lifecycle",
+      "valid": true
+    },
+    {
+      "edn": "[\"resource_lifecycle\", {\"namespace\": \"ride\", \"path\": [], \"incarnation\": 1, \"event\": \"create\"}]",
+      "id": "resource-lifecycle-empty-path",
+      "valid": false
+    },
+    {
+      "cbor": "82697061795f6c696d6974a466706572696f64636461796863757272656e6379635452596a68656c645f6d696e6f72192ee06b6c696d69745f6d696e6f721a0007a120",
+      "edn": "[\"pay_limit\", {\"currency\": \"TRY\", \"limit_minor\": 500000, \"period\": \"day\", \"held_minor\": 12000}]",
+      "id": "pay-limit",
+      "valid": true
+    },
+    {
+      "edn": "[\"pay_limit\", {\"currency\": \"try\", \"limit_minor\": 500000, \"period\": \"day\"}]",
+      "id": "pay-limit-lower-currency",
+      "valid": false
+    },
+    {
+      "cbor": "826f66756e64735f617661696c61626c65a36863757272656e63796345555269617661696c61626c65f56c616d6f756e745f6d696e6f72191387",
+      "edn": "[\"funds_available\", {\"currency\": \"EUR\", \"amount_minor\": 4999, \"available\": true}]",
+      "id": "funds-available",
+      "valid": true
+    },
+    {
+      "edn": "[\"credit_score\", {\"score\": 700}]",
+      "id": "unknown-class",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "product-seam.cddl"
+  ],
+  "contract": "product-seam-claim"
+}

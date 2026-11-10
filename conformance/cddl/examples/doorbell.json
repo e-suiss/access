@@ -1,0 +1,19 @@
+{
+  "cases": [
+    {
+      "cbor": "a3636964780363706f7319041266646f6d61696e58200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "edn": "{\"domain\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"pos\": 1042, \"idx\": 3}",
+      "id": "doorbell",
+      "valid": true
+    },
+    {
+      "edn": "{\"domain\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"pos\": 1042, \"idx\": 3, \"event\": \"grant.issued\"}",
+      "id": "doorbell-with-content",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "doorbell.cddl"
+  ],
+  "contract": "doorbell"
+}

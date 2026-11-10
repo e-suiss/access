@@ -1,0 +1,36 @@
+{
+  "cases": [
+    {
+      "cbor": "a4666e756d626572182f686465636973696f6e67617070726f7665696368616c6c656e676558200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a6a6465766963655f6b657958200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "edn": "{\"challenge\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"number\": 47, \"decision\": \"approve\", \"device_key\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b'}",
+      "id": "approve",
+      "valid": true
+    },
+    {
+      "cbor": "a5666e756d626572182f686465636973696f6e67617070726f7665696368616c6c656e676558200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a6a6465766963655f6b657958200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b6c70696e5f7665726966696564f5",
+      "edn": "{\"challenge\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"number\": 47, \"decision\": \"approve\", \"device_key\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b', \"pin_verified\": true}",
+      "id": "approve-app-controlled",
+      "valid": true
+    },
+    {
+      "cbor": "a3686465636973696f6e666e6f745f6d65696368616c6c656e676558200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a6a6465766963655f6b657958200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "edn": "{\"challenge\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"decision\": \"not_me\", \"device_key\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b'}",
+      "id": "not-me",
+      "valid": true
+    },
+    {
+      "edn": "{\"challenge\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"number\": 7, \"decision\": \"approve\", \"device_key\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b'}",
+      "id": "one-digit-number",
+      "valid": false
+    },
+    {
+      "edn": "{\"challenge\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"number\": 47, \"decision\": \"approve\", \"device_key\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b'}",
+      "id": "short-challenge",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "push-challenge.cddl"
+  ],
+  "contract": "push-answer"
+}

@@ -1,0 +1,73 @@
+; Linux client channel, version 1 (RFC 8610; OP-156 m.3 (p), IDP-32, MD-8).
+; Deterministic CBOR (RFC 8949 §4.2.1), one message per length-prefixed frame (u32 big endian)
+; on the daemon's Unix domain socket. The NSS module `libnss_access.so.2` and the PAM module
+; `pam_access.so` speak only this; every answer past the host's horizon is `unavailable`.
+
+linux-request = getpwnam / getpwuid / getgrnam / getgrgid / getgrouplist / authenticate /
+  sudo / poll
+
+getpwnam = { op: "getpwnam", name: user-name }
+getpwuid = { op: "getpwuid", uid: uint }
+getgrnam = { op: "getgrnam", name: user-name }
+getgrgid = { op: "getgrgid", gid: uint }
+getgrouplist = { op: "getgrouplist", name: user-name }
+
+; A console sign-in; the daemon answers `pending` with a device code or an approver push.
+authenticate = {
+  op: "authenticate",
+  user: user-name,
+  service: tstr .size (1..64),      ; the PAM service
+  ? tty: tstr .size (1..64),
+}
+
+; A `sudo` step-up, CT2 by default; never served offline.
+sudo = {
+  op: "sudo",
+  user: user-name,
+  command: bstr .size 32,           ; SHA-256 of the command line
+}
+
+; Polls a pending sign-in or step-up.
+poll = { op: "poll", attempt: bstr .size 16 }
+
+linux-response = passwd / group / groups / auth-pending / auth-done / not-found / unavailable
+
+passwd = {
+  kind: "passwd",
+  name: user-name,
+  uid: uint,
+  gid: uint,
+  gecos: tstr .size (0..256),
+  dir: tstr .size (1..4096),
+  shell: tstr .size (1..4096),
+}
+
+group = {
+  kind: "group",
+  name: user-name,
+  gid: uint,
+  members: [* user-name],
+}
+
+groups = { kind: "groups", gids: [* uint] }
+
+auth-pending = {
+  kind: "pending",
+  attempt: bstr .size 16,
+  text: text-id,                    ; the TextId the module shows
+  ? user_code: tstr .size (1..16),
+  ? verification_uri: tstr .size (1..2048),
+  expires_in: uint,                 ; seconds
+}
+
+auth-done = {
+  kind: "done",
+  outcome: "allow" / "deny",
+  ? offline: bool,                  ; served from the console cache within the horizon
+}
+
+not-found = { kind: "not_found" }
+unavailable = { kind: "unavailable", text: text-id }
+
+user-name = tstr .regexp "[a-z_][a-z0-9_-]{0,31}"
+text-id = tstr .regexp "[a-z][a-z0-9-]*(\\.[a-z0-9-]+)+"

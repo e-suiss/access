@@ -1,0 +1,48 @@
+{
+  "cases": [
+    {
+      "cbor": "a2626f706867657470776e616d646e616d656461797365",
+      "edn": "{\"op\": \"getpwnam\", \"name\": \"ayse\"}",
+      "id": "getpwnam",
+      "valid": true
+    },
+    {
+      "cbor": "a2626f70686765746772676964636769641903e9",
+      "edn": "{\"op\": \"getgrgid\", \"gid\": 1001}",
+      "id": "getgrgid",
+      "valid": true
+    },
+    {
+      "cbor": "a4626f706c61757468656e746963617465637474796474747931647573657264617973656773657276696365656c6f67696e",
+      "edn": "{\"op\": \"authenticate\", \"user\": \"ayse\", \"service\": \"login\", \"tty\": \"tty1\"}",
+      "id": "authenticate",
+      "valid": true
+    },
+    {
+      "cbor": "a3626f70647375646f6475736572646179736567636f6d6d616e6458200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "edn": "{\"op\": \"sudo\", \"user\": \"ayse\", \"command\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a'}",
+      "id": "sudo",
+      "valid": true
+    },
+    {
+      "cbor": "a2626f7064706f6c6c67617474656d70745002020202020202020202020202020202",
+      "edn": "{\"op\": \"poll\", \"attempt\": h'02020202020202020202020202020202'}",
+      "id": "poll",
+      "valid": true
+    },
+    {
+      "edn": "{\"op\": \"getpwnam\", \"name\": \"Ayse\"}",
+      "id": "upper-case-user",
+      "valid": false
+    },
+    {
+      "edn": "{\"op\": \"setpwent\"}",
+      "id": "unknown-op",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "linux-client.cddl"
+  ],
+  "contract": "linux-request"
+}

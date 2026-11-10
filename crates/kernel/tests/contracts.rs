@@ -270,6 +270,51 @@ fn edge_channel_examples_meet_the_cddl() {
     check_examples("edge-channel-response.json");
 }
 
+// OP-156 m.3 (b), (f), (k), (r), (t), (u), L2-CLB-1
+#[test]
+fn product_seam_claim_examples_meet_the_cddl() {
+    check_examples("product-seam.json");
+}
+
+// OP-156 m.3 (d), (e), IDP-4, TN-100
+#[test]
+fn push_answer_examples_meet_the_cddl() {
+    check_examples("push-answer.json");
+}
+
+// OP-156 m.3 (j), OP-138
+#[test]
+fn doorbell_examples_meet_the_cddl() {
+    check_examples("doorbell.json");
+}
+
+// OP-156 m.3 (p), IDP-32
+#[test]
+fn linux_client_examples_meet_the_cddl() {
+    check_examples("linux-client-request.json");
+    check_examples("linux-client-response.json");
+}
+
+// OP-156 m.3 (l), IDP-30
+#[test]
+fn proxy_examples_meet_the_cddl() {
+    check_examples("proxy-decision.json");
+    check_examples("app-token-claims.json");
+}
+
+// OP-156 m.3 (o), IDP-32
+#[test]
+fn ssh_cert_examples_meet_the_cddl() {
+    check_examples("ssh-cert.json");
+}
+
+// OP-156 m.3 (z), E58
+#[test]
+fn first_contact_examples_meet_the_cddl() {
+    check_examples("first-contact-request.json");
+    check_examples("first-contact-token.json");
+}
+
 // IDP-40, F23, OP-155 m.3 (q)
 #[test]
 fn interop_profile_examples_meet_both_schemas() {

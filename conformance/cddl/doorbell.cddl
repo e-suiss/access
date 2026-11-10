@@ -1,0 +1,15 @@
+; NATS JetStream doorbell, version 1 (RFC 8610; OP-156 m.3 (j), OP-138, §17.3.5).
+; Deterministic CBOR (RFC 8949 §4.2.1). Published to `ACCESS_DOORBELL` after the durability
+; fence; it carries no event content, and consumers still read from their outbox cursor.
+
+doorbell = {
+  domain: bstr .size 32,            ; the domain digest
+  pos: uint,                        ; the log position
+  idx: uint,                        ; the index within the position
+}
+
+; The monotone version every event, webhook and SET carries (OP-156 m.3 (j)).
+access-position = {
+  pos: uint,
+  idx: uint,
+}

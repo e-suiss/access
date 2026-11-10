@@ -1,0 +1,21 @@
+; SSH user certificate projection, version 1 (RFC 8610; OP-156 m.3 (o), IDP-32).
+; Deterministic CBOR (RFC 8949 §4.2.1). The fields of a `projection.issue` the realm SSH CA
+; encodes as `ssh-ed25519-cert-v01@openssh.com`; an agent's certificate is narrower than its
+; principal's (projection ⊆ source).
+
+ssh-cert-projection = {
+  key_id: tstr .size (1..128),      ; the projection id
+  serial: uint,                     ; 64 bits from the RNG
+  holder: "person" / "agent",
+  public_key: bstr .size 32,        ; the ephemeral Ed25519 public key
+  principals: [+ tstr .size (1..64)], ; from the `ssh.login` Grant's `principal` parameter
+  host_group: tstr .size (1..128),  ; the resource
+  valid_after: uint,                ; Unix seconds
+  valid_before: uint,               ; person ≤ 12 h, agent ≤ 1 h, never past the horizon
+  ? force_command: tstr .size (1..4096),
+  ? source_address: [+ tstr .size (1..64)],
+  extensions: [* ssh-extension],
+}
+
+ssh-extension = "permit-pty" / "permit-port-forwarding" / "permit-agent-forwarding" /
+  "permit-X11-forwarding" / "permit-user-rc"

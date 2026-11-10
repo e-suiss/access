@@ -1,0 +1,43 @@
+{
+  "cases": [
+    {
+      "cbor": "a7636469726a2f686f6d652f61797365636769641903e9637569641903e9646b696e6466706173737764646e616d656461797365656765636f736b417973652059696c6d617a657368656c6c692f62696e2f62617368",
+      "edn": "{\"kind\": \"passwd\", \"name\": \"ayse\", \"uid\": 1001, \"gid\": 1001, \"gecos\": \"Ayse Yilmaz\", \"dir\": \"/home/ayse\", \"shell\": \"/bin/bash\"}",
+      "id": "passwd",
+      "valid": true
+    },
+    {
+      "cbor": "a4636769641907d0646b696e646567726f7570646e616d65636f7073676d656d62657273826461797365646d657274",
+      "edn": "{\"kind\": \"group\", \"name\": \"ops\", \"gid\": 2000, \"members\": [\"ayse\", \"mert\"]}",
+      "id": "group",
+      "valid": true
+    },
+    {
+      "cbor": "a6646b696e646770656e64696e676474657874746c696e75782e7369676e696e2d70656e64696e6767617474656d7074500202020202020202020202020202020269757365725f636f64656957444a422d4d4a48546a657870697265735f696e19012c70766572696669636174696f6e5f757269781b68747470733a2f2f61636d652e6578616d706c652f646576696365",
+      "edn": "{\"kind\": \"pending\", \"attempt\": h'02020202020202020202020202020202', \"text\": \"linux.signin-pending\", \"user_code\": \"WDJB-MJHT\", \"verification_uri\": \"https://acme.example/device\", \"expires_in\": 300}",
+      "id": "pending",
+      "valid": true
+    },
+    {
+      "cbor": "a3646b696e6464646f6e65676f66666c696e65f5676f7574636f6d6565616c6c6f77",
+      "edn": "{\"kind\": \"done\", \"outcome\": \"allow\", \"offline\": true}",
+      "id": "done-offline",
+      "valid": true
+    },
+    {
+      "cbor": "a2646b696e646b756e617661696c61626c656474657874716c696e75782e756e617661696c61626c65",
+      "edn": "{\"kind\": \"unavailable\", \"text\": \"linux.unavailable\"}",
+      "id": "unavailable",
+      "valid": true
+    },
+    {
+      "edn": "{\"kind\": \"done\", \"outcome\": \"maybe\"}",
+      "id": "done-maybe",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "linux-client.cddl"
+  ],
+  "contract": "linux-response"
+}

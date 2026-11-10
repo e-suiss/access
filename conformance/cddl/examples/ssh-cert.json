@@ -1,0 +1,30 @@
+{
+  "cases": [
+    {
+      "cbor": "a966686f6c64657266706572736f6e666b65795f69646970726a5f3031485a586673657269616c1b7fffffffffffffff6a657874656e73696f6e73816a7065726d69742d7074796a686f73745f67726f75706870726f642d7765626a7072696e636970616c738164617973656a7075626c69635f6b657958200c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c6b76616c69645f61667465721a6955b6a86c76616c69645f6265666f72651a69562728",
+      "edn": "{\"key_id\": \"prj_01HZX\", \"serial\": 9223372036854775807, \"holder\": \"person\", \"public_key\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c', \"principals\": [\"ayse\"], \"host_group\": \"prod-web\", \"valid_after\": 1767225000, \"valid_before\": 1767253800, \"extensions\": [\"permit-pty\"]}",
+      "id": "person",
+      "valid": true
+    },
+    {
+      "cbor": "ab66686f6c646572656167656e74666b65795f69646970726a5f3031485a596673657269616c182a6a657874656e73696f6e73806a686f73745f67726f75706870726f642d7765626a7072696e636970616c7381666465706c6f796a7075626c69635f6b657958200c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c6b76616c69645f61667465721a6955b6a86c76616c69645f6265666f72651a6955ba2c6d666f7263655f636f6d6d616e64752f7573722f6c6f63616c2f62696e2f6465706c6f796e736f757263655f61646472657373816a31302e302e302e302f38",
+      "edn": "{\"key_id\": \"prj_01HZY\", \"serial\": 42, \"holder\": \"agent\", \"public_key\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c', \"principals\": [\"deploy\"], \"host_group\": \"prod-web\", \"valid_after\": 1767225000, \"valid_before\": 1767225900, \"force_command\": \"/usr/local/bin/deploy\", \"source_address\": [\"10.0.0.0/8\"], \"extensions\": []}",
+      "id": "agent",
+      "valid": true
+    },
+    {
+      "edn": "{\"key_id\": \"prj_01HZX\", \"serial\": 1, \"holder\": \"person\", \"public_key\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c', \"principals\": [], \"host_group\": \"prod-web\", \"valid_after\": 1, \"valid_before\": 2, \"extensions\": []}",
+      "id": "no-principal",
+      "valid": false
+    },
+    {
+      "edn": "{\"key_id\": \"prj_01HZX\", \"serial\": 1, \"holder\": \"person\", \"public_key\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c', \"principals\": [\"ayse\"], \"host_group\": \"prod-web\", \"valid_after\": 1, \"valid_before\": 2, \"extensions\": [\"no-touch-required\"]}",
+      "id": "unknown-extension",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "ssh-cert.cddl"
+  ],
+  "contract": "ssh-cert-projection"
+}

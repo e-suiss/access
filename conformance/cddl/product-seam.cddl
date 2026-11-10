@@ -1,0 +1,113 @@
+; Product seam Claim classes outside the Kernel table, version 1 (RFC 8610; OP-156 m.3 (b),
+; (f), (k), (r), (t), (u)). Deterministic CBOR (RFC 8949 §4.2.1).
+; A product, a signal source or an operator issues these Claims under its own issuer key; their
+; effect comes only from the domain's Acceptance (§7.9.10.3, PI-3, E38). A class with a body
+; carries in the Claim's `value` the digest
+; SHA-256("access/claim-body/v1" || 0x00 || dCBOR([class, body])) (L2-CLB-1); the Kernel does not
+; check these classes (L2-CLB-2).
+
+product-seam-claim = ["commitment_active", commitment-active] /
+  ["order_refundable", order-refundable] /
+  ["on_shift", on-shift] /
+  ["identity_proofing", identity-proofing] /
+  ["posture_mdm", posture-mdm] /
+  ["risk_external", risk-external] /
+  ["data_label", data-label] /
+  ["sim_change", sim-change] /
+  ["resource_lifecycle", resource-lifecycle] /
+  ["pay_limit", pay-limit] /
+  ["funds_available", funds-available]
+
+; A Work commitment a commitment-scoped Grant is held under (`WhileCondition::ClaimHeld`,
+; OP-156 m.3 (t)). An affirmative `false` ends the Grant; a later `true` never revives it (E14).
+commitment-active = {
+  commitment: digest,               ; the CommitmentRef digest
+  active: bool,
+}
+
+; A Commerce order a refund Grant is bound to (OP-156 m.3 (u)).
+order-refundable = {
+  order: ref,
+  refundable: bool,
+  ? until: uint,                    ; Unix milliseconds
+}
+
+; A Serve shift; short validity (OP-156 m.3 (u)).
+on-shift = {
+  location: ref,
+  on_shift: bool,
+  until: uint,                      ; Unix milliseconds
+}
+
+; External KYC or identity verification (OP-156 m.3 (r)); Access claims no proofing of its own.
+identity-proofing = identity-proofing-ial / identity-proofing-eidas
+
+identity-proofing-ial = {
+  provider: ref,
+  method: proofing-method,
+  ial: 1 / 2 / 3,                   ; NIST SP 800-63A-4
+  verified_at: uint,
+}
+
+identity-proofing-eidas = {
+  provider: ref,
+  method: proofing-method,
+  loa_eidas: "low" / "substantial" / "high",
+  verified_at: uint,
+}
+
+proofing-method = "document" / "document_nfc" / "eid" / "bank" / "in_person" / "video"
+
+; Device posture from an MDM (OP-156 m.3 (r)); shown as "Compliant per <provider> (statement)".
+posture-mdm = {
+  managed: bool,
+  compliant: bool,
+  provider: ref,
+  statement: tstr .size (1..512),
+}
+
+; An external risk or fraud verdict; it only narrows (CI-2, OP-156 m.3 (r)).
+risk-external = {
+  level: "low" / "medium" / "high" / "critical",
+  reason_class: ref,
+}
+
+; A DLP data label, a predicate input of `disclose` decisions (OP-156 m.3 (r)).
+data-label = {
+  label: ref,
+  scheme: ref,
+}
+
+; The last SIM change of the subject's phone line, from an operator or aggregator issuer
+; (OP-156 m.3 (f)).
+sim-change = {
+  last_change_at: uint,             ; Unix milliseconds
+  checked_at: uint,                 ; Unix milliseconds
+}
+
+; A product's resource lifecycle event under its own issuer (OP-156 m.3 (k), INV-32).
+resource-lifecycle = {
+  namespace: ref,
+  path: [+ tstr],
+  incarnation: uint,
+  event: "create" / "delete" / "reincarnate",
+}
+
+; A financial limit or hold of Pay or Money, a fact apart from authority (XI-14, OP-156 m.3 (u)).
+pay-limit = {
+  currency: currency,
+  limit_minor: uint,
+  period: "transaction" / "day" / "month",
+  ? held_minor: uint,
+}
+
+; Whether the instrument covers an amount (OP-156 m.3 (u)); never an authority statement.
+funds-available = {
+  currency: currency,
+  amount_minor: uint,
+  available: bool,
+}
+
+ref = tstr .regexp "[a-z0-9][a-z0-9._:-]{0,127}"
+currency = tstr .regexp "[A-Z]{3}"
+digest = bstr .size 32
