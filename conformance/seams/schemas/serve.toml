@@ -1,4 +1,59 @@
-# Suiss Serve seam schema (OP-156 m.3 (u)): its actions and Claim classes come with lane Q17.
+# Suiss Serve (§7.9.10.2, OP-156 m.3 (u)): Serve owns restaurants, menus, locations, orders,
+# kitchens, deliveries and the staff schedule; Access holds the void, refund, menu edit and cash
+# drawer authority. A store admin is a Grant of those actions on the store from the store's root,
+# never an action of its own. Who is on shift now is Serve's short-lived `on_shift` Claim; the
+# role is its `serve_staff` Claim. Shift membership is a Claim; authority is a Grant.
 product = "Suiss Serve"
 namespace = "serve"
 catalog_version = 1
+truth = ["restaurant", "menu", "location", "order", "kitchen", "delivery", "staff schedule"]
+
+[[actions]]
+name = "void"
+major = 1
+effect_class = "reversible"
+reversibility = "compensable"
+consumption_bearing = true
+params = { amount = "amount" }
+classes = { amount = "amount" }
+resource_types = ["order"]
+render = "Void {amount}"
+
+[[actions]]
+name = "refund"
+major = 1
+effect_class = "irreversible"
+reversibility = "irreversible"
+consumption_bearing = true
+params = { amount = "amount" }
+classes = { amount = "amount" }
+resource_types = ["order"]
+render = "Refund {amount}"
+
+[[actions]]
+name = "menu_edit"
+major = 1
+effect_class = "reversible"
+reversibility = "reversible"
+resource_types = ["menu"]
+render = "Edit the menu"
+
+[[actions]]
+name = "drawer_open"
+major = 1
+effect_class = "reversible"
+reversibility = "reversible"
+resource_types = ["drawer"]
+render = "Open the cash drawer"
+
+[[claims]]
+class = "on_shift"
+value = "bytes"
+use = "predicate-input"
+meaning = "The subject is on shift at the location now; it holds only until the shift ends."
+
+[[claims]]
+class = "serve_staff"
+value = "text"
+use = "subject-selection"
+meaning = "The subject has the staff role the value names, for example `store-1:cashier`."

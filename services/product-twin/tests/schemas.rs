@@ -101,3 +101,42 @@ fn an_unclassified_parameter_or_an_unknown_type_is_refused() {
     );
     assert!(Schema::parse(&tabled).is_err());
 }
+
+// §7.9.9, §7.9.10, OP-156 m.3 (u)
+#[test]
+fn pay_commerce_and_serve_name_their_actions_and_claims() {
+    let pay = load("pay");
+    let names: Vec<&str> = pay.actions.iter().map(|a| a.name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "initiate",
+            "approve",
+            "refund",
+            "payout",
+            "hold_create",
+            "beneficiary_add"
+        ]
+    );
+    assert_eq!(pay.classes["initiate"]["amount"], "amount");
+    assert_eq!(pay.classes["beneficiary_add"]["beneficiary"], "recipient");
+    assert_eq!(
+        pay.claim("pay_limit").unwrap().use_,
+        access_kernel::claim::PREDICATE_INPUT
+    );
+    let commerce = load("commerce");
+    assert!(commerce.action("refund").is_some() && commerce.action("policy_update").is_some());
+    assert_eq!(
+        commerce.claim("order_refundable").unwrap().use_,
+        access_kernel::claim::PREDICATE_INPUT
+    );
+    assert_eq!(
+        commerce.claim("seller_member").unwrap().use_,
+        access_kernel::claim::SUBJECT_SELECTION
+    );
+    let serve = load("serve");
+    for a in ["void", "refund", "menu_edit", "drawer_open"] {
+        assert!(serve.action(a).is_some(), "{a}");
+    }
+    assert!(serve.claim("on_shift").is_some() && serve.claim("serve_staff").is_some());
+}

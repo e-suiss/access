@@ -1,4 +1,40 @@
-# Suiss Commerce seam schema (OP-156 m.3 (u)): its actions and Claim classes come with lane Q17.
+# Suiss Commerce (§7.9.10.1, OP-156 m.3 (u)): Commerce owns catalog, cart, order, price,
+# inventory, seller state and the refund rule; Access holds the refund authority, the merchant
+# admin authority and the authority to change Commerce's eligibility settings. Whether an order is
+# refundable is Commerce's `order_refundable` predicate; whether someone works for a merchant is
+# its `seller_member` Claim, which selects a rule-shaped Grant.
 product = "Suiss Commerce"
 namespace = "commerce"
 catalog_version = 1
+truth = ["catalog", "cart", "order", "price", "inventory", "seller state", "refund rule"]
+
+[[actions]]
+name = "refund"
+major = 1
+effect_class = "irreversible"
+reversibility = "compensable"
+consumption_bearing = true
+params = { amount = "amount" }
+classes = { amount = "amount" }
+resource_types = ["order"]
+render = "Refund {amount} on an order"
+
+[[actions]]
+name = "policy_update"
+major = 1
+effect_class = "reversible"
+reversibility = "reversible"
+resource_types = ["merchant"]
+render = "Change the merchant's eligibility settings"
+
+[[claims]]
+class = "order_refundable"
+value = "bytes"
+use = "predicate-input"
+meaning = "The order can be refunded now, by Commerce's own refund rule."
+
+[[claims]]
+class = "seller_member"
+value = "text"
+use = "subject-selection"
+meaning = "The subject works for the merchant the value names."

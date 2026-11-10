@@ -1,4 +1,95 @@
-# Suiss Pay seam schema (OP-156 m.3 (u)): its actions and Claim classes come with lane Q17.
+# Suiss Pay (§7.9.9, E21, F9, OP-156 m.3 (u)): Access holds the authority over Pay's actions;
+# Pay owns payment execution, holds, settlement, refunds, payouts, scheme artefacts and network
+# tokens. A principal's payment authority limit is a BudgetTerm of the Grant; Pay's own financial
+# limit is its `pay_limit` Claim, a separate fact. The payment envelope is the amount bound, the
+# intent's recipient and its purpose. Dotted spec names become one action name each
+# (`pay.hold.create` is `hold_create`), since a schema publishes one namespace.
 product = "Suiss Pay"
 namespace = "pay"
 catalog_version = 1
+truth = [
+  "payment execution",
+  "authorization hold",
+  "settlement",
+  "financial idempotency",
+  "network and acquirer state",
+  "scheme artefacts",
+  "network tokens",
+  "financial limits",
+]
+
+[[actions]]
+name = "initiate"
+major = 1
+effect_class = "irreversible"
+reversibility = "compensable"
+consumption_bearing = true
+params = { amount = "amount" }
+classes = { amount = "amount" }
+resource_types = ["instrument"]
+render = "Pay {amount}"
+
+[[actions]]
+name = "approve"
+major = 1
+effect_class = "irreversible"
+reversibility = "compensable"
+consumption_bearing = true
+params = { amount = "amount" }
+classes = { amount = "amount" }
+resource_types = ["payment"]
+render = "Approve a payment of {amount}"
+
+[[actions]]
+name = "refund"
+major = 1
+effect_class = "irreversible"
+reversibility = "irreversible"
+consumption_bearing = true
+params = { amount = "amount" }
+classes = { amount = "amount" }
+resource_types = ["payment"]
+render = "Refund {amount}"
+
+[[actions]]
+name = "payout"
+major = 1
+effect_class = "irreversible"
+reversibility = "irreversible"
+consumption_bearing = true
+params = { amount = "amount" }
+classes = { amount = "amount" }
+resource_types = ["account"]
+render = "Pay out {amount}"
+
+[[actions]]
+name = "hold_create"
+major = 1
+effect_class = "reversible"
+reversibility = "reversible"
+params = { amount = "amount" }
+classes = { amount = "amount" }
+resource_types = ["instrument"]
+render = "Hold {amount}"
+
+[[actions]]
+name = "beneficiary_add"
+major = 1
+effect_class = "irreversible"
+reversibility = "compensable"
+params = { beneficiary = "id" }
+classes = { beneficiary = "recipient" }
+resource_types = ["account"]
+render = "Add {beneficiary} as a beneficiary"
+
+[[claims]]
+class = "pay_limit"
+value = "bytes"
+use = "predicate-input"
+meaning = "Pay's financial limit or hold on the instrument: a fact apart from authority (XI-14)."
+
+[[claims]]
+class = "funds_available"
+value = "bytes"
+use = "predicate-input"
+meaning = "Whether the instrument covers an amount; never an authority statement."

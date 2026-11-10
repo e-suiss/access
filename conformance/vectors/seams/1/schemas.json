@@ -5,10 +5,10 @@
  "operation": "seam.schema",
  "rules": ["OP-141 m.35 (b)"],
  "cases": [
-  {"id": "commerce", "schema": "seams/schemas/commerce.toml", "namespace": "commerce", "actions": {}},
+  {"id": "commerce", "schema": "seams/schemas/commerce.toml", "namespace": "commerce", "actions": {"refund": "4646b25ab264e8d404e7172810adf1e17259715ca79d6ca45142f8ebc6e21a0c", "policy_update": "45af8d3dfd5b35d5ec50648c03d8345d12fb7338dc53bdf1882c7486392cda06"}},
   {"id": "health", "schema": "seams/schemas/health.toml", "namespace": "health", "actions": {"read": "67aa96dd40a50c577dfb344051754fff588bc41d6facacb3103fded6525c1a9a", "share": "d7b9d8888b17ae592db7cbb7303c5f2ab5b09e1e28a6110b363fab19151a452e", "book": "96f7e484f70d2da81dcd5ecbbb88a28eb8021256a53737cc64fff0c265ed0560"}},
-  {"id": "pay", "schema": "seams/schemas/pay.toml", "namespace": "pay", "actions": {}},
+  {"id": "pay", "schema": "seams/schemas/pay.toml", "namespace": "pay", "actions": {"initiate": "6ef9d08de48622bdfb29796d17bc4e49d403621c1353a514c29218f55aa11439", "approve": "5ad701e680ba2cc7a3cb17ef43fcb92ab9c10b62f1922e8c9619abaecd8779fe", "refund": "9793c6e20ea7e7884bc54f747f634b7339cf2a2bfde9a73844b59dbdd64c3c7e", "payout": "bda50afb438177b16d427ed588c2b279d5744c8c707bbbe4d79bd40492552676", "hold_create": "077af3af48776de2b19f6492c041fa844264a4fae4526e38c7dd5d717a02c25a", "beneficiary_add": "57788e097cf51bee438791c49ac9b7ad42e7eb9b82638ef1f03063ef217f2d6e"}},
   {"id": "ride", "schema": "seams/schemas/ride.toml", "namespace": "ride", "actions": {"request": "31d61b5ec2d4f07d11ba63916b12110c9bde1f4608290ecddad7ca093b5a9bd5", "accept": "20bdffd3ae2a3abdbfef30bb2d3b5ca58074a669aa0221af3e2ab8ce33db3afe"}},
-  {"id": "serve", "schema": "seams/schemas/serve.toml", "namespace": "serve", "actions": {}}
+  {"id": "serve", "schema": "seams/schemas/serve.toml", "namespace": "serve", "actions": {"void": "856f373d69fd45dec203a8979075186face7a3af965ad42d0ad945008e2c01ed", "refund": "ec60eb3ce1600c6ba97a0108366f4a541a1b768d1eb19ad7177266eb344d5bc0", "menu_edit": "a50f249df35bfe458cffa7432a82d3aab00b85c1b058494b92d595376428192e", "drawer_open": "f2eae1f6076fdee9dfe012ce6dc4cade8d2d16383ec3ac6b305aece713e8ee1f"}}
  ]
 }
