@@ -28,6 +28,10 @@ pub(super) fn components() -> Value {
             }),
             &["context"],
         ),
+        "SuissCoordinator": object(
+            &json!({ "attention": text("The coordinator's public Needs Attention endpoint the realm named (`idp.realm.coordinator`, OP-156 m.3 (t)); `GET` with `party` answers `{count, href}`. Access keeps no queue.") }),
+            &["attention"],
+        ),
         "EligibleSet": object(
             &json!({
                 "parties": { "type": "array", "maxItems": 1000, "items": b64("A PartyID."), "description": "The named holders of `approve:<class>` now: a live Grant covering `access:contribute` on `access.contribution:[gate_class]` whose lineage is in force. Rule-shaped and public holders are not listed; ask `eligibility:check` per Party." },
