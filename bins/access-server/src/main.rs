@@ -22,6 +22,7 @@ mod custom_domains;
 mod doorbell;
 mod edge;
 mod events;
+mod export;
 mod idp;
 mod ids;
 mod ingest;
@@ -750,6 +751,9 @@ fn lockdown(config: &Config) -> Lockdown {
     if let Some(port) = config.telemetry.otlp_port() {
         lockdown = lockdown.allow_tcp_connect(port);
     }
+    // OP-156 m.3 (s)
+    lockdown =
+        lockdown.allow_tcp_connect(access_identity_oauth::adapters::outbound::SYSLOG_TLS_PORT);
     // OP-156 m.3 (i)
     if let Some(port) = acme_port(config) {
         lockdown = lockdown.allow_tcp_connect(port);
@@ -1460,6 +1464,7 @@ struct Background {
     chains: tokio::task::JoinHandle<()>,
     sampling: tokio::task::JoinHandle<()>,
     domains: tokio::task::JoinHandle<()>,
+    exporting: tokio::task::JoinHandle<()>,
     ready: Readiness,
     /// Every realm's JWKS loaded at start-up (OP-138, §17.9.7).
     jwks: ReadyFlag,
@@ -1490,6 +1495,13 @@ impl Background {
             custom_domains::Keks(keks.clone()),
             holder()?,
         );
+        // OP-156 m.3 (s)
+        let exporting = tokio::spawn(export::run(
+            (pools.app.clone(), pools.router.clone()),
+            outbound.clone(),
+            keks.clone(),
+            holder()?,
+        ));
         let logout = courier(config, pools, outbound.clone())?;
         let vault_outbound = outbound.clone();
         let keks_for_vault = keks.clone();
@@ -1579,6 +1591,7 @@ impl Background {
             // §17.8.2, OP-53
             sampling: tokio::spawn(sample_pools(PoolGauges::of(pools))),
             domains,
+            exporting,
             jwks: ready.flag("jwks.realms"),
             ready,
         })
@@ -1599,6 +1612,7 @@ impl Background {
         self.chains.abort();
         self.sampling.abort();
         self.domains.abort();
+        self.exporting.abort();
     }
 }
 

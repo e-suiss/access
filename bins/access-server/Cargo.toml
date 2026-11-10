@@ -24,6 +24,7 @@ access-identity-events = { workspace = true }
 access-identity-oauth = { workspace = true }
 access-identity-domain = { workspace = true }
 access-identity-proxy = { workspace = true }
+access-identity-export = { workspace = true }
 access-identity-attest = { workspace = true }
 access-identity-edge = { workspace = true }
 access-identity-scim = { workspace = true }
@@ -61,6 +62,7 @@ zeroize = { workspace = true, features = ["alloc", "std"] }
 
 [dev-dependencies]
 access-identity-domain = { workspace = true, features = ["testing"] }
+access-identity-export = { workspace = true, features = ["testing"] }
 access-experience = { workspace = true }
 access-executor = { path = "../../services/executor", features = ["testing"] }
 access-vc-verifier = { path = "../../services/vc-verifier", features = ["testing"] }

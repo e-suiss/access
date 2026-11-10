@@ -413,3 +413,12 @@ impl SyslogTwin {
             .collect()
     }
 }
+
+/// The rows of a Parquet object as text; `None` when it is not a Parquet file.
+#[must_use]
+pub fn parquet_rows(file: &[u8]) -> Option<Vec<String>> {
+    use parquet::file::reader::{FileReader as _, SerializedFileReader};
+    let reader = SerializedFileReader::new(bytes::Bytes::from(file.to_vec())).ok()?;
+    let rows = reader.get_row_iter(None).ok()?;
+    rows.map(|r| r.ok().map(|r| r.to_string())).collect()
+}

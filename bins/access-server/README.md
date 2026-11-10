@@ -245,7 +245,10 @@ While serving, the process also runs, each stopping with the server:
 - the Token Status List publisher, which signs a changed list at once and an unchanged one again
   before verifiers would find it stale;
 - the back-channel logout courier, the event and webhook fan-outs and couriers, and the SSF
-  receiver.
+  receiver;
+- the export pass: every 10 seconds one node sends each realm's export sinks the audit rows they
+  have not accepted yet, as a copy, never the record. Syslog sinks are reached over TLS on port
+  6514, or at a declared delivery target's host and port.
 
 `/readyz` answers ready only when every pool answers, both signers accept a connection, every
 realm's JWKS loaded at start-up and every courier and consumer is running.

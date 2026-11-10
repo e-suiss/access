@@ -309,6 +309,17 @@ pub(super) async fn console(label: &str, with_adp: bool) -> Console {
 
 /// [`console`] bootstrapped from `plan`.
 pub(super) async fn console_with(label: &str, with_adp: bool, plan: &Plan) -> Console {
+    console_declaring(label, with_adp, plan, DeclaredTargets::default()).await
+}
+
+/// [`console_with`] whose admin surface knows the operator's declared delivery targets
+/// (OP-149 m.23).
+pub(super) async fn console_declaring(
+    label: &str,
+    with_adp: bool,
+    plan: &Plan,
+    targets: DeclaredTargets,
+) -> Console {
     let w = World::new(label).await;
     let declared = DeclaredTargets::default();
     Bootstrap {
@@ -406,7 +417,7 @@ pub(super) async fn console_with(label: &str, with_adp: bool, plan: &Plan) -> Co
                 SignerKeys::new(w.identity_signer.clone()),
                 w.keys.clone(),
             )),
-            declared: DeclaredTargets::default(),
+            declared: targets,
             platform: None,
             outbound: Outbound::disabled(Duration::from_secs(5)),
             vault: access_identity_events::adapters::KekSealer(crate::login::RealmKeks::new(
@@ -1170,6 +1181,7 @@ mod cross_app;
 mod dcr;
 mod device;
 mod domains;
+mod export;
 mod gateways;
 mod organizations;
 mod resources;
