@@ -116,6 +116,9 @@ export * as agent from "./agent/index.js";
 export * as authorize from "./authorize.js";
 export * as reason from "./reason.js";
 export * as sso from "./sso/index.js";
+// OP-156 m.3 (u), (v)
+export * as pay from "./pay/index.js";
+export * as offline from "./offline/index.js";
 export type * as AccessApi from "./generated/access-v1.js";
 export type * as AdminApi from "./generated/admin-v1.js";
 export type * as FrontendApi from "./generated/frontend.js";
