@@ -26,6 +26,7 @@ pub mod health;
 pub mod ipc;
 pub mod parser;
 pub mod pool;
+pub mod saml;
 
 #[cfg(feature = "channel")]
 pub use crate::core::{EdgeCore, EdgeError};

@@ -44,6 +44,21 @@ after any answer that is not a clean `ok`.
 
 Each refusal is a stable code (`xml-doctype`, `der-too-large`, ...).
 
+## SAML
+
+| Operation | What it does |
+|---|---|
+| `saml.request` | Reads an `AuthnRequest` or `LogoutRequest` (alone, or in an ECP SOAP body), verifies its enveloped signature with the service provider's pinned certificates and returns the request's facts |
+| `saml.redirect` | Verifies a detached HTTP-Redirect signature over the octets as received |
+
+The message is read once, into one tree. Duplicate identifiers refuse the whole document. The one
+`ds:Signature` must be a direct child of the request and its one `Reference` must name that
+request's own `ID`; the facts are read from that same element, so the element whose signature
+verified is the element that is read. Only the enveloped-signature and exclusive c14n transforms
+are accepted, digests and signatures are SHA-2 (RSA or ECDSA), `KeyInfo` is never a trust anchor
+and SHA-1 is refused. C14N and the signature check are this crate's own code over `quick-xml`,
+the one parser.
+
 ## Wire
 
 One request, one reply. Each is a deterministic CBOR header and a raw byte segment, both prefixed

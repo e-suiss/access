@@ -10,7 +10,7 @@ use access_edge_core::ipc::{Op, Reply, Request};
 use access_edge_core::pool::{MAX_REQUESTS, read_frame};
 use suiss_sandbox::{LandlockAbi, Lockdown, Profile};
 
-use crate::{parse, supervisor, trusted_list};
+use crate::{parse, saml, supervisor, trusted_list};
 
 /// Address space of one worker.
 #[cfg_attr(
@@ -91,6 +91,8 @@ pub(crate) fn handle(r: Request) -> Reply {
         Op::DerCheck => parse::der(&r.input).map(|s| (s, r.input)),
         Op::Abort => abort(),
         Op::TlRead => trusted_list::read(&r.input),
+        Op::SamlRequest => saml::request(&r.input),
+        Op::SamlRedirect => saml::redirect(&r.input),
     };
     match checked {
         Ok((summary, output)) => Reply::Ok { summary, output },

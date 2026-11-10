@@ -6,7 +6,13 @@
 //! file, no key) and parses one request at a time from the socket pair it was started on. A
 //! crash, a panic or a limit kills only that worker.
 
+mod c14n;
+mod dom;
+mod dsig;
 mod parse;
+mod saml;
+#[cfg(test)]
+mod saml_tests;
 mod supervisor;
 mod trusted_list;
 mod work;

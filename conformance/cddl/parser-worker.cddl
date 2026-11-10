@@ -27,7 +27,8 @@ parser-request-header = {
 ; `test.abort` makes the worker abort as a memory-corruption crash would; it exists only in a
 ; debug build (U43 test hook) and a release worker refuses it with `op-refused`.
 parser-op = "xml.check" / "xml.inflate" / "der.check" / "test.abort" /
-  "tl.read"                             ; P12: ETSI TS 119 612 list summary (OP-155 m.3 (p))
+  "tl.read" /                           ; P12: ETSI TS 119 612 list summary (OP-155 m.3 (p))
+  "saml.request" / "saml.redirect"
 
 parser-reply-header = parser-ok / parser-refused / parser-worker-failed
 
@@ -54,7 +55,14 @@ parser-refusal = "op-refused" / "frame-malformed" / "deflate-malformed" /
   "xml-entity" / "xml-processing-instruction" / "xml-depth" / "xml-elements" /
   "xml-ratio" / "xml-multiple-roots" / "xml-unclosed" / "xml-content-outside-root" /
   "der-too-large" / "der-depth" / "der-malformed" /
-  "tl-malformed" / "tl-too-large"       ; P12
+  "tl-malformed" / "tl-too-large" /     ; P12
+  "xml-namespace" / "xml-duplicate-id" / "saml-duplicate-element" / "saml-mixed-content" /
+  "saml-soap" / "saml-message" / "saml-version" / "saml-issuer" / "saml-field" /
+  "saml-acs-both" / "saml-name-id" / "cert-malformed" / "cert-key-unsupported" /
+  "signature-alg" / "signature-no-key" / "signature-invalid" / "signature-malformed" /
+  "signature-digest-alg" / "signature-multiple" / "signature-not-enveloped" /
+  "signature-reference-count" / "signature-c14n" / "signature-reference" /
+  "signature-transform" / "signature-digest" / "signature-missing"
 
 ; P12: the `ok` segment of tl.read, deterministic CBOR. Certificates are DER; the worker verifies
 ; no signature.
@@ -72,4 +80,48 @@ tl-service = {
   service_type: tstr,
   status: tstr,
   certificates: [* bstr],
+}
+
+; SAML operations (OP-155 m.3 (d), §10.6.1, IDI-8). The request segment is a u32-prefixed
+; deterministic CBOR context, then (for saml.request) the untrusted message; the `ok` segment
+; is deterministic CBOR. The message is read into one tree; its one enveloped signature is
+; verified with a pinned certificate (never KeyInfo), exclusive c14n, SHA-2 only; the facts are
+; read from the element whose signature verified.
+saml-request-context = {
+  inflate: bool,                        ; HTTP-Redirect: raw DEFLATE first
+  certs: [* bstr .size (1..8192)],      ; the SP's pinned certificates, at most 8
+  require_signature: bool,
+}
+
+saml-redirect-context = {
+  certs: [* bstr .size (1..8192)],
+  sig_alg: tstr,
+  signed: bstr,                         ; the original URL-encoded octets
+  signature: bstr,
+}
+
+saml-facts = {
+  kind: "authn" / "logout",
+  id: tstr,
+  issue_instant: tstr,
+  issuer: tstr,
+  force_authn: bool,
+  is_passive: bool,
+  requester_ids: [* tstr],
+  session_indexes: [* tstr],
+  soap: bool,
+  ? signed: tstr,                       ; the verified SignatureMethod
+  ? destination: tstr,
+  ? acs_url: tstr,
+  ? acs_index: uint,
+  ? protocol_binding: tstr,
+  ? nameid_format: tstr,
+  ? allow_create: bool,
+  ? sp_name_qualifier: tstr,
+  ? proxy_count: uint,
+  ? name_id: tstr,
+}
+
+saml-redirect-verified = {
+  verified: tstr,
 }

@@ -29,14 +29,21 @@ pub enum Op {
     /// Reads an ETSI TS 119 612 trusted list into its CBOR summary (OP-155 m.3 (p)); the
     /// segment of the reply is the summary.
     TlRead,
+    /// Reads a SAML request and verifies its enveloped signature (`crate::saml::Context`, then
+    /// the message); answers `crate::saml::Facts` (§10.6.1, IDI-8).
+    SamlRequest,
+    /// Verifies a detached HTTP-Redirect signature (`crate::saml::Redirect`).
+    SamlRedirect,
 }
 
-const OPS: [(&str, Op); 5] = [
+const OPS: [(&str, Op); 7] = [
     ("xml.check", Op::XmlCheck),
     ("xml.inflate", Op::XmlInflate),
     ("der.check", Op::DerCheck),
     ("test.abort", Op::Abort),
     ("tl.read", Op::TlRead),
+    ("saml.request", Op::SamlRequest),
+    ("saml.redirect", Op::SamlRedirect),
 ];
 
 impl Op {

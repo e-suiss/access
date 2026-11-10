@@ -679,10 +679,12 @@ version = "0.4.0"
 dependencies = [
  "access-edge-core",
  "access-parse",
+ "aws-lc-rs",
  "esuiss-crypto",
  "esuiss-sandbox",
  "miniz_oxide",
  "quick-xml",
+ "rcgen",
  "rustix",
  "tokio",
 ]
