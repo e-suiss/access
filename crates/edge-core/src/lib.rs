@@ -25,6 +25,7 @@ mod core;
 pub mod governor;
 pub mod health;
 pub mod ipc;
+pub mod keytab;
 pub mod parser;
 pub mod pool;
 pub mod saml;
