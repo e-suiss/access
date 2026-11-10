@@ -956,3 +956,47 @@ phrases = [
 negation = true
 sources = ["E22", "IDP-39 (3)", "§7.9.12.3", "§8.17.12"]
 honest = "An IGA's review decisions reach Access as Exercise requests; Access answers who, why and revocation impact from its searches, and a campaign never produces authority."
+# §7.9.9.3, E21, MUST-NEVER-7, OP-156 m.3 (u)
+[[claim]]
+id = "payment-mandate-is-access-mandate"
+scope = "all"
+phrases = [
+  "payment mandate is an Access Mandate", "payment mandates are Access Mandates",
+  "Access Mandate for payments", "Access stores payment mandates", "Access stores the payment mandate",
+]
+negation = true
+sources = ["§7.9.9.3", "E21"]
+honest = "A payment mandate is Pay's scheme artefact; the delegation behind it is an Access Grant, and the artefact may reference its GrantID or ExerciseID."
+
+[[claim]]
+id = "pay-authorization-is-allow"
+scope = "all"
+phrases = [
+  "Pay authorization is an ALLOW", "payment authorization is an Access ALLOW", "ALLOW authorizes the payment",
+  "Access authorizes the payment", "ALLOW reserves the funds",
+]
+negation = true
+sources = ["§7.9.9.3", "E21"]
+honest = "ALLOW means the actor may ask for the payment; Pay's authorization means the issuer or acquirer reserved the money."
+
+[[claim]]
+id = "network-token-is-authority"
+scope = "all"
+phrases = [
+  "network token grants authority", "network tokens grant authority", "holding the token authorizes the payment",
+  "possession of the network token is authority",
+]
+negation = true
+sources = ["§7.9.9.3", "E21"]
+honest = "Possession is not authority: the authority to use a network token is an Access Grant; the token is Pay's credential."
+
+[[claim]]
+id = "access-holds-money"
+scope = "all"
+phrases = [
+  "Access holds the funds", "Access holds your money", "Access settles the payment", "Access keeps the ledger",
+  "Access coordinates the transaction", "Access is the payment ledger",
+]
+negation = true
+sources = ["MUST-NEVER-7", "§7.9.9.4"]
+honest = "Access holds no money, writes no ledger and coordinates no transaction; Pay and Money own execution, holds and settlement."
