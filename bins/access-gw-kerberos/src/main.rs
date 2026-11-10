@@ -60,6 +60,9 @@ fn run() -> Result<(), String> {
         .allow_tcp_connect(port_of(&config.channel.addr, "ACCESS_GW_KERBEROS_SERVER")?)
         .allow_read(&config.krb5_conf)
         .allow_read_write(&config.rcache);
+    if let Some(dir) = config.parser.parent() {
+        lockdown = lockdown.allow_read_write(dir);
+    }
     if let Some(b) = &config.backend {
         lockdown = lockdown
             .allow_tcp_connect(b.kdc_port)
