@@ -287,3 +287,180 @@ async fn an_x509_svid_reaches_the_authorization_server_and_names_no_pep() {
     assert_eq!(fetch(&s, Some((&two, &two_key)), "/chain").await, None);
     let _ = s.stop.send(());
 }
+
+async fn start_mtls(public_port: Option<u16>) -> Server {
+    let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()]).unwrap();
+    let config = access_http::tls::mtls_server_config(
+        cert.cert.pem().as_bytes(),
+        cert.signing_key.serialize_pem().as_bytes(),
+    )
+    .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    tokio::spawn(access_http::tls::serve_mtls(
+        listener,
+        config,
+        echo(),
+        public_port,
+        async {
+            let _ = stopped.await;
+        },
+    ));
+    let mut roots = RootCertStore::empty();
+    roots.add(cert.cert.der().clone()).unwrap();
+    Server { addr, roots, stop }
+}
+
+fn echo() -> Router {
+    Router::new()
+        .route(
+            "/mtls",
+            get(
+                |chain: Option<Extension<access_http::tls::MtlsChain>>| async move {
+                    chain.map_or_else(|| "none".to_owned(), |Extension(c)| c.0.len().to_string())
+                },
+            ),
+        )
+        .route(
+            "/pep",
+            get(|pep: Option<Extension<Pep>>| async move {
+                pep.map_or_else(|| "none".to_owned(), |Extension(Pep(p))| p)
+            }),
+        )
+        .route(
+            "/host",
+            get(|h: axum::http::HeaderMap| async move {
+                h.get("host")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("none")
+                    .to_owned()
+            }),
+        )
+        .route(
+            "/forwarded",
+            get(|h: axum::http::HeaderMap| async move {
+                access_http::tls::FORWARDED_CERT_HEADERS
+                    .iter()
+                    .filter(|n| h.contains_key(**n))
+                    .count()
+                    .to_string()
+            }),
+        )
+}
+
+async fn request(
+    s: &Server,
+    client: Option<(&rustls::pki_types::CertificateDer<'static>, &rcgen::KeyPair)>,
+    head: &str,
+) -> Option<String> {
+    let builder = ClientConfig::builder_with_provider(Arc::new(
+        rustls::crypto::aws_lc_rs::default_provider(),
+    ))
+    .with_protocol_versions(&[&rustls::version::TLS13])
+    .unwrap()
+    .with_root_certificates(s.roots.clone());
+    let config = match client {
+        None => builder.with_no_client_auth(),
+        Some((cert, key)) => builder
+            .with_client_auth_cert(
+                vec![cert.clone()],
+                rustls::pki_types::PrivateKeyDer::try_from(key.serialize_der()).unwrap(),
+            )
+            .unwrap(),
+    };
+    let tcp = TcpStream::connect(s.addr).await.unwrap();
+    let mut tls = TlsConnector::from(Arc::new(config))
+        .connect(ServerName::try_from("localhost").unwrap(), tcp)
+        .await
+        .ok()?;
+    tls.write_all(head.as_bytes()).await.ok()?;
+    let mut response = Vec::new();
+    tls.read_to_end(&mut response).await.ok()?;
+    let text = String::from_utf8_lossy(&response).into_owned();
+    Some(text.rsplit("\r\n").next().unwrap().to_owned())
+}
+
+// OP-155 m.3 (m), §10.2.5, Ek B 4673
+#[tokio::test]
+async fn the_mtls_listener_asks_for_any_certificate_and_names_no_pep() {
+    let s = start_mtls(None).await;
+    let (cert, key) = client_cert(&ca());
+    let get = |p: &str| format!("GET {p} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+    assert_eq!(
+        request(&s, Some((&cert, &key)), &get("/mtls"))
+            .await
+            .as_deref(),
+        Some("1")
+    );
+    assert_eq!(
+        request(&s, Some((&cert, &key)), &get("/pep"))
+            .await
+            .as_deref(),
+        Some("none")
+    );
+    assert_eq!(
+        request(&s, None, &get("/mtls")).await.as_deref(),
+        Some("none")
+    );
+    let _ = s.stop.send(());
+}
+
+// OP-155 m.3 (m), §17.9.6
+#[tokio::test]
+async fn the_mtls_listener_gives_the_request_the_public_host() {
+    let s = start_mtls(None).await;
+    let head = "GET /host HTTP/1.1\r\nHost: acme.example:8443\r\nConnection: close\r\n\r\n";
+    assert_eq!(
+        request(&s, None, head).await.as_deref(),
+        Some("acme.example")
+    );
+    let _ = s.stop.send(());
+    let s = start_mtls(Some(4443)).await;
+    assert_eq!(
+        request(&s, None, head).await.as_deref(),
+        Some("acme.example:4443")
+    );
+    let _ = s.stop.send(());
+    assert_eq!(
+        access_http::tls::public_authority("[::1]:8443", None),
+        "[::1]"
+    );
+    assert_eq!(
+        access_http::tls::public_authority("acme.example", Some(8080)),
+        "acme.example:8080"
+    );
+}
+
+// OP-155 m.3 (k)
+#[tokio::test]
+async fn a_forwarded_certificate_header_never_reaches_a_route() {
+    let forwarded: String = access_http::tls::FORWARDED_CERT_HEADERS
+        .iter()
+        .map(|n| format!("{n}: MIIB\r\n"))
+        .collect();
+    let head = format!(
+        "GET /forwarded HTTP/1.1\r\nHost: localhost\r\n{forwarded}Connection: close\r\n\r\n"
+    );
+    let s = start_mtls(None).await;
+    assert_eq!(request(&s, None, &head).await.as_deref(), Some("0"));
+    let _ = s.stop.send(());
+    let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()]).unwrap();
+    let config = server_config(
+        cert.cert.pem().as_bytes(),
+        cert.signing_key.serialize_pem().as_bytes(),
+        None,
+    )
+    .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    tokio::spawn(serve(listener, config, echo(), async {
+        let _ = stopped.await;
+    }));
+    let mut roots = RootCertStore::empty();
+    roots.add(cert.cert.der().clone()).unwrap();
+    let public = Server { addr, roots, stop };
+    assert_eq!(request(&public, None, &head).await.as_deref(), Some("0"));
+    let _ = public.stop.send(());
+}

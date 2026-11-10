@@ -104,6 +104,8 @@ const OUTBOUND_TIMEOUT: Duration = Duration::from_secs(5);
 /// Everything read from the file system before the lockdown closes it.
 struct Prepared {
     tls: Arc<access_http::tls::ServerConfig>,
+    /// OP-155 m.3 (m): the mTLS listener's configuration, when `mtls_listen` is set.
+    mtls: Option<Arc<access_http::tls::ServerConfig>>,
     root_cert: Vec<u8>,
     sequencer_password: SecretFile,
     app_password: SecretFile,
@@ -603,6 +605,7 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
         .map_err(|e| e.to_string())?;
     Ok(Prepared {
         tls,
+        mtls: mtls_config(config)?,
         root_cert,
         sequencer_password: password(&db.sequencer)?,
         app_password: password(&db.app)?,
@@ -1393,6 +1396,24 @@ fn event_pools(pools: &Pools, ids: &Arc<ids::CellIds>, outbound: &Outbound) -> e
     }
 }
 
+/// The mTLS listener's TLS configuration over the server's certificate (OP-155 m.3 (m)).
+fn mtls_config(
+    config: &Config,
+) -> Result<Option<std::sync::Arc<access_http::tls::ServerConfig>>, String> {
+    if config.mtls_listen.is_none() {
+        return Ok(None);
+    }
+    let tls = config.tls.as_ref().ok_or("no tls section")?;
+    let chain =
+        std::fs::read(&tls.cert_file).map_err(|e| format!("{}: {e}", tls.cert_file.display()))?;
+    let key = access_crypto::secret::Secret::new(
+        std::fs::read(&tls.key_file).map_err(|e| format!("{}: {e}", tls.key_file.display()))?,
+    );
+    access_http::tls::mtls_server_config(&chain, key.expose())
+        .map(Some)
+        .map_err(|e| e.to_string())
+}
+
 fn tls_config(config: &Config) -> Result<std::sync::Arc<access_http::tls::ServerConfig>, String> {
     let tls = config.tls.as_ref().ok_or("no tls section")?;
     let chain =
@@ -1641,7 +1662,7 @@ async fn serve(
     let served = listen(
         config,
         listeners,
-        &prepared.tls,
+        (&prepared.tls, prepared.mtls.as_ref()),
         [app, management],
         (health(report), background.ready.clone()),
     )
@@ -1659,6 +1680,8 @@ struct Listeners {
     public: std::net::TcpListener,
     management: std::net::TcpListener,
     internal: std::net::TcpListener,
+    /// OP-155 m.3 (m)
+    mtls: Option<std::net::TcpListener>,
 }
 
 impl Listeners {
@@ -1676,6 +1699,10 @@ impl Listeners {
             public: bind(config.listen, "listen")?,
             management: bind(management, "management_listen")?,
             internal: bind(internal, "internal_listen")?,
+            mtls: config
+                .mtls_listen
+                .map(|a| bind(a, "mtls_listen"))
+                .transpose()?,
         })
     }
 }
@@ -1690,7 +1717,10 @@ fn nonblocking(listener: std::net::TcpListener) -> Result<tokio::net::TcpListene
 async fn listen(
     config: &Config,
     listeners: Listeners,
-    tls: &Arc<access_http::tls::ServerConfig>,
+    (tls, mtls): (
+        &Arc<access_http::tls::ServerConfig>,
+        Option<&Arc<access_http::tls::ServerConfig>>,
+    ),
     [public, management]: [axum::Router; 2],
     (health, ready): (Health, Readiness),
 ) -> Result<(), String> {
@@ -1710,6 +1740,26 @@ async fn listen(
         internal_listen = ?config.internal_listen,
         "access-server listening (TLS 1.3)"
     );
+    // OP-155 m.3 (m)
+    let mtls_served = match (listeners.mtls.map(nonblocking).transpose()?, mtls) {
+        (Some(l), Some(c)) => {
+            tracing::info!(mtls_listen = ?config.mtls_listen, mtls_port = ?config.mtls_port(), "mTLS listener (TLS 1.3)");
+            Some(access_http::tls::serve_mtls(
+                l,
+                c.clone(),
+                public.clone(),
+                public_port(config),
+                signal(stopped.clone()),
+            ))
+        }
+        _ => None,
+    };
+    let mtls_served = async move {
+        match mtls_served {
+            Some(f) => f.await,
+            None => Ok(()),
+        }
+    };
     let public = access_http::tls::serve(public_l, tls.clone(), public, signal(stopped.clone()));
     let management = access_http::tls::serve(
         management_l,
@@ -1724,8 +1774,16 @@ async fn listen(
         let _ = stop.send(true);
     };
     ready.ready();
-    let ((), p, m, i) = tokio::join!(shutdown, public, management, inside);
-    p.and(m).and(i).map_err(|e| e.to_string())
+    let ((), p, m, i, t) = tokio::join!(shutdown, public, management, inside, mtls_served);
+    p.and(m).and(i).and(t).map_err(|e| e.to_string())
+}
+
+/// The port of the realms' public origin, from `identity.realm_base`; none for 443 (OP-155
+/// m.3 (m)).
+fn public_port(config: &Config) -> Option<u16> {
+    let base = config.identity.as_ref()?.realm_base.as_str();
+    let authority = base.strip_prefix("https://")?.split('/').next()?;
+    authority.rsplit_once(':').and_then(|(_, p)| p.parse().ok())
 }
 
 /// What `/healthz` reports: the lockdown in force (SA-22).

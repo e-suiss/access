@@ -25,6 +25,15 @@ pub(crate) struct Config {
     /// The internal listener: `/livez`, `/readyz`, `/healthz`, `/metrics` (OP-67 m.3, OP-151
     /// m.3 (b)). Required; never the public or management one.
     pub(crate) internal_listen: Option<SocketAddr>,
+    /// The mTLS listener (OP-155 m.3 (m), §10.2.5): certificate sign-in and mTLS client
+    /// authentication on a port of their own, conventionally 8443; it asks every client for a
+    /// certificate and requires none. Off when unset.
+    #[serde(default)]
+    pub(crate) mtls_listen: Option<SocketAddr>,
+    /// The port clients reach the mTLS listener on, which `mtls_endpoint_aliases` names; the
+    /// port of `mtls_listen` when unset.
+    #[serde(default)]
+    pub(crate) mtls_public_port: Option<u16>,
     /// `tracing` filter directives.
     pub(crate) log: String,
     /// `security.txt` contact URIs (RFC 9116).
@@ -489,6 +498,8 @@ impl Default for Config {
             listen: SocketAddr::from((Ipv4Addr::LOCALHOST, 8443)),
             management_listen: None,
             internal_listen: None,
+            mtls_listen: None,
+            mtls_public_port: None,
             log: "info".to_owned(),
             security_contacts: vec![
                 "https://github.com/e-suiss/access/security/advisories/new".to_owned(),
@@ -579,6 +590,10 @@ pub(crate) enum ConfigError {
     SharedListener,
     #[error("management_listen binds a non-loopback address without TLS (§17.9.6, OP-148)")]
     AdminWithoutTls,
+    #[error(
+        "mtls_listen must differ from listen, management_listen and internal_listen, and mtls_public_port must not be 0 (OP-155 m.3 (m))"
+    )]
+    MtlsListener,
 }
 
 /// Whether two listen addresses would take the same socket: one port, and one address or the
@@ -606,7 +621,24 @@ pub(crate) fn check_listeners(config: &Config) -> Result<(), ConfigError> {
     if config.tls.is_none() && !management.ip().is_loopback() {
         return Err(ConfigError::AdminWithoutTls);
     }
+    // OP-155 m.3 (m)
+    if let Some(mtls) = config.mtls_listen
+        && (overlap(mtls, config.listen) || overlap(mtls, management) || overlap(mtls, internal))
+    {
+        return Err(ConfigError::MtlsListener);
+    }
+    if config.mtls_public_port == Some(0) {
+        return Err(ConfigError::MtlsListener);
+    }
     Ok(())
+}
+
+impl Config {
+    /// The port clients reach the mTLS listener on, when there is one (OP-155 m.3 (m)).
+    pub(crate) fn mtls_port(&self) -> Option<u16> {
+        self.mtls_listen
+            .map(|a| self.mtls_public_port.unwrap_or_else(|| a.port()))
+    }
 }
 
 impl Config {
@@ -830,6 +862,42 @@ mod tests {
             ..with_tls()
         };
         assert!(matches!(config.validate(), Err(ConfigError::NoTls)));
+    }
+
+    // OP-155 m.3 (m), Ek B 4673
+    #[test]
+    fn the_mtls_listener_is_a_port_of_its_own() {
+        let off = with_tls();
+        assert_eq!(off.mtls_port(), None);
+        assert!(off.validate().is_ok());
+        let on = Config {
+            mtls_listen: Some("0.0.0.0:9444".parse().unwrap()),
+            ..with_tls()
+        };
+        assert!(on.validate().is_ok());
+        assert_eq!(on.mtls_port(), Some(9444));
+        let fronted = Config {
+            mtls_listen: Some("0.0.0.0:9444".parse().unwrap()),
+            mtls_public_port: Some(8443),
+            ..with_tls()
+        };
+        assert_eq!(fronted.mtls_port(), Some(8443));
+        for shared in ["127.0.0.1:9443", "0.0.0.0:9090", "127.0.0.1:8443"] {
+            let config = Config {
+                mtls_listen: Some(shared.parse().unwrap()),
+                ..with_tls()
+            };
+            assert!(
+                matches!(config.validate(), Err(ConfigError::MtlsListener)),
+                "{shared}"
+            );
+        }
+        let zero = Config {
+            mtls_listen: Some("0.0.0.0:9444".parse().unwrap()),
+            mtls_public_port: Some(0),
+            ..with_tls()
+        };
+        assert!(matches!(zero.validate(), Err(ConfigError::MtlsListener)));
     }
 
     fn listeners(management: &str, internal: &str) -> Config {
