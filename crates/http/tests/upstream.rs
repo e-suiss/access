@@ -1420,7 +1420,7 @@ async fn an_organization_connection_speaks_only_for_its_verified_domains_and_sig
     let org = t.insert_org(party, "Corp", &[1; 32]).await.unwrap();
     t.commit().await.unwrap();
 
-    // TN-134 (1): no verified domain, no identity
+    // TN-134 (1)
     e.says("emp-9", Some("ada@corp.example"));
     let refused = e.browser(1).upstream(&e, "corp", CORP).await;
     assert_eq!(refused.status, StatusCode::FORBIDDEN, "{}", refused.code());
@@ -1445,7 +1445,7 @@ async fn an_organization_connection_speaks_only_for_its_verified_domains_and_sig
     assert_eq!(a.status, StatusCode::SEE_OTHER, "{}", a.code());
     let subject = e.link_at(CORP, "emp-9").await.unwrap();
 
-    // TN-94: an enforced member signs in through the organization's own connection
+    // TN-94
     let mut t = e.tx().await;
     t.insert_membership(org, subject, access_store::orgs::Source::Jit, false, None)
         .await

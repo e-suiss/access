@@ -120,9 +120,9 @@ ALTER TABLE access.org_sso_drafts
     (protocol = 'oidc' AND issuer IS NOT NULL AND client_id IS NOT NULL
       AND saml_entity_id IS NULL AND saml_metadata_url IS NULL)
     OR (protocol = 'saml' AND issuer IS NULL AND client_id IS NULL
-      AND saml_entity_id IS NOT NULL AND saml_metadata_url IS NOT NULL)),
+      AND saml_entity_id IS NOT NULL AND saml_metadata_url IS NOT NULL)) NOT VALID,
   ADD CONSTRAINT org_sso_drafts_link FOREIGN KEY (tenant_id, realm_id, setup_link)
-    REFERENCES access.org_setup_links (tenant_id, realm_id, link_id);
+    REFERENCES access.org_setup_links (tenant_id, realm_id, link_id) NOT VALID;
 
 DO $$
 DECLARE

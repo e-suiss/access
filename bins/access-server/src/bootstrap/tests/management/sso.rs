@@ -202,7 +202,7 @@ async fn enforcing_sso_previews_sweeps_and_refuses_local_sign_in_until_lifted() 
         .await;
     assert_eq!(w.status, StatusCode::OK, "{}", w.body);
 
-    // TN-94: the sweep
+    // TN-94
     let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
         .await
         .unwrap();
@@ -213,7 +213,7 @@ async fn enforcing_sso_previews_sweeps_and_refuses_local_sign_in_until_lifted() 
     t.commit().await.unwrap();
     assert!(!invitation_open(&c, org, pending).await);
 
-    // TN-94: password sign-in is refused while SSO is enforced
+    // TN-94
     let (status, refused) = sign_in(&app, "mia@contoso.example").await;
     assert_eq!(status, StatusCode::FORBIDDEN, "{refused}");
     assert!(refused.to_string().contains("sso-required"), "{refused}");
@@ -235,7 +235,7 @@ async fn enforcing_sso_previews_sweeps_and_refuses_local_sign_in_until_lifted() 
     assert_eq!(after.body["enforced"], true);
     assert_eq!(after.body["invitations"], "cancel");
 
-    // SI-4: lifting widens again
+    // SI-4
     let lift = c
         .rest_write(
             &Method::POST,
@@ -282,7 +282,7 @@ async fn a_setup_link_opens_once_for_one_browser_drafts_only_and_expires() {
     assert_eq!(token.len(), 43);
     let path = format!("/v1/sso-setup/{token}");
 
-    // TN-134: a read spends nothing
+    // TN-134
     let mut admin = Page::default();
     let read = admin.call(&app, &Method::GET, &path, None).await;
     assert_eq!(read.status, StatusCode::OK, "{}", read.json);
@@ -303,7 +303,7 @@ async fn a_setup_link_opens_once_for_one_browser_drafts_only_and_expires() {
         StatusCode::OK
     );
 
-    // TN-134: the first step binds the link to this browser and only drafts
+    // TN-134
     let unknown = admin
         .call(
             &app,
@@ -372,7 +372,7 @@ async fn a_setup_link_opens_once_for_one_browser_drafts_only_and_expires() {
         StatusCode::GONE
     );
 
-    // TN-134: 72 hours
+    // TN-134
     let old = "expired-setup-link-token-0000000000000000000";
     let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
         .await
@@ -418,7 +418,7 @@ async fn while_a_scim_source_is_bound_invitations_close_and_deprovisioning_cance
     assert_eq!(w.status, StatusCode::OK, "{}", w.body);
     let secret = w.body["client_secret"].as_str().unwrap().to_owned();
 
-    // TN-95: no new invitation
+    // TN-95
     let refused = c
         .rest_write(
             &Method::POST,
@@ -439,7 +439,7 @@ async fn while_a_scim_source_is_bound_invitations_close_and_deprovisioning_cance
         refused.body
     );
 
-    // TN-95: a pending invitation becomes an access request
+    // TN-95
     let mut me = Page::default();
     me.jar.insert(
         String::from("__Host-access-session"),
@@ -468,7 +468,7 @@ async fn while_a_scim_source_is_bound_invitations_close_and_deprovisioning_cance
     );
     t.commit().await.unwrap();
 
-    // TN-95: SCIM deprovisioning cancels the person's pending invitation
+    // TN-95
     let s = scim_router(&c);
     let (st, _, created) = s
         .call(
@@ -488,7 +488,7 @@ async fn while_a_scim_source_is_bound_invitations_close_and_deprovisioning_cance
     assert_eq!(st, StatusCode::NO_CONTENT);
     assert!(!invitation_open(&c, org, ada_invite).await);
 
-    // TN-95: retiring the client reopens invitations
+    // TN-95
     let retired = c
         .rest_write(
             &Method::POST,

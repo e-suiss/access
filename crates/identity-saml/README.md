@@ -43,6 +43,17 @@ signature verification, time checks, audience or recipient checks, parser isolat
 does not exist, so a profile naming one is refused at load, as is SHA-1 or turning a signature
 off. Each tolerance names the test that pins it.
 
+## SSO app catalog
+
+`catalog/*.toml` holds 60 service provider templates as data: the eleven profiled providers
+first, then common SaaS applications. A template lists the values the administrator fills in
+(`{workspace}`, `{instance}`), the entity ID and ACS patterns, the `NameID` format, the attributes
+the provider expects and, for providers that also speak OpenID Connect, their redirect URIs. A
+registration names its template; a profiled template applies its interop profile, any other
+allows an e-mail `NameID` only when the template asks for one. Registering from a template whose
+attributes select authority (AWS roles, for example) is the reserved, CT3 `idp.saml.sp_mapping`
+rather than `idp.saml.sp_register`.
+
 ## The 21-action plan
 
 From the profiles of §10.6.1; actions 1 to 16 come first, 17 to 21 next. Each has a test.
