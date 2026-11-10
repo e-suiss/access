@@ -2317,6 +2317,7 @@ impl Change {
     ///
     /// # Errors
     /// [`Invalid`].
+    #[expect(clippy::too_many_lines, reason = "one arm per change")]
     pub fn check(&self, declared: &DeclaredTargets) -> Result<(), Invalid> {
         match self {
             Self::ClientRegister(c) | Self::ClientUpdate(c) => c.check(declared),
