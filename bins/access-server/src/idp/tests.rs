@@ -67,6 +67,7 @@ mod records;
 mod relay;
 mod resources;
 mod scim;
+mod signals;
 mod social;
 mod workloads;
 
