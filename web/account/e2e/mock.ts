@@ -160,6 +160,7 @@ export class AccountMock {
     await context.route(/\/v1\/(sessions|me)(\/|$)/, (r) => this.s10(r));
     await context.route(/\/v1\/approvers(\/|$)/, (r) => this.approversRoute(r));
     await context.route(/\/v1\/me\/cloud-key-permissions/, (r) => this.cloudKeysRoute(r));
+    await context.route(/\/v1\/me\/handles/, (r) => this.handlesRoute(r));
     await context.route(/\/v1\/account\/vault\/connections/, (r) => this.vaultRoute(r));
     await context.route(/\/v1\/account\/agent-connections/, (r) => this.agentsRoute(r));
     await context.route("**/access/v1/relay-status", (r) =>
@@ -178,6 +179,37 @@ export class AccountMock {
       destroy: false,
     },
   ];
+
+  /** E56: the person's handles. */
+  handles = [
+    { id: "hdl_1", handle: "ada.example.org", kind: "own", state: "pending", shown: false },
+  ];
+
+  private async handlesRoute(r: Route): Promise<void> {
+    this.record(r);
+    const reply = (status: number, body?: unknown) =>
+      r.fulfill({
+        status,
+        contentType: "application/json",
+        body: body === undefined ? "" : JSON.stringify(body),
+      });
+    if (!this.signedIn) return reply(401, { code: "session-required" });
+    const path = new URL(r.request().url()).pathname;
+    if (r.request().method() === "GET") return reply(200, { handles: this.handles });
+    const verify = /\/handles\/([^/]+)\/verify$/.exec(path)?.[1];
+    if (verify !== undefined) {
+      this.handles = this.handles.map((h) =>
+        h.id === verify ? { ...h, state: "verified", shown: true } : h,
+      );
+      return reply(200, { state: "verified", shown: true });
+    }
+    const retire = /\/handles\/([^/]+)\/retire$/.exec(path)?.[1];
+    if (retire !== undefined) {
+      this.handles = this.handles.filter((h) => h.id !== retire);
+      return reply(204);
+    }
+    return reply(404, { code: "handle-unknown" });
+  }
 
   private async cloudKeysRoute(r: Route): Promise<void> {
     this.record(r);

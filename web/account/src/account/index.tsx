@@ -6,6 +6,7 @@ import type { ReactElement } from "react";
 import { t } from "../lib/i18n.js";
 import { AgentAccounts } from "./AgentAccounts.js";
 import { Approvers } from "./Approvers.js";
+import { Handles } from "./Handles.js";
 import { ConnectedApps, LinkedSignIns } from "./Linked.js";
 import { SignInMethods } from "./Methods.js";
 
@@ -15,6 +16,7 @@ export function AccountSettings(): ReactElement {
       <h2 id="settings-heading">{t("settings.title")}</h2>
       <SignInMethods />
       <Approvers />
+      <Handles />
       <LinkedSignIns />
       <ConnectedApps />
       <AgentAccounts />

@@ -171,3 +171,15 @@ test("a cloud key permission is seen and stopped", async ({ page }) => {
   await keys.getByRole("button", { name: "Stop cloud use" }).click();
   await expect(page.getByTestId("cloud-keys")).toHaveCount(0);
 });
+
+// E56, OP-156 m.4 (Q20): a name shows only once its site points back; it can be checked again
+test("a pending name is checked again and then shown", async ({ page }) => {
+  await page.goto("/account/");
+  const names = page.getByTestId("handles");
+  await expect(names).toContainText("Your names");
+  await expect(names).toContainText("Waiting for ada.example.org to point back to you");
+  await names.getByRole("button", { name: "Check again" }).click();
+  await expect(names).not.toContainText("Waiting for");
+  await names.getByRole("button", { name: "Remove: ada.example.org" }).click();
+  await expect(names.getByTestId("handle-row")).toHaveCount(0);
+});

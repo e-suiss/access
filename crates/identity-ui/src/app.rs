@@ -18,6 +18,7 @@ mod credential;
 pub mod devices;
 pub mod did;
 pub mod first_contact;
+pub mod handle;
 pub mod household;
 pub mod hrd;
 pub mod ldap;

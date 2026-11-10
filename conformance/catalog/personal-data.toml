@@ -263,3 +263,21 @@ basis = "consent"
 portable = "derived"
 export = false
 note = "The person's Party in the governing domain whose device Instance granted the permission (E59)."
+
+[[field]]
+column = "access.handles.subject_id"
+vault = "none"
+retention = "profile"
+basis = "contract"
+portable = "observed"
+export = true
+note = "Whose handle this is (E56); a handle is an identifier, never authority (OP-156 m.4, Q20)."
+
+[[field]]
+column = "access.handles.party"
+vault = "none"
+retention = "profile"
+basis = "contract"
+portable = "derived"
+export = false
+note = "The Party whose DID the handle must point at (E56)."

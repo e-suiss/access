@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT h.did FROM access.handles h\n          WHERE h.handle = $1 AND h.kind = 'suiss'\n            AND EXISTS (SELECT 1 FROM access.handle_events e\n                         WHERE e.tenant_id = h.tenant_id AND e.realm_id = h.realm_id\n                           AND e.handle_id = h.handle_id AND e.event = 'verified')\n            AND NOT EXISTS (SELECT 1 FROM access.handle_events e\n                             WHERE e.tenant_id = h.tenant_id AND e.realm_id = h.realm_id\n                               AND e.handle_id = h.handle_id AND e.event = 'retired')",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "did",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.handles",
+            "name": "did"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "61fe4a3f6c11c2a956de5f4c847d7a33b838db6c9e929a6adc5dbc0f7d7f8138"
+}

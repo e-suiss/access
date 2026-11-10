@@ -39,6 +39,7 @@ pub mod export;
 pub mod extensions;
 pub mod federation;
 pub mod first_contact;
+pub mod handles;
 pub mod hr;
 
 /// The connection pool type, so other crates need no driver dependency (OP-66 m.2).

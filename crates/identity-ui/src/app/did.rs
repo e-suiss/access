@@ -131,10 +131,19 @@ impl<K: Kits, C: Clock + Sync, M: Messages> Hosted<K, C, M> {
             Ok(d) => d,
             Err(r) => return r,
         };
-        match keys.live_keys(domain, party).await {
-            Ok(list) => Reply::json(200, document(&did, &list)),
-            Err(_) => unavailable(),
+        let mut doc = match keys.live_keys(domain, party).await {
+            Ok(list) => document(&did, &list),
+            Err(_) => return unavailable(),
+        };
+        // E56 (2), OP-156 m.4 Q20
+        let handles = match self.shown_handles(&kit, party).await {
+            Ok(h) => h,
+            Err(r) => return r,
+        };
+        if let (false, Some(m)) = (handles.is_empty(), doc.as_object_mut()) {
+            m.insert(String::from("alsoKnownAs"), json!(handles));
         }
+        Reply::json(200, doc)
     }
 }
 

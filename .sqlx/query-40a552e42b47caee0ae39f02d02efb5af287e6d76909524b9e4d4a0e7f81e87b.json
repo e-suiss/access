@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.handle_events (tenant_id, realm_id, handle_id, event, handle, kind)\n             SELECT h.tenant_id, h.realm_id, h.handle_id, $5, h.handle, h.kind\n               FROM access.handles h\n              WHERE h.tenant_id = $1 AND h.realm_id = $2 AND h.handle_id = $3\n                AND h.subject_id = $4\n             ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "40a552e42b47caee0ae39f02d02efb5af287e6d76909524b9e4d4a0e7f81e87b"
+}

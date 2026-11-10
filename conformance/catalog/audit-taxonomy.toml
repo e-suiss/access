@@ -1705,3 +1705,38 @@ ocsf_class = 3001
 ocsf_activity = 99
 caep = "credential-change"
 webhook = false
+
+# ---------------------------------------------------------------- identity: Stage 11 Q20 (appended): handles (OP-156 m.4, E56)
+
+[[event]]
+event = "handle.claimed"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "handle.verified"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "handle.retired"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 3
+caep = ""
+webhook = false

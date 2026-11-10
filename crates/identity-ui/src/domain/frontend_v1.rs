@@ -1304,6 +1304,34 @@ pub const ROUTES: &[Route] = &[
         "revokeCloudKeyPermission",
         "Revokes a cloud key permission: one.cloud_key.revoke; the TEE copies must be destroyed before the work goes on.",
     ),
+    live(
+        Owner::Q20,
+        Verb::Get,
+        "/v1/me/handles",
+        "listHandles",
+        "The person's handles: each a Suiss subdomain or a domain they own, pending until both directions agree, shown only once verified.",
+    ),
+    live(
+        Owner::Q20,
+        Verb::Post,
+        "/v1/me/handles",
+        "claimHandle",
+        "Claims a handle after a sign-in in the last 5 minutes: a Suiss subdomain is verified at once, a domain of the person's own once its host answers /.well-known/access-handle with the DID. A handle is never handed to anyone else.",
+    ),
+    live(
+        Owner::Q20,
+        Verb::Post,
+        "/v1/me/handles/{handle}/verify",
+        "verifyHandle",
+        "Asks the handle's host for /.well-known/access-handle; verified when it names the person's DID.",
+    ),
+    live(
+        Owner::Q20,
+        Verb::Post,
+        "/v1/me/handles/{handle}/retire",
+        "retireHandle",
+        "Retires a handle: it is no longer shown or listed in the DID document.",
+    ),
 ];
 
 fn parameters(path: &str) -> Vec<Value> {

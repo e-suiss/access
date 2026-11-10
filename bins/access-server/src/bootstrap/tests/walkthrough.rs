@@ -190,6 +190,8 @@ pub(super) struct Desk {
     pub(super) tls: TestTls,
     /// The listener's address.
     pub(super) addr: std::net::SocketAddr,
+    /// What the hosts of handles people own answer (E56).
+    handle_hosts: one::Hosts,
     token: KeyStore,
     stop: Option<tokio::sync::oneshot::Sender<()>>,
 }
@@ -291,6 +293,9 @@ impl Desk {
         });
         let hosted_push = hosted.clone();
         let hosted_keys = hosted.clone();
+        let hosted_handles = hosted.clone();
+        let hosted_did = hosted.clone();
+        let handle_hosts = one::Hosts::default();
         let app = login_router(discovery(), hosted.clone(), None)
             .merge(me_router(
                 discovery(),
@@ -311,6 +316,19 @@ impl Desk {
             ));
         // OP-156 m.3 (d)
         let app = app.merge(access_http::login::push_router(discovery(), hosted_push));
+        // E56, OP-156 m.4 Q20
+        let app = app
+            .merge(access_http::login::handle_router(
+                discovery(),
+                hosted_handles,
+                access_identity_ui::app::handle::RouterHandles(w.db.router.clone()),
+                handle_hosts.clone(),
+            ))
+            .merge(access_http::login::did_router(
+                discovery(),
+                hosted_did,
+                w.plane.clone(),
+            ));
         // OP-156 m.3 (w)
         let app = app.merge(access_http::login::cloud_key_router(
             discovery(),
@@ -401,6 +419,7 @@ impl Desk {
             pings,
             tls,
             addr,
+            handle_hosts,
             token,
             stop: Some(stop),
         }

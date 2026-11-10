@@ -550,3 +550,146 @@ async fn kit_id(l: &Lab, made: &JsonValue) -> [u8; 16] {
         .unwrap()
         .id
 }
+
+/// What the hosts of handles people own answer at `/.well-known/access-handle` (E56).
+#[derive(Clone, Default)]
+pub(super) struct Hosts(Arc<std::sync::Mutex<BTreeMap<String, Vec<u8>>>>);
+
+impl access_identity_ui::ports::HandleHosts for Hosts {
+    fn well_known(
+        &self,
+        handle: &str,
+    ) -> impl std::future::Future<Output = Option<Vec<u8>>> + Send {
+        std::future::ready(self.0.lock().unwrap().get(handle).cloned())
+    }
+}
+
+impl Desk {
+    async fn me(&self, jar: &mut Jar, path: &str, body: Option<JsonValue>) -> (u16, JsonValue) {
+        let r = post_json(
+            &self.http,
+            &format!("{}{path}", self.user.issuer),
+            jar,
+            body,
+        )
+        .await
+        .unwrap();
+        (
+            r.status,
+            serde_json::from_slice(&r.body).unwrap_or(JsonValue::Null),
+        )
+    }
+
+    async fn get_json(&self, jar: &Jar, path: &str) -> (u16, JsonValue) {
+        let cookie = jar.header();
+        let r = self
+            .http
+            .request(
+                "GET",
+                &format!("{}{path}", self.user.issuer),
+                &[("Cookie", cookie.as_str())],
+                None,
+            )
+            .await
+            .unwrap();
+        (
+            r.status,
+            serde_json::from_slice(&r.body).unwrap_or(JsonValue::Null),
+        )
+    }
+
+    /// `GET /.well-known/access-handle` with `host` as the request's host, on the real router.
+    async fn handle_host(&self, host: &str) -> (u16, String) {
+        use tower::ServiceExt as _;
+        let router = access_http::login::handle_well_known_router(
+            access_identity_ui::app::handle::RouterHandles(self.w.db.router.clone()),
+        );
+        let req = axum::http::Request::builder()
+            .uri("/.well-known/access-handle")
+            .header(axum::http::header::HOST, host)
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let r = router.oneshot(req).await.unwrap();
+        let status = r.status().as_u16();
+        let body = axum::body::to_bytes(r.into_body(), 4096).await.unwrap();
+        (status, String::from_utf8_lossy(&body).into_owned())
+    }
+}
+
+// E56, OP-156 m.4 Q20, Ek B 4330
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_handle_is_shown_only_once_both_directions_agree() {
+    Box::pin(handle_walk()).await;
+}
+
+async fn handle_walk() {
+    use access_identity_ui::app::handle::suiss_base;
+    let d = Box::pin(Desk::open("q20-handles", false)).await;
+    let mut jar = d.person().await;
+    let base = suiss_base(&d.user.issuer).unwrap();
+    let path = "/v1/me/handles";
+    let did_path = format!("/u/{}/did.json", b64url_encode(&d.person.0));
+
+    // E56 (2)
+    let suiss = format!("ada.{base}");
+    let (status, made) = d.me(&mut jar, path, Some(json!({ "handle": suiss }))).await;
+    assert_eq!(status, 201, "{made}");
+    assert_eq!(made["state"], "verified");
+    let did = made["did"].as_str().unwrap().to_owned();
+    assert_eq!(d.handle_host(&suiss).await, (200, did.clone()));
+    assert_eq!(d.handle_host(&format!("eve.{base}")).await.0, 404);
+
+    // E56 (2)
+    let own = String::from("ada.example.org");
+    let (status, pending) = d.me(&mut jar, path, Some(json!({ "handle": own }))).await;
+    assert_eq!(status, 201, "{pending}");
+    assert_eq!(pending["state"], "pending");
+    assert_eq!(pending["shown"], false);
+    let verify = format!("{path}/{}/verify", pending["id"].as_str().unwrap());
+    let (status, v) = d.me(&mut jar, &verify, None).await;
+    assert_eq!(status, 409, "{v}");
+    d.handle_hosts
+        .0
+        .lock()
+        .unwrap()
+        .insert(own.clone(), b"did:web:someone.else:u:x".to_vec());
+    let (status, _) = d.me(&mut jar, &verify, None).await;
+    assert_eq!(status, 409);
+    let (_, doc) = d.get_json(&jar, &did_path).await;
+    let aka = doc["alsoKnownAs"].as_array().unwrap().clone();
+    assert_eq!(aka, [json!(format!("https://{suiss}"))], "{doc}");
+    d.handle_hosts
+        .0
+        .lock()
+        .unwrap()
+        .insert(own.clone(), format!("{did}\n").into_bytes());
+    let (status, v) = d.me(&mut jar, &verify, None).await;
+    assert_eq!(status, 200, "{v}");
+    let (_, doc) = d.get_json(&jar, &did_path).await;
+    assert_eq!(doc["alsoKnownAs"].as_array().unwrap().len(), 2, "{doc}");
+    assert_eq!(d.handle_host(&own).await.0, 404);
+
+    // E56
+    let (_, list) = d.get_json(&jar, path).await;
+    let id = list["handles"][0]["id"].as_str().unwrap().to_owned();
+    let (status, _) = d.me(&mut jar, &format!("{path}/{id}/retire"), None).await;
+    assert_eq!(status, 204);
+    assert_eq!(d.handle_host(&suiss).await.0, 404);
+    let (status, again) = d.me(&mut jar, path, Some(json!({ "handle": suiss }))).await;
+    assert_eq!(status, 409, "{again}");
+    let (status, bad) = d
+        .me(
+            &mut jar,
+            path,
+            Some(json!({ "handle": format!("a.b.{base}") })),
+        )
+        .await;
+    assert_eq!(status, 400, "{bad}");
+    let (_, doc) = d.get_json(&jar, &did_path).await;
+    assert_eq!(
+        doc["alsoKnownAs"],
+        json!(["https://ada.example.org"]),
+        "{doc}"
+    );
+    d.close().await;
+}

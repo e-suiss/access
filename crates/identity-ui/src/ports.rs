@@ -220,3 +220,20 @@ pub trait ApprovalClaims: Send + Sync {
         order: &ClaimOrder,
     ) -> impl Future<Output = Result<Issued, InstancesUnavailable>> + Send;
 }
+
+/// The hosts of handles a person owns (E56 (2)): `GET https://<handle>/.well-known/access-handle`
+/// over the public network, as Access fetches any outside document.
+pub trait HandleHosts: Send + Sync {
+    /// The body the handle's host answers, at most 512 bytes; `None` when it answers nothing
+    /// usable.
+    fn well_known(&self, handle: &str) -> impl Future<Output = Option<Vec<u8>>> + Send;
+}
+
+/// Who a Suiss handle host points at (E56 (2)): read as the router, across tenants.
+pub trait HandleDirectory: Send + Sync {
+    /// The DID the verified, not retired Suiss handle `host` points at.
+    fn did_of_host(
+        &self,
+        host: &str,
+    ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
+}

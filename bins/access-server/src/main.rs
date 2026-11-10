@@ -23,6 +23,7 @@ mod doorbell;
 mod edge;
 mod events;
 mod export;
+mod handles;
 mod hr;
 mod idp;
 mod ids;
@@ -2019,6 +2020,13 @@ async fn serve(
         hosted.clone(),
         certificate::certificates(prepared.outbound.clone(), Arc::new(idp_plane.clone())),
     );
+    // E56, OP-156 m.4 Q20
+    let handles = access_http::login::handle_router(
+        RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
+        hosted.clone(),
+        access_identity_ui::app::handle::RouterHandles(tenants_pool.clone()),
+        handles::OutboundHandles(prepared.outbound.clone()),
+    );
     // OP-156 m.3 (w), E59
     let cloud_keys = access_http::login::cloud_key_router(
         RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
@@ -2055,6 +2063,7 @@ async fn serve(
             .merge(payment)
             .merge(first_contact)
             .merge(cloud_keys)
+            .merge(handles)
             .merge(sso_setup)
             .merge(account_pages)
             .merge(authorize)
