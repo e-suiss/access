@@ -9,8 +9,6 @@ extern crate alloc;
 
 #[cfg(feature = "aws-lc")]
 pub mod aws;
-#[cfg(feature = "aws-lc")]
-pub mod blind_rsa;
 #[cfg(feature = "verify")]
 pub mod cose;
 #[cfg(feature = "verify")]

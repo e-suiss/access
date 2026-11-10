@@ -3,6 +3,7 @@
 //! the client's finalization into an RFC 9578 type `0x0002` token that the existing redemption
 //! check accepts, the daily limit, and nothing kept that links a token to the person.
 
+use access_crypto::blind_rsa;
 use access_crypto::privacy_pass::{self, Issuer};
 use access_identity_account::adapters::pg::PgAccounts;
 use access_identity_account::app::accounts::{change_status, create};
@@ -12,7 +13,6 @@ use access_identity_account::domain::status::AccountStatus;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use axum::body::Body;
 use axum::http::{Method, StatusCode};
-use suiss_crypto::blind_rsa;
 
 use super::management::{Console, console, now, send};
 use super::*;
@@ -184,7 +184,7 @@ async fn first_contact_tokens_are_blind_unlinkable_limited_and_produce_no_author
     let (pia, cookie) = signed_in(&c, "pia@example.com").await;
     let (_, other) = signed_in(&c, "ozan@example.com").await;
 
-    // OP-156 m.3 (z): the key of the last 30-day period stays listed after the current one
+    // OP-156 m.3 (z)
     let period = access_identity_account::app::first_contact::PERIOD_MS;
     let (old, _) = blind_rsa::IssuerKey::generate().unwrap();
     let old_key = old.token_key();
@@ -204,7 +204,7 @@ async fn first_contact_tokens_are_blind_unlinkable_limited_and_produce_no_author
     );
     t.commit().await.unwrap();
 
-    // RFC 9578 §4: the directory is public and names the current RSA-2048 PSS key first
+    // RFC 9578 §4
     let (r, body) = send(&app, call(&Method::GET, "/v1/first-contact/keys", None, "")).await;
     assert_eq!(
         r.status(),
@@ -241,7 +241,7 @@ async fn first_contact_tokens_are_blind_unlinkable_limited_and_produce_no_author
     let challenge = privacy_pass::challenge_digest("relay.example", &[], "relay.example");
     let head = c.w.domains.head(c.domain).await.unwrap().0;
 
-    // G57: issuance is for a signed-in person
+    // G57
     let p = prepare(&token_key, &challenge);
     let (r, _) = send(
         &app,
@@ -255,7 +255,7 @@ async fn first_contact_tokens_are_blind_unlinkable_limited_and_produce_no_author
     .await;
     assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
 
-    // E58: the issued token verifies with the existing redemption check
+    // E58
     let mut tokens = Vec::new();
     let mut seen_blinded = Vec::new();
     for (who, p) in [
@@ -293,9 +293,7 @@ async fn first_contact_tokens_are_blind_unlinkable_limited_and_produce_no_author
         seen_blinded.push(p.blinded.message.to_vec());
         tokens.push(token);
     }
-    // E58: two tokens of one person are told apart from another person's by nothing the issuer
-    // chose: the one issuer field, the key id, is the realm's, and nothing Access keeps holds a
-    // token, its nonce or the blinded message it signed
+    // E58
     for t in &tokens {
         assert_eq!(&t[66..98], key_id.as_slice());
     }
@@ -313,7 +311,7 @@ async fn first_contact_tokens_are_blind_unlinkable_limited_and_produce_no_author
         assert!(!dump.contains(&hex(b)));
     }
 
-    // RFC 9578 §6.2: a request for another key, even last period's, or another type is refused
+    // RFC 9578 §6.2
     let old_id = privacy_pass::token_key_id(&old_key);
     if old_id[31] != key_id[31] {
         let p = prepare(&old_key, &challenge);
@@ -364,7 +362,7 @@ async fn first_contact_tokens_are_blind_unlinkable_limited_and_produce_no_author
     assert_eq!(r.status(), StatusCode::BAD_REQUEST);
     assert_eq!(json(&body)["code"], "invalid-token-request");
 
-    // OP-156 m.3 (z): 20 tokens per identity and day, POLICY DEFAULT
+    // OP-156 m.3 (z)
     for _ in 2..20 {
         let p = prepare(&token_key, &challenge);
         let (r, _) = send(
@@ -403,6 +401,6 @@ async fn first_contact_tokens_are_blind_unlinkable_limited_and_produce_no_author
     assert_eq!(count("first_contact.tokens_issued"), 21);
     assert_eq!(count("first_contact.limit_reached"), 1);
 
-    // E58: a token produces no authority
+    // E58
     assert_eq!(c.w.domains.head(c.domain).await.unwrap().0, head);
 }

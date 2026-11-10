@@ -1,6 +1,7 @@
 //! Cryptography for Access: the shared server primitives (OP-140 m.4) and Access's own
 //! identifiers and secret files.
 
+pub mod blind_rsa;
 pub mod breach;
 pub mod client_secret_jwt;
 pub mod dpop;

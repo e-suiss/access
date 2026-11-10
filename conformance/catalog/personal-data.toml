@@ -97,6 +97,32 @@ portable = "observed"
 export = true
 
 [[field]]
+column = "access.iys_records.subject_id"
+vault = "none"
+retention = "consent"
+basis = "legal_obligation"
+portable = "observed"
+export = true
+note = "Whose İYS consent record Relay received (IDP-37 (4), B23); the address is only in the sealed message."
+
+[[field]]
+column = "access.iys_records.consent"
+vault = "none"
+retention = "consent"
+basis = "legal_obligation"
+portable = "observed"
+export = true
+
+[[field]]
+column = "access.first_contact_issued.subject_id"
+vault = "none"
+retention = "traffic"
+basis = "legitimate_interest"
+portable = "derived"
+export = false
+note = "The per-identity daily limit of first-contact tokens (E58); no token or blinded message is kept."
+
+[[field]]
 column = "access.identity_document_acceptances.document_digest"
 vault = "none"
 retention = "consent"

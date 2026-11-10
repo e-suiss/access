@@ -104,7 +104,7 @@ async fn only_the_persons_own_scoped_grant_lets_an_agent_interrupt_and_relay_ask
         )
     };
 
-    // E48: without a Grant the agent cannot interrupt
+    // E48
     let r = s
         .twin
         .ask(
@@ -119,7 +119,7 @@ async fn only_the_persons_own_scoped_grant_lets_an_agent_interrupt_and_relay_ask
         .await;
     assert!(r.is_err(), "{r:?}");
 
-    // INV-4: the agent cannot give the Grant to itself on the person's self-anchor or its own
+    // INV-4
     let to_itself = attempt(
         &s,
         &agent,
@@ -136,7 +136,7 @@ async fn only_the_persons_own_scoped_grant_lets_an_agent_interrupt_and_relay_ask
     )
     .await;
     assert!(!issued(&on_its_own), "{on_its_own:?}");
-    // E48: nobody gives it for the person
+    // E48
     let for_someone_else = attempt(
         &s,
         &stranger,
@@ -157,7 +157,7 @@ async fn only_the_persons_own_scoped_grant_lets_an_agent_interrupt_and_relay_ask
         "a stranger's own anchor does not cover the person: {from_its_anchor:?}"
     );
 
-    // E48: the person's explicit, scoped Grant
+    // E48
     let (exercise, since) = s
         .own_commit(
             &person,
@@ -191,7 +191,7 @@ async fn only_the_persons_own_scoped_grant_lets_an_agent_interrupt_and_relay_ask
         "the scope holds: {r:?}"
     );
 
-    // INV-4: holding it, the agent still cannot widen it
+    // INV-4
     let wider = attempt(
         &s,
         &agent,
@@ -217,7 +217,7 @@ async fn only_the_persons_own_scoped_grant_lets_an_agent_interrupt_and_relay_ask
     .await;
     assert!(!issued(&wider), "{wider:?}");
 
-    // E48: Relay asks at delivery, so the person's revocation stops the next interrupt
+    // E48
     s.own_commit(
         &person,
         ExerciseBasis::Anchor(person.anchor),

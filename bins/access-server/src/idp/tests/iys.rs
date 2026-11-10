@@ -95,7 +95,7 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
         granted,
     };
 
-    // OP-153 m.3 (ee): a realm topic is refused until the realm decides it
+    // OP-153 m.3 (ee)
     let loyalty = [change("email", "loyalty", true)];
     assert!(matches!(
         privacy::set_preferences(&db, &realm, ece, &loyalty, "self_service", &WHO, &notifier).await,
@@ -119,7 +119,7 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
     privacy::set_preferences(&db, &realm, ece, &loyalty, "self_service", &WHO, &notifier)
         .await
         .unwrap();
-    // OP-156 m.3 (c): with the switch off, no İYS record leaves
+    // OP-156 m.3 (c)
     let first = identity_events(&w.db, "event.preference.changed", 1).await;
     let payload = |e: &access_store::identity::OutboxEvent| {
         serde_json::from_slice::<Json>(&e.payload).unwrap()["payload"].clone()
@@ -130,7 +130,7 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
         payload(&first[0])
     );
 
-    // OP-156 m.3 (c): idp.realm.iys is CT2 and decided like every realm setting
+    // OP-156 m.3 (c)
     let on = proposal(
         (tenant, realm_id),
         Change::Iys {
@@ -156,10 +156,9 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
     privacy::set_preferences(&db, &realm, ece, &changes, "self_service", &WHO, &notifier)
         .await
         .unwrap();
-    // IDP-37 (3): a consent writes no authority record and is never a decision input
+    // IDP-37 (3)
     assert_eq!(w.plane.domains.head(d).await.unwrap(), head);
 
-    // the event names the channels, the type, the source and the date; never an address
     let events = identity_events(&w.db, "event.preference.changed", 2).await;
     let event = payload(&events[1]);
     assert_eq!(event["iys"]["channels"], json!(["sms", "email"]), "{event}");
@@ -183,7 +182,7 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
         );
     }
 
-    // B23: one sealed record per commercial channel, for Relay only, with all five fields
+    // B23
     let records = identity_events(&w.db, "relay.message.iys_consent", 2).await;
     assert_eq!(records.len(), 2, "push is no İYS channel");
     let mut tx = db.begin(tenant, realm_id).await.unwrap();
@@ -224,7 +223,6 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
         ids.push((*channel, env.header.event.0));
     }
 
-    // the person sees each channel waiting for Relay
     let prefs = privacy::preferences(&db, &realm, ece).await.unwrap();
     assert_eq!(prefs["current"]["email:loyalty"], false);
     assert_eq!(
@@ -232,7 +230,7 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
         "{prefs}"
     );
 
-    // E42 (2): Relay reports under its own platform client's assertion
+    // E42 (2)
     let relay = &ps[0];
     let app = iys_router(
         Arc::clone(&relay.api),
@@ -299,7 +297,7 @@ async fn iys_records_reach_relay_with_every_field_and_relay_reports_back() {
         assert_eq!(audit.iter().filter(|a| a.event_type == event).count(), n);
     }
 
-    // OP-156 m.3 (c): iys_close is CT1 and stops the records
+    // OP-156 m.3 (c)
     let off = proposal(
         (tenant, realm_id),
         Change::Iys {

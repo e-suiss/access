@@ -1,15 +1,14 @@
 //! RFC 9474 blind RSA as RFC 9578 token type `0x0002` uses it (RSABSSA-SHA384-PSS-Deterministic,
 //! 2048-bit keys; OP-156 m.3 (z), E58): the issuer's raw private operation on a blinded message,
 //! and the client's blinding and finalization. The raw RSA and big-number operations are
-//! aws-lc's; the `rsa` crate is never used (CR-14).
+//! aws-lc's; the `rsa` crate is never used (CR-14). Identity plane only: authority artefacts are
+//! never RSA (G46).
 
 #![allow(
     unsafe_code,
     reason = "aws-lc's raw RSA and big-number calls (R-2); each block states its SAFETY"
 )]
 
-use alloc::vec;
-use alloc::vec::Vec;
 use core::ffi::c_long;
 use core::ptr::{self, NonNull};
 
@@ -124,8 +123,8 @@ impl IssuerKey {
         if checked != 1 || usize::try_from(size).ok() != Some(MODULUS_LEN) || e.is_null() {
             return Err(BlindError::Key);
         }
-        key.n = padded(n, MODULUS_LEN)?;
-        if padded(e, EXPONENT.len())? != EXPONENT {
+        key.n = padded::<MODULUS_LEN>(n)?.to_vec();
+        if padded::<3>(e)? != EXPONENT {
             return Err(BlindError::Key);
         }
         Ok(key)
@@ -264,7 +263,7 @@ pub fn blind(n: &[u8], message: &[u8]) -> Result<Blinded, BlindError> {
     let ctx = Ctx::new()?;
     let modulus = Bn::of(n)?;
     let exponent = Bn::of(&EXPONENT)?;
-    let encoded = Bn::of(&encoded)?;
+    let encoded = Bn::of(encoded.as_slice())?;
     let mut r_bytes = Zeroizing::new([0_u8; MODULUS_LEN]);
     for _ in 0..8 {
         rng.fill(r_bytes.as_mut_slice())
@@ -285,11 +284,9 @@ pub fn blind(n: &[u8], message: &[u8]) -> Result<Blinded, BlindError> {
                 && sys::BN_mod_mul(out.ptr(), encoded.ptr(), masked.ptr(), modulus.ptr(), c) == 1
         };
         if ok {
-            let mut message = [0_u8; MODULUS_LEN];
-            message.copy_from_slice(&out.bytes(MODULUS_LEN)?);
             return Ok(Blinded {
-                message,
-                inverse: Zeroizing::new(inverse.bytes(MODULUS_LEN)?),
+                message: out.bytes()?,
+                inverse: Zeroizing::new(inverse.bytes()?.to_vec()),
             });
         }
     }
@@ -328,61 +325,75 @@ pub fn finalize(
     {
         return Err(BlindError::Operation);
     }
-    let mut sig = [0_u8; MODULUS_LEN];
-    sig.copy_from_slice(&s.bytes(MODULUS_LEN)?);
+    let sig = s.bytes()?;
     RsaPublicKeyComponents { n, e: &EXPONENT }
         .verify(&RSA_PSS_2048_8192_SHA384, message, &sig)
         .map_err(|_| BlindError::Operation)?;
     Ok(sig)
 }
 
+const DB_LEN: usize = MODULUS_LEN - HASH_LEN - 1;
+const ONE_AT: usize = DB_LEN - SALT_LEN - 1;
+const PRIME_LEN: usize = 8 + HASH_LEN + SALT_LEN;
+
 /// EMSA-PSS-ENCODE (RFC 8017 §9.1.1) with SHA-384, MGF1-SHA-384, `emBits` 2047.
-fn pss_encode(message: &[u8], salt: &[u8; SALT_LEN]) -> Result<Vec<u8>, BlindError> {
-    const DB_LEN: usize = MODULUS_LEN - HASH_LEN - 1;
+fn pss_encode(message: &[u8], salt: &[u8; SALT_LEN]) -> Result<[u8; MODULUS_LEN], BlindError> {
     let m_hash = digest(&SHA384, message);
-    let mut prime = vec![0_u8; 8];
-    prime.extend_from_slice(m_hash.as_ref());
-    prime.extend_from_slice(salt);
+    let mut prime = [0_u8; PRIME_LEN];
+    prime
+        .get_mut(8..PRIME_LEN - SALT_LEN)
+        .ok_or(BlindError::Operation)?
+        .copy_from_slice(m_hash.as_ref());
+    prime
+        .get_mut(PRIME_LEN - SALT_LEN..)
+        .ok_or(BlindError::Operation)?
+        .copy_from_slice(salt);
     let h = digest(&SHA384, &prime);
-    let mut db = vec![0_u8; DB_LEN - SALT_LEN - 1];
-    db.push(1);
-    db.extend_from_slice(salt);
-    let mask = mgf1(h.as_ref(), DB_LEN)?;
-    for (d, k) in db.iter_mut().zip(mask.iter()) {
+    let mut em = [0_u8; MODULUS_LEN];
+    *em.get_mut(ONE_AT).ok_or(BlindError::Operation)? = 1;
+    em.get_mut(ONE_AT + 1..DB_LEN)
+        .ok_or(BlindError::Operation)?
+        .copy_from_slice(salt);
+    let mask = mgf1(h.as_ref())?;
+    for (d, k) in em.iter_mut().zip(mask.iter()) {
         *d ^= k;
     }
-    if let Some(top) = db.first_mut() {
+    if let Some(top) = em.first_mut() {
         *top &= 0x7f;
     }
-    db.extend_from_slice(h.as_ref());
-    db.push(0xbc);
-    if db.len() == MODULUS_LEN {
-        Ok(db)
-    } else {
-        Err(BlindError::Operation)
-    }
+    em.get_mut(DB_LEN..MODULUS_LEN - 1)
+        .ok_or(BlindError::Operation)?
+        .copy_from_slice(h.as_ref());
+    *em.last_mut().ok_or(BlindError::Operation)? = 0xbc;
+    Ok(em)
 }
 
-fn mgf1(seed: &[u8], len: usize) -> Result<Vec<u8>, BlindError> {
-    let mut out = Vec::with_capacity(len.saturating_add(HASH_LEN));
-    let mut counter = 0_u32;
-    while out.len() < len {
-        let mut block = seed.to_vec();
-        block.extend_from_slice(&counter.to_be_bytes());
-        out.extend_from_slice(digest(&SHA384, &block).as_ref());
-        counter = counter.checked_add(1).ok_or(BlindError::Operation)?;
+/// MGF1 with SHA-384 (RFC 8017 §B.2.1), `DB_LEN` bytes.
+fn mgf1(seed: &[u8]) -> Result<[u8; DB_LEN], BlindError> {
+    let mut out = [0_u8; DB_LEN];
+    for (counter, chunk) in (0_u32..).zip(out.chunks_mut(HASH_LEN)) {
+        let mut block = [0_u8; HASH_LEN + 4];
+        block
+            .get_mut(..HASH_LEN)
+            .ok_or(BlindError::Operation)?
+            .copy_from_slice(seed);
+        block
+            .get_mut(HASH_LEN..)
+            .ok_or(BlindError::Operation)?
+            .copy_from_slice(&counter.to_be_bytes());
+        let d = digest(&SHA384, &block);
+        chunk.copy_from_slice(d.as_ref().get(..chunk.len()).ok_or(BlindError::Operation)?);
     }
-    out.truncate(len);
     Ok(out)
 }
 
-fn padded(bn: *const sys::BIGNUM, len: usize) -> Result<Vec<u8>, BlindError> {
+fn padded<const N: usize>(bn: *const sys::BIGNUM) -> Result<[u8; N], BlindError> {
     if bn.is_null() {
         return Err(BlindError::Key);
     }
-    let mut out = vec![0_u8; len];
-    // SAFETY: `bn` is a live big number borrowed from its key; `out` has `len` writable bytes.
-    if unsafe { sys::BN_bn2bin_padded(out.as_mut_ptr(), len, bn) } == 1 {
+    let mut out = [0_u8; N];
+    // SAFETY: `bn` is a live big number borrowed from its key; `out` has `N` writable bytes.
+    if unsafe { sys::BN_bn2bin_padded(out.as_mut_ptr(), N, bn) } == 1 {
         Ok(out)
     } else {
         Err(BlindError::Key)
@@ -410,8 +421,8 @@ impl Bn {
         self.0.as_ptr()
     }
 
-    fn bytes(&self, len: usize) -> Result<Vec<u8>, BlindError> {
-        padded(self.0.as_ptr(), len).map_err(|_| BlindError::Operation)
+    fn bytes(&self) -> Result<[u8; MODULUS_LEN], BlindError> {
+        padded(self.0.as_ptr()).map_err(|_| BlindError::Operation)
     }
 }
 

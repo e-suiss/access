@@ -15,7 +15,7 @@ default = ["std"]
 verify = []
 std = ["verify"]
 # OP-140 m.4: the server features; none of them is part of `verify`
-aws-lc = ["std", "dep:aws-lc-rs", "dep:aws-lc-sys", "dep:secrecy", "dep:subtle", "dep:zeroize"]
+aws-lc = ["std", "dep:aws-lc-rs", "dep:secrecy", "dep:subtle", "dep:zeroize"]
 aead = ["aws-lc"]
 signer = ["aws-lc"]
 pkcs11 = ["signer", "aead", "dep:cryptoki"]
@@ -29,7 +29,6 @@ ed25519-dalek = { workspace = true }
 curve25519-dalek = { workspace = true }
 p256 = { workspace = true }
 aws-lc-rs = { workspace = true, optional = true }
-aws-lc-sys = { workspace = true, optional = true }
 secrecy = { workspace = true, optional = true }
 subtle = { workspace = true, optional = true }
 zeroize = { workspace = true, optional = true, features = ["alloc", "std"] }
