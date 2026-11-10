@@ -330,7 +330,7 @@ pub enum TextId {
     /// P4: the upstream identity provider cannot be reached (OP-155 m.3 (h)); nothing falls back.
     #[serde(rename = "upstream.unreachable")]
     UpstreamUnreachable,
-    /// P4: the upstream's subject changed; an administrator resolves it with an explicit re-link (OP-155 m.3 (h)).
+    /// P4: the upstream's subject changed; only an explicit link after a re-authentication resolves it (OP-155 m.3 (h)).
     #[serde(rename = "upstream.subject_conflict")]
     UpstreamSubjectConflict,
     /// P4: home realm discovery's interstitial title (OP-155 m.3 (h)).
@@ -826,10 +826,10 @@ impl TextId {
                 "{ $client } asks for { $scope }. The request came from { $prefix }."
             }
             Self::UpstreamUnreachable => {
-                "{ $provider } can't be reached right now. Try again in a few minutes."
+                "{ $provider } isn't responding. Try another sign-in method if you've set one up."
             }
             Self::UpstreamSubjectConflict => {
-                "Your account at { $provider } has changed. Your administrator has to confirm the change before you can sign in with it."
+                "Your account at { $provider } has changed. Sign in another way, then link it again from your account."
             }
             Self::HrdTitle => "Continue to { $organization }?",
             Self::HrdConfirm => {

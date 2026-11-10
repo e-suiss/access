@@ -3491,8 +3491,15 @@
         "operationId": "startUpstreamSignIn",
         "summary": "Starts sign-in at an enterprise upstream identity provider (OIDC or SAML); home realm discovery confirms the organization first when it is on (OP-155 m.3 (h)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -3507,8 +3514,7 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       }
     },
     "/v1/login/upstream/{connection}/callback": {
@@ -3516,8 +3522,15 @@
         "operationId": "upstreamCallback",
         "summary": "The OIDC upstream's redirect back; its subject key is the connection's own, sub or [tid, oid].",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -3532,8 +3545,7 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       }
     },
     "/v1/login/upstream/{connection}/saml/acs": {

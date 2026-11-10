@@ -458,3 +458,103 @@ fn an_administrator_never_sets_a_users_credential() {
         assert_eq!(Op::from_operation(name), None, "{name}");
     }
 }
+
+// L6 (ii), TN-117, OP-148 m.4 (b), IDP-27, TN-98, OP-155 m.3 (h), Ek B 4907, 5097
+#[test]
+fn upstream_mapping_and_its_assurance_map_are_reserved_ct3_actions() {
+    let ids = ids();
+    let up = compile(
+        Op::PutGroup,
+        Some("eng"),
+        &json!({"display_name": "Eng", "membership_issuer": "upstream:corp"}),
+        &ids,
+    )
+    .unwrap();
+    assert_eq!(
+        up.action(),
+        access_internal_api::idp::IdpAction::UpstreamMapping
+    );
+    assert!(up.action().reserved());
+    let admin = compile(
+        Op::PutGroup,
+        Some("eng"),
+        &json!({"display_name": "Eng"}),
+        &ids,
+    )
+    .unwrap();
+    assert_eq!(
+        admin.action(),
+        access_internal_api::idp::IdpAction::GroupCreate
+    );
+    let map = compile(
+        Op::PutUpstreamAssuranceMap,
+        Some("corp"),
+        &json!({"entries": [{"match": "acr", "value": "urn:corp:mfa", "aal": 2}]}),
+        &ids,
+    )
+    .unwrap();
+    assert_eq!(
+        map.action(),
+        access_internal_api::idp::IdpAction::UpstreamAssuranceMap
+    );
+    assert!(map.action().reserved());
+    assert!(
+        map.check(&access_identity_oauth::adapters::outbound::DeclaredTargets::default())
+            .is_ok()
+    );
+    let bad = compile(
+        Op::PutUpstreamAssuranceMap,
+        Some("corp"),
+        &json!({"entries": [{"match": "acr", "value": "x", "aal": 9}]}),
+        &ids,
+    )
+    .unwrap();
+    assert_eq!(
+        bad.check(&access_identity_oauth::adapters::outbound::DeclaredTargets::default()),
+        Err(Invalid::Upstream)
+    );
+    let on = compile(Op::PutHrd, None, &json!({"enabled": true}), &ids).unwrap();
+    let off = compile(Op::PutHrd, None, &json!({"enabled": false}), &ids).unwrap();
+    assert_eq!(
+        (on.action(), off.action()),
+        (
+            access_internal_api::idp::IdpAction::RealmHrd,
+            access_internal_api::idp::IdpAction::RealmHrdClose
+        )
+    );
+}
+
+// OP-155 m.3 (h), TN-95
+#[test]
+fn an_upstream_registration_carries_its_profile_with_private_key_jwt_by_default() {
+    let ids = ids();
+    let base = json!({"issuer": "https://idp.example", "client_id": "c",
+                      "jwks_uri": "https://idp.example/jwks", "display_name": "Corp",
+                      "subject_key": "tid_oid"});
+    let Change::UpstreamRegister(u) = compile(Op::PutUpstream, Some("corp"), &base, &ids).unwrap()
+    else {
+        panic!("not a register")
+    };
+    assert_eq!(u.profile.client_auth.name(), "private_key_jwt");
+    assert_eq!(u.profile.display_name.as_deref(), Some("Corp"));
+    assert!(u.check().is_ok());
+    let mut secret = base.clone();
+    secret["client_secret_ref"] = json!("secret://upstream/corp");
+    let Change::UpstreamRegister(s) =
+        compile(Op::PutUpstream, Some("corp"), &secret, &ids).unwrap()
+    else {
+        panic!("not a register")
+    };
+    assert_eq!(s.profile.client_auth.name(), "client_secret_post");
+    let mut odd = base;
+    odd["allow_unsolicited"] = json!(true);
+    let Change::UpstreamRegister(o) = compile(Op::PutUpstream, Some("corp"), &odd, &ids).unwrap()
+    else {
+        panic!("not a register")
+    };
+    assert_eq!(
+        o.check(),
+        Err(Invalid::Upstream),
+        "unsolicited is SAML only"
+    );
+}
