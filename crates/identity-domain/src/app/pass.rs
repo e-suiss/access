@@ -262,13 +262,13 @@ where
                     Some(e.code()),
                 )
                 .await?;
-                audit(&mut t, "acme.order_failed", &d.hostname).await?;
                 tracing::error!(
                     event = "acme.renewal.failed",
                     plane = "ops",
                     error = e.code(),
                     "custom domain certificate not issued"
                 );
+                audit(&mut t, "acme.order_failed", &d.hostname).await?;
                 out.failed = out.failed.saturating_add(1);
             }
         }

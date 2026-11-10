@@ -76,10 +76,6 @@ fn written() -> BTreeSet<String> {
 const UNPRODUCED: &[&str] = &[
     "relay.resent",
     "relay.undelivered",
-    "domain.verified",
-    "domain.verification_failed",
-    "acme.certificate_issued",
-    "acme.order_failed",
     "push.challenge_sent",
     "push.approved",
     "push.denied",
