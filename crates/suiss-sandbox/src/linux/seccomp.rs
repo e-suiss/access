@@ -772,7 +772,9 @@ mod tests {
         for profile in PROFILES {
             for phase in PHASES {
                 let rules = allowlist(profile, phase, 1).unwrap();
-                let exec: &[i64] = if profile == Profile::Solver {
+                // OP-155 m.6 (b)
+                let exec: &[i64] = if matches!(profile, Profile::Solver | Profile::ParserSupervisor)
+                {
                     &[libc::SYS_execveat, libc::SYS_ptrace]
                 } else {
                     &[libc::SYS_execve, libc::SYS_execveat, libc::SYS_ptrace]
