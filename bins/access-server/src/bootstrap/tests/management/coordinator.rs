@@ -78,14 +78,16 @@ impl Upstream for Public {
         answer(&self.discovery, req).await
     }
 
-    async fn attention(&self, url: &str, party: &str) -> Answer {
-        if url != ATTENTION {
-            return Answer::Unanswered(Fault::Unreachable);
-        }
-        Answer::Response(Answered::new(
-            200,
-            self.coordinator.answer(party).to_string().into_bytes(),
-        ))
+    fn attention(&self, url: &str, party: &str) -> impl Future<Output = Answer> + Send {
+        let answer = if url == ATTENTION {
+            Answer::Response(Answered::new(
+                200,
+                self.coordinator.answer(party).to_string().into_bytes(),
+            ))
+        } else {
+            Answer::Unanswered(Fault::Unreachable)
+        };
+        std::future::ready(answer)
     }
 }
 
