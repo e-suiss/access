@@ -153,9 +153,18 @@ async fn check<P: Ports + 'static>(
     .await
 }
 
+/// The path Envoy appended to [`ENVOY_PREFIX`], as sent: never percent-decoded, so an encoded
+/// slash or dot still reaches the ambiguity rules (OP-156 m.15 (d)); the application's root `/`
+/// arrives as the prefix with a trailing `/` and is the empty suffix.
+fn envoy_suffix(uri: &Uri) -> &str {
+    uri.path().strip_prefix(ENVOY_PREFIX).unwrap_or_default()
+}
+
+/// The check path Envoy's `path_prefix` names, with the `/` every forwarded path starts with.
+pub const ENVOY_PREFIX: &str = "/proxy/v1/check/envoy/";
+
 async fn envoy<P: Ports + 'static>(
     State(s): State<Arc<Shared<P>>>,
-    Path(rest): Path<String>,
     method: Method,
     uri: Uri,
     headers: HeaderMap,
@@ -167,7 +176,7 @@ async fn envoy<P: Ports + 'static>(
         &s.proxy,
         Asked {
             engine: Engine::Envoy,
-            suffix: Some(&rest),
+            suffix: Some(envoy_suffix(&uri)),
             method: &method,
             uri: &uri,
             headers: &headers,
@@ -181,6 +190,7 @@ async fn envoy<P: Ports + 'static>(
 pub fn router<P: Ports + 'static>(proxy: Arc<Proxy<P>>) -> Router {
     Router::new()
         .route("/proxy/v1/check/{engine}", get(check::<P>).post(check::<P>))
+        .route(ENVOY_PREFIX, any(envoy::<P>))
         .route("/proxy/v1/check/envoy/{*path}", any(envoy::<P>))
         .with_state(Arc::new(Shared { proxy }))
 }
@@ -204,5 +214,15 @@ mod tests {
         let token = Pep(String::from("jkt"));
         assert_eq!(pep_of(Some(&token), Some(&chain)).as_deref(), Some("jkt"));
         assert_eq!(pep_of(None, None), None);
+    }
+
+    // IDP-30 (1), OP-156 m.15 (d), (f)
+    #[test]
+    fn envoy_paths_are_read_as_sent() {
+        let suffix = |p: &str| String::from(envoy_suffix(&p.parse::<Uri>().unwrap()));
+        assert_eq!(suffix("/proxy/v1/check/envoy/"), "");
+        assert_eq!(suffix("/proxy/v1/check/envoy/a/b?x=1"), "a/b");
+        assert_eq!(suffix("/proxy/v1/check/envoy/a%2fb"), "a%2fb");
+        assert_eq!(suffix("/proxy/v1/check/envoy//etc"), "/etc");
     }
 }

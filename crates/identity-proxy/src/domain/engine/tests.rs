@@ -59,6 +59,16 @@ fn each_engine_names_the_request_in_its_own_headers() {
     assert_eq!(envoy.uri(), "/admin/keys?x=1");
 }
 
+// IDP-30 (1), OP-156 m.15 (d), (f)
+#[test]
+fn envoy_root_and_doubled_slashes_keep_their_reading() {
+    let h = || headers(&[("host", "wiki.example.com")]);
+    let root = forwarded(Engine::Envoy, "GET", (Some(""), None), h()).unwrap();
+    assert_eq!(root.uri(), "/");
+    let doubled = forwarded(Engine::Envoy, "GET", (Some("/etc"), None), h()).unwrap();
+    assert_eq!(doubled.path, "//etc");
+}
+
 // IDP-30, TI-9
 #[test]
 fn a_request_it_cannot_read_is_refused() {

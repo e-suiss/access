@@ -177,7 +177,7 @@ pub fn forwarded(
         }
         Engine::Envoy => {
             let path = match suffix {
-                Some(s) => format!("/{}", s.trim_start_matches('/')),
+                Some(s) => format!("/{s}"),
                 None => String::from("/"),
             };
             let uri = match query {

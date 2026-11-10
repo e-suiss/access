@@ -37,6 +37,38 @@ pub fn route_ok(route: &str) -> bool {
         })
 }
 
+/// Whether `s` percent-encodes only bytes without a plain spelling, in upper-case hex (TN-113):
+/// `/%41dmin` is another spelling of `/admin` the application would decode, so it is refused.
+fn encoding_unique(s: &str) -> bool {
+    let b = s.as_bytes();
+    let mut i = 0_usize;
+    while let Some(&c) = b.get(i) {
+        if c == b'%' {
+            let hex = |x: Option<&u8>| {
+                x.and_then(|x| match x {
+                    b'0'..=b'9' => Some(x.wrapping_sub(b'0')),
+                    b'A'..=b'F' => Some(x.wrapping_sub(b'A').wrapping_add(10)),
+                    _ => None,
+                })
+            };
+            let (Some(h), Some(l)) = (
+                hex(b.get(i.saturating_add(1))),
+                hex(b.get(i.saturating_add(2))),
+            ) else {
+                return false;
+            };
+            let d = h.wrapping_mul(16).wrapping_add(l);
+            if d.is_ascii_graphic() || d <= b' ' || d == 0x7f {
+                return false;
+            }
+            i = i.saturating_add(3);
+            continue;
+        }
+        i = i.saturating_add(1);
+    }
+    true
+}
+
 /// Whether `path` has one reading only.
 fn unambiguous(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
@@ -45,6 +77,7 @@ fn unambiguous(path: &str) -> bool {
         && !lower.contains("%2f")
         && !lower.contains("%5c")
         && !lower.contains("%2e")
+        && encoding_unique(path)
         && path.split('/').all(|s| s != "." && s != "..")
 }
 
@@ -109,9 +142,15 @@ mod tests {
             "/admin%2Fkeys",
             "/a\\b",
             "/%2e%2e/admin",
+            "/%41dmin",
+            "/adm%69n",
+            "/caf%c3%a9",
+            "/a%2",
         ] {
             assert_eq!(pattern(&r, bad), None, "{bad}");
         }
+        assert_eq!(pattern(&r, "/caf%C3%A9"), Some("/"));
+        assert_eq!(pattern(&r, "/admin/"), Some("/admin"));
         assert_eq!(pattern(&routes(&["/admin"]), "/wiki"), None);
         assert_eq!(resource("apps", "wiki", "/Admin").path, ["wiki", "admin"]);
         assert_eq!(resource("apps", "wiki", "/").path, ["wiki"]);

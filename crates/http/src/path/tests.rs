@@ -166,3 +166,20 @@ proptest! {
         }
     }
 }
+
+// TN-113, OP-156 m.15 (d), (f)
+#[test]
+fn envoy_carries_the_application_path_as_data() {
+    assert_eq!(own_part("/proxy/v1/check/envoy/"), "/proxy/v1/check/envoy");
+    assert_eq!(
+        own_part("/proxy/v1/check/envoy/docs/"),
+        "/proxy/v1/check/envoy"
+    );
+    assert_eq!(
+        own_part("/proxy/v1/check/envoyx/"),
+        "/proxy/v1/check/envoyx/"
+    );
+    assert_eq!(own_part("/proxy/v1/check/nginx/"), "/proxy/v1/check/nginx/");
+    assert!(check(own_part("/proxy/v1/check/envoy/a//b")).is_ok());
+    assert!(check(own_part("/admin/")).is_err());
+}

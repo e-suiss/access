@@ -34,15 +34,15 @@ use super::management::send;
 use super::vault::{Lab, revoke_grant};
 use super::*;
 
-const HOST: &str = "access.test";
+pub(super) const HOST: &str = "access.test";
 const APP: &str = "wiki.example.com";
 const CALLBACK: &str = "https://wiki.example.com/access-proxy/v1/callback";
 
-type Env = crate::oauth::ServerEnv<TestPlane>;
-type Forward =
+pub(super) type Env = crate::oauth::ServerEnv<TestPlane>;
+pub(super) type Forward =
     Proxy<crate::proxy::ServerPorts<Env, KeyStore, ActorBindings, OsSalts, SourcesClock>>;
 
-fn oauth(w: &World) -> Arc<OAuth<Env>> {
+pub(super) fn oauth(w: &World) -> Arc<OAuth<Env>> {
     Arc::new(OAuth::new(crate::oauth::ServerEnv {
         saml: Arc::new(access_identity_oauth::ports::profile::NoSamlAssertions),
         client_certificates: Arc::new(access_identity_oauth::ports::profile::NoClientCertificates),
@@ -74,7 +74,7 @@ fn oauth(w: &World) -> Arc<OAuth<Env>> {
 }
 
 /// Commits `change` as the realm's root through the identity plane's write path.
-async fn commit(l: &Lab, change: Change) {
+pub(super) async fn commit(l: &Lab, change: Change) {
     let declared = DeclaredTargets::default();
     let b = Bootstrap {
         app: &l.w.db.app,
@@ -100,6 +100,11 @@ async fn commit(l: &Lab, change: Change) {
 
 /// A public client whose redirect URI is the application host's callback.
 async fn proxy_client(l: &Lab) -> String {
+    proxy_client_for(l, CALLBACK).await
+}
+
+/// A public client whose redirect URI is `callback`.
+pub(super) async fn proxy_client_for(l: &Lab, callback: &str) -> String {
     let declared = DeclaredTargets::default();
     let b = Bootstrap {
         app: &l.w.db.app,
@@ -119,7 +124,7 @@ async fn proxy_client(l: &Lab) -> String {
             id: id.clone(),
             display_name: String::from("Wiki"),
             auth: AuthMethod::None,
-            redirect_uris: vec![RedirectUri::parse(CALLBACK).unwrap()],
+            redirect_uris: vec![RedirectUri::parse(callback).unwrap()],
             post_logout_redirect_uris: Vec::new(),
             backchannel_logout_uri: None,
             require_par: false,
@@ -133,7 +138,7 @@ async fn proxy_client(l: &Lab) -> String {
 }
 
 /// The person's login session at the realm, as a sign-in leaves it: its cookie value.
-async fn login_session(l: &Lab) -> String {
+pub(super) async fn login_session(l: &Lab) -> String {
     let value: [u8; 32] = access_crypto::random::bytes().unwrap();
     let at = now_ms();
     let mut t = TenantTx::begin(&l.w.db.app, l.route.tenant, l.route.realm)
@@ -206,13 +211,13 @@ async fn check(router: &axum::Router, a: &Ask<'_>) -> (Response<Body>, serde_jso
     (r, json)
 }
 
-fn header_of(r: &Response<Body>, name: &str) -> Option<String> {
+pub(super) fn header_of(r: &Response<Body>, name: &str) -> Option<String> {
     r.headers()
         .get(name)
         .map(|v| v.to_str().unwrap().to_owned())
 }
 
-fn set_cookies(r: &Response<Body>) -> Vec<(String, String)> {
+pub(super) fn set_cookies(r: &Response<Body>) -> Vec<(String, String)> {
     r.headers()
         .get_all(header::SET_COOKIE)
         .iter()
@@ -230,7 +235,7 @@ fn set_cookies(r: &Response<Body>) -> Vec<(String, String)> {
         .collect()
 }
 
-fn path_of(url: &str) -> String {
+pub(super) fn path_of(url: &str) -> String {
     let rest = url.strip_prefix("https://").unwrap();
     rest[rest.find('/').unwrap()..].to_owned()
 }
@@ -408,6 +413,28 @@ async fn a_registered_proxy_signs_the_browser_in_and_every_request_is_a_real_dec
     assert_eq!(
         header_of(&r, "x-envoy-auth-headers-to-remove").as_deref(),
         Some("x-access-user,x-access-email")
+    );
+    // OP-156 m.15 (d), (f)
+    let (r, body) = check(
+        &forward,
+        &ask(Engine::Envoy, "GET", "/", Some(&proxy_cookie)),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::OK, "{body}");
+    let (r, _) = check(
+        &forward,
+        &ask(
+            Engine::Envoy,
+            "GET",
+            "/page%2f..%2fadmin",
+            Some(&proxy_cookie),
+        ),
+    )
+    .await;
+    assert_eq!(
+        r.status(),
+        StatusCode::FORBIDDEN,
+        "an encoded slash is not decoded"
     );
 
     // OP-156 m.3 (l)

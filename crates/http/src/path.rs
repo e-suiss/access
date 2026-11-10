@@ -106,9 +106,26 @@ pub fn check(path: &str) -> Result<(), PathError> {
     rest.split(|&c| c == b'/').try_for_each(segment)
 }
 
+/// Envoy's forward-auth check path (OP-156 m.15 (f)). What follows it is the application's own
+/// path, carried as data the way `X-Original-URI` carries it for Nginx; it routes nowhere in
+/// Access, and the forward-auth rules refuse every ambiguous spelling of it (OP-156 m.15 (d)).
+/// An application path such as `/` or `/docs/` ends in `/`, which no Access path may.
+pub const FORWARDED_PATH_PREFIX: &str = "/proxy/v1/check/envoy/";
+
+/// The part of `path` that names an Access route: all of it, or Envoy's check path alone.
+#[must_use]
+pub fn own_part(path: &str) -> &str {
+    if path.starts_with(FORWARDED_PATH_PREFIX) {
+        FORWARDED_PATH_PREFIX.trim_end_matches('/')
+    } else {
+        path
+    }
+}
+
 /// Refuses a request whose path is not canonical before it reaches a route (TN-113).
 pub async fn canonical(request: Request, next: Next) -> Response {
-    if check(request.uri().path()).is_err() {
+    let path = request.uri().path();
+    if check(own_part(path)).is_err() || path.len() > MAX_PATH {
         return Problem::new(StatusCode::BAD_REQUEST, "path-not-canonical", "Bad Request")
             .into_response();
     }
