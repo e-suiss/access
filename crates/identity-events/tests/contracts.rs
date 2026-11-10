@@ -28,7 +28,7 @@ use access_identity_events::domain::set::{
 use access_identity_events::domain::stream::{
     Channel, parse_poll, parse_stream, poll_response, ssf_configuration, stream_json,
 };
-use access_internal_api::events::{Detail, Event, Kind, ReasonClass, Source, Subject};
+use access_internal_api::events::{Detail, Event, Kind, Position, ReasonClass, Source, Subject};
 use access_kernel::digest::Digest;
 use access_kernel::model::Id;
 use serde_json::Value as Json;
@@ -120,7 +120,7 @@ fn tenants_are_named_by_their_opaque_id() {
     let t = ids.external(&[1; 16]).unwrap();
     assert!(t.starts_with("tnt_") && t.len() == 30);
     let e = IdentityEvent::tenant_created([2; 32], &t, "pool-default", 5);
-    let mut claims = set_claims(&e.ready(), "https://id.example", "work", 1);
+    let mut claims = set_claims(&positioned(e.ready()), "https://id.example", "work", 1);
     set_tenant(&mut claims, &t);
     assert_set(&claims);
     let ce: Json = serde_json::from_slice(&cloud_event(&claims, &t, &[2; 16], 5).unwrap()).unwrap();
@@ -290,12 +290,38 @@ fn sample(kind: Kind) -> Event {
     }
 }
 
+/// `r` with the `access_position` the fan-out adds (OP-22, OP-156 m.3 (j)).
+fn positioned(
+    mut r: access_identity_events::domain::catalog::Ready,
+) -> access_identity_events::domain::catalog::Ready {
+    access_identity_events::app::fanout::position(&mut r.payload, Position { pos: 9, idx: 2 });
+    r
+}
+
+// OP-22, OP-156 m.3 (j)
+#[test]
+fn an_event_without_its_position_does_not_meet_the_contract() {
+    let r = authority_ready(&sample(Kind::AuthorityRevoked), &[1; 32]);
+    let schema = load("authority-revoked.schema.json");
+    let errors = support::schema::Schema::new(&schema).errors(&r.payload);
+    assert!(
+        errors.iter().any(|e| e.contains("access_position")),
+        "{errors:?}"
+    );
+    let p = positioned(r);
+    assert_eq!(
+        p.payload["access_position"],
+        serde_json::json!({"pos": 9, "idx": 2})
+    );
+    assert_valid("authority-revoked.schema.json", &p.payload);
+}
+
 // OP-149 m.4, m.7
 #[test]
 fn built_events_meet_the_contracts() {
     let mut built = Vec::new();
     for (i, kind) in Kind::ALL.into_iter().enumerate() {
-        built.push(authority_ready(&sample(kind), &[i as u8; 32]));
+        built.push(positioned(authority_ready(&sample(kind), &[i as u8; 32])));
     }
     // OP-150 m.3 (m), MUST-NEVER-13
     let change = |kind, product: &str| {
@@ -341,7 +367,7 @@ fn built_events_meet_the_contracts() {
         let back =
             IdentityEvent::from_outbox(e.kind.outbox_kind(), &e.to_outbox().unwrap()).unwrap();
         assert_eq!(back, e);
-        built.push(e.ready());
+        built.push(positioned(e.ready()));
     }
     assert_eq!(
         IdentityKind::ProjectionInvalidated.outbox_kind(),

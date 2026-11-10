@@ -24,7 +24,11 @@
         "sink": "splunk",
         "adapter": "http",
         "since": 1793746800000,
-        "at": 1793750400000
+        "at": 1793750400000,
+        "access_position": {
+          "pos": 42,
+          "idx": 0
+        }
       }
     }
   }

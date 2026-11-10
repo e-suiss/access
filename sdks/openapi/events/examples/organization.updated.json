@@ -22,7 +22,11 @@
       "urn:suiss:access:event:organization.updated": {
         "tenant": "tnt_0123456789abcdefghjkmnpqrs",
         "organization": "019a0000-0000-7000-8000-0000000000b1",
-        "at": 1793750400000
+        "at": 1793750400000,
+        "access_position": {
+          "pos": 42,
+          "idx": 0
+        }
       }
     }
   }

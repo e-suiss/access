@@ -29,7 +29,11 @@
           "id": "BAQEBAQEBAQEBAQEBAQEBA"
         },
         "at": 1793750400000,
-        "party": "AgICAgICAgICAgICAgICAg"
+        "party": "AgICAgICAgICAgICAgICAg",
+        "access_position": {
+          "pos": 42,
+          "idx": 0
+        }
       }
     }
   }

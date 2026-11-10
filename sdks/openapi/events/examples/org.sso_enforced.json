@@ -24,7 +24,11 @@
         "organization": "019a0000-0000-7000-8000-0000000000b2",
         "connection": "acme-entra",
         "invitations": "redirect_to_sso",
-        "at": 1793750400000
+        "at": 1793750400000,
+        "access_position": {
+          "pos": 42,
+          "idx": 0
+        }
       }
     }
   }

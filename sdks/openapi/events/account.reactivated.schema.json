@@ -7,7 +7,8 @@
   "required": [
     "realm",
     "account",
-    "at"
+    "at",
+    "access_position"
   ],
   "additionalProperties": false,
   "properties": {
@@ -25,6 +26,9 @@
       "enum": [
         "active"
       ]
+    },
+    "access_position": {
+      "$ref": "#/$defs/access_position"
     }
   },
   "$defs": {
@@ -41,6 +45,25 @@
       "type": "string",
       "pattern": "^usr_[0-9a-hjkmnp-tv-z]{26}$",
       "description": "The account's opaque external id (OP-137): pseudonymous, never an identifier or a name."
+    },
+    "access_position": {
+      "type": "object",
+      "description": "The event's monotone version field (OP-22): it only grows within its source, the domain for an authority event and the issuer for an identity event. A receiver that has applied a later or equal position re-queries instead of applying this event.",
+      "required": [
+        "pos",
+        "idx"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "pos": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idx": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
     }
   }
 }

@@ -125,6 +125,31 @@
       "type": "string",
       "pattern": "^tnt_[0-9a-hjkmnp-tv-z]{26}$",
       "description": "The tenant the event happened in, by its opaque tnt_ id (OP-149 m.15 (i)). Present only on a platform product's subscription, which receives the events of every tenant (OP-149 m.17 (e)); iss and aud are then the platform realm's and its subscriber's."
+    },
+    "access_position": {
+      "$ref": "#/$defs/access_position",
+      "description": "On a CAEP or RISC SET, whose event body is fixed by its standard: the position of the Access event it copies, or of the identity plane signal. An Access event carries it in its own body."
+    }
+  },
+  "$defs": {
+    "access_position": {
+      "type": "object",
+      "description": "The event's monotone version field (OP-22): it only grows within its source, the domain for an authority event and the issuer for an identity event. A receiver that has applied a later or equal position re-queries instead of applying this event.",
+      "required": [
+        "pos",
+        "idx"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "pos": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idx": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
     }
   }
 }

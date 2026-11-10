@@ -177,7 +177,12 @@ impl<C: Clock + Send + Sync> WebhookFanout<C> {
                             ev.trace_parent.as_deref(),
                             Some(ev.age_ms),
                         );
-                        let ready = e.ready();
+                        let mut ready = e.ready();
+                        // OP-22, OP-156 m.3 (j)
+                        crate::app::fanout::position(
+                            &mut ready.payload,
+                            crate::app::fanout::identity_position(ev),
+                        );
                         let n =
                             tracing::Instrument::instrument(self.queue(ev.tenant, &ready), span)
                                 .await?;

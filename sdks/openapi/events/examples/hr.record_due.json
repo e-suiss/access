@@ -25,7 +25,11 @@
         "account": "usr_01jd8x7k2m3n4p5q6r7s8t9v0x",
         "change": "start",
         "due_at": 1793750400000,
-        "at": 1793750400000
+        "at": 1793750400000,
+        "access_position": {
+          "pos": 42,
+          "idx": 0
+        }
       }
     }
   }

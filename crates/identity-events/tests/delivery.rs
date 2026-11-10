@@ -783,6 +783,68 @@ async fn poll_returns_and_settles_sets() {
     ));
 }
 
+// OP-22, OP-156 m.3 (j), INV-24
+#[tokio::test]
+async fn sets_carry_their_position_and_a_late_one_is_requeried() {
+    use access_sdk::ordering::{AccessPosition, Applied, Next, should_requery};
+    let w = World::new().await;
+    let streams = w.streams();
+    let poll = streams
+        .create(
+            w.tenant,
+            w.realm,
+            &parse_stream(&stream_request(
+                "urn:ietf:rfc:8936",
+                None,
+                &["party.compromised", "party.disabled"],
+            ))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let token = poll.token.clone().unwrap();
+    w.authority_events(&[departed(&w.domain), compromised(&w.domain)])
+        .await;
+    let fanout = w.fanout();
+    assert_eq!(settle_domain(&fanout, &w.domain, 2).await, 2);
+    let answer = streams
+        .poll(&ClearSigner, &w.clock, w.tenant, w.realm, &token, b"{}")
+        .await
+        .unwrap();
+    let mut got = Vec::new();
+    for t in answer["sets"].as_object().unwrap().values() {
+        let (_, claims) = set_of(t.as_str().unwrap());
+        let urn = support::assert_set(&claims);
+        let p = &claims["events"][&urn]["access_position"];
+        got.push(AccessPosition {
+            pos: p["pos"].as_u64().unwrap(),
+            idx: p["idx"].as_u64().unwrap(),
+        });
+    }
+    got.sort_unstable();
+    let rows = access_store::authority::read_outbox(&w.db.app, &w.domain, (0, 0), 10)
+        .await
+        .unwrap();
+    let outbox: Vec<AccessPosition> = rows
+        .iter()
+        .map(|r| AccessPosition {
+            pos: r.pos,
+            idx: u64::from(r.idx),
+        })
+        .collect();
+    assert_eq!(got, outbox);
+    let (older, newer) = (got[0], got[1]);
+    assert!(older < newer);
+    let mut receiver = Applied::default();
+    assert_eq!(receiver.observe(newer), Next::Requery);
+    assert_eq!(receiver.observe(older), Next::Requery);
+    assert!(should_requery(receiver.last(), older));
+    assert_eq!(receiver.last(), Some(newer));
+    let mut in_order = Applied::default();
+    assert_eq!(in_order.observe(older), Next::Requery);
+    assert_eq!(in_order.observe(newer), Next::Apply);
+}
+
 // EI-9, E30, PI-9
 #[tokio::test]
 async fn delivery_and_acks_never_change_authority_state() {

@@ -26,7 +26,11 @@
         "key_id": "prj_01jd8x7k2m3n4p5q6r7s8t9v0w",
         "host_group": "prod-web",
         "valid_before": 1793779200,
-        "at": 1793750400000
+        "at": 1793750400000,
+        "access_position": {
+          "pos": 42,
+          "idx": 0
+        }
       }
     }
   }

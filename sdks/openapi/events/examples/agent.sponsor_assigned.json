@@ -23,7 +23,11 @@
         "realm": "019a0000-0000-7000-8000-0000000000a1",
         "agent": "AgICAgICAgICAgICAgICAg",
         "sponsor": "AwMDAwMDAwMDAwMDAwMDAw",
-        "at": 1793750400000
+        "at": 1793750400000,
+        "access_position": {
+          "pos": 42,
+          "idx": 0
+        }
       }
     }
   }

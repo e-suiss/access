@@ -33,7 +33,11 @@
         ],
         "window_from": 1793491200000,
         "declared_at": 1793750400000,
-        "evidence_digest": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk"
+        "evidence_digest": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk",
+        "access_position": {
+          "pos": 42,
+          "idx": 0
+        }
       }
     }
   }

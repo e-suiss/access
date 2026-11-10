@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
-use access_internal_api::events::{Event, Kind, Subject};
+use access_internal_api::events::{Event, Kind, POSITION_FIELD, Position, Subject};
 use access_store::authority;
 use access_store::events::{self as store, DeliveryRow, SubscriptionRow};
 use access_store::identity::{self, RealmId, TenantId, TenantTx};
@@ -81,7 +81,9 @@ impl<C: Clock + Send + Sync> Fanout<C> {
                             ev.trace_parent.as_deref(),
                             Some(ev.age_ms),
                         );
-                        let ready = e.ready();
+                        let mut ready = e.ready();
+                        // OP-22, OP-156 m.3 (j)
+                        position(&mut ready.payload, identity_position(ev));
                         let n =
                             tracing::Instrument::instrument(self.queue(ev.tenant, &ready), span)
                                 .await?;
@@ -92,7 +94,9 @@ impl<C: Clock + Send + Sync> Fanout<C> {
             } else if ev.kind.starts_with(SIGNAL_PREFIX) {
                 match Signal::from_outbox(&ev.kind, &ev.payload) {
                     Ok(s) => {
-                        let n = self.queue_signal(ev.tenant, ev.realm, &s).await?;
+                        let n = self
+                            .queue_signal(ev.tenant, ev.realm, &s, identity_position(ev))
+                            .await?;
                         queued = queued.saturating_add(n);
                     }
                     Err(e) => tracing::warn!(error = %e, "identity signal unreadable; passed"),
@@ -153,7 +157,9 @@ impl<C: Clock + Send + Sync> Fanout<C> {
                         self.device_ended(router, tenant, domain, &i.0, e.at)
                             .await?;
                     }
-                    let ready = authority_ready(&e, &r.event_id);
+                    let mut ready = authority_ready(&e, &r.event_id);
+                    // OP-22, OP-156 m.3 (j)
+                    position(&mut ready.payload, Position::authority(r.pos, r.idx));
                     // OP-67 m.1
                     let span = access_telemetry::trace::consumed(
                         "authority-events",
@@ -391,6 +397,13 @@ impl<C: Clock + Send + Sync> Fanout<C> {
                         let sub_id = json!({"format": "opaque", "id": ready.sub_id});
                         (standard_claims(&env, &form, &sub_id, body), jti)
                     };
+                    if form != own
+                        && let (Some(p), Some(c)) =
+                            (ready.payload.get(POSITION_FIELD), claims.as_object_mut())
+                    {
+                        // OP-22, OP-156 m.3 (j)
+                        c.insert(String::from(POSITION_FIELD), p.clone());
+                    }
                     if owner != tenant || s.platform_product.is_some() {
                         set_tenant(&mut claims, &self.db.tenant(tenant)?);
                     }
@@ -415,6 +428,7 @@ impl<C: Clock + Send + Sync> Fanout<C> {
         tenant: TenantId,
         realm: RealmId,
         signal: &Signal,
+        at: Position,
     ) -> Result<u32, Unavailable> {
         let now = self.clock.now().map_err(down)?;
         let uri = signal_uri(signal.kind);
@@ -459,7 +473,11 @@ impl<C: Clock + Send + Sync> Fanout<C> {
                 jti: &jti,
                 txn: &txn,
             };
-            let claims = standard_claims(&env, &uri, &sub_id, signal.event_body());
+            let mut claims = standard_claims(&env, &uri, &sub_id, signal.event_body());
+            if let Some(c) = claims.as_object_mut() {
+                // OP-22, OP-156 m.3 (j)
+                c.insert(String::from(POSITION_FIELD), position_json(at));
+            }
             let row = delivery_row(tenant, s, jti, uri.clone(), &claims, signal.at)?;
             if t.enqueue_delivery(&row, now).await.map_err(down)? {
                 queued = queued.saturating_add(1);
@@ -467,6 +485,29 @@ impl<C: Clock + Send + Sync> Fanout<C> {
         }
         t.commit().await.map_err(down)?;
         Ok(queued)
+    }
+}
+
+/// `{"pos": …, "idx": …}`.
+#[must_use]
+pub fn position_json(p: Position) -> Value {
+    json!({"pos": p.pos, "idx": p.idx})
+}
+
+/// Adds `access_position` to an event body (OP-22, OP-156 m.3 (j)).
+pub fn position(payload: &mut Value, p: Position) {
+    if let Some(m) = payload.as_object_mut() {
+        m.insert(String::from(POSITION_FIELD), position_json(p));
+    }
+}
+
+/// The position of an identity outbox event: its transaction and row, the order the outbox
+/// delivers in.
+#[must_use]
+pub fn identity_position(ev: &identity::OutboxEvent) -> Position {
+    Position {
+        pos: ev.xid,
+        idx: u64::try_from(ev.id).unwrap_or(0),
     }
 }
 

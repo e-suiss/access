@@ -26,7 +26,11 @@
         },
         "party": "AgICAgICAgICAgICAgICAg",
         "at": 1793750400000,
-        "reason_class": "departed"
+        "reason_class": "departed",
+        "access_position": {
+          "pos": 42,
+          "idx": 0
+        }
       }
     }
   }

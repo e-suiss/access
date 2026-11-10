@@ -11,7 +11,8 @@
     "key_id",
     "host_group",
     "valid_before",
-    "at"
+    "at",
+    "access_position"
   ],
   "additionalProperties": false,
   "properties": {
@@ -47,6 +48,9 @@
     },
     "at": {
       "$ref": "#/$defs/ms"
+    },
+    "access_position": {
+      "$ref": "#/$defs/access_position"
     }
   },
   "$defs": {
@@ -58,6 +62,25 @@
       "type": "integer",
       "minimum": 0,
       "description": "Unix time, milliseconds."
+    },
+    "access_position": {
+      "type": "object",
+      "description": "The event's monotone version field (OP-22): it only grows within its source, the domain for an authority event and the issuer for an identity event. A receiver that has applied a later or equal position re-queries instead of applying this event.",
+      "required": [
+        "pos",
+        "idx"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "pos": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idx": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
     }
   }
 }

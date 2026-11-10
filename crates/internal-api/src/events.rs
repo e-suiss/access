@@ -192,6 +192,34 @@ pub enum Detail {
     },
 }
 
+/// The member every event body, webhook and SET carries (OP-22, OP-156 m.3 (j)).
+pub const POSITION_FIELD: &str = "access_position";
+
+/// An event's monotone version field `access_position = {pos, idx}` (OP-22, §17.3.5): it only
+/// grows within its source. For an authority event the source is its domain and the value is
+/// its outbox cursor, record position and index. For an identity event the source is its
+/// issuer and the value is its identity outbox cursor, the writing transaction and the row,
+/// in the order the outbox delivers them. There is no order guarantee across sources, and a
+/// receiver that sees a position not past the last one it applied re-queries.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Position {
+    /// Record position, or the identity outbox transaction.
+    pub pos: u64,
+    /// Index within the record, or the identity outbox row.
+    pub idx: u64,
+}
+
+impl Position {
+    /// The position of the authority outbox event at `(pos, idx)`.
+    #[must_use]
+    pub fn authority(pos: u64, idx: u32) -> Self {
+        Self {
+            pos,
+            idx: u64::from(idx),
+        }
+    }
+}
+
 /// One semantic event.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Event {

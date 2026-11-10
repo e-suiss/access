@@ -7,7 +7,8 @@
   "required": [
     "party",
     "at",
-    "reason_class"
+    "reason_class",
+    "access_position"
   ],
   "additionalProperties": false,
   "properties": {
@@ -30,6 +31,9 @@
     },
     "source": {
       "$ref": "#/$defs/source"
+    },
+    "access_position": {
+      "$ref": "#/$defs/access_position"
     }
   },
   "$defs": {
@@ -78,6 +82,25 @@
           }
         }
       ]
+    },
+    "access_position": {
+      "type": "object",
+      "description": "The event's monotone version field (OP-22): it only grows within its source, the domain for an authority event and the issuer for an identity event. A receiver that has applied a later or equal position re-queries instead of applying this event.",
+      "required": [
+        "pos",
+        "idx"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "pos": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idx": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
     }
   }
 }

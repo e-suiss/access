@@ -25,6 +25,7 @@ pub mod auth;
 pub mod authorize;
 #[cfg(feature = "mcp")]
 pub mod mcp;
+pub mod ordering;
 pub mod reason;
 pub mod resource;
 pub mod transport;

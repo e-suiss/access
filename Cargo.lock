@@ -420,6 +420,7 @@ dependencies = [
  "access-telemetry",
  "aws-lc-rs",
  "esuiss-access-kernel",
+ "esuiss-access-sdk",
  "esuiss-crypto",
  "rcgen",
  "rustls",
