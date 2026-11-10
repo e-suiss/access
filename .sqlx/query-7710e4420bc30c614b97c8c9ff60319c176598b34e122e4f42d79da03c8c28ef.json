@@ -1,0 +1,199 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.ca_key, c.serial, c.key_id, c.domain_id, c.exercise, c.intent, c.holder,\n                      c.party, c.host_group, c.principals, c.valid_after, c.valid_before,\n                      c.issued_ms, r.reason AS \"reason?\", r.revoked_ms AS \"revoked_ms?\"\n                 FROM access.ssh_certificates c\n                 LEFT JOIN access.ssh_revocations r\n                   ON r.tenant_id = c.tenant_id AND r.realm_id = c.realm_id\n                  AND r.ca_key = c.ca_key AND r.serial = c.serial\n                WHERE c.tenant_id = $1 AND c.realm_id = $2 AND c.valid_before > $3\n                ORDER BY c.issued_ms DESC LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ca_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_certificates",
+            "name": "ca_key"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "serial",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_certificates",
+            "name": "serial"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "key_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_certificates",
+            "name": "key_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "domain_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_certificates",
+            "name": "domain_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "exercise",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_certificates",
+            "name": "exercise"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "intent",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_certificates",
+            "name": "intent"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "holder",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_certificates",
+            "name": "holder"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "party",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_certificates",
+            "name": "party"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "host_group",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_certificates",
+            "name": "host_group"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "principals",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_certificates",
+            "name": "principals"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "valid_after",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_certificates",
+            "name": "valid_after"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "valid_before",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_certificates",
+            "name": "valid_before"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "issued_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_certificates",
+            "name": "issued_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "reason?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_revocations",
+            "name": "reason"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "revoked_ms?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_revocations",
+            "name": "revoked_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "7710e4420bc30c614b97c8c9ff60319c176598b34e122e4f42d79da03c8c28ef"
+}

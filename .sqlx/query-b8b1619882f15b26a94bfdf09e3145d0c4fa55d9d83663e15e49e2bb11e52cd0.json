@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.ssh_certificates (tenant_id, realm_id, ca_key, serial, key_id,\n                    domain_id, exercise, decision_pos, intent, holder, party, host_group,\n                    principals, public_key, valid_after, valid_before, issued_ms)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Int8",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Bytea",
+        "Text",
+        "Bytea",
+        "Text",
+        "TextArray",
+        "Bytea",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b8b1619882f15b26a94bfdf09e3145d0c4fa55d9d83663e15e49e2bb11e52cd0"
+}

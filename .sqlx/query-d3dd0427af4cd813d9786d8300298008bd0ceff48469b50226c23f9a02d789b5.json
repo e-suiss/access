@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT version, change, decision_pos FROM access.ssh_ca_changes\n              WHERE tenant_id = $1 AND realm_id = $2\n              ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_ca_changes",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "change",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_ca_changes",
+            "name": "change"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_ca_changes",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d3dd0427af4cd813d9786d8300298008bd0ceff48469b50226c23f9a02d789b5"
+}

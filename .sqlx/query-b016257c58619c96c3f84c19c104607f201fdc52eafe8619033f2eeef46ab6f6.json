@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.ssh_ca_keys (tenant_id, realm_id, public_key, version, phase,\n                    since_ms, change_version)\n             SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6\n               FROM access.ssh_ca_keys\n              WHERE tenant_id = $1 AND realm_id = $2 AND public_key = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b016257c58619c96c3f84c19c104607f201fdc52eafe8619033f2eeef46ab6f6"
+}

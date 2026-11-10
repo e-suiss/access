@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ON (name) name, state, description, version, decision_pos\n               FROM access.ssh_host_groups\n              WHERE tenant_id = $1 AND realm_id = $2\n              ORDER BY name, version DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_host_groups",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_host_groups",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_host_groups",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_host_groups",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_host_groups",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "650c4d7cebea360d928a1986a45e6339dbc99cc73281937180695bffcf4b50b5"
+}

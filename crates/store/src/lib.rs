@@ -69,6 +69,7 @@ pub mod scim;
 pub mod scope;
 pub mod sessions;
 pub mod ssf;
+pub mod ssh;
 pub mod status;
 pub mod tenancy;
 pub mod throttle;

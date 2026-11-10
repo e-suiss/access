@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ON (public_key) public_key, phase, since_ms, change_version\n               FROM access.ssh_ca_keys\n              WHERE tenant_id = $1 AND realm_id = $2\n              ORDER BY public_key, version DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "public_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_ca_keys",
+            "name": "public_key"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "phase",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_ca_keys",
+            "name": "phase"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "since_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_ca_keys",
+            "name": "since_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "change_version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.ssh_ca_keys",
+            "name": "change_version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ebd38d1d22724afb1eab8289c6b4643c83e3e14e819b403b6e50edfddb48c621"
+}
