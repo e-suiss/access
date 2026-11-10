@@ -113,8 +113,10 @@ pub struct RecordRow {
     pub sealed: ([u8; 12], Vec<u8>),
     /// When its Claims may be issued, Unix ms.
     pub issue_after_ms: u64,
-    /// `issued` or `skipped` once its Claims were dealt with.
+    /// `issued`, `quarantined` or `skipped` once its Claims were dealt with.
     pub claims: Option<String>,
+    /// The `ExerciseID` of the import it came with.
+    pub exercise: [u8; 32],
 }
 
 /// The newest version of a start or end date.
@@ -271,21 +273,21 @@ impl TenantTx {
             .collect()
     }
 
-    /// Records the `idp.hr.import` bound by `bound`.
+    /// Records the `idp.hr.import` bound by `bound`, Exercise `exercise`.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_hr_import(
         &mut self,
         bound: &Bound,
-        source: &str,
+        (source, exercise): (&str, &[u8; 32]),
         (format, file, records): (&str, &[u8; 32], u32),
     ) -> Result<(), StoreError> {
         let (tenant, realm) = scope(self)?;
         sqlx::query!(
             "INSERT INTO access.hr_imports (tenant_id, realm_id, domain_id, decision_pos, source,
-                    format, file, records)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+                    format, file, records, exercise)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             tenant,
             realm,
             bound.domain().as_bytes().as_slice(),
@@ -294,6 +296,7 @@ impl TenantTx {
             format,
             file.as_slice(),
             i32::try_from(records).map_err(|_| StoreError::Range)?,
+            exercise.as_slice(),
         )
         .execute(&mut *self.tx)
         .await?;
@@ -346,8 +349,11 @@ impl TenantTx {
         let rows = sqlx::query!(
             r#"SELECT r.source, r.person, r.version, r.subject_id, r.start_ms, r.end_ms,
                       r.values_nonce, r.values_ciphertext, r.issue_after_ms,
-                      c.outcome AS "outcome?"
+                      c.outcome AS "outcome?", i.exercise
                  FROM access.hr_records r
+                 JOIN access.hr_imports i
+                   ON i.tenant_id = r.tenant_id AND i.realm_id = r.realm_id
+                  AND i.domain_id = r.import_domain AND i.decision_pos = r.import_pos
                  LEFT JOIN access.hr_record_claims c
                    ON c.tenant_id = r.tenant_id AND c.realm_id = r.realm_id
                   AND c.source = r.source AND c.person = r.person AND c.version = r.version
@@ -376,6 +382,7 @@ impl TenantTx {
                     ),
                     issue_after_ms: unsigned(r.issue_after_ms)?,
                     claims: r.outcome,
+                    exercise: id32(&r.exercise)?,
                 })
             })
             .collect()
@@ -566,6 +573,35 @@ impl TenantTx {
         Ok(rows)
     }
 
+    /// The passkey setup invitations of `subject`: its temporary access passes, whether each is
+    /// one-use, and when each was issued and ends, Unix ms (OP-156 m.3 (q)).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn hr_invites(
+        &mut self,
+        subject: [u8; 16],
+    ) -> Result<Vec<(bool, u64, u64)>, StoreError> {
+        let (tenant, realm) = scope(self)?;
+        let rows = sqlx::query!(
+            r#"SELECT one_time,
+                      (extract(epoch FROM issued_at) * 1000)::bigint AS "issued_ms!",
+                      (extract(epoch FROM expires_at) * 1000)::bigint AS "expires_ms!"
+                 FROM access.recovery_tokens
+                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+                  AND kind = 'temporary_access_pass'
+                ORDER BY issued_at"#,
+            tenant,
+            realm,
+            Uuid::from_bytes(subject),
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        rows.into_iter()
+            .map(|r| Ok((r.one_time, unsigned(r.issued_ms)?, unsigned(r.expires_ms)?)))
+            .collect()
+    }
+
     /// How many people have a record under `source`.
     ///
     /// # Errors
@@ -583,6 +619,19 @@ impl TenantTx {
         .await?;
         unsigned(n.unwrap_or(0))
     }
+}
+
+/// The sequencer's time of the decision `bound` names, Unix ms: what an import's TN-109
+/// cooling is measured from.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn decision_time(pool: &PgPool, bound: &Bound) -> Result<Option<u64>, StoreError> {
+    let p = bound.position();
+    Ok(crate::authority::read_log(pool, bound.domain(), p, p)
+        .await?
+        .first()
+        .map(|l| l.recorded_at))
 }
 
 /// The realms with HR work at `now_ms`: a pending date that came, or a record version whose

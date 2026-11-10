@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT r.source, r.person, r.version, r.subject_id, r.start_ms, r.end_ms,\n                      r.values_nonce, r.values_ciphertext, r.issue_after_ms,\n                      c.outcome AS \"outcome?\"\n                 FROM access.hr_records r\n                 LEFT JOIN access.hr_record_claims c\n                   ON c.tenant_id = r.tenant_id AND c.realm_id = r.realm_id\n                  AND c.source = r.source AND c.person = r.person AND c.version = r.version\n                WHERE r.tenant_id = $1 AND r.realm_id = $2 AND r.source = $3 AND r.person = $4\n                ORDER BY r.version",
+  "query": "SELECT r.source, r.person, r.version, r.subject_id, r.start_ms, r.end_ms,\n                      r.values_nonce, r.values_ciphertext, r.issue_after_ms,\n                      c.outcome AS \"outcome?\", i.exercise\n                 FROM access.hr_records r\n                 JOIN access.hr_imports i\n                   ON i.tenant_id = r.tenant_id AND i.realm_id = r.realm_id\n                  AND i.domain_id = r.import_domain AND i.decision_pos = r.import_pos\n                 LEFT JOIN access.hr_record_claims c\n                   ON c.tenant_id = r.tenant_id AND c.realm_id = r.realm_id\n                  AND c.source = r.source AND c.person = r.person AND c.version = r.version\n                WHERE r.tenant_id = $1 AND r.realm_id = $2 AND r.source = $3 AND r.person = $4\n                ORDER BY r.version",
   "describe": {
     "columns": [
       {
@@ -112,6 +112,17 @@
             "name": "outcome"
           }
         }
+      },
+      {
+        "ordinal": 10,
+        "name": "exercise",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.hr_imports",
+            "name": "exercise"
+          }
+        }
       }
     ],
     "parameters": {
@@ -132,8 +143,9 @@
       false,
       false,
       false,
-      true
+      true,
+      false
     ]
   },
-  "hash": "9498974d00729b7414302a666c1d8b5096bac811879446a731a5893cf1325b7a"
+  "hash": "50e3703cb0a166cc30b1319a197a6ea1e9fb14ad3ac85f06add0651cdd0dcb15"
 }

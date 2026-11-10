@@ -1167,7 +1167,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 .keys
                 .vault(p.realm)
                 .ok_or_else(|| AdminError::Unavailable(String::from("vault")))?;
-            let now = access_store::authority::server_time(self.app).await?;
+            // TN-109
+            let now = access_store::hr::decision_time(self.app, bound)
+                .await?
+                .ok_or(AdminError::Unbound)?;
             hr::import(&mut t, (vault, self.ids), i, (bound, exercise, now)).await?;
         }
         if let Change::RelayResend(original) = &p.change {

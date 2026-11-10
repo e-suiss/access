@@ -840,7 +840,8 @@ pub enum Next {
         /// The version.
         version: u64,
     },
-    /// The orders that state version `version` after the last stated one.
+    /// The orders that state version `version` after the last stated one; after a version the
+    /// domain did not accept, every value is stated again.
     Issue {
         /// The version.
         version: u64,
@@ -890,8 +891,9 @@ pub async fn next(
         .unwrap_or_default()
         .iter()
         .rev()
-        .find(|v| v.claims.as_deref() == Some("issued"));
+        .find(|v| matches!(v.claims.as_deref(), Some("issued" | "quarantined")));
     let before = match last {
+        Some(l) if l.claims.as_deref() == Some("quarantined") => BTreeMap::new(),
         Some(l) => match open(tx, l.subject, &l.sealed).await? {
             Some(r) => values(&r),
             None => {

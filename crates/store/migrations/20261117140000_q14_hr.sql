@@ -59,6 +59,7 @@ CREATE TABLE access.hr_imports (
   format text NOT NULL CHECK (format IN ('jsonl', 'csv')),
   file bytea NOT NULL CHECK (octet_length(file) = 32),
   records integer NOT NULL CHECK (records BETWEEN 1 AND 10000),
+  exercise bytea NOT NULL CHECK (octet_length(exercise) = 32),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (tenant_id, realm_id, domain_id, decision_pos),
   FOREIGN KEY (tenant_id, realm_id) REFERENCES access.realms (tenant_id, realm_id),

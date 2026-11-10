@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT one_time,\n                      (extract(epoch FROM issued_at) * 1000)::bigint AS \"issued_ms!\",\n                      (extract(epoch FROM expires_at) * 1000)::bigint AS \"expires_ms!\"\n                 FROM access.recovery_tokens\n                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3\n                  AND kind = 'temporary_access_pass'\n                ORDER BY issued_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "one_time",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.recovery_tokens",
+            "name": "one_time"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "issued_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "expires_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "0077938f6397b8746867ff38c1adbbdca179729c78e9b45c4ee80b591adfdd94"
+}

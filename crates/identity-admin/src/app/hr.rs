@@ -126,7 +126,7 @@ pub(crate) async fn current(t: &mut TenantTx, change: &HrChange) -> Result<(), A
     Ok(())
 }
 
-/// Writes `change` under `bound`; an import's records follow in [`import`].
+/// Writes `change` under `bound`; an import is written by [`import`].
 ///
 /// # Errors
 /// [`AdminError`].
@@ -162,10 +162,7 @@ pub(crate) async fn write(
             t.put_hr_connector(bound, name, false, (&row.source, &row.vendor))
                 .await?;
         }
-        HrChange::Import(i) => {
-            t.insert_hr_import(bound, &i.source, (i.format.name(), &i.file, i.records))
-                .await?;
-        }
+        HrChange::Import(_) => {}
     }
     Ok(true)
 }
@@ -181,6 +178,12 @@ pub(crate) async fn import(
     i: &HrImport,
     (bound, exercise, now): (&Bound, &Digest, u64),
 ) -> Result<records::Imported, AdminError> {
+    t.0.insert_hr_import(
+        bound,
+        (&i.source, &exercise.0),
+        (i.format.name(), &i.file, i.records),
+    )
+    .await?;
     let tenant = t.0.tenant();
     let realm_id = t.0.realm().ok_or(AdminError::NoRealm)?;
     let kek = vault.kek.clone();
@@ -577,7 +580,6 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
             correlation: &correlation,
         };
         let (change, applied) = if due.change == "start" {
-            // a retired source starts nobody; an end still applies (fail-closed)
             let applied = live
                 && matches!(
                     status,
@@ -624,8 +626,10 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
         Ok(applied)
     }
 
-    /// The passkey setup invitation of a person who starts: a one-use reset intent good for 7
-    /// days, sent through Relay to their work address (OP-156 m.3 (q), TN-61).
+    /// The passkey setup invitation of a person who starts: a one-use temporary access pass of
+    /// 240 bits good for 7 days, attributed to the import that set the start date and sent
+    /// through Relay to their work address; it opens the credential-only rebind window (OP-156
+    /// m.3 (q), TN-62).
     async fn invite(
         &self,
         t: &mut PgTx,
@@ -635,6 +639,7 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
         now: u64,
     ) -> Result<(), Unavailable> {
         use access_identity_account::adapters::system::{SystemClock, SystemEntropy};
+        use access_identity_account::domain::recovery_policy;
         use access_identity_account::domain::recovery_token as tokens;
         use access_identity_account::notify::message::{Address, Body, Message};
         use access_identity_account::notify::notifier::OutboxNotifier;
@@ -655,17 +660,19 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
         let Some(base) = g.issuer.as_deref() else {
             return Ok(());
         };
-        let token =
-            b64url_encode(&access_crypto::random::bytes::<32>().map_err(|_| down("random"))?);
+        let raw = access_crypto::random::bytes::<{ recovery_policy::TAP_LENGTH_MAX }>()
+            .map_err(|_| down("random"))?;
+        let token = recovery_policy::tap_code(&raw, recovery_policy::TAP_LENGTH_MAX);
         let expires = now.saturating_add(records::INVITE_TTL_MS);
         t.0.insert_recovery_token(&access_store::recovery::NewToken {
             subject: due.subject,
-            kind: tokens::RESET_INTENT,
-            token_hash: &tokens::digest(&token),
+            kind: tokens::TEMPORARY_ACCESS_PASS,
+            token_hash: &tokens::typed_digest(&token),
             attempt: None,
-            exercise: None,
+            exercise: Some(&newest.exercise),
             address: None,
-            entropy_bits: 256,
+            entropy_bits: i16::try_from(recovery_policy::TAP_LENGTH_MAX.saturating_mul(5))
+                .map_err(down)?,
             one_time: true,
             at_ms: i64::try_from(now).map_err(down)?,
             expires_ms: i64::try_from(expires).map_err(down)?,
@@ -679,11 +686,16 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
             kek: &*vault.kek,
             ids: self.ids,
         };
+        let to = Address::Email(record.email);
+        // OP-153 m.3 (i), m.9 (d)
+        let valid_since_ms = super::mailbox_since(&mut t.0, due.subject, &to)
+            .await
+            .map_err(down)?;
         let message = Message {
             subject: due.subject,
-            to: Address::Email(record.email),
+            to,
             locale: None,
-            valid_since_ms: None,
+            valid_since_ms,
             body: Body::PasskeySetupInvite {
                 link: access_crypto::Secret::new(format!(
                     "{}/login/recovery#intent={token}",

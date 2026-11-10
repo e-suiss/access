@@ -1,0 +1,149 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT run, connector, started_ms, ended_ms, outcome, read, left_out, pushed,\n                    refused, batches, reason\n               FROM hr_connector.runs WHERE connector = $1\n              ORDER BY ended_ms DESC, recorded_at DESC LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "run",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "hr_connector.runs",
+            "name": "run"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "connector",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "hr_connector.runs",
+            "name": "connector"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "started_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "hr_connector.runs",
+            "name": "started_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "ended_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "hr_connector.runs",
+            "name": "ended_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "outcome",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "hr_connector.runs",
+            "name": "outcome"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "read",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "hr_connector.runs",
+            "name": "read"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "left_out",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "hr_connector.runs",
+            "name": "left_out"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "pushed",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "hr_connector.runs",
+            "name": "pushed"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "refused",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "hr_connector.runs",
+            "name": "refused"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "batches",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "hr_connector.runs",
+            "name": "batches"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "hr_connector.runs",
+            "name": "reason"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "9c76718890097cbc4bd8d32c86e7e814d3a20366dabfa5d77a43bb39e025e630"
+}
