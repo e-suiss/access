@@ -9,6 +9,7 @@
 //! The resource server never re-emits a token: a [`Verified`] carries what the token proved,
 //! not the token (§9.9.3 rule 9, L24). Nothing is accepted on a fault (MD-8, X21, TI-9).
 
+pub mod app_token;
 pub mod bounds;
 pub mod claims;
 pub mod http_sig;
