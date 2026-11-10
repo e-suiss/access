@@ -189,7 +189,7 @@ wasm:
     have="$(wasm-bindgen --version 2>/dev/null | cut -d' ' -f2)"; \
     if [ "$have" != "$want" ]; then echo "wasm-bindgen-cli $want required (found '${have:-none}'): cargo install wasm-bindgen-cli --version $want --locked" >&2; exit 1; fi
     cargo build --locked --release --target wasm32-unknown-unknown -p access-kernel-wasm
-    wasm-bindgen --target web --out-dir sdks/typescript/wasm target/wasm32-unknown-unknown/release/access_kernel_wasm.wasm
+    wasm-bindgen --target web --out-dir sdks/typescript/wasm "${CARGO_TARGET_DIR:-target}/wasm32-unknown-unknown/release/access_kernel_wasm.wasm"
 
 # OP-116 m.6
 uniffi-test:
