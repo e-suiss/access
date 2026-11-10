@@ -120,7 +120,14 @@ fn fallback_page(login: &str) -> String {
 }
 
 impl Endpoint {
-    async fn audit(&self, event: &str, outcome: &str) {
+    /// Writes the audit event `name` as the realm's log names it (`edge.<event>.<outcome>`).
+    async fn audit(&self, name: &str) {
+        let Some((event, outcome)) = name
+            .strip_prefix("edge.")
+            .and_then(|rest| rest.rsplit_once('.'))
+        else {
+            return;
+        };
         if self.core.audit(event, outcome, None).await.is_err() {
             crate::log("audit unavailable");
         }
@@ -140,26 +147,26 @@ impl Endpoint {
         };
         let scheme = value.trim().split(' ').next().unwrap_or_default();
         if scheme.eq_ignore_ascii_case("ntlm") {
-            self.audit("kerberos.ntlm", "refused").await;
+            self.audit("edge.kerberos.ntlm.refused").await;
             return Outcome::Fallback;
         }
         let Some(raw) = spnego::authorization(value) else {
-            self.audit("kerberos.token", "refused").await;
+            self.audit("edge.kerberos.token.refused").await;
             return Outcome::Fallback;
         };
         let Ok(token) = self.read_token(raw).await else {
-            self.audit("kerberos.token", "refused").await;
+            self.audit("edge.kerberos.token.refused").await;
             return Outcome::Fallback;
         };
         // IDP-17, OP-155 m.3 (o)
         let kvno = match spnego::check(&token, &self.spn) {
             Ok(k) => k,
             Err(Refusal::Ntlm) => {
-                self.audit("kerberos.ntlm", "refused").await;
+                self.audit("edge.kerberos.ntlm.refused").await;
                 return Outcome::Fallback;
             }
             Err(Refusal::Spn | Refusal::Enctype | Refusal::Kvno) => {
-                self.audit("kerberos.token", "refused").await;
+                self.audit("edge.kerberos.token.refused").await;
                 return Outcome::Fallback;
             }
         };
@@ -167,7 +174,7 @@ impl Endpoint {
         let krb5 = token.krb5.clone();
         let accepted = tokio::task::spawn_blocking(move || acceptor.accept(&krb5)).await;
         let Ok(Ok(accepted)) = accepted else {
-            self.audit("kerberos.accept", "refused").await;
+            self.audit("edge.kerberos.accept.refused").await;
             return Outcome::Fallback;
         };
         let Ok(realm) = self.core.realm(None) else {
@@ -302,20 +309,20 @@ impl Endpoint {
             other => return self.respond(other),
         };
         let Some(delegated) = delegated else {
-            self.audit("kerberos.s4u2proxy", "refused").await;
+            self.audit("edge.kerberos.s4u2proxy.refused").await;
             return answer(303, &[("Location", &self.login)], "");
         };
         let p = proxy.clone();
         let token = tokio::task::spawn_blocking(move || p.token(delegated)).await;
         let Ok(Ok(token)) = token else {
-            self.audit("kerberos.s4u2proxy", "refused").await;
+            self.audit("edge.kerberos.s4u2proxy.refused").await;
             return answer(303, &[("Location", &self.login)], "");
         };
         if let Ok(raw) = proxy.get(path, &spnego::base64(&token)).await {
-            self.audit("kerberos.s4u2proxy", "ok").await;
+            self.audit("edge.kerberos.s4u2proxy.ok").await;
             raw
         } else {
-            self.audit("kerberos.s4u2proxy", "refused").await;
+            self.audit("edge.kerberos.s4u2proxy.refused").await;
             answer(502, &[], "")
         }
     }
