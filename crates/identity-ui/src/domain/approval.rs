@@ -81,6 +81,22 @@ pub struct ContributionEnvelope {
     pub valid_until: String,
     /// The AIS (`COSE_Sign1`) by the approver's device Instance key, base64url.
     pub ais: String,
+    /// The coordinator's Gate this approval answers, when one waits on it (§9.14, OP-156 m.3
+    /// (t)): opaque to Access, signed into the statement so the coordinator's Declaration can
+    /// cite the contribution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work_gate: Option<WorkGateRef>,
+}
+
+/// A Work Gate and the Declaration content an approval answers (AAS `work_gate`), base64url
+/// digests of 32 bytes each.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkGateRef {
+    /// The `GateRef` digest.
+    pub gate: String,
+    /// The digest of the Work Declaration content that would satisfy the Gate.
+    pub declaration: String,
 }
 
 /// `POST /v1/approve/requests`.
@@ -213,6 +229,8 @@ pub struct Envelope {
     pub validity: Window,
     /// The AIS.
     pub ais: Vec<u8>,
+    /// The Work Gate and Declaration digests, when a Gate waits on it.
+    pub work_gate: Option<(Digest, Digest)>,
 }
 
 /// Why a push is refused.
@@ -337,6 +355,21 @@ pub fn envelope(e: &ContributionEnvelope) -> Result<Envelope, PushRejection> {
         .ok()
         .filter(|a| (1..=8192).contains(&a.len()) && a.first() == Some(&0xd2))
         .ok_or(bad)?;
+    // OP-156 m.3 (t)
+    let work_gate = e
+        .work_gate
+        .as_ref()
+        .map(|w| {
+            let d = |t: &str| {
+                b64url_decode(t)
+                    .ok()
+                    .and_then(|b| <[u8; 32]>::try_from(b).ok())
+                    .map(Digest)
+            };
+            Some((d(&w.gate)?, d(&w.declaration)?))
+        })
+        .map(|w| w.ok_or(bad))
+        .transpose()?;
     Ok(Envelope {
         nonce,
         class,
@@ -344,6 +377,7 @@ pub fn envelope(e: &ContributionEnvelope) -> Result<Envelope, PushRejection> {
         capacity: Capacity::Own,
         validity: Window { from, until },
         ais,
+        work_gate,
     })
 }
 
@@ -448,6 +482,13 @@ pub fn components() -> Value {
                 "valid_from": time_field("Intent validity start."),
                 "valid_until": time_field("Intent validity end."),
                 "ais": b64_schema("AIS (tagged COSE_Sign1) by the approver's device Instance key over the contribute intent of the request's target (Kernel contribution::contribute_intent; the committed example is conformance/cddl/examples/contribute-intent.json), mode commit, capacity own, pep access-identity."),
+                "work_gate": object(
+                    &json!({
+                        "gate": b64_schema("The coordinator's GateRef digest, 32 bytes."),
+                        "declaration": b64_schema("The digest of the Work Declaration content that would satisfy the Gate, 32 bytes."),
+                    }),
+                    &["gate", "declaration"],
+                ),
             }),
             &["nonce", "basis", "valid_from", "valid_until", "ais"],
         ),
@@ -666,9 +707,27 @@ mod tests {
             valid_from: "2026-01-01T00:00:00Z".into(),
             valid_until: "2026-01-01T00:05:00Z".into(),
             ais: b64url_encode(&[0xd2, 0x84, 0x40]),
+            work_gate: None,
         };
         let env = envelope(&e).unwrap();
         assert_eq!(env.class, DEFAULT_CLASS);
+        assert_eq!(env.work_gate, None);
+        // §9.14, OP-156 m.3 (t)
+        let mut gated = e.clone();
+        gated.work_gate = Some(WorkGateRef {
+            gate: b64url_encode(&[0x61; 32]),
+            declaration: b64url_encode(&[0x62; 32]),
+        });
+        assert_eq!(
+            envelope(&gated).unwrap().work_gate,
+            Some((Digest([0x61; 32]), Digest([0x62; 32])))
+        );
+        let mut short_gate = gated.clone();
+        short_gate.work_gate = Some(WorkGateRef {
+            gate: b64url_encode(&[0x61; 31]),
+            declaration: b64url_encode(&[0x62; 32]),
+        });
+        assert_eq!(envelope(&short_gate), Err(PushRejection::Contribution));
         assert_eq!(env.capacity, Capacity::Own);
         assert!(matches!(env.basis, ExerciseBasis::Holding(h) if h.since == 3));
         assert!(env.validity.from < env.validity.until);

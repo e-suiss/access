@@ -221,6 +221,7 @@ fn approval_examples_match_the_code_and_the_schema() {
                 valid_from: rfc3339(1_767_225_000_000),
                 valid_until: rfc3339(1_767_225_300_000),
                 ais: b64(0xd2, 180),
+                work_gate: None,
             },
         },
     );

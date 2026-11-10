@@ -913,7 +913,8 @@ fn statement_of(
         target: p.intent,
         domain: p.domain,
         nonce: env.nonce.clone(),
-        work_gate: None,
+        // §9.14, OP-156 m.3 (t)
+        work_gate: env.work_gate,
         surface_profile: String::from(SURFACE_PROFILE),
         surface_version: SURFACE_VERSION,
         render_digest,

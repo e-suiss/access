@@ -354,6 +354,12 @@ export interface components {
             valid_until: string;
             /** @description AIS (tagged COSE_Sign1) by the approver's device Instance key over the contribute intent of the request's target (Kernel contribution::contribute_intent; the committed example is conformance/cddl/examples/contribute-intent.json), mode commit, capacity own, pep access-identity. */
             ais: string;
+            work_gate?: {
+                /** @description The coordinator's GateRef digest, 32 bytes. */
+                gate: string;
+                /** @description The digest of the Work Declaration content that would satisfy the Gate, 32 bytes. */
+                declaration: string;
+            };
         };
         ApprovalPush: {
             /** @description The typed authority request (conformance/cddl/authority-request.schema.json) with its require_action. */

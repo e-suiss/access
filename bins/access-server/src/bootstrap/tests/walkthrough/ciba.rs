@@ -569,6 +569,7 @@ impl Desk {
                 contribution: holding_of(&self.allowed["contribution"]["basis"]),
                 reason: "The mail agent asks for your approval.",
                 request: Some(request),
+                work_gate: None,
             },
         )
         .await

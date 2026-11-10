@@ -269,6 +269,7 @@ async fn approve_command(o: &Options) -> Result<serde_json::Value, String> {
                 .optional("reason")
                 .unwrap_or("Local end-to-end test of an allowed Exercise."),
             request: request.as_ref(),
+            work_gate: None,
         },
     )
     .await

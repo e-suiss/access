@@ -1289,6 +1289,26 @@
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]*$",
             "description": "AIS (tagged COSE_Sign1) by the approver's device Instance key over the contribute intent of the request's target (Kernel contribution::contribute_intent; the committed example is conformance/cddl/examples/contribute-intent.json), mode commit, capacity own, pep access-identity."
+          },
+          "work_gate": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "gate",
+              "declaration"
+            ],
+            "properties": {
+              "gate": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]*$",
+                "description": "The coordinator's GateRef digest, 32 bytes."
+              },
+              "declaration": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]*$",
+                "description": "The digest of the Work Declaration content that would satisfy the Gate, 32 bytes."
+              }
+            }
           }
         }
       },

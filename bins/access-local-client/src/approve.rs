@@ -80,6 +80,9 @@ pub struct Approve<'a> {
     pub reason: &'a str,
     /// A pushed request a product built already; the client then approves without exercising.
     pub request: Option<&'a Value>,
+    /// The coordinator's Gate and Declaration digests this approval answers (§9.14, OP-156
+    /// m.3 (t)).
+    pub work_gate: Option<(Digest, Digest)>,
 }
 
 fn unexpected(step: &'static str, r: &Response) -> ClientError {
@@ -153,14 +156,21 @@ fn contribution(a: &Approve<'_>, target: Digest, now: u64) -> Result<Value, Clie
         exercise: None,
     };
     let holding = holding_json(&a.contribution);
-    Ok(json!({
+    let mut out = json!({
         "nonce": b64url_encode(&nonce),
         "class": APPROVE_CLASS,
         "basis": holding.get("holding").cloned().unwrap_or(Value::Null),
         "valid_from": rfc3339(validity.from)?,
         "valid_until": rfc3339(validity.until)?,
         "ais": b64url_encode(&adp::ais(a.device, &statement)?),
-    }))
+    });
+    if let (Some((gate, declaration)), Some(o)) = (a.work_gate, out.as_object_mut()) {
+        o.insert(
+            String::from("work_gate"),
+            json!({ "gate": b64url_encode(&gate.0), "declaration": b64url_encode(&declaration.0) }),
+        );
+    }
+    Ok(out)
 }
 
 /// Whether the render the surface shows is the one this client computes from the intent

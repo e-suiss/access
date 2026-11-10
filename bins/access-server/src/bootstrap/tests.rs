@@ -1926,6 +1926,7 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
         contribution: holding_of(&allowed["contribution"]["basis"]),
         reason: "Close the main ledger for the period.",
         request: None,
+        work_gate: None,
     };
     // (OP-149 m.26 (b), (c), (e))
     let password = local_plan().test_user.unwrap().password;
@@ -2032,6 +2033,7 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
         &Approve {
             intent: &other,
             request: Some(&pushed),
+            work_gate: None,
             ..request
         },
     )
