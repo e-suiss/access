@@ -2307,45 +2307,6 @@
         ]
       }
     },
-    "/relay/v1/iys-status": {
-      "post": {
-        "operationId": "relayIysStatus",
-        "summary": "Relay's report of an İYS consent record's registration state for a preference.changed event; it changes no preference (OP-156 m.3 (c)).",
-        "x-suiss-status": "planned",
-        "responses": {
-          "400": {
-            "description": "The request is refused; nothing is read.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Temporarily unavailable; retry.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-156 m.4).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/access/v1/eligibility:set": {
       "post": {
         "operationId": "eligibleSet",
@@ -2410,6 +2371,93 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/relay/v1/iys-status": {
+      "post": {
+        "operationId": "relayIysStatus",
+        "summary": "Relay's report of an İYS consent record's registration state; it changes no preference and no authority (OP-156 m.3 (c), IDP-37 (4), B23).",
+        "x-suiss-served": true,
+        "security": [
+          {
+            "platform_client": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IysStatusReport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "invalid-request: the report is malformed; nothing is kept.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "client-unauthenticated: no valid platform client assertion.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "not-relay: the client is not Relay's.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not-found: the realm has no such record.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "body-too-large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Kept beside its record; no preference changed."
           }
         }
       }
@@ -8359,6 +8407,49 @@
                 "const": false
               }
             }
+          }
+        }
+      },
+      "IysStatusReport": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tenant",
+          "realm",
+          "record",
+          "status",
+          "at"
+        ],
+        "properties": {
+          "tenant": {
+            "type": "string",
+            "description": "The tenant's external id (tnt_), as the Relay message's accesstenant names it."
+          },
+          "realm": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The realm, as the Relay message's accessrealm names it."
+          },
+          "record": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The CloudEvents id of the relay.message.iys_consent.v1 the record came in."
+          },
+          "status": {
+            "enum": [
+              "recorded",
+              "failed"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+            "description": "Why it failed; never with recorded."
+          },
+          "at": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "When it happened at İYS, Unix ms."
           }
         }
       }
