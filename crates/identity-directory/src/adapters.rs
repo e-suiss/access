@@ -161,39 +161,39 @@ type Op = (u8, Vec<u8>, Option<Vec<u8>>);
 
 fn op(msg: &[u8]) -> Result<Op, BerError> {
     let mut outer = Reader::new(msg);
-    let mut m = Reader::new(outer.expect(0x30)?);
-    m.expect(0x02)?;
+    let mut m = Reader::new(outer.tagged(0x30)?);
+    m.tagged(0x02)?;
     let o = m.element()?;
     let controls = if m.is_empty() {
         None
     } else {
-        Some(m.expect(0xa0)?.to_vec())
+        Some(m.tagged(0xa0)?.to_vec())
     };
     Ok((o.tag, o.content.to_vec(), controls))
 }
 
 fn result_code(content: &[u8]) -> Result<u64, BerError> {
     let mut r = Reader::new(content);
-    ber::integer(r.expect(0x0a)?)
+    ber::integer(r.tagged(0x0a)?)
 }
 
 fn entry(content: &[u8]) -> Result<SourceEntry, BerError> {
     let mut r = Reader::new(content);
-    let dn = String::from_utf8(r.expect(0x04)?.to_vec()).map_err(|_| BerError::Malformed)?;
-    let mut attrs = Reader::new(r.expect(0x30)?);
+    let dn = String::from_utf8(r.tagged(0x04)?.to_vec()).map_err(|_| BerError::Malformed)?;
+    let mut attrs = Reader::new(r.tagged(0x30)?);
     let mut out = SourceEntry {
         dn,
         ..SourceEntry::default()
     };
     while !attrs.is_empty() {
-        let mut a = Reader::new(attrs.expect(0x30)?);
-        let name = String::from_utf8(a.expect(0x04)?.to_vec())
+        let mut a = Reader::new(attrs.tagged(0x30)?);
+        let name = String::from_utf8(a.tagged(0x04)?.to_vec())
             .map_err(|_| BerError::Malformed)?
             .to_ascii_lowercase();
-        let mut vals = Reader::new(a.expect(0x31)?);
+        let mut vals = Reader::new(a.tagged(0x31)?);
         let held = out.attributes.entry(name).or_default();
         while !vals.is_empty() {
-            held.push(vals.expect(0x04)?.to_vec());
+            held.push(vals.tagged(0x04)?.to_vec());
         }
     }
     Ok(out)
@@ -205,8 +205,8 @@ fn cookie(controls: Option<&[u8]>) -> Result<Vec<u8>, BerError> {
     };
     let mut list = Reader::new(c);
     while !list.is_empty() {
-        let mut ctl = Reader::new(list.expect(0x30)?);
-        let oid = ctl.expect(0x04)?;
+        let mut ctl = Reader::new(list.tagged(0x30)?);
+        let oid = ctl.tagged(0x04)?;
         if oid != PAGED.as_bytes() {
             continue;
         }
@@ -215,9 +215,9 @@ fn cookie(controls: Option<&[u8]>) -> Result<Vec<u8>, BerError> {
             next = ctl.element()?;
         }
         let mut value = Reader::new(next.content);
-        let mut seq = Reader::new(value.expect(0x30)?);
-        seq.expect(0x02)?;
-        return Ok(seq.expect(0x04)?.to_vec());
+        let mut seq = Reader::new(value.tagged(0x30)?);
+        seq.tagged(0x02)?;
+        return Ok(seq.tagged(0x04)?.to_vec());
     }
     Ok(Vec::new())
 }

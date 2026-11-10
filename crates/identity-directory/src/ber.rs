@@ -109,7 +109,7 @@ impl<'a> Reader<'a> {
     ///
     /// # Errors
     /// [`BerError::Malformed`].
-    pub fn expect(&mut self, tag: u8) -> Result<&'a [u8], BerError> {
+    pub fn tagged(&mut self, tag: u8) -> Result<&'a [u8], BerError> {
         let t = self.element()?;
         if t.tag == tag {
             Ok(t.content)
@@ -185,7 +185,7 @@ mod tests {
         assert_eq!(frame_len(&[0x04, 0x00]), Err(BerError::Malformed));
         let enc = tlv(0x04, &[7; 300]);
         let mut r = Reader::new(&enc);
-        assert_eq!(r.expect(0x04).unwrap().len(), 300);
+        assert_eq!(r.tagged(0x04).unwrap().len(), 300);
         assert!(r.is_empty());
         assert_eq!(integer(&int(0x02, 128)[2..]).unwrap(), 128);
         assert_eq!(integer(&int(0x02, 0)[2..]).unwrap(), 0);

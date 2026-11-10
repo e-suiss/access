@@ -86,6 +86,7 @@ rules:
         - "**/testing.rs"
         - "**/testing/**"
         - "**/testkit.rs"
+        - "**/*_tests.rs"
         - "**/examples/**"
         - "xtask/**"
     patterns:
