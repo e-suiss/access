@@ -118,6 +118,11 @@ async fn every_realm_keyed_table_has_a_realm_policy() {
     .unwrap();
     assert_eq!(
         unscoped,
-        ["realm_domain_binding", "realms", "sandbox_domains"]
+        [
+            "federation_issuer_state",
+            "realm_domain_binding",
+            "realms",
+            "sandbox_domains"
+        ]
     );
 }
