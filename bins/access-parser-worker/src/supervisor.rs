@@ -12,6 +12,7 @@
 
 use std::io::Write as _;
 use std::num::NonZeroUsize;
+use std::os::unix::fs::PermissionsExt as _;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -147,6 +148,13 @@ pub(crate) fn run() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    // SA-22
+    if let Err(error) =
+        std::fs::set_permissions(&config.socket, std::fs::Permissions::from_mode(0o666))
+    {
+        log(&format!("cannot open the socket to the gateways: {error}"));
+        return ExitCode::FAILURE;
+    }
     // SA-22, OP-90, OP-155 m.3 (c)
     let mut lockdown = Lockdown::new(Profile::ParserSupervisor, LandlockAbi::REQUIRED)
         .allow_execute(&exe)
