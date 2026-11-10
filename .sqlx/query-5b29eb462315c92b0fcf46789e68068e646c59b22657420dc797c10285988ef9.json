@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT spn, rotate_days, kvno_floor FROM access.edge_keytab_policies\n          WHERE tenant_id = $1 AND realm_id = $2 AND gateway = $3\n          ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "spn",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.edge_keytab_policies",
+            "name": "spn"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "rotate_days",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.edge_keytab_policies",
+            "name": "rotate_days"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "kvno_floor",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.edge_keytab_policies",
+            "name": "kvno_floor"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5b29eb462315c92b0fcf46789e68068e646c59b22657420dc797c10285988ef9"
+}

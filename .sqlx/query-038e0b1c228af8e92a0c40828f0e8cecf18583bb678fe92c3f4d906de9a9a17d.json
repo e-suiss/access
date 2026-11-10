@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.edge_keytab_kvnos (tenant_id, realm_id, gateway, kvno, first_seen_ms)\n         VALUES ($1, $2, $3, $4, $5)\n         ON CONFLICT (tenant_id, realm_id, gateway, kvno) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "038e0b1c228af8e92a0c40828f0e8cecf18583bb678fe92c3f4d906de9a9a17d"
+}

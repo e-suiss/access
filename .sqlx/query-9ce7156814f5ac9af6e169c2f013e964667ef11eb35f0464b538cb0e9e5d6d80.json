@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT kvno, first_seen_ms FROM access.edge_keytab_kvnos\n          WHERE tenant_id = $1 AND realm_id = $2 AND gateway = $3\n          ORDER BY kvno",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kvno",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.edge_keytab_kvnos",
+            "name": "kvno"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "first_seen_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.edge_keytab_kvnos",
+            "name": "first_seen_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "9ce7156814f5ac9af6e169c2f013e964667ef11eb35f0464b538cb0e9e5d6d80"
+}

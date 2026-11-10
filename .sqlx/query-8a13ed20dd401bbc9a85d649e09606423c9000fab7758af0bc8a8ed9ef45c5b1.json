@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (\n             SELECT 1 FROM access.edge_radius_clients c\n              WHERE c.tenant_id = $1 AND c.realm_id = $2 AND c.gateway = $3 AND c.cert_sha256 = $4\n                AND c.version = (SELECT MAX(n.version) FROM access.edge_radius_clients n\n                                  WHERE n.tenant_id = c.tenant_id AND n.realm_id = c.realm_id\n                                    AND n.gateway = c.gateway AND n.client = c.client)\n           ) AS \"found!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "found!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8a13ed20dd401bbc9a85d649e09606423c9000fab7758af0bc8a8ed9ef45c5b1"
+}
