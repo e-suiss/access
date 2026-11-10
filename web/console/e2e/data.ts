@@ -154,6 +154,21 @@ export function seed(bff: ConsoleMock): void {
       },
     ],
   });
+  // OP-156 m.3 (r)
+  bff.admin.set("realms/acme/signal-sources", {
+    items: [
+      {
+        name: "acme-mdm",
+        kind: "mdm",
+        class: "posture_mdm",
+        provider: "Acme MDM",
+        issuer: "BwcHBwcHBwcHBwcHBwcHBw",
+        format: "intune",
+        transmitter: null,
+        status: "live",
+      },
+    ],
+  });
   bff.admin.set("realms/acme/social-providers", {
     items: [
       {

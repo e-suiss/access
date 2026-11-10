@@ -160,6 +160,8 @@ const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   importHrCsv: ["idp.hr", "import"],
   registerHrConnector: ["idp.hr", "connector_register"],
   retireHrConnector: ["idp.hr", "connector_retire"],
+  registerSignalSource: ["idp.signal", "source_register"],
+  retireSignalSource: ["idp.signal", "source_retire"],
 };
 
 export interface Write {

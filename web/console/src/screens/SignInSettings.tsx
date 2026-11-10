@@ -10,6 +10,7 @@ import { adminGet, adminGetTagged, change, type WriteResult } from "../lib/admin
 import { Problem } from "../lib/api.js";
 import { type Ctx, at, Field, Panel, Show, useLoad, useRun } from "./parts.js";
 import { Domains } from "./Domains.js";
+import { Signals as SignalSources } from "./Signals.js";
 import { UpstreamLink } from "./UpstreamLink.js";
 
 interface Settings {
@@ -552,6 +553,7 @@ export function SignInSettings({ ctx }: { readonly ctx: Ctx }): ReactElement {
         }}
       </Show>
       <Domains ctx={ctx} />
+      <SignalSources ctx={ctx} />
       <Listing ctx={ctx} path="/clients" title={t("settingsClients")} id="clients" />
       <Listing ctx={ctx} path="/upstream-idps" title={t("settingsUpstreams")} id="upstreams" />
       <SocialProviders ctx={ctx} />

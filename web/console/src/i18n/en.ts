@@ -842,6 +842,25 @@ export const en = {
   hrConnectorRegister: "Register a connector",
   hrConnectorName: "Connector name",
   hrVendor: "HR system",
+  signalSourcesTitle: "Signal sources",
+  signalSourcesIntro:
+    "A KYC provider, a device management system, a risk service or a DLP system sends its own Claims. Registering it does not make them count: only the domain's acceptance and its policies do, and a risk signal can only deny or ask for more.",
+  signalPostureNote:
+    'A device posture is shown as the provider\'s statement, for example "Compliant per {provider} (statement)"; Access never states compliance itself.',
+  signalKindKyc: "Identity verification",
+  signalKindMdm: "Device management",
+  signalKindRisk: "Risk and fraud",
+  signalKindDlp: "Data classification",
+  signalSourceLive: "In use",
+  signalSourceRetired: "Retired",
+  signalSourceRetire: "Retire {name}",
+  signalSourceRegister: "Register a signal source",
+  signalSourceName: "Source name",
+  signalSourceKind: "Kind",
+  signalSourceProvider: "Provider",
+  signalSourceIssuer: "Issuer",
+  signalSourceIssuerHint: "The issuer the source's Claims are signed as",
+  signalSourceRegisterSend: "Register source",
 } as const;
 
 export type Key = keyof typeof en;

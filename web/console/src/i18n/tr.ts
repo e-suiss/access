@@ -851,4 +851,23 @@ export const tr: Record<Key, string> = {
   hrConnectorRegister: "Bağlayıcı kaydet",
   hrConnectorName: "Bağlayıcı adı",
   hrVendor: "İK sistemi",
+  signalSourcesTitle: "Sinyal kaynakları",
+  signalSourcesIntro:
+    "Bir KYC sağlayıcısı, cihaz yönetim sistemi, risk servisi ya da DLP sistemi kendi Claim'lerini gönderir. Kaydetmek onları geçerli kılmaz: yalnız domain'in kabulü ve politikaları geçerli kılar; bir risk sinyali yalnız reddedebilir ya da daha fazlasını isteyebilir.",
+  signalPostureNote:
+    'Cihaz durumu sağlayıcının beyanı olarak gösterilir, örneğin "{provider}\'a göre uyumlu (beyan)"; Access uyumluluğu kendi adına söylemez.',
+  signalKindKyc: "Kimlik doğrulama",
+  signalKindMdm: "Cihaz yönetimi",
+  signalKindRisk: "Risk ve dolandırıcılık",
+  signalKindDlp: "Veri sınıflandırma",
+  signalSourceLive: "Kullanımda",
+  signalSourceRetired: "Emekli",
+  signalSourceRetire: "{name} kaynağını emekliye ayır",
+  signalSourceRegister: "Sinyal kaynağı kaydet",
+  signalSourceName: "Kaynak adı",
+  signalSourceKind: "Tür",
+  signalSourceProvider: "Sağlayıcı",
+  signalSourceIssuer: "Issuer",
+  signalSourceIssuerHint: "Kaynağın Claim'lerini imzaladığı issuer",
+  signalSourceRegisterSend: "Kaynağı kaydet",
 };
