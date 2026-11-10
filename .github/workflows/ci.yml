@@ -187,6 +187,13 @@ jobs:
       - name: Seccomp kills reported by the kernel
         if: failure()
         run: sudo dmesg | grep -E 'type=1326|seccomp' || true
+      - name: Parser worker prctl trace
+        if: failure()
+        run: |
+          sudo apt-get install --yes --no-install-recommends strace
+          bin="$(cargo test --locked -p access-parser-worker --test worker --no-run --message-format=json | jq -r 'select(.executable != null and .target.name == "worker") | .executable')"
+          sudo strace -f -e trace=prctl,prlimit64,setrlimit -o "$RUNNER_TEMP/worker.strace" "$bin" --ignored --test-threads=1 limits_refuse_before_parsing || true
+          grep -E 'prctl|SIGSYS|killed' "$RUNNER_TEMP/worker.strace" | tail -60 || true
 
   # OP-119 m.3, CR-49
   lean:
@@ -332,6 +339,13 @@ jobs:
       - name: Seccomp kills reported by the kernel
         if: failure()
         run: sudo dmesg | grep -E 'type=1326|seccomp' || true
+      - name: Parser worker prctl trace
+        if: failure()
+        run: |
+          sudo apt-get install --yes --no-install-recommends strace
+          bin="$(cargo test --locked -p access-parser-worker --test worker --no-run --message-format=json | jq -r 'select(.executable != null and .target.name == "worker") | .executable')"
+          sudo strace -f -e trace=prctl,prlimit64,setrlimit -o "$RUNNER_TEMP/worker.strace" "$bin" --ignored --test-threads=1 limits_refuse_before_parsing || true
+          grep -E 'prctl|SIGSYS|killed' "$RUNNER_TEMP/worker.strace" | tail -60 || true
 
   # OP-116 m.6
   uniffi-kotlin:
