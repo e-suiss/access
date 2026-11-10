@@ -316,7 +316,8 @@ impl Env {
             assert!(Instant::now() < deadline);
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        self.courier.step(&self.term).await.unwrap();
+        let term = self.courier.hold("node-a", TTL).await.unwrap().unwrap();
+        self.courier.step(&term).await.unwrap();
         s
     }
 
@@ -499,7 +500,8 @@ async fn redelivery_after_a_lost_acknowledgement_carries_the_same_id() {
     e.queue(&otp(s, START_MS + 300_000)).await;
     e.fail_ack_once();
     let deadline = Instant::now() + Duration::from_secs(20);
-    while e.courier.step(&e.term).await.is_ok() {
+    let term = e.courier.hold("node-a", TTL).await.unwrap().unwrap();
+    while e.courier.step(&term).await.is_ok() {
         assert!(Instant::now() < deadline);
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
@@ -1629,7 +1631,8 @@ async fn the_courier_delivers_to_the_twin() {
     e.queue(&notice(s, START_MS)).await;
     let deadline = Instant::now() + Duration::from_secs(20);
     while twin.accepted().len() < 2 {
-        courier.step(&e.term).await.unwrap();
+        let term = courier.hold("node-a", TTL).await.unwrap().unwrap();
+        courier.step(&term).await.unwrap();
         assert!(Instant::now() < deadline);
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
