@@ -5,6 +5,8 @@
 import { expect, test } from "@playwright/test";
 
 const REALM = process.env["ACCESS_LIVE_REALM"] ?? "/realms/acme";
+// The local deployment's realms do not decide idp.realm.spc.
+const NO_SPC_REALM = process.env["ACCESS_LIVE_NO_SPC_REALM"] ?? REALM;
 
 test.describe("@live secure payment confirmation", () => {
   test("@live the approval surface takes a payment.get assertion only for a started flow", async ({
@@ -25,8 +27,12 @@ test.describe("@live secure payment confirmation", () => {
     expect(login?.status()).toBe(200);
     expect(login?.headers()["permissions-policy"]).toContain("payment=()");
     const origin = new URL(page.url()).origin;
-    const pay = await page.goto(`${REALM}/login?reason=pay&request=urn:x&redirect_uri=x&state=s`);
+    // OP-156 m.3 (g): a realm without idp.realm.spc keeps payment closed on its payment page too
+    const pay = await page.goto(
+      `${NO_SPC_REALM}/login?reason=pay&request=urn:x&redirect_uri=x&state=s`,
+    );
     expect(pay?.status()).toBe(200);
+    expect(pay?.headers()["permissions-policy"]).toContain("payment=()");
     const start = await page.request.post(`${REALM}/v1/approve/flows`, {
       data: { request: "urn:x", redirect_uri: "https://shop.example/a", state: "s" },
       headers: { origin, "idempotency-key": crypto.randomUUID() },

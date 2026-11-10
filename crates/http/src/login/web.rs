@@ -832,6 +832,13 @@ fn signs(uri: &Uri) -> bool {
         .is_some_and(|p| matches!(p.get("reason"), Some("approve" | "ciba")))
 }
 
+/// Whether the page at `uri` is the Secure Payment Confirmation page (OP-156 m.3 (g)).
+fn pays(uri: &Uri) -> bool {
+    uri.query()
+        .and_then(|q| access_identity_oauth::domain::request::Params::parse(q).ok())
+        .is_some_and(|p| p.get("reason") == Some("pay"))
+}
+
 /// `policy` with WebAssembly compilation allowed to this origin's scripts, and nothing else.
 fn with_wasm(policy: &str) -> String {
     policy.replacen(
@@ -882,7 +889,15 @@ where
         enforced = with_wasm(&enforced);
         report_only = report_only.map(|r| with_wasm(&r));
     }
+    // OP-156 m.3 (g)
+    let payment = pays(&uri) && matches!(s.hosted.spc_on(&entry).await, Ok(true));
     let h = page.headers_mut();
+    if payment {
+        h.insert(
+            HeaderName::from_static("permissions-policy"),
+            HeaderValue::from_static(access_identity_ui::domain::spc::SPC_PERMISSIONS_POLICY),
+        );
+    }
     if let Ok(v) = HeaderValue::from_str(&enforced) {
         h.insert(header::CONTENT_SECURITY_POLICY, v);
     }

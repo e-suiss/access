@@ -945,3 +945,38 @@ async fn a_tr_payment_approval_needs_two_independent_elements_bound_to_amount_an
     assert_eq!(last.assurance.get("uv"), Some(&0));
     assert_eq!(e.surface.contributions.lock().unwrap().len(), 1);
 }
+
+// OP-156 m.3 (g), Ek B 5120
+#[tokio::test]
+async fn only_the_payment_page_of_an_spc_realm_opens_payment() {
+    let policy = |a: &Answer| -> Vec<String> {
+        a.headers
+            .get_all("permissions-policy")
+            .iter()
+            .map(|v| v.to_str().unwrap().to_owned())
+            .collect()
+    };
+    let on = env(0x69, "q6-spc-page", SPC).await;
+    let mut b = on.browser("b");
+    let pay = b
+        .get("/login?reason=pay&request=urn:x&redirect_uri=x&state=s")
+        .await;
+    assert_eq!(pay.status, StatusCode::OK);
+    assert_eq!(
+        policy(&pay),
+        [access_identity_ui::domain::spc::SPC_PERMISSIONS_POLICY]
+    );
+    for path in ["/login", "/login?reason=approve", "/login?reason=payment"] {
+        let other = b.get(path).await;
+        assert_eq!(policy(&other).len(), 1, "{path}");
+        assert!(policy(&other)[0].contains("payment=()"), "{path}");
+    }
+    let off = env(0x6a, "q6-spc-page-off", AuthPolicy::DEFAULT).await;
+    let pay = off
+        .browser("c")
+        .get("/login?reason=pay&request=urn:x&redirect_uri=x&state=s")
+        .await;
+    assert_eq!(pay.status, StatusCode::OK);
+    assert_eq!(policy(&pay).len(), 1);
+    assert!(policy(&pay)[0].contains("payment=()"));
+}

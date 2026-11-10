@@ -291,6 +291,15 @@ where
         Ok(reply)
     }
 
+    /// Whether the realm decided `idp.realm.spc`, which opens `payment` on its payment page
+    /// (OP-156 m.3 (g)).
+    ///
+    /// # Errors
+    /// The realm's kit is unavailable.
+    pub async fn spc_on(&self, entry: &RealmEntry) -> Result<bool, Reply> {
+        Ok(self.kit(entry).await?.auth.spc)
+    }
+
     /// The signed-in session, authenticated in the last five minutes.
     async fn fresh_session(&self, kit: &RealmKit, b: &Browser<'_>) -> Result<SessionView, Reply> {
         signin!(self, kit, auth);
