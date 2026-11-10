@@ -4,6 +4,7 @@
 pub mod accounts;
 pub mod agents;
 pub mod domains;
+pub mod federation;
 pub mod household;
 pub mod issuer;
 pub mod org_flows;
@@ -447,6 +448,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Vault(v) => vault::current(t, v).await?,
             // OP-155 m.3 (g)
             Change::Scim(s) => scim::current(t, s).await?,
+            // OP-155 m.3 (j)
+            Change::Federation(f) => federation::current(t, f).await?,
             // OP-154 m.3 (j)
             Change::DcrPolicy { policy, loosens } => {
                 let current =
@@ -1615,6 +1618,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 secret = scim::write(t, bound, s, self.vault).await?;
                 true
             }
+            // OP-155 m.3 (j)
+            Change::Federation(f) => federation::write(t, bound, f).await?,
             Change::DeviceCode(on) => {
                 t.put_device_code(bound, *on).await?;
                 true

@@ -103,6 +103,7 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::AgentSponsors => Kind::AgentSponsors,
         ResourceKind::VaultResources => Kind::VaultResources,
         ResourceKind::ProtectedResources => Kind::ProtectedResources,
+        ResourceKind::TrustAnchors => Kind::TrustAnchors,
     }
 }
 

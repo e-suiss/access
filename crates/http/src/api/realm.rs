@@ -1162,8 +1162,8 @@ const fn put(section: &'static str) -> Shape {
 pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
     use ResourceKind::{
         Accounts, AgentSponsors, Agents, Analytics, Clients, Deliveries, Groups, Hooks,
-        Organizations, ProtectedResources, Settings, Signals, SocialProviders, UpstreamIdps,
-        VaultResources, Webhooks,
+        Organizations, ProtectedResources, Settings, Signals, SocialProviders, TrustAnchors,
+        UpstreamIdps, VaultResources, Webhooks,
     };
     const CREATE: Shape = Shape::Write {
         patch: None,
@@ -1197,7 +1197,13 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "retireScimClient"
         | "registerScimTarget"
         | "retireScimTarget"
-        | "putFrontchannelLogout" => (Settings, w(false)),
+        | "putFrontchannelLogout"
+        // OP-155 m.3 (j)
+        | "putFederation"
+        | "addTrustAnchor"
+        | "removeTrustAnchor"
+        | "putFederationAuthority"
+        | "putFederationRegistration" => (Settings, w(false)),
         "revokeAllAgentInstances" => (Agents, Shape::RevokeAll),
         // OP-154 m.3 (t)
         "listVaultResources" => (
@@ -1219,6 +1225,11 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "putClientEncryption"
         | "putClientSamlBearer"
         | "putClientLegacyBearer" => (Clients, w(false)),
+        // OP-155 m.3 (j)
+        "listTrustAnchors" => (
+            TrustAnchors,
+            Shape::List(&["anchor", "entity_id", "status"]),
+        ),
         o if declared(o) => (Settings, Shape::Planned(planned_body(o))),
         "listClients" => (
             Clients,
@@ -1374,7 +1385,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::AccountState => &r::ACCOUNT_STATE_CONFLICT,
             Invalid::NoSecret => &r::CLIENT_HAS_NO_SECRET,
             Invalid::PasskeyLoss => &r::PASSKEY_LOSS_NOT_ACKNOWLEDGED,
-            Invalid::Body => &r::INVALID_BODY,
+            Invalid::Body | Invalid::Federation => &r::INVALID_BODY,
             Invalid::Validity => &r::INVALID_VALIDITY,
             Invalid::PublicSub => &r::PUBLIC_SUB_NOT_OPTED_IN,
             Invalid::SectorIdentifier => &r::INVALID_SECTOR_IDENTIFIER_URI,
@@ -1424,6 +1435,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             | Invalid::NoInvitation
             | Invalid::NoSocial
             | Invalid::NoVaultResource
+            | Invalid::NoTrustAnchor
             | Invalid::NoCrossAppConnection
             | Invalid::NoScimClient
             | Invalid::NoDomain => &codes::NOT_FOUND,

@@ -193,6 +193,8 @@ pub enum ResourceKind {
     VaultResources,
     /// Protected resources and MCP servers, by canonical URI (AG-8).
     ProtectedResources,
+    /// OpenID Federation trust anchors, by their entity identifier's base64url (OP-155 m.3 (j)).
+    TrustAnchors,
 }
 
 impl ResourceKind {
@@ -216,6 +218,7 @@ impl ResourceKind {
             Self::AgentSponsors => "agent-sponsors",
             Self::VaultResources => "vault-resources",
             Self::ProtectedResources => "protected-resources",
+            Self::TrustAnchors => "trust-anchors",
         }
     }
 }

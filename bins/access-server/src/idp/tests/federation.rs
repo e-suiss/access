@@ -170,3 +170,103 @@ async fn a_lost_chain_cuts_the_issuer_and_its_return_resumes_it() {
         "the chain is back: input resumes with the same Acceptance"
     );
 }
+
+mod admin {
+    use access_identity_admin::domain::Invalid;
+    use access_identity_admin::domain::federation::{FederationChange, Subordinate};
+
+    use super::*;
+
+    const TA: &str = "https://ta.federation.example";
+
+    fn jwks() -> String {
+        String::from(r#"{"keys":[{"kty":"EC","crv":"P-256","kid":"k1","x":"AA","y":"AA"}]}"#)
+    }
+
+    async fn settings(
+        w: &World,
+        t: TenantId,
+        r: RealmId,
+    ) -> access_store::oidf::FederationSettingsRow {
+        let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
+        let s = tx.federation_settings().await.unwrap();
+        tx.commit().await.unwrap();
+        s
+    }
+
+    async fn anchors(w: &World, t: TenantId, r: RealmId) -> Vec<(String, bool)> {
+        let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
+        let a = tx.trust_anchors().await.unwrap();
+        tx.commit().await.unwrap();
+        a.into_iter().map(|a| (a.entity_id, a.live)).collect()
+    }
+
+    async fn apply(w: &World, at: (TenantId, RealmId), d: Digest, c: FederationChange, n: u8) {
+        let hours = if c.action().reserved() { 48 } else { 1 };
+        let p = proposal(at, Change::Federation(c), n, idp_anchor(d), hours);
+        written(&exercise(w, &p, ROOT_KEY).await.unwrap());
+    }
+
+    async fn refused(
+        w: &World,
+        at: (TenantId, RealmId),
+        d: Digest,
+        c: FederationChange,
+    ) -> Invalid {
+        let p = proposal(at, Change::Federation(c), 99, idp_anchor(d), 1);
+        match w.admin().prepare(&p).await {
+            Err(AdminError::Invalid(i)) => i,
+            Err(e) => panic!("{e:?}"),
+            Ok(_) => panic!("prepared"),
+        }
+    }
+
+    // OP-155 m.3 (a), (j), IDP-19, §10.7.1 rule 7
+    #[tokio::test]
+    async fn federation_is_off_until_each_action_turns_it_on() {
+        let w = World::new().await;
+        let (t, r, d) = w.realm("oidf-admin").await;
+        onboard(&w.plane, d, ROOT, ROOT_KEY).await;
+        let s = settings(&w, t, r).await;
+        assert!(!s.enabled && !s.ta_enabled && !s.registration_open);
+        assert_eq!(
+            refused(&w, (t, r), d, FederationChange::Registration(true)).await,
+            Invalid::Federation
+        );
+        let hints = vec![String::from(TA)];
+        apply(
+            &w,
+            (t, r),
+            d,
+            FederationChange::Enable {
+                authority_hints: hints.clone(),
+            },
+            2,
+        )
+        .await;
+        apply(&w, (t, r), d, FederationChange::Registration(true), 3).await;
+        let sub = Subordinate {
+            entity_id: String::from("https://rp.federation.example"),
+            jwks: jwks(),
+            metadata_policy: None,
+        };
+        apply(&w, (t, r), d, FederationChange::TaEnable(vec![sub]), 4).await;
+        let s = settings(&w, t, r).await;
+        assert!(s.enabled && s.ta_enabled && s.registration_open);
+        assert_eq!(s.authority_hints, hints);
+        let add = FederationChange::TrustAnchorAdd {
+            entity_id: String::from(TA),
+            jwks: jwks(),
+        };
+        assert!(add.action().reserved());
+        apply(&w, (t, r), d, add, 5).await;
+        assert_eq!(anchors(&w, t, r).await, vec![(String::from(TA), true)]);
+        let remove = FederationChange::TrustAnchorRemove(String::from(TA));
+        apply(&w, (t, r), d, remove.clone(), 6).await;
+        assert_eq!(anchors(&w, t, r).await, vec![(String::from(TA), false)]);
+        assert_eq!(refused(&w, (t, r), d, remove).await, Invalid::NoTrustAnchor);
+        apply(&w, (t, r), d, FederationChange::Disable, 8).await;
+        let s = settings(&w, t, r).await;
+        assert!(!s.enabled && !s.ta_enabled && !s.registration_open);
+    }
+}

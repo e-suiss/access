@@ -170,6 +170,16 @@ pub enum Op {
     RegisterProtectedResource,
     /// `putDcrPolicy`: `idp.client.dcr_policy`, or `dcr_policy_tighten` (OP-154 m.3 (j)).
     PutDcrPolicy,
+    /// `putFederation`: `idp.federation.enable` or `disable` (OP-155 m.3 (j)).
+    PutFederation,
+    /// `addTrustAnchor`: `idp.federation.trust_anchor_add` (reserved).
+    AddTrustAnchor,
+    /// `removeTrustAnchor`: `idp.federation.trust_anchor_remove`, keyed by the anchor's id.
+    RemoveTrustAnchor,
+    /// `putFederationAuthority`: `idp.federation.ta_enable`.
+    PutFederationAuthority,
+    /// `putFederationRegistration`: `idp.federation.registration_open` or `registration_close`.
+    PutFederationRegistration,
     /// `putDeviceCode`: `idp.realm.device_code`, or `device_code_close` (OP-154 m.3 (p)).
     PutDeviceCode,
     /// `createCrossAppConnection`: `idp.client.cross_app_connection` (OP-154 m.3 (n)).
@@ -273,6 +283,11 @@ impl Op {
             "putVaultReleaseMode" => Self::PutVaultReleaseMode,
             "registerProtectedResource" => Self::RegisterProtectedResource,
             "putDcrPolicy" => Self::PutDcrPolicy,
+            "putFederation" => Self::PutFederation,
+            "addTrustAnchor" => Self::AddTrustAnchor,
+            "removeTrustAnchor" => Self::RemoveTrustAnchor,
+            "putFederationAuthority" => Self::PutFederationAuthority,
+            "putFederationRegistration" => Self::PutFederationRegistration,
             "putDeviceCode" => Self::PutDeviceCode,
             "createCrossAppConnection" => Self::CreateCrossAppConnection,
             "retireCrossAppConnection" => Self::RetireCrossAppConnection,
@@ -770,6 +785,43 @@ fn vault_change(
     }))
 }
 
+/// The `idp.federation.*` change of a federation operation (OP-155 m.3 (j)), `None` for any
+/// other.
+fn federation_change(
+    op: Op,
+    key: Option<&str>,
+    body: &Json,
+) -> Result<Option<crate::domain::federation::FederationChange>, Invalid> {
+    use crate::domain::federation::FederationChange as F;
+    if !matches!(
+        op,
+        Op::PutFederation
+            | Op::AddTrustAnchor
+            | Op::RemoveTrustAnchor
+            | Op::PutFederationAuthority
+            | Op::PutFederationRegistration
+    ) {
+        return Ok(None);
+    }
+    let mut own = obj(body)?.clone();
+    own.remove(VALIDITY);
+    own.remove("ais");
+    let bad = |_| Invalid::Federation;
+    Ok(Some(match op {
+        Op::PutFederation => F::put_federation(&own).map_err(bad)?,
+        Op::AddTrustAnchor => F::add_anchor(&own).map_err(bad)?,
+        Op::RemoveTrustAnchor => {
+            if !own.is_empty() {
+                return Err(Invalid::Body);
+            }
+            F::TrustAnchorRemove(super::federation::anchor_of(key_of(key)?)?)
+        }
+        Op::PutFederationAuthority => F::put_authority(&own).map_err(bad)?,
+        Op::PutFederationRegistration => F::put_registration(&own).map_err(bad)?,
+        _ => return Ok(None),
+    }))
+}
+
 /// A hook's or webhook's id from its external id; anything else is `missing`.
 fn extension_id(ids: &IdKey, prefix: &str, s: &str, missing: Invalid) -> Result<[u8; 16], Invalid> {
     ids.decode(prefix, s).map_err(|_| missing)
@@ -848,6 +900,9 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
     }
     if let Some(s) = scim_change(op, key, m)? {
         return Ok(Change::Scim(s));
+    }
+    if let Some(f) = federation_change(op, key, body)? {
+        return Ok(Change::Federation(f));
     }
     Ok(match op {
         Op::CreateOrganization => {
@@ -1216,7 +1271,12 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         | Op::RotateScimSecret
         | Op::RetireScimClient
         | Op::RegisterScimTarget
-        | Op::RetireScimTarget => return Err(Invalid::Body),
+        | Op::RetireScimTarget
+        | Op::PutFederation
+        | Op::AddTrustAnchor
+        | Op::RemoveTrustAnchor
+        | Op::PutFederationAuthority
+        | Op::PutFederationRegistration => return Err(Invalid::Body),
         // OP-153 m.18 (e), m.25 (b)
         Op::BindAccount => {
             only(
@@ -1810,6 +1870,8 @@ pub enum Kind {
     VaultResources,
     /// The protected resources by canonical URI (AG-8).
     ProtectedResources,
+    /// The trust anchors by the base64url of their entity identifier (OP-155 m.3 (j)).
+    TrustAnchors,
 }
 
 /// How many days the analytics read covers, today included (PD).
@@ -2170,6 +2232,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                         )
                     })
                     .collect(),
+                last: None,
+            },
+            // OP-155 m.3 (j)
+            (Kind::TrustAnchors, _) => Read {
+                items: super::federation::anchors(t, key).await?,
                 last: None,
             },
             // OP-154 m.3 (t)

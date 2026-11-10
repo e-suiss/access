@@ -658,7 +658,8 @@ fn body_of(row: &Route) -> &'static str {
             ResourceKind::Deliveries
             | ResourceKind::AgentSponsors
             | ResourceKind::VaultResources
-            | ResourceKind::ProtectedResources => "Page",
+            | ResourceKind::ProtectedResources
+            | ResourceKind::TrustAnchors => "Page",
             ResourceKind::SocialProviders => "SocialProvider",
             ResourceKind::Organizations => "Organization",
             ResourceKind::Agents => "Agent",

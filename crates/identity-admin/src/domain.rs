@@ -27,6 +27,7 @@ pub mod accounts;
 pub mod agent;
 pub mod certificate;
 pub mod dns;
+pub mod federation;
 pub mod org;
 pub mod provision;
 pub use access_identity_risk::domain::mode::ProtectionMode;
@@ -465,6 +466,12 @@ pub enum Invalid {
     /// No enabled vault Resource by that name.
     #[error("no such vault resource")]
     NoVaultResource,
+    /// An `idp.federation.*` body outside the rules (OP-155 m.3 (j)).
+    #[error("invalid federation")]
+    Federation,
+    /// No live trust anchor by that entity identifier.
+    #[error("no such trust anchor")]
+    NoTrustAnchor,
     /// N5: a Related Origins list that is not `https` origins, names more than five
     /// registrable labels with the RP ID, or an origin outside the realm's verified domains
     /// (TN-18, OP-153 m.3 (u)).
@@ -515,6 +522,8 @@ impl Invalid {
             Self::AgentTemplate => "invalid-agent-template",
             Self::VaultResource => "invalid-vault-resource",
             Self::NoVaultResource => "no-such-vault-resource",
+            Self::Federation => "invalid-federation",
+            Self::NoTrustAnchor => "no-such-trust-anchor",
             Self::DisplayName => "invalid-display-name",
             Self::RedirectUri | Self::RedirectUris => "invalid-redirect-uri",
             Self::JwksUri => "invalid-jwks-uri",
@@ -1752,6 +1761,8 @@ pub enum Change {
     Vault(access_identity_vault::domain::resource::VaultChange),
     /// `idp.scim.*` (OP-155 m.3 (a), (g)).
     Scim(scim::ScimChange),
+    /// `idp.federation.*` (OP-155 m.3 (a), (j)).
+    Federation(federation::FederationChange),
     /// `idp.client.resource_register` (AG-8, OP-154 m.3 (a)).
     ResourceRegister(ProtectedResource),
     /// `idp.client.cross_app_connection` (CT2, OP-154 m.3 (a), (n)).
@@ -2125,6 +2136,7 @@ impl Change {
             Self::Agent(a) => a.action(),
             Self::Vault(v) => v.action(),
             Self::Scim(s) => s.action(),
+            Self::Federation(f) => f.action(),
             Self::ResourceRegister(_) => IdpAction::ClientResourceRegister,
             Self::CrossAppConnection(_) => IdpAction::ClientCrossAppConnection,
             Self::CrossAppConnectionRetire(_) => IdpAction::ClientCrossAppConnectionRetire,
@@ -2192,6 +2204,7 @@ impl Change {
             Self::Agent(a) => a.check(),
             Self::Vault(v) => v.check().map_err(|_| Invalid::VaultResource),
             Self::Scim(s) => s.check(),
+            Self::Federation(f) => f.check().map_err(|_| Invalid::Federation),
             Self::ResourceRegister(r) => r.check(),
             Self::CrossAppConnection(c) => c.check(),
             Self::CrossAppConnectionRetire(name) => {
@@ -2342,6 +2355,7 @@ impl Change {
             Self::Agent(a) => a.body(),
             Self::Vault(v) => v.body(),
             Self::Scim(s) => s.body(),
+            Self::Federation(f) => f.body(),
             Self::DeviceCode(on) => Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))]),
             Self::CertificateLogin(c) => c.to_value(),
             Self::MtlsAliases(on) => Value::Map(vec![(Value::text("published"), Value::Bool(*on))]),
@@ -2491,6 +2505,7 @@ impl Change {
             Self::Agent(a) => path.extend(a.path()),
             Self::Vault(v) => path.extend(v.path()),
             Self::Scim(s) => path.extend(s.path()),
+            Self::Federation(f) => path.extend(f.path()),
             Self::ResourceRegister(r) => {
                 path.extend([String::from("resource"), r.resource.clone()]);
             }
