@@ -58,7 +58,7 @@ mod tests {
         access_kernel::json::parse(v.to_string().as_bytes(), 4096).unwrap()
     }
 
-    // OP-156 m.3 (r): recorded Okta SSF event bodies, scrubbed
+    // OP-156 m.3 (r)
     #[test]
     fn caep_events_map_to_the_same_signal_bodies() {
         use access_internal_api::signals::Signal;

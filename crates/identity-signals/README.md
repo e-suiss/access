@@ -1,7 +1,7 @@
 # access-identity-signals
 
 External signal sources of the Access identity plane: identity verification (KYC/IDV), device
-management (MDM), risk and fraud engines, and data classification (DLP).
+management (MDM), risk and fraud services, and data classification (DLP).
 
 Every external signal is a Claim of a registered issuer. Registering a source
 (`idp.signal.source_register`) only names that issuer; its Claims do something only once the
@@ -20,8 +20,8 @@ Restriction policies only forbid or ask for more, so a signal can deny or requir
 allow. A body Access cannot read counts as the most severe statement of its class, a risk
 Claim counts for at most a day after its issue, and a missing signal is `none`.
 
-Biometrics, RASP and bot management engines send `risk_external` (or `posture_mdm` for device
-checks) like any risk engine.
+Biometric, RASP and bot management services send `risk_external` (or `posture_mdm` for device
+checks) like any other risk source.
 
 ## Ingress
 

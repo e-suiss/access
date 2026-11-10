@@ -202,7 +202,7 @@ mod tests {
 
     use super::*;
 
-    // OP-156 m.3 (r): recorded Intune and Jamf shapes, scrubbed
+    // OP-156 m.3 (r)
     #[test]
     fn device_records_map_to_posture() {
         let d = |compliance: &str| {
@@ -241,7 +241,7 @@ mod tests {
         assert!(jamf(&json!({"general": {}}), "jamf").is_err());
     }
 
-    // IDP-34, OP-156 m.3 (r): recorded Onfido and Persona shapes, scrubbed
+    // IDP-34, OP-156 m.3 (r)
     #[test]
     fn verification_results_map_to_proofing_levels() {
         let check = |result: &str, reports: Json| {
