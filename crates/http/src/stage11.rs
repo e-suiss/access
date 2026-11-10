@@ -1,6 +1,6 @@
 //! The Stage 11 routes outside the realm-admin and Frontend API manifests, declared before
-//! their lanes serve them (OP-156 m.4): the forward-auth checks, the Relay callbacks and status,
-//! and the eligible set. Each answers `501 not-yet-served`; a lane that serves one removes its
+//! their lanes serve them (OP-156 m.4): the forward-auth checks and the Relay callbacks and
+//! status. Each answers `501 not-yet-served`; a lane that serves one removes its
 //! row and mounts its own handler.
 
 use axum::Router;
@@ -71,12 +71,6 @@ pub const PLANNED: &[Planned] = &[
         "/access/v1/relay-status",
         "getRelayStatus",
         "{relay_lag_ms, notifications_delayed}: the age of the courier's oldest undelivered message, or null when none waits, and whether it is past 60 s; authority never waits on delivery (OP-156 m.3 (c), E30).",
-    ),
-    planned(
-        Method::Post,
-        "/access/v1/eligibility:set",
-        "eligibleSet",
-        "The holders of approve:<class> for {gate_class, resource, digest}: derived, records nothing, at most 1000 Parties, more marked truncated (OP-156 m.3 (t), E41).",
     ),
 ];
 

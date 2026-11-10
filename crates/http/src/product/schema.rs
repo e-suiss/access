@@ -160,6 +160,7 @@ fn party_components() -> Value {
 }
 
 mod developer;
+mod eligibility;
 mod platform;
 mod records;
 mod ssf;
@@ -178,6 +179,7 @@ fn components() -> Value {
         ssf::components(),
         developer::components(),
         stage11::components(),
+        eligibility::components(),
     ] {
         if let (Value::Object(m), Value::Object(more)) = (&mut all, more) {
             m.extend(more);
@@ -511,6 +513,7 @@ pub fn openapi() -> Value {
     ssf::paths(&mut paths);
     developer::paths(&mut paths);
     stage11::paths(&mut paths);
+    eligibility::paths(&mut paths, &common);
     json!({
         "openapi": "3.1.1",
         "info": {

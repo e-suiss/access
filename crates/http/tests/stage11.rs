@@ -50,7 +50,6 @@ fn the_relay_status_and_forward_auth_checks_are_declared() {
     for op in [
         "getRelayStatus",
         "proxyCheck",
-        "eligibleSet",
         "relayIysStatus",
     ] {
         assert!(ops.contains(&op), "{op}");

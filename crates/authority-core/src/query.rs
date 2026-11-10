@@ -9,7 +9,7 @@ use access_kernel::algebra::{Catalog, resource_le};
 use access_kernel::combinator::HopStatus;
 use access_kernel::digest::Digest;
 use access_kernel::intent::{IntentEnvelope, intent_digest};
-use access_kernel::meta::{self, Actor, ExerciseBasis, GrantState, View, kind};
+use access_kernel::meta::{self, Actor, ExerciseBasis, GrantState, kind};
 use access_kernel::model::{ActionRef, Id, ResourceRef, ResourceSelector, SubjectSelector, Window};
 
 use crate::CoreError;
@@ -118,6 +118,17 @@ pub enum Query {
     },
     /// An agent Instance's own summary (A-11, L8).
     AgentStatus,
+    /// Who may approve a Gate of `gate_class` now: the holders of `approve:<class>`, that is
+    /// of `access:contribute` on `access.contribution:[class]` (§7.9.5.3, E41, OP-156 m.3 (t)).
+    /// Derived, never recorded, at most [`ELIGIBLE_MAX`] Parties.
+    EligibleSet {
+        /// The contribution class the Gate needs.
+        gate_class: String,
+        /// The resource the Gate is on, as the coordinator names it; opaque here.
+        resource: String,
+        /// The digest the approval binds, as the coordinator names it; opaque here.
+        digest: Digest,
+    },
     /// L6: what executors reported about one Exercise (OP-154 m.3 (u), EI-10).
     Outcome {
         /// The Exercise.
@@ -194,11 +205,12 @@ pub enum Report {
 /// Search kinds declared and not served yet, each owned by its lane: `discovery` (Stage 9 L3,
 /// auditor-only and advisory, OP-154 m.3 (z)), `federation-chain` (Stage 10 P6, each OIDF
 /// issuer's chain state and lapse, OP-155 m.3 (j)) and `scim-sync` (Stage 10 P3, inbound and
-/// outbound SCIM provisioning results, OP-155 m.3 (g)) and `eligible-set` (Stage 11 Q16, the
-/// holders of `approve:<class>`, OP-156 m.3 (t)). A search of one answers
+/// outbound SCIM provisioning results, OP-155 m.3 (g)). A search of one answers
 /// `501 not-yet-served` (OP-154 m.4, OP-155 m.4, OP-156 m.4).
-pub const RESERVED_KINDS: [&str; 4] =
-    ["discovery", "federation-chain", "scim-sync", "eligible-set"];
+pub const RESERVED_KINDS: [&str; 3] = ["discovery", "federation-chain", "scim-sync"];
+
+/// The most Parties an eligible set names; more are marked truncated (OP-156 m.3 (t)).
+pub const ELIGIBLE_MAX: usize = 1000;
 
 impl Query {
     /// The path segment of the search intent's resource.
@@ -224,6 +236,7 @@ impl Query {
             Self::AgentStatus => "agent-status",
             Self::Outcome { .. } => "outcome",
             Self::ResourceIncarnation { .. } => "resource-incarnation",
+            Self::EligibleSet { .. } => "eligible-set",
         }
     }
 
@@ -279,7 +292,7 @@ pub struct Found {
 }
 
 /// Whether every hop of the lineage is live.
-fn live(view: &dyn View, grant: &Id) -> Option<GrantState> {
+fn live(view: &Snapshot, grant: &Id) -> Option<GrantState> {
     let (hops, _) = lineage_hops(view, grant)?;
     if hops.iter().all(|h| h.status == HopStatus::Active) {
         read(view, kind::GRANT, grant)
@@ -413,6 +426,9 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             Query::Outcome { exercise, envelope } => {
                 return self.outcome(actor.party, *exercise, envelope, now).await;
             }
+            Query::EligibleSet { gate_class, .. } => {
+                return self.eligible_set(inc, &actor, gate_class, now).await;
+            }
             _ => {}
         }
         let candidates = match query {
@@ -455,6 +471,67 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Ok(Found {
             hits: hits.into_iter().collect(),
             next,
+            audited: None,
+        })
+    }
+
+    /// The eligible set of a Gate of `class` (§7.9.5.3, E41, OP-156 m.3 (t)): the named holders of
+    /// a live Grant covering `access:contribute` on `access.contribution:[class]` now, without
+    /// repeats, at most [`ELIGIBLE_MAX`]; `next` is set when more were left out. Only the
+    /// domain's auditors and a reader the domain allowed to read this kind (a `check` of the
+    /// search intent itself is ALLOW) see one (E26); anyone else gets nothing. Rule-shaped and
+    /// public holders are not listed: their members are asked one by one with
+    /// `eligibility:check`. Nothing is recorded.
+    async fn eligible_set(
+        &mut self,
+        inc: &Incoming,
+        actor: &Actor,
+        class: &str,
+        now: u64,
+    ) -> Result<Found, CoreError> {
+        // E26
+        let allowed = self.audits(&actor.party, now).await?
+            || self.exercise(inc, now).await?.decision.outcome
+                == access_kernel::combinator::Outcome::Allow;
+        if !allowed {
+            return Ok(Found::default());
+        }
+        let target = ResourceRef {
+            namespace: String::from(crate::app::CONTRIBUTION_NAMESPACE),
+            path: vec![String::from(class)],
+            incarnation: 0,
+        };
+        let catalog = self
+            .settled(|snap| accepted_catalog(snap, meta::NAMESPACE, now, &Catalog::default()))
+            .await?;
+        let mut parties = BTreeSet::new();
+        let mut after = None;
+        let mut truncated = false;
+        loop {
+            let page = self
+                .reader
+                .grants_in(&target.namespace, after, PAGE)
+                .await?;
+            for g in &page {
+                let holder = self
+                    .settled(|snap| eligible_holder(snap, g, &target, &catalog, now))
+                    .await?;
+                if let Some(p) = holder {
+                    if parties.len() == ELIGIBLE_MAX && !parties.contains(&p) {
+                        truncated = true;
+                        break;
+                    }
+                    parties.insert(p);
+                }
+            }
+            if truncated || page.len() < PAGE as usize {
+                break;
+            }
+            after = page.last().copied();
+        }
+        Ok(Found {
+            hits: parties.into_iter().map(Hit::Party).collect(),
+            next: truncated.then_some(Id([0xff; 16])),
             audited: None,
         })
     }
@@ -658,6 +735,42 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             audited: Some(actor.instance),
         })
     }
+}
+
+/// The named holder of Grant `g` if it lets that Party contribute to `target` now: every hop
+/// of its lineage live, in its validity window and with its while-conditions holding.
+fn eligible_holder(
+    view: &Snapshot,
+    g: &Id,
+    target: &ResourceRef,
+    catalog: &Catalog,
+    now: u64,
+) -> Option<Id> {
+    let grant: GrantState = read(view, kind::GRANT, g)?;
+    let SubjectSelector::Party(party) = grant.content.holder else {
+        return None;
+    };
+    let set = &grant.content.authority.authority;
+    let contribute = meta::core_action(access_kernel::contribution::ACTION);
+    if !catalog.covered(&set.actions).contains(&contribute)
+        || !resource_le(&ResourceSelector::Exact(target.clone()), &set.resource)
+    {
+        return None;
+    }
+    let (hops, _) = crate::domain::lineage_hops_at(view, g, Some(now))?;
+    let actor = Actor {
+        party,
+        instance: Id([0; 16]),
+    };
+    hops.iter()
+        .all(|h| {
+            let c = &h.authority.constraints;
+            h.status == HopStatus::Active
+                && c.validity.from <= now
+                && now <= c.validity.until
+                && crate::domain::conditions_hold(view, &c.conditions, Some(&actor), now)
+        })
+        .then_some(party)
 }
 
 /// The page token's body: the last candidate.

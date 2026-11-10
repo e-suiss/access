@@ -3,7 +3,7 @@
 
 use serde_json::{Map, Value, json};
 
-use super::{object, problems, r, text};
+use super::{object, problems, r};
 use crate::stage11::{Method, PLANNED, PROXY_ENGINES};
 
 /// The relay status schema.
@@ -19,14 +19,6 @@ pub(super) fn components() -> Value {
                 "notifications_delayed": { "type": "boolean", "description": "Whether relay_lag_ms is past 60 s (OP-156 m.3 (c))." },
             }),
             &["relay_lag_ms", "notifications_delayed"],
-        ),
-        "EligibleSetRequest": object(
-            &json!({
-                "gate_class": text("The coordination Gate class."),
-                "resource": text("The resource the Gate is on."),
-                "digest": text("The digest the approval binds."),
-            }),
-            &["gate_class", "resource", "digest"],
         ),
     })
 }
@@ -72,15 +64,6 @@ pub(super) fn paths(paths: &mut Map<String, Value>) {
                     "required": true,
                     "schema": { "type": "string", "enum": PROXY_ENGINES },
                 }]),
-            );
-        }
-        if p.operation == "eligibleSet" {
-            op.insert(
-                "requestBody".into(),
-                json!({
-                    "required": true,
-                    "content": { "application/json": { "schema": r("EligibleSetRequest") } },
-                }),
             );
         }
         let entry = paths

@@ -720,6 +720,13 @@ fn later(kind: &str, q: &mut Obj<'_>) -> R<Query> {
     match kind {
         // OP-156 m.3 (k)
         "resource-incarnation" => incarnation(q),
+        // E41, OP-156 m.3 (t)
+        "eligible-set" => Ok(Query::EligibleSet {
+            gate_class: crate::adp::eligibility::gate_class(q.req("gate_class", "query")?)?,
+            resource: text(q.req("resource", "query")?, "query")
+                .and_then(crate::adp::eligibility::resource)?,
+            digest: Digest(fixed(q.req("digest", "query")?, "query")?),
+        }),
         _ => Err(AdpError("search")),
     }
 }

@@ -78,6 +78,7 @@ pub fn router<P: Pdp + 'static>(service: Service<P>, discovery: Discovery) -> Ro
         .route("/access/v1/explain", post(explain::<P>))
         .route("/access/v1/search/{kind}", post(search::<P>))
         .route("/access/v1/eligibility:check", post(eligibility::<P>))
+        .route(crate::adp::eligibility::PATH, post(eligible_set::<P>))
         .route(crate::audit::EXPORT_PATH, post(audit_export::<P>))
         .route(crate::adp::publication::PUBLISH_PATH, post(publish::<P>))
         .route(
@@ -149,6 +150,18 @@ async fn eligibility<P: Pdp>(
 ) -> Response {
     let (pep, requester) = caller((pep, requester));
     let reply = shared.service.eligibility(&body, pep, requester).await;
+    respond(reply, &headers)
+}
+
+async fn eligible_set<P: Pdp>(
+    State(shared): State<Arc<Shared<P>>>,
+    pep: Option<axum::Extension<Pep>>,
+    requester: Option<axum::Extension<Requester>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let (pep, requester) = caller((pep, requester));
+    let reply = crate::adp::eligibility::set(&shared.service, &body, pep, requester).await;
     respond(reply, &headers)
 }
 

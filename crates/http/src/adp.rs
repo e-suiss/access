@@ -4,6 +4,7 @@ pub mod adapters;
 pub mod app;
 pub mod cbor;
 pub mod domain;
+pub mod eligibility;
 pub mod hub;
 pub mod payload;
 pub mod pep;
