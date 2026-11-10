@@ -12,7 +12,7 @@ ENV RUSTUP_TOOLCHAIN=1.99.0 \
     CARGO_TERM_COLOR=never \
     RUSTFLAGS="--remap-path-prefix=/src=/access --remap-path-prefix=/usr/local/cargo=/cargo"
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libkrb5-dev libclang-dev \
+ && apt-get install -y --no-install-recommends libkrb5-dev libclang-dev pkg-config \
  && rm -rf /var/lib/apt/lists/* \
  && cargo install --locked cargo-auditable --version 0.7.6
 COPY . .
