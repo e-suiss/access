@@ -160,3 +160,14 @@ test("approvers are listed and removed", async ({ page }) => {
   await expect(approvers.getByTestId("said")).toHaveText("Removed.");
   await expect(approvers).toContainText("No approvers yet.");
 });
+
+// OP-156 m.3 (w), E59: a live cloud key permission is seen and stopped with one tap
+test("a cloud key permission is seen and stopped", async ({ page }) => {
+  await page.goto("/account/");
+  const keys = page.getByTestId("cloud-keys");
+  await expect(keys).toContainText("Cloud use of your data by One");
+  await expect(keys.getByTestId("cloud-key-row")).toHaveCount(1);
+  await expect(keys).toContainText("one_memory, one_model");
+  await keys.getByRole("button", { name: "Stop cloud use" }).click();
+  await expect(page.getByTestId("cloud-keys")).toHaveCount(0);
+});

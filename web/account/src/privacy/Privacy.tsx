@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState, type ReactElement } from "react";
 
 import { frontend, json } from "../lib/api.js";
 import { t } from "../lib/i18n.js";
+import { CloudKeys } from "./CloudKeys.js";
 
 const CHANNELS = ["email", "sms", "call", "push"] as const;
 const TOPICS = ["campaign", "newsletter", "product_news"] as const;
@@ -291,6 +292,7 @@ export function Privacy(): ReactElement {
     <div data-testid="privacy">
       <h2>{t("privacy.title")}</h2>
       <PreferencesView />
+      <CloudKeys />
       <DocumentsView />
       <HistoryView />
       <DeletionView />

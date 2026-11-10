@@ -159,11 +159,43 @@ export class AccountMock {
     );
     await context.route(/\/v1\/(sessions|me)(\/|$)/, (r) => this.s10(r));
     await context.route(/\/v1\/approvers(\/|$)/, (r) => this.approversRoute(r));
+    await context.route(/\/v1\/me\/cloud-key-permissions/, (r) => this.cloudKeysRoute(r));
     await context.route(/\/v1\/account\/vault\/connections/, (r) => this.vaultRoute(r));
     await context.route(/\/v1\/account\/agent-connections/, (r) => this.agentsRoute(r));
     await context.route("**/access/v1/relay-status", (r) =>
       r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(this.relay) }),
     );
+  }
+
+  /** OP-156 m.3 (w): One's cloud key permissions. */
+  cloudKeys = [
+    {
+      id: "ckp_1",
+      purpose: "consolidate",
+      classes: ["one_memory", "one_model"],
+      valid_until: "2030-01-02T03:04:05.000Z",
+      state: "live",
+      destroy: false,
+    },
+  ];
+
+  private async cloudKeysRoute(r: Route): Promise<void> {
+    this.record(r);
+    const reply = (status: number, body?: unknown) =>
+      r.fulfill({
+        status,
+        contentType: "application/json",
+        body: body === undefined ? "" : JSON.stringify(body),
+      });
+    if (!this.signedIn) return reply(401, { code: "session-required" });
+    const path = new URL(r.request().url()).pathname;
+    if (r.request().method() === "GET") return reply(200, { permissions: this.cloudKeys });
+    const id = /\/cloud-key-permissions\/([^/]+)\/revoke$/.exec(path)?.[1];
+    if (id === undefined) return reply(404, { code: "cloud-key-unknown" });
+    this.cloudKeys = this.cloudKeys.map((k) =>
+      k.id === id ? { ...k, state: "revoked", destroy: true } : k,
+    );
+    return reply(204);
   }
 
   private async approversRoute(r: Route): Promise<void> {
