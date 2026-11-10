@@ -10,6 +10,7 @@ import { Invitation } from "./Invitation.js";
 import { MagicLink } from "./MagicLink.js";
 import { Recovery } from "./Recovery.js";
 import { SignIn } from "./SignIn.js";
+import { Spc } from "./Spc.js";
 import { SsoSetup } from "./SsoSetup.js";
 
 /** The page a location draws. */
@@ -18,6 +19,7 @@ export type Page =
   | "sign_up"
   | "consent"
   | "approval"
+  | "pay"
   | "ciba"
   | "device"
   | "recovery"
@@ -41,6 +43,8 @@ export function pageOf(path: string, search: string): Page {
   if (reason === "share") return "consent";
   // §11.6, OP-154 m.3 (k)
   if (reason === "approve") return "approval";
+  // OP-156 m.3 (g)
+  if (reason === "pay") return "pay";
   // OP-155 m.3 (l)
   if (reason === "ciba") return "ciba";
   // §10.4.6, Ek B 4098
@@ -58,6 +62,8 @@ function Body({ page }: { readonly page: Page }) {
       return <Consent />;
     case "approval":
       return <Approval />;
+    case "pay":
+      return <Spc />;
     case "ciba":
       return <Ciba />;
     case "device":
