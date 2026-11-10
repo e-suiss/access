@@ -596,3 +596,19 @@ pub const INVALID_SETUP_LINK: Code = code(
     "Bad Request",
     "The setup link order names an address that is not an e-mail address (TN-134).",
 );
+/// The undelivered Relay message's sealed content was crypto-shredded; it cannot be resent
+/// (OP-156 m.3 (c), OP-73).
+pub const CONTENT_SHREDDED: Code = code(
+    "content-shredded",
+    410,
+    "Gone",
+    "The message's sealed content was crypto-shredded, so it cannot be resent; nothing was written (OP-156 m.3 (c)).",
+);
+/// The undelivered Relay message is past its expiry; resending it would deliver a worthless
+/// code or link (OP-156 m.3 (c)).
+pub const MESSAGE_EXPIRED: Code = code(
+    "message-expired",
+    409,
+    "Conflict",
+    "The message is past its expiry, so it is not resent; start the flow that sends it again (OP-156 m.3 (c)).",
+);

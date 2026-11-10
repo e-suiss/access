@@ -484,6 +484,276 @@ const STAGE10: [Route; 45] = [
     ),
 ];
 
+/// The Stage 11 realm routes, declared before their lanes serve them (OP-156 m.4): each answers
+/// `501 not-yet-served` behind its permission until its lane fills the handler.
+const STAGE11: [Route; 46] = [
+    list(
+        "/admin/v1/realms/{slug}/domains",
+        "listDomains",
+        "The realm's custom domains: host, verification state, next re-check, certificate expiry (OP-156 m.3 (i)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/domains",
+        "registerDomain",
+        "Registers a custom domain to verify by DNS TXT `_access-challenge.<host>` and a CNAME to `<slug>.<base>`: idp.domain.register.",
+    ),
+    read(
+        "/admin/v1/realms/{slug}/domains/{domain}",
+        "getDomain",
+        "One custom domain: the TXT value and CNAME target to publish, the verification state and the ACME certificate.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/domains/{domain}/retire",
+        "retireDomain",
+        "Retires a custom domain; it is no longer served and nothing is deleted (OP-73): idp.domain.retire.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/domains/{domain}/issuer-bind",
+        "bindDomainIssuer",
+        "Binds the issuer or passkey RP ID to a verified custom domain, irreversibly (§10.2.4, TN-16): idp.domain.issuer_bind (reserved).",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/proxies",
+        "listProxies",
+        "The realm's forward-auth proxies and Access Proxy instances, each a PEP (OP-156 m.3 (l), (m)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/proxies",
+        "registerProxy",
+        "Registers a proxy as a PEP with its application, engine and upstream: idp.proxy.register.",
+    ),
+    read(
+        "/admin/v1/realms/{slug}/proxies/{proxy}",
+        "getProxy",
+        "One proxy: application, engine, decision cache bound, header mode, MCP pins.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/proxies/{proxy}",
+        "putProxy",
+        "Replaces a proxy's registration: idp.proxy.update.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/proxies/{proxy}/retire",
+        "retireProxy",
+        "Retires a proxy: idp.proxy.retire.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/proxies/{proxy}/plain-headers",
+        "putProxyPlainHeaders",
+        "Turns the plain identity headers on (idp.proxy.plain_headers) after the setup check proves the application unreachable except through the proxy, or off (plain_headers_close).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/proxies/{proxy}/mcp-pins",
+        "pinMcpTools",
+        "Pins an MCP server's tool list by the SHA-256 of each tool's canonical definition; a changed or new tool is blocked until pinned again: idp.proxy.mcp_pin (OP-156 m.3 (n)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/ssh-ca",
+        "putSshCa",
+        "Turns the realm's Ed25519 SSH user CA on (idp.ssh.ca_enable) or off (ca_disable) (OP-156 m.3 (o)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/settings/ssh-ca/rotate",
+        "rotateSshCa",
+        "Rotates the SSH CA key on its schedule: idp.ssh.ca_rotate.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/settings/ssh-ca/replace",
+        "replaceSshCa",
+        "Replaces the SSH CA key at once: idp.ssh.ca_emergency (reserved).",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/ssh-host-groups",
+        "listSshHostGroups",
+        "The realm's SSH server groups, the resources of ssh.login Grants.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/ssh-host-groups",
+        "registerSshHostGroup",
+        "Registers an SSH server group: idp.ssh.host_group_register.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/ssh-host-groups/{host_group}/retire",
+        "retireSshHostGroup",
+        "Retires an SSH server group: idp.ssh.host_group_retire.",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/linux-hosts",
+        "listLinuxHosts",
+        "The realm's Linux client hosts with their offline horizon and last contact (OP-156 m.3 (p)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/linux-hosts",
+        "registerLinuxHost",
+        "Registers a Linux host of the Linux client: idp.linux.host_register.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/linux-hosts/{host}/retire",
+        "retireLinuxHost",
+        "Retires a Linux host: idp.linux.host_retire.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/linux-hosts/{host}/offline-policy",
+        "putLinuxOfflinePolicy",
+        "Sets a host's offline cache limits within its ValidityContract horizon: NSS data at most 12 hours, console sign-in at most 8, never sudo: idp.linux.offline_policy.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/linux-hosts/{host}/break-glass-policy",
+        "putLinuxBreakGlassPolicy",
+        "Sets a host's local break-glass policy over a one-use offline PAP slice: idp.linux.break_glass_policy (reserved).",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/hr-sources",
+        "listHrSources",
+        "The realm's HR sources, each a Claim issuer whose selection effect is a CT3 subject-selection Acceptance (OP-156 m.3 (q)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/hr-sources",
+        "registerHrSource",
+        "Registers an HR source: idp.hr.source_register.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/hr-sources/{source}/retire",
+        "retireHrSource",
+        "Retires an HR source: idp.hr.source_retire.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/hr-sources/{source}/records:batch",
+        "importHrBatch",
+        "Imports at most 10 000 JSONL HR records into the source's Claims: idp.hr.import.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/hr-sources/{source}/records:csv",
+        "importHrCsv",
+        "Imports an RFC 4180 CSV file of at most 10 MB with the fixed columns and a header row: idp.hr.import.",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/hr-connectors",
+        "listHrConnectors",
+        "The realm's HR connectors of services/hr-connector and their last pull.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/hr-connectors",
+        "registerHrConnector",
+        "Registers an HR connector: idp.hr.connector_register.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/hr-connectors/{connector}/retire",
+        "retireHrConnector",
+        "Retires an HR connector: idp.hr.connector_retire.",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/export-sinks",
+        "listExportSinks",
+        "The realm's export sinks for the read-only SIEM projection and their cursors; a copy, not the record (OP-156 m.3 (s)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/export-sinks",
+        "registerExportSink",
+        "Registers an export sink (OCSF Parquet on S3, OTLP logs, HTTP collector, syslog CEF or LEEF): idp.export.sink_register.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/export-sinks/{sink}",
+        "putExportSink",
+        "Replaces an export sink's configuration: idp.export.sink_update.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/export-sinks/{sink}/retire",
+        "retireExportSink",
+        "Retires an export sink: idp.export.sink_retire.",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/signal-sources",
+        "listSignalSources",
+        "The realm's signal sources (KYC, MDM, risk, DLP), each a Claim issuer whose effect needs an Acceptance (OP-156 m.3 (r)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/signal-sources",
+        "registerSignalSource",
+        "Registers a signal source: idp.signal.source_register.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/signal-sources/{source}/retire",
+        "retireSignalSource",
+        "Retires a signal source: idp.signal.source_retire.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/push",
+        "putPush",
+        "Turns push verification with number matching on (idp.realm.push) or off (push_close) (OP-156 m.3 (d)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/sms-otp",
+        "putSmsOtp",
+        "Turns the restricted SMS one-time code on (idp.realm.sms_otp) or off (sms_otp_close) (OP-156 m.3 (f)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/spc",
+        "putSpc",
+        "Opens Permissions-Policy: payment on the approval surface for Secure Payment Confirmation: idp.realm.spc (OP-156 m.3 (g)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/coordinator",
+        "putCoordinator",
+        "Names the coordinator URL the hub links pending approvals to: idp.realm.coordinator (OP-156 m.3 (t)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/iys",
+        "putIys",
+        "Turns the İYS consent registry events on (idp.realm.iys) or off (iys_close).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/security-notices",
+        "putSecurityNotices",
+        "Turns the immediate security authority notices on (idp.realm.security_notices) or off (security_notices_close); on by default (OP-156 m.3 (c)).",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/relay/undelivered",
+        "listUndeliveredRelayMessages",
+        "The realm's Relay messages the courier gave up on, without their sealed content (OP-156 m.3 (c)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/relay/undelivered/{event_id}/resend",
+        "resendRelayMessage",
+        "Resends an undelivered Relay message as a new outbox row citing the original: idp.relay.resend. A crypto-shredded message answers content-shredded, an expired one message-expired.",
+    ),
+];
+
 /// Every realm resource route, in contract order.
 pub const ROWS: &[Route] = &ALL_ROWS;
 
@@ -497,8 +767,8 @@ const BASE_LEN: usize = BASE.len();
     clippy::large_const_arrays,
     reason = "composed at compile time into the manifest, which a static cannot be"
 )]
-const ALL_ROWS: [Route; BASE_LEN + STAGE9.len() + STAGE10.len()] = {
-    let mut out = [BASE[0]; BASE_LEN + STAGE9.len() + STAGE10.len()];
+const ALL_ROWS: [Route; BASE_LEN + STAGE9.len() + STAGE10.len() + STAGE11.len()] = {
+    let mut out = [BASE[0]; BASE_LEN + STAGE9.len() + STAGE10.len() + STAGE11.len()];
     let mut i = 0;
     while i < BASE_LEN {
         out[i] = BASE[i];
@@ -514,21 +784,31 @@ const ALL_ROWS: [Route; BASE_LEN + STAGE9.len() + STAGE10.len()] = {
         out[BASE_LEN + STAGE9.len() + k] = STAGE10[k];
         k += 1;
     }
+    let mut l = 0;
+    while l < STAGE11.len() {
+        out[BASE_LEN + STAGE9.len() + STAGE10.len() + l] = STAGE11[l];
+        l += 1;
+    }
     out
 };
 
-/// Whether a realm row is a Stage 9 or Stage 10 declaration (OP-154 m.4, OP-155 m.4).
+/// Whether a realm row is a Stage 9, 10 or 11 declaration (OP-154 m.4, OP-155 m.4, OP-156 m.4).
 fn declared(operation_id: &str) -> bool {
     STAGE9
         .iter()
         .chain(STAGE10.iter())
+        .chain(STAGE11.iter())
         .any(|r| r.operation_id == operation_id)
 }
 
 /// The response schema a declared route will answer with: a page for a list, a declared
 /// resource for a read, the write result for a write (OP-155 m.4).
 fn planned_body(operation_id: &str) -> &'static str {
-    match STAGE10.iter().find(|r| r.operation_id == operation_id) {
+    match STAGE10
+        .iter()
+        .chain(STAGE11.iter())
+        .find(|r| r.operation_id == operation_id)
+    {
         Some(r) if r.verb == Verb::Get && !r.query.is_empty() => "Page",
         Some(r) if r.verb == Verb::Get => "Declared",
         _ => "WriteResult",

@@ -479,6 +479,8 @@ pub const CODES: &[Code] = &[
     codes::realm::OWNER_ONLY,
     codes::realm::HANDOVER_WAITING,
     codes::realm::NOT_THE_HANDOVER,
+    codes::realm::CONTENT_SHREDDED,
+    codes::realm::MESSAGE_EXPIRED,
 ];
 
 /// The type URI of `code`.

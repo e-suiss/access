@@ -849,6 +849,20 @@
       "status": 409,
       "title": "Conflict",
       "description": "The signed change is not this organization's handover to that recipient (TN-91)."
+    },
+    {
+      "code": "content-shredded",
+      "type": "urn:suiss:access:problem:content-shredded",
+      "status": 410,
+      "title": "Gone",
+      "description": "The message's sealed content was crypto-shredded, so it cannot be resent; nothing was written (OP-156 m.3 (c))."
+    },
+    {
+      "code": "message-expired",
+      "type": "urn:suiss:access:problem:message-expired",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The message is past its expiry, so it is not resent; start the flow that sends it again (OP-156 m.3 (c))."
     }
   ]
 }
