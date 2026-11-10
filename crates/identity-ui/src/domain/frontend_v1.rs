@@ -1218,21 +1218,21 @@ pub const ROUTES: &[Route] = &[
         "issueFirstContactTokens",
         "Issues RFC 9578 type 2 first-contact tokens for blinded requests (first-contact.cddl), limited per identity; a token is anonymous and unlinkable and produces no authority (E58, OP-156 m.3 (z)).",
     ),
-    planned(
+    live(
         Owner::Q8,
         Verb::Post,
         "/ssh/certificate",
         "issueSshCertificate",
         "Issues an OpenSSH user certificate for an ephemeral Ed25519 key as a projection.issue: principals, constraints and lifetime from the ssh.login Grant, at most 12 hours for a person and 1 hour for an agent, never past the horizon (OP-156 m.3 (o)).",
     ),
-    planned(
+    live(
         Owner::Q8,
         Verb::Get,
         "/ssh/krl",
         "getSshKrl",
         "The realm's OpenSSH key revocation list.",
     ),
-    planned(
+    live(
         Owner::Q8,
         Verb::Get,
         "/ssh/ca.pub",

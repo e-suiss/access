@@ -914,6 +914,7 @@ dependencies = [
  "access-identity-scim",
  "access-identity-session",
  "access-identity-signer",
+ "access-identity-ssh",
  "access-identity-ui",
  "access-identity-vault",
  "access-identity-webauthn",

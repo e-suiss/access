@@ -21,6 +21,7 @@ pub mod realm;
 pub mod scim;
 mod security_txt;
 pub mod ssf;
+pub mod ssh;
 pub mod stage11;
 pub mod status;
 pub mod tls;

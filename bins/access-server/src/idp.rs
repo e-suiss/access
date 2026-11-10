@@ -1161,6 +1161,7 @@ impl RealmKeys for RealmKeyring {
 mod projections;
 
 pub(crate) mod federation;
+mod ssh;
 pub(crate) mod vault;
 
 #[cfg(test)]

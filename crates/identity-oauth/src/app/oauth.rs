@@ -61,6 +61,7 @@ pub use crate::app::oauth::approval::{
 pub use crate::app::oauth::authorize::{REQUEST_CONTEXT, consent_resource};
 pub use crate::app::oauth::ciba::{CibaRefused, CibaView, ciba_csrf};
 pub use crate::app::oauth::device::{DeviceRefused, DeviceView, device_csrf};
+pub use crate::app::oauth::resource::RealmHolder;
 pub use crate::app::oauth::token::TokenHttp;
 
 /// `Retry-After` of a shed request, seconds (PD).

@@ -52,6 +52,20 @@ pub(crate) struct AccessToken {
     pub(crate) iat: i64,
 }
 
+/// Who presented a live DPoP-bound access token of this realm for the realm itself, as a
+/// realm resource such as the SSH certificate authority reads it (OP-156 m.3 (o)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RealmHolder {
+    /// The account the token's grant names.
+    pub subject: [u8; 16],
+    /// The thumbprint of the DPoP key the token is bound to, which signed this request's proof.
+    pub jkt: [u8; 32],
+    /// The client the token was issued to.
+    pub client_id: String,
+    /// When the session's person last authenticated, ms.
+    pub auth_time_ms: u64,
+}
+
 fn text(c: &Json, name: &str) -> Option<String> {
     c.get(name).and_then(Json::as_str).map(String::from)
 }
@@ -158,6 +172,94 @@ impl<E: Env> OAuth<E> {
             .await?
             .is_some_and(|s| session_live(&s, now));
         Ok(live.then_some(g))
+    }
+
+    /// The holder of `authorization` (`DPoP <token>`) for `method` on `uri` with its `DPoP`
+    /// proofs: a live token of this realm for the realm itself, bound to the key that signed
+    /// the proof, whose grant and session are live now. Anything else answers `401` with the
+    /// RFC 9449 challenge; there is no bearer form.
+    ///
+    /// # Errors
+    /// [`Unavailable`].
+    pub async fn realm_holder(
+        &self,
+        realm: &Realm,
+        method: &str,
+        uri: &str,
+        authorization: Option<&str>,
+        dpop: &[&str],
+    ) -> Result<Result<RealmHolder, Reply>, Unavailable> {
+        let profile = self.env.dpop().clone();
+        let unauthorized = |error: &str| Reply::Json {
+            status: 401,
+            body: json!({ "error": error }).to_string(),
+            dpop_nonce: self.nonce(realm, Role::ResourceServer),
+            challenge: Some(format!(
+                r#"DPoP error="{error}", algs="{}""#,
+                profile.signing_alg_values().join(" ")
+            )),
+        };
+        let Some(token) = authorization
+            .and_then(|a| a.split_once(' '))
+            .filter(|(scheme, _)| scheme.eq_ignore_ascii_case("dpop"))
+            .map(|(_, t)| t.trim())
+            .filter(|t| t.split('.').count() == 3)
+        else {
+            return Ok(Err(unauthorized("invalid_token")));
+        };
+        let now = self.now()?;
+        let Some((at, sid, jkt)) = self
+            .access_token(realm, token, now, true)
+            .await?
+            .filter(|at| at.aud == realm.issuer.as_str())
+            .and_then(|at| match (at.sid, at.binding) {
+                (Some(sid), Binding::Dpop(jkt)) => Some((at, sid, jkt)),
+                _ => None,
+            })
+        else {
+            return Ok(Err(unauthorized("invalid_token")));
+        };
+        let proof = self
+            .dpop(
+                realm,
+                Role::ResourceServer,
+                &DpopRequest {
+                    proofs: dpop,
+                    method,
+                    uri,
+                    access_token: Some(token),
+                    bound: Some(jkt),
+                },
+            )
+            .await;
+        match proof {
+            Ok(_) => {}
+            Err(Failure::Unavailable) => return Err(Unavailable),
+            Err(f) => {
+                return Ok(Err(Reply::Json {
+                    status: f.status(Role::ResourceServer),
+                    body: json!({ "error": f.error() }).to_string(),
+                    dpop_nonce: f.nonce().map(String::from),
+                    challenge: f.challenge(Role::ResourceServer, &profile),
+                }));
+            }
+        }
+        let mut tx = self.begin(realm).await?;
+        let grant = self.live_grant(&mut tx, &sid, now).await?;
+        let session = match &grant {
+            Some(g) => tx.session(g.session).await?,
+            None => None,
+        };
+        tx.commit().await?;
+        let (Some(grant), Some(session)) = (grant, session) else {
+            return Ok(Err(unauthorized("invalid_token")));
+        };
+        Ok(Ok(RealmHolder {
+            subject: grant.subject,
+            jkt: jkt.0,
+            client_id: at.client_id,
+            auth_time_ms: u64::try_from(session.auth_time_ms).unwrap_or(0),
+        }))
     }
 
     /// `GET`/`POST /userinfo` with a DPoP-bound access token (RFC 9449 §7, OIDC Core §5.3):

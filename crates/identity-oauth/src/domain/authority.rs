@@ -327,8 +327,9 @@ pub fn encode_exercise(e: &TokenExercise) -> Result<String, AuthorityError> {
     Ok(access_kernel::json::b64url_encode(&cbor))
 }
 
-/// The `kid` of the AIS: the RFC 7638 thumbprint of the key that signed it.
-fn ais_kid(ais: &[u8]) -> Option<[u8; 32]> {
+/// The `kid` of an AIS: the RFC 7638 thumbprint of the Instance key that signed it.
+#[must_use]
+pub fn ais_kid(ais: &[u8]) -> Option<[u8; 32]> {
     let msg = cose::parse_sign1(ais).ok()?;
     let Ok(Value::Map(header)) = dcbor::decode(&msg.protected, Limits::CEILING) else {
         return None;

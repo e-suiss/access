@@ -37,6 +37,7 @@ mod retention;
 mod risk;
 mod saml;
 mod scim;
+mod ssh;
 mod startup;
 mod status;
 #[cfg(test)]
@@ -1832,6 +1833,7 @@ async fn serve(
         app: oauth_inputs.0.clone(),
         keks: claim_keks,
     });
+    let ssh_app = oauth_inputs.0.clone();
     let (authorize, pep_tokens) = authorization(
         config,
         oauth_inputs,
@@ -1852,6 +1854,11 @@ async fn serve(
         Discovery {
             issuer: issuer.clone(),
         },
+    );
+    // OP-156 m.3 (o)
+    let ssh_ca = access_http::ssh::router(
+        pep_tokens.clone(),
+        ssh::SshCa::new(ssh_app, identity_section.signer.clone(), idp_plane.clone()),
     );
     // OP-155 m.3 (q)
     let public_adp = access_http::adp::pep::with_tokens(adp.clone(), pep_tokens, issuer);
@@ -1886,7 +1893,7 @@ async fn serve(
         },
         console_assets,
     )?;
-    let authorize = authorize.merge(ssf);
+    let authorize = authorize.merge(ssf).merge(ssh_ca);
     // OP-149 m.6, m.8, m.9
     // OP-153 m.3 (w)
     let courier = Arc::new(courier);
