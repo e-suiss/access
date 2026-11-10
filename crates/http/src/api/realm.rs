@@ -1578,7 +1578,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "listProxies" => (Proxies, Shape::List(&["name", "host", "status"])),
         "getProxy" => (Proxies, Shape::Get),
         "registerProxy" => (Proxies, CREATE),
-        "putProxy" | "retireProxy" | "putProxyPlainHeaders" => (Proxies, w(false)),
+        "putProxy" | "retireProxy" | "putProxyPlainHeaders" | "pinMcpTools" => {
+            (Proxies, w(false))
+        }
         // OP-156 m.3 (s)
         "listExportSinks" => (
             ResourceKind::ExportSinks,
@@ -1825,6 +1827,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::HrConnector => &r::INVALID_HR_CONNECTOR,
             Invalid::HrConnectorExists => &r::HR_CONNECTOR_EXISTS,
             Invalid::HrRecords => &r::INVALID_HR_RECORDS,
+            Invalid::McpPins => &r::INVALID_MCP_PINS,
             Invalid::NoClient
             | Invalid::NoAgent
             | Invalid::NoKey

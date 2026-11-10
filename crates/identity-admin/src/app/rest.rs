@@ -242,6 +242,8 @@ pub enum Op {
     RegisterHrConnector,
     /// `retireHrConnector`: `idp.hr.connector_retire`, keyed by the connector's name.
     RetireHrConnector,
+    /// `pinMcpTools`: `idp.proxy.mcp_pin` (OP-156 m.3 (n)).
+    PinMcpTools,
     /// `putDcrPolicy`: `idp.client.dcr_policy`, or `dcr_policy_tighten` (OP-154 m.3 (j)).
     PutDcrPolicy,
     /// `putFederation`: `idp.federation.enable` or `disable` (OP-155 m.3 (j)).
@@ -417,6 +419,7 @@ impl Op {
             "importHrCsv" => Self::ImportHrCsv,
             "registerHrConnector" => Self::RegisterHrConnector,
             "retireHrConnector" => Self::RetireHrConnector,
+            "pinMcpTools" => Self::PinMcpTools,
             "putDcrPolicy" => Self::PutDcrPolicy,
             "putFederation" => Self::PutFederation,
             "addTrustAnchor" => Self::AddTrustAnchor,
@@ -1226,6 +1229,18 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
     if let Some(h) = hr_change(op, key, body)? {
         return Ok(Change::Hr(h));
     }
+    // OP-156 m.3 (n)
+    if op == Op::PinMcpTools {
+        let mut own = m.clone();
+        own.remove(VALIDITY);
+        own.remove("ais");
+        return access_identity_proxy::domain::mcp::McpPinChange::parse(
+            key_of(key)?,
+            &Json::Object(own),
+        )
+        .map(Change::McpPin)
+        .map_err(|_| Invalid::McpPins);
+    }
     Ok(match op {
         Op::CreateOrganization => {
             only(m, &["party", "display_name"])?;
@@ -1691,7 +1706,8 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         | Op::ImportHrBatch
         | Op::ImportHrCsv
         | Op::RegisterHrConnector
-        | Op::RetireHrConnector => return Err(Invalid::Body),
+        | Op::RetireHrConnector
+        | Op::PinMcpTools => return Err(Invalid::Body),
         // OP-153 m.18 (e), m.25 (b)
         Op::BindAccount => {
             only(

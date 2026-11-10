@@ -509,6 +509,9 @@ pub const CODES: &[Code] = &[
     codes::realm::INVALID_HR_CONNECTOR,
     codes::realm::HR_CONNECTOR_EXISTS,
     codes::realm::INVALID_HR_RECORDS,
+    codes::realm::INVALID_MCP_PINS,
+    codes::realm::INVALID_MCP_CALL,
+    codes::realm::MCP_TOOL_UNPINNED,
 ];
 
 /// The type URI of `code`.

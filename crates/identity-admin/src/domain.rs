@@ -571,6 +571,9 @@ pub enum Invalid {
     /// record count the change does not name; nothing of it is written.
     #[error("invalid HR records")]
     HrRecords,
+    /// An MCP tool list that is not names and pins (OP-156 m.3 (n)).
+    #[error("invalid MCP pins")]
+    McpPins,
     /// A gateway registration that is not a gateway name, kind and certificate digest, or a
     /// retirement of a gateway that is not live.
     #[error("invalid gateway")]
@@ -676,6 +679,7 @@ impl Invalid {
             Self::NoHrConnector => "no-such-hr-connector",
             Self::HrConnectorExists => "hr-connector-exists",
             Self::HrRecords => "invalid-hr-records",
+            Self::McpPins => "invalid-mcp-pins",
             Self::Gateway => "invalid-gateway",
             Self::DisplayName => "invalid-display-name",
             Self::RedirectUri | Self::RedirectUris => "invalid-redirect-uri",
@@ -1944,6 +1948,8 @@ pub enum Change {
     Linux(linux::LinuxChange),
     /// `idp.hr.*` (OP-156 m.3 (a), (q)).
     Hr(hr::HrChange),
+    /// `idp.proxy.mcp_pin` (CT2): a proxy's whole MCP tool list (OP-156 m.3 (n)).
+    McpPin(access_identity_proxy::domain::mcp::McpPinChange),
     /// `idp.client.resource_register` (AG-8, OP-154 m.3 (a)).
     ResourceRegister(ProtectedResource),
     /// `idp.client.cross_app_connection` (CT2, OP-154 m.3 (a), (n)).
@@ -2429,6 +2435,7 @@ impl Change {
             Self::Export(e) => e.action(),
             Self::Linux(l) => l.action(),
             Self::Hr(h) => h.action(),
+            Self::McpPin(p) => p.action(),
             Self::ResourceRegister(_) => IdpAction::ClientResourceRegister,
             Self::CrossAppConnection(_) => IdpAction::ClientCrossAppConnection,
             Self::CrossAppConnectionRetire(_) => IdpAction::ClientCrossAppConnectionRetire,
@@ -2521,6 +2528,7 @@ impl Change {
             Self::Export(e) => e.check().map_err(|_| Invalid::ExportSink),
             Self::Linux(l) => l.check(),
             Self::Hr(h) => h.check(),
+            Self::McpPin(p) => p.check().map_err(|_| Invalid::McpPins),
             Self::ResourceRegister(r) => r.check(),
             Self::CrossAppConnection(c) => c.check(),
             Self::CrossAppConnectionRetire(name) => {
@@ -2698,6 +2706,7 @@ impl Change {
             Self::Proxy(p) => p.body(),
             Self::Export(e) => e.body(),
             Self::Linux(l) => l.body(),
+            Self::McpPin(p) => p.body(),
             Self::DeviceCode(on) | Self::Hrd(on) | Self::SecurityNotices(on) | Self::Push(on) => {
                 Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))])
             }
@@ -2891,6 +2900,7 @@ impl Change {
             Self::Export(e) => path.extend(e.path()),
             Self::Linux(l) => path.extend(l.path()),
             Self::Hr(h) => path.extend(h.path()),
+            Self::McpPin(p) => path.extend(p.path()),
             Self::ResourceRegister(r) => {
                 path.extend([String::from("resource"), r.resource.clone()]);
             }

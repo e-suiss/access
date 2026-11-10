@@ -15343,9 +15343,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,

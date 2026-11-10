@@ -2,8 +2,10 @@
 //! proxies as administrators read them. A proxy's client must be live with the application
 //! host's callback as a redirect URI; a retired proxy keeps its name forever and its browser
 //! sessions end with it (OP-73). The plain header setup check runs before the change is
-//! proposed (access-server).
+//! proposed (access-server). An MCP tool list is pinned only for a live proxy, as a whole
+//! (OP-156 m.3 (n)).
 
+use access_identity_proxy::domain::mcp::McpPinChange;
 use access_identity_proxy::domain::registration::{ProxyChange, Registration, from_json, to_json};
 use access_store::identity::TenantTx;
 use access_store::idp::Bound;
@@ -64,6 +66,46 @@ pub(crate) async fn current(t: &mut TenantTx, change: &ProxyChange) -> Result<()
             _ => Ok(()),
         },
     }
+}
+
+/// What must hold now for an `idp.proxy.mcp_pin`: the proxy is live.
+///
+/// # Errors
+/// [`Invalid::NoProxy`]; [`AdminError`].
+pub(crate) async fn current_pins(
+    t: &mut TenantTx,
+    change: &McpPinChange,
+) -> Result<(), AdminError> {
+    live(t, &change.proxy).await.map(drop)
+}
+
+/// Writes `change` under `bound`: the proxy's whole tool list, as the next version.
+///
+/// # Errors
+/// [`AdminError`].
+pub(crate) async fn write_pins(
+    t: &mut TenantTx,
+    bound: &Bound,
+    change: &McpPinChange,
+) -> Result<bool, AdminError> {
+    live(t, &change.proxy).await?;
+    let tools = access_identity_proxy::domain::mcp::to_json(&change.tools).to_string();
+    access_store::mcp_pins::put_pins(t, bound, &change.proxy, &tools).await?;
+    Ok(true)
+}
+
+async fn pins_of(t: &mut TenantTx, name: &str) -> Result<Json, AdminError> {
+    let Some(row) = access_store::mcp_pins::pins(t, name).await? else {
+        return Ok(Json::Null);
+    };
+    let v: Json = serde_json::from_str(&row.tools)
+        .map_err(|_| AdminError::Unavailable(String::from("mcp pins")))?;
+    let tools = access_identity_proxy::domain::mcp::from_json(&v)
+        .map_err(|_| AdminError::Unavailable(String::from("mcp pins")))?;
+    Ok(access_identity_proxy::domain::mcp::listed(
+        &tools,
+        row.version,
+    ))
 }
 
 /// The live registration of `name`, for the setup check.
@@ -139,6 +181,9 @@ pub(crate) async fn list(
                 json!(access_identity_proxy::domain::cache::MAX_TTL_MS / 1000),
             );
             m.insert(String::from("version"), json!(row.version));
+            if key.is_some() {
+                m.insert(String::from("mcp_pins"), pins_of(t, &row.name).await?);
+            }
         }
         out.push((v, row.position));
     }

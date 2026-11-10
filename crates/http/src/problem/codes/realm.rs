@@ -812,3 +812,24 @@ pub const INVALID_HR_RECORDS: Code = code(
     "Bad Request",
     "The import is {file, records, content}: content is 1 to 10 000 JSON Lines records or an RFC 4180 CSV file of at most 10 MB with a header row of employee_id, email, department, title, manager, start_date, end_date and employment_status, file its SHA-256 and records its record count. One bad record, an unknown column or a digest or count that does not match refuses the whole file and nothing is written (OP-156 m.3 (q)).",
 );
+/// An MCP tool list that is not names and pins (OP-156 m.3 (n)).
+pub const INVALID_MCP_PINS: Code = code(
+    "invalid-mcp-pins",
+    400,
+    "Bad Request",
+    "The body is {\"tools\": [{\"name\", \"pin\"}]}: at most 256 tools, each MCP tool name once (1 to 128 of A-Z a-z 0-9 _ - .) with the base64url SHA-256 of its canonical definition (the RFC 8785 form of name, description, inputSchema and annotations); the list replaces the one before (OP-156 m.3 (n)).",
+);
+/// The MCP gateway's call does not name one tool call of the proxy (OP-156 m.3 (n)).
+pub const INVALID_MCP_CALL: Code = code(
+    "invalid-mcp-call",
+    400,
+    "Bad Request",
+    "The MCP gateway's request is not one commit of the agent's own statement on a tool of this proxy: the tool name, its pin, the evaluation's intent (the proxy's action on namespace:[proxy, tool]) or the realm's domain does not match; nothing was decided (AG-42, OP-156 m.3 (n)).",
+);
+/// The tool is not pinned with this definition (AG-42, OP-156 m.3 (n)).
+pub const MCP_TOOL_UNPINNED: Code = code(
+    "mcp-tool-unpinned",
+    409,
+    "Conflict",
+    "The tool's definition changed or the tool is new: it is blocked until an administrator pins it with idp.proxy.mcp_pin; nothing was decided and the call is not forwarded (AG-42, OP-156 m.3 (n)).",
+);

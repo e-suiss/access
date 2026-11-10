@@ -498,6 +498,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Linux(l) => linux::current(t, l).await?,
             // OP-156 m.3 (q)
             Change::Hr(h) => hr::current(t, h).await?,
+            Change::McpPin(p) => proxy::current_pins(t, p).await?,
             // OP-154 m.3 (j)
             Change::DcrPolicy { policy, loosens } => {
                 let current =
@@ -1785,6 +1786,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Linux(l) => linux::write(t, bound, l).await?,
             // OP-156 m.3 (q)
             Change::Hr(h) => hr::write(t, bound, h).await?,
+            Change::McpPin(p) => proxy::write_pins(t, bound, p).await?,
             Change::DeviceCode(on) => {
                 t.put_device_code(bound, *on).await?;
                 true
