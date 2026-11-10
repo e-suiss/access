@@ -1033,7 +1033,7 @@ impl TextId {
             Self::PushTitle => "Approve on { $approver }",
             Self::PushNumber => "Open { $approver } and enter this number: { $number }",
             Self::PushWaiting => "Waiting for your answer…",
-            Self::PushDenied => "Not approved. Nothing was done.",
+            Self::PushDenied => "The request was refused on your approver. Nothing was done.",
             Self::PushExpired => "This request expired. Send a new one or use another way.",
             Self::PushHeld => "Requests to your approver are on hold for a while. Use another way to sign in.",
             Self::PushNotMe => "We stopped this sign-in. If it wasn't you, secure your account.",
