@@ -210,7 +210,12 @@ pub fn answer(code: u8, token: [u8; 4]) -> [u8; HEADER] {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::indexing_slicing, reason = "test code")]
+    #![allow(
+        clippy::unwrap_used,
+        clippy::indexing_slicing,
+        clippy::arithmetic_side_effects,
+        reason = "test code"
+    )]
 
     use super::*;
 

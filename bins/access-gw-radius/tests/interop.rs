@@ -1,4 +1,4 @@
-//! OP-155 m.3 (f), (q), Ek B 4664: FreeRADIUS's `radclient` against the gateway, with
+//! OP-155 m.3 (f), (q), Ek B 4664: the `radclient` tool (`freeradius-utils`) against the gateway, with
 //! access-server's real edge router on a real PostgreSQL. `radclient` speaks RADIUS over UDP
 //! only, which the gateway never answers. CI's `edge-interop` job installs `radclient` and runs
 //! this with `--ignored`; it needs no container.
