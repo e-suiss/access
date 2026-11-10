@@ -31,6 +31,7 @@ mod iys;
 mod jobs;
 mod linux;
 mod login;
+mod mcp_gateway;
 mod migration;
 mod oauth;
 mod orgs;
@@ -1776,6 +1777,7 @@ async fn serve(
     let sandbox_pool = router_pool.clone();
     let (edge_router, edge_app) = (router_pool.clone(), app.clone());
     let (proxy_router, proxy_app) = (router_pool.clone(), app.clone());
+    let (mcp_router, mcp_app) = (router_pool.clone(), app.clone());
     // OP-155 m.3 (g), IDP-23, IDP-29
     let scim_ids = cell_ids.key().ok_or("no cell id key")?;
     let scim_calls = scim::routes(
@@ -1906,6 +1908,18 @@ async fn serve(
         pep_tokens.clone(),
         linux::Linux::new(linux_app, idp_plane.clone()),
     );
+    // OP-156 m.3 (n), AG-42
+    let mcp_gateway = Arc::new(access_identity_proxy::mcp::Gateway::new(
+        mcp_gateway::McpServerPorts {
+            proxy: proxy::ServerPorts {
+                router: mcp_router,
+                app: mcp_app,
+                oauth: pep_tokens.clone(),
+                domains: domains.clone(),
+            },
+            adp: adp.clone(),
+        },
+    ));
     // OP-155 m.3 (q)
     let public_adp = access_http::adp::pep::with_tokens(adp.clone(), pep_tokens, issuer);
     // OP-151 m.3, m.2 M1, m.12
@@ -2024,7 +2038,8 @@ async fn serve(
             .merge(scim_calls)
             .merge(declared(&Declarations::of(config.provider)))
             .merge(access_http::stage11::router())
-            .merge(access_http::proxy::router(forward_auth)),
+            .merge(access_http::proxy::router(forward_auth))
+            .merge(access_http::mcp_gateway::router(mcp_gateway)),
     );
     let served = listen(
         config,

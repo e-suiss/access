@@ -78,8 +78,6 @@ const UNPRODUCED: &[&str] = &[
     "sms.refused",
     "spc.approved",
     "spc.mismatch",
-    "mcp_gateway.call",
-    "mcp_gateway.tool_blocked",
     "linux.offline_signin",
     "linux.break_glass",
     "hr.connector_pulled",
