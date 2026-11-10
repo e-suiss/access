@@ -989,6 +989,41 @@
       "status": 400,
       "title": "Bad Request",
       "description": "The forward-auth check does not name the request it asks about: the engine's method, URI and host headers are missing or malformed; the request is refused (OP-156 m.3 (l))."
+    },
+    {
+      "code": "invalid-linux-host",
+      "type": "urn:suiss:access:problem:invalid-linux-host",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A Linux host has a name and a live server group of a lower-case letter followed by up to 62 lower-case letters, digits and hyphens, the 43-character x5t#S256 of its client certificate, an absolute shell path and sudo at CT2 or CT3; it serves NSS data offline for at most 12 hours and reuses a console sign-in offline for at most 8 (OP-156 m.3 (p))."
+    },
+    {
+      "code": "linux-host-exists",
+      "type": "urn:suiss:access:problem:linux-host-exists",
+      "status": 409,
+      "title": "Conflict",
+      "description": "A Linux host with this name was registered before, or a live host presents this client certificate; a retired host's name is never reused (OP-73)."
+    },
+    {
+      "code": "linux-host-unknown",
+      "type": "urn:suiss:access:problem:linux-host-unknown",
+      "status": 403,
+      "title": "Forbidden",
+      "description": "The request did not come with the client certificate of a live Linux host of this realm, registered with idp.linux.host_register (OP-156 m.3 (p))."
+    },
+    {
+      "code": "invalid-linux-request",
+      "type": "urn:suiss:access:problem:invalid-linux-request",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The Linux NSS request is an empty JSON object; a sign-in is {user}, a sudo step-up {user, command} with the base64url SHA-256 of the command line, each with the person's DPoP-bound access token (OP-156 m.3 (p))."
+    },
+    {
+      "code": "linux-step-up",
+      "type": "urn:suiss:access:problem:linux-step-up",
+      "status": 403,
+      "title": "Forbidden",
+      "description": "sudo needs a sign-in in the last 5 minutes with a phishing-resistant, user-verifying authenticator (CT2; CT3 also device-bound and non-custodial); a push or a password alone is not enough (IDP-8, OP-156 m.3 (p))."
     }
   ]
 }
