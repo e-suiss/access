@@ -15,6 +15,8 @@ mod edge;
 pub(crate) mod files;
 #[path = "rules_fluent.rs"]
 mod fluent;
+#[path = "rules_interop.rs"]
+pub(crate) mod interop;
 #[path = "rules_lex.rs"]
 pub(crate) mod lex;
 #[path = "rules_limits.rs"]
@@ -182,6 +184,14 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "no-plan-progress",
             run: progress::check,
+        },
+        Check {
+            name: "interop-profile-tests",
+            run: interop::check_tests,
+        },
+        Check {
+            name: "interop-lab",
+            run: interop::check_lab,
         },
     ]);
     all

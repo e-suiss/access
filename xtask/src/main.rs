@@ -82,6 +82,7 @@ fn usage() -> ExitCode {
     eprintln!("  check [NAME]       run all rule checks, or only NAME");
     eprintln!("  list               list check names");
     eprintln!("  catalog            regenerate catalogs from the local spec (OP-81)");
+    eprintln!("  interop-table      regenerate conformance/interop/COMPATIBILITY.md from lab.toml");
     ExitCode::FAILURE
 }
 
@@ -100,6 +101,13 @@ fn main() -> ExitCode {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
                 eprintln!("catalog: {error}");
+                ExitCode::FAILURE
+            }
+        },
+        Some("interop-table") => match rules::interop::write_table(&root) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("interop-table: {error}");
                 ExitCode::FAILURE
             }
         },

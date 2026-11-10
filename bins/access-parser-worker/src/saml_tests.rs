@@ -622,3 +622,85 @@ fn the_saml_idp_suite_request_corpus_is_refused_or_answered_for_the_signed_value
         assert!(r.passed, "{} ({}): {}", r.name, r.class, r.detail);
     }
 }
+
+const SP_FIXTURES: &[(&str, &str)] = &[
+    (
+        "adfs",
+        include_str!("../../../conformance/interop/fixtures/saml/adfs.xml"),
+    ),
+    (
+        "atlassian",
+        include_str!("../../../conformance/interop/fixtures/saml/atlassian.xml"),
+    ),
+    (
+        "aws-identity-center",
+        include_str!("../../../conformance/interop/fixtures/saml/aws-identity-center.xml"),
+    ),
+    (
+        "google-workspace",
+        include_str!("../../../conformance/interop/fixtures/saml/google-workspace.xml"),
+    ),
+    (
+        "salesforce",
+        include_str!("../../../conformance/interop/fixtures/saml/salesforce.xml"),
+    ),
+    (
+        "servicenow",
+        include_str!("../../../conformance/interop/fixtures/saml/servicenow.xml"),
+    ),
+    (
+        "slack",
+        include_str!("../../../conformance/interop/fixtures/saml/slack.xml"),
+    ),
+    (
+        "workday",
+        include_str!("../../../conformance/interop/fixtures/saml/workday.xml"),
+    ),
+    (
+        "zoom",
+        include_str!("../../../conformance/interop/fixtures/saml/zoom.xml"),
+    ),
+];
+
+// IDP-40, OP-155 m.3 (q), Ek B 4934, 5024
+#[test]
+fn service_provider_requests_read_the_same_as_an_independent_reader() {
+    use saml_idp_suite::{SAML, SAMLP};
+    let lenient = Context {
+        inflate: false,
+        certs: vec![],
+        require_signature: false,
+    };
+    for (name, xml) in SP_FIXTURES {
+        let f = run(&lenient, xml).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let doc = saml_idp_suite::xml::parse(xml).unwrap();
+        let r = &doc.root;
+        assert!(r.is(SAMLP, "AuthnRequest"), "{name}");
+        assert_eq!(f.kind, Kind::Authn, "{name}");
+        assert_eq!(Some(f.id.as_str()), r.attr("ID"), "{name}");
+        assert_eq!(f.issuer, r.child(SAML, "Issuer").unwrap().text(), "{name}");
+        assert_eq!(
+            f.acs_url.as_deref(),
+            r.attr("AssertionConsumerServiceURL"),
+            "{name}"
+        );
+        assert_eq!(
+            f.protocol_binding.as_deref(),
+            r.attr("ProtocolBinding"),
+            "{name}"
+        );
+        assert_eq!(
+            f.force_authn,
+            r.attr("ForceAuthn") == Some("true"),
+            "{name}"
+        );
+        assert_eq!(f.is_passive, r.attr("IsPassive") == Some("true"), "{name}");
+        let policy = r.child(SAMLP, "NameIDPolicy");
+        assert_eq!(
+            f.nameid_format.as_deref(),
+            policy.and_then(|p| p.attr("Format")),
+            "{name}"
+        );
+        assert_eq!(f.signed, Signed::Absent, "{name}");
+    }
+}

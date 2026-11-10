@@ -1,0 +1,69 @@
+name: Interoperability report
+description: A SAML service provider, SCIM client, OAuth or OpenID Connect client, or directory that does not work with Access.
+labels: ["interop"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Security vulnerabilities must not be reported here.** Use private reporting as described in SECURITY.md.
+
+        Every confirmed report becomes a test case first. When the difference is only a format the
+        other system insists on, the fix is an entry in that system's interop profile, and the entry
+        must name the test case (`cargo xtask check` refuses one that does not). A profile never
+        relaxes signature, time, audience or recipient checks, client authentication, parser
+        isolation or a limit. The tested systems and versions are listed in
+        `conformance/interop/COMPATIBILITY.md`.
+  - type: input
+    id: system
+    attributes:
+      label: Other system and version
+      description: For example "Okta SCIM provisioning, 2026.10" or "Shibboleth SP 3.4.1".
+    validations:
+      required: true
+  - type: dropdown
+    id: protocol
+    attributes:
+      label: Protocol
+      options:
+        - SAML 2.0
+        - SCIM 2.0
+        - OAuth 2.x / OpenID Connect
+        - OpenID Federation
+        - LDAP
+        - Kerberos / SPNEGO
+        - RADIUS
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: The error each side shows, with the Access problem code (`urn:suiss:access:problem:…`) if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: message
+    attributes:
+      label: The message that failed
+      description: >-
+        The request or response as sent, scrubbed: remove signatures, certificates, keys, tokens,
+        secrets, tenant names and personal data, and replace them with placeholders.
+      render: text
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      description: Cite the standard or the rule ID if the behavior contradicts one.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Access version or commit
+  - type: checkboxes
+    id: scrubbed
+    attributes:
+      label: Scrubbing
+      options:
+        - label: The report carries no signature, key, certificate, token, secret or personal data.
+          required: true

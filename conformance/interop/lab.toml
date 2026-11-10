@@ -1,0 +1,379 @@
+# The interop lab (IDP-40, OP-155 m.3 (q)): every system Access is tested against, how, and by
+# which tests. `cargo xtask check` holds it to its rules (containers pinned by digest, live runs
+# name their CI secret, Keycloak never an oracle, every test exists) and `cargo xtask
+# interop-table` generates COMPATIBILITY.md from it.
+#
+# kind: container (pinned image), package (a distribution package on the CI runner), fixture
+# (recorded or documented requests) or live (a vendor tenant, run only when `secret` is set).
+# A test is `<crate dir>::<test path>` or `script:<file>#<case>`.
+
+version = 1
+
+[[system]]
+name = "OpenID Foundation conformance suite"
+protocol = "oidc"
+role = "certification suite"
+kind = "container"
+version = "release-v5.3.3"
+image = "registry.gitlab.com/openid/conformance-suite@sha256:377ab51f011d821c4b6f7729053e85adf062d691e51a3615f40507fd900a2436"
+oracle = true
+job = "oidf-conformance"
+tests = [
+    "script:conformance/oidf/plans.json#oidcc-basic-certification-test-plan",
+    "script:conformance/oidf/plans.json#fapi2-security-profile-final-test-plan",
+    "script:conformance/oidf/plans.json#fapi2-message-signing-final-test-plan",
+    "script:conformance/oidf/plans.json#fapi-ciba-id1-test-plan",
+    "script:conformance/oidf/plans.json#oidcc-dynamic-certification-test-plan",
+    "script:conformance/oidf/plans.json#oidcc-rp-initiated-logout-certification-test-plan",
+    "script:conformance/oidf/plans.json#oidcc-backchannel-rp-initiated-logout-certification-test-plan",
+    "script:conformance/oidf/plans.json#oidcc-frontchannel-rp-initiated-logout-certification-test-plan",
+    "script:conformance/oidf/plans.json#openid-federation-deployed-entity-test-plan",
+]
+
+[[system]]
+name = "oidc-provider"
+protocol = "oidc"
+role = "reference authorization server"
+kind = "container"
+version = "9.13.3 on Node.js 24.22.0"
+image = "node@sha256:a6155384446670e9719bdc4fd0ebe4d4b29fb32a8d6aa523da3547a6cfbcf22c"
+oracle = true
+job = "differential"
+tests = [
+    "script:conformance/interop/node/differential.mjs#par-without-client-authentication",
+    "script:conformance/interop/node/differential.mjs#par-assertion-signed-by-another-key",
+    "script:conformance/interop/node/differential.mjs#par-without-pkce",
+    "script:conformance/interop/node/differential.mjs#par-pkce-plain",
+    "script:conformance/interop/node/differential.mjs#par-unregistered-redirect-uri",
+    "script:conformance/interop/node/differential.mjs#token-unknown-code",
+    "script:conformance/interop/node/differential.mjs#token-assertion-replayed",
+]
+
+[[system]]
+name = "openid-client"
+protocol = "oidc"
+role = "relying party library"
+kind = "container"
+version = "6.8.8 on Node.js 24.22.0"
+image = "node@sha256:a6155384446670e9719bdc4fd0ebe4d4b29fb32a8d6aa523da3547a6cfbcf22c"
+job = "differential"
+tests = [
+    "script:conformance/interop/node/differential.mjs#relyingParty",
+]
+
+[[system]]
+name = "xmlsec1"
+protocol = "saml"
+role = "XML signature verifier"
+kind = "container"
+version = "Debian 13.2 package"
+image = "debian@sha256:4bcb9db66237237d03b55b969271728dd3d955eaaa254b9db8a3db94550b1885"
+oracle = true
+job = "differential"
+tests = [
+    "bins/access-server::bootstrap::tests::management::saml::xmlsec1_verifies_a_real_response_and_metadata_and_refuses_a_tampered_one",
+]
+
+[[system]]
+name = "SimpleSAMLphp"
+protocol = "saml"
+role = "service provider"
+kind = "container"
+version = "simplesamlphp/saml2-legacy 4.20.3, the SAML library of SimpleSAMLphp 2.5"
+image = "composer@sha256:5248900ab8b5f7f880c2d62180e40960cd87f60149ec9a1abfd62ac72a02577c"
+job = "differential"
+tests = [
+    "bins/access-server::bootstrap::tests::management::saml::simplesamlphp_accepts_a_real_response_and_refuses_a_tampered_one",
+]
+
+[[system]]
+name = "Shibboleth SP"
+protocol = "saml"
+role = "service provider"
+kind = "container"
+version = "3, Debian 13.2 package behind Apache"
+image = "debian@sha256:4bcb9db66237237d03b55b969271728dd3d955eaaa254b9db8a3db94550b1885"
+job = "differential"
+tests = [
+    "bins/access-server::bootstrap::tests::management::saml::shibboleth_sp_accepts_a_real_response_and_refuses_a_tampered_one",
+]
+
+[[system]]
+name = "Salesforce"
+protocol = "saml"
+role = "service provider"
+kind = "fixture"
+version = "request shape of the vendor's SAML guide"
+profile = "saml.salesforce"
+job = "interop-lab"
+tests = [
+    "bins/access-parser-worker::saml_tests::service_provider_requests_read_the_same_as_an_independent_reader",
+    "crates/identity-saml::identity_saml::domain::profile::tests::salesforce_requires_the_assertion_signature_and_its_audience",
+    "bins/access-parser-worker::saml_tests::the_saml_idp_suite_request_corpus_is_refused_or_answered_for_the_signed_values",
+]
+
+[[system]]
+name = "ServiceNow"
+protocol = "saml"
+role = "service provider"
+kind = "fixture"
+version = "request shape of the vendor's SAML guide"
+profile = "saml.servicenow"
+job = "interop-lab"
+tests = [
+    "bins/access-parser-worker::saml_tests::service_provider_requests_read_the_same_as_an_independent_reader",
+    "crates/identity-saml::identity_saml::domain::profile::tests::every_shipped_profile_loads",
+    "bins/access-parser-worker::saml_tests::the_saml_idp_suite_request_corpus_is_refused_or_answered_for_the_signed_values",
+]
+
+[[system]]
+name = "Workday"
+protocol = "saml"
+role = "service provider"
+kind = "fixture"
+version = "request shape of the vendor's SAML guide"
+profile = "saml.workday"
+job = "interop-lab"
+tests = [
+    "bins/access-parser-worker::saml_tests::service_provider_requests_read_the_same_as_an_independent_reader",
+    "crates/identity-saml::identity_saml::domain::profile::tests::every_shipped_profile_loads",
+    "bins/access-parser-worker::saml_tests::the_saml_idp_suite_request_corpus_is_refused_or_answered_for_the_signed_values",
+]
+
+[[system]]
+name = "AWS IAM Identity Center"
+protocol = "saml"
+role = "service provider"
+kind = "fixture"
+version = "request shape of the vendor's SAML guide"
+profile = "saml.aws_identity_center"
+job = "interop-lab"
+tests = [
+    "bins/access-parser-worker::saml_tests::service_provider_requests_read_the_same_as_an_independent_reader",
+    "crates/identity-saml::identity_saml::domain::profile::tests::identity_center_takes_email_and_no_encryption",
+    "bins/access-parser-worker::saml_tests::the_saml_idp_suite_request_corpus_is_refused_or_answered_for_the_signed_values",
+]
+
+[[system]]
+name = "Google Workspace"
+protocol = "saml"
+role = "service provider"
+kind = "fixture"
+version = "request shape of the vendor's SAML guide"
+profile = "saml.google_workspace"
+job = "interop-lab"
+tests = [
+    "bins/access-parser-worker::saml_tests::service_provider_requests_read_the_same_as_an_independent_reader",
+    "crates/identity-saml::identity_saml::domain::profile::tests::every_shipped_profile_loads",
+    "bins/access-parser-worker::saml_tests::the_saml_idp_suite_request_corpus_is_refused_or_answered_for_the_signed_values",
+]
+
+[[system]]
+name = "Slack"
+protocol = "saml"
+role = "service provider"
+kind = "fixture"
+version = "request shape of the vendor's SAML guide"
+profile = "saml.slack"
+job = "interop-lab"
+tests = [
+    "bins/access-parser-worker::saml_tests::service_provider_requests_read_the_same_as_an_independent_reader",
+    "crates/identity-saml::identity_saml::domain::profile::tests::slack_requires_the_response_signature_and_no_logout",
+    "bins/access-parser-worker::saml_tests::the_saml_idp_suite_request_corpus_is_refused_or_answered_for_the_signed_values",
+]
+
+[[system]]
+name = "Zoom"
+protocol = "saml"
+role = "service provider"
+kind = "fixture"
+version = "request shape of the vendor's SAML guide"
+profile = "saml.zoom"
+job = "interop-lab"
+tests = [
+    "bins/access-parser-worker::saml_tests::service_provider_requests_read_the_same_as_an_independent_reader",
+    "crates/identity-saml::identity_saml::domain::profile::tests::every_shipped_profile_loads",
+    "bins/access-parser-worker::saml_tests::the_saml_idp_suite_request_corpus_is_refused_or_answered_for_the_signed_values",
+]
+
+[[system]]
+name = "Atlassian Cloud"
+protocol = "saml"
+role = "service provider"
+kind = "fixture"
+version = "request shape of the vendor's SAML guide"
+profile = "saml.atlassian"
+job = "interop-lab"
+tests = [
+    "bins/access-parser-worker::saml_tests::service_provider_requests_read_the_same_as_an_independent_reader",
+    "crates/identity-saml::identity_saml::domain::profile::tests::atlassian_requires_the_assertion_signature_and_email",
+    "bins/access-parser-worker::saml_tests::the_saml_idp_suite_request_corpus_is_refused_or_answered_for_the_signed_values",
+]
+
+[[system]]
+name = "ADFS"
+protocol = "saml"
+role = "service provider"
+kind = "fixture"
+version = "request shape of the vendor's SAML guide"
+job = "interop-lab"
+tests = [
+    "bins/access-parser-worker::saml_tests::service_provider_requests_read_the_same_as_an_independent_reader",
+    "bins/access-parser-worker::saml_tests::the_saml_idp_suite_request_corpus_is_refused_or_answered_for_the_signed_values",
+]
+
+[[system]]
+name = "Amazon Web Services console federation"
+protocol = "saml"
+role = "service provider (IdP-initiated)"
+kind = "fixture"
+version = "response profile of the AWS IAM guide"
+profile = "saml.aws"
+job = "interop-lab"
+tests = [
+    "crates/identity-saml::identity_saml::domain::profile::tests::aws_requires_role_and_session_name",
+    "crates/identity-saml::identity_saml::domain::profile::tests::idp_initiated_stays_opt_in_per_registration",
+]
+
+[[system]]
+name = "Microsoft Entra ID / Microsoft 365"
+protocol = "saml"
+role = "service provider"
+kind = "fixture"
+version = "response profile of the Microsoft guide"
+profile = "saml.entra"
+job = "interop-lab"
+tests = [
+    "crates/identity-saml::identity_saml::domain::profile::tests::entra_takes_persistent_and_idp_email",
+]
+
+[[system]]
+name = "scim2-tester"
+protocol = "scim"
+role = "compliance checker"
+kind = "container"
+version = "0.6.4"
+image = "python@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962"
+oracle = true
+job = "differential"
+tests = [
+    "bins/access-server::bootstrap::tests::management::scim::scim2_tester_finds_the_server_compliant",
+]
+
+[[system]]
+name = "Microsoft Entra ID"
+protocol = "scim"
+role = "provisioning client"
+kind = "fixture"
+version = "recorded requests, scrubbed of tenant names and secrets"
+profile = "scim.entra"
+job = "interop-lab"
+tests = [
+    "crates/identity-scim::scim_profiles::entra::opt_flag",
+    "crates/identity-scim::scim_profiles::entra::ops_in_title_case",
+    "crates/identity-scim::scim_profiles::entra::remove_member_by_value",
+    "crates/identity-scim::scim_profiles::entra::empty_value_clears",
+]
+
+[[system]]
+name = "Okta"
+protocol = "scim"
+role = "provisioning client"
+kind = "fixture"
+version = "recorded requests, scrubbed of tenant names and secrets"
+profile = "scim.okta"
+job = "interop-lab"
+tests = [
+    "crates/identity-scim::scim_profiles::okta::plain_json_body",
+    "crates/identity-scim::scim_profiles::okta::user_name_filter_ignores_case",
+    "crates/identity-scim::scim_profiles::okta::custom_attributes_dropped",
+    "bins/access-server::bootstrap::tests::management::scim::okta_requests_pass_through_their_profile_and_the_strict_server_refuses_them",
+]
+
+[[system]]
+name = "Google Workspace"
+protocol = "scim"
+role = "provisioning client"
+kind = "fixture"
+version = "recorded requests, scrubbed of tenant names and secrets"
+profile = "scim.google_workspace"
+job = "interop-lab"
+tests = [
+    "crates/identity-scim::scim_profiles::google_workspace::plain_json_body",
+    "crates/identity-scim::scim_profiles::google_workspace::cursor_page_without_total",
+]
+
+[[system]]
+name = "OneLogin"
+protocol = "scim"
+role = "provisioning client"
+kind = "fixture"
+version = "recorded requests, scrubbed of tenant names and secrets"
+profile = "scim.onelogin"
+job = "interop-lab"
+tests = [
+    "crates/identity-scim::scim_profiles::onelogin::active_as_text",
+    "crates/identity-scim::scim_profiles::onelogin::body_without_schemas",
+    "crates/identity-scim::scim_profiles::onelogin::single_value_array",
+]
+
+[[system]]
+name = "JumpCloud"
+protocol = "scim"
+role = "provisioning client"
+kind = "fixture"
+version = "recorded requests, scrubbed of tenant names and secrets"
+profile = "scim.jumpcloud"
+job = "interop-lab"
+tests = [
+    "crates/identity-scim::scim_profiles::jumpcloud::flat_enterprise_attributes",
+    "crates/identity-scim::scim_profiles::jumpcloud::urn_filter_case",
+    "crates/identity-scim::scim_profiles::jumpcloud::urn_path_case",
+]
+
+[[system]]
+name = "OpenLDAP command-line clients"
+protocol = "ldap"
+role = "LDAP client"
+kind = "package"
+version = "ldap-utils of Ubuntu 24.04"
+job = "edge-interop"
+tests = [
+    "bins/access-gw-ldap::interop::openldap_clients_bind_page_and_change_the_app_password",
+]
+
+[[system]]
+name = "OpenLDAP"
+protocol = "ldap"
+role = "directory (AD sync source)"
+kind = "container"
+version = "osixia/openldap 1.5.0"
+image = "osixia/openldap@sha256:18742e9c449c9c1afe129d3f2f3ee15fb34cc43e5f940a20f3399728f41d7c28"
+job = "edge-interop"
+tests = [
+    "crates/identity-directory::openldap::an_incremental_pull_reads_people_and_groups_above_the_watermark",
+]
+
+[[system]]
+name = "MIT Kerberos KDC"
+protocol = "kerberos"
+role = "key distribution center"
+kind = "container"
+version = "krb5-kdc of Debian 13.2"
+image = "debian@sha256:4bcb9db66237237d03b55b969271728dd3d955eaaa254b9db8a3db94550b1885"
+job = "kerberos"
+tests = [
+    "crates/edge-core::channel::kerberos_gateway::spnego_signs_in_falls_back_and_never_writes_the_keytab",
+]
+
+[[system]]
+name = "FreeRADIUS radclient"
+protocol = "radius"
+role = "RADIUS client"
+kind = "container"
+version = "3.2.8"
+image = "freeradius/freeradius-server@sha256:bbb399476d804b710c8289559c5a6ce4ac20cb81113554ea371614f30ee0ad41"
+job = "edge-interop"
+tests = [
+    "bins/access-gw-radius::interop::radclient_over_udp_gets_no_answer",
+]

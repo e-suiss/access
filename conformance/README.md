@@ -10,6 +10,7 @@ This folder is the conformance layer of the Access Protocol: the data model, the
 | [`lean/`](lean) | An executable Lean model of the constraint algebra with machine-checked proofs |
 | [`catalog/`](catalog) | Invariants, guarantees and claims the vectors and tests are traced to |
 | [`pep/`](pep) | PEP fault cases and a language-independent runner: no upstream fault may produce an effect |
+| [`interop/`](interop) | The interop lab: the systems Access is tested against, the public [compatibility table](interop/COMPATIBILITY.md) and the differential tests |
 
 ## Vector format
 
@@ -36,12 +37,15 @@ The Kernel and F0 are also compared every night on random inputs (`just f0-rando
 
 ## External suites in CI
 
-Three suites run side by side, and none stands in for another: the Access vectors test Access semantics, the others test wire formats.
+These suites run side by side, and none stands in for another: the Access vectors test Access semantics, the others test wire formats and interoperability.
 
 | Suite | Runs against | Where |
 |---|---|---|
 | Access vectors | every Kernel binding and F0 | every pull request |
-| [OpenID Foundation conformance suite](oidf) | a seeded realm (Basic OP, Config OP, FAPI 2.0) | every night |
+| [OpenID Foundation conformance suite](oidf) | a seeded realm: Basic OP, Config OP, FAPI 2.0 Security Profile and Message Signing, FAPI-CIBA (poll and ping), Dynamic OP, RP-initiated, back-channel and front-channel logout, and OpenID Federation | every night and every release tag (`oidf-conformance`) |
+| [Differential tests](interop) | Access next to oidc-provider, openid-client, xmlsec1, SimpleSAMLphp, Shibboleth SP and scim2-tester | every night and every release tag (`differential`) |
+| [Interop lab](interop) | recorded vendor requests through the real parsers and servers | every night and every release tag (`interop-lab`) |
+| [SAML IdP test suite](../tools/saml-idp-suite) | the SAML identity provider: standards checks, signature wrapping and comment injection, service provider profiles | every build |
 | [MCP conformance suite](mcp), pinned in its lockfile | the local deployment's authorization server, and the Rust SDK's reference MCP resource server on the same deployment | every image built from `main` (`mcp-conformance`) |
 
 ## Claiming conformance
