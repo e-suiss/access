@@ -10,6 +10,7 @@ mod cloud;
 mod cross_org;
 mod local_agent;
 mod mcp_proxy;
+mod work_gate;
 
 use std::sync::atomic::AtomicUsize;
 
@@ -493,6 +494,7 @@ impl Desk {
                 contribution: holding_of(&self.allowed["contribution"]["basis"]),
                 reason: "The mail agent wants to close the main ledger for you.",
                 request: Some(&request),
+                work_gate: None,
             },
         )
         .await

@@ -1250,3 +1250,5 @@ async fn a_domain_predicate_is_consumed_and_never_recomputed() {
     assert!(matches!(r, Err(Denied::Refused(Refusal::Deny))), "{r:?}");
     s.only_public();
 }
+
+mod work;
