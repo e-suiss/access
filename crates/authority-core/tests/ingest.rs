@@ -807,6 +807,87 @@ async fn an_external_idp_enters_through_its_pinned_acceptance() {
     );
 }
 
+// §9.13.2, §9.17.4, E3, E24, PI-13, OP-155 m.3 (q), Ek B 4868
+#[tokio::test]
+async fn a_domain_whose_only_actor_binding_issuer_is_an_external_idp_commits_exercises() {
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(
+        &db,
+        vec![
+            acceptance(IDP, "actor-binding", &["authentication"], vec![pinned()]),
+            acceptance(BOB, "predicate-input", &["identity_binding_person"], vec![]),
+        ],
+    )
+    .await;
+    let issuers = core.assertion_issuers(ISS, NOW).await.unwrap();
+    assert_eq!(issuers.len(), 1);
+    assert_eq!(issuers[0].0, IDP);
+    for realm in [
+        "https://access.test/realms/acme",
+        "https://acme.access.test",
+    ] {
+        assert!(
+            core.assertion_issuers(realm, NOW).await.unwrap().is_empty(),
+            "no Suiss realm issuer is accepted: {realm}"
+        );
+    }
+
+    let bind = statement(
+        d,
+        BOB,
+        ALICE,
+        "identity_binding_person",
+        binding_value(&subject_digest(ISS, "alice@external")).unwrap(),
+    );
+    let v = core.ingest(&signed(&bind, BOB_KEY), NOW).await.unwrap();
+    assert!(matches!(v.verdict, ClaimVerdict::Admitted { .. }), "{v:?}");
+    let token = id_token("alice@external", IDP_KEY);
+    let v = core
+        .ingest(
+            &submit(d, Carrier::Oidc, token, Some(context_bytes(&ALICE))),
+            NOW,
+        )
+        .await
+        .unwrap();
+    assert!(matches!(v.verdict, ClaimVerdict::Admitted { .. }), "{v:?}");
+    assert_eq!((v.issuer, v.class.as_str()), (IDP, "authentication"));
+
+    let held = ExerciseBasis::Holding(HoldingRef {
+        grant: meta::object_id(&d, kind::GRANT, 1),
+        holder: ALICE,
+        since: 0,
+    });
+    let mut read = request(
+        d,
+        40,
+        held,
+        Payload::PartyRegister {
+            party: ALICE,
+            root: Root::Sole(ALICE),
+            actor_kind: ActorKind::Human,
+        },
+    );
+    read.payload = None;
+    read.intent.action = action("read");
+    read.intent.opaque = BTreeMap::new();
+    let r = send(&mut core, read, ALICE_KEY).await.unwrap();
+    assert_eq!(r.decision.outcome, Outcome::Allow, "{r:?}");
+    assert!(r.exercise.is_some() && r.record.is_some(), "{r:?}");
+    let other = id_token("alice@external", 31);
+    assert_eq!(
+        core.ingest(
+            &submit(d, Carrier::Oidc, other, Some(context_bytes(&ALICE))),
+            NOW
+        )
+        .await
+        .unwrap()
+        .verdict,
+        ClaimVerdict::Rejected {
+            code: "claim-issuer".to_owned()
+        }
+    );
+}
+
 #[derive(Clone)]
 struct Listed(Digest);
 
