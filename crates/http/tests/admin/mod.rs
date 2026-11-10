@@ -221,6 +221,9 @@ fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
                                         "agent_kind": "cloud", "status": "active",
                                         "sponsors": [], "instances": [] }),
         ResourceKind::AgentSponsors => json!({ "account_id": key }),
+        ResourceKind::SsoEnforcementPreviews => json!({ "organization": key, "enforced": false,
+                                                        "members": [], "service_accounts": [],
+                                                        "pending_invitations": 0 }),
     };
     Item { body, version }
 }

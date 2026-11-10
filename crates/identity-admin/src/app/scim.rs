@@ -29,8 +29,13 @@ fn refused(e: ClientError) -> AdminError {
 /// [`AdminError`].
 pub(crate) async fn current(t: &mut TenantTx, s: &ScimChange) -> Result<(), AdminError> {
     match s {
-        ScimChange::ClientRegister { name, .. } => {
-            clients::registrable(t, name).await.map_err(refused)
+        ScimChange::ClientRegister { name, org, .. } => {
+            clients::registrable(t, name).await.map_err(refused)?;
+            // TN-95
+            if let Some(o) = org {
+                super::orgs::live_org(t, *o).await?;
+            }
+            Ok(())
         }
         ScimChange::TokenRotate(n) | ScimChange::ClientRetire(n) => {
             clients::live(t, n).await.map_err(refused)
@@ -71,7 +76,7 @@ pub(crate) async fn write(
     vault: Option<&dyn KeyVault>,
 ) -> Result<Option<ClientSecret>, AdminError> {
     match s {
-        ScimChange::ClientRegister { name, profile } => {
+        ScimChange::ClientRegister { name, profile, .. } => {
             let secret = clients::register(t, bound, name, profile.as_deref())
                 .await
                 .map_err(refused)?;

@@ -581,3 +581,18 @@ pub const INVALID_GATEWAY: Code = code(
     "Bad Request",
     "The gateway registration needs a kind (saml, ldap, kerberos or radius), a name of lower-case letters, digits and hyphens, and the SHA-256 of its client certificate in hex; only a live gateway can be retired (OP-155 m.3 (c)).",
 );
+/// The organization's SCIM source answers for its membership: invitations are closed (TN-95,
+/// OP-155 m.3 (i)).
+pub const INVITATIONS_CLOSED_BY_SCIM: Code = code(
+    "invitations-closed-by-scim",
+    409,
+    "Conflict",
+    "The organization's SCIM source answers for its membership, so it takes no invitation; members come and go through the SCIM client (TN-95).",
+);
+/// A setup link order whose address is not one (TN-134).
+pub const INVALID_SETUP_LINK: Code = code(
+    "invalid-setup-link",
+    400,
+    "Bad Request",
+    "The setup link order names an address that is not an e-mail address (TN-134).",
+);

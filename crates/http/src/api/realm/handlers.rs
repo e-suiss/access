@@ -473,6 +473,8 @@ pub(super) async fn commit<E: Env>(
                 "exportAccounts" => "bundle",
                 // OP-153 m.18 (e)
                 "bindAccount" => "offer",
+                // TN-134
+                "createOrganizationSetupLink" => "setup_link",
                 _ => secret_member(kind),
             };
             o.insert(member.to_owned(), Value::String(s));

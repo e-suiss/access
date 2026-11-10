@@ -359,6 +359,32 @@ fn schemas() -> Value {
             "type": "object",
             "description": "The realm's settings: JOSE algorithm, Argon2, RP ID, CIMD, sign-in requirements (TN-132), console session policy (TN-129), branding (TN-106), mappers (TN-117), the extension policy (`allow_private_targets`, `hook_disclosure`; OP-151 m.10 (e)), the hosted pages' `csp_mode` (`enforce` or `report_only`), `related_origins` (TN-18) and `locale_overrides` by locale and key (X35).",
         },
+        "SsoEnforcementPreview": {
+            "type": "object",
+            "description": "What enforcing SSO on the organization would end; nothing changes until idp.org.sso_enforce commits (TN-94, X20, OP-155 m.3 (i)). Each active member with its local sign-in methods, directory app passwords (API keys), open sign-ins and refresh families; the service accounts, members whose API keys enforcement revokes; and the pending invitations, whose fate the enforcement names (cancel or redirect_to_sso).",
+            "properties": {
+                "organization": { "type": "string" },
+                "enforced": { "type": "boolean" },
+                "invitations": { "type": ["string", "null"], "enum": ["cancel", "redirect_to_sso", null] },
+                "members": { "type": "array", "items": {
+                    "type": "object",
+                    "properties": {
+                        "account_id": { "type": "string" },
+                        "owner": { "type": "boolean" },
+                        "local_sign_in_methods": { "type": "integer", "minimum": 0 },
+                        "password": { "type": "boolean" },
+                        "api_keys": { "type": "integer", "minimum": 0 },
+                        "sign_ins": { "type": "integer", "minimum": 0 },
+                        "refresh_families": { "type": "integer", "minimum": 0 },
+                        "linked_sign_ins": { "type": "integer", "minimum": 0 },
+                        "service_account": { "type": "boolean" },
+                    },
+                } },
+                "service_accounts": { "type": "array", "items": { "type": "string" } },
+                "pending_invitations": { "type": "integer", "minimum": 0 },
+                "totals": { "type": "object" },
+            },
+        },
         "Declared": {
             "type": "object",
             "description": "A resource whose route is declared and not served yet; its lane names its members when it serves it (OP-155 m.4).",
@@ -383,6 +409,7 @@ fn schemas() -> Value {
                 "verification_key": text("The `whpk_` public key or `whsec_` secret a hook's or webhook's receiver verifies with; shown once, never read back."),
                 "offer": text("An administrator's binding offer, a compact JWS of type `binding-offer+jwt` signed by this realm's key, for the peer realm's `bindAccount` (OP-153 m.18 (e)); shown once."),
                 "bundle": text("A migration export's bundle, dCBOR as unpadded base64url, sealed to the recipient key the change names (TN-86); shown once, never kept."),
+                "setup_link": text("An organization's one-use SSO setup link, valid 72 hours; shown once and kept only as its token's SHA-256 (TN-134)."),
                 "challenge": text("A domain claim's challenge, published as `suiss-access-verify=<challenge>` in a DNS TXT record at `_suiss-access.<domain>` or at `https://<domain>/.well-known/suiss-access-verify`; shown once, kept only as its SHA-256 (TN-90)."),
                 "irreversible": { "type": "boolean", "description": "Set on an RP ID change: it cannot be undone and the realm's passkeys stop working (IDI-4)." },
             },
@@ -664,6 +691,7 @@ fn body_of(row: &Route) -> &'static str {
             ResourceKind::SocialProviders => "SocialProvider",
             ResourceKind::Organizations => "Organization",
             ResourceKind::Agents => "Agent",
+            ResourceKind::SsoEnforcementPreviews => "SsoEnforcementPreview",
         },
         _ => "ExerciseRef",
     }

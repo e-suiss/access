@@ -1163,7 +1163,7 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
     use ResourceKind::{
         Accounts, AgentSponsors, Agents, Analytics, Clients, Deliveries, Groups, Hooks,
         Organizations, ProtectedResources, SamlSps, Settings, Signals, SocialProviders,
-        TrustAnchors, UpstreamIdps, VaultResources, Webhooks,
+        SsoEnforcementPreviews, TrustAnchors, UpstreamIdps, VaultResources, Webhooks,
     };
     const CREATE: Shape = Shape::Write {
         patch: None,
@@ -1250,6 +1250,11 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "putSamlSp" => (SamlSps, w(true)),
         "retireSamlSp" => (SamlSps, w(false)),
         "registerGateway" => (Settings, CREATE),
+        // OP-155 m.3 (i)
+        "previewSsoEnforcement" => (SsoEnforcementPreviews, Shape::Get),
+        "enforceOrganizationSso" | "liftOrganizationSso" | "createOrganizationSetupLink" => {
+            (Accounts, w(false))
+        }
         o if declared(o) => (Settings, Shape::Planned(planned_body(o))),
         "listClients" => (
             Clients,
@@ -1438,6 +1443,8 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::DomainContested => &r::DOMAIN_CONTESTED,
             Invalid::DomainUnverified => &r::DOMAIN_NOT_VERIFIED,
             Invalid::SsoDraft => &r::INVALID_CONNECTION_DRAFT,
+            Invalid::ScimAuthoritative => &r::INVITATIONS_CLOSED_BY_SCIM,
+            Invalid::SetupLink => &r::INVALID_SETUP_LINK,
             Invalid::Agent => &r::INVALID_AGENT,
             Invalid::AgentTemplate => &r::INVALID_AGENT_TEMPLATE,
             Invalid::Workload => &r::INVALID_WORKLOAD_CLIENT,

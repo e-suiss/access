@@ -48,12 +48,15 @@ impl core::fmt::Debug for TargetSecret {
 /// One `idp.scim.*` change.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ScimChange {
-    /// `idp.scim.client_register` (CT2): a client and its tolerance profile.
+    /// `idp.scim.client_register` (CT2): a client, its tolerance profile and the organization
+    /// whose membership it is the source of (TN-95).
     ClientRegister {
         /// Its name.
         name: String,
         /// Its tolerance profile, `scim.<counterpart>`.
         profile: Option<String>,
+        /// The organization's Party whose SCIM source it is: invitations to it close.
+        org: Option<[u8; 16]>,
     },
     /// `idp.scim.token_rotate` (CT2).
     TokenRotate(String),
@@ -96,7 +99,7 @@ impl ScimChange {
 
     pub(crate) fn check(&self) -> Result<(), Invalid> {
         match self {
-            Self::ClientRegister { name, profile } => {
+            Self::ClientRegister { name, profile, .. } => {
                 check_register(name, profile.as_deref()).map_err(|_| Invalid::ScimClient)
             }
             Self::OutboundRegister { name, base_url, .. } => {
@@ -115,9 +118,14 @@ impl ScimChange {
     pub(crate) fn body(&self) -> Value {
         let mut fields = vec![(Value::text("name"), Value::text(self.name()))];
         match self {
-            Self::ClientRegister {
-                profile: Some(p), ..
-            } => fields.push((Value::text("profile"), Value::text(p))),
+            Self::ClientRegister { profile, org, .. } => {
+                if let Some(p) = profile {
+                    fields.push((Value::text("profile"), Value::text(p)));
+                }
+                if let Some(o) = org {
+                    fields.push((Value::text("org"), Value::Bytes(o.to_vec())));
+                }
+            }
             Self::OutboundRegister {
                 base_url, secret, ..
             } => {

@@ -38,6 +38,7 @@ pub use access_identity_risk::domain::mode::ProtectionMode;
 pub mod realm;
 pub mod saml;
 pub mod scim;
+pub mod sso;
 
 pub use ciba::CibaSetting;
 pub use realm::{
@@ -447,6 +448,13 @@ pub enum Invalid {
     /// empty or too long (TN-120).
     #[error("invalid connection draft")]
     SsoDraft,
+    /// The organization's SCIM source is authoritative for membership: invitations are closed
+    /// (TN-95).
+    #[error("invitations closed by scim")]
+    ScimAuthoritative,
+    /// A setup link order whose address is not one (TN-134).
+    #[error("invalid setup link")]
+    SetupLink,
     /// The organization's invitations are mostly ignored: invitations wait (TN-89 (11)).
     #[error("invitation reputation")]
     InviteReputation,
@@ -540,6 +548,8 @@ impl Invalid {
             Self::DomainContested => "domain-contested",
             Self::DomainUnverified => "domain-not-verified",
             Self::SsoDraft => "invalid-connection-draft",
+            Self::ScimAuthoritative => "invitations-closed-by-scim",
+            Self::SetupLink => "invalid-setup-link",
             Self::InviteReputation => "invitation-reputation",
             Self::NoAgent => "no-such-agent",
             Self::Workload => "invalid-workload-client",
@@ -1888,6 +1898,10 @@ pub enum Change {
     },
     /// `idp.org.sso_draft` (TN-120, OP-153 m.3 (p)).
     OrgSsoDraft(crate::domain::org::SsoDraft),
+    /// `idp.org.sso_enforce` (CT1) or `sso_enforce_lift` (CT2) (TN-94, OP-155 m.3 (i)).
+    OrgSsoEnforce(sso::SsoEnforcement),
+    /// `idp.org.setup_link` (CT2): a one-use, 72-hour SSO setup link (TN-134, OP-155 m.3 (i)).
+    OrgSetupLink(sso::SetupLinkOrder),
     /// `idp.account.bind` (OP-153 m.18 (e), m.25 (b)).
     AccountBind(accounts::AccountBind),
     /// `idp.account.import` (TN-85, OP-153 m.19 (d), m.25 (b)).
@@ -2139,7 +2153,7 @@ fn uint(v: u32) -> Value {
 impl Change {
     /// The action that authorizes it.
     #[must_use]
-    pub const fn action(&self) -> IdpAction {
+    pub fn action(&self) -> IdpAction {
         match self {
             Self::ClientRegister(_) => IdpAction::ClientRegister,
             Self::ClientUpdate(_) => IdpAction::ClientUpdate,
@@ -2195,6 +2209,9 @@ impl Change {
             Self::OrgDomainClaim(_) => IdpAction::OrgDomainClaim,
             Self::OrgDomainRelease { .. } => IdpAction::OrgDomainRelease,
             Self::OrgSsoDraft(_) => IdpAction::OrgSsoDraft,
+            Self::OrgSsoEnforce(e) if e.invites.is_some() => IdpAction::OrgSsoEnforce,
+            Self::OrgSsoEnforce(_) => IdpAction::OrgSsoEnforceLift,
+            Self::OrgSetupLink(_) => IdpAction::OrgSetupLink,
             Self::AccountBind(_) => IdpAction::AccountBind,
             Self::AccountImport(_) => IdpAction::AccountImport,
             Self::MigrationExport(_) => IdpAction::AccountMigrationExport,
@@ -2273,6 +2290,7 @@ impl Change {
             Self::OrgUpdate(u) => u.check(),
             Self::OrgDomainClaim(d) => d.check(),
             Self::OrgSsoDraft(d) => d.check(),
+            Self::OrgSetupLink(l) => l.check(),
             Self::AccountImport(i) => i.check(),
             Self::MigrationExport(e) => e.check(),
             Self::GuardianshipRecord(g) => g.check(),
@@ -2305,6 +2323,7 @@ impl Change {
             Self::GatewayKeytabPolicy(p) => p.check(),
             Self::GatewayKeytabEmergency { gateway, kvno } => gateway::emergency(gateway, *kvno),
             Self::AccountBind(_)
+            | Self::OrgSsoEnforce(_)
             | Self::FrontchannelLogout
             | Self::DeviceCode(_)
             | Self::MtlsAliases(_)
@@ -2430,6 +2449,8 @@ impl Change {
                 (Value::text("claim"), Value::Bytes(claim.to_vec())),
             ]),
             Self::OrgSsoDraft(d) => d.to_value(),
+            Self::OrgSsoEnforce(e) => e.to_value(),
+            Self::OrgSetupLink(l) => l.to_value(),
             Self::AccountBind(b) => b.to_value(),
             Self::AccountImport(i) => i.to_value(),
             Self::MigrationExport(e) => e.to_value(),
@@ -2592,7 +2613,9 @@ impl Change {
             | Self::OrgInviteRevoke { org, .. }
             | Self::OrgDomainRelease { org, .. }
             | Self::OrgDomainClaim(crate::domain::org::DomainClaim { org, .. })
-            | Self::OrgSsoDraft(crate::domain::org::SsoDraft { org, .. }) => {
+            | Self::OrgSsoDraft(crate::domain::org::SsoDraft { org, .. })
+            | Self::OrgSsoEnforce(sso::SsoEnforcement { org, .. })
+            | Self::OrgSetupLink(sso::SetupLinkOrder { org, .. }) => {
                 path.extend([String::from("org"), b64url_encode(org)]);
             }
             Self::SocialEnable(Social { preset, .. })

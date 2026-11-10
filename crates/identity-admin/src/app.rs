@@ -15,6 +15,7 @@ pub mod rest;
 pub mod saml;
 mod scim;
 mod signals;
+mod sso;
 pub mod transfers;
 pub mod vault;
 pub mod workloads;
@@ -525,7 +526,18 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     return Err(Invalid::Gateway.into());
                 }
             }
-            Change::OrgInvite(i) => orgs::invite_current(t, i).await?,
+            Change::OrgInvite(i) => {
+                orgs::invite_current(t, i).await?;
+                // TN-95
+                let org = orgs::live_org(t, i.org).await?;
+                sso::invite_open(t, org.id).await?;
+            }
+            // TN-94, OP-155 m.3 (i)
+            Change::OrgSsoEnforce(e) => sso::enforce_current(t, e).await?,
+            // TN-134
+            Change::OrgSetupLink(l) => {
+                orgs::live_org(t, l.org).await?;
+            }
             Change::OrgUpdate(u) => orgs::update_current(t, u).await?,
             Change::OrgInviteRevoke { org, invitation } => {
                 let org = orgs::live_org(t, *org).await?;
@@ -1200,6 +1212,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         secret = org_flows::committed(&mut t.0, &p.change, p.subject, &exercise.0)
             .await?
             .or(secret);
+        // TN-94, TN-95, TN-134, OP-155 m.3 (i)
+        secret = self
+            .sso_committed(&mut t, p, &g, exercise)
+            .await?
+            .or(secret);
         declare_transmitter(&mut t.0, bound, &p.change, exercise).await?;
         self.announce(&mut t.0, p, exercise).await?;
         let at = access_store::authority::server_time(self.app).await?;
@@ -1667,6 +1684,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::OrgInvite(_)
             | Change::OrgDomainClaim(_)
             | Change::OrgSsoDraft(_)
+            | Change::OrgSetupLink(_)
             | Change::AccountResetIntent { .. }
             | Change::Agent(_)
             | Change::AccountTapIssue(_) => true,
@@ -1847,6 +1865,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 _ => false,
             },
             Change::OrgInviteRevoke { invitation, .. } => t.revoke_invitation(*invitation).await?,
+            // TN-94, OP-155 m.3 (i)
+            Change::OrgSsoEnforce(e) => sso::write(t, bound, e).await?,
             Change::OrgDomainRelease { org, claim } => {
                 org_flows::release_domain(t, *org, *claim).await?
             }
@@ -2029,6 +2049,57 @@ async fn recovery_policy(t: &mut TenantTx) -> Result<RecoveryPolicy, AdminError>
 }
 
 impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
+    /// What a committed organization SSO change writes besides its row (TN-94, TN-95, TN-134,
+    /// OP-155 m.3 (i)): enforcement's sweep, a setup link and its Relay message, a SCIM source.
+    async fn sso_committed(
+        &self,
+        tx: &mut PgTx,
+        p: &Proposal,
+        g: &Governing,
+        exercise: &Digest,
+    ) -> Result<Option<ClientSecret>, AdminError> {
+        sso::scim_source(&mut tx.0, &p.change, &exercise.0).await?;
+        if !matches!(p.change, Change::OrgSsoEnforce(_) | Change::OrgSetupLink(_)) {
+            return Ok(None);
+        }
+        let kek = self
+            .vault
+            .and_then(|v| v.realm_kek(p.tenant, p.realm))
+            .ok_or_else(|| AdminError::Unavailable(String::from("kek")))?;
+        let realm = access_identity_account::app::Realm {
+            tenant: p.tenant,
+            realm: p.realm,
+            kek: &*kek,
+            ids: self.ids,
+        };
+        let at = access_store::authority::server_time(self.app).await?;
+        match &p.change {
+            Change::OrgSsoEnforce(e) => {
+                let correlation = access_kernel::json::b64url_encode(&exercise.0);
+                let vault = self
+                    .keys
+                    .vault(p.realm)
+                    .ok_or_else(|| AdminError::Unavailable(String::from("vault")))?;
+                let prior = tx.1.replace(vault);
+                let swept = sso::sweep(tx, &realm, e, (&correlation, at)).await;
+                tx.1 = prior;
+                swept?;
+                Ok(None)
+            }
+            Change::OrgSetupLink(order) => {
+                let issuer = g.issuer.as_deref().ok_or(AdminError::NoRealm)?;
+                let w = sso::Issue {
+                    realm: &realm,
+                    issuer,
+                    exercise: &exercise.0,
+                    at,
+                };
+                Ok(Some(sso::setup_link(&mut tx.0, &w, order).await?))
+            }
+            _ => Ok(None),
+        }
+    }
+
     /// Tells the account's own address that its status changed (`relay.message.account_status.v1`).
     async fn status_notice(
         &self,

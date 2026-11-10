@@ -80,8 +80,27 @@ pub(crate) async fn sso_draft(
             .unwrap_or([0; 16]),
         None => [0; 16],
     };
-    t.insert_sso_draft(org.id, (&d.issuer, &d.client_id), by, exercise)
-        .await?;
+    let shape = match &d.connection {
+        crate::domain::org::DraftConnection::Oidc { issuer, client_id } => {
+            access_store::org_sso::DraftShape::Oidc { issuer, client_id }
+        }
+        crate::domain::org::DraftConnection::Saml {
+            entity_id,
+            metadata_url,
+        } => access_store::org_sso::DraftShape::Saml {
+            entity_id,
+            metadata_url,
+        },
+    };
+    t.insert_connection_draft(&access_store::org_sso::NewDraft {
+        org: org.id,
+        shape,
+        provider: None,
+        drafted_by: by,
+        exercise,
+        setup_link: None,
+    })
+    .await?;
     Ok(())
 }
 

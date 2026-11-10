@@ -1211,7 +1211,10 @@ async fn the_connection_manager_template_only_drafts_for_seven_days_and_never_de
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     let drafts = t.sso_drafts(org).await.unwrap();
     assert_eq!(drafts.len(), 1);
-    assert_eq!(drafts[0].issuer, "https://login.acme.example");
+    assert_eq!(
+        drafts[0].issuer.as_deref(),
+        Some("https://login.acme.example")
+    );
     assert_eq!(drafts[0].drafted_by, ALICE.0);
     t.commit().await.unwrap();
 

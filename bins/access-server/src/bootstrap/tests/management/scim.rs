@@ -9,11 +9,11 @@ use super::*;
 
 const BASE: &str = "/realms/acme/scim/v2";
 
-struct Scim {
+pub(super) struct Scim {
     router: axum::Router,
 }
 
-fn scim_router(c: &Console) -> Scim {
+pub(super) fn scim_router(c: &Console) -> Scim {
     let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
     Scim {
         router: crate::scim::routes(
@@ -27,7 +27,7 @@ fn scim_router(c: &Console) -> Scim {
 }
 
 impl Scim {
-    async fn call(
+    pub(super) async fn call(
         &self,
         method: Method,
         path: &str,
@@ -71,7 +71,7 @@ impl Scim {
     }
 }
 
-struct HeaderMapLite {
+pub(super) struct HeaderMapLite {
     etag: Option<String>,
     txn: Option<String>,
 }
@@ -94,7 +94,7 @@ async fn register(c: &Console, name: &str, profile: Option<&str>) -> String {
     w.body["client_secret"].as_str().unwrap().to_owned()
 }
 
-fn user(name: &str, external: &str) -> serde_json::Value {
+pub(super) fn user(name: &str, external: &str) -> serde_json::Value {
     serde_json::json!({
         "schemas": [USER],
         "userName": name,

@@ -2539,6 +2539,27 @@ export interface components {
         };
         /** @description The realm's settings: JOSE algorithm, Argon2, RP ID, CIMD, sign-in requirements (TN-132), console session policy (TN-129), branding (TN-106), mappers (TN-117), the extension policy (`allow_private_targets`, `hook_disclosure`; OP-151 m.10 (e)), the hosted pages' `csp_mode` (`enforce` or `report_only`), `related_origins` (TN-18) and `locale_overrides` by locale and key (X35). */
         Settings: Record<string, never>;
+        /** @description What enforcing SSO on the organization would end; nothing changes until idp.org.sso_enforce commits (TN-94, X20, OP-155 m.3 (i)). Each active member with its local sign-in methods, directory app passwords (API keys), open sign-ins and refresh families; the service accounts, members whose API keys enforcement revokes; and the pending invitations, whose fate the enforcement names (cancel or redirect_to_sso). */
+        SsoEnforcementPreview: {
+            organization?: string;
+            enforced?: boolean;
+            /** @enum {string|null} */
+            invitations?: "cancel" | "redirect_to_sso" | null;
+            members?: {
+                account_id?: string;
+                owner?: boolean;
+                local_sign_in_methods?: number;
+                password?: boolean;
+                api_keys?: number;
+                sign_ins?: number;
+                refresh_families?: number;
+                linked_sign_ins?: number;
+                service_account?: boolean;
+            }[];
+            service_accounts?: string[];
+            pending_invitations?: number;
+            totals?: Record<string, never>;
+        };
         /** @description A resource whose route is declared and not served yet; its lane names its members when it serves it (OP-155 m.4). */
         Declared: Record<string, never>;
         /** @description One page; the next is in the `Link` header (OP-65). Only what the realm may see is listed (TN-113). */
@@ -2558,6 +2579,8 @@ export interface components {
             offer?: string;
             /** @description A migration export's bundle, dCBOR as unpadded base64url, sealed to the recipient key the change names (TN-86); shown once, never kept. */
             bundle?: string;
+            /** @description An organization's one-use SSO setup link, valid 72 hours; shown once and kept only as its token's SHA-256 (TN-134). */
+            setup_link?: string;
             /** @description A domain claim's challenge, published as `suiss-access-verify=<challenge>` in a DNS TXT record at `_suiss-access.<domain>` or at `https://<domain>/.well-known/suiss-access-verify`; shown once, kept only as its SHA-256 (TN-90). */
             challenge?: string;
             /** @description Set on an RP ID change: it cannot be undone and the realm's passkeys stop working (IDI-4). */
@@ -9420,14 +9443,13 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Declared"];
+                    "application/json": components["schemas"]["SsoEnforcementPreview"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -9474,7 +9496,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -9521,7 +9542,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -9568,7 +9588,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };

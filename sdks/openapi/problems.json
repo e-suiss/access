@@ -683,6 +683,20 @@
       "description": "The gateway registration needs a kind (saml, ldap, kerberos or radius), a name of lower-case letters, digits and hyphens, and the SHA-256 of its client certificate in hex; only a live gateway can be retired (OP-155 m.3 (c))."
     },
     {
+      "code": "invitations-closed-by-scim",
+      "type": "urn:suiss:access:problem:invitations-closed-by-scim",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The organization's SCIM source answers for its membership, so it takes no invitation; members come and go through the SCIM client (TN-95)."
+    },
+    {
+      "code": "invalid-setup-link",
+      "type": "urn:suiss:access:problem:invalid-setup-link",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The setup link order names an address that is not an e-mail address (TN-134)."
+    },
+    {
       "code": "invalid-protected-resource",
       "type": "urn:suiss:access:problem:invalid-protected-resource",
       "status": 400,

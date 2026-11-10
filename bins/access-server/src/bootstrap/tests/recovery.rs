@@ -192,7 +192,10 @@ fn routes(c: &Console, messages: Recording, devices: bool) -> axum::Router {
             SignerKeys::new(w.identity_signer.clone()),
         )
     };
-    let login = access_http::login::router(discovery(), hosted.clone(), None);
+    // TN-134
+    let login = access_http::login::router(discovery(), hosted.clone(), None).merge(
+        access_http::login::sso_setup_router(discovery(), hosted.clone()),
+    );
     if !devices {
         return login;
     }

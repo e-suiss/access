@@ -225,8 +225,17 @@ impl SamlChange {
     /// subject, fixed values) never select authority, so REST registers with `sp_register`
     /// (OP-155 m.7 (a)).
     #[must_use]
-    pub const fn action(&self) -> IdpAction {
+    pub fn action(&self) -> IdpAction {
         match self {
+            // IDP-28, L6, OP-155 m.7 (a)
+            Self::Register(_, sp)
+                if sp
+                    .template
+                    .as_deref()
+                    .is_some_and(access_identity_saml::catalog::selects_authority) =>
+            {
+                IdpAction::SamlSpMapping
+            }
             Self::Register(..) => IdpAction::SamlSpRegister,
             Self::Update(..) => IdpAction::SamlSpUpdate,
             Self::Retire(_) => IdpAction::SamlSpRetire,

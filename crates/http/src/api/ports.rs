@@ -197,6 +197,8 @@ pub enum ResourceKind {
     ProtectedResources,
     /// OpenID Federation trust anchors, by their entity identifier's base64url (OP-155 m.3 (j)).
     TrustAnchors,
+    /// What enforcing SSO on an organization would end, by its Party's base64url (TN-94).
+    SsoEnforcementPreviews,
 }
 
 impl ResourceKind {
@@ -222,6 +224,7 @@ impl ResourceKind {
             Self::SamlSps => "saml-sps",
             Self::ProtectedResources => "protected-resources",
             Self::TrustAnchors => "trust-anchors",
+            Self::SsoEnforcementPreviews => "sso-enforcement-previews",
         }
     }
 }

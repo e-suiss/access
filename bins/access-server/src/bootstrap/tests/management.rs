@@ -1174,6 +1174,7 @@ mod resources;
 mod saml;
 mod scim;
 mod settings;
+mod sso;
 mod vault;
 mod walkthrough_enterprise;
 mod workloads;

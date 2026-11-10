@@ -105,6 +105,7 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::SamlSps => Kind::SamlSps,
         ResourceKind::ProtectedResources => Kind::ProtectedResources,
         ResourceKind::TrustAnchors => Kind::TrustAnchors,
+        ResourceKind::SsoEnforcementPreviews => Kind::SsoPreview,
     }
 }
 

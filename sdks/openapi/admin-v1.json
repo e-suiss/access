@@ -13501,7 +13501,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Declared"
+                  "$ref": "#/components/schemas/SsoEnforcementPreview"
                 }
               }
             }
@@ -13520,9 +13520,6 @@
           },
           "503": {
             "$ref": "#/components/responses/Unavailable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -13612,9 +13609,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -13714,9 +13708,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -13816,9 +13807,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -15634,6 +15622,82 @@
         "type": "object",
         "description": "The realm's settings: JOSE algorithm, Argon2, RP ID, CIMD, sign-in requirements (TN-132), console session policy (TN-129), branding (TN-106), mappers (TN-117), the extension policy (`allow_private_targets`, `hook_disclosure`; OP-151 m.10 (e)), the hosted pages' `csp_mode` (`enforce` or `report_only`), `related_origins` (TN-18) and `locale_overrides` by locale and key (X35)."
       },
+      "SsoEnforcementPreview": {
+        "type": "object",
+        "description": "What enforcing SSO on the organization would end; nothing changes until idp.org.sso_enforce commits (TN-94, X20, OP-155 m.3 (i)). Each active member with its local sign-in methods, directory app passwords (API keys), open sign-ins and refresh families; the service accounts, members whose API keys enforcement revokes; and the pending invitations, whose fate the enforcement names (cancel or redirect_to_sso).",
+        "properties": {
+          "organization": {
+            "type": "string"
+          },
+          "enforced": {
+            "type": "boolean"
+          },
+          "invitations": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "cancel",
+              "redirect_to_sso",
+              null
+            ]
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "account_id": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "boolean"
+                },
+                "local_sign_in_methods": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "password": {
+                  "type": "boolean"
+                },
+                "api_keys": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "sign_ins": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "refresh_families": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "linked_sign_ins": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "service_account": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "service_accounts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pending_invitations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totals": {
+            "type": "object"
+          }
+        }
+      },
       "Declared": {
         "type": "object",
         "description": "A resource whose route is declared and not served yet; its lane names its members when it serves it (OP-155 m.4)."
@@ -15688,6 +15752,10 @@
           "bundle": {
             "type": "string",
             "description": "A migration export's bundle, dCBOR as unpadded base64url, sealed to the recipient key the change names (TN-86); shown once, never kept."
+          },
+          "setup_link": {
+            "type": "string",
+            "description": "An organization's one-use SSO setup link, valid 72 hours; shown once and kept only as its token's SHA-256 (TN-134)."
           },
           "challenge": {
             "type": "string",

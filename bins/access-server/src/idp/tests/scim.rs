@@ -119,6 +119,7 @@ async fn a_scim_membership_selects_only_through_a_subject_selection_acceptance()
         Change::Scim(ScimChange::ClientRegister {
             name: String::from("hr"),
             profile: None,
+            org: None,
         }),
         0x61,
         idp_anchor(d),

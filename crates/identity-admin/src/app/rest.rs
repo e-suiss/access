@@ -133,6 +133,12 @@ pub enum Op {
     ReleaseOrganizationDomain,
     /// `draftOrganizationConnection`: `idp.org.sso_draft` (TN-120).
     DraftOrganizationConnection,
+    /// `enforceOrganizationSso`: `idp.org.sso_enforce` (TN-94, OP-155 m.3 (i)).
+    EnforceOrganizationSso,
+    /// `liftOrganizationSso`: `idp.org.sso_enforce_lift` (TN-94).
+    LiftOrganizationSso,
+    /// `createOrganizationSetupLink`: `idp.org.setup_link` (TN-134).
+    CreateOrganizationSetupLink,
     /// `putCspMode`: `idp.realm.csp_mode`, or `csp_mode_loosen` when it loosens (OP-153 m.22 (g)).
     PutCspMode,
     /// `putRelatedOrigins`: `idp.realm.related_origins` (TN-18, OP-153 m.22 (k)).
@@ -291,6 +297,9 @@ impl Op {
             "claimOrganizationDomain" => Self::ClaimOrganizationDomain,
             "releaseOrganizationDomain" => Self::ReleaseOrganizationDomain,
             "draftOrganizationConnection" => Self::DraftOrganizationConnection,
+            "enforceOrganizationSso" => Self::EnforceOrganizationSso,
+            "liftOrganizationSso" => Self::LiftOrganizationSso,
+            "createOrganizationSetupLink" => Self::CreateOrganizationSetupLink,
             "putCspMode" => Self::PutCspMode,
             "putRelatedOrigins" => Self::PutRelatedOrigins,
             "putLocaleOverrides" => Self::PutLocaleOverrides,
@@ -914,10 +923,14 @@ fn scim_change(
     let name = |k: Option<&str>| key_of(k).map(String::from);
     Ok(Some(match op {
         Op::RegisterScimClient => {
-            only(m, &["name", "profile"])?;
+            only(m, &["name", "profile", "organization"])?;
             ScimChange::ClientRegister {
                 name: String::from(text(m, "name")?),
                 profile: opt_text(m, "profile")?.map(String::from),
+                // TN-95
+                org: opt_text(m, "organization")?
+                    .map(|o| party_of(o, Invalid::NoOrg))
+                    .transpose()?,
             }
         }
         Op::RotateScimSecret => {
@@ -1070,12 +1083,64 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     .map_err(|_| Invalid::NoDomain)?,
             }
         }
+        // TN-120, OP-153 m.3 (p), OP-155 m.3 (i)
         Op::DraftOrganizationConnection => {
-            only(m, &["issuer", "client_id"])?;
+            only(
+                m,
+                &[
+                    "protocol",
+                    "issuer",
+                    "client_id",
+                    "entity_id",
+                    "metadata_url",
+                ],
+            )?;
+            let connection = match opt_text(m, "protocol")? {
+                None | Some("oidc") => {
+                    only(m, &["protocol", "issuer", "client_id"])?;
+                    crate::domain::org::DraftConnection::Oidc {
+                        issuer: String::from(text(m, "issuer")?),
+                        client_id: String::from(text(m, "client_id")?),
+                    }
+                }
+                Some("saml") => {
+                    only(m, &["protocol", "entity_id", "metadata_url"])?;
+                    crate::domain::org::DraftConnection::Saml {
+                        entity_id: String::from(text(m, "entity_id")?),
+                        metadata_url: String::from(text(m, "metadata_url")?),
+                    }
+                }
+                Some(_) => return Err(Invalid::SsoDraft),
+            };
             Change::OrgSsoDraft(crate::domain::org::SsoDraft {
                 org: party_of(key_of(key)?, Invalid::NoOrg)?,
-                issuer: String::from(text(m, "issuer")?),
-                client_id: String::from(text(m, "client_id")?),
+                connection,
+            })
+        }
+        // TN-94, C10, OP-155 m.3 (i)
+        Op::EnforceOrganizationSso => {
+            only(m, &["invitations"])?;
+            Change::OrgSsoEnforce(crate::domain::sso::SsoEnforcement {
+                org: party_of(key_of(key)?, Invalid::NoOrg)?,
+                invites: Some(
+                    crate::domain::sso::InviteFate::parse(text(m, "invitations")?)
+                        .ok_or(Invalid::Body)?,
+                ),
+            })
+        }
+        Op::LiftOrganizationSso => {
+            only(m, &[])?;
+            Change::OrgSsoEnforce(crate::domain::sso::SsoEnforcement {
+                org: party_of(key_of(key)?, Invalid::NoOrg)?,
+                invites: None,
+            })
+        }
+        // TN-134
+        Op::CreateOrganizationSetupLink => {
+            only(m, &["email"])?;
+            Change::OrgSetupLink(crate::domain::sso::SetupLinkOrder {
+                org: party_of(key_of(key)?, Invalid::NoOrg)?,
+                email: opt_text(m, "email")?.map(access_identity_account::app::vault::folded),
             })
         }
         Op::RevokeInvitation => {
@@ -2085,6 +2150,8 @@ pub enum Kind {
     ProtectedResources,
     /// The trust anchors by the base64url of their entity identifier (OP-155 m.3 (j)).
     TrustAnchors,
+    /// What enforcing SSO on one organization would end (TN-94, X20, OP-155 m.3 (i)).
+    SsoPreview,
 }
 
 /// How many days the analytics read covers, today included (PD).
@@ -2233,8 +2300,59 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 "protocol": d.protocol,
                 "issuer": d.issuer,
                 "client_id": d.client_id,
+                "entity_id": d.entity_id,
+                "metadata_url": d.metadata_url,
+                "provider": d.provider,
                 "drafted_by": b64url_encode(&d.drafted_by),
+                "through_setup_link": d.setup_link.is_some(),
             })).collect::<Vec<_>>(),
+        }))
+    }
+
+    /// What enforcing SSO on `org` would end (TN-94, X20, OP-155 m.3 (i)): each active member's
+    /// local sign-in methods, directory app passwords, open sign-ins and refresh families; the
+    /// service accounts, members holding API keys the sweep revokes; and the pending invitations.
+    /// It changes nothing.
+    async fn sso_preview(
+        &self,
+        t: &mut TenantTx,
+        org: &access_store::orgs::OrgRow,
+    ) -> Result<Json, AdminError> {
+        let account = |s: [u8; 16]| self.ids.encode(SUBJECT_PREFIX, s).unwrap_or_default();
+        let impact = t.sso_impact(org.id).await?;
+        let state = t.sso_enforcement(org.id).await?;
+        let pending = t.open_invitations(org.id).await?.len();
+        let sum = |f: fn(&access_store::org_sso::MemberImpact) -> u64| {
+            impact.iter().map(f).fold(0_u64, u64::saturating_add)
+        };
+        Ok(json!({
+            "organization": b64url_encode(&org.party),
+            "enforced": state.as_ref().is_some_and(|s| s.enforced),
+            "invitations": state.and_then(|s| s.invites),
+            "members": impact.iter().map(|m| json!({
+                "account_id": account(m.subject),
+                "owner": m.owner,
+                "local_sign_in_methods": m.local_methods,
+                "password": m.password,
+                "api_keys": m.api_keys,
+                "sign_ins": m.sessions,
+                "refresh_families": m.refresh_families,
+                "linked_sign_ins": m.linked_sign_ins,
+                "service_account": m.api_keys > 0,
+            })).collect::<Vec<_>>(),
+            "service_accounts": impact
+                .iter()
+                .filter(|m| m.api_keys > 0)
+                .map(|m| account(m.subject))
+                .collect::<Vec<_>>(),
+            "pending_invitations": pending,
+            "totals": {
+                "members": impact.len(),
+                "local_sign_in_methods": sum(|m| m.local_methods),
+                "api_keys": sum(|m| m.api_keys),
+                "sign_ins": sum(|m| m.sessions),
+                "refresh_families": sum(|m| m.refresh_families),
+            },
         }))
     }
 
@@ -2540,6 +2658,22 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     last: None,
                 }
             }
+            // TN-94, X20, OP-155 m.3 (i)
+            (Kind::SsoPreview, Some(k)) => {
+                let Some(party) = b64url_decode(k)
+                    .ok()
+                    .and_then(|b| <[u8; 16]>::try_from(b).ok())
+                else {
+                    return Ok(Read::default());
+                };
+                let Some(org) = t.org_by_party(party).await?.filter(|o| !o.ended) else {
+                    return Ok(Read::default());
+                };
+                Read {
+                    items: vec![(self.sso_preview(t, &org).await?, 0)],
+                    last: None,
+                }
+            }
             (Kind::Organizations, Some(k)) => {
                 let Some(party) = b64url_decode(k)
                     .ok()
@@ -2690,7 +2824,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     items: rows.iter().map(|d| (delivery_view(d), 0)).collect(),
                 }
             }
-            (Kind::Deliveries, None) => Read::default(),
+            (Kind::Deliveries | Kind::SsoPreview, None) => Read::default(),
             (Kind::Settings, _) => {
                 let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
                 let p = resources::policies(t).await?;

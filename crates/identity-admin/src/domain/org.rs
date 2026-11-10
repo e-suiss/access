@@ -163,43 +163,98 @@ impl DomainClaim {
     }
 }
 
+/// The upstream an enterprise connection draft names (OP-153 m.3 (p), OP-155 m.3 (i)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DraftConnection {
+    /// An OIDC issuer and the client id at it.
+    Oidc {
+        /// The upstream OIDC issuer.
+        issuer: String,
+        /// The client id at the upstream.
+        client_id: String,
+    },
+    /// A SAML identity provider: its entity ID and metadata URL.
+    Saml {
+        /// The entity ID.
+        entity_id: String,
+        /// The `https` metadata URL.
+        metadata_url: String,
+    },
+}
+
+impl DraftConnection {
+    /// Whether the draft is well formed: an `https` OIDC issuer with a bounded client id, or a
+    /// bounded SAML entity ID with an `https` metadata URL.
+    #[must_use]
+    pub fn ok(&self) -> bool {
+        let https = |u: &str, query: bool| {
+            u.strip_prefix("https://")
+                .and_then(|r| r.split(['/', '?']).next())
+                .is_some_and(|h| !h.is_empty() && !h.contains('@'))
+                && u.len() <= 2048
+                && !u.chars().any(|c| {
+                    c.is_whitespace() || c.is_control() || c == '#' || (!query && c == '?')
+                })
+        };
+        match self {
+            Self::Oidc { issuer, client_id } => {
+                https(issuer, false)
+                    && !client_id.is_empty()
+                    && client_id.chars().count() <= 256
+                    && !client_id.chars().any(char::is_control)
+            }
+            Self::Saml {
+                entity_id,
+                metadata_url,
+            } => {
+                https(metadata_url, true)
+                    && !entity_id.is_empty()
+                    && entity_id.len() <= 1024
+                    && !entity_id
+                        .chars()
+                        .any(|c| c.is_whitespace() || c.is_control())
+            }
+        }
+    }
+}
+
 /// An enterprise connection the connection manager drafts (TN-120, OP-153 m.3 (p)): it takes
 /// effect only through `idp.upstream.register` (CT3) at the organization's root.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SsoDraft {
     /// The organization's Party.
     pub org: [u8; 16],
-    /// The upstream OIDC issuer.
-    pub issuer: String,
-    /// The client id at the upstream.
-    pub client_id: String,
+    /// The upstream it names.
+    pub connection: DraftConnection,
 }
 
 impl SsoDraft {
     pub(crate) fn check(&self) -> Result<(), crate::domain::Invalid> {
-        let host = self.issuer.strip_prefix("https://").unwrap_or("");
-        if host.is_empty()
-            || self.issuer.len() > 2048
-            || self
-                .issuer
-                .chars()
-                .any(|c| c.is_whitespace() || c.is_control() || c == '#' || c == '?')
-            || self.client_id.is_empty()
-            || self.client_id.chars().count() > 256
-            || self.client_id.chars().any(char::is_control)
-        {
-            return Err(crate::domain::Invalid::SsoDraft);
+        if self.connection.ok() {
+            Ok(())
+        } else {
+            Err(crate::domain::Invalid::SsoDraft)
         }
-        Ok(())
     }
 
     pub(crate) fn to_value(&self) -> suiss_crypto::dcbor::Value {
         use suiss_crypto::dcbor::Value;
-        Value::Map(vec![
-            (Value::text("org"), Value::Bytes(self.org.to_vec())),
-            (Value::text("issuer"), Value::text(&self.issuer)),
-            (Value::text("client_id"), Value::text(&self.client_id)),
-        ])
+        let mut m = vec![(Value::text("org"), Value::Bytes(self.org.to_vec()))];
+        match &self.connection {
+            DraftConnection::Oidc { issuer, client_id } => {
+                m.push((Value::text("issuer"), Value::text(issuer)));
+                m.push((Value::text("client_id"), Value::text(client_id)));
+            }
+            DraftConnection::Saml {
+                entity_id,
+                metadata_url,
+            } => {
+                m.push((Value::text("protocol"), Value::text("saml")));
+                m.push((Value::text("entity_id"), Value::text(entity_id)));
+                m.push((Value::text("metadata_url"), Value::text(metadata_url)));
+            }
+        }
+        Value::Map(m)
     }
 }
 
