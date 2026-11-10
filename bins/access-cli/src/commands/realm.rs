@@ -230,11 +230,21 @@ mod tests {
                     .unwrap_or_else(|e| panic!("{name}: {}: {e}", step.resource));
             }
         }
-        // OP-153 m.3 (r)
+        // OP-153 m.3 (r), OP-156 m.3 (e), (f), MD-11, SA-54, Ek B 5116
         let tr = parse(TEMPLATES[9].1).unwrap();
-        assert!(tr.notes.iter().any(|n| n.contains("biometrics alone")));
-        assert!(tr.notes.iter().any(|n| n.contains("SMS")));
-        assert!(tr.notes.iter().any(|n| n.contains("90 days")));
+        let body = |r: &str| {
+            tr.step
+                .iter()
+                .find(|s| s.resource == r)
+                .map(|s| Value::Object(s.body.clone()))
+                .unwrap_or_else(|| panic!("tr-payment: {r}"))
+        };
+        assert_eq!(body("settings/signin-policy")["profile"], "tr-payment");
+        assert_eq!(body("settings/push")["enabled"], true);
+        assert_eq!(body("settings/sms-otp")["enabled"], true);
+        for rule in ["biometrics", "SMS", "90 days", "app-controlled"] {
+            assert!(!tr.notes.iter().any(|n| n.contains(rule)), "{rule}");
+        }
         assert!(parse("name = \"x\"\ndescription = \"y\"\nstep = []\n").is_err());
     }
 }

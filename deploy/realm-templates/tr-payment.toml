@@ -1,16 +1,21 @@
-# Realm template `tr-payment` (OP-153 m.3 (r), §10.9.2): realm policy defaults as data.
-# `access-cli realm apply-template` commits each step as its own Exercise and stops at the
-# first failure.
+# Realm template `tr-payment` (OP-153 m.3 (r), §10.9.2, OP-156 m.3 (e), (f)): realm policy
+# defaults as data. `access-cli realm apply-template` commits each step as its own Exercise and
+# stops at the first failure.
+#
+# The `tr-payment` assurance profile of the sign-in policy carries the payment rules:
+# - CT2 and CT3 need a phishing-resistant authenticator and the app-controlled factor (an
+#   approver key attested in hardware that signs only after the app's own PIN);
+# - platform biometrics alone are never a factor;
+# - SMS codes are taken only to activate the app-controlled factor, never to sign in, and only
+#   on a line whose SIM did not change in the last 90 days, with a SIM signal from the last
+#   24 hours;
+# - an approval is a signature of the customer's own keys over the statement (H(AAS)).
 
 name = "tr-payment"
-description = "Turkish payment and e-money institutions (BDDK/TCMB GKD): passkeys only, MFA required, short sessions bound to the address."
+description = "Turkish payment and e-money institutions (BDDK/TCMB GKD): passkeys and the app-controlled factor, MFA required, SMS only for activation, short sessions bound to the address."
 # Rules this template carries that the realm settings cannot express yet; the command
 # prints them for the operator.
 notes = [
-  "The second factor is app-controlled; biometrics alone never authenticate.",
-  "SMS is used only at enrolment, never as a sign-in factor.",
-  "A phone number's SIM must be at least 90 days old before it is trusted.",
-  "Transaction codes are signed with the customer's own key.",
   "Mother's maiden name and identity card data are never a factor.",
 ]
 
@@ -21,6 +26,19 @@ resource = "settings/signin-policy"
 methods = ["passkey"]
 required_fields = ["email", "phone_number"]
 mfa_required = true
+profile = "tr-payment"
+
+[[step]]
+resource = "settings/push"
+
+[step.body]
+enabled = true
+
+[[step]]
+resource = "settings/sms-otp"
+
+[step.body]
+enabled = true
 
 [[step]]
 resource = "settings/session-policy"
