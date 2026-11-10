@@ -390,7 +390,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** One advisory search page (L1-ADP-16). Graph kinds `subject`, `resource`, `action`; management kinds `roles` and `role` (a role version with its computed "Not included" block, §8.17.9.2, E11), `admin-grant` (an admin Grant's meta-actions one by one, reserved ones apart), `holdings` (the viewer's own holdings, each a usable ADP `holding` basis, IA-5) and `changes` (information only, IA-2: an auditor sees every change, anyone else only those about them); `bulk-impact` (each Grant revoke of a bulk job and their sum, E17); `sources` (each live Acceptance by use with its blast radius, and the partners whose authority bridging Grants recognize up to their ceilings; §8.17.9.3, §5.13); developer kinds `schema-publications` (a namespace's published versions and where each stands here: there is no accept, a domain accepts only by its own `acceptance.amend` with the exact fingerprint, X21), `change-impact` (a role move or a `policy.set` candidate: abilities gained and lost per holder count, expansion requirements, orphan rows; X20, TN-121, §5.8; the SMT relation is `unknown` until proved), `revocation-impact` (subtree, staleness exposure, index lag, orphan tuples; §5.4) and `compromise-impact` (Exercises, Grants, contributions, projections and Claims in a window; SEC15). Developer kinds answer only the domain's auditors, and `revocation-impact` of a Grant also whoever stands above it in its lineage: the root of its Anchor or a holder of a Grant it derives from (XI-5); anyone else gets an empty page. `changes` also lists Grants whose agency names the reader and ingested regime key-events about the reader (`kind: key_event` with `class` and `issuer`; SI-21, SI-13, U26). Hub kinds `inventory` (holdings in the groups acting for you, shared from you and your authority, with the Anchors the reader roots) and `activity` (allowed uses by or for the reader; a DENY is not a use) answer only the reading Party about itself (XI-9, XI-22). The agent kind `agent-status` answers an agent Instance about itself only: whether it is live, its Mandate, and the Grants its Party holds with their actions, horizon and budget left; nothing about any other Party's delegations (A-11, E26). `outcome` (`{exercise, intent}`: what executors reported about one Exercise, compared with the allowed intent; only its actor Party, and a reporter for its own reports; OP-154 m.3 (u), E64, EI-10). `resource-incarnation` (`{namespace, path}`: the lifecycle facts domain products declared for one resource and its highest incarnation; the domain's auditors only; OP-156 m.3 (k), INV-32). Nothing is recorded. */
+        /** One advisory search page (L1-ADP-16). Graph kinds `subject`, `resource`, `action`; management kinds `roles` and `role` (a role version with its computed "Not included" block, §8.17.9.2, E11), `admin-grant` (an admin Grant's meta-actions one by one, reserved ones apart), `holdings` (the viewer's own holdings, each a usable ADP `holding` basis, IA-5) and `changes` (information only, IA-2: an auditor sees every change, anyone else only those about them); `bulk-impact` (each Grant revoke of a bulk job and their sum, E17); `sources` (each live Acceptance by use with its blast radius, and the partners whose authority bridging Grants recognize up to their ceilings; §8.17.9.3, §5.13); developer kinds `schema-publications` (a namespace's published versions and where each stands here: there is no accept, a domain accepts only by its own `acceptance.amend` with the exact fingerprint, X21), `change-impact` (a role move or a `policy.set` candidate: abilities gained and lost per holder count, expansion requirements, orphan rows; X20, TN-121, §5.8; the SMT relation is `unknown` until proved), `revocation-impact` (subtree, staleness exposure, index lag, orphan tuples; §5.4) and `compromise-impact` (Exercises, Grants, contributions, projections and Claims in a window; SEC15). Developer kinds answer only the domain's auditors, and `revocation-impact` of a Grant also whoever stands above it in its lineage: the root of its Anchor or a holder of a Grant it derives from (XI-5); anyone else gets an empty page. `changes` also lists Grants whose agency names the reader and ingested regime key-events about the reader (`kind: key_event` with `class` and `issuer`; SI-21, SI-13, U26). Hub kinds `inventory` (holdings in the groups acting for you, shared from you and your authority, with the Anchors the reader roots) and `activity` (allowed uses by or for the reader; a DENY is not a use) answer only the reading Party about itself (XI-9, XI-22). The agent kind `agent-status` answers an agent Instance about itself only: whether it is live, its Mandate, and the Grants its Party holds with their actions, horizon and budget left; nothing about any other Party's delegations (A-11, E26). `outcome` (`{exercise, intent}`: what executors reported about one Exercise, compared with the allowed intent; only its actor Party, and a reporter for its own reports; OP-154 m.3 (u), E64, EI-10). `resource-incarnation` (`{namespace, path}`: the lifecycle facts domain products declared for one resource and its highest incarnation; the domain's auditors only; OP-156 m.3 (k), INV-32). `eligible-set` (`{gate_class, resource, digest}`: the named holders of `approve:<class>` now, as `eligibility:set` answers it; OP-156 m.3 (t), E41). Nothing is recorded. */
         post: operations["search"];
         delete?: never;
         options?: never;
@@ -493,7 +493,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** The holders of approve:<class> for {gate_class, resource, digest}: derived, records nothing, at most 1000 Parties, more marked truncated (OP-156 m.3 (t), E41). */
+        /** Who may approve a Gate of a class now (§7.9.5.3, E41, OP-156 m.3 (t)): derived, advisory, never recorded, at most 1000 Parties. Only the domain's auditors and a reader holding `access:read` on `access.search:[eligible-set]` get Parties (E26); anyone else gets an empty set. A Gate being satisfied is never an ALLOW (G30, EI-4). */
         post: operations["eligibleSet"];
         delete?: never;
         options?: never;
@@ -675,10 +675,7 @@ export interface components {
             suiss_products: {
                 [key: string]: string;
             };
-            suiss_coordinator?: {
-                /** @description The coordinator's public Needs Attention endpoint the realm named (`idp.realm.coordinator`, OP-156 m.3 (t)); `GET` with `party` answers `{count, href}`. Access keeps no queue. */
-                attention: string;
-            };
+            suiss_coordinator?: components["schemas"]["SuissCoordinator"];
             endpoints: {
                 adp?: string;
                 key_lookup?: string;
@@ -2069,13 +2066,33 @@ export interface components {
             /** @description Whether relay_lag_ms is past 60 s (OP-156 m.3 (c)). */
             notifications_delayed: boolean;
         };
-        EligibleSetRequest: {
-            /** @description The coordination Gate class. */
+        EligibleSetQuery: {
+            /** @description The contribution class the Gate needs: `approve` or a class the domain uses. */
             gate_class: string;
-            /** @description The resource the Gate is on. */
+            /** @description The resource the Gate is on, as the coordinator names it; opaque to Access, at most 512 bytes. */
             resource: string;
-            /** @description The digest the approval binds. */
+            /** @description The digest the approval binds: the target intent's digest for an intent-bound Gate, the Gate payload's for a coordination Gate. */
             digest: string;
+        };
+        EligibleSetRequest: {
+            /** @description The reader's `check` context (L1-ADP-5…9) with `query` (`EligibleSetQuery`): the intent's action is `access`/`read` and its first resource `access.search` with the path `["eligible-set"]`. The same body is the `eligible-set` search. */
+            context: Record<string, never>;
+        };
+        SuissCoordinator: {
+            /** @description The coordinator's public Needs Attention endpoint the realm named (`idp.realm.coordinator`, OP-156 m.3 (t)); `GET` with `party` answers `{count, href}`. Access keeps no queue. */
+            attention: string;
+        };
+        EligibleSet: {
+            /** @description The named holders of `approve:<class>` now: a live Grant covering `access:contribute` on `access.contribution:[gate_class]` whose lineage is in force. Rule-shaped and public holders are not listed; ask `eligibility:check` per Party. */
+            parties: string[];
+            /** @description More Parties hold it than are listed. */
+            truncated: boolean;
+            context: {
+                /** @constant */
+                advisory: true;
+                /** @constant */
+                recorded: false;
+            };
         };
     };
     responses: never;
@@ -3550,7 +3567,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                kind: "subject" | "resource" | "action" | "roles" | "role" | "admin-grant" | "holdings" | "changes" | "bulk-impact" | "sources" | "schema-publications" | "change-impact" | "revocation-impact" | "compromise-impact" | "inventory" | "activity" | "agent-status" | "outcome" | "resource-incarnation";
+                kind: "subject" | "resource" | "action" | "roles" | "role" | "admin-grant" | "holdings" | "changes" | "bulk-impact" | "sources" | "schema-publications" | "change-impact" | "revocation-impact" | "compromise-impact" | "inventory" | "activity" | "agent-status" | "outcome" | "resource-incarnation" | "eligible-set";
             };
             cookie?: never;
         };
@@ -3888,6 +3905,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The set. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EligibleSet"];
+                };
+            };
             /** @description The request is refused; nothing is read. */
             400: {
                 headers: {
@@ -3897,8 +3923,17 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-156 m.4). */
-            501: {
+            /** @description No client certificate (OP-141 m.18 (b)). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Over a rate limit. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
