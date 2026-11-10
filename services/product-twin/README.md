@@ -25,6 +25,7 @@ The domain decides what the product's statements mean. Its schema counts only on
 | `Twin::accepted` | Reads whether a domain accepted that package. |
 | `Twin::issue_claim` | Signs a Claim with its Instance key and sends it to Claim Ingest. |
 | `Twin::sign_claim` | Signs a Claim without sending it, so a request can carry it. |
+| `Twin::issue_signed` | Signs a `Signed` Claim (its body, assurance, issue time, supersession and its binding to an intent, an Instance or a resource) and sends it with its body: a signal, an effect attestation, a verifier profile, a predicate about one order. |
 | `Twin::ask` | Forwards the actor's own statement to the ADP evaluation endpoint as its own PEP and verifies the signed receipt. Anything but a verified ALLOW is a denial. |
 | `Twin::enforce` | Runs the product's effect once, only for the intent that was allowed. |
 | `Twin::attempt` | Tries a meta-action as the product itself, so a test can show the refusal. |
@@ -55,6 +56,16 @@ use = "subject-selection"
 ```
 
 `Schema::parse` loads a file through the Kernel's own decoders: a schema that needs anything the Kernel does not already have does not load.
+
+## Pay, Commerce and Serve
+
+The three commerce products show how much stays outside Access:
+
+- **Pay** asks Access before every payment. Access holds the authority to initiate, approve, refund, pay out, place a hold and add a beneficiary, the principal's limit as a budget, and the payment envelope: at most this amount, to this recipient, for this purpose. Pay keeps the money: its holds, its own financial limit (a `pay_limit` Claim, a separate fact), the execution and the scheme artefacts. A payment agreement or a merchant-initiated transaction record is Pay's, and names the GrantID and ExerciseID it rests on. An `effect_attestation` is a Claim about what Pay did and never changes a decision. A domain that takes payments can install the PSD2 SCA or the TR GKD template (`access_authority_core::app::templates`) with its own `policy.set`: each asks for a fresh authentication bound to the payment's own intent, the TR one also for the application-controlled factor at CT2 and above. The templates are building blocks; whether a deployment meets the regulation is the deployer's assessment.
+- **Commerce** keeps orders and its refund rule and says whether an order is refundable (`order_refundable`) and who works for a merchant (`seller_member`). The merchant grants refund and admin authority from its own Anchor.
+- **Serve** keeps the schedule and says who is on shift now (`on_shift`, short-lived) and in which role (`serve_staff`). A cashier's Grant holds only while the shift Claim does. Offline, the POS terminal checks a projection with a void count and amount slice using `esuiss-access-verifier` and refuses once the slice is spent.
+
+None of them writes an Anchor, a Grant or an Acceptance, and Access holds no money, writes no ledger and coordinates no transaction (`cargo xtask check no-money-state`).
 
 ## License
 

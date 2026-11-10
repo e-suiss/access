@@ -143,6 +143,8 @@ pub struct Signed {
     pub issued_ago_ms: u64,
     /// The Instance it is bound to.
     pub instance: Option<Id>,
+    /// The intent it is bound to: an effect attestation's, or an authentication's (E64).
+    pub intent: Option<Digest>,
     /// The Claim it supersedes in its issuer line.
     pub supersedes: Option<Id>,
 }
@@ -157,6 +159,7 @@ impl Signed {
             assurance: BTreeMap::new(),
             issued_ago_ms: 0,
             instance: None,
+            intent: None,
             supersedes: None,
         }
     }
@@ -756,7 +759,7 @@ impl<W: Wire, C: Clock + Send + Sync, R: Random> Twin<W, C, R> {
                 until: now.saturating_add(issue.for_ms),
             },
             assurance: signed.assurance.clone(),
-            bound_intent: None,
+            bound_intent: signed.intent,
             bound_instance: signed.instance,
             bound_resource: issue.resource,
             supersedes: signed.supersedes,
