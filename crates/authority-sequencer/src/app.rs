@@ -5,6 +5,10 @@ use access_kernel::digest::Digest;
 use access_kernel::model::TrustedTime;
 use access_kernel::record::RecordKind;
 use access_store::authority::{Lease, Renewal};
+use std::sync::Arc;
+
+use suiss_ledger::doorbell::{Bell, Gate, Ring};
+use suiss_ledger::fence::{Cursor, Fence};
 use suiss_ledger::sequencer::{Head, Sequencer};
 
 use crate::SequencerError;
@@ -23,6 +27,8 @@ pub struct Leader<L: DomainLog> {
     lease: Lease,
     seq: Sequencer,
     key: EventKey,
+    gate: Gate,
+    bell: Option<Arc<dyn Bell>>,
 }
 
 impl<L: DomainLog> Leader<L> {
@@ -36,13 +42,23 @@ impl<L: DomainLog> Leader<L> {
         let last = log.record(row.pos).await?.ok_or(SequencerError::Diverged)?;
         check_last(&last, &row, &domain)?;
         let seq = Sequencer::lead(lease.epoch, head_of(&row)?);
+        let gate = Gate::new(Fence::at(seq.head().pos));
         Ok(Self {
             log,
             domain,
             lease,
             seq,
             key,
+            gate,
+            bell: None,
         })
+    }
+
+    /// Rings `bell` after each durable commit with outbox events (OP-156 m.3 (j), T26).
+    #[must_use]
+    pub fn with_bell(mut self, bell: Arc<dyn Bell>) -> Self {
+        self.bell = Some(bell);
+        self
     }
 
     /// The last committed head.
@@ -125,6 +141,7 @@ impl<L: DomainLog> Leader<L> {
         match committed {
             Ok(()) => {
                 self.seq.committed(batch)?;
+                self.ring(&stored);
                 Ok(Outcome::Appended(
                     stored.records.iter().map(|r| r.pos).collect(),
                 ))
@@ -140,6 +157,28 @@ impl<L: DomainLog> Leader<L> {
                 Err(e)
             }
         }
+    }
+}
+
+impl<L: DomainLog> Leader<L> {
+    /// TI-6, OP-156 m.3 (j): the fence moves to the committed head, then the batch's last
+    /// outbox event rings the bell; a ring the fence does not cover never leaves.
+    fn ring(&mut self, stored: &access_store::authority::CommitBatch) {
+        if self.gate.fence().advance(self.seq.head().pos).is_err() {
+            return;
+        }
+        let (Some(bell), Some(last)) = (self.bell.as_deref(), stored.outbox.last()) else {
+            return;
+        };
+        let ring = Ring {
+            domain: self.domain.0,
+            at: Cursor {
+                pos: last.pos,
+                idx: last.idx,
+            },
+            id: last.event_id,
+        };
+        self.gate.release(ring, bell);
     }
 }
 

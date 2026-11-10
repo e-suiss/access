@@ -228,6 +228,61 @@ async fn a_fenced_leader_steps_down_and_writes_nothing() {
     assert_eq!(new.head().pos, 2);
 }
 
+#[derive(Default)]
+struct Rang(std::sync::Mutex<Vec<suiss_ledger::doorbell::Ring>>);
+
+impl suiss_ledger::doorbell::Bell for Rang {
+    fn ring(&self, ring: suiss_ledger::doorbell::Ring) {
+        self.0.lock().unwrap().push(ring);
+    }
+}
+
+// TI-6, OP-156 m.3 (j): a ring names the last durable event; nothing rings for a commit that
+// did not land
+#[tokio::test]
+async fn the_doorbell_rings_only_after_a_durable_commit() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, "g").await;
+    let bell = std::sync::Arc::new(Rang::default());
+    let mut old = lead(&db, d, "a").await.unwrap().with_bell(bell.clone());
+    let mut it = item("x", None);
+    it.events = vec![vec![1], vec![2]];
+    old.commit(2_000, &[it]).await.unwrap();
+    let mut quiet = item("quiet", None);
+    quiet.events.clear();
+    old.commit(2_001, &[quiet]).await.unwrap();
+    let id = DomainId::from_bytes(d.0);
+    let rows = read_outbox(&db.app, &id, (0, 0), 10).await.unwrap();
+    let last = rows.last().unwrap();
+    assert_eq!((last.pos, last.idx), (1, 1));
+    {
+        let rang = bell.0.lock().unwrap();
+        assert_eq!(rang.len(), 1);
+        assert_eq!(rang[0].domain, d.0);
+        assert_eq!((rang[0].at.pos, rang[0].at.idx), (last.pos, last.idx));
+        assert_eq!(rang[0].id, last.event_id);
+    }
+    access_store::authority::release_lease(
+        &db.sequencer,
+        &id,
+        "a",
+        access_store::authority::Lease { epoch: old.epoch() },
+    )
+    .await
+    .unwrap();
+    let mut new = lead(&db, d, "b").await.unwrap().with_bell(bell.clone());
+    let mut stale = item("stale", None);
+    stale.events = vec![vec![3]];
+    assert!(old.commit(2_002, &[stale]).await.is_err());
+    assert_eq!(bell.0.lock().unwrap().len(), 1);
+    let mut fresh_item = item("y", None);
+    fresh_item.events = vec![vec![4]];
+    new.commit(2_003, &[fresh_item]).await.unwrap();
+    let rang = bell.0.lock().unwrap();
+    assert_eq!(rang.len(), 2);
+    assert_eq!(rang[1].at.pos, new.head().pos);
+}
+
 // G40, U23
 #[tokio::test]
 async fn a_nonce_retry_replays_and_a_reuse_conflicts() {

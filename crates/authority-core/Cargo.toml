@@ -19,7 +19,7 @@ access-telemetry = { workspace = true }
 miniz_oxide = { workspace = true }
 access-authority-sequencer = { path = "../authority-sequencer" }
 suiss-crypto = { workspace = true, features = ["pkcs11"] }
-suiss-ledger = { workspace = true }
+suiss-ledger = { workspace = true, features = ["doorbell"] }
 suiss-restriction = { workspace = true }
 tracing = { workspace = true, features = ["std"] }
 serde_json = { workspace = true, features = ["std"] }

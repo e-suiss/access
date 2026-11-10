@@ -429,6 +429,7 @@ const PAGE_TOKEN: &str = "page";
 pub struct Domains<K, B: Binding, S: Salts, C> {
     setup: Setup<K, B, S, C>,
     led: Mutex<HashMap<Digest, Slot<B, S, C>>>,
+    bell: Option<Arc<dyn suiss_ledger::doorbell::Bell>>,
 }
 
 impl<K: Keys, B: Binding, S: Salts, C> Domains<K, B, S, C> {
@@ -463,7 +464,15 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         Self {
             setup,
             led: Mutex::new(HashMap::new()),
+            bell: None,
         }
+    }
+
+    /// Every domain this leads rings `bell` after a durable commit (OP-156 m.3 (j)).
+    #[must_use]
+    pub fn with_bell(mut self, bell: Arc<dyn suiss_ledger::doorbell::Bell>) -> Self {
+        self.bell = Some(bell);
+        self
     }
 
     fn slots(&self) -> Vec<Slot<B, S, C>> {
@@ -503,7 +512,10 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             Ok(leader) => {
                 // §17.8.2, TI-2
                 epoch_changed("acquired");
-                leader
+                match &self.bell {
+                    Some(bell) => leader.with_bell(bell.clone()),
+                    None => leader,
+                }
             }
             Err(SequencerError::Store(StoreError::LeaseHeld)) => {
                 return Err(CoreError::Unavailable("lease-held"));
