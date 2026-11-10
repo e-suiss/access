@@ -3597,14 +3597,20 @@
         "operationId": "oidfEntityConfiguration",
         "summary": "The realm issuer's OpenID Federation entity configuration, signed with its federation key (OP-155 m.3 (j)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/federation/fetch": {
