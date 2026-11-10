@@ -39,6 +39,27 @@ pub struct Service<F, V> {
     cell: Option<CellKey>,
     issuers: BTreeMap<Realm, IssuerKey>,
     rsa_ids: BTreeMap<Realm, access_crypto::rsa_id::RsaIdKey>,
+    federation: BTreeMap<Realm, Keyring>,
+}
+
+/// The JWS types only a realm's `federation` key signs, and the realm JOSE key never does
+/// (OP-155 m.3 (j), MD-6).
+pub const FEDERATION_TYPES: [&str; 4] = [
+    "entity-statement+jwt",
+    "trust-mark+jwt",
+    "resolve-response+jwt",
+    "trust-mark-status-response+jwt",
+];
+
+/// The purpose word of a `federation` key set's vault entry.
+const FEDERATION: &str = "federation";
+
+/// The vault slot of `realm`'s `federation` key set, apart from its JOSE key set.
+fn federation_slot(realm: Realm) -> Realm {
+    let d = suiss_crypto::digest::context_digest("access/identity-signer/federation/v1", &realm.0);
+    let mut out = [0; 16];
+    out.copy_from_slice(&d.0[..16]);
+    Realm(out)
 }
 
 const STATES: [(&str, State); 5] = [
@@ -141,8 +162,19 @@ fn saved_of(v: &Value) -> Option<Saved> {
 /// A realm's vault entry: its identifier, the algorithm of its new keys, its rotation policy
 /// and its keys.
 fn stored(realm: Realm, alg: JwsAlg, policy: &Policy, saved: &[Saved]) -> Option<Vec<u8>> {
+    stored_as(None, realm, alg, policy, saved)
+}
+
+fn stored_as(
+    purpose: Option<&str>,
+    realm: Realm,
+    alg: JwsAlg,
+    policy: &Policy,
+    saved: &[Saved],
+) -> Option<Vec<u8>> {
     let v = map(vec![
         ("realm", Some(Value::Bytes(realm.0.to_vec()))),
+        ("purpose", purpose.map(Value::text)),
         ("alg", Some(Value::text(alg.name()))),
         ("policy", Some(policy_value(policy))),
         (
@@ -153,10 +185,15 @@ fn stored(realm: Realm, alg: JwsAlg, policy: &Policy, saved: &[Saved]) -> Option
     dcbor::encode(&v, Limits::CEILING).ok()
 }
 
-type Restored = (Realm, JwsAlg, Option<Policy>, Vec<Saved>);
+type Restored = (Realm, JwsAlg, Option<Policy>, Vec<Saved>, bool);
 
 fn restored(b: &[u8]) -> Option<Restored> {
     let v = dcbor::decode(b, Limits::CEILING).ok()?;
+    let federation = match v.get("purpose") {
+        None => false,
+        Some(Value::Text(t)) if t == FEDERATION => true,
+        Some(_) => return None,
+    };
     let realm = Realm(bytes(v.get("realm"))?.try_into().ok()?);
     let alg = match v.get("alg") {
         Some(Value::Text(t)) => alg_of(t)?,
@@ -171,6 +208,7 @@ fn restored(b: &[u8]) -> Option<Restored> {
         alg,
         policy,
         keys.iter().filter_map(saved_of).collect(),
+        federation,
     ))
 }
 
@@ -189,11 +227,16 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             cell: None,
             issuers: BTreeMap::new(),
             rsa_ids: BTreeMap::new(),
+            federation: BTreeMap::new(),
         };
-        for (realm, alg, policy, saved) in all.iter().filter_map(|b| restored(b)) {
+        for (realm, alg, policy, saved, federation) in all.iter().filter_map(|b| restored(b)) {
             let policy = policy.unwrap_or(s.policy);
             if let Ok(ring) = Keyring::restore(alg, policy, saved, &mut s.factory) {
-                s.rings.insert(realm, (alg, ring));
+                if federation {
+                    s.federation.insert(realm, ring);
+                } else {
+                    s.rings.insert(realm, (alg, ring));
+                }
             }
         }
         Ok(s)
@@ -267,7 +310,78 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
         for realm in self.realms() {
             self.round_one(realm, now, draw, &mut report);
         }
+        let federated: Vec<Realm> = self.federation.keys().copied().collect();
+        for realm in federated {
+            if !self.federation_round(realm, now, draw) {
+                report.troubled.push(realm);
+            }
+        }
         report
+    }
+
+    fn persist_federation(&mut self, realm: Realm) -> bool {
+        let Some(ring) = self.federation.get(&realm) else {
+            return false;
+        };
+        stored_as(
+            Some(FEDERATION),
+            realm,
+            JwsAlg::Es256,
+            &ring.policy(),
+            &ring.saved(),
+        )
+        .is_some_and(|b| self.vault.put(&federation_slot(realm), &b).is_ok())
+    }
+
+    fn federation_round(&mut self, realm: Realm, now: u64, draw: u64) -> bool {
+        let ok = self
+            .federation
+            .get_mut(&realm)
+            .map(|ring| ring.tick(&mut self.factory, now, draw))
+            .is_some_and(|r| !r.outage);
+        self.persist_federation(realm) && ok
+    }
+
+    /// Answers the `federation` key's requests (OP-155 m.3 (j)): its key set is made on the first
+    /// request, P-256 only, and it signs only federation types.
+    fn handle_federation(&mut self, request: Request, now: u64, draw: u64) -> Response {
+        let realm = match &request {
+            Request::FederationJwks(r) | Request::SignFederation { realm: r, .. } => *r,
+            _ => return Response::Error(String::from("signer-frame")),
+        };
+        if !self.federation.contains_key(&realm) {
+            let Ok(ring) = Keyring::new(JwsAlg::Es256, self.policy) else {
+                return Response::Error(String::from("signer-policy"));
+            };
+            self.federation.insert(realm, ring);
+            if !self.federation_round(realm, now, draw) {
+                self.federation.remove(&realm);
+                return Response::Error(String::from("signer-outage"));
+            }
+        }
+        let Some(ring) = self.federation.get_mut(&realm) else {
+            return Response::Error(String::from(UNKNOWN_REALM));
+        };
+        match request {
+            Request::SignFederation {
+                typ, payload, at, ..
+            } => {
+                if at.abs_diff(now) > MAX_SKEW_MS {
+                    return Response::Error(String::from("signer-time"));
+                }
+                if !FEDERATION_TYPES.contains(&typ.as_str()) {
+                    return Response::Error(String::from(crate::SignerError::Payload.code()));
+                }
+                match ring.sign(&typ, &payload, at) {
+                    Ok(s) => Response::Signed {
+                        token: s.token,
+                        kid: s.kid,
+                    },
+                    Err(e) => Response::Error(String::from(e.code())),
+                }
+            }
+            _ => Response::Jwks(ring.jwks().to_owned()),
+        }
     }
 
     /// Changes `realm`'s key set outside the schedule and keeps the vault current (TN-118,
@@ -332,6 +446,10 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                 if at.abs_diff(now) > MAX_SKEW_MS {
                     return Response::Error(String::from("signer-time"));
                 }
+                // OP-155 m.3 (j), MD-6
+                if FEDERATION_TYPES.contains(&typ.as_str()) {
+                    return Response::Error(String::from(crate::SignerError::Payload.code()));
+                }
                 let Some((_, ring)) = self.rings.get_mut(&realm) else {
                     return Response::Error(String::from(UNKNOWN_REALM));
                 };
@@ -387,6 +505,9 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                     Err(e) => Response::Error(String::from(e.code())),
                 },
             },
+            r @ (Request::FederationJwks(_) | Request::SignFederation { .. }) => {
+                self.handle_federation(r, now, draw)
+            }
             other => self.handle_issuer(&other, now),
         }
     }

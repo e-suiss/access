@@ -597,3 +597,64 @@ fn the_claim_issuer_key_is_separate_and_survives_a_restart() {
         Response::SignedCose { kid: k, .. } if k == kid
     ));
 }
+
+// OP-155 m.3 (j), MD-6, §10.7.1 rule 5, Ek B 5083
+#[test]
+fn the_federation_key_signs_only_federation_statements() {
+    let vault = MemVault::default();
+    let mut s = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    let open = Request::Open {
+        realm: A,
+        alg: JwsAlg::Es256,
+    };
+    assert_eq!(s.handle(open, 0, 7), Response::Opened);
+    let jose = jwks(&mut s, A);
+    let Response::Jwks(fed) = s.handle(Request::FederationJwks(A), 0, 7) else {
+        panic!("no federation keys");
+    };
+    assert_ne!(fed, jose);
+    assert!(fed.contains(r#""crv":"P-256""#));
+    let sign = |typ: &str| Request::SignFederation {
+        realm: A,
+        typ: String::from(typ),
+        payload: br#"{"iss":"https://id.example","sub":"https://id.example"}"#.to_vec(),
+        at: 0,
+    };
+    let Response::Signed { token, kid } = s.handle(sign("entity-statement+jwt"), 0, 0) else {
+        panic!("not signed");
+    };
+    assert!(fed.contains(&access_kernel::json::b64url_encode(&kid)));
+    assert!(!jose.contains(&access_kernel::json::b64url_encode(&kid)));
+    assert_eq!(token.split('.').count(), 3);
+    let payload = Response::Error(String::from(SignerError::Payload.code()));
+    assert_eq!(s.handle(sign("JWT"), 0, 0), payload);
+    let jose_sign = Request::Sign {
+        realm: A,
+        typ: String::from("entity-statement+jwt"),
+        payload: b"{}".to_vec(),
+        at: 0,
+    };
+    assert_eq!(
+        s.handle(jose_sign, 0, 0),
+        payload,
+        "the JOSE key never signs one"
+    );
+    let mut again = Service::start(factory(), vault, Policy::REALM).unwrap();
+    assert_eq!(
+        again.realms(),
+        vec![A],
+        "the federation set is not a realm key set"
+    );
+    assert_eq!(
+        again.handle(Request::FederationJwks(A), 0, 0),
+        Response::Jwks(fed)
+    );
+    let roundtrip = crate::protocol::decode_request(
+        crate::protocol::encode_request(&sign("trust-mark+jwt"))
+            .unwrap()
+            .get(4..)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(roundtrip, sign("trust-mark+jwt"));
+}

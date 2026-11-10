@@ -129,6 +129,21 @@ pub enum Request {
         /// What to sign.
         registration: crate::issuer::Registration,
     },
+    /// The realm's OpenID Federation JWKS; the `federation` key set is made on this first
+    /// request (OP-155 m.3 (j), MD-6).
+    FederationJwks(Realm),
+    /// Signs a JSON object as a compact JWS of a federation `typ` at `at` with the realm's
+    /// `federation` key: an entity statement, a trust mark, a resolve or trust mark status answer.
+    SignFederation {
+        /// Realm.
+        realm: Realm,
+        /// JWS `typ`, one of [`crate::service::FEDERATION_TYPES`].
+        typ: String,
+        /// JSON payload.
+        payload: Vec<u8>,
+        /// Signing time; within the signer's clock skew of its own clock.
+        at: u64,
+    },
 }
 
 /// The identity signer's answer.
@@ -344,6 +359,21 @@ impl Request {
                     ("policy", policy_value(policy)),
                 ]),
             )]),
+            Self::FederationJwks(r) => map(vec![("federation_jwks", Value::Bytes(r.0.to_vec()))]),
+            Self::SignFederation {
+                realm,
+                typ,
+                payload,
+                at,
+            } => map(vec![(
+                "sign_federation",
+                map(vec![
+                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("typ", Value::text(typ)),
+                    ("payload", Value::Bytes(payload.clone())),
+                    ("at", Value::Unsigned(*at)),
+                ]),
+            )]),
             Self::OpenIssuer { realm, party } => map(vec![(
                 "open_issuer",
                 map(vec![
@@ -402,6 +432,17 @@ impl Request {
         if let Some(c) = v.get("sign_checkpoint") {
             return Ok(Self::SignCheckpoint {
                 body: text(c.get("body"))?,
+            });
+        }
+        if let Some(r) = v.get("federation_jwks") {
+            return Ok(Self::FederationJwks(realm(Some(r))?));
+        }
+        if let Some(s) = v.get("sign_federation") {
+            return Ok(Self::SignFederation {
+                realm: realm(s.get("realm"))?,
+                typ: text(s.get("typ"))?,
+                payload: bytes(s.get("payload"))?,
+                at: uint(s.get("at"))?,
             });
         }
         if let Some(o) = v.get("open_issuer") {
