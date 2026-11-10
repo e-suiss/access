@@ -1,0 +1,150 @@
+{
+  "track": "management",
+  "version": "1",
+  "operation": "approval.mapping",
+  "rule": "§5.9",
+  "cases": [
+    {
+      "name": "okta-dual-approval",
+      "vendor": "okta",
+      "source": "Okta Identity Governance access request, two sequential approvers, requester excluded",
+      "policy": {
+        "approval_sequence": [
+          "approver",
+          "approver"
+        ],
+        "requester_can_approve": false
+      },
+      "requirement": {
+        "proof_kind": "contribution",
+        "class": "approve",
+        "count": 2,
+        "binding": "intent_digest",
+        "independence": "distinct_party",
+        "consumption": "single_use"
+      },
+      "scenarios": [
+        {
+          "approvals": [
+            "alice"
+          ],
+          "outcome": "require_action"
+        },
+        {
+          "approvals": [
+            "requester",
+            "alice"
+          ],
+          "outcome": "require_action"
+        },
+        {
+          "approvals": [
+            "alice",
+            "alice"
+          ],
+          "outcome": "require_action"
+        },
+        {
+          "approvals": [
+            "alice",
+            "bob"
+          ],
+          "outcome": "allow"
+        }
+      ],
+      "requirement_cbor": "a665636c61737367617070726f766565636f756e74026762696e64696e676d696e74656e745f6469676573746a70726f6f665f6b696e646c636f6e747269627574696f6e6b636f6e73756d7074696f6e6a73696e676c655f7573656c696e646570656e64656e6365a16864697374696e6374657061727479"
+    },
+    {
+      "name": "aws-multi-party-approval-2",
+      "vendor": "aws",
+      "source": "AWS Multi-party approval team, minimum approvals 2",
+      "policy": {
+        "approval_team": [
+          "requester",
+          "alice",
+          "bob",
+          "carol"
+        ],
+        "minimum_approvals": 2
+      },
+      "requirement": {
+        "proof_kind": "contribution",
+        "class": "approve",
+        "count": 2,
+        "binding": "intent_digest",
+        "independence": "distinct_party",
+        "consumption": "single_use"
+      },
+      "scenarios": [
+        {
+          "approvals": [
+            "bob"
+          ],
+          "outcome": "require_action"
+        },
+        {
+          "approvals": [
+            "requester",
+            "carol"
+          ],
+          "outcome": "require_action"
+        },
+        {
+          "approvals": [
+            "bob",
+            "carol"
+          ],
+          "outcome": "allow"
+        }
+      ],
+      "requirement_cbor": "a665636c61737367617070726f766565636f756e74026762696e64696e676d696e74656e745f6469676573746a70726f6f665f6b696e646c636f6e747269627574696f6e6b636f6e73756d7074696f6e6a73696e676c655f7573656c696e646570656e64656e6365a16864697374696e6374657061727479"
+    },
+    {
+      "name": "aws-multi-party-approval-3",
+      "vendor": "aws",
+      "source": "AWS Multi-party approval team, minimum approvals 3",
+      "policy": {
+        "approval_team": [
+          "alice",
+          "bob",
+          "carol"
+        ],
+        "minimum_approvals": 3
+      },
+      "requirement": {
+        "proof_kind": "contribution",
+        "class": "approve",
+        "count": 3,
+        "binding": "intent_digest",
+        "independence": "distinct_party",
+        "consumption": "single_use"
+      },
+      "scenarios": [
+        {
+          "approvals": [
+            "alice",
+            "bob"
+          ],
+          "outcome": "require_action"
+        },
+        {
+          "approvals": [
+            "alice",
+            "bob",
+            "bob"
+          ],
+          "outcome": "require_action"
+        },
+        {
+          "approvals": [
+            "alice",
+            "bob",
+            "carol"
+          ],
+          "outcome": "allow"
+        }
+      ],
+      "requirement_cbor": "a665636c61737367617070726f766565636f756e74036762696e64696e676d696e74656e745f6469676573746a70726f6f665f6b696e646c636f6e747269627574696f6e6b636f6e73756d7074696f6e6a73696e676c655f7573656c696e646570656e64656e6365a16864697374696e6374657061727479"
+    }
+  ]
+}

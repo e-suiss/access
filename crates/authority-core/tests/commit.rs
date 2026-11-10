@@ -2027,6 +2027,218 @@ async fn a_contribution_approves_once() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
+/// The approval mapping vectors (§5.9).
+fn approval_vectors() -> std::path::PathBuf {
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../conformance/vectors/management/1/approval-mapping.json")
+}
+
+/// The `RequirementTerm` a vector's `requirement` names.
+fn vector_term(v: &serde_json::Value) -> RequirementTerm {
+    assert_eq!(v["proof_kind"], "contribution");
+    assert_eq!(v["binding"], "intent_digest");
+    assert_eq!(v["independence"], "distinct_party");
+    assert_eq!(v["consumption"], "single_use");
+    RequirementTerm {
+        proof_kind: ProofKind::Contribution,
+        class: v["class"].as_str().unwrap().to_owned(),
+        count: v["count"].as_u64().unwrap(),
+        binding: ProofBinding::IntentDigest,
+        freshness_ms: None,
+        independence: Independence::DistinctParty,
+        consumption: Consumption::SingleUse,
+        source: None,
+        assurance: BTreeMap::new(),
+    }
+}
+
+const CAROL: Id = Id([0x0c; 16]);
+const CAROL_KEY: u8 = 16;
+
+/// `party`'s approval of `target` on its contribute Grant `grant`, its Instance opened by
+/// `instance_nonce`, as contribution `nonce`.
+fn approval_by(
+    d: Digest,
+    (party, grant, instance_nonce): (Id, u64, u8),
+    nonce: u8,
+    target: Digest,
+    render: Digest,
+) -> Request {
+    let mut r = contribute(d, nonce, target);
+    r.basis = ExerciseBasis::Holding(HoldingRef {
+        grant: meta::object_id(&d, kind::GRANT, grant),
+        holder: party,
+        since: 0,
+    });
+    let mut act = approval_act(d, nonce, target, render, NOW - 1_000, NOW + 60_000);
+    act.party = party;
+    act.instance = meta::object_id(
+        &meta::exercise_id(&d, &[instance_nonce; 16]).unwrap(),
+        kind::INSTANCE,
+        0,
+    );
+    let h = access_kernel::aas::digest(&act).unwrap();
+    let claim = sign_claim(
+        &access_kernel::claim::Statement {
+            domain: d,
+            issuer: ALICE,
+            subject: party,
+            class: "authentication".to_owned(),
+            value: Some(EqValue::Bytes(vec![0xaa; 32])),
+            issued_at: NOW - 5_000,
+            validity: Window {
+                from: NOW - 5_000,
+                until: NOW + 12 * 3_600_000,
+            },
+            assurance: PASSKEY_UV
+                .iter()
+                .map(|(k, v)| ((*k).to_owned(), *v))
+                .collect(),
+            bound_intent: Some(h),
+            bound_instance: None,
+            bound_resource: None,
+            supersedes: None,
+        },
+        ALICE_KEY,
+    );
+    with_proofs(
+        r,
+        vec![
+            ProofRef::Aas(act.to_bytes().unwrap()),
+            ProofRef::Claim(claim),
+        ],
+    )
+}
+
+// §5.9, C26, L13, INV-20, CI-14, L0-EVAL-26, OP-155 m.3 (q), Ek B 5077
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "every vendor mapping vector and its scenarios on one store"
+)]
+async fn okta_and_aws_approval_policies_map_to_one_requirement_term() {
+    use std::fmt::Write as _;
+    let mut doc: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(approval_vectors()).unwrap()).unwrap();
+    let committed = doc.clone();
+    for case in doc["cases"].as_array_mut().unwrap() {
+        let bytes = vector_term(&case["requirement"]).to_bytes().unwrap();
+        case["requirement_cbor"] =
+            serde_json::Value::from(bytes.iter().fold(String::new(), |mut h, b| {
+                let _ = write!(h, "{b:02x}");
+                h
+            }));
+    }
+    if std::env::var_os("ACCESS_UPDATE_VECTORS").is_some() {
+        std::fs::write(
+            approval_vectors(),
+            format!("{}\n", serde_json::to_string_pretty(&doc).unwrap()),
+        )
+        .unwrap();
+        return;
+    }
+    assert_eq!(
+        committed, doc,
+        "vectors are stale; run with ACCESS_UPDATE_VECTORS=1"
+    );
+    for case in committed["cases"].as_array().unwrap() {
+        let name = case["name"].as_str().unwrap();
+        let term = vector_term(&case["requirement"]);
+        let db = fresh().await.unwrap();
+        let mut g = gated(&[term]);
+        let Some(Value::Array(mut grants)) = g.get("grants").map(|o| o.value.clone()) else {
+            panic!("genesis has grants");
+        };
+        let alice = grants[1].clone();
+        for party in [BOB, CAROL, ROOT] {
+            let Value::Map(mut m) = alice.clone() else {
+                panic!("a grant is a map");
+            };
+            for (k, v) in &mut m {
+                if *k == Value::text("holder") {
+                    *v = SubjectSelector::Party(party).to_value();
+                }
+            }
+            grants.push(Value::Map(m));
+        }
+        grants.sort_by_key(|v| dcbor::encode(v, Limits::CEILING).unwrap());
+        let held = |party: Id| {
+            let holder = SubjectSelector::Party(party).to_value();
+            u64::try_from(
+                grants
+                    .iter()
+                    .position(|v| v.get("holder") == Some(&holder))
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        let index = [held(ALICE), held(BOB), held(CAROL), held(ROOT)];
+        g.insert(
+            "grants".to_owned(),
+            Opened {
+                value: Value::Array(grants),
+                salt: [3; 32],
+            },
+        );
+        let d = create_genesis(&db.sequencer, TENANT, g, 1_000)
+            .await
+            .unwrap();
+        let log = PgLog::new(db.sequencer.clone(), d, TENANT, "t".to_owned(), TTL);
+        let leader = Leader::acquire(log, d, EventKey::new(Secret::new([5; 32])))
+            .await
+            .unwrap();
+        let reader = PgReader::new(db.app.clone(), DomainId::from_bytes(d.0));
+        let mut bound = binding();
+        bound
+            .0
+            .insert(thumbprint(&public(CAROL_KEY)), (CAROL, public(CAROL_KEY)));
+        let mut core: Core = Authority::new(leader, reader, bound, Counter(0), d);
+        onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+        onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+        onboard(&mut core, d, BOB, BOB_KEY, (5, 6)).await;
+        onboard(&mut core, d, CAROL, CAROL_KEY, (7, 8)).await;
+        let approver = |who: &str| match who {
+            "alice" => ((ALICE, index[0], 4), ALICE_KEY),
+            "bob" => ((BOB, index[1], 6), BOB_KEY),
+            "carol" => ((CAROL, index[2], 8), CAROL_KEY),
+            "requester" => ((ROOT, index[3], 2), ROOT_KEY),
+            other => panic!("{other}"),
+        };
+        let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+        let mut nonce: u8 = 20;
+        let mut next = || {
+            nonce = nonce.checked_add(1).unwrap();
+            nonce
+        };
+        for scenario in case["scenarios"].as_array().unwrap() {
+            let target = shop_request(d, next(), Mode::Commit, shop);
+            let digest = access_kernel::intent::intent_digest(&target.intent).unwrap();
+            let shown = render_of(&target);
+            let asked = send(&mut core, target.clone(), ROOT_KEY).await.unwrap();
+            assert_eq!(asked.decision.outcome, Outcome::RequireAction, "{name}");
+            let mut proofs = Vec::new();
+            for who in scenario["approvals"].as_array().unwrap() {
+                let (id, seed) = approver(who.as_str().unwrap());
+                let given = send(&mut core, approval_by(d, id, next(), digest, shown), seed)
+                    .await
+                    .unwrap();
+                allowed(&given);
+                proofs.push(ProofRef::Contribution(given.exercise.unwrap()));
+            }
+            let decided = send(&mut core, with_proofs(target, proofs), ROOT_KEY)
+                .await
+                .unwrap();
+            let want = match scenario["outcome"].as_str().unwrap() {
+                "allow" => Outcome::Allow,
+                "require_action" => Outcome::RequireAction,
+                other => panic!("{other}"),
+            };
+            assert_eq!(decided.decision.outcome, want, "{name}: {scenario}");
+        }
+        fold_check(&db.sequencer, d).await.unwrap();
+    }
+}
+
 fn protocol(r: Result<Response, CoreError>) -> &'static str {
     match r {
         Err(CoreError::Protocol(code)) => code,
@@ -4841,7 +5053,7 @@ async fn foreign_authority_counts_only_through_its_acceptance_and_a_bridging_cei
         named(BlockerClass::SourceNotAccepted, "foreign-not-accepted"),
     );
 
-    // §9.15A.2: a proof ingested for predicate-input never selects a holder
+    // §9.15A.2
     allowed(
         &send(
             &mut core,
@@ -4875,7 +5087,7 @@ async fn foreign_authority_counts_only_through_its_acceptance_and_a_bridging_cei
         ),
         named(BlockerClass::SourceNotAccepted, "foreign-not-accepted"),
     );
-    // CI-10: foreign identity alone is only actor-binding
+    // CI-10
     assert_eq!(
         blocked(&send(&mut core, read(23, BOB), BOB_KEY).await.unwrap()),
         named(BlockerClass::SourceNotAccepted, "foreign-not-accepted"),
@@ -4917,7 +5129,7 @@ async fn foreign_authority_counts_only_through_its_acceptance_and_a_bridging_cei
         .await
         .unwrap(),
     );
-    // §9.15A.2: effective = Ceiling ∩ Map(foreign chain)
+    // §9.15A.2
     let mut outside = read(25, ALICE);
     outside.intent.resources = vec![ResourceRef {
         namespace: "shop".to_owned(),
