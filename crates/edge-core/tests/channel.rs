@@ -755,7 +755,7 @@ mod kerberos_gateway {
     }
 
     // IDP-17, OP-155 m.3 (o), §10.6.4, RR-28
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[ignore = "needs root, the MIT KDC and the gateway binary; CI job kerberos"]
     async fn spnego_signs_in_falls_back_and_never_writes_the_keytab() {
         let w = world(59).await;
@@ -845,26 +845,38 @@ mod kerberos_gateway {
             .unwrap();
         running.0.push(gateway);
         listening(port).await;
-        let kinit = Command::new("kinit")
-            .arg(format!("ada@{realm}"))
-            .env("KRB5_CONFIG", dir.join("krb5.conf"))
-            .env(
-                "KRB5CCNAME",
-                format!("FILE:{}", dir.join("ccache").display()),
-            )
-            .stdin(Stdio::piped())
-            .spawn()
-            .and_then(|mut c| {
-                use std::io::Write as _;
-                c.stdin
-                    .take()
+        let kinit = tokio::task::spawn_blocking({
+            let dir = dir.clone();
+            move || {
+                Command::new("kinit")
+                    .arg(format!("ada@{realm}"))
+                    .env("KRB5_CONFIG", dir.join("krb5.conf"))
+                    .env(
+                        "KRB5CCNAME",
+                        format!("FILE:{}", dir.join("ccache").display()),
+                    )
+                    .stdin(Stdio::piped())
+                    .spawn()
+                    .and_then(|mut c| {
+                        use std::io::Write as _;
+                        c.stdin
+                            .take()
+                            .unwrap()
+                            .write_all(b"ci-only-not-a-secret\n")?;
+                        c.wait()
+                    })
                     .unwrap()
-                    .write_all(b"ci-only-not-a-secret\n")?;
-                c.wait()
-            })
-            .unwrap();
+            }
+        })
+        .await
+        .unwrap();
         assert!(kinit.success());
-        let (no_token, _) = curl(&dir, "access.corp.example", port, &[]);
+        let (no_token, _) = tokio::task::spawn_blocking({
+            let dir = dir.clone();
+            move || curl(&dir, "access.corp.example", port, &[])
+        })
+        .await
+        .unwrap();
         assert_eq!(no_token, "401");
         let (code, to) = tokio::task::spawn_blocking({
             let dir = dir.clone();
@@ -898,7 +910,12 @@ mod kerberos_gateway {
             "Authorization: NTLM TlRMTVNTUAABAAAAB4IIogAAAAAAAAAAAAAAAAAAAAAKAGFKAAAADw==",
             "Authorization: Negotiate TlRMTVNTUAABAAAAB4IIogAAAAAAAAAAAAAAAAAAAAAKAGFKAAAADw==",
         ] {
-            let (ntlm, to) = curl(&dir, "access.corp.example", port, &["-H", header]);
+            let (ntlm, to) = tokio::task::spawn_blocking({
+                let dir = dir.clone();
+                move || curl(&dir, "access.corp.example", port, &["-H", header])
+            })
+            .await
+            .unwrap();
             assert_eq!((ntlm.as_str(), to.as_str()), ("303", LOGIN), "{header}");
         }
         let (audit, outbox) = w.rows().await;
