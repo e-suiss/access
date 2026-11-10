@@ -115,6 +115,21 @@ async fn an_app_password_binds_and_reads_the_directory_tree() {
         .await;
     assert_eq!(hits.len(), 1);
     assert_eq!(values(&hits[0], "uid"), vec![String::from("ada")]);
+    let (schema, done) = c
+        .search(
+            "cn=Subschema",
+            LdapSearchScope::Base,
+            LdapFilter::Present(String::from("objectClass")),
+            &["attributeTypes", "objectClasses"],
+            Vec::new(),
+        )
+        .await;
+    assert_eq!(code(&done), LdapResultCode::Success);
+    let types = values(&schema[0], "attributeTypes");
+    assert!(types.iter().any(|t| t.contains("NAME 'memberOf'")));
+    assert!(types.iter().any(|t| t.contains("NAME 'uidNumber'")));
+    let classes = values(&schema[0], "objectClasses");
+    assert!(classes.iter().any(|t| t.contains("NAME 'posixGroup'")));
     // IDP-16
     let mut d = ldaps(&w, None).await;
     assert_eq!(
