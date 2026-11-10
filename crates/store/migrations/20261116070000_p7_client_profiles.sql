@@ -18,7 +18,7 @@ CREATE TABLE access.oauth_client_profiles (
   jwt_kek_id text CHECK (length(jwt_kek_id) BETWEEN 1 AND 128),
   jwt_wrapped bytea CHECK (octet_length(jwt_wrapped) BETWEEN 16 AND 512),
   jwt_nonce bytea CHECK (octet_length(jwt_nonce) = 12),
-  jwt_ciphertext bytea CHECK (octet_length(jwt_ciphertext) BETWEEN 32 AND 256),
+  jwt_sealed bytea CHECK (octet_length(jwt_sealed) BETWEEN 32 AND 256),
   tls_auth text CHECK (tls_auth IN ('tls_client_auth', 'self_signed_tls_client_auth')),
   tls_name_kind text CHECK (tls_name_kind IN ('subject_dn', 'san_dns', 'san_uri', 'san_ip', 'san_email')),
   tls_name text CHECK (length(tls_name) BETWEEN 1 AND 1024),
@@ -41,8 +41,8 @@ CREATE TABLE access.oauth_client_profiles (
   -- OP-148 m.16 (l): the sealed secret exists exactly for client_secret_jwt
   CHECK ((legacy_auth IS NOT DISTINCT FROM 'client_secret_jwt')
     = (jwt_kek_id IS NOT NULL AND jwt_wrapped IS NOT NULL AND jwt_nonce IS NOT NULL
-       AND jwt_ciphertext IS NOT NULL)),
-  CHECK (num_nulls(jwt_kek_id, jwt_wrapped, jwt_nonce, jwt_ciphertext) IN (0, 4)),
+       AND jwt_sealed IS NOT NULL)),
+  CHECK (num_nulls(jwt_kek_id, jwt_wrapped, jwt_nonce, jwt_sealed) IN (0, 4)),
   -- RFC 8705 §2.1.2, §2.2.2: the PKI method names one subject; the self-signed one registers keys
   CHECK ((tls_auth IS NOT DISTINCT FROM 'tls_client_auth')
     = (tls_name_kind IS NOT NULL AND tls_name IS NOT NULL)),

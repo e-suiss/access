@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT fapi2, legacy_auth, jwt_kek_id, jwt_wrapped, jwt_nonce, jwt_ciphertext, tls_auth,\n                tls_name_kind, tls_name, tls_jwks, rs256, id_token_alg, enc_alg, enc_jwks,\n                enc_id_token, enc_userinfo, enc_jarm, userinfo_signed, saml_bearer_upstream,\n                legacy_bearer, frontchannel_logout_uri\n           FROM access.oauth_client_profiles\n          WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3\n          ORDER BY version DESC LIMIT 1",
+  "query": "SELECT fapi2, legacy_auth, jwt_kek_id, jwt_wrapped, jwt_nonce, jwt_sealed, tls_auth,\n                tls_name_kind, tls_name, tls_jwks, rs256, id_token_alg, enc_alg, enc_jwks,\n                enc_id_token, enc_userinfo, enc_jarm, userinfo_signed, saml_bearer_upstream,\n                legacy_bearer, frontchannel_logout_uri\n           FROM access.oauth_client_profiles\n          WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3\n          ORDER BY version DESC LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -60,12 +60,12 @@
       },
       {
         "ordinal": 5,
-        "name": "jwt_ciphertext",
+        "name": "jwt_sealed",
         "type_info": "Bytea",
         "origin": {
           "Table": {
             "table": "access.oauth_client_profiles",
-            "name": "jwt_ciphertext"
+            "name": "jwt_sealed"
           }
         }
       },
@@ -266,5 +266,5 @@
       true
     ]
   },
-  "hash": "7b336f03944aa0bed78d3d6275c46eeca4babc482f5c4e7ec8808e380df4ecc1"
+  "hash": "02350f5ddf211fc14bd6e550eca1b2f8f1b6fd5caccf442b80da6f39ddc30f53"
 }

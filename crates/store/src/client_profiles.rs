@@ -96,7 +96,7 @@ pub async fn put_profile(
     let jwt = p.jwt_secret.as_ref();
     let version = sqlx::query_scalar!(
         r#"INSERT INTO access.oauth_client_profiles (tenant_id, realm_id, client_uuid, version,
-                fapi2, legacy_auth, jwt_kek_id, jwt_wrapped, jwt_nonce, jwt_ciphertext, tls_auth,
+                fapi2, legacy_auth, jwt_kek_id, jwt_wrapped, jwt_nonce, jwt_sealed, tls_auth,
                 tls_name_kind, tls_name, tls_jwks, rs256, id_token_alg, enc_alg, enc_jwks,
                 enc_id_token, enc_userinfo, enc_jarm, userinfo_signed, saml_bearer_upstream,
                 legacy_bearer, frontchannel_logout_uri, domain_id, decision_pos)
@@ -147,7 +147,7 @@ pub async fn profile(
 ) -> Result<Option<ClientProfileRow>, StoreError> {
     let (tenant, realm) = scope(t)?;
     let row = sqlx::query!(
-        "SELECT fapi2, legacy_auth, jwt_kek_id, jwt_wrapped, jwt_nonce, jwt_ciphertext, tls_auth,
+        "SELECT fapi2, legacy_auth, jwt_kek_id, jwt_wrapped, jwt_nonce, jwt_sealed, tls_auth,
                 tls_name_kind, tls_name, tls_jwks, rs256, id_token_alg, enc_alg, enc_jwks,
                 enc_id_token, enc_userinfo, enc_jarm, userinfo_signed, saml_bearer_upstream,
                 legacy_bearer, frontchannel_logout_uri
@@ -163,7 +163,7 @@ pub async fn profile(
     let Some(r) = row else {
         return Ok(None);
     };
-    let jwt_secret = match (r.jwt_kek_id, r.jwt_wrapped, r.jwt_nonce, r.jwt_ciphertext) {
+    let jwt_secret = match (r.jwt_kek_id, r.jwt_wrapped, r.jwt_nonce, r.jwt_sealed) {
         (Some(kek_id), Some(wrapped), Some(nonce), Some(ciphertext)) => Some(SealedJwtSecret {
             kek_id,
             wrapped,
