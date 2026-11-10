@@ -666,6 +666,30 @@ test("organizations show roots, membership sources apart from sign-in, domains a
   await expect(page.getByText(/transfer/i)).toHaveCount(0);
 });
 
+// TN-94, C10, X20, OP-155 m.3 (i), Ek B 4872: the preview first, service accounts included, and
+// no enforcement until the pending invitations' fate is chosen
+test("SSO enforcement shows its preview and needs the invitations' fate", async ({ page, bff }) => {
+  await open(page, bff, "/console/admin/organizations");
+  await page.getByRole("button", { name: "Acme <b>Corp</b>" }).click();
+  const sso = page.getByRole("region", { name: "Enterprise sign-in (SSO)" });
+  await expect(page.getByTestId("sso-state")).toHaveText("Not enforced");
+  await expect(page.getByTestId("sso-preview")).toContainText("ends 3 members' sign-ins");
+  await expect(page.getByTestId("sso-service-accounts")).toContainText(": 1");
+  const enforce = sso.getByRole("button", { name: "Enforce SSO" });
+  await expect(enforce).toBeDisabled();
+  await sso.getByLabel("Cancel them").check();
+  await enforce.click();
+  await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
+  await expect(sso.getByRole("status")).toContainText("Recorded");
+  expect(bff.writes).toEqual([
+    {
+      method: "POST",
+      path: `realms/acme/organizations/${Buffer.alloc(16, 10).toString("base64url")}/sso-enforcement`,
+      body: expect.objectContaining({ invitations: "cancel" }) as unknown,
+    },
+  ]);
+});
+
 // §8.5 S7, §8.17.9.1, Ek B 3874: every change grouped by the record that made it
 test("history lists each recorded change under its record and asks nothing", async ({
   page,

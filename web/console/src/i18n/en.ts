@@ -667,6 +667,24 @@ export const en = {
   publishKept: "Published as fingerprint",
   publishAcceptedIn: "Accepted in: {domains}",
   deliveryAttempts: "{n} attempts",
+  ssoTitle: "Enterprise sign-in (SSO)",
+  ssoState: "SSO enforcement",
+  ssoEnforced: "Enforced",
+  ssoNotEnforced: "Not enforced",
+  ssoPreview:
+    "Turning this on ends {members} members' sign-ins, refresh tokens and API keys. Their passwords stop working until it is lifted.",
+  ssoServiceAccounts: "Service accounts affected (they hold API keys): {n}",
+  ssoPending: "Pending invitations: {n}",
+  ssoFate: "What happens to the pending invitations",
+  ssoFateCancel: "Cancel them",
+  ssoFateRedirect: "Keep them; they are accepted through the new sign-in only",
+  ssoEnforce: "Enforce SSO",
+  ssoLift: "Lift SSO enforcement",
+  ssoSetupLink: "Send a setup link",
+  ssoSetupEmail: "Address of the organization's IT administrator",
+  ssoSetupSend: "Create the link",
+  ssoSetupShown: "This one-use link works for 72 hours and is shown once:",
+  orgDraftSaml: "SAML · {entity}",
 } as const;
 
 export type Key = keyof typeof en;

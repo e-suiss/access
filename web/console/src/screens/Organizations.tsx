@@ -8,6 +8,7 @@ import { useState, type ReactElement } from "react";
 import { type Key, t } from "../i18n/index.js";
 import { adminGet } from "../lib/admin.js";
 import { at, type Ctx, Panel, Show, useLoad, useRun } from "./parts.js";
+import { SsoEnforcement } from "./SsoEnforcement.js";
 
 interface OrgSummary {
   readonly organization: string;
@@ -46,8 +47,9 @@ interface Handover {
 
 interface Draft {
   readonly protocol: string;
-  readonly issuer: string;
-  readonly client_id: string;
+  readonly issuer?: string | null;
+  readonly client_id?: string | null;
+  readonly entity_id?: string | null;
 }
 
 interface Organization extends OrgSummary {
@@ -171,8 +173,15 @@ function OrganizationView({ o }: { readonly o: Organization }): ReactElement {
       ) : (
         <ul data-testid="org-drafts">
           {o.connection_drafts.map((d) => (
-            <li key={`${d.issuer}/${d.client_id}`}>
-              <span className="mono">{d.issuer}</span> · {d.client_id} · {t("orgDraftOnly")}
+            <li key={`${d.issuer ?? ""}/${d.client_id ?? ""}/${d.entity_id ?? ""}`}>
+              {d.protocol === "saml" ? (
+                t("orgDraftSaml", { entity: d.entity_id ?? "" })
+              ) : (
+                <>
+                  <span className="mono">{d.issuer}</span> · {d.client_id}
+                </>
+              )}{" "}
+              · {t("orgDraftOnly")}
             </li>
           ))}
         </ul>
@@ -227,6 +236,7 @@ export function Organizations({ ctx }: { readonly ctx: Ctx }): ReactElement {
       {open !== undefined && (
         <Panel id="org-open" title={t("orgOpen")}>
           <Show l={one}>{(o) => <OrganizationView o={o} />}</Show>
+          <SsoEnforcement key={open} ctx={ctx} org={open} />
         </Panel>
       )}
     </>

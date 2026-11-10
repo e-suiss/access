@@ -55,6 +55,16 @@ export function seed(bff: ConsoleMock): void {
   bff.admin.set("realms/acme/organizations", {
     items: [{ organization: id(10), display_name: "Acme <b>Corp</b>", hrd: false }],
   });
+  // TN-94, X20
+  bff.admin.set(`realms/acme/organizations/${id(10)}/sso-enforcement/preview`, {
+    organization: id(10),
+    enforced: false,
+    invitations: null,
+    members: [],
+    service_accounts: ["usr_bot"],
+    pending_invitations: 2,
+    totals: { members: 3 },
+  });
   bff.admin.set(`realms/acme/organizations/${id(10)}`, {
     organization: id(10),
     display_name: "Acme <b>Corp</b>",

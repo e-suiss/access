@@ -137,6 +137,9 @@ const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   putRpId: ["idp.realm", "rp_id"],
   suspendAccount: ["idp.account", "suspend"],
   reactivateAccount: ["idp.account", "reactivate"],
+  enforceOrganizationSso: ["idp.org", "sso_enforce"],
+  liftOrganizationSso: ["idp.org", "sso_enforce_lift"],
+  createOrganizationSetupLink: ["idp.org", "setup_link"],
 };
 
 export interface Write {
