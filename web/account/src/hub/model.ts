@@ -60,7 +60,11 @@ export interface Row {
   readonly who: {
     readonly kind: "party" | "everyone" | "group" | "foreign";
     readonly party?: string;
+    /** The Claim classes of a rule-shaped holder. */
+    readonly classes?: readonly string[];
   };
+  /** "Sync from HR (*issuer*)": an accepted HR source selects the viewer (§8.17.9.8). */
+  readonly hrSource?: string;
   readonly capacity: readonly Capacity[];
   readonly what: readonly string[];
   readonly validUntil?: number;
@@ -134,8 +138,31 @@ function capacities(row: Json, yours: boolean): Capacity[] {
 function who(holder: Json): Row["who"] {
   const party = str(holder["party"]);
   if (party !== undefined) return { kind: "party", party };
-  if (Array.isArray(holder["group"])) return { kind: "group" };
+  if (Array.isArray(holder["group"])) {
+    return {
+      kind: "group",
+      classes: arr(holder["group"]).filter((c): c is string => typeof c === "string"),
+    };
+  }
   return { kind: holder["public"] !== undefined ? "everyone" : "foreign" };
+}
+
+/** The HR membership classes (SCIM HR classes, OP-155 m.9 (c)); as services/experience. */
+const HR_CLASSES = [
+  "hr_department",
+  "hr_title",
+  "hr_manager",
+  "hr_start",
+  "hr_end",
+  "hr_employment_status",
+];
+
+/** §8.17.9.8, INV-16: the issuer of an HR-only rule-shaped selection. */
+function hrSource(holder: Row["who"], selection: Selection | undefined): string | undefined {
+  const classes = holder.classes ?? [];
+  const hr =
+    holder.kind === "group" && classes.length > 0 && classes.every((c) => HR_CLASSES.includes(c));
+  return hr ? selection?.by : undefined;
 }
 
 function offers(row: Json, viewer: string, roots: ReadonlySet<string>): Offer[] {
@@ -198,6 +225,8 @@ function row(
   const validUntil = num(obj(v["validity"])["until"]);
   const since = num(v["since"]);
   const holder = obj(v["holder"]);
+  const holderWho = who(holder);
+  const hr = hrSource(holderWho, chosen);
   // XI-17
   const agent = agents.faceOf(
     v["agent"],
@@ -214,7 +243,8 @@ function row(
       asOf,
       status,
       ...(chosen === undefined ? {} : { selection: chosen }),
-      who: who(obj(v["holder"])),
+      who: holderWho,
+      ...(hr === undefined ? {} : { hrSource: hr }),
       capacity: capacities(v, groups.includes("your_authority")),
       what: arr(v["actions"]).map(
         (a) => `${str(obj(a)["namespace"]) ?? ""}:${str(obj(a)["name"]) ?? ""}`,

@@ -4,13 +4,14 @@
 // answer is "Not confirmed — checking", retried with the same signed request (G39, HL-5). An
 // agent is shown as an agent (XI-17); what it did is what its runtime reported (E64, X30); Stop
 // is two rows (X13) and the aftermath is honest about the horizon (§8.13, §8.17.7.4).
-import { agents, honesty, WhyPanel, type Explanation } from "@suiss/access-react";
+import { agents, honesty, payment, WhyPanel, type Explanation } from "@suiss/access-react";
 import { useCallback, useEffect, useState, type ReactElement } from "react";
 
 import { revoke, search, type Revoking } from "../lib/adp.js";
-import { at, catalogue, t } from "../lib/i18n.js";
+import { at, catalogue, locale, t } from "../lib/i18n.js";
 import type { Confirm, Instance, SignatureView } from "../lib/instance.js";
 import { assemble, type ActivityRow, type Hub as HubData, type Read, type Row } from "./model.js";
+import { relayStatus } from "./relay.js";
 
 export type Section = "authority" | "activity" | "changes";
 
@@ -371,6 +372,17 @@ function Rows({
               </p>
               {r.agent !== undefined && <NextCheck instance={instance} grant={r.grant} />}
               <Passed row={r} rows={all} viewer={instance.party} />
+              {/* XI-14: Access's own limits; a financial limit is Pay's row, shown only from Pay */}
+              <payment.LimitRows
+                rows={payment.limitRows(r.limits, [], locale, (p) => t(`period.${p}`))}
+                catalogue={catalogue}
+              />
+              {/* §8.17.9.8 */}
+              {r.hrSource !== undefined && (
+                <p className="meta" data-testid="hr-source">
+                  {t("source.sync_from_hr", { issuer: r.hrSource })}
+                </p>
+              )}
               <p className="meta">
                 {r.selection?.at === undefined
                   ? t(r.status)
@@ -460,7 +472,12 @@ export function Hub({
   readonly section: Section;
 }): ReactElement {
   const [hub, setHub] = useState<HubData | null>(null);
+  const [delayed, setDelayed] = useState(false);
   const load = useCallback(() => {
+    // §8.13, INV-24: a delay is a notice; no row changes with it
+    void relayStatus().then((s) => {
+      setDelayed(s?.delayed === true);
+    });
     const query = { party: instance.party };
     void Promise.all([
       read(search(instance, "inventory", query)),
@@ -485,6 +502,17 @@ export function Hub({
           {t(n)}
         </p>
       ))}
+      {/* §8.13, OP-156 m.6 (d) */}
+      {hub.status === "domain.unreachable" && (
+        <p className="notice" role="alert" data-testid="access-unavailable">
+          {t("status.access_unavailable")}
+        </p>
+      )}
+      {delayed && (
+        <p className="notice" data-testid="notifications-delayed">
+          {t("status.notifications_delayed")}
+        </p>
+      )}
       <button type="button" className="secondary" onClick={load}>
         {t("action.read_again")}
       </button>

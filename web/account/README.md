@@ -5,7 +5,9 @@ The realm's own account pages, served by Access at `/account` on the realm's pub
 ## Sections
 
 - **Account** — privacy (what the realm may contact you about, the documents you accepted, your security history, a scheduled deletion and your data requests). These screens use the session cookie only and never touch authority. Sign-in methods and sessions live in `src/account` and `src/signins`.
-- **Authority** — _Your authority_, _Acting for you_, _Shared from you_, _Activity_ and _Changes_, with **Why?** and **Revoke** on every row you can act on.
+- **Authority** — _Your authority_, _Acting for you_, _Shared from you_, _Activity_ and _Changes_, with **Why?** and **Revoke** on every row you can act on. A role your HR source selects you for says "Sync from HR".
+- **Merchants that can charge you** — every merchant holding a payment delegation from you, a merchant's agent shown as "AI agent · acting for _M_", the limit as Access recorded it, and **Stop charges**, which revokes the delegation. Payment agreements are Pay's and are cancelled in Pay, as a separate step.
+- **One-time payment** (`/account/payment`) — opened from a merchant's request: it shows "Pay 300 TRY to _M_ once" exactly as the request's bytes say and sends your own payment, never a delegation. A request that would let the merchant charge you again is refused.
 
 ## How the Authority screens stay honest
 
@@ -14,6 +16,8 @@ The realm's own account pages, served by Access at `/account` on the realm's pub
 - **Two steps to revoke.** Revoke opens what it changes and the request to sign; Revoke again sends it.
 - **Done only when recorded.** The page shows "Submitted" until Access answers, "Not confirmed — checking" when the answer is lost, and retries with the very same signed request. It never shows an unknown outcome as done or as not recorded.
 - **Changes are information.** Nothing in Changes asks you to act.
+- **Two limits, two rows.** A limit Access records and a limit your bank or Pay sets are separate rows, each with its owner; neither is worked out from the other.
+- **Degraded states are said plainly.** When notifications are delayed the page says so and what you changed still reads as done; when Access can't be reached it says authority can't be changed right now and that the runtime can still be asked to stop.
 
 Texts come from Access's Fluent catalogs in `locales/`, with the realm's overrides where allowed.
 

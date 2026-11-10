@@ -128,6 +128,13 @@ export class AccountMock {
   vault: Record<string, unknown>[] = [];
   /** S11: the person's agents `GET /v1/account/agent-connections` lists. */
   agents: Record<string, unknown>[] = [];
+  /** OP-156 m.11 (e): what `GET /access/v1/relay-status` answers. */
+  relay: { relay_lag_ms: number | null; notifications_delayed: boolean } = {
+    relay_lag_ms: null,
+    notifications_delayed: false,
+  };
+  /** §8.13: ADP's searches do not answer. */
+  searchDown = false;
 
   async signIn(context: BrowserContext, baseURL: string): Promise<void> {
     this.signedIn = true;
@@ -154,6 +161,9 @@ export class AccountMock {
     await context.route(/\/v1\/approvers(\/|$)/, (r) => this.approversRoute(r));
     await context.route(/\/v1\/account\/vault\/connections/, (r) => this.vaultRoute(r));
     await context.route(/\/v1\/account\/agent-connections/, (r) => this.agentsRoute(r));
+    await context.route("**/access/v1/relay-status", (r) =>
+      r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(this.relay) }),
+    );
   }
 
   private async approversRoute(r: Route): Promise<void> {
@@ -284,7 +294,10 @@ export class AccountMock {
     const context = s.body["context"] as Record<string, unknown> | undefined;
     if (typeof context?.["ais"] !== "string") return reply(403, { code: "read-not-own" });
     const kind = /^\/proxy\/adp\/search\/(.+)$/.exec(path)?.[1];
-    if (kind !== undefined) return reply(200, { results: this.searches.get(kind) ?? [], page: {} });
+    if (kind !== undefined) {
+      if (this.searchDown) return reply(503, { code: "unavailable" });
+      return reply(200, { results: this.searches.get(kind) ?? [], page: {} });
+    }
     if (path === "/proxy/adp/evaluation") {
       this.nonces.push(String(context["nonce"]));
       const how = this.evaluations.shift() ?? "allow";

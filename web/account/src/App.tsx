@@ -6,6 +6,8 @@ import { useEffect, useState, type ReactElement } from "react";
 import { AccountSettings } from "./account/index.js";
 import { DeviceSetup } from "./hub/DeviceSetup.js";
 import { Hub, type Section } from "./hub/Hub.js";
+import { MerchantsPage } from "./merchants/Merchants.js";
+import { OneTimePaymentPage } from "./payment/Payment.js";
 import { useSignature } from "./hub/Sign.js";
 import { call, FRONTEND, json, PAGE, Problem, type SessionInfo } from "./lib/api.js";
 import { t } from "./lib/i18n.js";
@@ -13,12 +15,14 @@ import { find, type Instance } from "./lib/instance.js";
 import { Privacy } from "./privacy/Privacy.js";
 import { SignedOutReason, SignIns } from "./signins/index.js";
 
-type Screen = "account" | Section;
+type Screen = "account" | Section | "merchants" | "payment";
 
-const SCREENS: readonly Screen[] = ["account", "authority", "activity", "changes"];
+const SCREENS: readonly Screen[] = ["account", "authority", "activity", "changes", "merchants"];
 
 function screenOf(path: string): Screen {
   const rest = path.slice(PAGE.length).replace(/^\//, "");
+  // OP-156 m.3 (v): the one-time payment is reached from the merchant's request, not the menu
+  if (rest === "payment") return "payment";
   return SCREENS.find((s) => s === rest) ?? "account";
 }
 
@@ -92,7 +96,9 @@ export function App(): ReactElement {
                 ? t("nav.account")
                 : s === "authority"
                   ? t("nav.authority")
-                  : t(`hub.${s}`)}
+                  : s === "merchants"
+                    ? t("merchants.title")
+                    : t(`hub.${s}`)}
             </a>
           ))}
         </nav>
@@ -106,6 +112,10 @@ export function App(): ReactElement {
           </>
         ) : instance === undefined ? (
           <DeviceSetup session={session} confirm={confirm} onReady={setInstance} />
+        ) : screen === "merchants" ? (
+          <MerchantsPage instance={instance} confirm={confirm} />
+        ) : screen === "payment" ? (
+          <OneTimePaymentPage instance={instance} confirm={confirm} />
         ) : (
           <Hub instance={instance} section={screen} />
         )}
