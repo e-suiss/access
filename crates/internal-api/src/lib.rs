@@ -11,6 +11,7 @@ pub mod instances;
 pub mod linux;
 pub mod projections;
 pub mod saml;
+pub mod signals;
 pub mod ssh;
 
 #[cfg(test)]
