@@ -29,7 +29,7 @@ up() {
     curl --fail --silent --show-error --location --output "$CA" "$MINICA_URL"
     echo "$MINICA_SHA256  $CA" | sha256sum --check --strict
     docker run --detach --name access-challtestsrv --network host "$CHALLTESTSRV" \
-        -defaultIPv6 "" -defaultIPv4 127.0.0.1
+        -defaultIPv6 "" -defaultIPv4 127.0.0.1 -tlsalpn01 "" -http01 "" -https01 "" -doh ""
     docker run --detach --name access-pebble --network host \
         --env PEBBLE_VA_NOSLEEP=1 --env PEBBLE_WFE_NONCEREJECT=0 \
         "$PEBBLE" -config /test/config/pebble-config.json -dnsserver 127.0.0.1:8053

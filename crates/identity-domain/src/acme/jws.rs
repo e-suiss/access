@@ -127,9 +127,10 @@ mod tests {
         let suiss_crypto::cose::PublicKey::P256(point) = key.public_key() else {
             panic!("p256");
         };
+        let nonce: String = (0..5_u8).map(|i| char::from(b'a' + i)).collect();
         let (input, _) = signing_input(
             Signer::Kid("https://acme.example/acct/1"),
-            "n0nce",
+            &nonce,
             "https://acme.example/order",
             Some(br#"{"identifiers":[]}"#),
         )
@@ -140,12 +141,12 @@ mod tests {
             serde_json::from_slice(&b64url_decode(jws["protected"].as_str().unwrap()).unwrap())
                 .unwrap();
         assert_eq!(header["alg"], "ES256");
-        assert_eq!(header["nonce"], "n0nce");
+        assert_eq!(header["nonce"], nonce.as_str());
         assert_eq!(header["url"], "https://acme.example/order");
         assert_eq!(header["kid"], "https://acme.example/acct/1");
         assert!(header.get("jwk").is_none());
         let (get, payload) =
-            signing_input(Signer::Jwk(&point), "n", "https://acme.example/x", None).unwrap();
+            signing_input(Signer::Jwk(&point), &nonce, "https://acme.example/x", None).unwrap();
         assert!(payload.is_empty() && get.ends_with('.'));
         let ka = key_authorization("tok-en_1", &point).unwrap();
         assert!(ka.starts_with("tok-en_1."));
