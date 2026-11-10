@@ -28,6 +28,7 @@ pub mod accounts;
 pub mod agent;
 pub mod certificate;
 pub mod ciba;
+pub mod custom_domain;
 pub mod dns;
 pub mod federation;
 pub mod gateway;
@@ -519,6 +520,14 @@ pub enum Invalid {
     /// No live gateway of that kind and name (OP-155 m.3 (f), (o)).
     #[error("no such gateway")]
     NoGateway,
+    /// A custom domain that is not a host below a registrable domain outside the deployment's
+    /// base, or a retirement of one bound as issuer or RP ID (OP-156 m.3 (i)).
+    #[error("invalid custom domain")]
+    CustomDomain,
+    /// The issuer stays fixed: the realm was activated, or its issuer is path-based (TN-16,
+    /// OP-156 m.3 (i)).
+    #[error("issuer fixed")]
+    IssuerFixed,
 }
 
 impl Invalid {
@@ -631,6 +640,8 @@ impl Invalid {
             Self::ScimClient => "invalid-scim-client",
             Self::NoScimClient => "no-such-scim-client",
             Self::NoGateway => "no-such-gateway",
+            Self::CustomDomain => "invalid-custom-domain",
+            Self::IssuerFixed => "issuer-fixed",
         }
     }
 }
@@ -1806,6 +1817,8 @@ pub enum Change {
     Federation(federation::FederationChange),
     /// `idp.saml.*` and `idp.gateway.register`/`retire` (OP-155 m.3 (a), m.6 (h)).
     Saml(saml::SamlChange),
+    /// `idp.domain.*` (OP-156 m.3 (a), (i)).
+    Domain(custom_domain::DomainChange),
     /// `idp.client.resource_register` (AG-8, OP-154 m.3 (a)).
     ResourceRegister(ProtectedResource),
     /// `idp.client.cross_app_connection` (CT2, OP-154 m.3 (a), (n)).
@@ -2221,6 +2234,7 @@ impl Change {
             Self::Scim(s) => s.action(),
             Self::Federation(f) => f.action(),
             Self::Saml(s) => s.action(),
+            Self::Domain(d) => d.action(),
             Self::ResourceRegister(_) => IdpAction::ClientResourceRegister,
             Self::CrossAppConnection(_) => IdpAction::ClientCrossAppConnection,
             Self::CrossAppConnectionRetire(_) => IdpAction::ClientCrossAppConnectionRetire,
@@ -2299,6 +2313,7 @@ impl Change {
             Self::Scim(s) => s.check(),
             Self::Federation(f) => f.check().map_err(|_| Invalid::Federation),
             Self::Saml(s) => s.check(),
+            Self::Domain(d) => d.check(),
             Self::ResourceRegister(r) => r.check(),
             Self::CrossAppConnection(c) => c.check(),
             Self::CrossAppConnectionRetire(name) => {
@@ -2460,6 +2475,7 @@ impl Change {
             Self::Scim(s) => s.body(),
             Self::Federation(f) => f.body(),
             Self::Saml(s) => s.body(),
+            Self::Domain(d) => d.body(),
             Self::DeviceCode(on) | Self::Hrd(on) => {
                 Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))])
             }
@@ -2628,6 +2644,7 @@ impl Change {
             Self::Scim(s) => path.extend(s.path()),
             Self::Federation(f) => path.extend(f.path()),
             Self::Saml(s) => path.extend(s.path()),
+            Self::Domain(d) => path.extend(d.path()),
             Self::ResourceRegister(r) => {
                 path.extend([String::from("resource"), r.resource.clone()]);
             }

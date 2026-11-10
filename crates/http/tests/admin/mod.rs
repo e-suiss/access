@@ -217,6 +217,7 @@ fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
                                               "status": "live" }),
         ResourceKind::SamlSps => json!({ "name": key, "entity_id": "https://sp.test",
                                          "status": "live" }),
+        ResourceKind::CustomDomains => json!({ "host": key, "status": "pending" }),
         ResourceKind::Agents => json!({ "agent": key, "display_name": "Helper",
                                         "agent_kind": "cloud", "status": "active",
                                         "sponsors": [], "instances": [] }),

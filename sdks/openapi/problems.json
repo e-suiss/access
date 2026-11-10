@@ -683,6 +683,20 @@
       "description": "The gateway registration needs a kind (saml, ldap, kerberos or radius), a name of lower-case letters, digits and hyphens, and the SHA-256 of its client certificate in hex; only a live gateway can be retired (OP-155 m.3 (c))."
     },
     {
+      "code": "invalid-custom-domain",
+      "type": "urn:suiss:access:problem:invalid-custom-domain",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A custom domain is a lower-case host below a registrable domain, outside the deployment's base domain and never localhost; one bound as the issuer or passkey RP ID is never retired (OP-156 m.3 (i))."
+    },
+    {
+      "code": "issuer-fixed",
+      "type": "urn:suiss:access:problem:issuer-fixed",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The realm's issuer moves to a custom domain only before its first client or service provider is registered, and only from a subdomain issuer (TN-16, OP-156 m.3 (i))."
+    },
+    {
       "code": "invitations-closed-by-scim",
       "type": "urn:suiss:access:problem:invitations-closed-by-scim",
       "status": 409,

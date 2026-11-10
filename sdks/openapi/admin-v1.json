@@ -7989,6 +7989,445 @@
         "x-access-visibility": "hidden"
       }
     },
+    "/admin/v1/realms/{slug}/domains": {
+      "get": {
+        "operationId": "listDomains",
+        "summary": "The realm's custom domains: host, verification state, next re-check, certificate expiry (OP-156 m.3 (i)).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "realm.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Filter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": "realm.read",
+        "x-access-visibility": "hidden"
+      },
+      "post": {
+        "operationId": "registerDomain",
+        "summary": "Registers a custom domain to verify by DNS TXT `_access-challenge.<host>` and a CNAME to `<slug>.<base>`: idp.domain.register.",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/realms/{slug}/domains/{domain}": {
+      "get": {
+        "operationId": "getDomain",
+        "summary": "One custom domain: the TXT value and CNAME target to publish, the verification state and the ACME certificate.",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "realm.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": "realm.read",
+        "x-access-visibility": "hidden"
+      }
+    },
+    "/admin/v1/realms/{slug}/domains/{domain}/retire": {
+      "post": {
+        "operationId": "retireDomain",
+        "summary": "Retires a custom domain; it is no longer served and nothing is deleted (OP-73): idp.domain.retire.",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/realms/{slug}/domains/{domain}/issuer-bind": {
+      "post": {
+        "operationId": "bindDomainIssuer",
+        "summary": "Binds the issuer or passkey RP ID to a verified custom domain, irreversibly (§10.2.4, TN-16): idp.domain.issuer_bind (reserved).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/v1/realms/{slug}/agents": {
       "get": {
         "operationId": "listAgents",
@@ -13906,460 +14345,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          }
-        },
-        "deprecated": false,
-        "x-access-surface": "realm",
-        "x-access-scope": null,
-        "x-access-visibility": "hidden",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WriteBody"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/v1/realms/{slug}/domains": {
-      "get": {
-        "operationId": "listDomains",
-        "summary": "The realm's custom domains: host, verification state, next re-check, certificate expiry (OP-156 m.3 (i)).",
-        "tags": [
-          "realm"
-        ],
-        "security": [
-          {
-            "read_token": [
-              "realm.read"
-            ]
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Traceparent"
-          },
-          {
-            "$ref": "#/components/parameters/Slug"
-          },
-          {
-            "$ref": "#/components/parameters/PageSize"
-          },
-          {
-            "$ref": "#/components/parameters/Cursor"
-          },
-          {
-            "$ref": "#/components/parameters/Filter"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The resource.",
-            "headers": {
-              "Request-Id": {
-                "$ref": "#/components/headers/Request-Id"
-              },
-              "RateLimit-Policy": {
-                "$ref": "#/components/headers/RateLimit-Policy"
-              },
-              "RateLimit": {
-                "$ref": "#/components/headers/RateLimit"
-              },
-              "Link": {
-                "$ref": "#/components/headers/Link"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Page"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "503": {
-            "$ref": "#/components/responses/Unavailable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
-          }
-        },
-        "deprecated": false,
-        "x-access-surface": "realm",
-        "x-access-scope": "realm.read",
-        "x-access-visibility": "hidden"
-      },
-      "post": {
-        "operationId": "registerDomain",
-        "summary": "Registers a custom domain to verify by DNS TXT `_access-challenge.<host>` and a CNAME to `<slug>.<base>`: idp.domain.register.",
-        "tags": [
-          "realm"
-        ],
-        "security": [
-          {
-            "ais": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Traceparent"
-          },
-          {
-            "$ref": "#/components/parameters/Slug"
-          },
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          },
-          {
-            "$ref": "#/components/parameters/Ais"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Committed: the Exercise record (TN-110).",
-            "headers": {
-              "Request-Id": {
-                "$ref": "#/components/headers/Request-Id"
-              },
-              "RateLimit-Policy": {
-                "$ref": "#/components/headers/RateLimit-Policy"
-              },
-              "RateLimit": {
-                "$ref": "#/components/headers/RateLimit"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WriteResult"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "503": {
-            "$ref": "#/components/responses/Unavailable"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "422": {
-            "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
-          }
-        },
-        "deprecated": false,
-        "x-access-surface": "realm",
-        "x-access-scope": null,
-        "x-access-visibility": "hidden",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WriteBody"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/v1/realms/{slug}/domains/{domain}": {
-      "get": {
-        "operationId": "getDomain",
-        "summary": "One custom domain: the TXT value and CNAME target to publish, the verification state and the ACME certificate.",
-        "tags": [
-          "realm"
-        ],
-        "security": [
-          {
-            "read_token": [
-              "realm.read"
-            ]
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Traceparent"
-          },
-          {
-            "$ref": "#/components/parameters/Slug"
-          },
-          {
-            "name": "domain",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 255
-            },
-            "description": "The resource's natural key."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The resource.",
-            "headers": {
-              "Request-Id": {
-                "$ref": "#/components/headers/Request-Id"
-              },
-              "RateLimit-Policy": {
-                "$ref": "#/components/headers/RateLimit-Policy"
-              },
-              "RateLimit": {
-                "$ref": "#/components/headers/RateLimit"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Declared"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "503": {
-            "$ref": "#/components/responses/Unavailable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
-          }
-        },
-        "deprecated": false,
-        "x-access-surface": "realm",
-        "x-access-scope": "realm.read",
-        "x-access-visibility": "hidden"
-      }
-    },
-    "/admin/v1/realms/{slug}/domains/{domain}/retire": {
-      "post": {
-        "operationId": "retireDomain",
-        "summary": "Retires a custom domain; it is no longer served and nothing is deleted (OP-73): idp.domain.retire.",
-        "tags": [
-          "realm"
-        ],
-        "security": [
-          {
-            "ais": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Traceparent"
-          },
-          {
-            "$ref": "#/components/parameters/Slug"
-          },
-          {
-            "name": "domain",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 255
-            },
-            "description": "The resource's natural key."
-          },
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          },
-          {
-            "$ref": "#/components/parameters/Ais"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Committed: the Exercise record (TN-110).",
-            "headers": {
-              "Request-Id": {
-                "$ref": "#/components/headers/Request-Id"
-              },
-              "RateLimit-Policy": {
-                "$ref": "#/components/headers/RateLimit-Policy"
-              },
-              "RateLimit": {
-                "$ref": "#/components/headers/RateLimit"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WriteResult"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "503": {
-            "$ref": "#/components/responses/Unavailable"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "422": {
-            "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
-          }
-        },
-        "deprecated": false,
-        "x-access-surface": "realm",
-        "x-access-scope": null,
-        "x-access-visibility": "hidden",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WriteBody"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/admin/v1/realms/{slug}/domains/{domain}/issuer-bind": {
-      "post": {
-        "operationId": "bindDomainIssuer",
-        "summary": "Binds the issuer or passkey RP ID to a verified custom domain, irreversibly (§10.2.4, TN-16): idp.domain.issuer_bind (reserved).",
-        "tags": [
-          "realm"
-        ],
-        "security": [
-          {
-            "ais": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Traceparent"
-          },
-          {
-            "$ref": "#/components/parameters/Slug"
-          },
-          {
-            "name": "domain",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 255
-            },
-            "description": "The resource's natural key."
-          },
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          },
-          {
-            "$ref": "#/components/parameters/Ais"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Committed: the Exercise record (TN-110).",
-            "headers": {
-              "Request-Id": {
-                "$ref": "#/components/headers/Request-Id"
-              },
-              "RateLimit-Policy": {
-                "$ref": "#/components/headers/RateLimit-Policy"
-              },
-              "RateLimit": {
-                "$ref": "#/components/headers/RateLimit"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WriteResult"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "503": {
-            "$ref": "#/components/responses/Unavailable"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "422": {
-            "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,

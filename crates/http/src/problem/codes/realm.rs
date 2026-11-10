@@ -612,3 +612,18 @@ pub const MESSAGE_EXPIRED: Code = code(
     "Conflict",
     "The message is past its expiry, so it is not resent; start the flow that sends it again (OP-156 m.3 (c)).",
 );
+/// A custom domain that is not a host below a registrable domain outside the deployment's base,
+/// or a retirement of one bound as the issuer or RP ID (OP-156 m.3 (i)).
+pub const INVALID_CUSTOM_DOMAIN: Code = code(
+    "invalid-custom-domain",
+    400,
+    "Bad Request",
+    "A custom domain is a lower-case host below a registrable domain, outside the deployment's base domain and never localhost; one bound as the issuer or passkey RP ID is never retired (OP-156 m.3 (i)).",
+);
+/// The realm's issuer stays fixed: it was activated, or its issuer is path-based (TN-16).
+pub const ISSUER_FIXED: Code = code(
+    "issuer-fixed",
+    409,
+    "Conflict",
+    "The realm's issuer moves to a custom domain only before its first client or service provider is registered, and only from a subdomain issuer (TN-16, OP-156 m.3 (i)).",
+);

@@ -28,7 +28,7 @@ use suiss_crypto::envelope::Kek;
 use crate::orgs::WebProbe;
 
 /// The pass's job kind.
-pub(crate) const KIND: &str = "custom-domains";
+pub(crate) const KIND: &str = "custom_domains";
 
 /// How often a node schedules and claims a pass (PD).
 pub(crate) const INTERVAL: Duration = Duration::from_mins(1);

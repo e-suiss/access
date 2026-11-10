@@ -3,6 +3,7 @@
 
 pub mod accounts;
 pub mod agents;
+mod custom_domains;
 pub mod domains;
 pub mod federation;
 pub mod household;
@@ -460,6 +461,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Hook(_) | Change::Webhook(_) => {
                 extension_current(t, change, declared, state).await?;
             }
+            // OP-156 m.3 (i)
+            Change::Domain(d) => custom_domains::current(t, d, g, base).await?,
             _ if !state => {}
             Change::OrgCreate(o) => {
                 if t.org_by_party(o.party).await?.is_some() {
@@ -1712,6 +1715,12 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Federation(f) => federation::write(t, bound, f).await?,
             // OP-155 m.3 (a), (e), m.6 (h)
             Change::Saml(s) => saml::write(t, bound, s).await?,
+            // OP-156 m.3 (i)
+            Change::Domain(d) => {
+                let g = idp::governance(t).await?.ok_or(AdminError::NoRealm)?;
+                let exercise = bound.position().to_be_bytes();
+                custom_domains::write(t, bound, d, (&g, self.base, &exercise)).await?
+            }
             Change::DeviceCode(on) => {
                 t.put_device_code(bound, *on).await?;
                 true

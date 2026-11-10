@@ -188,6 +188,12 @@ pub enum Op {
     RegisterGateway,
     /// `retireGateway`: `idp.gateway.retire`.
     RetireGateway,
+    /// `registerDomain`: `idp.domain.register` (OP-156 m.3 (i)).
+    RegisterDomain,
+    /// `retireDomain`: `idp.domain.retire`.
+    RetireDomain,
+    /// `bindDomainIssuer`: `idp.domain.issuer_bind` (reserved).
+    BindDomainIssuer,
     /// `putDcrPolicy`: `idp.client.dcr_policy`, or `dcr_policy_tighten` (OP-154 m.3 (j)).
     PutDcrPolicy,
     /// `putFederation`: `idp.federation.enable` or `disable` (OP-155 m.3 (j)).
@@ -328,6 +334,9 @@ impl Op {
             "replaceSamlCertificate" => Self::ReplaceSamlCertificate,
             "registerGateway" => Self::RegisterGateway,
             "retireGateway" => Self::RetireGateway,
+            "registerDomain" => Self::RegisterDomain,
+            "retireDomain" => Self::RetireDomain,
+            "bindDomainIssuer" => Self::BindDomainIssuer,
             "putDcrPolicy" => Self::PutDcrPolicy,
             "putFederation" => Self::PutFederation,
             "addTrustAnchor" => Self::AddTrustAnchor,
@@ -961,6 +970,25 @@ fn scim_change(
     }))
 }
 
+/// The `idp.domain.*` change of a custom domain operation (OP-156 m.3 (i)), `None` for any other.
+fn domain_change(
+    op: Op,
+    key: Option<&str>,
+    body: &Json,
+) -> Result<Option<crate::domain::custom_domain::DomainChange>, Invalid> {
+    use crate::domain::custom_domain::DomainChange;
+    let mut own = obj(body)?.clone();
+    own.remove(VALIDITY);
+    own.remove("ais");
+    let body = Json::Object(own);
+    Ok(Some(match op {
+        Op::RegisterDomain => DomainChange::register(&body)?,
+        Op::RetireDomain => DomainChange::retire(key_of(key)?, &body)?,
+        Op::BindDomainIssuer => DomainChange::issuer_bind(key_of(key)?, &body)?,
+        _ => return Ok(None),
+    }))
+}
+
 /// Compiles one write operation's body into its one [`Change`] (TN-110). `key` is the path's
 /// natural key; a create carries the `client_id` its prepare step assigned.
 ///
@@ -986,6 +1014,9 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
     }
     if let Some(s) = saml_change(op, key, body)? {
         return Ok(Change::Saml(s));
+    }
+    if let Some(d) = domain_change(op, key, body)? {
+        return Ok(Change::Domain(d));
     }
     Ok(match op {
         Op::CreateOrganization => {
@@ -1427,7 +1458,10 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         | Op::PutSamlCertificatePolicy
         | Op::ReplaceSamlCertificate
         | Op::RegisterGateway
-        | Op::RetireGateway => return Err(Invalid::Body),
+        | Op::RetireGateway
+        | Op::RegisterDomain
+        | Op::RetireDomain
+        | Op::BindDomainIssuer => return Err(Invalid::Body),
         // OP-153 m.18 (e), m.25 (b)
         Op::BindAccount => {
             only(
@@ -2156,6 +2190,8 @@ pub enum Kind {
     TrustAnchors,
     /// What enforcing SSO on one organization would end (TN-94, X20, OP-155 m.3 (i)).
     SsoPreview,
+    /// The realm's custom domains by host (OP-156 m.3 (i)).
+    CustomDomains,
 }
 
 /// How many days the analytics read covers, today included (PD).
@@ -2582,6 +2618,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-155 m.3 (e)
             (Kind::SamlSps, _) => Read {
                 items: super::saml::list(t, key).await?,
+                last: None,
+            },
+            // OP-156 m.3 (i)
+            (Kind::CustomDomains, _) => Read {
+                items: super::custom_domains::list(t, key).await?,
                 last: None,
             },
             (Kind::Socials, _) => {

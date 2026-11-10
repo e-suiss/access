@@ -486,35 +486,7 @@ const STAGE10: [Route; 45] = [
 
 /// The Stage 11 realm routes, declared before their lanes serve them (OP-156 m.4): each answers
 /// `501 not-yet-served` behind its permission until its lane fills the handler.
-const STAGE11: [Route; 46] = [
-    list(
-        "/admin/v1/realms/{slug}/domains",
-        "listDomains",
-        "The realm's custom domains: host, verification state, next re-check, certificate expiry (OP-156 m.3 (i)).",
-    ),
-    write(
-        Verb::Post,
-        "/admin/v1/realms/{slug}/domains",
-        "registerDomain",
-        "Registers a custom domain to verify by DNS TXT `_access-challenge.<host>` and a CNAME to `<slug>.<base>`: idp.domain.register.",
-    ),
-    read(
-        "/admin/v1/realms/{slug}/domains/{domain}",
-        "getDomain",
-        "One custom domain: the TXT value and CNAME target to publish, the verification state and the ACME certificate.",
-    ),
-    write(
-        Verb::Post,
-        "/admin/v1/realms/{slug}/domains/{domain}/retire",
-        "retireDomain",
-        "Retires a custom domain; it is no longer served and nothing is deleted (OP-73): idp.domain.retire.",
-    ),
-    write(
-        Verb::Post,
-        "/admin/v1/realms/{slug}/domains/{domain}/issuer-bind",
-        "bindDomainIssuer",
-        "Binds the issuer or passkey RP ID to a verified custom domain, irreversibly (§10.2.4, TN-16): idp.domain.issuer_bind (reserved).",
-    ),
+const STAGE11: [Route; 41] = [
     list(
         "/admin/v1/realms/{slug}/proxies",
         "listProxies",
@@ -1311,6 +1283,35 @@ const BASE: &[Route] = &[
         "getAuditEventProof",
         "The event's inclusion proof in the realm's own audit tree, checkpointed by the cell key under the realm's origin; it shows nothing of other realms. Each read is itself audited.",
     ),
+    // OP-156 m.3 (i)
+    list(
+        "/admin/v1/realms/{slug}/domains",
+        "listDomains",
+        "The realm's custom domains: host, verification state, next re-check, certificate expiry (OP-156 m.3 (i)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/domains",
+        "registerDomain",
+        "Registers a custom domain to verify by DNS TXT `_access-challenge.<host>` and a CNAME to `<slug>.<base>`: idp.domain.register.",
+    ),
+    read(
+        "/admin/v1/realms/{slug}/domains/{domain}",
+        "getDomain",
+        "One custom domain: the TXT value and CNAME target to publish, the verification state and the ACME certificate.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/domains/{domain}/retire",
+        "retireDomain",
+        "Retires a custom domain; it is no longer served and nothing is deleted (OP-73): idp.domain.retire.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/domains/{domain}/issuer-bind",
+        "bindDomainIssuer",
+        "Binds the issuer or passkey RP ID to a verified custom domain, irreversibly (§10.2.4, TN-16): idp.domain.issuer_bind (reserved).",
+    ),
 ];
 
 /// How a row is served.
@@ -1441,8 +1442,8 @@ const fn put(section: &'static str) -> Shape {
 )]
 pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
     use ResourceKind::{
-        Accounts, AgentSponsors, Agents, Analytics, Clients, Deliveries, Groups, Hooks,
-        Organizations, ProtectedResources, SamlSps, Settings, Signals, SocialProviders,
+        Accounts, AgentSponsors, Agents, Analytics, Clients, CustomDomains, Deliveries, Groups,
+        Hooks, Organizations, ProtectedResources, SamlSps, Settings, Signals, SocialProviders,
         SsoEnforcementPreviews, TrustAnchors, UpstreamIdps, VaultResources, Webhooks,
     };
     const CREATE: Shape = Shape::Write {
@@ -1535,6 +1536,11 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "enforceOrganizationSso" | "liftOrganizationSso" | "createOrganizationSetupLink" => {
             (Accounts, w(false))
         }
+        // OP-156 m.3 (i)
+        "listDomains" => (CustomDomains, Shape::List(&["host", "status"])),
+        "getDomain" => (CustomDomains, Shape::Get),
+        "registerDomain" => (CustomDomains, CREATE),
+        "retireDomain" | "bindDomainIssuer" => (CustomDomains, w(false)),
         o if declared(o) => (Settings, Shape::Planned(planned_body(o))),
         "listClients" => (
             Clients,
@@ -1722,6 +1728,8 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::ConsumerDomain => &r::CONSUMER_DOMAIN,
             Invalid::DomainContested => &r::DOMAIN_CONTESTED,
             Invalid::DomainUnverified => &r::DOMAIN_NOT_VERIFIED,
+            Invalid::CustomDomain => &r::INVALID_CUSTOM_DOMAIN,
+            Invalid::IssuerFixed => &r::ISSUER_FIXED,
             Invalid::SsoDraft => &r::INVALID_CONNECTION_DRAFT,
             Invalid::ScimAuthoritative => &r::INVITATIONS_CLOSED_BY_SCIM,
             Invalid::SetupLink => &r::INVALID_SETUP_LINK,

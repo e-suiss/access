@@ -199,6 +199,8 @@ pub enum ResourceKind {
     TrustAnchors,
     /// What enforcing SSO on an organization would end, by its Party's base64url (TN-94).
     SsoEnforcementPreviews,
+    /// Custom domains, by host (OP-156 m.3 (i)).
+    CustomDomains,
 }
 
 impl ResourceKind {
@@ -225,6 +227,7 @@ impl ResourceKind {
             Self::ProtectedResources => "protected-resources",
             Self::TrustAnchors => "trust-anchors",
             Self::SsoEnforcementPreviews => "sso-enforcement-previews",
+            Self::CustomDomains => "domains",
         }
     }
 }

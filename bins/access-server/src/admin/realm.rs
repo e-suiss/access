@@ -106,6 +106,7 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::ProtectedResources => Kind::ProtectedResources,
         ResourceKind::TrustAnchors => Kind::TrustAnchors,
         ResourceKind::SsoEnforcementPreviews => Kind::SsoPreview,
+        ResourceKind::CustomDomains => Kind::CustomDomains,
     }
 }
 
