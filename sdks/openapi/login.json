@@ -498,6 +498,36 @@
                 "pattern": "^/"
               }
             }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "number",
+              "label",
+              "expires_at"
+            ],
+            "properties": {
+              "type": {
+                "const": "push_number"
+              },
+              "number": {
+                "type": "integer",
+                "minimum": 10,
+                "maximum": 99
+              },
+              "approver": {
+                "type": "string"
+              },
+              "label": {
+                "$ref": "#/components/schemas/Text"
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
           }
         ]
       },

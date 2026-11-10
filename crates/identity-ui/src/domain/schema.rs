@@ -114,6 +114,18 @@ fn node() -> Value {
         }),
         &["provider", "label", "href"],
     );
+    // OP-156 m.3 (d)
+    let push_number = variant(
+        "type",
+        "push_number",
+        &json!({
+            "number": { "type": "integer", "minimum": 10, "maximum": 99 },
+            "approver": { "type": "string" },
+            "label": r("Text"),
+            "expires_at": { "type": "string", "format": "date-time" },
+        }),
+        &["number", "label", "expires_at"],
+    );
     json!({ "oneOf": [
         input,
         submit,
@@ -123,6 +135,7 @@ fn node() -> Value {
         passkey_signal,
         option,
         provider,
+        push_number,
     ] })
 }
 

@@ -108,6 +108,22 @@ fn examples() -> Vec<(&'static str, Ui)> {
                 .with_message(Message::error(TextId::SecondFactorFailed))
                 .unwrap(),
         ),
+        // OP-156 m.3 (d)
+        (
+            "second-factor-push",
+            Ui::second_factor(flow(), SecondFactors { push: true, ..mfa }, None, &POLICY),
+        ),
+        (
+            "push-sent",
+            Ui::push_sent(
+                flow(),
+                42,
+                Some("Ada's phone".into()),
+                "2026-11-10T10:02:00Z".into(),
+                &POLICY,
+            ),
+        ),
+        ("push-stopped", Ui::push_stopped(flow(), &POLICY)),
         (
             "complete",
             Ui::complete(flow(), "/callback?state=example".into(), &POLICY)

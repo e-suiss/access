@@ -48,7 +48,7 @@ use access_identity_oauth::ports::RealmEntry;
 use access_identity_session::SessionError;
 use access_identity_session::adapters::OsRandom;
 use access_identity_session::adapters::passkeys::PgPasskeys;
-use access_identity_session::app::push::{PushEnd, PushPoll};
+use access_identity_session::app::push::{PushEnd, PushPoll, PushWait};
 use access_identity_session::app::signin::{Identify, LinkOutcome, LinkPreview, PasswordStep};
 use access_identity_session::app::{
     Auth, CODE_NOT_ACCEPTED, FLOW_GONE, FlowRef, Refusal, Step as Outcome,
@@ -217,7 +217,7 @@ enum Current {
     Email(EmailWait),
     Second(SecondFactors),
     /// OP-156 m.3 (d): a push waits; the page shows the number until the end.
-    Push(u8, u64),
+    Push(PushWait),
     /// OP-156 m.3 (d): the push ended without an approval; the second step again, with why.
     PushEnded(SecondFactors, TextId),
     /// OP-156 m.3 (d): "This wasn't me" stopped the sign-in.
@@ -497,10 +497,11 @@ fn shape_bare(kit: &RealmKit, flow: &FlowId, current: &Current) -> Option<Ui> {
         Current::Second(offered) | Current::PushEnded(offered, _) => {
             Ui::second_factor(flow.clone(), *offered, Some(blank), &reqs)
         }
-        Current::Push(number, expires_ms) => Ui::push_sent(
+        Current::Push(w) => Ui::push_sent(
             flow.clone(),
-            *number,
-            crate::domain::frontend::rfc3339(*expires_ms),
+            w.number,
+            w.approver.clone(),
+            crate::domain::frontend::rfc3339(w.expires_ms),
             &reqs,
         ),
         Current::Stopped => Ui::push_stopped(flow.clone(), &reqs),
@@ -972,8 +973,8 @@ where
             .map_err(|e| failed(&e))?
         {
             PushPoll::Step(s) => s,
-            PushPoll::Waiting { number, expires_ms } => {
-                return Ok(Current::Push(number, expires_ms));
+            PushPoll::Waiting(w) => {
+                return Ok(Current::Push(w));
             }
             PushPoll::Ended(PushEnd::NotMe) => return Ok(Current::Stopped),
             PushPoll::Ended(end) => {
@@ -1101,10 +1102,11 @@ where
                 ui.messages.push(Message::error(why));
                 ui
             }
-            Current::Push(number, expires_ms) => Ui::push_sent(
+            Current::Push(w) => Ui::push_sent(
                 flow.clone(),
-                number,
-                crate::domain::frontend::rfc3339(expires_ms),
+                w.number,
+                w.approver,
+                crate::domain::frontend::rfc3339(w.expires_ms),
                 &reqs,
             ),
             Current::Stopped => Ui::push_stopped(flow.clone(), &reqs),

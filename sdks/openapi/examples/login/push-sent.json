@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "flow": "lgf_example",
+  "step": "second_factor",
+  "action": "/v1/login/flows/lgf_example",
+  "requirements": [
+    {
+      "requirement": "identifier",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "first_factor",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "second_factor",
+      "state": "missing"
+    }
+  ],
+  "nodes": [
+    {
+      "type": "push_number",
+      "number": 42,
+      "approver": "Ada's phone",
+      "label": {
+        "id": "push.number",
+        "text": "Open Ada's phone and enter this number: 42"
+      },
+      "expires_at": "2026-11-10T10:02:00Z"
+    },
+    {
+      "type": "submit",
+      "method": "restart",
+      "label": {
+        "id": "action.restart",
+        "text": "Use a different account"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "id": "push.waiting",
+      "text": "Waiting for your answer…",
+      "severity": "info"
+    }
+  ]
+}

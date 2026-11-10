@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "flow": "lgf_example",
+  "step": "second_factor",
+  "action": "/v1/login/flows/lgf_example",
+  "requirements": [
+    {
+      "requirement": "identifier",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "first_factor",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "second_factor",
+      "state": "missing"
+    }
+  ],
+  "nodes": [
+    {
+      "type": "submit",
+      "method": "restart",
+      "label": {
+        "id": "action.restart",
+        "text": "Use a different account"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "id": "push.not_me",
+      "text": "We stopped this sign-in. If it wasn't you, secure your account.",
+      "severity": "error"
+    }
+  ]
+}

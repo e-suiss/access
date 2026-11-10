@@ -136,9 +136,15 @@ where
             .await
             .map_err(|e| failed(&e))?
         {
-            PushStart::Sent { number, expires_ms } => Ok(Reply::ui(
+            PushStart::Sent(w) => Ok(Reply::ui(
                 200,
-                Ui::push_sent(flow.clone(), number, rfc3339(expires_ms), &policy(kit)),
+                Ui::push_sent(
+                    flow.clone(),
+                    w.number,
+                    w.approver,
+                    rfc3339(w.expires_ms),
+                    &policy(kit),
+                ),
             )),
             PushStart::Held {
                 retry_after_s,

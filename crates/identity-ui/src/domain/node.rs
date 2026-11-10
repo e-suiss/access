@@ -435,6 +435,9 @@ pub enum Node {
     PushNumber {
         /// Two digits, 10 to 99.
         number: u8,
+        /// The approver's name when the account has exactly one; the person gave it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        approver: Option<String>,
         /// Caption, with `{ $number }` filled.
         label: Text,
         /// RFC 3339.

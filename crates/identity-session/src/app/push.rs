@@ -44,6 +44,13 @@ pub fn challenge_digest(challenge: &[u8; 32]) -> [u8; 32] {
     sha256(&m)
 }
 
+fn only(approvers: &[access_store::push::DeviceKeyRow]) -> Option<String> {
+    match approvers {
+        [one] => Some(one.name.clone()),
+        _ => None,
+    }
+}
+
 /// Where and for what a push is sent.
 #[derive(Clone, Copy)]
 pub struct PushContext<'a> {
@@ -77,16 +84,22 @@ impl core::fmt::Debug for SameDevice<'_> {
     }
 }
 
+/// What the sign-in page shows while a push waits.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PushWait {
+    /// The number to type into the approver.
+    pub number: u8,
+    /// Unix ms.
+    pub expires_ms: u64,
+    /// The approver's name when the account has exactly one.
+    pub approver: Option<String>,
+}
+
 /// The outcome of sending a push. A decision, not an error.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PushStart {
-    /// Sent: the page shows `number` until `expires_ms`.
-    Sent {
-        /// The number to type into the approver.
-        number: u8,
-        /// Unix ms.
-        expires_ms: u64,
-    },
+    /// Sent: the page shows the number until the end.
+    Sent(PushWait),
     /// The fatigue limits hold push for `retry_after_s`; another way is offered.
     Held {
         /// Whole seconds.
@@ -113,12 +126,7 @@ pub enum PushEnd {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PushPoll {
     /// Still waiting.
-    Waiting {
-        /// The number the page shows.
-        number: u8,
-        /// Unix ms.
-        expires_ms: u64,
-    },
+    Waiting(PushWait),
     /// Ended without an approval; the flow is back at its second step, or stopped.
     Ended(PushEnd),
     /// No push is pending, or the approval was taken: the flow's next step.
@@ -294,7 +302,11 @@ where
         )
         .await?;
         tx.commit().await?;
-        Ok(PushStart::Sent { number, expires_ms })
+        Ok(PushStart::Sent(PushWait {
+            number,
+            expires_ms,
+            approver: only(&approvers),
+        }))
     }
 
     /// Where the flow's push stands (TN-102): an approval completes only the push step, once; a
@@ -353,10 +365,11 @@ where
                 tx.commit().await?;
                 Ok(PushPoll::Ended(PushEnd::Denied))
             }
-            (Some(r), None) if now < expires_ms => Ok(PushPoll::Waiting {
+            (Some(r), None) if now < expires_ms => Ok(PushPoll::Waiting(PushWait {
                 number: r.number,
                 expires_ms,
-            }),
+                approver: only(&tx.approvers(subject).await?),
+            })),
             _ => {
                 l.state.pending = None;
                 save(&mut tx, &l, "open", Resume::Keep).await?;
@@ -436,12 +449,15 @@ where
         }
         tx.approver_seen(device.id).await?;
         let target = self.external(row.subject)?;
-        let event = match outcome {
-            Answered::Approved => "push.approved",
-            Answered::NotMe => "push.not_me",
-            _ => "push.denied",
-        };
-        audit(&mut tx, event, &target, &target, correlation).await?;
+        match outcome {
+            Answered::Approved => {
+                audit(&mut tx, "push.approved", &target, &target, correlation).await?;
+            }
+            Answered::NotMe => {
+                audit(&mut tx, "push.not_me", &target, &target, correlation).await?;
+            }
+            _ => audit(&mut tx, "push.denied", &target, &target, correlation).await?,
+        }
         if outcome == Answered::NotMe {
             // OP-156 m.3 (d), §7.6 TN-O4
             emit(

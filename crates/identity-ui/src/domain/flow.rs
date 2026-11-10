@@ -487,15 +487,25 @@ impl Ui {
     /// submits [`Method::Push`] again, and the way back. The client polls the flow until
     /// `expires_at`.
     #[must_use]
-    pub fn push_sent(flow: FlowId, number: u8, expires_at: String, policy: &[Requirement]) -> Self {
+    pub fn push_sent(
+        flow: FlowId,
+        number: u8,
+        approver: Option<String>,
+        expires_at: String,
+        policy: &[Requirement],
+    ) -> Self {
         let mut label = Text::from(TextId::PushNumber);
         label.text = label
             .text
             .replace("{ $number }", &number.to_string())
-            .replace("{ $approver }", "your approver app");
+            .replace(
+                "{ $approver }",
+                approver.as_deref().unwrap_or("your approver app"),
+            );
         let nodes = vec![
             Node::PushNumber {
                 number,
+                approver,
                 label,
                 expires_at,
             },
