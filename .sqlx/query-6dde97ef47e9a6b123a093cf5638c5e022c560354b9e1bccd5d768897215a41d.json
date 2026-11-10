@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.hr_sources (tenant_id, realm_id, name, version, state, issuer,\n                    domain_id, decision_pos)\n             SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7\n               FROM access.hr_sources\n              WHERE tenant_id = $1 AND realm_id = $2 AND name = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6dde97ef47e9a6b123a093cf5638c5e022c560354b9e1bccd5d768897215a41d"
+}

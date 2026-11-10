@@ -1,0 +1,39 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.hr_records (tenant_id, realm_id, source, person, version,\n                    subject_id, import_domain, import_pos, start_ms, end_ms, values_nonce,\n                    values_ciphertext, issue_after_ms)\n             SELECT $1, $2, $3, $4, COALESCE(MAX(version), 0) + 1, $5, $6, $7, $8, $9, $10, $11, $12\n               FROM access.hr_records\n              WHERE tenant_id = $1 AND realm_id = $2 AND source = $3 AND person = $4\n             RETURNING version",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.hr_records",
+            "name": "version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Uuid",
+        "Bytea",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f623b6d3a44c0e07a27ddd84ede5c24fc79edf9fa8d51e37f865b2d87f5226a5"
+}

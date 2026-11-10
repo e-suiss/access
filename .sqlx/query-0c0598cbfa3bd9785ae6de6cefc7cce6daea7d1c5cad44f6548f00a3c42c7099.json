@@ -1,0 +1,103 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.source, d.person, d.change, d.version, d.subject_id, d.due_ms, d.state\n               FROM access.hr_due d\n              WHERE d.tenant_id = $1 AND d.realm_id = $2 AND d.state = 'pending'\n                AND d.due_ms <= $3\n                AND NOT EXISTS (SELECT 1 FROM access.hr_due n\n                                 WHERE n.tenant_id = d.tenant_id AND n.realm_id = d.realm_id\n                                   AND n.source = d.source AND n.person = d.person\n                                   AND n.change = d.change AND n.version > d.version)\n              ORDER BY d.due_ms LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "source",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.hr_due",
+            "name": "source"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "person",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.hr_due",
+            "name": "person"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "change",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.hr_due",
+            "name": "change"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.hr_due",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.hr_due",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "due_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.hr_due",
+            "name": "due_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.hr_due",
+            "name": "state"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "0c0598cbfa3bd9785ae6de6cefc7cce6daea7d1c5cad44f6548f00a3c42c7099"
+}

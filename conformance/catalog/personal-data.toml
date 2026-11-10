@@ -227,3 +227,21 @@ basis = "contract"
 portable = "derived"
 export = false
 note = "The raw ID token or SAML assertion of an upstream sign-in, sealed; the Claim carries only its digest (OP-155 m.3 (h), §10.1.2 rule 1)."
+
+[[field]]
+column = "access.hr_records.person"
+vault = "none"
+retention = "profile"
+basis = "contract"
+portable = "derived"
+export = false
+note = "Keyed blind index of the HR source's employee id (OP-156 m.3 (q)); the id itself is in the sealed values."
+
+[[field]]
+column = "access.hr_records.values_ciphertext"
+vault = "profile"
+retention = "profile"
+basis = "contract"
+portable = "observed"
+export = true
+note = "A person's HR record as the HR source sent it (department, title, manager, dates, status, employee id), sealed; its HR Claims state the same values (OP-156 m.3 (q), IDP-35)."

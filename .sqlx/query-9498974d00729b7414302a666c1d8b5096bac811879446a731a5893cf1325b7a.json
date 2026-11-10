@@ -1,0 +1,139 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.source, r.person, r.version, r.subject_id, r.start_ms, r.end_ms,\n                      r.values_nonce, r.values_ciphertext, r.issue_after_ms,\n                      c.outcome AS \"outcome?\"\n                 FROM access.hr_records r\n                 LEFT JOIN access.hr_record_claims c\n                   ON c.tenant_id = r.tenant_id AND c.realm_id = r.realm_id\n                  AND c.source = r.source AND c.person = r.person AND c.version = r.version\n                WHERE r.tenant_id = $1 AND r.realm_id = $2 AND r.source = $3 AND r.person = $4\n                ORDER BY r.version",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "source",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.hr_records",
+            "name": "source"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "person",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.hr_records",
+            "name": "person"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.hr_records",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.hr_records",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "start_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.hr_records",
+            "name": "start_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "end_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.hr_records",
+            "name": "end_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "values_nonce",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.hr_records",
+            "name": "values_nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "values_ciphertext",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.hr_records",
+            "name": "values_ciphertext"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "issue_after_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.hr_records",
+            "name": "issue_after_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "outcome?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.hr_record_claims",
+            "name": "outcome"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "9498974d00729b7414302a666c1d8b5096bac811879446a731a5893cf1325b7a"
+}
