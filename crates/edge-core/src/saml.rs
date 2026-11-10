@@ -9,7 +9,8 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 use crate::ipc::FrameError;
 
 pub use access_internal_api::saml::{
-    Facts, Kind, MAX_CERT, MAX_CERTS, MAX_LIST, MAX_TEXT, Signed, decode_verified, encode_verified,
+    AssertionFacts, Facts, Kind, MAX_ATTRIBUTES, MAX_CERT, MAX_CERTS, MAX_LIST, MAX_TEXT, Signed,
+    decode_verified, encode_verified,
 };
 
 /// What a gateway asks the worker to do with one SAML message.

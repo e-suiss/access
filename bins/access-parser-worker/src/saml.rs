@@ -4,7 +4,9 @@
 //! certificates, and its facts are read from that same element (IDI-8).
 
 use access_edge_core::ipc::Summary;
-use access_edge_core::saml::{Context, Facts, Kind, MAX_LIST, MAX_TEXT, Redirect, Signed};
+use access_edge_core::saml::{
+    AssertionFacts, Context, Facts, Kind, MAX_ATTRIBUTES, MAX_LIST, MAX_TEXT, Redirect, Signed,
+};
 
 use crate::dom::{self, Doc};
 use crate::dsig;
@@ -195,4 +197,164 @@ pub(crate) fn redirect(input: &[u8]) -> Result<(Summary, Vec<u8>), &'static str>
     dsig::verify_with(&r.certs, &r.sig_alg, &r.signed, &r.signature)?;
     let out = access_edge_core::saml::encode_verified(&r.sig_alg).map_err(|_| "saml-field")?;
     Ok((Summary::default(), out))
+}
+
+/// The SAML 2.0 success status (SAML Core §3.2.2.2).
+const SUCCESS: &str = "urn:oasis:names:tc:SAML:2.0:status:Success";
+
+/// The bearer subject confirmation method (SAML Profiles §3.3).
+const BEARER: &str = "urn:oasis:names:tc:SAML:2.0:cm:bearer";
+
+fn text_of(doc: &Doc, at: usize) -> Result<String, &'static str> {
+    bounded(doc.text(at)?.trim())
+}
+
+/// The one assertion of an upstream's message: the root, or the one child of a `samlp:Response`
+/// with a success status. An encrypted assertion, a second assertion anywhere in the document
+/// or a non-success status is refused (OP-155 m.3 (h), IDI-8).
+fn the_assertion(doc: &Doc) -> Result<(usize, bool), &'static str> {
+    let all = doc
+        .subtree(0)?
+        .into_iter()
+        .filter(|&i| doc.get(i).is_ok_and(|e| e.is(SAML, "Assertion") || e.is(SAML, "EncryptedAssertion")))
+        .collect::<Vec<_>>();
+    if all.iter().any(|&i| doc.get(i).is_ok_and(|e| e.is(SAML, "EncryptedAssertion"))) {
+        return Err("saml-encrypted");
+    }
+    let root = doc.get(0)?;
+    if root.is(SAML, "Assertion") {
+        return if all.len() == 1 { Ok((0, false)) } else { Err("saml-message") };
+    }
+    if !root.is(SAMLP, "Response") || root.attr("Version") != Some("2.0") {
+        return Err("saml-message");
+    }
+    let status = doc.one(0, SAMLP, "Status")?.ok_or("saml-status")?;
+    let code = doc.one(status, SAMLP, "StatusCode")?.ok_or("saml-status")?;
+    if doc.get(code)?.attr("Value") != Some(SUCCESS) {
+        return Err("saml-status");
+    }
+    match (doc.named(0, SAML, "Assertion")?.as_slice(), all.len()) {
+        ([one], 1) => Ok((*one, true)),
+        _ => Err("saml-message"),
+    }
+}
+
+fn assertion_facts(
+    doc: &Doc,
+    at: usize,
+    in_response: bool,
+    signed: String,
+) -> Result<AssertionFacts, &'static str> {
+    if doc.get(at)?.attr("Version") != Some("2.0") {
+        return Err("saml-version");
+    }
+    let issuer = text_of(doc, doc.one(at, SAML, "Issuer")?.ok_or("saml-issuer")?)?;
+    if issuer.is_empty() {
+        return Err("saml-issuer");
+    }
+    let subject = doc.one(at, SAML, "Subject")?.ok_or("saml-name-id")?;
+    if doc.one(subject, SAML, "EncryptedID")?.is_some() || doc.one(subject, SAML, "BaseID")?.is_some() {
+        return Err("saml-name-id");
+    }
+    let n = doc.one(subject, SAML, "NameID")?.ok_or("saml-name-id")?;
+    let name_id = text_of(doc, n)?;
+    if name_id.is_empty() {
+        return Err("saml-name-id");
+    }
+    let mut f = AssertionFacts {
+        id: opt(doc, at, "ID")?.ok_or("saml-field")?,
+        issuer,
+        issue_instant: opt(doc, at, "IssueInstant")?.ok_or("saml-field")?,
+        name_id,
+        name_id_format: opt(doc, n, "Format")?,
+        audiences: Vec::new(),
+        not_before: None,
+        not_on_or_after: None,
+        recipient: None,
+        confirmation_not_on_or_after: None,
+        in_response_to: None,
+        authn_instant: None,
+        session_index: None,
+        authn_context: None,
+        attributes: Vec::new(),
+        signed,
+        in_response,
+    };
+    let bearer: Vec<usize> = doc
+        .named(subject, SAML, "SubjectConfirmation")?
+        .into_iter()
+        .filter(|&c| doc.get(c).is_ok_and(|e| e.attr("Method") == Some(BEARER)))
+        .collect();
+    match bearer.as_slice() {
+        [c] => {
+            if let Some(d) = doc.one(*c, SAML, "SubjectConfirmationData")? {
+                f.recipient = opt(doc, d, "Recipient")?;
+                f.confirmation_not_on_or_after = opt(doc, d, "NotOnOrAfter")?;
+                f.in_response_to = opt(doc, d, "InResponseTo")?;
+            }
+        }
+        _ => return Err("saml-confirmation"),
+    }
+    if let Some(c) = doc.one(at, SAML, "Conditions")? {
+        f.not_before = opt(doc, c, "NotBefore")?;
+        f.not_on_or_after = opt(doc, c, "NotOnOrAfter")?;
+        for r in doc.named(c, SAML, "AudienceRestriction")? {
+            for a in doc.named(r, SAML, "Audience")? {
+                if f.audiences.len() >= MAX_LIST {
+                    return Err("saml-field");
+                }
+                f.audiences.push(text_of(doc, a)?);
+            }
+        }
+    }
+    if let Some(s) = doc.one(at, SAML, "AuthnStatement")? {
+        f.authn_instant = opt(doc, s, "AuthnInstant")?;
+        f.session_index = opt(doc, s, "SessionIndex")?;
+        if let Some(ctx) = doc.one(s, SAML, "AuthnContext")?
+            && let Some(r) = doc.one(ctx, SAML, "AuthnContextClassRef")?
+        {
+            f.authn_context = Some(text_of(doc, r)?);
+        }
+    }
+    for st in doc.named(at, SAML, "AttributeStatement")? {
+        if doc.one(st, SAML, "EncryptedAttribute")?.is_some() {
+            return Err("saml-encrypted");
+        }
+        for a in doc.named(st, SAML, "Attribute")? {
+            if f.attributes.len() >= MAX_ATTRIBUTES {
+                return Err("saml-field");
+            }
+            let name = opt(doc, a, "Name")?.ok_or("saml-field")?;
+            let mut values = Vec::new();
+            for v in doc.named(a, SAML, "AttributeValue")? {
+                if values.len() >= MAX_LIST {
+                    return Err("saml-field");
+                }
+                values.push(text_of(doc, v)?);
+            }
+            f.attributes.push((name, values));
+        }
+    }
+    Ok(f)
+}
+
+/// `saml.assertion` (P4): reads an upstream IdP's `samlp:Response` or bare `saml:Assertion`
+/// (a [`Context`], then the message, never deflated), verifies the assertion's own enveloped
+/// signature with one of the IdP's pinned certificates and returns the assertion's facts, read
+/// from that element (OP-155 m.3 (h), IDI-8). A Response signature alone never suffices.
+///
+/// # Errors
+/// A stable refusal code.
+pub(crate) fn assertion(input: &[u8]) -> Result<(Summary, Vec<u8>), &'static str> {
+    let (ctx, xml) = Context::decode(input).map_err(|_| "frame-malformed")?;
+    if ctx.inflate || ctx.certs.is_empty() {
+        return Err("signature-no-key");
+    }
+    let summary = crate::parse::xml(xml)?;
+    let doc = dom::read(xml)?;
+    let (at, in_response) = the_assertion(&doc)?;
+    let alg = dsig::enveloped(&doc, at, &ctx.certs)?.ok_or("signature-missing")?;
+    let f = assertion_facts(&doc, at, in_response, alg)?;
+    let out = f.encode().map_err(|_| "saml-field")?;
+    Ok((summary, out))
 }

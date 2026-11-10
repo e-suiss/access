@@ -94,6 +94,7 @@ pub(crate) fn handle(r: Request) -> Reply {
         Op::SamlRequest => saml::request(&r.input),
         Op::SamlRedirect => saml::redirect(&r.input),
         Op::SpnegoRead => spnego::read(&r.input),
+        Op::SamlAssertion => saml::assertion(&r.input),
     };
     match checked {
         Ok((summary, output)) => Reply::Ok { summary, output },

@@ -37,9 +37,13 @@ pub enum Op {
     /// Reads a Kerberos `Negotiate` token (SPNEGO or a raw Kerberos initial context token) into
     /// its [`crate::spnego::Token`] (OP-155 m.3 (o)); the segment of the reply is the summary.
     SpnegoRead,
+    /// P4: reads an upstream IdP's `samlp:Response` or bare `saml:Assertion` and verifies the
+    /// assertion's enveloped signature (`crate::saml::Context`, then the message); answers
+    /// `crate::saml::AssertionFacts` (OP-155 m.3 (h), IDI-8).
+    SamlAssertion,
 }
 
-const OPS: [(&str, Op); 8] = [
+const OPS: [(&str, Op); 9] = [
     ("xml.check", Op::XmlCheck),
     ("xml.inflate", Op::XmlInflate),
     ("der.check", Op::DerCheck),
@@ -48,6 +52,7 @@ const OPS: [(&str, Op); 8] = [
     ("saml.request", Op::SamlRequest),
     ("saml.redirect", Op::SamlRedirect),
     ("spnego.read", Op::SpnegoRead),
+    ("saml.assertion", Op::SamlAssertion),
 ];
 
 impl Op {

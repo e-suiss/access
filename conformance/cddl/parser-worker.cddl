@@ -29,7 +29,8 @@ parser-request-header = {
 parser-op = "xml.check" / "xml.inflate" / "der.check" / "test.abort" /
   "tl.read" /                           ; P12: ETSI TS 119 612 list summary (OP-155 m.3 (p))
   "saml.request" / "saml.redirect" /
-  "spnego.read"                         ; P11: Kerberos Negotiate token summary (OP-155 m.3 (o))
+  "spnego.read" /                       ; P11: Kerberos Negotiate token summary (OP-155 m.3 (o))
+  "saml.assertion"                      ; P4: an upstream IdP's assertion (OP-155 m.3 (h))
 
 parser-reply-header = parser-ok / parser-refused / parser-worker-failed
 
@@ -65,7 +66,8 @@ parser-refusal = "op-refused" / "frame-malformed" / "deflate-malformed" /
   "signature-digest-alg" / "signature-multiple" / "signature-not-enveloped" /
   "signature-reference-count" / "signature-c14n" / "signature-reference" /
   "signature-transform" / "signature-digest" / "signature-missing" /
-  "spnego-malformed" / "spnego-mech"    ; P11
+  "spnego-malformed" / "spnego-mech" /  ; P11
+  "saml-encrypted" / "saml-status" / "saml-confirmation"   ; P4
 
 ; P12: the `ok` segment of tl.read, deterministic CBOR. Certificates are DER; the worker verifies
 ; no signature.
@@ -127,6 +129,8 @@ saml-facts = {
 
 saml-redirect-verified = {
   verified: tstr,
+}
+
 ; P11: the `ok` segment of spnego.read, deterministic CBOR. A raw NTLMSSP message or a
 ; NegTokenInit that offers NTLM first is `{ mech: "ntlm" }`, which the gateway refuses (IDP-17).
 ; Otherwise the first mechanism must be Kerberos (1.2.840.113554.1.2.2 or 1.2.840.48018.1.2.2)
@@ -140,4 +144,28 @@ spnego-summary = { mech: "ntlm" } / {
   etype: int,
   ? kvno: uint .le 4294967295,
   token: bstr .size (1..8192),
+}
+
+; P4: the `ok` segment of saml.assertion (OP-155 m.3 (h), IDI-8). The request context is a
+; saml-request-context with inflate false and at least one pinned IdP certificate; the message
+; is a samlp:Response with a success status and exactly one saml:Assertion, or a bare
+; saml:Assertion. The assertion's own enveloped signature must verify; facts come from it.
+saml-assertion-facts = {
+  id: tstr,
+  issuer: tstr,
+  issue_instant: tstr,
+  name_id: tstr,
+  audiences: [* tstr],
+  attributes: [* [tstr, [* tstr]]],     ; at most 32, each at most 16 values
+  signed: tstr,                         ; the verified SignatureMethod
+  in_response: bool,
+  ? name_id_format: tstr,
+  ? not_before: tstr,
+  ? not_on_or_after: tstr,
+  ? recipient: tstr,                    ; bearer SubjectConfirmationData
+  ? confirmation_not_on_or_after: tstr,
+  ? in_response_to: tstr,
+  ? authn_instant: tstr,
+  ? session_index: tstr,
+  ? authn_context: tstr,
 }

@@ -447,3 +447,93 @@ fn an_ecp_request_is_read_from_the_soap_body() {
     assert!(f.soap);
     assert_eq!(f.id, "_e1");
 }
+
+/// P4: a canonical assertion `id` of upstream `https://idp.test` about `name_id`, with
+/// `extra` inserted before its closing tag; signed by `idp` when `sign`.
+fn assertion(idp: &Sp, id: &str, name_id: &str, sign: bool) -> String {
+    let head = format!(
+        r#"<saml:Assertion xmlns:saml="{SAML_NS}" ID="{id}" IssueInstant="2026-11-10T10:00:00Z" Version="2.0">"#
+    );
+    let issuer = "<saml:Issuer>https://idp.test</saml:Issuer>";
+    let rest = format!(
+        concat!(
+            r#"<saml:Subject><saml:NameID Format="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent">{n}</saml:NameID>"#,
+            r#"<saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData InResponseTo="_req1" NotOnOrAfter="2026-11-10T10:05:00Z" Recipient="https://sp.test/acs"></saml:SubjectConfirmationData></saml:SubjectConfirmation></saml:Subject>"#,
+            r#"<saml:Conditions NotBefore="2026-11-10T09:59:00Z" NotOnOrAfter="2026-11-10T10:05:00Z"><saml:AudienceRestriction><saml:Audience>https://sp.test</saml:Audience></saml:AudienceRestriction></saml:Conditions>"#,
+            r#"<saml:AuthnStatement AuthnInstant="2026-11-10T10:00:00Z" SessionIndex="s1"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement>"#,
+            r#"<saml:AttributeStatement><saml:Attribute Name="mail"><saml:AttributeValue>ada@corp.test</saml:AttributeValue></saml:Attribute></saml:AttributeStatement>"#,
+            "</saml:Assertion>"
+        ),
+        n = name_id
+    );
+    let body = format!("{head}{issuer}{rest}");
+    if !sign {
+        return body;
+    }
+    let sig = idp.signature(id, &body);
+    format!("{head}{issuer}{sig}{rest}")
+}
+
+fn response(inner: &str, status: &str) -> String {
+    format!(
+        r#"<samlp:Response xmlns:samlp="{SAMLP_NS}" ID="r1" InResponseTo="_req1" IssueInstant="2026-11-10T10:00:00Z" Version="2.0"><saml:Issuer xmlns:saml="{SAML_NS}">https://idp.test</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:{status}"></samlp:StatusCode></samlp:Status>{inner}</samlp:Response>"#
+    )
+}
+
+fn run_assertion(c: &Context, xml: &str) -> Result<access_edge_core::saml::AssertionFacts, &'static str> {
+    let (_, out) = crate::saml::assertion(&c.encode(xml.as_bytes()).unwrap())?;
+    Ok(access_edge_core::saml::AssertionFacts::decode(&out).unwrap())
+}
+
+// OP-155 m.3 (h), IDI-8, Ek B 4784
+#[test]
+fn an_upstream_assertion_verifies_and_its_facts_come_from_the_signed_assertion() {
+    let idp = sp();
+    let c = ctx(&idp);
+    let f = run_assertion(&c, &response(&assertion(&idp, "a1", "emp-1", true), "Success")).unwrap();
+    assert_eq!(f.id, "a1");
+    assert_eq!(f.issuer, "https://idp.test");
+    assert_eq!(f.name_id, "emp-1");
+    assert_eq!(f.audiences, ["https://sp.test"]);
+    assert_eq!(f.in_response_to.as_deref(), Some("_req1"));
+    assert_eq!(f.recipient.as_deref(), Some("https://sp.test/acs"));
+    assert_eq!(f.session_index.as_deref(), Some("s1"));
+    assert!(f.authn_context.unwrap().ends_with("PasswordProtectedTransport"));
+    assert_eq!(f.attributes, [(String::from("mail"), vec![String::from("ada@corp.test")])]);
+    assert!(f.in_response);
+    assert_eq!(f.signed, ECDSA_SHA256);
+    let bare = run_assertion(&c, &assertion(&idp, "a2", "emp-2", true)).unwrap();
+    assert!(!bare.in_response);
+}
+
+// OP-155 m.3 (h), IDI-8
+#[test]
+fn an_unsigned_tampered_wrapped_encrypted_or_failed_assertion_is_refused() {
+    let idp = sp();
+    let c = ctx(&idp);
+    assert_eq!(
+        run_assertion(&c, &response(&assertion(&idp, "a1", "emp-1", false), "Success")),
+        Err("signature-missing")
+    );
+    let signed = assertion(&idp, "a1", "emp-1", true);
+    let tampered = signed.replace(">emp-1<", ">emp-9<");
+    assert!(run_assertion(&c, &response(&tampered, "Success")).is_err());
+    let other = sp();
+    assert!(run_assertion(&ctx(&other), &response(&signed, "Success")).is_err());
+    let two = format!("{signed}{}", assertion(&idp, "a2", "evil", false));
+    assert_eq!(run_assertion(&c, &response(&two, "Success")), Err("saml-message"));
+    assert_eq!(
+        run_assertion(&c, &response(&signed, "Requester")),
+        Err("saml-status")
+    );
+    let enc = format!(r#"<saml:EncryptedAssertion xmlns:saml="{SAML_NS}"></saml:EncryptedAssertion>"#);
+    assert_eq!(run_assertion(&c, &response(&enc, "Success")), Err("saml-encrypted"));
+    let none = Context {
+        certs: Vec::new(),
+        ..ctx(&idp)
+    };
+    assert_eq!(
+        run_assertion(&none, &response(&signed, "Success")),
+        Err("signature-no-key")
+    );
+}

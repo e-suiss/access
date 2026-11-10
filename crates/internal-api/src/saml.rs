@@ -294,6 +294,165 @@ pub fn decode_verified(input: &[u8]) -> Result<String, WireError> {
     text(&v, "verified")
 }
 
+/// P4: most attributes kept from one assertion, and most values of one attribute.
+pub const MAX_ATTRIBUTES: usize = 32;
+
+/// P4: the facts of one SAML 2.0 assertion an upstream IdP issued, read from the assertion
+/// element whose enveloped signature verified with a pinned IdP certificate (OP-155 m.3 (h),
+/// IDI-8). The Response around it, when there was one, is unsigned context: only its status
+/// and `InResponseTo` are kept, and nothing is decided on them alone.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AssertionFacts {
+    /// The assertion's `ID`.
+    pub id: String,
+    /// The assertion's `saml:Issuer`, the IdP entity ID.
+    pub issuer: String,
+    /// `IssueInstant`, as written.
+    pub issue_instant: String,
+    /// `Subject/NameID`.
+    pub name_id: String,
+    /// `NameID/@Format`.
+    pub name_id_format: Option<String>,
+    /// `Conditions/AudienceRestriction/Audience`s.
+    pub audiences: Vec<String>,
+    /// `Conditions/@NotBefore`.
+    pub not_before: Option<String>,
+    /// `Conditions/@NotOnOrAfter`.
+    pub not_on_or_after: Option<String>,
+    /// The bearer `SubjectConfirmationData/@Recipient`.
+    pub recipient: Option<String>,
+    /// The bearer `SubjectConfirmationData/@NotOnOrAfter`.
+    pub confirmation_not_on_or_after: Option<String>,
+    /// The bearer `SubjectConfirmationData/@InResponseTo`.
+    pub in_response_to: Option<String>,
+    /// `AuthnStatement/@AuthnInstant`.
+    pub authn_instant: Option<String>,
+    /// `AuthnStatement/@SessionIndex`.
+    pub session_index: Option<String>,
+    /// `AuthnContext/AuthnContextClassRef`.
+    pub authn_context: Option<String>,
+    /// `AttributeStatement` attributes by `Name`, each with its values, in document order.
+    pub attributes: Vec<(String, Vec<String>)>,
+    /// The verified `SignatureMethod`.
+    pub signed: String,
+    /// The assertion came inside a `samlp:Response` whose status was success.
+    pub in_response: bool,
+}
+
+impl AssertionFacts {
+    /// The worker's output.
+    ///
+    /// # Errors
+    /// [`WireError::TooLarge`].
+    pub fn encode(&self) -> Result<Vec<u8>, WireError> {
+        let mut e = vec![
+            ("id", Value::text(&self.id)),
+            ("issuer", Value::text(&self.issuer)),
+            ("issue_instant", Value::text(&self.issue_instant)),
+            ("name_id", Value::text(&self.name_id)),
+            ("audiences", text_list(&self.audiences)),
+            (
+                "attributes",
+                Value::Array(
+                    self.attributes
+                        .iter()
+                        .map(|(n, v)| Value::Array(vec![Value::text(n), text_list(v)]))
+                        .collect(),
+                ),
+            ),
+            ("signed", Value::text(&self.signed)),
+            ("in_response", Value::Bool(self.in_response)),
+        ];
+        for (k, v) in [
+            ("name_id_format", &self.name_id_format),
+            ("not_before", &self.not_before),
+            ("not_on_or_after", &self.not_on_or_after),
+            ("recipient", &self.recipient),
+            (
+                "confirmation_not_on_or_after",
+                &self.confirmation_not_on_or_after,
+            ),
+            ("in_response_to", &self.in_response_to),
+            ("authn_instant", &self.authn_instant),
+            ("session_index", &self.session_index),
+            ("authn_context", &self.authn_context),
+        ] {
+            opt(&mut e, k, v.as_deref().map(Value::text));
+        }
+        encoded(&map(e))
+    }
+
+    /// Reads the worker's output.
+    ///
+    /// # Errors
+    /// [`WireError`].
+    pub fn decode(input: &[u8]) -> Result<Self, WireError> {
+        let v = dcbor::decode(input, Limits::CEILING).map_err(|_| WireError::Malformed)?;
+        only(
+            &v,
+            &[
+                "id",
+                "issuer",
+                "issue_instant",
+                "name_id",
+                "audiences",
+                "attributes",
+                "signed",
+                "in_response",
+                "name_id_format",
+                "not_before",
+                "not_on_or_after",
+                "recipient",
+                "confirmation_not_on_or_after",
+                "in_response_to",
+                "authn_instant",
+                "session_index",
+                "authn_context",
+            ],
+        )?;
+        let Some(Value::Array(list)) = v.get("attributes") else {
+            return Err(WireError::Malformed);
+        };
+        if list.len() > MAX_ATTRIBUTES {
+            return Err(WireError::TooLarge);
+        }
+        let mut attributes = Vec::with_capacity(list.len());
+        for a in list {
+            let Value::Array(pair) = a else {
+                return Err(WireError::Malformed);
+            };
+            let (Some(Value::Text(n)), Some(vals), None) = (pair.first(), pair.get(1), pair.get(2))
+            else {
+                return Err(WireError::Malformed);
+            };
+            if n.len() > MAX_TEXT {
+                return Err(WireError::Malformed);
+            }
+            let holder = map(vec![("v", vals.clone())]);
+            attributes.push((n.clone(), texts(&holder, "v")?));
+        }
+        Ok(Self {
+            id: text(&v, "id")?,
+            issuer: text(&v, "issuer")?,
+            issue_instant: text(&v, "issue_instant")?,
+            name_id: text(&v, "name_id")?,
+            name_id_format: opt_text(&v, "name_id_format")?,
+            audiences: texts(&v, "audiences")?,
+            not_before: opt_text(&v, "not_before")?,
+            not_on_or_after: opt_text(&v, "not_on_or_after")?,
+            recipient: opt_text(&v, "recipient")?,
+            confirmation_not_on_or_after: opt_text(&v, "confirmation_not_on_or_after")?,
+            in_response_to: opt_text(&v, "in_response_to")?,
+            authn_instant: opt_text(&v, "authn_instant")?,
+            session_index: opt_text(&v, "session_index")?,
+            authn_context: opt_text(&v, "authn_context")?,
+            attributes,
+            signed: text(&v, "signed")?,
+            in_response: flag(&v, "in_response")?,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, reason = "test code")]
