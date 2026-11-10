@@ -570,11 +570,57 @@ async fn a_pos_terminal_refuses_offline_once_its_slice_is_spent() {
             content_position: None,
         });
         match (verdict, expect) {
-            (Verdict::Allow(_), true) => voided.push(order),
+            (Verdict::Allow(_), true) => {
+                voided.push(order);
+                // OP-156 m.3 (v), §8.17.5.8, Ek B 5161
+                assert_eq!(
+                    till_report(
+                        &pap,
+                        &pos.slice_unused(&pap.projection_exercise),
+                        &pos_profile()
+                    ),
+                    serde_json::json!({
+                        "until": pap.validity.horizon,
+                        "voids_left": 2 - voided.len(),
+                        "amount_left": { "currency": "EUR", "minor": 10_000 - 4_000 * voided.len() },
+                    }),
+                );
+            }
             (Verdict::Deny(d), false) => assert_eq!(d.code(), "pap-slice"),
             (v, _) => panic!("{order}: {v:?}"),
         }
     }
     assert_eq!(voided, ["o-1", "o-2"]);
     p.s.only_public();
+}
+
+/// The till's offline view from its PAP and its Verifier Profile (OP-156 m.3 (v), §8.17.5.8):
+/// it may act until the contract's horizon; what is left of each offline slice, at most the
+/// profile's `slice_max` for that unit, is `voids_left` (unit `count`) and `amount_left` (unit
+/// `eur`, minor units). A term whose slice is spent reads 0. `@esuiss/access` `offline.reportFrom`
+/// computes the same from the same inputs.
+fn till_report(
+    pap: &access_kernel::pap::Pap,
+    unused: &BTreeSet<access_kernel::report::SliceAmount>,
+    profile: &VerifierProfile,
+) -> serde_json::Value {
+    let mut out = serde_json::json!({ "until": pap.validity.horizon });
+    for s in &pap.validity.offline_slice {
+        let left = unused
+            .iter()
+            .find(|u| u.budget_term == s.budget_term)
+            .map_or(0, |u| u.amount);
+        let cap = profile
+            .slice_max
+            .get(&s.unit)
+            .and_then(|m| u64::try_from(*m).ok())
+            .unwrap_or(0);
+        let left = left.min(cap);
+        if s.unit == "count" {
+            out["voids_left"] = serde_json::json!(left);
+        } else if s.unit == UNIT {
+            out["amount_left"] = serde_json::json!({ "currency": "EUR", "minor": left });
+        }
+    }
+    out
 }
