@@ -254,6 +254,7 @@ fn idp_actions_carry_their_consequence_tiers() {
         (IdpAction::RealmIysClose, Tier::Ct1),
         (IdpAction::RealmSecurityNotices, Tier::Ct2),
         (IdpAction::RealmSecurityNoticesClose, Tier::Ct1),
+        (IdpAction::RelayResend, Tier::Ct1),
 
     ] {
         assert_eq!(tier(a), t, "{}", a.label());

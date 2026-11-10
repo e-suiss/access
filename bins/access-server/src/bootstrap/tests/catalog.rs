@@ -188,7 +188,7 @@ async fn the_upgrade_waits_out_the_time_lock_and_reuses_its_open_attempt() {
 /// Opens Genesis as `idp.*` catalog `version` declared it: catalog 1 has no `idp.org` and no
 /// `idp.social`, catalog 3 no `idp.agent` and no `idp.vault`, catalog 4 none of `idp.saml`,
 /// `idp.scim`, `idp.gateway`, `idp.federation` and `idp.vc`, catalog 5 none of `idp.domain`,
-/// `idp.proxy`, `idp.ssh`, `idp.linux`, `idp.hr`, `idp.export` and `idp.signal`, and none a later
+/// `idp.proxy`, `idp.ssh`, `idp.linux`, `idp.hr`, `idp.export`, `idp.signal` and `idp.relay`, and none a later
 /// action in the other namespaces; the CT3 time-lock is zero.
 struct FirstCatalog<'a> {
     plane: &'a TestPlane,
@@ -364,6 +364,7 @@ async fn a_catalog_1_realm_refuses_the_version_2_actions_until_its_upgrade_commi
             ("idp.org", "accepted"),
             ("idp.proxy", "accepted"),
             ("idp.realm", "accepted"),
+            ("idp.relay", "accepted"),
             ("idp.saml", "accepted"),
             ("idp.scim", "accepted"),
             ("idp.signal", "accepted"),
@@ -452,6 +453,7 @@ async fn a_catalog_3_realm_refuses_the_version_4_actions_until_its_upgrade_commi
             ("idp.org", "accepted"),
             ("idp.proxy", "accepted"),
             ("idp.realm", "accepted"),
+            ("idp.relay", "accepted"),
             ("idp.saml", "accepted"),
             ("idp.scim", "accepted"),
             ("idp.signal", "accepted"),
@@ -536,6 +538,7 @@ async fn a_catalog_4_realm_refuses_the_version_5_actions_until_its_upgrade_commi
             ("idp.org", "accepted"),
             ("idp.proxy", "accepted"),
             ("idp.realm", "accepted"),
+            ("idp.relay", "accepted"),
             ("idp.saml", "accepted"),
             ("idp.scim", "accepted"),
             ("idp.signal", "accepted"),
@@ -616,6 +619,7 @@ async fn a_catalog_5_realm_refuses_the_version_6_actions_until_its_upgrade_commi
             ("idp.linux", "accepted"),
             ("idp.proxy", "accepted"),
             ("idp.realm", "accepted"),
+            ("idp.relay", "accepted"),
             ("idp.signal", "accepted"),
             ("idp.ssh", "accepted"),
         ]

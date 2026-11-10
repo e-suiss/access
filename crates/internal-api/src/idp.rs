@@ -20,7 +20,7 @@ pub const CATALOG_VERSION: u64 = 6;
 
 /// The `idp.*` action namespaces, one SPP each (OP-141 m.35, OP-153 m.3 (a), OP-154 m.3 (a),
 /// OP-155 m.3 (a), OP-156 m.3 (a)).
-pub const NAMESPACES: [&str; 24] = [
+pub const NAMESPACES: [&str; 25] = [
     "idp.account",
     "idp.agent",
     "idp.client",
@@ -36,6 +36,7 @@ pub const NAMESPACES: [&str; 24] = [
     "idp.org",
     "idp.proxy",
     "idp.realm",
+    "idp.relay",
     "idp.saml",
     "idp.scim",
     "idp.signal",
@@ -440,11 +441,14 @@ pub enum IdpAction {
     RealmSecurityNotices,
     /// Turns the immediate security authority notices off; it lessens notice, CT1.
     RealmSecurityNoticesClose,
+    /// Resends an undelivered Relay message as a new outbox row citing the original; a message
+    /// whose sealed content was crypto-shredded cannot be resent (OP-156 m.3 (c)): CT1.
+    RelayResend,
 }
 
 impl IdpAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 175] = [
+    pub const ALL: [Self; 176] = [
         Self::ClientRegister,
         Self::ClientUpdate,
         Self::ClientRetire,
@@ -620,6 +624,7 @@ impl IdpAction {
         Self::RealmIysClose,
         Self::RealmSecurityNotices,
         Self::RealmSecurityNoticesClose,
+        Self::RelayResend,
     ];
 
     /// The catalog version that first declared it (OP-153 m.3 (a), OP-154 m.3 (a), OP-155
@@ -669,7 +674,8 @@ impl IdpAction {
             | Self::RealmIys
             | Self::RealmIysClose
             | Self::RealmSecurityNotices
-            | Self::RealmSecurityNoticesClose => 6,
+            | Self::RealmSecurityNoticesClose
+            | Self::RelayResend => 6,
             Self::SamlSpRegister
             | Self::SamlSpMapping
             | Self::SamlSpUpdate
@@ -925,6 +931,7 @@ impl IdpAction {
             | Self::ExportSinkRetire => "idp.export",
             Self::SignalSourceRegister
             | Self::SignalSourceRetire => "idp.signal",
+            Self::RelayResend => "idp.relay",
             Self::SocialEnable | Self::SocialUpdate | Self::SocialDisable => "idp.social",
             Self::HookRegister | Self::HookRetire => "idp.hook",
             Self::WebhookRegister | Self::WebhookUpdate | Self::WebhookRetire => "idp.webhook",
@@ -1126,6 +1133,7 @@ impl IdpAction {
             Self::RealmIysClose => "iys_close",
             Self::RealmSecurityNotices => "security_notices",
             Self::RealmSecurityNoticesClose => "security_notices_close",
+            Self::RelayResend => "resend",
         }
     }
 
@@ -1201,7 +1209,8 @@ impl IdpAction {
             | Self::RealmPushClose
             | Self::RealmSmsOtpClose
             | Self::RealmIysClose
-            | Self::RealmSecurityNoticesClose => EffectClass::Reversible,
+            | Self::RealmSecurityNoticesClose
+            | Self::RelayResend => EffectClass::Reversible,
             _ => EffectClass::Irreversible,
         }
     }
@@ -1235,6 +1244,15 @@ impl IdpAction {
         )
     }
 
+    /// Its typed parameters (OP-156 m.3 (c)).
+    #[must_use]
+    pub fn params(self) -> BTreeMap<String, String> {
+        match self {
+            Self::RelayResend => BTreeMap::from([(String::from("event_id"), String::from("text"))]),
+            _ => BTreeMap::new(),
+        }
+    }
+
     /// Its Action Schema.
     #[must_use]
     pub fn schema(self) -> ActionSchema {
@@ -1245,7 +1263,7 @@ impl IdpAction {
             effect: self.effect(),
             reserved: self.reserved(),
             consumption_bearing: false,
-            params: BTreeMap::new(),
+            params: self.params(),
             resource_types: BTreeSet::new(),
             render: None,
         }
