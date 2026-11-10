@@ -7,6 +7,8 @@ Every Access SDK decides, verifies and encodes with the same Kernel. The binding
 | uniffi | `uniffi/` | Python, Kotlin, Swift | `just uniffi-test`, `just uniffi-test-kotlin`, `just uniffi-test-swift` |
 | WebAssembly | `wasm/` | TypeScript (Node and browsers) through `@esuiss/access` | `just web-test` |
 
+The SDK's `approver` module has its own uniffi binding, `sdks/rust/approver-uniffi` (`approver_*` functions), so a Swift or Kotlin app can answer push verifications with a key from its platform key store.
+
 A C ABI binding does not exist yet; it is added with the first language package that needs it, and joins the same gate.
 
 ## The gate

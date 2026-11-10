@@ -1,0 +1,31 @@
+[package]
+name = "access-approver-uniffi"
+description = "uniffi binding of the Access SDK's approver module for Swift, Kotlin and Python (OP-156 m.3 (d))."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+name = "access_approver_uniffi"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+# OP-116 m.6
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+bindgen = ["uniffi/cli", "uniffi/cargo-metadata"]
+
+[dependencies]
+# OP-62
+access-sdk = { workspace = true }
+thiserror = { workspace = true }
+uniffi = { workspace = true }
+
+[lints]
+workspace = true
