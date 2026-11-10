@@ -15,6 +15,7 @@ import { Proxy } from "./Proxy.js";
 import { SignInSettings } from "./SignInSettings.js";
 import { Export as SiemExport } from "./Export.js";
 import { Linux } from "./Linux.js";
+import { Hr } from "./Hr.js";
 import { Ssh } from "./Ssh.js";
 
 export const SCREEN_TITLE: Readonly<Record<Screen, Key>> = {
@@ -33,6 +34,7 @@ export const SCREEN_TITLE: Readonly<Record<Screen, Key>> = {
   siem: "screenSiem",
   linux: "screenLinux",
   proxy: "screenProxy",
+  hr: "screenHr",
   "sign-in": "screenSignIn",
   schemas: "screenSchemas",
   integrations: "screenIntegrations",
@@ -90,6 +92,8 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
       return <Linux ctx={ctx} />;
     case "proxy":
       return <Proxy ctx={ctx} />;
+    case "hr":
+      return <Hr ctx={ctx} />;
     case "sign-in":
       return <SignInSettings ctx={ctx} />;
     case "schemas":

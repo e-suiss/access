@@ -810,6 +810,38 @@ export const en = {
   proxyRoutes: "Path patterns",
   proxyRoutesHint: "Comma-separated, for example /, /admin",
   proxyRegisterSend: "Register proxy",
+  screenHr: "HR",
+  hrSourcesTitle: "HR sources",
+  hrSourcesIntro:
+    "An HR source sends people's department, title, manager, start and end dates. Its data picks people for roles only after this domain accepts it as a membership source, which is a protected change.",
+  hrLive: "In use",
+  hrRetired: "Retired",
+  hrPeople: "{n} people",
+  hrRoleSource: "Role source",
+  hrSyncFromHr: "Sync from HR ({source}): roles that use its data list it as their source",
+  hrNotAccepted: "Not accepted yet: its data picks nobody for a role",
+  hrRetire: "Retire {name}",
+  hrSourceRegister: "Register an HR source",
+  hrSourceName: "Name",
+  hrNameHint: "Lower-case letters, digits and hyphens, starting with a letter",
+  hrRegisterSend: "Register",
+  hrImportTitle: "Import",
+  hrImportIntro:
+    "Upload a CSV file of at most 10 MB or a JSON Lines file of at most 10,000 people. The whole file is checked first: one bad row or an unknown column and nothing is imported.",
+  hrImportSource: "HR source",
+  hrImportFormat: "Format",
+  hrCsv: "CSV with a header row",
+  hrJsonl: "JSON Lines",
+  hrImportFile: "File",
+  hrImportSend: "Import",
+  hrLifecycle:
+    "On the start date the account is turned on and the person gets a one-use passkey setup link for 7 days. On the end date the account is suspended, its sign-ins end and agents only that person sponsored are suspended. A new position waits 24 hours before it counts.",
+  hrConnectorsTitle: "HR connectors",
+  hrConnectorsIntro:
+    "A connector runs beside Access, reads an HR system on its schedule and imports into one HR source with its own signing key.",
+  hrConnectorRegister: "Register a connector",
+  hrConnectorName: "Connector name",
+  hrVendor: "HR system",
 } as const;
 
 export type Key = keyof typeof en;

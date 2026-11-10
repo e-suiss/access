@@ -154,6 +154,12 @@ const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   registerProxy: ["idp.proxy", "register"],
   retireProxy: ["idp.proxy", "retire"],
   putProxyPlainHeaders: ["idp.proxy", "plain_headers"],
+  registerHrSource: ["idp.hr", "source_register"],
+  retireHrSource: ["idp.hr", "source_retire"],
+  importHrBatch: ["idp.hr", "import"],
+  importHrCsv: ["idp.hr", "import"],
+  registerHrConnector: ["idp.hr", "connector_register"],
+  retireHrConnector: ["idp.hr", "connector_retire"],
 };
 
 export interface Write {
