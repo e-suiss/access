@@ -238,4 +238,23 @@ impl SessionTx for PgTx {
     ) -> Result<Option<[u8; 16]>, SessionError> {
         Ok(self.0.session_instance(session).await?)
     }
+
+    async fn record_upstream_session(
+        &mut self,
+        session: [u8; 16],
+        connection: &str,
+        now_ms: u64,
+    ) -> Result<(), SessionError> {
+        Ok(self
+            .0
+            .record_upstream_session(session, connection, now_ms)
+            .await?)
+    }
+
+    async fn upstream_live_sessions(
+        &mut self,
+        connection: &str,
+    ) -> Result<Vec<([u8; 16], [u8; 16])>, SessionError> {
+        Ok(self.0.upstream_live_sessions(connection).await?)
+    }
 }

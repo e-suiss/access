@@ -3,6 +3,7 @@
 //! A realm that requires a second step leaves the flow at that step, with nothing enrolled yet.
 
 use access_identity_account::notify::message::{Address, Body, Message, Notice};
+use access_identity_account::ports::AccountTx as _;
 use access_identity_webauthn::ports::{CredentialRegistry, SignalSink};
 use access_store::sessions::NewFlow;
 
@@ -70,6 +71,51 @@ where
     ) -> Result<Opened, SessionError> {
         self.open_with(subject, Factor::federated(proven_ms), device, correlation)
             .await
+    }
+
+    /// Opens the login flow of `subject` whose enterprise upstream sign-in was checked by the
+    /// caller: discovery, `iss`, the connection's Acceptance and the ID token or assertion
+    /// (OP-155 m.3 (h)); `factor` is [`Factor::upstream`]. It completes like any other first
+    /// step, so the realm's policy still decides what more it needs (TN-98).
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub async fn upstream(
+        &self,
+        subject: [u8; 16],
+        factor: Factor,
+        device: Option<&str>,
+        correlation: &str,
+    ) -> Result<Opened, SessionError> {
+        if factor.upstream.is_none() {
+            return Err(SessionError::Corrupt);
+        }
+        self.open_with(subject, factor, device, correlation).await
+    }
+
+    /// Tells the holder of a link that its upstream `upstream` (the display name) answered with
+    /// another subject and nothing was relinked (TN-66, OP-155 m.3 (h)).
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub async fn upstream_conflict_notice(
+        &self,
+        subject: [u8; 16],
+        upstream: &str,
+    ) -> Result<(), SessionError> {
+        let at_ms = self.now();
+        let mut tx = self.begin().await?;
+        self.account_message(
+            &mut tx,
+            subject,
+            Body::UpstreamSubjectConflict {
+                upstream: upstream.chars().take(200).collect(),
+                at_ms,
+            },
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(())
     }
 
     /// Opens the login flow of `subject` who presented a client certificate on the mTLS

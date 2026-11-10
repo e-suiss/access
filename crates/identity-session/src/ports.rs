@@ -219,6 +219,18 @@ pub trait SessionTx: AccountTx + RiskTx {
         &mut self,
         session: [u8; 16],
     ) -> impl Future<Output = Result<Option<[u8; 16]>, SessionError>> + Send;
+    /// Records that the enterprise upstream `connection` opened `session` (SEC9).
+    fn record_upstream_session(
+        &mut self,
+        session: [u8; 16],
+        connection: &str,
+        now_ms: u64,
+    ) -> impl Future<Output = Result<(), SessionError>> + Send;
+    /// The live sessions `connection` opened, with their subjects (SEC9).
+    fn upstream_live_sessions(
+        &mut self,
+        connection: &str,
+    ) -> impl Future<Output = Result<Vec<([u8; 16], [u8; 16])>, SessionError>> + Send;
 }
 
 /// Opens session transactions in one realm.

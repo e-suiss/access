@@ -42,6 +42,42 @@ pub enum Resolved {
     Unusable,
 }
 
+/// The field the raw upstream assertion is sealed under.
+pub const UPSTREAM_ASSERTION: &str = "upstream_assertion";
+
+/// What an enterprise upstream's sign-in adds to its identity (OP-155 m.3 (h)).
+pub struct UpstreamFacts<'a> {
+    /// The connection.
+    pub connection: &'a str,
+    /// The upstream issuer's Party id.
+    pub issuer: [u8; 16],
+    /// The digest of the raw assertion.
+    pub evidence: &'a [u8; 32],
+    /// The raw assertion, sealed and kept; never in a Claim.
+    pub raw: &'a [u8],
+    /// The national identity number the preset names; only its keyed digest enters a Claim.
+    pub national: Option<&'a str>,
+}
+
+/// The outcome of an enterprise upstream sign-in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UpstreamResolved {
+    /// The identity is linked to this account.
+    Existing([u8; 16]),
+    /// A new account was made just in time.
+    Created([u8; 16]),
+    /// The linked account cannot sign in.
+    Unusable,
+    /// The connection answered with a subject new to it for an address one of its links holds:
+    /// nothing was relinked (TN-66).
+    Conflict {
+        /// The account whose link holds the address.
+        holder: [u8; 16],
+        /// Whether this conflict was raised now, not already open.
+        fresh: bool,
+    },
+}
+
 /// The outcome of linking an external identity to a signed-in account (TN-65).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Linked {
@@ -142,6 +178,18 @@ impl Externals<'_> {
         who: &Actor<'_>,
     ) -> Result<Resolved, AccountError> {
         let mut tx = self.begin().await?;
+        let r = self.resolve(&mut tx, a, now_ms, who).await?;
+        tx.commit().await?;
+        Ok(r)
+    }
+
+    async fn resolve(
+        &self,
+        tx: &mut PgTx,
+        a: &Asserted<'_>,
+        now_ms: u64,
+        who: &Actor<'_>,
+    ) -> Result<Resolved, AccountError> {
         if let Some(row) = tx.0.federated_by_key(a.key).await? {
             let status = tx
                 .subject(row.subject, false)
@@ -149,11 +197,9 @@ impl Externals<'_> {
                 .ok_or(AccountError::Corrupt)?
                 .status;
             if status != AccountStatus::Active.name() {
-                tx.commit().await?;
                 return Ok(Resolved::Unusable);
             }
             tx.0.federated_verified(row.link, now_ms).await?;
-            tx.commit().await?;
             return Ok(Resolved::Existing(row.subject));
         }
         let wrapped = crate::app::sealing::new_subject_key(self.realm)?;
@@ -161,17 +207,10 @@ impl Externals<'_> {
             .insert_subject(AccountStatus::Active, self.realm.kek.id(), &wrapped)
             .await?;
         let external = self.realm.external(subject)?;
-        audit(
-            &mut tx,
-            "account.created",
-            who.actor,
-            &external,
-            who.correlation,
-        )
-        .await?;
+        audit(tx, "account.created", who.actor, &external, who.correlation).await?;
         // OP-151 m.3 (i)
-        events::created(&mut tx, self.realm, subject).await?;
-        crate::app::accounts::status_claim(&mut tx, subject, AccountStatus::Active).await?;
+        events::created(tx, self.realm, subject).await?;
+        crate::app::accounts::status_claim(tx, subject, AccountStatus::Active).await?;
         // IDP-31 (3), MD-5
         if let Some((value, true)) = a.address
             && let Ok(id) = Identifier::new(IdentifierKind::Email, value)
@@ -195,7 +234,7 @@ impl Externals<'_> {
         if let Some(n) = a.name.map(str::trim).filter(|n| !n.is_empty()) {
             vault::set_profile(&mut tx.0, self.vault, subject, "name", n).await?;
         }
-        let address = self.sealed(&mut tx, subject, a.address).await?;
+        let address = self.sealed(tx, subject, a.address).await?;
         if !tx
             .0
             .link_federated(subject, a.provider, a.key, address.as_ref(), now_ms)
@@ -204,15 +243,168 @@ impl Externals<'_> {
             return Err(AccountError::Corrupt);
         }
         audit(
-            &mut tx,
+            tx,
             "account.registered",
             who.actor,
             &external,
             who.correlation,
         )
         .await?;
-        tx.commit().await?;
         Ok(Resolved::Created(subject))
+    }
+
+    /// Signs in with an enterprise upstream's checked identity `a` (OP-155 m.3 (h)):
+    ///
+    /// - its linked account, or a new one made just in time (§10.2.6); groups and roles never
+    ///   come from the upstream's answer;
+    /// - a subject new to the connection whose address a live link of the same connection
+    ///   holds is a conflict: nothing is relinked, the conflict is recorded and audited, and
+    ///   only an explicit link after a re-authentication resolves it (TN-66,
+    ///   GHSA-x8cg-3c8h-gw55); another issuer's or another connection's address never reaches
+    ///   that account;
+    /// - the raw assertion is sealed under the subject's `security_history` key and the
+    ///   `identity_binding_person` Claim carries only digests (§10.1.2 rule 1).
+    ///
+    /// # Errors
+    /// [`AccountError`].
+    pub async fn sign_in_upstream(
+        &self,
+        a: &Asserted<'_>,
+        up: &UpstreamFacts<'_>,
+        now_ms: u64,
+        who: &Actor<'_>,
+    ) -> Result<UpstreamResolved, AccountError> {
+        let mut tx = self.begin().await?;
+        if tx.0.federated_by_key(a.key).await?.is_none()
+            && let Some((value, _)) = a.address
+        {
+            let index = self.vault.index_of(
+                self.realm.tenant.as_bytes(),
+                self.realm.realm.as_bytes(),
+                value,
+            )?;
+            if let Some(holder) = tx.0.federated_by_address(a.provider, &index).await? {
+                // TN-66, GHSA-x8cg-3c8h-gw55
+                let fresh =
+                    tx.0.insert_subject_conflict(a.provider, holder, a.key, now_ms)
+                        .await?;
+                if fresh {
+                    let target = self.realm.external(holder)?;
+                    audit(
+                        &mut tx,
+                        "upstream.subject_conflict",
+                        who.actor,
+                        &target,
+                        who.correlation,
+                    )
+                    .await?;
+                }
+                tx.commit().await?;
+                return Ok(UpstreamResolved::Conflict { holder, fresh });
+            }
+        }
+        let resolved = self.resolve(&mut tx, a, now_ms, who).await?;
+        let subject = match resolved {
+            Resolved::Existing(s) | Resolved::Created(s) => s,
+            Resolved::Unusable => {
+                tx.commit().await?;
+                return Ok(UpstreamResolved::Unusable);
+            }
+        };
+        self.keep_assertion(&mut tx, subject, a.key, up, now_ms)
+            .await?;
+        tx.commit().await?;
+        Ok(match resolved {
+            Resolved::Created(s) => UpstreamResolved::Created(s),
+            _ => UpstreamResolved::Existing(subject),
+        })
+    }
+
+    /// Links an enterprise upstream's checked identity to the signed-in `subject` after its
+    /// fresh re-authentication (TN-65, TN-66): the explicit link that resolves the
+    /// connection's open conflicts for that identity; its assertion is kept as on sign-in.
+    ///
+    /// # Errors
+    /// [`AccountError`].
+    pub async fn link_upstream(
+        &self,
+        subject: [u8; 16],
+        a: &Asserted<'_>,
+        up: &UpstreamFacts<'_>,
+        now_ms: u64,
+        who: &Actor<'_>,
+    ) -> Result<Linked, AccountError> {
+        let linked = self.link(subject, a, now_ms, who).await?;
+        if linked != Linked::Elsewhere {
+            let mut tx = self.begin().await?;
+            tx.0.resolve_subject_conflicts(a.provider, a.key, now_ms)
+                .await?;
+            self.keep_assertion(&mut tx, subject, a.key, up, now_ms)
+                .await?;
+            tx.commit().await?;
+        }
+        Ok(linked)
+    }
+
+    async fn keep_assertion(
+        &self,
+        tx: &mut PgTx,
+        subject: [u8; 16],
+        key: &[u8; 32],
+        up: &UpstreamFacts<'_>,
+        now_ms: u64,
+    ) -> Result<(), AccountError> {
+        use crate::app::vault::PiiClass;
+        let dek = vault::class_key(
+            &mut tx.0,
+            self.vault,
+            subject,
+            PiiClass::SecurityHistory,
+            true,
+        )
+        .await?
+        .ok_or(AccountError::Shredded)?;
+        let sealed = vault::seal(
+            &tx.0,
+            &dek,
+            subject,
+            PiiClass::SecurityHistory,
+            UPSTREAM_ASSERTION,
+            up.raw,
+        )?;
+        tx.0.insert_upstream_assertion(&access_store::upstream::NewAssertion {
+            subject,
+            connection: up.connection,
+            evidence: up.evidence,
+            nonce: &sealed.nonce,
+            ciphertext: &sealed.ciphertext,
+            now_ms,
+        })
+        .await?;
+        // IDP-34: a keyed digest, never the number
+        let national = up
+            .national
+            .map(|n| {
+                self.vault.index_of(
+                    self.realm.tenant.as_bytes(),
+                    self.realm.realm.as_bytes(),
+                    &format!("national-id:{n}"),
+                )
+            })
+            .transpose()?;
+        let at = tx.server_time().await?;
+        crate::app::claims::emit(
+            tx,
+            &crate::domain::claims::identity_binding_upstream(
+                subject,
+                up.issuer,
+                key,
+                up.evidence,
+                national.as_ref(),
+                at,
+            ),
+        )
+        .await
     }
 
     /// Links `a` to the signed-in `subject` after its fresh re-authentication and the proof of

@@ -275,6 +275,74 @@ pub fn authentication(f: AuthFacts) -> ClaimOrder {
     }
 }
 
+/// The `authentication` Claim of an enterprise upstream sign-in (§10.1.2 OIDC and SAML rows,
+/// OP-155 m.3 (h)): the realm issuer's, with the upstream's verified `iss` and its declared
+/// `acr` and `amr` as attribution; its evidence is the raw assertion's digest.
+#[must_use]
+pub fn authentication_upstream(
+    f: AuthFacts,
+    upstream: access_kernel::claim::body::Upstream,
+) -> ClaimOrder {
+    let mut order = authentication(f);
+    if let Content::Body {
+        body: Body::Authentication(a),
+        ..
+    } = &mut order.content
+    {
+        a.upstream = Some(upstream);
+    }
+    order
+}
+
+/// Digest context of the proof an upstream identity binding rests on.
+pub const UPSTREAM_BINDING_CONTEXT: &str = "access/upstream-binding/v1";
+
+/// The `identity_binding_person` Claim of an enterprise upstream sign-in (§10.1.2, INV-17,
+/// OP-155 m.3 (h)): an actor-binding fact, never authority. Its evidence is the digest of the
+/// upstream issuer's Party id, the `(iss, sub)` key, the raw assertion's digest and, for a
+/// national identity number, only its keyed digest; one line per upstream issuer.
+#[must_use]
+pub fn identity_binding_upstream(
+    subject: [u8; 16],
+    issuer: [u8; 16],
+    key: &[u8; 32],
+    assertion: &[u8; 32],
+    national: Option<&[u8; 32]>,
+    at: u64,
+) -> ClaimOrder {
+    let mut parts = vec![
+        Value::Bytes(issuer.to_vec()),
+        Value::Bytes(key.to_vec()),
+        Value::Bytes(assertion.to_vec()),
+    ];
+    if let Some(n) = national {
+        parts.push(Value::Bytes(n.to_vec()));
+    }
+    let bytes = dcbor::encode(&Value::Array(parts), Limits::CEILING).unwrap_or_default();
+    ClaimOrder {
+        subject,
+        class: Class::IdentityBinding(BindingKind::Person).name(),
+        at,
+        ttl_ms: BINDING_TTL_MS,
+        content: Content::Body {
+            body: Body::IdentityBinding(IdentityBinding {
+                workload: None,
+                evidence: Digest(context_digest(UPSTREAM_BINDING_CONTEXT, &bytes).0),
+            }),
+            disclose: true,
+        },
+        assurance: BTreeMap::new(),
+        bind: Bind::None,
+        line: Some(line(&[
+            b"identity_binding",
+            b"person",
+            b"upstream",
+            &issuer,
+        ])),
+        retract: false,
+    }
+}
+
 /// The order that ends a session's `authentication` line when the session ends (§12.0.3,
 /// §7.1 "actor-binding tazeliği", OP-150 L6): its last Claim is superseded by one that holds
 /// for no time, so the Instances the session bound meet no freshness term from it. Nothing else

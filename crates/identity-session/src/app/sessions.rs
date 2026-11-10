@@ -220,6 +220,36 @@ where
         Ok(epoch)
     }
 
+    /// SEC9, OP-155 m.3 (h): ends every live session the enterprise upstream `connection` opened,
+    /// once the governing domain no longer accepts its issuer; each session's `authentication`
+    /// line ends with it. Returns how many ended.
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub async fn quarantine_upstream(&self, connection: &str) -> Result<u32, SessionError> {
+        let now = self.now();
+        let mut tx = self.begin().await?;
+        let mut n = 0_u32;
+        for (session, subject) in tx.upstream_live_sessions(connection).await? {
+            if !tx.end_session(session, i64_of(now)?, "upstream").await? {
+                continue;
+            }
+            emit(&mut tx, &authentication_ended(subject, session, now)).await?;
+            let target = self.external(subject)?;
+            audit(
+                &mut tx,
+                "session.upstream_cutoff",
+                "system",
+                &target,
+                "upstream",
+            )
+            .await?;
+            n = n.saturating_add(1);
+        }
+        tx.commit().await?;
+        Ok(n)
+    }
+
     /// N5: ends another sign-in of the same person (S10 "End this sign-in", X36, OP-153 m.3
     /// (y)): the session ends with reason `ended` and issues nothing more. Its device Instance,
     /// if it has one, ends only by its own `instance.terminate`, which the page signs next; the

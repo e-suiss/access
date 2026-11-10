@@ -173,6 +173,31 @@ pub struct Factor {
     /// m.3 (m)).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub certificate: Option<[u8; 32]>,
+    /// What an enterprise upstream declared, for its `authentication` Claim (OP-155 m.3 (h)).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream: Option<UpstreamStep>,
+}
+
+/// An enterprise upstream's checked sign-in (§10.1.2 OIDC and SAML rows, OP-155 m.3 (h)): its
+/// declarations as evidence, and the assurance its connection's map gave them.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpstreamStep {
+    /// The connection.
+    pub connection: String,
+    /// SAML rather than OIDC.
+    pub saml: bool,
+    /// The verified issuer (RFC 9207) or IdP entity ID.
+    pub iss: String,
+    /// `acr` or `AuthnContextClassRef`, as declared.
+    pub acr: Option<String>,
+    /// `amr`, as declared.
+    pub amr: Vec<String>,
+    /// The digest of the raw assertion.
+    pub evidence: [u8; 32],
+    /// The AAL the assurance map gave, 1 when it gave none (IDP-27).
+    pub aal: u8,
+    /// The eIDAS level the assurance map gave, 1 to 3.
+    pub loa_eidas: Option<u8>,
 }
 
 /// What a passkey assertion showed (§10.1.2 WebAuthn row): the AAGUID hint, the counter, the
@@ -209,6 +234,7 @@ impl Factor {
             at_ms,
             webauthn: None,
             certificate: None,
+            upstream: None,
         }
     }
 
@@ -247,6 +273,17 @@ impl Factor {
     #[must_use]
     pub fn federated(at_ms: u64) -> Self {
         Self::base(MethodClass::Federated, vec![FactorKind::Possession], at_ms)
+    }
+
+    /// An enterprise upstream's checked sign-in (OP-155 m.3 (h)): a federated step whose AAL and
+    /// eIDAS level are only what the connection's assurance map gave; it is never phishing
+    /// resistant on our side and so satisfies no CT (IDP-8, IDP-27).
+    #[must_use]
+    pub fn upstream(step: UpstreamStep, at_ms: u64) -> Self {
+        Self {
+            upstream: Some(step),
+            ..Self::base(MethodClass::Federated, vec![FactorKind::Possession], at_ms)
+        }
     }
 
     /// A client certificate on the mTLS listener (§10.2.5, OP-155 m.3 (m)): channel binding, so
@@ -376,23 +413,44 @@ fn has_two_categories(factors: &[Factor]) -> bool {
 ///
 /// AAL3 needs one step that is phishing resistant, device-bound and UV; AAL2 needs two
 /// categories with a replay-resistant step, or a UV synced passkey; else AAL1. Synced passkeys
-/// never reach AAL3 (OP-146 m.9 (c)). The vector carries the latest step's time.
+/// never reach AAL3 (OP-146 m.9 (c)). An upstream step adds only what its connection's
+/// assurance map gave. The vector carries the latest step's time.
 #[must_use]
 pub fn vector(factors: &[Factor]) -> AssuranceVector {
     let aal3 = factors
         .iter()
         .any(|f| f.phishing.is_some() && f.binding == BindingStrength::DeviceBound && f.uv);
     let multi = has_two_categories(factors) && factors.iter().any(|f| f.replay_resistant);
-    let aal = if aal3 {
+    let own = if aal3 {
         Aal::Aal3
     } else if multi {
         Aal::Aal2
     } else {
         Aal::Aal1
     };
+    // IDP-27, OP-155 m.3 (h)
+    let mapped = factors
+        .iter()
+        .filter_map(|f| f.upstream.as_ref())
+        .map(|u| match u.aal {
+            3 => Aal::Aal3,
+            2 => Aal::Aal2,
+            _ => Aal::Aal1,
+        })
+        .max()
+        .unwrap_or(Aal::Aal1);
+    let loa_eidas = factors
+        .iter()
+        .filter_map(|f| f.upstream.as_ref().and_then(|u| u.loa_eidas))
+        .max()
+        .map(|l| match l {
+            3 => LoaEidas::High,
+            2 => LoaEidas::Substantial,
+            _ => LoaEidas::Low,
+        });
     AssuranceVector {
-        aal,
-        loa_eidas: None,
+        aal: own.max(mapped),
+        loa_eidas,
         phishing_resistant: factors.iter().any(|f| f.phishing.is_some()),
         hardware_bound: factors
             .iter()
@@ -581,6 +639,37 @@ mod tests {
         assert_eq!(eidas_from_upstream(Aal::Aal3, true), LoaEidas::High);
         assert_eq!(eidas_from_upstream(Aal::Aal2, true), LoaEidas::Substantial);
         assert_eq!(eidas_from_upstream(Aal::Aal1, true), LoaEidas::Low);
+    }
+
+    fn step(aal: u8, loa_eidas: Option<u8>) -> UpstreamStep {
+        UpstreamStep {
+            connection: String::from("corp"),
+            saml: false,
+            iss: String::from("https://idp.example"),
+            acr: Some(String::from("urn:x:gold")),
+            amr: vec![String::from("mfa")],
+            evidence: [9; 32],
+            aal,
+            loa_eidas,
+        }
+    }
+
+    // IDP-27, IDP-8, §10.1.2 rule 2, OP-155 m.3 (h)
+    #[test]
+    fn an_upstream_step_carries_only_what_its_map_gave_and_no_ct() {
+        let lowest = [Factor::upstream(step(1, None), T)];
+        let v = vector(&lowest);
+        assert_eq!(v.aal, Aal::Aal1);
+        assert_eq!(v.loa_eidas, None);
+        assert!(!v.phishing_resistant);
+        assert_eq!(ct_ceiling(&lowest), CtCeiling::None);
+        assert_eq!(lowest[0].method.amr(), "fed");
+        let mapped = [Factor::upstream(step(3, Some(3)), T)];
+        let v = vector(&mapped);
+        assert_eq!(v.aal, Aal::Aal3);
+        assert_eq!(v.loa_eidas, Some(LoaEidas::High));
+        assert!(!v.hardware_bound && !v.phishing_resistant);
+        assert_eq!(ct_ceiling(&mapped), CtCeiling::None);
     }
 
     // §10.3.1 FAL

@@ -18,7 +18,7 @@ use access_kernel::digest::Digest;
 
 use super::SignedIn;
 use crate::SessionError;
-use crate::domain::assurance::{AssuranceVector, Factor, MethodClass, PasskeyDetail};
+use crate::domain::assurance::{AssuranceVector, Factor, MethodClass, PasskeyDetail, UpstreamStep};
 use crate::domain::flow::{FlowState, Purpose};
 use crate::ports::SessionTx;
 
@@ -70,6 +70,17 @@ pub fn levels(v: &AssuranceVector) -> BTreeMap<String, u64> {
 #[must_use]
 pub fn method(factors: &[Factor]) -> Option<(AuthMethod, Option<PasskeyDetail>)> {
     let pick = |m: MethodClass| factors.iter().find(|f| f.method == m);
+    // OP-155 m.3 (h)
+    if let Some(u) = upstream(factors) {
+        return Some((
+            if u.saml {
+                AuthMethod::Saml
+            } else {
+                AuthMethod::Oidc
+            },
+            None,
+        ));
+    }
     // OP-155 m.3 (m)
     if certificate(factors).is_some() {
         return Some((AuthMethod::X509, None));
@@ -81,6 +92,12 @@ pub fn method(factors: &[Factor]) -> Option<(AuthMethod, Option<PasskeyDetail>)>
         return Some((AuthMethod::Totp, None));
     }
     pick(MethodClass::Password).map(|_| (AuthMethod::Password, None))
+}
+
+/// The enterprise upstream step, when one carried the authentication (OP-155 m.3 (h)).
+#[must_use]
+pub fn upstream(factors: &[Factor]) -> Option<&UpstreamStep> {
+    factors.iter().find_map(|f| f.upstream.as_ref())
 }
 
 /// The thumbprint of a certificate step (OP-155 m.3 (m)).
@@ -121,7 +138,8 @@ pub(crate) async fn signed_in<T: SessionTx>(
     let Some((m, passkey)) = method(&state.factors) else {
         return Ok(());
     };
-    let order = claims::authentication(AuthFacts {
+    let up = upstream(&state.factors);
+    let facts = AuthFacts {
         subject: r.subject,
         method: m,
         auth_time: r.assurance.auth_time_ms,
@@ -136,10 +154,28 @@ pub(crate) async fn signed_in<T: SessionTx>(
         }),
         evidence: passkey
             .map(|p| Digest(p.evidence))
-            .or_else(|| certificate(&state.factors).map(Digest)),
+            .or_else(|| certificate(&state.factors).map(Digest))
+            .or_else(|| up.map(|u| Digest(u.evidence))),
         bind: Bind::Session(signed.session),
-    });
+    };
+    let order = match up {
+        // §10.1.2, OP-155 m.3 (h)
+        Some(u) => claims::authentication_upstream(
+            facts,
+            access_kernel::claim::body::Upstream {
+                iss: u.iss.clone(),
+                acr: u.acr.clone(),
+                amr: u.amr.clone(),
+            },
+        ),
+        None => claims::authentication(facts),
+    };
     emit(tx, &order).await?;
+    // SEC9
+    if let Some(u) = up {
+        tx.record_upstream_session(signed.session, &u.connection, r.assurance.auth_time_ms)
+            .await?;
+    }
     if unknown_device && matches!(state.purpose, Purpose::Login) {
         let at = r.assurance.auth_time_ms;
         let signal = claims::risk(
