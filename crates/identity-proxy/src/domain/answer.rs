@@ -110,6 +110,11 @@ pub fn clear_cookie(name: &str) -> String {
     set_cookie(name, "", 0)
 }
 
+/// How many `Set-Cookie` values an Nginx redirect carries: `auth_request_set` reads one
+/// `$upstream_http_set_cookie`, which joins repeated headers into one unreadable value. The first
+/// cookie is the one that must be set; a following one only clears a cookie that lapses anyway.
+pub const NGINX_COOKIES: usize = 1;
+
 /// `answer` as `engine` reads it.
 #[must_use]
 pub fn render(engine: Engine, answer: &Answer) -> Rendered {
@@ -159,7 +164,12 @@ pub fn render(engine: Engine, answer: &Answer) -> Rendered {
             cookies,
         } => {
             headers.push(("location", location.clone()));
-            headers.extend(cookies.iter().map(|c| ("set-cookie", c.clone())));
+            let kept = if engine == Engine::Nginx {
+                NGINX_COOKIES
+            } else {
+                cookies.len()
+            };
+            headers.extend(cookies.iter().take(kept).map(|c| ("set-cookie", c.clone())));
             Rendered {
                 status: engine.redirect_status(),
                 headers,
@@ -235,6 +245,19 @@ mod tests {
             ["__Host-access-proxy-state=s; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=600"]
         );
         assert_eq!(render(Engine::Traefik, &a).status, 302);
+        let back = Answer::Redirect {
+            decision: String::from("d"),
+            location: String::from("https://wiki.example.com/"),
+            cookies: vec![
+                set_cookie(SESSION_COOKIE, "v", 60),
+                clear_cookie(STATE_COOKIE),
+            ],
+        };
+        assert_eq!(
+            header(&render(Engine::Nginx, &back), "set-cookie"),
+            [set_cookie(SESSION_COOKIE, "v", 60)]
+        );
+        assert_eq!(header(&render(Engine::Caddy, &back), "set-cookie").len(), 2);
         let d = render(
             Engine::Envoy,
             &Answer::Deny {
