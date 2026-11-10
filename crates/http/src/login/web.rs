@@ -190,7 +190,12 @@ pub(crate) async fn send(reply: Reply, headers: &HeaderMap) -> Response {
             HeaderName::from_bytes(name.as_bytes()),
             HeaderValue::from_str(&value),
         ) {
-            h.append(n, v);
+            // OP-156 m.3 (g)
+            if n.as_str() == "permissions-policy" {
+                h.insert(n, v);
+            } else {
+                h.append(n, v);
+            }
         }
     }
     if let Some(id) = headers.get(&REQUEST_ID) {

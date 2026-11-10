@@ -170,6 +170,10 @@ pub struct ApprovalStarted {
     pub render: RenderView,
     /// `PublicKeyCredentialRequestOptionsJSON`; its challenge is H(AAS).
     pub options: Value,
+    /// Secure Payment Confirmation's request data, from the canonical render, when the realm
+    /// decided `idp.realm.spc` and the request is a payment (OP-156 m.3 (g)).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spc: Option<Value>,
 }
 
 /// `POST /v1/approve/flows/{flow}`.
@@ -182,6 +186,37 @@ pub struct ApprovalFinish {
     pub redirect_uri: String,
     /// As `GET /v1/approve`: echoed unchanged.
     pub state: String,
+    /// The app-controlled factor over the same statement: an activated approver's signature
+    /// (MD-11, OP-156 m.3 (e)); required for CT2 and CT3 under the TR payment profile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_factor: Option<AppFactorProof>,
+}
+
+/// An activated approver's signature over `dCBOR(["access/approval-app-factor/v1", issuer,
+/// H(AAS), true])`: its app checked its own PIN before signing (MD-11, OP-156 m.3 (e)).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AppFactorProof {
+    /// The RFC 7638 thumbprint of the approver key, base64url.
+    pub device_key: String,
+    /// ES256 `r ‖ s`, base64url.
+    pub signature: String,
+}
+
+/// What an approver signs as the app-controlled factor of an approval.
+#[must_use]
+pub fn app_factor_message(issuer: &str, statement: &[u8; 32]) -> Vec<u8> {
+    use suiss_crypto::dcbor::{self, Limits, Value as Cbor};
+    dcbor::encode(
+        &Cbor::Array(vec![
+            Cbor::text("access/approval-app-factor/v1"),
+            Cbor::text(issuer),
+            Cbor::Bytes(statement.to_vec()),
+            Cbor::Bool(true),
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap_or_default()
 }
 
 /// A finished flow.
@@ -437,10 +472,20 @@ pub const PAGE_JS: &str = r#"(async () => {
   const button = el("button", "Approve with your passkey");
   root.replaceChildren(el("h1", "Approve this request?"), list, el("p", s.render.reason),
     el("p", "Approving meets this one request only and grants nothing else. The statement expires at " + s.render.expires_at + "."), button);
+  const confirmPayment = async () => {
+    const b64 = (t) => Uint8Array.from(atob(t.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+    const data = Object.assign({}, s.spc, { rpId: s.options.rpId, challenge: b64(s.options.challenge), credentialIds: s.options.allowCredentials.map((c) => b64(c.id)), timeout: s.options.timeout });
+    const total = data.total; delete data.total;
+    const request = new PaymentRequest([{ supportedMethods: "secure-payment-confirmation", data }], { total: { label: "Total", amount: total } });
+    const response = await request.show().catch(() => null);
+    if (!response) return null;
+    await response.complete("success").catch(() => undefined);
+    return response.details;
+  };
   button.onclick = async () => {
     button.disabled = true;
     const publicKey = PublicKeyCredential.parseRequestOptionsFromJSON(s.options);
-    const cred = await navigator.credentials.get({ publicKey }).catch(() => null);
+    const cred = s.spc && window.PaymentRequest ? await confirmPayment() : await navigator.credentials.get({ publicKey }).catch(() => null);
     if (!cred) { button.disabled = false; return; }
     const r = await call("/v1/approve/flows/" + encodeURIComponent(s.flow), { credential: cred.toJSON(), redirect_uri: q.get("redirect_uri"), state: q.get("state") });
     const out = await r.json().catch(() => ({}));
@@ -537,6 +582,7 @@ pub fn components() -> Value {
                 "flow": { "type": "string" },
                 "render": r("RenderView"),
                 "options": { "type": "object", "description": "PublicKeyCredentialRequestOptionsJSON; the challenge is H(AAS) (§9.14.1 step 3). userVerification is required from CT2." },
+                "spc": { "type": "object", "description": "Secure Payment Confirmation's request data (payeeName, payeeOrigin, total, instrument) from the canonical render, when the realm decided idp.realm.spc and the request is a payment; a payment.get assertion counts only when it shows exactly these (OP-156 m.3 (g))." },
             }),
             &["flow", "render", "options"],
         ),
@@ -545,8 +591,16 @@ pub fn components() -> Value {
                 "credential": { "description": "The PublicKeyCredential JSON of the assertion (toJSON()), as a string or an object." },
                 "redirect_uri": { "type": "string", "description": "As GET /v1/approve; checked against the realm's clients again." },
                 "state": { "type": "string", "description": "As GET /v1/approve." },
+                "app_factor": r("AppFactorProof"),
             }),
             &["credential", "redirect_uri", "state"],
+        ),
+        "AppFactorProof": object(
+            &json!({
+                "device_key": b64_schema("The RFC 7638 thumbprint of an activated approver's key, 32 bytes."),
+                "signature": b64_schema("ES256 r||s over dCBOR([\"access/approval-app-factor/v1\", issuer, H(AAS), true]): the app checked its own PIN; required for CT2 and CT3 under the TR payment profile (MD-11, OP-156 m.3 (e))."),
+            }),
+            &["device_key", "signature"],
         ),
         "ApprovalFinished": object(
             &json!({

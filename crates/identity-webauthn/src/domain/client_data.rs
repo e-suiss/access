@@ -14,6 +14,8 @@ pub enum CeremonyType {
     Create,
     /// `webauthn.get`.
     Get,
+    /// `payment.get`: a Secure Payment Confirmation assertion (W3C SPC, OP-156 m.3 (g)).
+    Payment,
 }
 
 impl CeremonyType {
@@ -21,6 +23,7 @@ impl CeremonyType {
         match self {
             Self::Create => "webauthn.create",
             Self::Get => "webauthn.get",
+            Self::Payment => "payment.get",
         }
     }
 }

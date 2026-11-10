@@ -12,7 +12,9 @@ use access_identity_session::app::claims::levels;
 use access_identity_session::app::sessions::SessionStatus;
 use access_identity_session::domain::assurance::{Factor, vector};
 use access_identity_webauthn::domain::assurance::Binding as KeyBinding;
-use access_identity_webauthn::domain::ceremony::{AuthenticationState, verify_assertion};
+use access_identity_webauthn::domain::ceremony::{
+    AuthenticationState, verify_assertion, verify_payment_assertion,
+};
 use access_identity_webauthn::domain::ids::{CredentialId, UserHandle};
 use access_identity_webauthn::domain::options::{CredentialDescriptor, request_options};
 use access_identity_webauthn::ports::CredentialRegistry;
@@ -40,6 +42,7 @@ use suiss_crypto::dcbor::{self, Limits};
 use super::me::{Devices, governing, unavailable};
 use super::{Browser, Hosted, Reply, SESSION_REQUIRED, failed, signin};
 use crate::app::credential;
+use crate::domain::approval::app_factor_message;
 use crate::domain::approval::{
     ApprovalFinish, ApprovalPush, ApprovalStart, ContributionEnvelope, Envelope, FieldView,
     PAGE_HTML, Pushed, RenderView, SURFACE_PROFILE, SURFACE_VERSION, cooling_text, envelope,
@@ -48,6 +51,7 @@ use crate::domain::approval::{
 use crate::domain::frontend::{
     ApprovalRequest, ApproveQuery, ApproveRejection, approval_redirect, approval_request, rfc3339,
 };
+use crate::domain::spc;
 use crate::ports::{ApprovalClaims, Approvals, Kits, Messages, RealmKit};
 
 fn problem(status: u16, code: &'static str, title: &'static str) -> Reply {
@@ -275,6 +279,15 @@ where
             Err(r) => return r,
         };
         match call(&self.db, &self.products, &kit, query, self.clock.now_ms()).await {
+            // OP-156 m.3 (g)
+            Ok(_) if kit.auth.spc => {
+                let mut page = Reply::html(PAGE_HTML);
+                page.headers.push((
+                    "permissions-policy",
+                    String::from(crate::domain::spc::SPC_PERMISSIONS_POLICY),
+                ));
+                page
+            }
             Ok(_) => Reply::html(PAGE_HTML),
             Err(r) => r,
         }
@@ -375,14 +388,21 @@ where
             Err(_) => return unavailable(),
         }
         let view = render_view(&shown, &p.reason, tier, expires_at);
-        Reply::json(
-            201,
-            json!({
-                "flow": b64url_encode(&row.id),
-                "render": view,
-                "options": options,
-            }),
-        )
+        let mut out = json!({
+            "flow": b64url_encode(&row.id),
+            "render": view,
+            "options": options,
+        });
+        // OP-156 m.3 (g), §9.4.1
+        if kit.auth.spc
+            && let (Some(d), Some(m)) = (spc::display(&shown, &kit.name), out.as_object_mut())
+        {
+            m.insert(
+                String::from("spc"),
+                d.request(&format!("{}/favicon.ico", kit.issuer)),
+            );
+        }
+        Reply::json(201, out)
     }
 
     /// The live session of the approver's browser.
@@ -560,18 +580,43 @@ where
         else {
             return unavailable();
         };
-        let tier = match still_asked(devices, &act, now).await {
+        let (tier, shown) = match still_asked(devices, &act, now).await {
             Ok(t) => t,
             Err(r) => return r,
         };
-        // §9.14.1 step 3
-        let verified = match self
+        // §9.14.1 step 3, OP-156 m.3 (g)
+        let payment = match self
+            .payment(&kit, &session.subject, &assertion, shown.as_ref())
+            .await
+        {
+            Ok(p) => p,
+            Err(r) => return r,
+        };
+        let mut verified = match self
             .assert(&kit, &session.subject, &statement, tier, &assertion, now)
             .await
         {
             Ok(v) => v,
             Err(r) => return r,
         };
+        // MD-11, SA-54, OP-156 m.3 (e)
+        if let Err(r) = self
+            .app_factor(
+                &kit,
+                &session.subject,
+                &statement,
+                tier,
+                body,
+                &mut verified,
+                now,
+            )
+            .await
+        {
+            return r;
+        }
+        if payment {
+            self.spc_audit(&kit, &session.subject, "spc.approved").await;
+        }
         // SEC18, §8.13
         if let Err(r) = cooled(tier, verified.created_ms, now) {
             return r;
@@ -731,8 +776,14 @@ where
             require_user_verification: tier >= Tier::Ct2,
             expires_at: now_s.saturating_add(1),
         };
-        let verified = verify_assertion(&kit.rp, &kit.webauthn, &state, &response, &stored, now_s)
-            .map_err(|e| {
+        let payment = spc::ceremony(response.client_data_json).as_deref() == Some("payment.get");
+        let verify = if payment {
+            verify_payment_assertion
+        } else {
+            verify_assertion
+        };
+        let verified =
+            verify(&kit.rp, &kit.webauthn, &state, &response, &stored, now_s).map_err(|e| {
                 tracing::info!(error = %e, "approval assertion rejected");
                 problem(401, "assertion-rejected", "The passkey was not accepted")
             })?;
@@ -759,6 +810,7 @@ where
             response.signature,
         );
         Ok(Verified {
+            factors: vec![factor.clone()],
             levels: levels(&vector(&[factor])),
             detail: WebauthnDetail {
                 aaguid: stored.aaguid.0,
@@ -786,11 +838,12 @@ async fn still_asked<A, I, P: Approvals, Q>(
     devices: &Devices<A, I, P, Q>,
     act: &ApprovalAct,
     now: u64,
-) -> Result<Tier, Reply> {
-    let tier = match devices.approvals.opening(act.domain, act.target).await {
-        Ok(Some(o)) if o.render_digest == act.render_digest => {
-            tier_of(o.tier).ok_or_else(unavailable)?
-        }
+) -> Result<(Tier, Option<render::Render>), Reply> {
+    let (tier, shown) = match devices.approvals.opening(act.domain, act.target).await {
+        Ok(Some(o)) if o.render_digest == act.render_digest => (
+            tier_of(o.tier).ok_or_else(unavailable)?,
+            o.render.as_deref().and_then(|b| render::decode(b).ok()),
+        ),
         Ok(_) => return Err(Reply::problem(CHANGED)),
         Err(e) => {
             tracing::warn!(reason = %e.0, "approval opening unavailable");
@@ -804,7 +857,7 @@ async fn still_asked<A, I, P: Approvals, Q>(
             "The statement expired; open it again",
         ));
     }
-    Ok(tier)
+    Ok((tier, shown))
 }
 
 /// SEC18, §8.13, X38: a binding younger than 24 h meets no CT2+ approval; the refusal names
@@ -972,8 +1025,140 @@ fn committed(
 
 /// What a verified approval assertion established.
 struct Verified {
+    factors: Vec<Factor>,
     levels: std::collections::BTreeMap<String, u64>,
     detail: WebauthnDetail,
     evidence: Digest,
     created_ms: u64,
+}
+
+impl<K, C, M> Hosted<K, C, M>
+where
+    K: Kits,
+    C: crate::ports::Clock + Sync,
+    M: Messages,
+{
+    /// OP-156 m.3 (g), §9.4.1: whether the assertion is a Secure Payment Confirmation, refusing
+    /// one the realm did not open, one over a request that is no payment, and one whose shown
+    /// payee, total or instrument is not byte for byte the canonical render's.
+    async fn payment(
+        &self,
+        kit: &RealmKit,
+        subject: &[u8; 16],
+        assertion: &credential::Assertion,
+        shown: Option<&render::Render>,
+    ) -> Result<bool, Reply> {
+        let raw = assertion.response().client_data_json;
+        if spc::ceremony(raw).as_deref() != Some("payment.get") {
+            return Ok(false);
+        }
+        let display = shown.and_then(|r| spc::display(r, &kit.name));
+        let matched = kit.auth.spc
+            && display
+                .as_ref()
+                .is_some_and(|d| spc::shown_matches(raw, d, kit.rp.rp_id.as_str(), &kit.issuer));
+        if matched {
+            return Ok(true);
+        }
+        self.spc_audit(kit, subject, "spc.mismatch").await;
+        Err(problem(
+            409,
+            "spc-mismatch",
+            "The payment details didn't match. Nothing was approved.",
+        ))
+    }
+
+    async fn spc_audit(&self, kit: &RealmKit, subject: &[u8; 16], event_type: &'static str) {
+        let actor = kit.ids.encode("usr", *subject).unwrap_or_default();
+        let wrote = async {
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            t.audit(&access_store::audit::AuditEvent {
+                event_type,
+                actor: &actor,
+                target: &actor,
+                correlation: "approval",
+            })
+            .await?;
+            t.commit().await
+        };
+        if let Err(error) = wrote.await {
+            tracing::warn!(%error, "approval audit not written");
+        }
+    }
+
+    /// MD-11, SA-54, OP-156 m.3 (e): under the TR payment profile a CT2 or CT3 approval needs
+    /// the app-controlled factor over the same statement, from an activated approver of the
+    /// approver's account; an offered one counts in any realm. It joins the passkey's step in
+    /// the `authentication` Claim's levels.
+    #[expect(clippy::too_many_arguments, reason = "one approval's facts")]
+    async fn app_factor(
+        &self,
+        kit: &RealmKit,
+        subject: &[u8; 16],
+        statement: &[u8; 32],
+        tier: Tier,
+        body: &ApprovalFinish,
+        verified: &mut Verified,
+        now: u64,
+    ) -> Result<(), Reply> {
+        use access_identity_session::domain::assurance::AssuranceProfile;
+        let required = kit.auth.profile == AssuranceProfile::TrPayment && tier >= Tier::Ct2;
+        let refused = || {
+            problem(
+                401,
+                "app-factor-refused",
+                "Your app's confirmation wasn't accepted",
+            )
+        };
+        let Some(proof) = &body.app_factor else {
+            return if required {
+                Err(problem(
+                    403,
+                    "app-factor-required",
+                    "Confirm in your app with its PIN as well",
+                ))
+            } else {
+                Ok(())
+            };
+        };
+        let (Some(thumbprint), Some(signature)) = (
+            access_kernel::json::b64url_decode(&proof.device_key)
+                .ok()
+                .and_then(|k| <[u8; 32]>::try_from(k).ok()),
+            access_kernel::json::b64url_decode(&proof.signature).ok(),
+        ) else {
+            return Err(refused());
+        };
+        let found = async {
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let key = t.device_key_by_thumbprint(&thumbprint).await?;
+            let factor = match &key {
+                Some(k) => t.app_factor_key(k.id).await?,
+                None => None,
+            };
+            t.commit().await?;
+            Ok::<_, access_store::StoreError>(key.zip(factor))
+        };
+        let Ok(found) = found.await else {
+            return Err(unavailable());
+        };
+        let Some((key, factor)) = found else {
+            return Err(refused());
+        };
+        let message = app_factor_message(&kit.issuer, statement);
+        if key.subject != *subject
+            || !factor.hardware_attested
+            || !factor.app_pin
+            || !access_identity_account::domain::approver::verify(
+                &key.public_key,
+                &message,
+                &signature,
+            )
+        {
+            return Err(refused());
+        }
+        verified.factors.push(Factor::app_controlled(key.id, now));
+        verified.levels = levels(&vector(&verified.factors));
+        Ok(())
+    }
 }

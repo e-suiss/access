@@ -275,6 +275,43 @@ pub fn verify_assertion(
     stored: &CredentialRecord,
     now: u64,
 ) -> Result<VerifiedAssertion, Rejection> {
+    verify_as(CeremonyType::Get, rp, policy, state, response, stored, now)
+}
+
+/// Verifies a Secure Payment Confirmation assertion (`clientDataJSON.type = "payment.get"`,
+/// OP-156 m.3 (g)) exactly as [`verify_assertion`] does; what the browser showed, the client
+/// data's `payment` member, is the caller's to compare with the canonical render.
+///
+/// # Errors
+/// [`Rejection`].
+pub fn verify_payment_assertion(
+    rp: &RelyingParty,
+    policy: &RealmPolicy,
+    state: &AuthenticationState,
+    response: &AssertionResponse<'_>,
+    stored: &CredentialRecord,
+    now: u64,
+) -> Result<VerifiedAssertion, Rejection> {
+    verify_as(
+        CeremonyType::Payment,
+        rp,
+        policy,
+        state,
+        response,
+        stored,
+        now,
+    )
+}
+
+fn verify_as(
+    kind: CeremonyType,
+    rp: &RelyingParty,
+    policy: &RealmPolicy,
+    state: &AuthenticationState,
+    response: &AssertionResponse<'_>,
+    stored: &CredentialRecord,
+    now: u64,
+) -> Result<VerifiedAssertion, Rejection> {
     if now > state.expires_at {
         return Err(Rejection::Expired);
     }
@@ -297,12 +334,7 @@ pub fn verify_assertion(
     if state.user.is_some_and(|u| u != stored.user) {
         return Err(Rejection::UserHandle);
     }
-    let client = check_client_data(
-        response.client_data_json,
-        CeremonyType::Get,
-        &state.challenge,
-        rp,
-    )?;
+    let client = check_client_data(response.client_data_json, kind, &state.challenge, rp)?;
     let auth = AuthenticatorData::parse(response.authenticator_data)?;
     if auth.rp_id_hash != sha256(rp.rp_id.as_str().as_bytes()) {
         return Err(Rejection::RpIdHash);

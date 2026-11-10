@@ -275,6 +275,7 @@ fn approval_examples_match_the_code_and_the_schema() {
                 "userVerification": "preferred",
                 "timeout": 300_000,
             }),
+            spc: None,
         },
     );
     example(
@@ -294,6 +295,7 @@ fn approval_examples_match_the_code_and_the_schema() {
             }),
             redirect_uri: String::from("https://shop.example/approved"),
             state: String::from("st-1"),
+            app_factor: None,
         },
     );
     example(

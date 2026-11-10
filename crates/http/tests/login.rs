@@ -291,11 +291,17 @@ struct Surface {
     shifted: Arc<std::sync::atomic::AtomicBool>,
     unbound: Arc<std::sync::atomic::AtomicBool>,
     contributions: Arc<Mutex<Vec<Contribution>>>,
+    /// OP-156 m.3 (g): the request is a payment to a named payee.
+    payment: Arc<std::sync::atomic::AtomicBool>,
 }
 
 const TARGET: access_kernel::digest::Digest = access_kernel::digest::Digest([0x44; 32]);
 
 fn refund_render(shifted: bool) -> (access_kernel::digest::Digest, Vec<u8>) {
+    surface_render(shifted, false)
+}
+
+fn surface_render(shifted: bool, payment: bool) -> (access_kernel::digest::Digest, Vec<u8>) {
     use access_kernel::intent::{ContextRefs, IntentEnvelope, ParamValue};
     use access_kernel::model::{ActionRef, ResourceRef, Window};
     use access_kernel::schema::{ActionSchema, EffectClass};
@@ -306,7 +312,14 @@ fn refund_render(shifted: bool) -> (access_kernel::digest::Digest, Vec<u8>) {
         effect: EffectClass::Irreversible,
         reserved: false,
         consumption_bearing: false,
-        params: BTreeMap::from([("amount".to_owned(), "amount".to_owned())]),
+        params: if payment {
+            BTreeMap::from([
+                ("amount".to_owned(), "amount".to_owned()),
+                ("payee".to_owned(), "text".to_owned()),
+            ])
+        } else {
+            BTreeMap::from([("amount".to_owned(), "amount".to_owned())])
+        },
         resource_types: std::collections::BTreeSet::new(),
         render: Some("Refund {amount} on {resource}".into()),
     };
@@ -323,13 +336,22 @@ fn refund_render(shifted: bool) -> (access_kernel::digest::Digest, Vec<u8>) {
             path: vec!["orders".into(), "o-1042".into()],
             incarnation: 0,
         }],
-        params: BTreeMap::from([(
-            "amount".to_owned(),
-            ParamValue::Amount {
-                value: if shifted { 4300 } else { 4200 },
-                unit: "eur".into(),
-            },
-        )]),
+        params: {
+            let mut p = BTreeMap::from([(
+                "amount".to_owned(),
+                ParamValue::Amount {
+                    value: if shifted { 4300 } else { 4200 },
+                    unit: "eur".into(),
+                },
+            )]);
+            if payment {
+                p.insert(
+                    "payee".to_owned(),
+                    ParamValue::Eq(access_kernel::model::EqValue::Text("Kahve Evi".into())),
+                );
+            }
+            p
+        },
         opaque: BTreeMap::new(),
         recipient: None,
         purpose: None,
@@ -355,7 +377,10 @@ impl Approvals for Surface {
         if self.gone.load(Ordering::SeqCst) || intent != TARGET {
             return Ok(None);
         }
-        let (render_digest, render) = refund_render(self.shifted.load(Ordering::SeqCst));
+        let (render_digest, render) = surface_render(
+            self.shifted.load(Ordering::SeqCst),
+            self.payment.load(Ordering::SeqCst),
+        );
         Ok(Some(Opening {
             render_digest,
             render: Some(render),
@@ -368,7 +393,10 @@ impl Approvals for Surface {
         let value =
             suiss_crypto::dcbor::decode(&c.aas, suiss_crypto::dcbor::Limits::CEILING).unwrap();
         let act = access_kernel::aas::ApprovalAct::from_value(&value).unwrap();
-        let (render_digest, _) = refund_render(self.shifted.load(Ordering::SeqCst));
+        let (render_digest, _) = surface_render(
+            self.shifted.load(Ordering::SeqCst),
+            self.payment.load(Ordering::SeqCst),
+        );
         if act.render_digest != render_digest {
             return Ok(Verdict::Refused {
                 code: String::from("aas-render"),
@@ -465,7 +493,11 @@ fn kit(tenant: TenantId, realm: RealmId, seed: u8, auth: AuthPolicy) -> RealmKit
             pinned: true,
             related: Vec::new(),
         },
-        webauthn: RealmPolicy::default(),
+        // MD-11, OP-156 m.3 (e)
+        webauthn: RealmPolicy {
+            platform_uv_is_factor: auth.profile.platform_uv_is_factor(),
+            ..RealmPolicy::default()
+        },
         auth,
         lifetimes: SessionPolicy::DEFAULT,
         signin: access_identity_session::domain::realm_policy::RealmSignin::default(),
