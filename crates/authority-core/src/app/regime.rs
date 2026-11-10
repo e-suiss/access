@@ -33,6 +33,12 @@ const fn current(s: &Statement, now: u64) -> bool {
 /// digest, which names one event each (a sign-in, a binding), so such Claims stand side by side
 /// (TI-RT7, OP-141 m.30 (e), OP-150 L6 (f)).
 fn contradicts(a: &Statement, b: &Statement) -> bool {
+    // OP-156 m.3 (r)
+    if access_internal_api::signals::is_signal(&a.class) {
+        return a.value != b.value
+            && a.bound_resource == b.bound_resource
+            && a.bound_instance == b.bound_instance;
+    }
     a.value != b.value && !Class::parse(&a.class).is_some_and(Class::has_body)
 }
 

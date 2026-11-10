@@ -14,7 +14,7 @@ pub mod wire;
 
 pub use schema::Schema;
 pub use twin::{
-    Attempt, Config, Issue, Issued, Keys, Paired, Proof, Published, Random, Request, Twin,
+    Attempt, Config, Issue, Issued, Keys, Paired, Proof, Published, Random, Request, Signed, Twin,
     TwinError,
 };
 pub use wire::{Call, Method, Wire};

@@ -128,6 +128,40 @@ pub struct Issue {
     pub resource: Option<ResourceRef>,
 }
 
+/// A Claim with what [`Issue`] leaves at its default: the body that travels beside it, the
+/// assurance it states, an issue time in the past and the Claim it supersedes. A signal source
+/// issues these (OP-156 m.3 (r)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Signed {
+    /// The statement's subject, class, value, validity and resource.
+    pub issue: Issue,
+    /// The body's dCBOR, sent beside the Claim.
+    pub body: Option<Vec<u8>>,
+    /// The assurance the Claim states.
+    pub assurance: BTreeMap<String, u64>,
+    /// How long ago it was issued, ms; its validity still runs from now for `issue.for_ms`.
+    pub issued_ago_ms: u64,
+    /// The Instance it is bound to.
+    pub instance: Option<Id>,
+    /// The Claim it supersedes in its issuer line.
+    pub supersedes: Option<Id>,
+}
+
+impl Signed {
+    /// `issue` with its body and nothing else changed.
+    #[must_use]
+    pub fn with_body(issue: Issue, body: Vec<u8>) -> Self {
+        Self {
+            issue,
+            body: Some(body),
+            assurance: BTreeMap::new(),
+            issued_ago_ms: 0,
+            instance: None,
+            supersedes: None,
+        }
+    }
+}
+
 /// What Claim Ingest did with a Claim (CMP-8).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Issued {
@@ -631,14 +665,32 @@ impl<W: Wire, C: Clock + Send + Sync, R: Random> Twin<W, C, R> {
     /// # Errors
     /// [`TwinError`].
     pub async fn issue_claim(&self, domain: &Digest, issue: Issue) -> Result<Issued, TwinError> {
+        self.issue_signed(
+            domain,
+            Signed {
+                body: None,
+                ..Signed::with_body(issue, Vec::new())
+            },
+        )
+        .await
+    }
+
+    /// One [`Signed`] Claim signed and sent to Claim Ingest with its body beside it.
+    ///
+    /// # Errors
+    /// [`TwinError`].
+    pub async fn issue_signed(&self, domain: &Digest, signed: Signed) -> Result<Issued, TwinError> {
         let p = self.paired(domain)?;
-        let claim = self.sign_claim(domain, issue)?;
+        let claim = self.sign_signed(domain, &signed)?;
         let id = claim_id(&claim);
-        let body = json!({
+        let mut body = json!({
             "domain": format!("sha-256:{}", b64url_encode(&p.domain.0)),
             "carrier": "cose",
             "claim": b64url_encode(&claim),
         });
+        if let (Some(b), Some(o)) = (&signed.body, body.as_object_mut()) {
+            o.insert(String::from("body"), Json::from(b64url_encode(b)));
+        }
         let mut c = wire::call(
             Method::Post,
             wire::CLAIMS_INGEST,
@@ -674,24 +726,40 @@ impl<W: Wire, C: Clock + Send + Sync, R: Random> Twin<W, C, R> {
     /// # Errors
     /// [`TwinError`].
     pub fn sign_claim(&self, domain: &Digest, issue: Issue) -> Result<Vec<u8>, TwinError> {
+        self.sign_signed(
+            domain,
+            &Signed {
+                body: None,
+                ..Signed::with_body(issue, Vec::new())
+            },
+        )
+    }
+
+    /// One [`Signed`] Claim signed as its own issuer in `domain`, not sent.
+    ///
+    /// # Errors
+    /// [`TwinError`].
+    pub fn sign_signed(&self, domain: &Digest, signed: &Signed) -> Result<Vec<u8>, TwinError> {
         let p = self.paired(domain)?;
         let now = self.now()?;
+        let issued_at = now.saturating_sub(signed.issued_ago_ms);
+        let issue = signed.issue.clone();
         let statement = ClaimStatement {
             domain: p.domain,
             issuer: p.party,
             subject: issue.subject,
             class: issue.class,
             value: issue.value,
-            issued_at: now,
+            issued_at,
             validity: Window {
-                from: now.saturating_sub(SKEW_MS),
+                from: issued_at.saturating_sub(SKEW_MS),
                 until: now.saturating_add(issue.for_ms),
             },
-            assurance: BTreeMap::new(),
+            assurance: signed.assurance.clone(),
             bound_intent: None,
-            bound_instance: None,
+            bound_instance: signed.instance,
             bound_resource: issue.resource,
-            supersedes: None,
+            supersedes: signed.supersedes,
         };
         let payload = statement
             .to_bytes()

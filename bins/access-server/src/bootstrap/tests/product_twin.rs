@@ -179,33 +179,42 @@ async fn realm(w: &World, slug: &str) -> (TenantId, RealmId, Digest) {
 impl Seam {
     /// The deployment with the platform product `product`, its twin paired with `seams`.
     async fn open(label: &str, product: &str) -> Self {
+        Self::open_many(label, &[product]).await.0
+    }
+
+    /// The deployment with the platform products `products`, each a twin paired with `seams`;
+    /// the first is the seam's own, the others come back with their Parties.
+    async fn open_many(label: &str, products: &[&str]) -> (Self, Vec<(ProductTwin, Id)>) {
         let (w, signer) = World::open(label, true).await;
         let signer = signer.unwrap();
         schedule(&signer);
-        let (service, _) = SoftSigner::generate_ed25519().unwrap();
-        let (client, _) = SoftSigner::generate_p256().unwrap();
+        let keys: Vec<(SoftSigner, SoftSigner)> = products
+            .iter()
+            .map(|_| {
+                (
+                    SoftSigner::generate_ed25519().unwrap().0,
+                    SoftSigner::generate_p256().unwrap().0,
+                )
+            })
+            .collect();
         let plan = Plan {
-            products: vec![ProductPlan {
-                product: PlatformProduct::parse(product).unwrap(),
-                display_name: format!("Suiss {product}"),
-                client_key: client.public_key(),
-                service_key: service.public_key(),
-                event_receiver: None,
-                redirect_uris: vec![
-                    RedirectUri::parse(&format!("https://{product}.test/cb")).unwrap(),
-                ],
-            }],
+            products: products
+                .iter()
+                .zip(&keys)
+                .map(|(product, (service, client))| ProductPlan {
+                    product: PlatformProduct::parse(product).unwrap(),
+                    display_name: format!("Suiss {product}"),
+                    client_key: client.public_key(),
+                    service_key: service.public_key(),
+                    event_receiver: None,
+                    redirect_uris: vec![
+                        RedirectUri::parse(&format!("https://{product}.test/cb")).unwrap(),
+                    ],
+                })
+                .collect(),
             ..plan()
         };
         let summary = serde_json::to_value(w.run(&plan).await).unwrap();
-        let client_id = summary["clients"][0]["client_id"]
-            .as_str()
-            .unwrap()
-            .to_owned();
-        let audience = summary["clients"][0]["audience"]
-            .as_str()
-            .unwrap()
-            .to_owned();
         schedule(&signer);
         let (tenant, created_realm, domain) = realm(&w, SLUG).await;
         let root = root_key(&w.keys).unwrap();
@@ -259,32 +268,48 @@ impl Seam {
             public: platform.merge(adp).merge(ingest),
             seen: Arc::new(StdMutex::new(Vec::new())),
         };
-        let twin = Twin::new(
-            Config {
-                client_id,
-                audience,
-                pep: String::from(TWIN_PEP),
-            },
-            Keys { service, client },
-            (listener.clone(), Wall, Os),
-        );
         let tnt =
             access_identity_events::ports::TenantIds::external(&*ids, tenant.as_bytes()).unwrap();
-        let paired = twin.register(&tnt).await.unwrap();
-        assert_eq!(paired.len(), 1, "{paired:?}");
-        assert_eq!(paired[0].domain, domain);
-        let party = paired[0].party;
-        schedule(&signer);
-        Self {
-            w,
-            signer,
-            domain,
-            root,
-            root_party,
-            listener,
-            twin,
-            party,
+        let mut twins = Vec::new();
+        for (i, (service, client)) in keys.into_iter().enumerate() {
+            let client_id = summary["clients"][i]["client_id"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+            let audience = summary["clients"][i]["audience"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+            let twin = Twin::new(
+                Config {
+                    client_id,
+                    audience,
+                    pep: String::from(TWIN_PEP),
+                },
+                Keys { service, client },
+                (listener.clone(), Wall, Os),
+            );
+            let paired = twin.register(&tnt).await.unwrap();
+            assert_eq!(paired.len(), 1, "{paired:?}");
+            assert_eq!(paired[0].domain, domain);
+            let party = paired[0].party;
+            schedule(&signer);
+            twins.push((twin, party));
         }
+        let (twin, party) = twins.remove(0);
+        (
+            Self {
+                w,
+                signer,
+                domain,
+                root,
+                root_party,
+                listener,
+                twin,
+                party,
+            },
+            twins,
+        )
     }
 
     fn bootstrap<'a>(
@@ -1253,4 +1278,5 @@ async fn a_domain_predicate_is_consumed_and_never_recomputed() {
     s.only_public();
 }
 
+mod signals;
 mod work;
