@@ -1035,26 +1035,36 @@ impl TextId {
             Self::PushWaiting => "Waiting for your answer…",
             Self::PushDenied => "The request was refused on your approver. Nothing was done.",
             Self::PushExpired => "This request expired. Send a new one or use another way.",
-            Self::PushHeld => "Requests to your approver are on hold for a while. Use another way to sign in.",
+            Self::PushHeld => {
+                "Requests to your approver are on hold for a while. Use another way to sign in."
+            }
             Self::PushNotMe => "We stopped this sign-in. If it wasn't you, secure your account.",
             Self::SendPush => "Send a request to my approver",
             Self::SmsLabel => "Code from the text message",
             Self::SendSms => "Text me a code",
             Self::SmsSent => "We sent a code to the number ending in { $last_digits }.",
-            Self::SmsRefused => "Text message codes can't be used for this number right now. Use another way.",
+            Self::SmsRefused => {
+                "Text message codes can't be used for this number right now. Use another way."
+            }
             Self::SpcTitle => "Confirm this payment",
             Self::SpcMismatch => "The payment details didn't match. Nothing was approved.",
             Self::AppFactorTitle => "Confirm in { $app }",
             Self::AppFactorPin => "Enter your app PIN on your phone to approve.",
             Self::ProxyTitle => "Sign in to continue to { $application }",
             Self::ProxyRefused => "You can't open { $application } with this account.",
-            Self::ProxyUnavailable => "{ $application } can't be opened right now. Try again shortly.",
+            Self::ProxyUnavailable => {
+                "{ $application } can't be opened right now. Try again shortly."
+            }
             Self::SshTitle => "Approve SSH access",
-            Self::SshRequest => "Your terminal asks for SSH access to { $host_group }. Approve only if you started this and the terminal shows { $code }.",
+            Self::SshRequest => {
+                "Your terminal asks for SSH access to { $host_group }. Approve only if you started this and the terminal shows { $code }."
+            }
             Self::SshApproved => "Done. Go back to your terminal.",
             Self::LinuxPending => "To sign in, open { $uri } and enter { $code }.",
             Self::LinuxStepUp => "Confirm it's you with your security key to run this command.",
-            Self::LinuxUnavailable => "Access can't be reached and this computer's saved sign-in has run out. Try again when it's online.",
+            Self::LinuxUnavailable => {
+                "Access can't be reached and this computer's saved sign-in has run out. Try again when it's online."
+            }
         }
     }
 

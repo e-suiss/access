@@ -902,9 +902,7 @@ impl IdpAction {
             | Self::VcTrustedList
             | Self::VcIssuerEnable
             | Self::VcIssuerDisable => "idp.vc",
-            Self::DomainRegister
-            | Self::DomainRetire
-            | Self::DomainIssuerBind => "idp.domain",
+            Self::DomainRegister | Self::DomainRetire | Self::DomainIssuerBind => "idp.domain",
             Self::ProxyRegister
             | Self::ProxyUpdate
             | Self::ProxyRetire
@@ -926,11 +924,10 @@ impl IdpAction {
             | Self::HrImport
             | Self::HrConnectorRegister
             | Self::HrConnectorRetire => "idp.hr",
-            Self::ExportSinkRegister
-            | Self::ExportSinkUpdate
-            | Self::ExportSinkRetire => "idp.export",
-            Self::SignalSourceRegister
-            | Self::SignalSourceRetire => "idp.signal",
+            Self::ExportSinkRegister | Self::ExportSinkUpdate | Self::ExportSinkRetire => {
+                "idp.export"
+            }
+            Self::SignalSourceRegister | Self::SignalSourceRetire => "idp.signal",
             Self::RelayResend => "idp.relay",
             Self::SocialEnable | Self::SocialUpdate | Self::SocialDisable => "idp.social",
             Self::HookRegister | Self::HookRetire => "idp.hook",

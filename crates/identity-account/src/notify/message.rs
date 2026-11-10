@@ -699,7 +699,10 @@ pub enum Body {
 }
 
 impl fmt::Debug for Body {
-    #[expect(clippy::too_many_lines, reason = "one arm per body, each its redactions")]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm per body, each its redactions"
+    )]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Otp {
@@ -931,7 +934,10 @@ impl Body {
         }
     }
 
-    #[expect(clippy::too_many_lines, reason = "one arm per body, each its field rules")]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm per body, each its field rules"
+    )]
     fn validate(&self) -> Result<(), Invalid> {
         match self {
             Self::Otp { code, .. } => {

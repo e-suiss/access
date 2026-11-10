@@ -886,7 +886,13 @@ fn push_goes_to_a_device_and_sms_codes_to_a_phone_only() {
     }
     assert!(short[5].validate().is_err());
     let printed = format!("{:?}", stage11_messages([5; 16]));
-    for hidden in ["Acme Wiki", "Istanbul", "Acme Travel", "id.example", "flight"] {
+    for hidden in [
+        "Acme Wiki",
+        "Istanbul",
+        "Acme Travel",
+        "id.example",
+        "flight",
+    ] {
         assert!(!printed.contains(hidden), "{printed}");
     }
 }

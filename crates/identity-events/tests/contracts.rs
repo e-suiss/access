@@ -214,13 +214,7 @@ fn identity_events() -> Vec<IdentityEvent> {
             ("acme-entra", InvitationFate::Cancel),
             5,
         ),
-        IdentityEvent::hr_record_due(
-            [43; 32],
-            &realm,
-            ("personio", ACCOUNT, HrChange::End),
-            5,
-            5,
-        ),
+        IdentityEvent::hr_record_due([43; 32], &realm, ("personio", ACCOUNT, HrChange::End), 5, 5),
         IdentityEvent::proxy_registered([44; 32], &realm, ("wiki", "caddy"), 5),
         IdentityEvent::ssh_certificate_issued(
             [45; 32],
