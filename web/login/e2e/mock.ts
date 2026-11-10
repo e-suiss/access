@@ -170,6 +170,14 @@ export class LoginMock {
   authenticateExtras: UiNode[] = [];
   /** How many polls of a link wait still answer "waiting". */
   linkPolls = 2;
+  /** OP-156 m.3 (d): the second step after the password, when a test replaces it. */
+  secondFactor: LoginUi | undefined = undefined;
+  /** The step a sent push answers with. */
+  pushSent: LoginUi | undefined = undefined;
+  /** How many polls of a push wait still answer "waiting". */
+  pushPolls = 1;
+  /** The step a push wait ends in; complete when unset. */
+  pushEnd: LoginUi | undefined = undefined;
   /** JSON answers by `METHOD /path`; the bodies posted to them. */
   readonly json = new Map<string, Canned | ((body: unknown) => Canned)>();
   readonly posted: { key: string; body: unknown }[] = [];
@@ -273,6 +281,10 @@ export class LoginMock {
         if (this.linkPolls > 0) this.linkPolls -= 1;
         else ui = withoutNodes(example("complete"));
       }
+      if (ui?.nodes.some((n) => n.type === "push_number") === true) {
+        if (this.pushPolls > 0) this.pushPolls -= 1;
+        else ui = this.pushEnd ?? withoutNodes(example("complete"));
+      }
       return ui === undefined
         ? route.fulfill({
             status: 410,
@@ -324,7 +336,7 @@ export class LoginMock {
         return { status: 200, ui: this.identifierStep() };
       case "password":
         return fields.password === password
-          ? { status: 200, ui: example("second-factor") }
+          ? { status: 200, ui: this.secondFactor ?? example("second-factor") }
           : { status: 401, ui: echo(example("authenticate-failed"), this.identifier) };
       case "totp":
         return fields.totp_code === totp
@@ -356,6 +368,11 @@ export class LoginMock {
         return { status: 200, ui: withoutNodes(example("complete")) };
       case "recovery_code":
         return { status: 200, ui: example("second-factor-failed") };
+      case "push": {
+        const ui = this.pushSent ?? example("push-sent");
+        this.flows.set(ui.flow, ui);
+        return { status: 200, ui };
+      }
       case "magic_link": {
         const ui = linkWait();
         this.flows.set(ui.flow, ui);

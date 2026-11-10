@@ -43,7 +43,8 @@ export type Method =
   | "dont_share"
   | "accept_invitation"
   | "link"
-  | "acknowledge";
+  | "acknowledge"
+  | "push";
 
 export interface Text {
   readonly id: string;
@@ -136,8 +137,18 @@ export interface ProviderNode {
   readonly href: string;
 }
 
+/** The number to type into the approver while a push waits; the push never carries it (OP-156 m.3 (d)). */
+export interface PushNumberNode {
+  readonly type: "push_number";
+  readonly number: number;
+  readonly approver?: string;
+  readonly label: Text;
+  readonly expires_at: string;
+}
+
 export type UiNode =
   | InputNode
+  | PushNumberNode
   | OptionNode
   | ProviderNode
   | SubmitNode
@@ -172,6 +183,7 @@ const nodeTypes = new Set<string>([
   "passkey_signal",
   "option",
   "provider",
+  "push_number",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {

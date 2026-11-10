@@ -221,3 +221,17 @@ code {
   font-size: 1.125rem;
   letter-spacing: 0.05em;
 }
+
+/* OP-156 m.3 (d) */
+.push {
+  margin-block-end: 1rem;
+  text-align: center;
+}
+
+.push-number {
+  margin: 0.5rem 0 0;
+  font-size: 3rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createFlow, getFlow, stepUp, submit, type Answer } from "./api.js";
 import type { FlowKind, LoginUi, Message, Submission } from "./contract.js";
 import { t } from "./i18n.js";
+import { pushGiveUpMs, pushOf, PUSH_POLL_MS, waitsForPush } from "./PushWait.js";
 import { StepView } from "./StepView.js";
 
 type State =
@@ -124,6 +125,30 @@ export function SignIn({ kind }: { readonly kind: FlowKind }) {
       window.clearTimeout(timer);
     };
   }, [ui, settle, show]);
+
+  // OP-156 m.3 (d), TN-102
+  useEffect(() => {
+    if (ui === null || !waitsForPush(ui)) return;
+    const node = pushOf(ui);
+    if (node === undefined) return;
+    let timer: number | undefined;
+    let live = true;
+    const until = Date.now() + pushGiveUpMs(node, Date.now());
+    const tick = async () => {
+      const answer = await getFlow(ui.flow);
+      if (!live) return;
+      if (answer.kind === "ui" && waitsForPush(answer.ui) && Date.now() < until) {
+        timer = window.setTimeout(() => void tick(), PUSH_POLL_MS);
+        return;
+      }
+      await settle(answer);
+    };
+    timer = window.setTimeout(() => void tick(), PUSH_POLL_MS);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+  }, [ui, settle]);
 
   const onSubmit = useCallback(
     (submission: Submission) => {

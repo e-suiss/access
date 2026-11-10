@@ -14,6 +14,7 @@ import type {
   UiNode,
 } from "./contract.js";
 import { LOGIN, under } from "./base.js";
+import { pushOf, PushWait } from "./PushWait.js";
 import { follow, returnTo } from "./http.js";
 import { t, text } from "./i18n.js";
 import {
@@ -176,6 +177,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
   const create = ui.nodes.find((n): n is PasskeyCreateNode => n.type === "passkey_create");
   const optionNodes = ui.nodes.filter((n): n is OptionNode => n.type === "option");
   const providers = ui.nodes.filter((n): n is ProviderNode => n.type === "provider");
+  const push = pushOf(ui);
   const conditional = useRef<AbortController | null>(null);
   const title = useRef<HTMLHeadingElement>(null);
   const first = useRef(true);
@@ -300,6 +302,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
           </p>
         ))}
       </div>
+      {push !== undefined && <PushWait node={push} />}
       {optionNodes.length > 0 && (
         <fieldset className="options">
           <legend className="visually-hidden">{t("page.options")}</legend>
