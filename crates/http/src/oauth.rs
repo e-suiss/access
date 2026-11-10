@@ -43,7 +43,11 @@ struct Incoming {
 
 /// The authorization server routes.
 pub fn router<E: Env>(service: OAuth<E>) -> Router {
-    let shared = Arc::new(service);
+    shared_router(Arc::new(service))
+}
+
+/// [`router`] over a service shared with another surface, such as the ADP's PEP tokens.
+pub fn shared_router<E: Env>(shared: Arc<OAuth<E>>) -> Router {
     let mut r = Router::new();
     for e in [
         Endpoint::Authorize,

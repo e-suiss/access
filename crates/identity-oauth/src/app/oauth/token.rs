@@ -302,6 +302,11 @@ impl<E: Env> OAuth<E> {
             let reply = self.agent_grant(realm, &client, params, proof.jkt, now);
             return Ok(reply.await?.with_nonce(Some(proof.nonce)));
         }
+        if grant_type == Some("client_credentials") && self.asks_pep_token(params) {
+            // OP-155 m.3 (q)
+            let reply = self.pep_token(realm, &client, proof.jkt, now).await?;
+            return Ok(reply.with_nonce(Some(proof.nonce)));
+        }
         if grant_type == Some("client_credentials") {
             // OP-149 m.31 (a), m.34 (b)
             let reply = match self.service_target(realm, &client, params).await? {

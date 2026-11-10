@@ -6,6 +6,7 @@ pub mod cbor;
 pub mod domain;
 pub mod hub;
 pub mod payload;
+pub mod pep;
 pub mod ports;
 pub mod publication;
 pub mod report;

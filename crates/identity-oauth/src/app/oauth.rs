@@ -16,6 +16,7 @@ pub mod device;
 mod exchange;
 mod logout;
 mod management;
+pub mod pep;
 mod profile;
 mod resource;
 mod service;
@@ -284,6 +285,7 @@ impl Reply {
 pub struct OAuth<E> {
     env: E,
     refetched: std::sync::Mutex<std::collections::BTreeMap<[u8; 16], u64>>,
+    pep_audience: Option<String>,
 }
 
 /// Shortest time between two JWKS fetches for an unknown `kid` of one client (§10.4.5).
@@ -390,7 +392,20 @@ impl<E: Env> OAuth<E> {
         Self {
             env,
             refetched: std::sync::Mutex::new(std::collections::BTreeMap::new()),
+            pep_audience: None,
         }
+    }
+
+    /// Also issues PEP tokens for the deployment's ADP at `api_base`, its `resource` and `aud`
+    /// (OP-155 m.3 (q)); without it no PEP token is issued or accepted.
+    #[must_use]
+    pub fn with_pep_audience(mut self, api_base: String) -> Self {
+        self.pep_audience = Some(api_base);
+        self
+    }
+
+    pub(crate) fn pep_audience(&self) -> Option<&str> {
+        self.pep_audience.as_deref()
     }
 
     /// §10.4.5, Ek B 5098: whether the JWKS of client `client` may be fetched again for an

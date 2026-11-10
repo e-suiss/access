@@ -57,7 +57,6 @@ use access_http::api::app::{RequestIds, request_id};
 use access_http::declarations::{Declarations, router as declared};
 use access_http::internal::{Readiness, ReadyFlag, router as internal_router};
 use access_http::login::{Assets, me_router, router as login_router};
-use access_http::oauth::router as oauth_router;
 use access_http::realm::router as realm_router;
 use access_http::{Health, Limits, SandboxHealth, router};
 use access_identity_account::adapters::system::{SystemClock, cgroup_memory_budget, cores};
@@ -1250,6 +1249,9 @@ fn upstream_reader(config: &Config) -> upstream::ParserReader {
     )
 }
 
+/// The realm authorization server, shared with the ADP's PEP tokens (OP-155 m.3 (q)).
+type ServerOAuth<P> = Arc<OAuth<oauth::ServerEnv<P>>>;
+
 /// The realm authorization server (OP-146 I7) over the application pool, the identity signer,
 /// clients' endpoints, the HSM's DPoP nonce keys and the authority plane's token projections
 /// (OP-150 m.2).
@@ -1260,7 +1262,7 @@ fn authorization<P>(
     tenant_ids: Arc<ids::CellIds>,
     hooks: Arc<dyn access_identity_hooks::ports::HookCaller + Sync>,
     claims: Arc<dyn access_identity_oauth::ports::oauth::ClaimSource + Sync>,
-) -> Result<axum::Router, String>
+) -> Result<(axum::Router, ServerOAuth<P>), String>
 where
     P: access_internal_api::projections::Projections
         + admin::realm::LiveKeys
@@ -1346,7 +1348,10 @@ where
         geo,
         saml,
     };
-    Ok(oauth_router(OAuth::new(env)))
+    // OP-155 m.3 (q)
+    let service =
+        Arc::new(OAuth::new(env).with_pep_audience(config.issuer.clone().ok_or("no issuer")?));
+    Ok((access_http::oauth::shared_router(service.clone()), service))
 }
 
 /// The back-channel logout courier (§10.4.6, OP-131): its own outbox cursor, at least once.
@@ -1702,7 +1707,7 @@ async fn serve(
         app: oauth_inputs.0.clone(),
         keks: claim_keks,
     });
-    let authorize = authorization(
+    let (authorize, pep_tokens) = authorization(
         config,
         oauth_inputs,
         idp_plane.clone(),
@@ -1719,8 +1724,12 @@ async fn serve(
             },
             limits.max_body_bytes,
         ),
-        Discovery { issuer },
+        Discovery {
+            issuer: issuer.clone(),
+        },
     );
+    // OP-155 m.3 (q)
+    let public_adp = access_http::adp::pep::with_tokens(adp.clone(), pep_tokens, issuer);
     // OP-151 m.3, m.2 M1, m.12
     let management_origin = config
         .suiss
@@ -1810,7 +1819,8 @@ async fn serve(
     let app = router(
         config.security_txt(),
         limits,
-        adp.merge(products)
+        public_adp
+            .merge(products)
             .merge(platform)
             .merge(realms)
             .merge(sign_in.merge(me).merge(certificate_login))

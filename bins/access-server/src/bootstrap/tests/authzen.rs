@@ -17,6 +17,8 @@ use tower::ServiceExt as _;
 
 use super::*;
 
+mod pep_token;
+
 /// The PEP the TLS layer names by its certificate (OP-141 m.18 (b)).
 pub(super) const PEP: &str = "authzen-pep";
 
