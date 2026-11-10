@@ -230,6 +230,18 @@ pub enum Op {
     PutLinuxOfflinePolicy,
     /// `putLinuxBreakGlassPolicy`: `idp.linux.break_glass_policy` (reserved).
     PutLinuxBreakGlassPolicy,
+    /// `registerHrSource`: `idp.hr.source_register` (OP-156 m.3 (q)).
+    RegisterHrSource,
+    /// `retireHrSource`: `idp.hr.source_retire`, keyed by the source's name.
+    RetireHrSource,
+    /// `importHrBatch`: `idp.hr.import` of a JSONL batch, keyed by the source's name.
+    ImportHrBatch,
+    /// `importHrCsv`: `idp.hr.import` of an RFC 4180 CSV file, keyed by the source's name.
+    ImportHrCsv,
+    /// `registerHrConnector`: `idp.hr.connector_register`.
+    RegisterHrConnector,
+    /// `retireHrConnector`: `idp.hr.connector_retire`, keyed by the connector's name.
+    RetireHrConnector,
     /// `putDcrPolicy`: `idp.client.dcr_policy`, or `dcr_policy_tighten` (OP-154 m.3 (j)).
     PutDcrPolicy,
     /// `putFederation`: `idp.federation.enable` or `disable` (OP-155 m.3 (j)).
@@ -399,6 +411,12 @@ impl Op {
             "retireLinuxHost" => Self::RetireLinuxHost,
             "putLinuxOfflinePolicy" => Self::PutLinuxOfflinePolicy,
             "putLinuxBreakGlassPolicy" => Self::PutLinuxBreakGlassPolicy,
+            "registerHrSource" => Self::RegisterHrSource,
+            "retireHrSource" => Self::RetireHrSource,
+            "importHrBatch" => Self::ImportHrBatch,
+            "importHrCsv" => Self::ImportHrCsv,
+            "registerHrConnector" => Self::RegisterHrConnector,
+            "retireHrConnector" => Self::RetireHrConnector,
             "putDcrPolicy" => Self::PutDcrPolicy,
             "putFederation" => Self::PutFederation,
             "addTrustAnchor" => Self::AddTrustAnchor,
@@ -997,6 +1015,30 @@ fn ssh_change(
     }))
 }
 
+/// The `idp.hr.*` change of an HR source, import or connector operation (OP-156 m.3 (q)),
+/// `None` for any other.
+fn hr_change(
+    op: Op,
+    key: Option<&str>,
+    body: &Json,
+) -> Result<Option<crate::domain::hr::HrChange>, Invalid> {
+    use crate::domain::hr::HrChange;
+    use access_identity_account::app::hr::Format;
+    let mut own = obj(body)?.clone();
+    own.remove(VALIDITY);
+    own.remove("ais");
+    let body = Json::Object(own);
+    Ok(Some(match op {
+        Op::RegisterHrSource => HrChange::register_source(&body)?,
+        Op::RetireHrSource => HrChange::retire_source(key_of(key)?, &body)?,
+        Op::ImportHrBatch => HrChange::import(key_of(key)?, Format::Jsonl, &body)?,
+        Op::ImportHrCsv => HrChange::import(key_of(key)?, Format::Csv, &body)?,
+        Op::RegisterHrConnector => HrChange::register_connector(&body)?,
+        Op::RetireHrConnector => HrChange::retire_connector(key_of(key)?, &body)?,
+        _ => return Ok(None),
+    }))
+}
+
 /// The `idp.export.*` change of an export sink operation (OP-156 m.3 (s)), `None` for any other.
 fn export_change(
     op: Op,
@@ -1180,6 +1222,9 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
     }
     if let Some(l) = linux_change(op, key, body)? {
         return Ok(Change::Linux(l));
+    }
+    if let Some(h) = hr_change(op, key, body)? {
+        return Ok(Change::Hr(h));
     }
     Ok(match op {
         Op::CreateOrganization => {
@@ -1640,7 +1685,13 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         | Op::RegisterLinuxHost
         | Op::RetireLinuxHost
         | Op::PutLinuxOfflinePolicy
-        | Op::PutLinuxBreakGlassPolicy => return Err(Invalid::Body),
+        | Op::PutLinuxBreakGlassPolicy
+        | Op::RegisterHrSource
+        | Op::RetireHrSource
+        | Op::ImportHrBatch
+        | Op::ImportHrCsv
+        | Op::RegisterHrConnector
+        | Op::RetireHrConnector => return Err(Invalid::Body),
         // OP-153 m.18 (e), m.25 (b)
         Op::BindAccount => {
             only(
@@ -2418,6 +2469,10 @@ pub enum Kind {
     ExportSinks,
     /// The Linux client hosts by name (OP-156 m.3 (p)).
     LinuxHosts,
+    /// The HR sources by name (OP-156 m.3 (q)).
+    HrSources,
+    /// The HR connectors by name (OP-156 m.3 (q)).
+    HrConnectors,
     /// The protected resources by canonical URI (AG-8).
     ProtectedResources,
     /// The trust anchors by the base64url of their entity identifier (OP-155 m.3 (j)).
@@ -2884,6 +2939,15 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-156 m.3 (p)
             (Kind::LinuxHosts, _) => Read {
                 items: super::linux::list(t, key).await?,
+                last: None,
+            },
+            // OP-156 m.3 (q)
+            (Kind::HrSources, _) => Read {
+                items: super::hr::sources(t, key).await?,
+                last: None,
+            },
+            (Kind::HrConnectors, _) => Read {
+                items: super::hr::connectors(t, key).await?,
                 last: None,
             },
             (Kind::Socials, _) => {

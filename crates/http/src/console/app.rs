@@ -798,7 +798,13 @@ async fn admin_proxy<E: ConsoleEnv>(
     let Some(instance) = live.session.instance.clone() else {
         return problems::instance_required().into_response();
     };
-    let Ok(body) = axum::body::to_bytes(body, c.limits.max_body_bytes).await else {
+    // OP-156 m.3 (q)
+    let limit = if rest.ends_with("/records:batch") || rest.ends_with("/records:csv") {
+        crate::api::realm::HR_IMPORT_BODY.max(c.limits.max_body_bytes)
+    } else {
+        c.limits.max_body_bytes
+    };
+    let Ok(body) = axum::body::to_bytes(body, limit).await else {
         return codes::BODY_TOO_LARGE.problem().into_response();
     };
     let path = format!("/admin/v1/{rest}");

@@ -107,6 +107,8 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::Proxies => Kind::Proxies,
         ResourceKind::ExportSinks => Kind::ExportSinks,
         ResourceKind::LinuxHosts => Kind::LinuxHosts,
+        ResourceKind::HrSources => Kind::HrSources,
+        ResourceKind::HrConnectors => Kind::HrConnectors,
         ResourceKind::ProtectedResources => Kind::ProtectedResources,
         ResourceKind::TrustAnchors => Kind::TrustAnchors,
         ResourceKind::SsoEnforcementPreviews => Kind::SsoPreview,

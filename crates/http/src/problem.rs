@@ -504,6 +504,11 @@ pub const CODES: &[Code] = &[
     codes::realm::LINUX_HOST_UNKNOWN,
     codes::realm::INVALID_LINUX_REQUEST,
     codes::realm::LINUX_STEP_UP,
+    codes::realm::INVALID_HR_SOURCE,
+    codes::realm::HR_SOURCE_EXISTS,
+    codes::realm::INVALID_HR_CONNECTOR,
+    codes::realm::HR_CONNECTOR_EXISTS,
+    codes::realm::INVALID_HR_RECORDS,
 ];
 
 /// The type URI of `code`.

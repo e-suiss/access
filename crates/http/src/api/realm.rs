@@ -770,6 +770,17 @@ fn planned_body(operation_id: &str) -> &'static str {
     }
 }
 
+/// Largest body of an HR import (OP-156 m.3 (q)): a 10 MB CSV file or 10 000 JSONL records as
+/// one JSON string, escaped.
+pub const HR_IMPORT_BODY: usize = 24 * 1024 * 1024;
+
+/// The body limit of a realm row above the surface's, if it has one: only the HR imports
+/// (OP-156 m.3 (q)).
+#[must_use]
+pub fn body_limit(operation_id: &str) -> Option<usize> {
+    matches!(operation_id, "importHrBatch" | "importHrCsv").then_some(HR_IMPORT_BODY)
+}
+
 /// Whether a realm row is declared and not served yet (OP-154 m.4).
 #[must_use]
 pub fn planned(operation_id: &str) -> bool {
@@ -1450,9 +1461,9 @@ const fn put(section: &'static str) -> Shape {
 pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
     use ResourceKind::{
         Accounts, AgentSponsors, Agents, Analytics, Clients, CustomDomains, Deliveries, Groups,
-        Hooks, LinuxHosts, Organizations, ProtectedResources, Proxies, RelayUndelivered, SamlSps,
-        Settings, Signals, SocialProviders, SshHostGroups, SsoEnforcementPreviews, TrustAnchors,
-        UpstreamIdps, VaultResources, Webhooks,
+        Hooks, HrConnectors, HrSources, LinuxHosts, Organizations, ProtectedResources, Proxies,
+        RelayUndelivered, SamlSps, Settings, Signals, SocialProviders, SshHostGroups,
+        SsoEnforcementPreviews, TrustAnchors, UpstreamIdps, VaultResources, Webhooks,
     };
     const CREATE: Shape = Shape::Write {
         patch: None,
@@ -1554,6 +1565,13 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "registerGateway" => (Settings, CREATE),
         // OP-156 m.3 (o)
         "listSshHostGroups" => (SshHostGroups, Shape::List(&["name", "status"])),
+        // OP-156 m.3 (q)
+        "listHrSources" => (HrSources, Shape::List(&["name", "status"])),
+        "registerHrSource" => (HrSources, CREATE),
+        "retireHrSource" | "importHrBatch" | "importHrCsv" => (HrSources, w(false)),
+        "listHrConnectors" => (HrConnectors, Shape::List(&["name", "source", "status"])),
+        "registerHrConnector" => (HrConnectors, CREATE),
+        "retireHrConnector" => (HrConnectors, w(false)),
         "registerSshHostGroup" => (SshHostGroups, CREATE),
         "retireSshHostGroup" => (SshHostGroups, w(false)),
         // OP-156 m.3 (l)
@@ -1802,6 +1820,11 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::ExportSinkExists => &r::EXPORT_SINK_EXISTS,
             Invalid::LinuxHost => &r::INVALID_LINUX_HOST,
             Invalid::LinuxHostExists => &r::LINUX_HOST_EXISTS,
+            Invalid::HrSource => &r::INVALID_HR_SOURCE,
+            Invalid::HrSourceExists => &r::HR_SOURCE_EXISTS,
+            Invalid::HrConnector => &r::INVALID_HR_CONNECTOR,
+            Invalid::HrConnectorExists => &r::HR_CONNECTOR_EXISTS,
+            Invalid::HrRecords => &r::INVALID_HR_RECORDS,
             Invalid::NoClient
             | Invalid::NoAgent
             | Invalid::NoKey
@@ -1821,6 +1844,8 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             | Invalid::NoProxy
             | Invalid::NoExportSink
             | Invalid::NoLinuxHost
+            | Invalid::NoHrSource
+            | Invalid::NoHrConnector
             | Invalid::NoCrossAppConnection
             | Invalid::NoScimClient
             | Invalid::NoGateway

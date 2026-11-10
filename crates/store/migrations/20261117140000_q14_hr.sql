@@ -98,7 +98,8 @@ CREATE TABLE access.hr_records (
 CREATE INDEX hr_records_subject ON access.hr_records (tenant_id, realm_id, subject_id);
 CREATE INDEX hr_records_issue ON access.hr_records (issue_after_ms);
 
--- one row once every HR Claim of a record version was answered by Claim Ingest ('issued'), or
+-- one row once every HR Claim of a record version was answered by Claim Ingest ('issued', or
+-- 'quarantined' while the domain does not accept the source), or
 -- once a newer version replaced a version still cooling ('skipped')
 CREATE TABLE access.hr_record_claims (
   tenant_id uuid NOT NULL,
@@ -106,7 +107,7 @@ CREATE TABLE access.hr_record_claims (
   source text NOT NULL,
   person bytea NOT NULL,
   version bigint NOT NULL,
-  outcome text NOT NULL CHECK (outcome IN ('issued', 'skipped')),
+  outcome text NOT NULL CHECK (outcome IN ('issued', 'quarantined', 'skipped')),
   issued_ms bigint NOT NULL CHECK (issued_ms > 0),
   PRIMARY KEY (tenant_id, realm_id, source, person, version),
   FOREIGN KEY (tenant_id, realm_id, source, person, version)

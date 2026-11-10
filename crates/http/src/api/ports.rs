@@ -201,6 +201,10 @@ pub enum ResourceKind {
     ExportSinks,
     /// Linux client hosts, by name (OP-156 m.3 (p)).
     LinuxHosts,
+    /// HR sources, by name (OP-156 m.3 (q)).
+    HrSources,
+    /// HR connectors, by name (OP-156 m.3 (q)).
+    HrConnectors,
     /// Protected resources and MCP servers, by canonical URI (AG-8).
     ProtectedResources,
     /// OpenID Federation trust anchors, by their entity identifier's base64url (OP-155 m.3 (j)).
@@ -238,6 +242,8 @@ impl ResourceKind {
             Self::Proxies => "proxies",
             Self::ExportSinks => "export-sinks",
             Self::LinuxHosts => "linux-hosts",
+            Self::HrSources => "hr-sources",
+            Self::HrConnectors => "hr-connectors",
             Self::ProtectedResources => "protected-resources",
             Self::TrustAnchors => "trust-anchors",
             Self::SsoEnforcementPreviews => "sso-enforcement-previews",

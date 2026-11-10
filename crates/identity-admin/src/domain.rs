@@ -32,6 +32,7 @@ pub mod custom_domain;
 pub mod dns;
 pub mod federation;
 pub mod gateway;
+pub mod hr;
 pub mod linux;
 pub mod org;
 pub mod provision;
@@ -548,6 +549,28 @@ pub enum Invalid {
     /// The host name was registered before, or a live host has that certificate.
     #[error("Linux host exists")]
     LinuxHostExists,
+    /// An HR source body that is not a source name (OP-156 m.3 (q)).
+    #[error("invalid HR source")]
+    HrSource,
+    /// No live HR source by that name.
+    #[error("no such HR source")]
+    NoHrSource,
+    /// The HR source name was registered before; it is not reused (OP-73).
+    #[error("HR source exists")]
+    HrSourceExists,
+    /// An HR connector body that is not a name, a source and a vendor the service reads.
+    #[error("invalid HR connector")]
+    HrConnector,
+    /// No live HR connector by that name.
+    #[error("no such HR connector")]
+    NoHrConnector,
+    /// The HR connector name was registered before; it is not reused (OP-73).
+    #[error("HR connector exists")]
+    HrConnectorExists,
+    /// An HR file that is not 1 to 10 000 good records of its format, or whose digest or
+    /// record count the change does not name; nothing of it is written.
+    #[error("invalid HR records")]
+    HrRecords,
     /// A gateway registration that is not a gateway name, kind and certificate digest, or a
     /// retirement of a gateway that is not live.
     #[error("invalid gateway")]
@@ -646,6 +669,13 @@ impl Invalid {
             Self::LinuxHost => "invalid-linux-host",
             Self::NoLinuxHost => "no-such-linux-host",
             Self::LinuxHostExists => "linux-host-exists",
+            Self::HrSource => "invalid-hr-source",
+            Self::NoHrSource => "no-such-hr-source",
+            Self::HrSourceExists => "hr-source-exists",
+            Self::HrConnector => "invalid-hr-connector",
+            Self::NoHrConnector => "no-such-hr-connector",
+            Self::HrConnectorExists => "hr-connector-exists",
+            Self::HrRecords => "invalid-hr-records",
             Self::Gateway => "invalid-gateway",
             Self::DisplayName => "invalid-display-name",
             Self::RedirectUri | Self::RedirectUris => "invalid-redirect-uri",
@@ -1912,6 +1942,8 @@ pub enum Change {
     Export(access_identity_export::domain::sink::ExportChange),
     /// `idp.linux.*` (OP-156 m.3 (a), (p)).
     Linux(linux::LinuxChange),
+    /// `idp.hr.*` (OP-156 m.3 (a), (q)).
+    Hr(hr::HrChange),
     /// `idp.client.resource_register` (AG-8, OP-154 m.3 (a)).
     ResourceRegister(ProtectedResource),
     /// `idp.client.cross_app_connection` (CT2, OP-154 m.3 (a), (n)).
@@ -2396,6 +2428,7 @@ impl Change {
             Self::Proxy(p) => p.action(),
             Self::Export(e) => e.action(),
             Self::Linux(l) => l.action(),
+            Self::Hr(h) => h.action(),
             Self::ResourceRegister(_) => IdpAction::ClientResourceRegister,
             Self::CrossAppConnection(_) => IdpAction::ClientCrossAppConnection,
             Self::CrossAppConnectionRetire(_) => IdpAction::ClientCrossAppConnectionRetire,
@@ -2487,6 +2520,7 @@ impl Change {
             Self::Proxy(p) => p.check().map_err(|_| Invalid::Proxy),
             Self::Export(e) => e.check().map_err(|_| Invalid::ExportSink),
             Self::Linux(l) => l.check(),
+            Self::Hr(h) => h.check(),
             Self::ResourceRegister(r) => r.check(),
             Self::CrossAppConnection(c) => c.check(),
             Self::CrossAppConnectionRetire(name) => {
@@ -2660,6 +2694,7 @@ impl Change {
             Self::Saml(s) => s.body(),
             Self::Domain(d) => d.body(),
             Self::Ssh(s) => s.body(),
+            Self::Hr(h) => h.body(),
             Self::Proxy(p) => p.body(),
             Self::Export(e) => e.body(),
             Self::Linux(l) => l.body(),
@@ -2855,6 +2890,7 @@ impl Change {
             Self::Proxy(p) => path.extend(p.path()),
             Self::Export(e) => path.extend(e.path()),
             Self::Linux(l) => path.extend(l.path()),
+            Self::Hr(h) => path.extend(h.path()),
             Self::ResourceRegister(r) => {
                 path.extend([String::from("resource"), r.resource.clone()]);
             }

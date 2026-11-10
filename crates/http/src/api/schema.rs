@@ -693,7 +693,9 @@ fn body_of(row: &Route) -> &'static str {
             | ResourceKind::SshHostGroups
             | ResourceKind::Proxies
             | ResourceKind::ExportSinks
-            | ResourceKind::LinuxHosts => "Page",
+            | ResourceKind::LinuxHosts
+            | ResourceKind::HrSources
+            | ResourceKind::HrConnectors => "Page",
             ResourceKind::SocialProviders => "SocialProvider",
             ResourceKind::Organizations => "Organization",
             ResourceKind::Agents => "Agent",

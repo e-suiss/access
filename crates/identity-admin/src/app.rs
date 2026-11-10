@@ -8,6 +8,7 @@ pub mod domains;
 mod export_sinks;
 pub mod federation;
 pub mod household;
+pub mod hr;
 pub mod issuer;
 pub mod linux;
 pub mod org_flows;
@@ -495,6 +496,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Export(e) => export_sinks::current(t, e, declared).await?,
             // OP-156 m.3 (p)
             Change::Linux(l) => linux::current(t, l).await?,
+            // OP-156 m.3 (q)
+            Change::Hr(h) => hr::current(t, h).await?,
             // OP-154 m.3 (j)
             Change::DcrPolicy { policy, loosens } => {
                 let current =
@@ -1158,6 +1161,15 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-148, §7.9.8, E42, TN-49
             self.status_notice(&mut t, p, subject, to).await?;
         }
+        if let Change::Hr(crate::domain::hr::HrChange::Import(i)) = &p.change {
+            // OP-156 m.3 (q), IDP-35
+            let vault = self
+                .keys
+                .vault(p.realm)
+                .ok_or_else(|| AdminError::Unavailable(String::from("vault")))?;
+            let now = access_store::authority::server_time(self.app).await?;
+            hr::import(&mut t, (vault, self.ids), i, (bound, exercise, now)).await?;
+        }
         if let Change::RelayResend(original) = &p.change {
             // OP-156 m.3 (c)
             let kek = self
@@ -1768,6 +1780,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Export(e) => export_sinks::write(t, bound, e, self.vault).await?,
             // OP-156 m.3 (p)
             Change::Linux(l) => linux::write(t, bound, l).await?,
+            // OP-156 m.3 (q)
+            Change::Hr(h) => hr::write(t, bound, h).await?,
             Change::DeviceCode(on) => {
                 t.put_device_code(bound, *on).await?;
                 true

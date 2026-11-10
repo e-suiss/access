@@ -246,7 +246,12 @@ async fn run<E: Env>(
         limiter,
         key: surface_slot,
     };
-    let Ok(body) = to_bytes(body, g.api.limits.max_body_bytes).await else {
+    // OP-156 m.3 (q)
+    let limit = crate::api::realm::body_limit(row.operation_id)
+        .map_or(g.api.limits.max_body_bytes, |l| {
+            l.max(g.api.limits.max_body_bytes)
+        });
+    let Ok(body) = to_bytes(body, limit).await else {
         return problem(&codes::BODY_TOO_LARGE);
     };
     let auth = values(&parts.headers, &header::AUTHORIZATION).unwrap_or_else(|| vec!["\0"]);

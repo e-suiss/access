@@ -777,3 +777,38 @@ pub const LINUX_STEP_UP: Code = code(
     "Forbidden",
     "sudo needs a sign-in in the last 5 minutes with a phishing-resistant, user-verifying authenticator (CT2; CT3 also device-bound and non-custodial); a push or a password alone is not enough (IDP-8, OP-156 m.3 (p)).",
 );
+/// An HR source that is not a name of lower-case letters, digits and hyphens (OP-156 m.3 (q)).
+pub const INVALID_HR_SOURCE: Code = code(
+    "invalid-hr-source",
+    400,
+    "Bad Request",
+    "The HR source needs a name of a lower-case letter followed by up to 62 lower-case letters, digits and hyphens; a retirement has an empty body (OP-156 m.3 (q)).",
+);
+/// The HR source name was registered before; it is not reused (OP-73).
+pub const HR_SOURCE_EXISTS: Code = code(
+    "hr-source-exists",
+    409,
+    "Conflict",
+    "An HR source with this name was registered before; a retired source's name and issuer are never reused (OP-73).",
+);
+/// An HR connector that is not a name, a live source and a vendor the service reads.
+pub const INVALID_HR_CONNECTOR: Code = code(
+    "invalid-hr-connector",
+    400,
+    "Bad Request",
+    "The HR connector needs a name, the HR source it pushes to and a vendor services/hr-connector reads: personio, bamboohr, hibob, workday, successfactors, kolayik or logo (OP-156 m.3 (q)).",
+);
+/// The HR connector name was registered before; it is not reused (OP-73).
+pub const HR_CONNECTOR_EXISTS: Code = code(
+    "hr-connector-exists",
+    409,
+    "Conflict",
+    "An HR connector with this name was registered before; a retired connector's name is never reused (OP-73).",
+);
+/// An HR file refused whole (OP-156 m.3 (q)).
+pub const INVALID_HR_RECORDS: Code = code(
+    "invalid-hr-records",
+    400,
+    "Bad Request",
+    "The import is {file, records, content}: content is 1 to 10 000 JSON Lines records or an RFC 4180 CSV file of at most 10 MB with a header row of employee_id, email, department, title, manager, start_date, end_date and employment_status, file its SHA-256 and records its record count. One bad record, an unknown column or a digest or count that does not match refuses the whole file and nothing is written (OP-156 m.3 (q)).",
+);

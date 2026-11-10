@@ -82,8 +82,6 @@ const UNPRODUCED: &[&str] = &[
     "mcp_gateway.tool_blocked",
     "linux.offline_signin",
     "linux.break_glass",
-    "hr.imported",
-    "hr.record_applied",
     "hr.connector_pulled",
     "signal.claim_ingested",
     "signal.refused",

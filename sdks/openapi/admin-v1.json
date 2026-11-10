@@ -16427,9 +16427,6 @@
           },
           "503": {
             "$ref": "#/components/responses/Unavailable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -16463,7 +16460,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "201": {
             "description": "Committed: the Exercise record (TN-110).",
             "headers": {
               "Request-Id": {
@@ -16507,9 +16504,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -16609,9 +16603,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -16711,9 +16702,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -16813,9 +16801,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -16904,9 +16889,6 @@
           },
           "503": {
             "$ref": "#/components/responses/Unavailable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -16940,7 +16922,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "201": {
             "description": "Committed: the Exercise record (TN-110).",
             "headers": {
               "Request-Id": {
@@ -16984,9 +16966,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -17086,9 +17065,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
