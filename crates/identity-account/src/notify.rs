@@ -14,6 +14,7 @@ pub mod envelope;
 pub mod http;
 pub mod lease;
 pub mod message;
+pub mod notices;
 pub mod notifier;
 pub mod pg;
 pub mod ports;

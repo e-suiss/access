@@ -432,6 +432,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/access/v1/relay-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** {relay_lag_ms, notifications_delayed}: the age of the courier's oldest undelivered message, or null when none waits, and whether it is past 60 s; authority never waits on delivery (OP-156 m.3 (c), E30). */
+        get: operations["getRelayStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/proxy/v1/check/{engine}": {
         parameters: {
             query?: never;
@@ -461,23 +478,6 @@ export interface paths {
         put?: never;
         /** Relay's report of an İYS consent record's registration state for a preference.changed event; it changes no preference (OP-156 m.3 (c)). */
         post: operations["relayIysStatus"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/access/v1/relay-status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** {relay_lag_ms, notifications_delayed}: the age of the courier's oldest undelivered message, or null when none waits, and whether it is past 60 s; authority never waits on delivery (OP-156 m.3 (c), E30). */
-        get: operations["getRelayStatus"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3727,6 +3727,35 @@ export interface operations {
             };
         };
     };
+    getRelayStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelayStatus"];
+                };
+            };
+            /** @description Temporarily unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     proxyCheck: {
         parameters: {
             query?: never;
@@ -3816,53 +3845,6 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The request is refused; nothing is read. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-156 m.4). */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Temporarily unavailable; retry. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    getRelayStatus: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The status. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RelayStatus"];
-                };
-            };
             /** @description The request is refused; nothing is read. */
             400: {
                 headers: {

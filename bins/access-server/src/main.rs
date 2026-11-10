@@ -1520,7 +1520,11 @@ impl Background {
         let relay = relay_prepared.map(|p| -> Result<relay::Running, String> {
             Ok(relay::start(
                 p,
-                (pools.outbox_reader.clone(), pools.app.clone()),
+                (
+                    pools.outbox_reader.clone(),
+                    pools.app.clone(),
+                    pools.router.clone(),
+                ),
                 keks.clone(),
                 id_key,
                 format!("relay/{}", holder()?),

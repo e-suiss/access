@@ -4,12 +4,17 @@
 
 use std::time::Duration;
 
+use access_store::audit::AuditEvent;
 use access_store::identity::{self, Cursor, OutboxEvent, RealmId, TenantId, TenantTx};
 use access_store::relay::{self, CourierLease, Undelivered};
 use access_store::{Pool, StoreError};
 
+/// The identity audit event of a message the courier passed without delivering.
+pub const AUDIT_EVENT: &str = "relay.undelivered";
+
 use crate::notify::NotifyError;
 use crate::notify::courier::CONSUMER;
+use crate::notify::envelope::EventId;
 use crate::notify::message::KIND_PREFIX;
 use crate::notify::ports::{CourierStore, SubjectKey};
 
@@ -98,6 +103,15 @@ impl CourierStore for PgCourierStore {
     ) -> Result<(), NotifyError> {
         let mut tx = TenantTx::begin(&self.app, tenant, realm).await?;
         tx.relay_undelivered(record).await?;
+        // OP-156 m.3 (c), OP-41
+        let target = EventId(record.event_id).to_string();
+        tx.audit(&AuditEvent {
+            event_type: AUDIT_EVENT,
+            actor: CONSUMER,
+            target: &target,
+            correlation: &target,
+        })
+        .await?;
         tx.commit().await?;
         Ok(())
     }

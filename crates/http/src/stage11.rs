@@ -46,6 +46,10 @@ const fn planned(
 /// The forward-auth engines (OP-156 m.3 (l)); Envoy is `ext_authz` in HTTP service mode.
 pub const PROXY_ENGINES: [&str; 4] = ["nginx", "traefik", "caddy", "envoy"];
 
+/// `GET /access/v1/relay-status`, served by the Relay courier's lane (OP-156 m.3 (c)): the age
+/// of the courier's oldest undelivered message and whether notifications read as delayed.
+pub const RELAY_STATUS: &str = "/access/v1/relay-status";
+
 /// Every declared, not yet served route.
 pub const PLANNED: &[Planned] = &[
     planned(
@@ -65,12 +69,6 @@ pub const PLANNED: &[Planned] = &[
         "/relay/v1/iys-status",
         "relayIysStatus",
         "Relay's report of an İYS consent record's registration state for a preference.changed event; it changes no preference (OP-156 m.3 (c)).",
-    ),
-    planned(
-        Method::Get,
-        "/access/v1/relay-status",
-        "getRelayStatus",
-        "{relay_lag_ms, notifications_delayed}: the age of the courier's oldest undelivered message, or null when none waits, and whether it is past 60 s; authority never waits on delivery (OP-156 m.3 (c), E30).",
     ),
 ];
 

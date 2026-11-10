@@ -2,6 +2,7 @@
     clippy::unwrap_used,
     clippy::panic,
     clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
@@ -83,6 +84,7 @@ struct World {
     db: TestDb,
     tenant: TenantId,
     realm: RealmId,
+    domain: DomainId,
     keks: RealmKeks,
     store: Arc<KeyStore>,
 }
@@ -105,6 +107,13 @@ async fn world() -> World {
     let realm = create_realm(&mut t, &domain, "shop", "pool-default")
         .await
         .unwrap();
+    t.enter_realm(realm).await.unwrap();
+    assert!(
+        access_store::tenancy::set_issuer(&mut t, "https://id.test/realms/shop")
+            .await
+            .unwrap()
+    );
+    access_store::idp::create_settings(&mut t).await.unwrap();
     t.commit().await.unwrap();
     let store = STORE
         .get_or_init(|| {
@@ -122,13 +131,68 @@ async fn world() -> World {
         db,
         tenant,
         realm,
+        domain,
         store,
     }
+}
+
+/// Commits one authority record with `event` in its outbox, as the sequencer does.
+async fn authority_event(
+    db: &TestDb,
+    tenant: TenantId,
+    domain: &DomainId,
+    event: &access_internal_api::events::Event,
+) {
+    use access_store::authority::{CommitBatch, HeadRow, OutboxRow, acquire_lease, commit_batch};
+    let (lease, head) = acquire_lease(&db.sequencer, domain, "t", Duration::from_secs(10))
+        .await
+        .unwrap();
+    let pos = head.pos + 1;
+    let leaf = access_crypto::random::bytes::<32>().unwrap();
+    let batch = CommitBatch {
+        epoch: lease.epoch,
+        after: head.pos,
+        records: vec![LogRecord {
+            pos,
+            kind: "decision",
+            recorded_at: 2,
+            leaf_hash: leaf,
+            envelope: vec![0xa1, 1],
+        }],
+        head: HeadRow {
+            pos,
+            epoch: lease.epoch,
+            leaf_hash: leaf,
+            recorded_at: 2,
+            frontier: vec![leaf],
+        },
+        nonces: vec![],
+        outbox: vec![OutboxRow {
+            pos,
+            idx: 0,
+            event_id: access_crypto::random::bytes::<32>().unwrap(),
+            event: event.to_bytes().unwrap(),
+            trace_parent: None,
+        }],
+        proofs: vec![],
+        reads: vec![],
+        writes: vec![],
+        draws: vec![],
+        single_use: vec![],
+        effects: vec![],
+    };
+    commit_batch(&db.sequencer, domain, *tenant.as_bytes(), &batch)
+        .await
+        .unwrap();
 }
 
 impl World {
     /// A subject of the realm with one sign-in notice queued for it beside a business change.
     async fn queue_notice(&self) -> String {
+        self.subject_with_notice().await.1
+    }
+
+    async fn subject_with_notice(&self) -> ([u8; 16], String) {
         let kek = self.keks.kek(self.tenant, self.realm).unwrap();
         let ids = IdKey::new(Secret::new(
             crate::login::id_key_bytes(&self.store).unwrap(),
@@ -160,13 +224,17 @@ impl World {
         };
         let id = notifier.notify(&mut tx, &message).await.unwrap();
         tx.commit().await.unwrap();
-        id.to_string()
+        (s, id.to_string())
     }
 
     fn start(&self, prepared: Prepared, flag: &ReadyFlag) -> Running {
         start(
             prepared,
-            (self.db.reader.clone(), self.db.app.clone()),
+            (
+                self.db.reader.clone(),
+                self.db.app.clone(),
+                self.db.router.clone(),
+            ),
             self.keks.clone(),
             crate::login::id_key_bytes(&self.store).unwrap(),
             format!("relay/{}", random_hex()),
@@ -210,10 +278,10 @@ async fn the_server_courier_delivers_to_relay_once_relay_is_confirmed() {
     let post = twin.posts().into_iter().find(|p| p.id == id).unwrap();
     assert_eq!(post.schema_errors, Vec::<String>::new());
     assert_eq!(post.event["type"], "relay.message.new_sign_in.v1");
-    assert_eq!(
-        w.status().await,
-        json!({ "relay_lag_ms": null, "notifications_delayed": false })
-    );
+    while w.status().await != json!({ "relay_lag_ms": null, "notifications_delayed": false }) {
+        assert!(Instant::now() < deadline, "the cursor never passed the message");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
     running.stop().await;
     assert!(!ready.failing().await.contains(&"outbox.consumers"));
     let lease = access_store::relay::acquire_courier_lease(
@@ -532,4 +600,86 @@ async fn relay_consumes_authority_events_as_an_ordinary_receiver() {
     let ce: Value = serde_json::from_slice(&got.body).unwrap();
     assert_eq!(ce["type"], urn("authority-revoked"));
     assert_eq!(ce["specversion"], "1.0");
+}
+
+// OP-156 m.3 (c), INV-24, §8.6
+#[tokio::test]
+async fn an_ended_instance_reaches_its_person_as_a_security_notice_without_action_required() {
+    use access_identity_account::notify::notices::REVIEW_PATH;
+    use access_internal_api::events::{Detail, Event, Kind, Source, Subject};
+    use access_kernel::digest::Digest;
+    use access_kernel::model::Id;
+    let w = world().await;
+    let (subject, _) = w.subject_with_notice().await;
+    let party = access_crypto::random::bytes::<16>().unwrap();
+    let mut t = TenantTx::begin(&w.db.app, w.tenant, w.realm).await.unwrap();
+    assert!(
+        access_store::idp::bind_subject_party(&mut t, &subject, &party)
+            .await
+            .unwrap()
+    );
+    t.commit().await.unwrap();
+    for (kind, detail) in [
+        (
+            Kind::InstanceTerminated,
+            Detail::Instance { party: Id(party) },
+        ),
+        (Kind::AuthorityRevoked, Detail::None),
+    ] {
+        authority_event(
+            &w.db,
+            w.tenant,
+            &w.domain,
+            &Event {
+                kind,
+                domain: Digest(*w.domain.as_bytes()),
+                source: Source::Exercise(Digest([9; 32])),
+                subject: Subject::Instance(Id([3; 16])),
+                at: 1_800_000_000_000,
+                detail,
+            },
+        )
+        .await;
+    }
+    let pools = NoticePools {
+        app: w.db.app.clone(),
+        router: w.db.router.clone(),
+        reader: w.db.reader.clone(),
+    };
+    let ids = IdKey::new(Secret::new(crate::login::id_key_bytes(&w.store).unwrap()));
+    assert_eq!(notices_step(&pools, &w.keks, &ids).await.unwrap(), 1);
+    assert_eq!(
+        notices_step(&pools, &w.keks, &ids).await.unwrap(),
+        0,
+        "the cursor passed it"
+    );
+
+    let token = random_hex();
+    let twin = RelayTwin::start(&token, ISSUER).await;
+    let c = config(&twin, file("credential", &token));
+    let ready = access_http::internal::Readiness::default();
+    let flag = ready.flag("outbox.consumers");
+    flag.set(true);
+    let running = w.start(prepare(&c, &[]).unwrap(), &flag);
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let post = loop {
+        if let Some(p) = twin
+            .posts()
+            .into_iter()
+            .find(|p| p.event["type"] == "relay.message.security_authority_notice.v1")
+        {
+            break p;
+        }
+        assert!(Instant::now() < deadline, "no notice in 30 s");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    };
+    running.stop().await;
+    assert_eq!(post.schema_errors, Vec::<String>::new());
+    assert_eq!(post.event["data"]["event"], "instance_ended");
+    assert_eq!(
+        post.event["data"]["review_link"],
+        format!("https://id.test/realms/shop{REVIEW_PATH}")
+    );
+    let text = post.event.to_string().to_ascii_lowercase();
+    assert!(!text.contains("action required") && !text.contains("action_required"));
 }

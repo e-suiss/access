@@ -10,6 +10,7 @@ use sqlx::types::Uuid;
 
 use crate::StoreError;
 use crate::identity::{Cursor, TenantTx};
+use crate::scope::{DomainId, DomainTx};
 
 /// A held courier lease: the holder and the epoch that fences its cursor.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -152,6 +153,53 @@ pub async fn oldest_pending_ms(
     .fetch_optional(reader)
     .await?;
     Ok(age.map(|a| u64::try_from(a).unwrap_or(0)))
+}
+
+/// The security notice courier's cursor in `domain`'s authority outbox, `(0, 0)` before the
+/// first event (OP-156 m.3 (c)).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn notice_cursor(app: &PgPool, domain: &DomainId) -> Result<(u64, u32), StoreError> {
+    let mut t = DomainTx::begin(app, domain).await?;
+    let row = sqlx::query!(
+        "SELECT pos, idx FROM access.relay_notice_cursor WHERE domain_id = $1",
+        domain.as_bytes().as_slice(),
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    row.map_or(Ok((0, 0)), |r| {
+        Ok((
+            u64::try_from(r.pos).map_err(|_| StoreError::Corrupt)?,
+            u32::try_from(r.idx).map_err(|_| StoreError::Corrupt)?,
+        ))
+    })
+}
+
+/// Moves the notice cursor of `domain` forward to `at`; never back.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn advance_notice_cursor(
+    app: &PgPool,
+    domain: &DomainId,
+    at: (u64, u32),
+) -> Result<(), StoreError> {
+    let mut t = DomainTx::begin(app, domain).await?;
+    sqlx::query!(
+        "INSERT INTO access.relay_notice_cursor (domain_id, pos, idx) VALUES ($1, $2, $3)
+         ON CONFLICT (domain_id) DO UPDATE SET pos = EXCLUDED.pos, idx = EXCLUDED.idx,
+                updated_at = now()
+          WHERE (relay_notice_cursor.pos, relay_notice_cursor.idx) < (EXCLUDED.pos, EXCLUDED.idx)",
+        domain.as_bytes().as_slice(),
+        i64::try_from(at.0).map_err(|_| StoreError::Range)?,
+        i32::try_from(at.1).map_err(|_| StoreError::Range)?,
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    Ok(())
 }
 
 /// An undeliverable message as a resend finds it: where it sits and why it was passed.

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT pos, idx FROM access.relay_notice_cursor WHERE domain_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.relay_notice_cursor",
+            "name": "pos"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "idx",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.relay_notice_cursor",
+            "name": "idx"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "e569da51710a90565d8da09e4628eeb64da3c558cefb111abb2832bec54fb6e7"
+}

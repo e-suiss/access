@@ -3,8 +3,8 @@
 
 use serde_json::{Map, Value, json};
 
-use super::{object, problems, r};
-use crate::stage11::{Method, PLANNED, PROXY_ENGINES};
+use super::{object, problems, r, text};
+use crate::stage11::{Method, PLANNED, PROXY_ENGINES, RELAY_STATUS};
 
 /// The relay status schema.
 pub(super) fn components() -> Value {
@@ -23,8 +23,25 @@ pub(super) fn components() -> Value {
     })
 }
 
-/// Every declared route of [`PLANNED`].
+/// Every declared route of [`PLANNED`], and the served relay status (OP-156 m.3 (c)).
 pub(super) fn paths(paths: &mut Map<String, Value>) {
+    let mut responses = problems(&[("503", "Temporarily unavailable; retry.")]);
+    responses.insert(
+        "200".into(),
+        json!({
+            "description": "The status.",
+            "content": { "application/json": { "schema": r("RelayStatus") } },
+        }),
+    );
+    paths.insert(
+        RELAY_STATUS.into(),
+        json!({ "get": {
+            "operationId": "getRelayStatus",
+            "summary": "{relay_lag_ms, notifications_delayed}: the age of the courier's oldest undelivered message, or null when none waits, and whether it is past 60 s; authority never waits on delivery (OP-156 m.3 (c), E30).",
+            "x-suiss-served": true,
+            "responses": Value::Object(responses),
+        }}),
+    );
     for p in PLANNED {
         let method = match p.method {
             Method::Get => "get",
@@ -41,15 +58,6 @@ pub(super) fn paths(paths: &mut Map<String, Value>) {
                 "content": { "application/problem+json": { "schema": r("Problem") } },
             }),
         );
-        if p.operation == "getRelayStatus" {
-            responses.insert(
-                "200".into(),
-                json!({
-                    "description": "The status.",
-                    "content": { "application/json": { "schema": r("RelayStatus") } },
-                }),
-            );
-        }
         let mut op = Map::new();
         op.insert("operationId".into(), p.operation.into());
         op.insert("summary".into(), p.summary.into());

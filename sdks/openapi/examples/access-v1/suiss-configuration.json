@@ -29,6 +29,7 @@
     "party_lookup": "https://access.example/access/v1/parties/{party}",
     "platform_streams": "https://access.example/access/v1/platform/streams",
     "pushed_authorization_request": "https://acme.id.example/par",
+    "relay_status": "https://access.example/access/v1/relay-status",
     "status_list": "https://access.example/access/v1/status-lists/{list}",
     "subject_resolution": "https://access.example/access/v1/tenants/{tenant}/subjects:resolve",
     "tenant_snapshot": "https://access.example/access/v1/tenants/{tenant}/snapshot"

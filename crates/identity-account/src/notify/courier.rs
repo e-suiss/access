@@ -168,7 +168,15 @@ where
                 .is_none_or(|t| t.due(self.clock.now_ms(), TTL))
             {
                 term = match self.hold(holder, TTL).await {
-                    Ok(t) => t,
+                    Ok(t) => {
+                        tracing::debug!(
+                            event = "relay.courier.lease",
+                            epoch = t.as_ref().map_or(0, |t| t.lease.epoch),
+                            held = t.is_some(),
+                            "relay courier lease"
+                        );
+                        t
+                    }
                     Err(e) => {
                         tracing::warn!(error = %e, "relay courier lease failed");
                         None
@@ -237,7 +245,13 @@ where
         realm: [u8; 16],
         why: Undeliverable,
     ) -> Result<(), NotifyError> {
-        tracing::warn!(kind = %event.kind, reason = why.reason(), "relay message undeliverable");
+        tracing::warn!(
+            event = "relay.delivery.failed",
+            kind = %event.kind,
+            status = why.relay_status().unwrap_or(0),
+            reason = why.reason(),
+            "relay message undeliverable"
+        );
         let Some(id) = id else {
             return Ok(());
         };

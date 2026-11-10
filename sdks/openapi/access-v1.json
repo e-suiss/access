@@ -2170,6 +2170,35 @@
         }
       }
     },
+    "/access/v1/relay-status": {
+      "get": {
+        "operationId": "getRelayStatus",
+        "summary": "{relay_lag_ms, notifications_delayed}: the age of the courier's oldest undelivered message, or null when none waits, and whether it is past 60 s; authority never waits on delivery (OP-156 m.3 (c), E30).",
+        "x-suiss-served": true,
+        "responses": {
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/proxy/v1/check/{engine}": {
       "get": {
         "operationId": "proxyCheck",
@@ -2310,55 +2339,6 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/access/v1/relay-status": {
-      "get": {
-        "operationId": "getRelayStatus",
-        "summary": "{relay_lag_ms, notifications_delayed}: the age of the courier's oldest undelivered message, or null when none waits, and whether it is past 60 s; authority never waits on delivery (OP-156 m.3 (c), E30).",
-        "x-suiss-status": "planned",
-        "responses": {
-          "400": {
-            "description": "The request is refused; nothing is read.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Temporarily unavailable; retry.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-156 m.4).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "The status.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RelayStatus"
                 }
               }
             }

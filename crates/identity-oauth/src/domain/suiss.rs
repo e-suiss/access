@@ -158,6 +158,8 @@ pub const SERVED: &[Endpoint] = &[
     Endpoint::Approval,
     Endpoint::ApprovalRequests,
     Endpoint::PushedAuthorizationRequest,
+    // OP-156 m.3 (c)
+    Endpoint::RelayStatus,
 ];
 
 /// Well-known suffix of the realm's SSF transmitter metadata (SSF 1.0 §7.1).
