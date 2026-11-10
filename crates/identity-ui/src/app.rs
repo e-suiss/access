@@ -13,6 +13,7 @@
 mod account;
 mod approve;
 pub mod certificate;
+pub mod cloud_key;
 mod credential;
 pub mod devices;
 pub mod did;

@@ -2,6 +2,7 @@
 
 pub mod approval;
 pub mod branding;
+pub mod cloud_key;
 pub mod error_page;
 pub mod flow;
 pub mod frontend;

@@ -9,6 +9,7 @@ pub mod events;
 pub mod idp;
 pub mod instances;
 pub mod linux;
+pub mod one;
 pub mod projections;
 pub mod saml;
 pub mod signals;

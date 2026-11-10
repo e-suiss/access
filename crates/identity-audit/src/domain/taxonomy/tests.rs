@@ -79,8 +79,6 @@ const UNPRODUCED: &[&str] = &[
     "hr.connector_pulled",
     "signal.claim_ingested",
     "signal.refused",
-    "cloud_key.granted",
-    "cloud_key.revoked",
     "cloud_key.destroyed",
 ];
 

@@ -2019,6 +2019,13 @@ async fn serve(
         hosted.clone(),
         certificate::certificates(prepared.outbound.clone(), Arc::new(idp_plane.clone())),
     );
+    // OP-156 m.3 (w), E59
+    let cloud_keys = access_http::login::cloud_key_router(
+        RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
+        hosted.clone(),
+        idp_plane.clone(),
+        String::from(IDENTITY_PEP),
+    );
     let me = frontend(
         config,
         tenants_pool.clone(),
@@ -2047,6 +2054,7 @@ async fn serve(
             .merge(push)
             .merge(payment)
             .merge(first_contact)
+            .merge(cloud_keys)
             .merge(sso_setup)
             .merge(account_pages)
             .merge(authorize)

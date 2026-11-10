@@ -20,6 +20,7 @@ pub mod ciba;
 pub mod claims;
 pub mod client_profiles;
 pub mod clients;
+pub mod cloud_keys;
 pub mod commitments;
 pub mod connect;
 pub mod consents;

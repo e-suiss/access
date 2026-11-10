@@ -1283,21 +1283,21 @@ pub const ROUTES: &[Route] = &[
         "linuxSudo",
         "A sudo step-up, CT2 by default: a phishing-resistant authenticator; a push alone is not enough and nothing is served offline.",
     ),
-    planned(
+    live(
         Owner::Q20,
         Verb::Get,
         "/v1/me/cloud-key-permissions",
         "listCloudKeyPermissions",
         "The person's cloud key permissions for One: purpose, classes, until, TEE measurement; the record holds no key or data (OP-156 m.3 (w)).",
     ),
-    planned(
+    live(
         Owner::Q20,
         Verb::Post,
         "/v1/me/cloud-key-permissions",
         "grantCloudKeyPermission",
         "Grants One's cloud key permission as the device Instance's one.cloud_key.grant Exercise: purpose, classes, at most 24 hours, the TEE measurement and the Mandate that covers acting while the person is away.",
     ),
-    planned(
+    live(
         Owner::Q20,
         Verb::Post,
         "/v1/me/cloud-key-permissions/{permission}/revoke",

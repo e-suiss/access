@@ -7,6 +7,7 @@
 
 pub mod assets;
 mod certificate;
+mod cloud_key;
 mod did;
 mod first_contact;
 mod idempotency;
@@ -35,6 +36,7 @@ use axum::routing::{delete, get, patch, post, put};
 
 pub use assets::{Assets, AssetsError};
 pub use certificate::router as certificate_router;
+pub use cloud_key::router as cloud_key_router;
 pub use did::router as did_router;
 pub use first_contact::router as first_contact_router;
 pub use idempotency::{CAPACITY as IDEMPOTENCY_CAPACITY, RETENTION as IDEMPOTENCY_RETENTION};

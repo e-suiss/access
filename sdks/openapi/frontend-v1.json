@@ -4521,21 +4521,34 @@
         "operationId": "listCloudKeyPermissions",
         "summary": "The person's cloud key permissions for One: purpose, classes, until, TEE measurement; the record holds no key or data (OP-156 m.3 (w)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       },
       "post": {
         "operationId": "grantCloudKeyPermission",
         "summary": "Grants One's cloud key permission as the device Instance's one.cloud_key.grant Exercise: purpose, classes, at most 24 hours, the TEE measurement and the Mandate that covers acting while the person is away.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -4549,8 +4562,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/me/cloud-key-permissions/{permission}/revoke": {
@@ -4558,8 +4570,15 @@
         "operationId": "revokeCloudKeyPermission",
         "summary": "Revokes a cloud key permission: one.cloud_key.revoke; the TEE copies must be destroyed before the work goes on.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -4583,8 +4602,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     }
   },

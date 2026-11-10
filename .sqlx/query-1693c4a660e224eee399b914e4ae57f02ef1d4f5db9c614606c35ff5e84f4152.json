@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.cloud_key_permissions\n               (tenant_id, realm_id, subject_id, party, domain, exercise, purpose, classes,\n                valid_from, valid_until, tee_measurement, job_key, mandate)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)\n             ON CONFLICT (tenant_id, realm_id, exercise) DO NOTHING\n             RETURNING permission_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "permission_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.cloud_key_permissions",
+            "name": "permission_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Text",
+        "TextArray",
+        "Int8",
+        "Int8",
+        "Bytea",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1693c4a660e224eee399b914e4ae57f02ef1d4f5db9c614606c35ff5e84f4152"
+}

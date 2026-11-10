@@ -1,0 +1,188 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.permission_id, p.subject_id, p.party, p.domain, p.exercise, p.purpose,\n                      p.classes, p.valid_from, p.valid_until, p.tee_measurement, p.job_key,\n                      p.mandate, e.how AS \"how?\", e.ended_at AS \"ended_at?\"\n                 FROM access.cloud_key_permissions p\n                 LEFT JOIN access.cloud_key_permission_ends e\n                   ON e.tenant_id = p.tenant_id AND e.realm_id = p.realm_id\n                  AND e.permission_id = p.permission_id\n                WHERE p.tenant_id = $1 AND p.realm_id = $2 AND p.subject_id = $3\n                  AND p.valid_until > $4\n                ORDER BY p.permission_id DESC\n                LIMIT $5",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "permission_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.cloud_key_permissions",
+            "name": "permission_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.cloud_key_permissions",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "party",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.cloud_key_permissions",
+            "name": "party"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "domain",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.cloud_key_permissions",
+            "name": "domain"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "exercise",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.cloud_key_permissions",
+            "name": "exercise"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "purpose",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.cloud_key_permissions",
+            "name": "purpose"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "classes",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.cloud_key_permissions",
+            "name": "classes"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "valid_from",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.cloud_key_permissions",
+            "name": "valid_from"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "valid_until",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.cloud_key_permissions",
+            "name": "valid_until"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "tee_measurement",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.cloud_key_permissions",
+            "name": "tee_measurement"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "job_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.cloud_key_permissions",
+            "name": "job_key"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "mandate",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.cloud_key_permissions",
+            "name": "mandate"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "how?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.cloud_key_permission_ends",
+            "name": "how"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "ended_at?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.cloud_key_permission_ends",
+            "name": "ended_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c24fda1439e65151d868c3ff6600ea343dd94dd2e4ed9255803f415a0444f426"
+}

@@ -245,3 +245,21 @@ basis = "contract"
 portable = "observed"
 export = true
 note = "A person's HR record as the HR source sent it (department, title, manager, dates, status, employee id), sealed; its HR Claims state the same values (OP-156 m.3 (q), IDP-35)."
+
+[[field]]
+column = "access.cloud_key_permissions.subject_id"
+vault = "none"
+retention = "consent"
+basis = "consent"
+portable = "observed"
+export = true
+note = "Whose cloud key permission for One this is (E59); the record holds no key or data (OP-156 m.3 (w))."
+
+[[field]]
+column = "access.cloud_key_permissions.party"
+vault = "none"
+retention = "consent"
+basis = "consent"
+portable = "derived"
+export = false
+note = "The person's Party in the governing domain whose device Instance granted the permission (E59)."

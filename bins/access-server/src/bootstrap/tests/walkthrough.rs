@@ -11,6 +11,7 @@ mod cross_org;
 mod linux;
 mod local_agent;
 mod mcp_proxy;
+mod one;
 mod push;
 mod ssh;
 mod work_gate;
@@ -289,6 +290,7 @@ impl Desk {
             clock: SystemClock,
         });
         let hosted_push = hosted.clone();
+        let hosted_keys = hosted.clone();
         let app = login_router(discovery(), hosted.clone(), None)
             .merge(me_router(
                 discovery(),
@@ -309,6 +311,13 @@ impl Desk {
             ));
         // OP-156 m.3 (d)
         let app = app.merge(access_http::login::push_router(discovery(), hosted_push));
+        // OP-156 m.3 (w)
+        let app = app.merge(access_http::login::cloud_key_router(
+            discovery(),
+            hosted_keys,
+            w.plane.clone(),
+            String::from(IDENTITY_PEP),
+        ));
         // OP-155 m.3 (l)
         let (oauth, pings) = ciba::oauth_router(&w);
         let app = app.merge(oauth);
