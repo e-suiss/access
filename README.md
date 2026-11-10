@@ -230,6 +230,23 @@ ACCESS_BOOTSTRAP_PLAN=/etc/access/local/bootstrap-work.toml \
 - `ACCESS_DELIVERY_TARGETS` lists the declared endpoints (`delivery_targets` in the server's TOML). A URL is matched byte for byte: `https`, lowercase host, the port unless 443, the full path. `ca_file`, when given, is the only trust anchor for that endpoint.
 - The product's `suiss_event_receiver` (`event_receiver` in the bootstrap plan) and any stream it creates must use exactly a declared URL; anything else on a private address or another port is refused.
 
+## Integrations
+
+Access works beside the security products you already run. Each keeps its own job; Access decides who may act and gives them its decisions, events and signals. None of them can grant anything in Access by itself, and Access does not take over their job.
+
+| Kind | Ready for | What Access gives | What stays in the product |
+|---|---|---|---|
+| Privileged access (PAM) | Teleport, CyberArk | A just-in-time decision for each privileged connection over AuthZEN; short-lived SSH certificates from the realm's SSH CA | Session brokering, recording, the account vault |
+| Secret stores | OpenBao, HashiCorp Vault | The `secret.release` decision; the SDK's `resource::release` hands a secret out only for that Exercise, once | The secret and its versions |
+| Identity governance (IGA) | Any product that follows the contract | Who can act and what a removal would end, from Access's searches; a reviewer's decision lands as the reviewer's own `grant.revoke` or `grant.issue` | Campaigns, certification, role mining, SoD analysis |
+| SIEM | Splunk, Microsoft Sentinel, Datadog, Elastic | The event and audit stream as OCSF, CEF or LEEF over syslog, HTTP or object storage | Search, correlation, alerts |
+| HR systems | Personio, BambooHR, HiBob, Workday, SAP SuccessFactors, Kolay İK, Logo | Starters, leavers and moves as accounts and role selections, once the domain accepts the HR source | The employee record |
+| Device management (MDM) | Microsoft Intune, Jamf Pro | Device compliance as the MDM's Claim, which only narrows a decision | Enrollment, compliance, inventory |
+| Identity verification | Onfido, Persona | The provider's proofing result as its Claim | Document and face checks |
+| Risk, fraud and DLP | Any source that sends a Claim or a CAEP event | A risk level or a data label as its source's Claim, which only narrows a decision | Scoring and classification |
+
+The same list is in the console under Developer ▸ Integrations. The seam schemas and mappings are in [`conformance/seams`](conformance/seams).
+
 ## Tech stack
 
 Rust (single backend), PostgreSQL, NATS, HSM-backed keys over PKCS#11, React for UI components.
