@@ -2,6 +2,7 @@
 //! back after a restart.
 
 use access_crypto::jose::JwsAlg;
+use access_crypto::rsa_id::RsaIdKey;
 use suiss_crypto::signer::{SignError, Signer};
 
 /// A new realm key: its signer and the sealed form the factory can load it back from.
@@ -26,6 +27,24 @@ pub trait KeyFactory {
     /// # Errors
     /// [`SignError::Key`] when it cannot be unsealed.
     fn load(&mut self, alg: JwsAlg, sealed: &[u8]) -> Result<Box<dyn Signer + Send>, SignError>;
+
+    /// A new RSA-3072 `rsa-id` key and its sealed form (MD-6, OP-155 m.3 (k)); a factory
+    /// without RSA refuses.
+    ///
+    /// # Errors
+    /// [`SignError`].
+    fn generate_rsa_id(&mut self) -> Result<(RsaIdKey, Vec<u8>), SignError> {
+        Err(SignError::Algorithm)
+    }
+
+    /// The `rsa-id` key a sealed form holds.
+    ///
+    /// # Errors
+    /// [`SignError::Key`].
+    fn load_rsa_id(&mut self, sealed: &[u8]) -> Result<RsaIdKey, SignError> {
+        let _ = sealed;
+        Err(SignError::Key)
+    }
 }
 
 /// Why the vault failed.
@@ -75,4 +94,26 @@ pub trait Vault {
         realm: &crate::protocol::Realm,
         bytes: &[u8],
     ) -> Result<(), VaultError>;
+
+    /// The stored `rsa-id` key of `realm`, if one was made (MD-6, OP-155 m.3 (k)).
+    ///
+    /// # Errors
+    /// [`VaultError`].
+    fn rsa_id(&mut self, realm: &crate::protocol::Realm) -> Result<Option<Vec<u8>>, VaultError> {
+        let _ = realm;
+        Ok(None)
+    }
+
+    /// Stores the `rsa-id` key of `realm`; it is written once. A vault without the slot refuses.
+    ///
+    /// # Errors
+    /// [`VaultError`].
+    fn put_rsa_id(
+        &mut self,
+        realm: &crate::protocol::Realm,
+        bytes: &[u8],
+    ) -> Result<(), VaultError> {
+        let _ = (realm, bytes);
+        Err(VaultError)
+    }
 }

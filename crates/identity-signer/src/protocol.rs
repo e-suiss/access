@@ -98,6 +98,19 @@ pub enum Request {
         /// The realm's issuer Party.
         party: [u8; 16],
     },
+    /// Signs a JSON object as an RS256 compact JWS of type `typ` at `at` with the realm's
+    /// `rsa-id` key, made on first use (MD-6, OP-155 m.3 (k)): identity assertions of clients
+    /// that opted in, never an authority artefact.
+    SignRs256 {
+        /// Realm.
+        realm: Realm,
+        /// JWS `typ`.
+        typ: String,
+        /// JSON payload.
+        payload: Vec<u8>,
+        /// Signing time; within the signer's clock skew of its own clock.
+        at: u64,
+    },
     /// Signs a canonical `claim-statement` of the realm's issuer as a `COSE_Sign1` Claim at `at`
     /// with the realm's Claim issuer key (L2-CLM-1).
     SignClaim {
@@ -345,6 +358,20 @@ impl Request {
                     ("at", Value::Unsigned(*at)),
                 ]),
             )]),
+            Self::SignRs256 {
+                realm,
+                typ,
+                payload,
+                at,
+            } => map(vec![(
+                "sign_rs256",
+                map(vec![
+                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("typ", Value::text(typ)),
+                    ("payload", Value::Bytes(payload.clone())),
+                    ("at", Value::Unsigned(*at)),
+                ]),
+            )]),
             Self::SignIssuerRegistration {
                 realm,
                 registration: r,
@@ -401,6 +428,14 @@ impl Request {
                     step: crate::issuer::Step::parse(&text(s.get("step"))?)
                         .ok_or(FrameError::Malformed)?,
                 },
+            });
+        }
+        if let Some(s) = v.get("sign_rs256") {
+            return Ok(Self::SignRs256 {
+                realm: realm(s.get("realm"))?,
+                typ: text(s.get("typ"))?,
+                payload: bytes(s.get("payload"))?,
+                at: uint(s.get("at"))?,
             });
         }
         if let Some(o) = v.get("open") {

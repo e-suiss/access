@@ -642,6 +642,27 @@ impl TokenSigner for SignerKeys {
     async fn jwks(&self, realm: RealmId) -> Result<String, Unavailable> {
         Keys::jwks(self, realm).await
     }
+
+    // MD-6, OP-155 m.3 (k)
+    async fn sign_rs256(
+        &self,
+        realm: RealmId,
+        typ: &str,
+        payload: &[u8],
+        at_ms: u64,
+    ) -> Result<String, Unavailable> {
+        let request = Request::SignRs256 {
+            realm: Realm(*realm.as_bytes()),
+            typ: String::from(typ),
+            payload: payload.to_vec(),
+            at: at_ms,
+        };
+        match self.ask(&request).await? {
+            Response::Signed { token, .. } => Ok(token),
+            Response::Error(code) => Err(refused(&code, typ)),
+            _ => Err(Unavailable),
+        }
+    }
 }
 
 /// The back-channel courier's outbox and cursor as `access_outbox_reader` (OP-131 m.3), its

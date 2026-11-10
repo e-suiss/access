@@ -23,6 +23,9 @@ use crate::ports::{Generated, KeyFactory};
 /// Binds the sealed key to what it is for; distinct from the authority's operational keys.
 const SEAL_CONTEXT: &[u8] = b"access/identity-signer/realm-key";
 
+/// Binds a sealed `rsa-id` key to its purpose (OP-155 m.3 (k)).
+const RSA_ID_CONTEXT: &[u8] = b"access/identity-signer/rsa-id";
+
 /// Creates realm keys on aws-lc-rs and seals each PKCS#8 document under its own DEK, wrapped
 /// by the realm's KEK; the plaintext never leaves memory (CR-21 m.3).
 pub struct SealedFactory<K> {
@@ -43,7 +46,51 @@ fn from_pkcs8(alg: JwsAlg, doc: &Secret<Vec<u8>>) -> Result<Box<dyn Signer + Sen
     })
 }
 
+impl<K: Kek> SealedFactory<K> {
+    fn seal(&self, context: &[u8], doc: &[u8]) -> Result<Vec<u8>, SignError> {
+        let dek = Dek::generate().map_err(|_| SignError::Random)?;
+        let wrapped = self.kek.wrap(&dek).map_err(|_| SignError::Key)?;
+        let sealed = seal_body(dek, context, doc).map_err(|_| SignError::Key)?;
+        let v = Value::Map(vec![
+            (Value::text("kek"), Value::text(self.kek.id())),
+            (Value::text("wrapped"), Value::Bytes(wrapped)),
+            (Value::text("nonce"), Value::Bytes(sealed.nonce.to_vec())),
+            (Value::text("ciphertext"), Value::Bytes(sealed.ciphertext)),
+        ]);
+        dcbor::encode(&v, Limits::CEILING).map_err(|_| SignError::Encode)
+    }
+
+    fn open(&self, context: &[u8], sealed: &[u8]) -> Result<Secret<Vec<u8>>, SignError> {
+        let v = dcbor::decode(sealed, Limits::CEILING).map_err(|_| SignError::Key)?;
+        let bytes = |k: &str| match v.get(k) {
+            Some(Value::Bytes(b)) => Ok(b.clone()),
+            _ => Err(SignError::Key),
+        };
+        let dek = self
+            .kek
+            .unwrap(&bytes("wrapped")?)
+            .map_err(|_| SignError::Key)?;
+        let body = Sealed {
+            nonce: bytes("nonce")?.try_into().map_err(|_| SignError::Key)?,
+            ciphertext: bytes("ciphertext")?,
+        };
+        let doc = open_body(&dek, context, &body).map_err(|_| SignError::Key)?;
+        Ok(Secret::new(doc.to_vec()))
+    }
+}
+
 impl<K: Kek> KeyFactory for SealedFactory<K> {
+    // MD-6, OP-155 m.3 (k)
+    fn generate_rsa_id(&mut self) -> Result<(access_crypto::rsa_id::RsaIdKey, Vec<u8>), SignError> {
+        let (key, doc) = access_crypto::rsa_id::RsaIdKey::generate().map_err(|_| SignError::Key)?;
+        Ok((key, self.seal(RSA_ID_CONTEXT, &doc)?))
+    }
+
+    fn load_rsa_id(&mut self, sealed: &[u8]) -> Result<access_crypto::rsa_id::RsaIdKey, SignError> {
+        let doc = self.open(RSA_ID_CONTEXT, sealed)?;
+        access_crypto::rsa_id::RsaIdKey::from_pkcs8(doc.expose()).map_err(|_| SignError::Key)
+    }
+
     fn generate(&mut self, alg: JwsAlg) -> Result<Generated, SignError> {
         let (signer, doc): (Box<dyn Signer + Send>, _) = match alg {
             JwsAlg::Es256 => {
@@ -162,6 +209,29 @@ impl Vault for DirVault {
         std::fs::write(&tmp, bytes).map_err(|_| VaultError)?;
         std::fs::rename(&tmp, self.dir.join(issuer_file(realm))).map_err(|_| VaultError)
     }
+
+    fn rsa_id(&mut self, realm: &Realm) -> Result<Option<Vec<u8>>, VaultError> {
+        match std::fs::read(self.dir.join(rsa_id_file(realm))) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(_) => Err(VaultError),
+        }
+    }
+
+    fn put_rsa_id(&mut self, realm: &Realm, bytes: &[u8]) -> Result<(), VaultError> {
+        let tmp = self.dir.join(format!("{}.rsa-id.tmp", hex(realm)));
+        std::fs::write(&tmp, bytes).map_err(|_| VaultError)?;
+        std::fs::rename(&tmp, self.dir.join(rsa_id_file(realm))).map_err(|_| VaultError)
+    }
+}
+
+/// A realm's `rsa-id` key file; not `.cbor`, so it is never read as a realm key set.
+fn rsa_id_file(realm: &Realm) -> String {
+    format!(
+        "{}.{}.key",
+        hex(realm),
+        crate::purpose::KeyPurpose::RsaId.label()
+    )
 }
 
 /// A realm's Claim issuer key file; not `.cbor`, so it is never read as a realm key set.

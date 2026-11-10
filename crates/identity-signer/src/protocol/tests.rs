@@ -36,6 +36,13 @@ fn messages_round_trip() {
             payload: vec![0xa0],
             at: 42,
         },
+        // OP-155 m.3 (k)
+        Request::SignRs256 {
+            realm,
+            typ: String::from("JWT"),
+            payload: b"{}".to_vec(),
+            at: 42,
+        },
         Request::SignIssuerRegistration {
             realm,
             registration: crate::issuer::Registration {

@@ -931,6 +931,83 @@ async fn front_channel_logout_is_a_realm_and_client_opt_in() {
     assert!(page.contains(&expected), "{page}");
 }
 
+// CR-2, MD-3, MD-6, OP-125, Ek B 5093, 5094, 5103, 5104, 5106: a client that opted in gets RS256
+// ID tokens and JARM from the realm's RSA-3072 key, made on first use and published in the JWKS;
+// its access token stays on the realm's own algorithm, and the signature checks byte for byte
+#[tokio::test]
+async fn rs256_identity_assertions_are_a_client_opt_in() {
+    let c = Cluster::new(&["ha-rs"]).await;
+    let a = c.at(0);
+    let before = a.oauth().env().signer.jwks(a.realm().realm).await.unwrap();
+    assert!(!before.contains(r#""kty":"RSA""#));
+    let without_opt_in = ClientProfileRow {
+        id_token_alg: Some(String::from("RS256")),
+        ..ClientProfileRow::default()
+    };
+    assert!(
+        a.set_profile('a', "idp.client.alg_rs256", &without_opt_in)
+            .await
+            .is_err()
+    );
+    let rs = ClientProfileRow {
+        rs256: true,
+        id_token_alg: Some(String::from("RS256")),
+        ..ClientProfileRow::default()
+    };
+    a.set_profile('a', "idp.client.alg_rs256", &rs)
+        .await
+        .unwrap();
+    let cookie = a.sign_in(now() - 1000).await;
+    let to = location(
+        &a.authorize(&[("response_mode", "query.jwt")], Some(&cookie))
+            .await,
+    );
+    let response = query(&to, "response");
+    let t = body(
+        &a.exchange(&claims(&response)["code"].as_str().unwrap().to_owned())
+            .await,
+        200,
+    );
+    let id = t["id_token"].as_str().unwrap();
+    let header: Value =
+        serde_json::from_slice(&b64url_decode(id.split('.').next().unwrap()).unwrap()).unwrap();
+    assert_eq!(header["alg"], "RS256");
+    let access: Value = serde_json::from_slice(
+        &b64url_decode(
+            t["access_token"]
+                .as_str()
+                .unwrap()
+                .split('.')
+                .next()
+                .unwrap(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(access["alg"], "ES256");
+    let jwks: Value =
+        serde_json::from_str(&a.oauth().env().signer.jwks(a.realm().realm).await.unwrap()).unwrap();
+    let rsa = jwks["keys"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|k| k["kty"] == "RSA")
+        .unwrap()
+        .clone();
+    assert_eq!(rsa["kid"], header["kid"]);
+    let n = b64url_decode(rsa["n"].as_str().unwrap()).unwrap();
+    let e = b64url_decode(rsa["e"].as_str().unwrap()).unwrap();
+    assert_eq!(n.len(), 384);
+    for token in [id, response.as_str()] {
+        let (input, sig) = token.rsplit_once('.').unwrap();
+        let sig = b64url_decode(sig).unwrap();
+        access_crypto::rsa_id::verify_strict(&n, &e, input.as_bytes(), &sig).unwrap();
+        let mut padded = vec![0];
+        padded.extend_from_slice(&sig);
+        assert!(access_crypto::rsa_id::verify_strict(&n, &e, input.as_bytes(), &padded).is_err());
+    }
+}
+
 // TN-14, Ek B 5095: userinfo is a JWT signed by the realm key when the client asks
 #[tokio::test]
 async fn userinfo_can_be_signed_by_the_realm_key() {

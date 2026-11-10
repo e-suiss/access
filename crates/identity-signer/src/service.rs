@@ -38,6 +38,7 @@ pub struct Service<F, V> {
     policy: Policy,
     cell: Option<CellKey>,
     issuers: BTreeMap<Realm, IssuerKey>,
+    rsa_ids: BTreeMap<Realm, access_crypto::rsa_id::RsaIdKey>,
 }
 
 const STATES: [(&str, State); 5] = [
@@ -187,6 +188,7 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             policy,
             cell: None,
             issuers: BTreeMap::new(),
+            rsa_ids: BTreeMap::new(),
         };
         for (realm, alg, policy, saved) in all.iter().filter_map(|b| restored(b)) {
             let policy = policy.unwrap_or(s.policy);
@@ -313,10 +315,39 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                 }
                 Response::Opened
             }
-            Request::Jwks(realm) => self.rings.get(&realm).map_or_else(
-                || Response::Error(String::from(UNKNOWN_REALM)),
-                |(_, ring)| Response::Jwks(ring.jwks().to_owned()),
-            ),
+            Request::Jwks(realm) => {
+                let rsa = self
+                    .rsa_id(realm)
+                    .map(access_crypto::rsa_id::RsaIdKey::public_jwk);
+                self.rings.get(&realm).map_or_else(
+                    || Response::Error(String::from(UNKNOWN_REALM)),
+                    |(_, ring)| Response::Jwks(with_rsa(ring.jwks(), rsa.as_deref())),
+                )
+            }
+            // MD-6, CR-2, OP-155 m.3 (k)
+            Request::SignRs256 {
+                realm,
+                typ,
+                payload,
+                at,
+            } => {
+                if at.abs_diff(now) > MAX_SKEW_MS {
+                    return Response::Error(String::from("signer-time"));
+                }
+                if !self.rings.contains_key(&realm) {
+                    return Response::Error(String::from(UNKNOWN_REALM));
+                }
+                let Some(key) = self.open_rsa_id(realm) else {
+                    return Response::Error(String::from("signer-outage"));
+                };
+                match key.sign_compact(&typ, &payload) {
+                    Ok(token) => Response::Signed {
+                        token,
+                        kid: *key.kid(),
+                    },
+                    Err(e) => Response::Error(String::from(e.code())),
+                }
+            }
             Request::Sign {
                 realm,
                 typ,
@@ -452,6 +483,26 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
         }
     }
 
+    /// The realm's `rsa-id` key when one was made, loaded from the vault after a restart.
+    fn rsa_id(&mut self, realm: Realm) -> Option<&access_crypto::rsa_id::RsaIdKey> {
+        if !self.rsa_ids.contains_key(&realm) {
+            let stored = self.vault.rsa_id(&realm).ok().flatten()?;
+            let key = self.factory.load_rsa_id(&stored).ok()?;
+            self.rsa_ids.insert(realm, key);
+        }
+        self.rsa_ids.get(&realm)
+    }
+
+    /// The realm's `rsa-id` key, made and stored before its first use (MD-6).
+    fn open_rsa_id(&mut self, realm: Realm) -> Option<&access_crypto::rsa_id::RsaIdKey> {
+        if self.rsa_id(realm).is_none() {
+            let (key, sealed) = self.factory.generate_rsa_id().ok()?;
+            self.vault.put_rsa_id(&realm, &sealed).ok()?;
+            self.rsa_ids.insert(realm, key);
+        }
+        self.rsa_ids.get(&realm)
+    }
+
     /// The realm's open Claim issuer key, loaded from the vault after a restart.
     fn issuer(&mut self, realm: Realm) -> Option<&IssuerKey> {
         if !self.issuers.contains_key(&realm) {
@@ -460,6 +511,19 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             self.issuers.insert(realm, key);
         }
         self.issuers.get(&realm)
+    }
+}
+
+/// The realm's JWKS with its `rsa-id` key appended after the JOSE keys, when it has one
+/// (OP-155 m.3 (k)).
+fn with_rsa(jwks: &str, rsa: Option<&str>) -> String {
+    let Some(rsa) = rsa else {
+        return String::from(jwks);
+    };
+    match jwks.strip_suffix("]}") {
+        Some(head) if head.ends_with('[') => format!("{head}{rsa}]}}"),
+        Some(head) => format!("{head},{rsa}]}}"),
+        None => String::from(jwks),
     }
 }
 
