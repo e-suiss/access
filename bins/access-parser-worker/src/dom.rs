@@ -13,6 +13,9 @@ use crate::parse::{MAX_DEPTH, MAX_ELEMENTS, MAX_XML};
 /// The XML namespace, bound to `xml` everywhere.
 pub(crate) const XML_NS: &str = "http://www.w3.org/XML/1998/namespace";
 
+/// Most namespace declarations in one document (§14.6 `max_declarations`).
+pub(crate) const MAX_DECLARATIONS: usize = 32;
+
 /// The attribute local names that identify an element for a same-document reference: SAML 2.0
 /// `ID`, XML Signature `Id`, SAML 1.1 `AssertionID`/`ResponseID`/`RequestID`, and `xml:id`.
 const ID_NAMES: [&str; 6] = ["ID", "Id", "id", "AssertionID", "ResponseID", "RequestID"];
@@ -199,6 +202,7 @@ struct Builder {
     scopes: Vec<Scope>,
     open: Vec<usize>,
     closed: bool,
+    declarations: usize,
 }
 
 impl Builder {
@@ -235,6 +239,10 @@ impl Builder {
             } else {
                 raw.push((String::from(name), value));
             }
+        }
+        self.declarations = self.declarations.saturating_add(decls.len());
+        if self.declarations > MAX_DECLARATIONS {
+            return Err("xml-declarations");
         }
         self.scopes.push(Scope {
             decls: decls.clone(),
@@ -347,6 +355,7 @@ pub(crate) fn read(input: &[u8]) -> Result<Doc, &'static str> {
         scopes: Vec::new(),
         open: Vec::new(),
         closed: false,
+        declarations: 0,
     };
     loop {
         match reader.read_event().map_err(|_| "xml-malformed")? {
@@ -453,6 +462,22 @@ mod tests {
             Err("xml-malformed")
         );
         assert_eq!(read(br#"<r a="1" a="2"/>"#), Err("xml-malformed"));
+    }
+
+    // §14.6, OP-155 m.3 (c)
+    #[test]
+    fn namespace_declarations_are_bounded() {
+        let decls = |n: usize| {
+            let mut doc = String::from("<r");
+            for i in 0..n {
+                let _ =
+                    std::fmt::Write::write_fmt(&mut doc, format_args!(" xmlns:p{i}=\"urn:{i}\""));
+            }
+            doc.push_str("/>");
+            doc
+        };
+        assert!(read(decls(32).as_bytes()).is_ok());
+        assert_eq!(read(decls(33).as_bytes()), Err("xml-declarations"));
     }
 
     // RUSTSEC-2024-0437, OP-155 m.3 (c)

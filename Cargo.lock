@@ -176,6 +176,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-gw-saml"
+version = "0.4.0"
+dependencies = [
+ "access-edge-core",
+ "access-identity-saml",
+ "access-internal-api",
+ "esuiss-sandbox",
+ "httparse",
+ "tokio",
+]
+
+[[package]]
 name = "access-http"
 version = "0.4.0"
 dependencies = [

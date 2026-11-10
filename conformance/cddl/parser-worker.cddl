@@ -56,7 +56,8 @@ parser-refusal = "op-refused" / "frame-malformed" / "deflate-malformed" /
   "xml-ratio" / "xml-multiple-roots" / "xml-unclosed" / "xml-content-outside-root" /
   "der-too-large" / "der-depth" / "der-malformed" /
   "tl-malformed" / "tl-too-large" /     ; P12
-  "xml-namespace" / "xml-duplicate-id" / "saml-duplicate-element" / "saml-mixed-content" /
+  "xml-namespace" / "xml-duplicate-id" / "xml-declarations" / "saml-duplicate-element" /
+  "saml-mixed-content" /
   "saml-soap" / "saml-message" / "saml-version" / "saml-issuer" / "saml-field" /
   "saml-acs-both" / "saml-name-id" / "cert-malformed" / "cert-key-unsupported" /
   "signature-alg" / "signature-no-key" / "signature-invalid" / "signature-malformed" /
