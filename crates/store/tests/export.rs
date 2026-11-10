@@ -170,7 +170,7 @@ async fn sinks_follow_decisions_and_cursors_only_move_forward() {
     );
     for i in 0..3 {
         tx.audit(&AuditEvent {
-            event_type: "login.succeeded",
+            event_type: "login.password.succeeded",
             actor: "a",
             target: &format!("t{i}"),
             correlation: "-",
