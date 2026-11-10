@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:event:proxy.registered:1",
+  "title": "A proxy became a PEP of the realm (OP-156 m.3 (l))",
+  "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:proxy.registered`. idp.proxy.register committed; every request through it is an AuthZEN evaluation. A notification, never an authority source (INV-24).",
+  "type": "object",
+  "required": [
+    "realm",
+    "proxy",
+    "engine",
+    "at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "realm": {
+      "$ref": "#/$defs/uuid"
+    },
+    "proxy": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "The proxy's name in the realm."
+    },
+    "engine": {
+      "type": "string",
+      "enum": [
+        "nginx",
+        "traefik",
+        "caddy",
+        "envoy",
+        "access-proxy"
+      ]
+    },
+    "at": {
+      "$ref": "#/$defs/ms"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix time, milliseconds."
+    }
+  }
+}

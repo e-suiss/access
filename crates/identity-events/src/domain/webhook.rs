@@ -304,6 +304,15 @@ mod tests {
         assert!(event_names(&[String::from("scim.deprovisioned")]).is_ok());
         // OP-155 m.3 (i)
         assert!(event_names(&[String::from("org.sso_enforced")]).is_err());
+        // OP-156 m.3 (l), (o), (q), (s)
+        for name in [
+            "hr.record_due",
+            "proxy.registered",
+            "ssh.certificate_issued",
+            "export.sink_failed",
+        ] {
+            assert!(event_names(&[String::from(name)]).is_err(), "{name}");
+        }
     }
 
     // EI-25

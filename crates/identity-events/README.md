@@ -152,6 +152,10 @@ profile is used by Relay, so one verifier accepts both products. Test vectors:
 | `scim.provisioned` | a SCIM client creates, changes or reactivates a user, group or device |
 | `scim.deprovisioned` | a SCIM client deletes or deactivates one; the account is kept as a tombstone |
 | `org.sso_enforced` | an organization starts signing in only through its own identity provider |
+| `hr.record_due` | a future-dated HR start or end reaches its date |
+| `proxy.registered` | a proxy becomes a policy enforcement point of the realm |
+| `ssh.certificate_issued` | the realm's SSH certificate authority issues a certificate |
+| `export.sink_failed` | an export sink stops accepting the audit copy |
 
 The tenant, organization and API client events of the catalogue (`tenant.created`,
 `organization.*`, `api_client.*`) and the authority events reach subscribers through streams.
@@ -163,3 +167,8 @@ but no producer yet; a webhook or stream that names them is refused (`invalid-we
 
 `scim.provisioned`, `scim.deprovisioned` and `org.sso_enforced` are catalogued and refused the
 same way until the SCIM server and SSO enforcement raise them.
+
+`hr.record_due`, `proxy.registered`, `ssh.certificate_issued` and `export.sink_failed` are
+catalogued and refused the same way until the HR job, proxy registration, the SSH certificate
+authority and the export sinks raise them. `preference.changed` may carry an `iys` member naming
+the commercial message channels a change touched, for realms that record consent with İYS.

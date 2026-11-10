@@ -16,8 +16,8 @@ use access_identity_account::domain::signal::{
     ChangeType, CredentialType, Initiator, RiskLevel, Signal, SignalKind,
 };
 use access_identity_events::domain::catalog::{
-    ClientChange, IdentityEvent, IdentityKind, InvitationFate, NAMES, PlatformProduct,
-    ScimResource, authority_ready, urn,
+    CertificateHolder, ClientChange, HrChange, IdentityEvent, IdentityKind, InvitationFate, NAMES,
+    PlatformProduct, ScimResource, authority_ready, urn,
 };
 use access_identity_events::domain::mapping::{
     Profile, counterpart, counterpart_body, forms, signal_uri,
@@ -146,6 +146,7 @@ const ACCOUNT: &str = "usr_0b5yq2mtzk6x4hd1e8fg3wa7rc";
 
 /// OP-151 m.3 (i): every identity event the account use cases queue and every one whose
 /// producer arrives later.
+#[expect(clippy::too_many_lines, reason = "one sample per identity event")]
 fn identity_events() -> Vec<IdentityEvent> {
     use access_identity_account::domain::events::{AccountEvent, CredentialChange, EventOrder};
     use access_identity_account::domain::status::AccountStatus;
@@ -213,6 +214,22 @@ fn identity_events() -> Vec<IdentityEvent> {
             ("acme-entra", InvitationFate::Cancel),
             5,
         ),
+        IdentityEvent::hr_record_due(
+            [43; 32],
+            &realm,
+            ("personio", ACCOUNT, HrChange::End),
+            5,
+            5,
+        ),
+        IdentityEvent::proxy_registered([44; 32], &realm, ("wiki", "caddy"), 5),
+        IdentityEvent::ssh_certificate_issued(
+            [45; 32],
+            &realm,
+            (&[4; 16], CertificateHolder::Agent, "prj_x", "prod-web"),
+            5,
+            5,
+        ),
+        IdentityEvent::export_sink_failed([46; 32], &realm, ("splunk", "http"), 4, 5),
     ];
     for (i, (from, to)) in [
         (AccountStatus::Locked, AccountStatus::Active),

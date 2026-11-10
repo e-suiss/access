@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:event:export.sink_failed:1",
+  "title": "An export sink stopped accepting the projection (OP-156 m.3 (s))",
+  "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:export.sink_failed`. The copy is behind; the record is unchanged and answers every audit question. A notification, never an authority source (INV-24).",
+  "type": "object",
+  "required": [
+    "realm",
+    "sink",
+    "adapter",
+    "since",
+    "at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "realm": {
+      "$ref": "#/$defs/uuid"
+    },
+    "sink": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "The export sink's name in the realm."
+    },
+    "adapter": {
+      "type": "string",
+      "enum": [
+        "ocsf_parquet",
+        "otlp",
+        "http",
+        "syslog_cef",
+        "syslog_leef",
+        "set",
+        "ssf"
+      ]
+    },
+    "since": {
+      "$ref": "#/$defs/ms"
+    },
+    "at": {
+      "$ref": "#/$defs/ms"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix time, milliseconds."
+    }
+  }
+}

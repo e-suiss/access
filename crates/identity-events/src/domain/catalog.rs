@@ -20,8 +20,9 @@ pub use access_identity_oauth::ports::oauth::TENANT_PREFIX;
 pub const OUTBOX_PREFIX: &str = "event.";
 
 /// Every event name, authority events first; the identity events of OP-151 m.3 (i) last, then
-/// the agent events of OP-154 and the enterprise events of OP-155 (appended).
-pub const NAMES: [&str; 33] = [
+/// the agent events of OP-154, the enterprise events of OP-155 and the integration events of
+/// OP-156 (appended).
+pub const NAMES: [&str; 37] = [
     "authority-revoked",
     "authority-narrowed",
     "authority-expired",
@@ -55,6 +56,10 @@ pub const NAMES: [&str; 33] = [
     "scim.provisioned",
     "scim.deprovisioned",
     "org.sso_enforced",
+    "hr.record_due",
+    "proxy.registered",
+    "ssh.certificate_issued",
+    "export.sink_failed",
 ];
 
 /// The Access semantic events that close CAEP's agent gap: an agent is an Instance, so these
@@ -77,8 +82,16 @@ pub fn urn(name: &str) -> String {
 /// the preference center (IDP-37), organizations and their memberships `idp.org.*` and
 /// invitation acceptance (OP-153 m.4), agent suspension and sponsor assignment the agent
 /// registry's `idp.agent.*` (OP-154 m.3 (e), SI-21), the SCIM events the SCIM server (OP-155 m.3
-/// (g)). `org.sso_enforced` waits for `idp.org.sso_enforce` (OP-155 m.3 (i)).
-pub const UNPRODUCED: [&str; 1] = ["org.sso_enforced"];
+/// (g)). `org.sso_enforced` waits for `idp.org.sso_enforce` (OP-155 m.3 (i)); the Stage 11 events
+/// wait for the HR job, `idp.proxy.register`, the SSH CA and the export sinks (OP-156 m.3 (l),
+/// (o), (q), (s)).
+pub const UNPRODUCED: [&str; 5] = [
+    "org.sso_enforced",
+    "hr.record_due",
+    "proxy.registered",
+    "ssh.certificate_issued",
+    "export.sink_failed",
+];
 
 /// Whether a webhook or stream may subscribe to `name`: a catalog event with a producer.
 #[must_use]
@@ -142,10 +155,18 @@ pub enum IdentityKind {
     ScimDeprovisioned,
     /// `org.sso_enforced`: an organization's SSO enforcement committed (OP-155 m.3 (i)).
     OrgSsoEnforced,
+    /// `hr.record_due`: a future-dated HR start or end reached its date (OP-156 m.3 (q)).
+    HrRecordDue,
+    /// `proxy.registered`: `idp.proxy.register` committed (OP-156 m.3 (l)).
+    ProxyRegistered,
+    /// `ssh.certificate_issued`: the realm SSH CA issued a certificate projection (OP-156 m.3 (o)).
+    SshCertificateIssued,
+    /// `export.sink_failed`: an export sink stopped accepting the projection (OP-156 m.3 (s)).
+    ExportSinkFailed,
 }
 
 impl IdentityKind {
-    const ALL: [Self; 18] = [
+    const ALL: [Self; 22] = [
         Self::TenantCreated,
         Self::OrganizationCreated,
         Self::OrganizationUpdated,
@@ -164,6 +185,10 @@ impl IdentityKind {
         Self::ScimProvisioned,
         Self::ScimDeprovisioned,
         Self::OrgSsoEnforced,
+        Self::HrRecordDue,
+        Self::ProxyRegistered,
+        Self::SshCertificateIssued,
+        Self::ExportSinkFailed,
     ];
 
     /// The event name.
@@ -189,6 +214,10 @@ impl IdentityKind {
             Self::ScimProvisioned => "scim.provisioned",
             Self::ScimDeprovisioned => "scim.deprovisioned",
             Self::OrgSsoEnforced => "org.sso_enforced",
+            Self::HrRecordDue => "hr.record_due",
+            Self::ProxyRegistered => "proxy.registered",
+            Self::SshCertificateIssued => "ssh.certificate_issued",
+            Self::ExportSinkFailed => "export.sink_failed",
         }
     }
 
@@ -215,6 +244,10 @@ impl IdentityKind {
             Self::ScimProvisioned => "event.scim.provisioned",
             Self::ScimDeprovisioned => "event.scim.deprovisioned",
             Self::OrgSsoEnforced => "event.org.sso_enforced",
+            Self::HrRecordDue => "event.hr.record_due",
+            Self::ProxyRegistered => "event.proxy.registered",
+            Self::SshCertificateIssued => "event.ssh.certificate_issued",
+            Self::ExportSinkFailed => "event.export.sink_failed",
         }
     }
 
@@ -278,6 +311,46 @@ impl InvitationFate {
         match self {
             Self::Cancel => "cancel",
             Self::RedirectToSso => "redirect_to_sso",
+        }
+    }
+}
+
+/// What a due HR record does (OP-156 m.3 (q)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HrChange {
+    /// The start date: the account is activated and a passkey setup invitation is sent.
+    Start,
+    /// The end date: the account is suspended and its sign-ins end.
+    End,
+}
+
+impl HrChange {
+    /// The wire name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Start => "start",
+            Self::End => "end",
+        }
+    }
+}
+
+/// Who holds an SSH certificate (OP-156 m.3 (o)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CertificateHolder {
+    /// A person.
+    Person,
+    /// An agent, whose certificate is narrower than its principal's.
+    Agent,
+}
+
+impl CertificateHolder {
+    /// The wire name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Person => "person",
+            Self::Agent => "agent",
         }
     }
 }
@@ -525,6 +598,98 @@ impl IdentityEvent {
                 "organization": uuid(organization),
                 "connection": connection,
                 "invitations": invitations.name(),
+                "at": at,
+            }),
+        }
+    }
+
+    /// `hr.record_due`: the HR source `source`'s record for `account` (its `usr_` id) reached its
+    /// `change` date `due_at` (OP-156 m.3 (q)).
+    #[must_use]
+    pub fn hr_record_due(
+        id: [u8; 32],
+        realm: &[u8; 16],
+        (source, account, change): (&str, &str, HrChange),
+        due_at: u64,
+        at: u64,
+    ) -> Self {
+        Self {
+            kind: IdentityKind::HrRecordDue,
+            id,
+            payload: json!({
+                "realm": uuid(realm),
+                "source": source,
+                "account": account,
+                "change": change.name(),
+                "due_at": due_at,
+                "at": at,
+            }),
+        }
+    }
+
+    /// `proxy.registered`: the proxy `proxy` with `engine` became a PEP (OP-156 m.3 (l)).
+    #[must_use]
+    pub fn proxy_registered(
+        id: [u8; 32],
+        realm: &[u8; 16],
+        (proxy, engine): (&str, &str),
+        at: u64,
+    ) -> Self {
+        Self {
+            kind: IdentityKind::ProxyRegistered,
+            id,
+            payload: json!({
+                "realm": uuid(realm),
+                "proxy": proxy,
+                "engine": engine,
+                "at": at,
+            }),
+        }
+    }
+
+    /// `ssh.certificate_issued`: the projection `key_id` for `party` on `host_group`, valid until
+    /// `valid_before` (Unix seconds); the principals and the key stay out (OP-156 m.3 (o)).
+    #[must_use]
+    pub fn ssh_certificate_issued(
+        id: [u8; 32],
+        realm: &[u8; 16],
+        (party, holder, key_id, host_group): (&[u8; 16], CertificateHolder, &str, &str),
+        valid_before: u64,
+        at: u64,
+    ) -> Self {
+        Self {
+            kind: IdentityKind::SshCertificateIssued,
+            id,
+            payload: json!({
+                "realm": uuid(realm),
+                "party": uuid(party),
+                "holder": holder.name(),
+                "key_id": key_id,
+                "host_group": host_group,
+                "valid_before": valid_before,
+                "at": at,
+            }),
+        }
+    }
+
+    /// `export.sink_failed`: the export sink `sink` (`adapter`) has refused the projection since
+    /// `since` (OP-156 m.3 (s)).
+    #[must_use]
+    pub fn export_sink_failed(
+        id: [u8; 32],
+        realm: &[u8; 16],
+        (sink, adapter): (&str, &str),
+        since: u64,
+        at: u64,
+    ) -> Self {
+        Self {
+            kind: IdentityKind::ExportSinkFailed,
+            id,
+            payload: json!({
+                "realm": uuid(realm),
+                "sink": sink,
+                "adapter": adapter,
+                "since": since,
                 "at": at,
             }),
         }

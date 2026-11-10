@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:event:ssh.certificate_issued:1",
+  "title": "The realm SSH CA issued a certificate (OP-156 m.3 (o))",
+  "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:ssh.certificate_issued`. A projection.issue; the principals and the public key are not carried. A notification, never an authority source (INV-24).",
+  "type": "object",
+  "required": [
+    "realm",
+    "party",
+    "holder",
+    "key_id",
+    "host_group",
+    "valid_before",
+    "at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "realm": {
+      "$ref": "#/$defs/uuid"
+    },
+    "party": {
+      "$ref": "#/$defs/uuid"
+    },
+    "holder": {
+      "type": "string",
+      "enum": [
+        "person",
+        "agent"
+      ]
+    },
+    "key_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "The projection id, the certificate's key id."
+    },
+    "host_group": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "The SSH server group."
+    },
+    "valid_before": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix time, seconds."
+    },
+    "at": {
+      "$ref": "#/$defs/ms"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix time, milliseconds."
+    }
+  }
+}

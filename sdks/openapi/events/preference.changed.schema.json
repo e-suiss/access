@@ -28,6 +28,45 @@
         "type": "string",
         "pattern": "^[a-z][a-z0-9_.-]{0,63}$"
       }
+    },
+    "iys": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "channels",
+        "recipient_type"
+      ],
+      "description": "Present when the realm sends İYS consent records (idp.realm.iys, OP-156 m.3 (c)): which commercial message channels the change touched; never the address.",
+      "properties": {
+        "channels": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "sms",
+              "email",
+              "call"
+            ]
+          }
+        },
+        "recipient_type": {
+          "type": "string",
+          "enum": [
+            "individual",
+            "merchant"
+          ]
+        },
+        "consent": {
+          "type": "string",
+          "enum": [
+            "approved",
+            "rejected"
+          ]
+        }
+      }
     }
   },
   "$defs": {

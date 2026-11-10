@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:event:hr.record_due:1",
+  "title": "A future-dated HR start or end reached its date (OP-156 m.3 (q))",
+  "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:hr.record_due`. At a start the account is activated and a passkey setup invitation goes out; at an end it is suspended and its sign-ins end. A notification, never an authority source (INV-24).",
+  "type": "object",
+  "required": [
+    "realm",
+    "source",
+    "account",
+    "change",
+    "due_at",
+    "at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "realm": {
+      "$ref": "#/$defs/uuid"
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "The HR source's name in the realm."
+    },
+    "account": {
+      "type": "string",
+      "pattern": "^usr_[0-9a-hjkmnp-tv-z]{26}$",
+      "description": "The account's opaque external id (OP-137)."
+    },
+    "change": {
+      "type": "string",
+      "enum": [
+        "start",
+        "end"
+      ]
+    },
+    "due_at": {
+      "$ref": "#/$defs/ms"
+    },
+    "at": {
+      "$ref": "#/$defs/ms"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix time, milliseconds."
+    }
+  }
+}
