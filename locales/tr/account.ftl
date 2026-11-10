@@ -188,3 +188,16 @@ merchants-agreement = Ödeme anlaşmasını gör
 merchants-agent_badge = Yapay zekâ ajanı · { $merchant } adına
 payment-one_time_title = Tek seferlik ödeme
 payment-one_time_confirm = { $merchant } işletmesine bir kez { $amount } öde. Bununla başka ödeme alınamaz.
+# Q18 (OP-156 m.3 (v))
+merchants-save_card = { $merchant } kartından ödeme alabilsin: sipariş başına en çok { $amount }, { $time } tarihine kadar, yalnız senin verdiğin siparişler için
+merchants-save_card_confirm = { $merchant } kartımdan ödeme alabilsin
+merchants-based_on = { $agreement } · { $merchant } işletmesine verdiğin yetkiye dayanır ({ $limit })
+merchants-cancel_separately = Burada ödeme almayı bitirmek ve Pay'deki ödeme anlaşmasını iptal etmek iki ayrı adımdır.
+merchants-scheme_consent = { $consent } Pay'de yönetilir · { $merchant } işletmesine verdiğin yetkiye bağlıdır
+merchants-not_explained = { $merchant } işletmesinin kendi içinde verdiği kararlar burada gösterilmez.
+period-transaction = sipariş
+period-day = gün
+period-month = ay
+payment-purpose = Amaç: { $purpose }
+payment-pay = Bir kez öde
+payment-not_one_time = Bu istek { $merchant } işletmesinin senden yeniden ödeme almasına izin verir. Burada tek seferlik ödeme olarak ödenemez.

@@ -176,3 +176,11 @@ offline-remaining = Bu kasa çevrimiçi olana kadar { $voids } iptal ve { $amoun
 work-badge = Work
 work-ends_with_commitment = Work taahhüdü { $commitment } ile biter
 work-gate_not_updated = Onay kaydedildi (Access); kapı henüz güncellenmedi (Work)
+# Q18 (OP-156 m.3 (v))
+source-sync_from_hr = İK'dan eşitleme ({ $issuer })
+limit-authority = Yetki sınırı (Access): { $limit }
+limit-financial = Mali sınır (Pay): { $limit }
+limit-held = Pay'in tuttuğu: { $amount }
+offline-since = { $time } saatinden beri çevrimdışı
+offline-until = Beyan ettiği çevrimdışı profile uyuyorsa { $time } saatine kadar çevrimdışı işlem yapabilir
+offline-ended = Çevrimdışı süre { $time } saatinde bitti. Bu kasanın devam etmek için çevrimiçi olması gerekir.

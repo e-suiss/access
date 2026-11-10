@@ -188,3 +188,16 @@ merchants-agreement = See the payment agreement
 merchants-agent_badge = AI agent · acting for { $merchant }
 payment-one_time_title = One-time payment
 payment-one_time_confirm = Pay { $amount } to { $merchant } once. Nothing more can be charged with this.
+# Q18 (OP-156 m.3 (v))
+merchants-save_card = Let { $merchant } charge your card: up to { $amount } per order, until { $time }, only for orders you place
+merchants-save_card_confirm = Let { $merchant } charge my card
+merchants-based_on = { $agreement } · based on your delegation to { $merchant } ({ $limit })
+merchants-cancel_separately = Stopping charges here and cancelling the payment agreement in Pay are two separate steps.
+merchants-scheme_consent = { $consent } is managed in Pay · linked to your delegation to { $merchant }
+merchants-not_explained = What { $merchant } decides inside its own business isn't shown here.
+period-transaction = order
+period-day = day
+period-month = month
+payment-purpose = For { $purpose }
+payment-pay = Pay once
+payment-not_one_time = This request would let { $merchant } charge you again. It can't be paid here as a one-time payment.

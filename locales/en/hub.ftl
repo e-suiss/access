@@ -176,3 +176,11 @@ offline-remaining = { $voids } voids and { $amount } left until this till must g
 work-badge = Work
 work-ends_with_commitment = Ends with Work commitment { $commitment }
 work-gate_not_updated = Approval recorded (Access); gate not updated yet (Work)
+# Q18 (OP-156 m.3 (v))
+source-sync_from_hr = Sync from HR ({ $issuer })
+limit-authority = Authority limit (Access): { $limit }
+limit-financial = Financial limit (Pay): { $limit }
+limit-held = { $amount } held by Pay
+offline-since = Offline since { $time }
+offline-until = Can act offline until { $time }, if it follows its declared offline profile
+offline-ended = The offline period ended at { $time }. This till must go online to continue.

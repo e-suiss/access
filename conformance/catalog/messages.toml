@@ -4168,3 +4168,138 @@ surface = "hub"
 class = "status"
 owner = "access"
 protected = false
+
+# Q18 (OP-156 m.3 (v))
+
+[[message]]
+key = "source-sync_from_hr"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "limit-authority"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "limit-financial"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "limit-held"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "offline-since"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "offline-until"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "offline-ended"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "merchants-save_card"
+surface = "account"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "merchants-save_card_confirm"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "merchants-based_on"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "merchants-cancel_separately"
+surface = "account"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "merchants-scheme_consent"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "merchants-not_explained"
+surface = "account"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "period-transaction"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "period-day"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "period-month"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "payment-purpose"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "payment-pay"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "payment-not_one_time"
+surface = "account"
+class = "notice"
+owner = "identity_plane"
+protected = false
