@@ -52,6 +52,17 @@ jobs:
       - name: Repository rules, rule coverage included (OP-62, SA-59)
         run: just rules
 
+  # OP-155 m.3 (q): the OIDF profile plans, the differential tests and the interop lab are a
+  # breaking gate of every release; an unrecorded expected list fails it
+  conformance:
+    name: conformance
+    needs: gate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/conformance.yml
+    with:
+      release: true
+
   build:
     name: build (${{ matrix.arch }})
     needs: gate
@@ -205,7 +216,7 @@ jobs:
 
   publish:
     name: publish
-    needs: [build, test]
+    needs: [build, test, conformance]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -343,7 +354,7 @@ jobs:
 
   image-publish:
     name: image-publish
-    needs: [image, test]
+    needs: [image, test, conformance]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

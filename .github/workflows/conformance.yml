@@ -1,0 +1,215 @@
+# OP-146 I11, §14.8 SA-T2, B9, T42, IDP-40, OP-155 m.3 (q): the OIDF profile plans, the
+# differential tests and the interop lab, called every night and on every release tag. A plan or
+# a counterpart list is a breaking gate once its expected list is recorded; a release run refuses
+# an unrecorded one. Counterpart containers are pinned by digest in scripts/ci/interop/images.sh
+# and go into no image.
+name: Conformance
+
+on:
+  workflow_call:
+    inputs:
+      release:
+        description: A release tag run; an unrecorded expected list fails it.
+        type: boolean
+        default: false
+
+permissions: {}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  oidf-conformance:
+    name: oidf-conformance (${{ matrix.group }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [core, fapi2, ciba, dynamic, logout, federation]
+    services:
+      postgres:
+        image: postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336 # 18.6-trixie
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+          POSTGRES_INITDB_ARGS: --auth=scram-sha-256 --data-checksums
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://postgres:ci-only-not-a-secret@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: test
+      - name: The target's host name on the runner
+        run: echo "127.0.0.1 acme.id.test" | sudo tee -a /etc/hosts
+      - name: Start the conformance suite
+        run: docker compose --file .github/oidf/compose.yml up --detach --quiet-pull
+      - name: Build the conformance target
+        run: cargo build --locked -p access-http --example oidf_target
+      - name: Start the conformance target
+        run: |
+          mkdir -p "$RUNNER_TEMP/oidf"
+          OIDF_RUNTIME="$RUNNER_TEMP/oidf/runtime.json" OIDF_CERT_OUT="$RUNNER_TEMP/oidf/target.pem" \
+            nohup target/debug/examples/oidf_target > "$RUNNER_TEMP/oidf/target.log" 2>&1 &
+          for _ in $(seq 1 90); do
+            if [[ -s "$RUNNER_TEMP/oidf/target.pem" ]] && curl -fs --cacert "$RUNNER_TEMP/oidf/target.pem" \
+              https://acme.id.test:9443/.well-known/openid-configuration > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/oidf/target.log"
+          exit 1
+      - name: Plans of the group
+        env:
+          GROUP: ${{ matrix.group }}
+          RELEASE: ${{ inputs.release }}
+        run: |
+          flags=(--group "$GROUP" --runtime "$RUNNER_TEMP/oidf/runtime.json" --target-ca "$RUNNER_TEMP/oidf/target.pem")
+          if [[ "$RELEASE" == true ]]; then
+            flags+=(--release)
+          fi
+          python3 -I .github/scripts/oidf-conformance.py \
+            https://localhost.emobix.co.uk:8443 conformance/oidf "$RUNNER_TEMP/oidf" "${flags[@]}"
+      - name: Suite logs
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/oidf/runtime.json"
+          docker compose --file .github/oidf/compose.yml logs --no-color > "$RUNNER_TEMP/oidf/suite.log" 2>&1 || true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: oidf-conformance-${{ matrix.group }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/oidf
+          retention-days: 90
+          if-no-files-found: ignore
+
+  # T42, Ek B 5064, 5100: the same inputs to Access and to mature counterparts; only pinned
+  # open-source references are oracles, Keycloak never (§14.8)
+  differential:
+    name: differential
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336 # 18.6-trixie
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+          POSTGRES_INITDB_ARGS: --auth=scram-sha-256 --data-checksums
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://postgres:ci-only-not-a-secret@localhost:5432/postgres
+      INTEROP_RELEASE: ${{ inputs.release && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: test
+          tools: nextest
+      - name: SoftHSM
+        run: sudo apt-get install --yes --no-install-recommends softhsm2
+      - name: The target's host name on the runner
+        run: echo "127.0.0.1 acme.id.test" | sudo tee -a /etc/hosts
+      - name: Build and start the conformance target
+        run: |
+          cargo build --locked -p access-http --example oidf_target
+          mkdir -p "$RUNNER_TEMP/oidf"
+          OIDF_RUNTIME="$RUNNER_TEMP/oidf/runtime.json" OIDF_CERT_OUT="$RUNNER_TEMP/oidf/target.pem" \
+            nohup target/debug/examples/oidf_target > "$RUNNER_TEMP/oidf/target.log" 2>&1 &
+          for _ in $(seq 1 90); do
+            if [[ -s "$RUNNER_TEMP/oidf/target.pem" ]] && curl -fs --cacert "$RUNNER_TEMP/oidf/target.pem" \
+              https://acme.id.test:9443/.well-known/openid-configuration > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/oidf/target.log"
+          exit 1
+      - name: openid-client and oidc-provider
+        run: scripts/ci/interop/oidc-node.sh "$RUNNER_TEMP/oidf/target.pem"
+      - name: xmlsec1, SimpleSAMLphp, Shibboleth SP and scim2-tester against the real server
+        run: |
+          SOFTHSM2_CONF="$(scripts/softhsm-local.sh)"
+          export SOFTHSM2_CONF
+          export ACCESS_TEST_XMLSEC1="$PWD/scripts/ci/interop/saml-xmlsec1.sh"
+          export ACCESS_TEST_SIMPLESAMLPHP="$PWD/scripts/ci/interop/saml-simplesamlphp.sh"
+          export ACCESS_TEST_SHIBBOLETH_SP="$PWD/scripts/ci/interop/saml-shibboleth.sh"
+          export ACCESS_TEST_SCIM2_TESTER="$PWD/scripts/ci/interop/scim2-tester.sh"
+          cargo nextest run --locked -p access-server --run-ignored only --no-fail-fast \
+            -E 'test(xmlsec1_verifies) | test(simplesamlphp_accepts) | test(shibboleth_sp_accepts) | test(scim2_tester)'
+      - name: Target log
+        if: failure()
+        run: cat "$RUNNER_TEMP/oidf/target.log"
+
+  # IDP-40, Ek B 4934, 4936, 5024: recorded vendor requests through the real parsers and servers,
+  # the matrix and its public table, and the vendor-live runs whose CI secret exists
+  interop-lab:
+    name: interop-lab
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336 # 18.6-trixie
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+          POSTGRES_INITDB_ARGS: --auth=scram-sha-256 --data-checksums
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://postgres:ci-only-not-a-secret@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: test
+          tools: nextest
+      - name: SoftHSM
+        run: sudo apt-get install --yes --no-install-recommends softhsm2
+      - name: The lab matrix, its table and every named test
+        run: |
+          cargo xtask check interop-lab
+          cargo xtask check interop-profile-tests
+      - name: Recorded vendor requests and service provider profiles
+        run: |
+          SOFTHSM2_CONF="$(scripts/softhsm-local.sh)"
+          export SOFTHSM2_CONF
+          cargo nextest run --locked --no-fail-fast \
+            -p access-identity-scim -p access-identity-saml -p access-parser-worker -p access-server \
+            -E 'binary(scim_profiles) | test(/profile::tests::/) | test(service_provider_requests) | test(saml_idp_suite) | test(okta_requests_pass_through)'
+      - name: Vendor-live runs whose CI secret exists
+        run: scripts/ci/interop/vendor-live.sh
