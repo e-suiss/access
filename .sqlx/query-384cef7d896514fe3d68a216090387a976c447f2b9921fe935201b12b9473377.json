@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT invitation_id AS \"id!\" FROM access.org_invitations\n                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3\n                  AND accepted_at IS NULL AND revoked_at IS NULL\n                  AND expires_at > clock_timestamp()\n                ORDER BY invitation_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_invitations",
+            "name": "invitation_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "384cef7d896514fe3d68a216090387a976c447f2b9921fe935201b12b9473377"
+}

@@ -1,0 +1,87 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT link_id, org_id, created_exercise, browser_hash,\n                      expires_at <= clock_timestamp() AS \"expired!\",\n                      finished_at IS NOT NULL AS \"finished!\",\n                      (extract(epoch FROM expires_at) * 1000)::bigint AS \"expires_ms!\"\n                 FROM access.org_setup_links\n                WHERE tenant_id = $1 AND realm_id = $2 AND token_hash = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "link_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_setup_links",
+            "name": "link_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "org_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_setup_links",
+            "name": "org_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "created_exercise",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.org_setup_links",
+            "name": "created_exercise"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "browser_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.org_setup_links",
+            "name": "browser_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "expired!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "finished!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "expires_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "d4dc5daf69eb86261ac225fe3200cac46dd7734539b5696880973a501410cc10"
+}

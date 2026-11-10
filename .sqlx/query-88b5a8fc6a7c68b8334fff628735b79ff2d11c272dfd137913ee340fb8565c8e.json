@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT draft_id, protocol, issuer, client_id, drafted_by,\n                      withdrawn_at IS NOT NULL AS \"withdrawn!\"\n                 FROM access.org_sso_drafts\n                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3\n                ORDER BY draft_id",
+  "query": "SELECT draft_id, protocol, issuer, client_id, saml_entity_id, saml_metadata_url,\n                      provider, drafted_by, setup_link, withdrawn_at IS NOT NULL AS \"withdrawn!\"\n                 FROM access.org_sso_drafts\n                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3\n                ORDER BY draft_id",
   "describe": {
     "columns": [
       {
@@ -49,6 +49,39 @@
       },
       {
         "ordinal": 4,
+        "name": "saml_entity_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.org_sso_drafts",
+            "name": "saml_entity_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "saml_metadata_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.org_sso_drafts",
+            "name": "saml_metadata_url"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "provider",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.org_sso_drafts",
+            "name": "provider"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
         "name": "drafted_by",
         "type_info": "Bytea",
         "origin": {
@@ -59,7 +92,18 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 8,
+        "name": "setup_link",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_sso_drafts",
+            "name": "setup_link"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
         "name": "withdrawn!",
         "type_info": "Bool",
         "origin": "Expression"
@@ -75,11 +119,15 @@
     "nullable": [
       false,
       false,
+      true,
+      true,
+      true,
+      true,
+      true,
       false,
-      false,
-      false,
+      true,
       null
     ]
   },
-  "hash": "3b1a5bb7d33a693dd88e80fcb226e82f4c2ced4ad427a2fc84943d341a80c66a"
+  "hash": "88b5a8fc6a7c68b8334fff628735b79ff2d11c272dfd137913ee340fb8565c8e"
 }

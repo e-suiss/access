@@ -1,0 +1,84 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.subject_id, m.owner,\n                      (SELECT count(*) FROM access.identity_credentials c\n                        WHERE c.tenant_id = m.tenant_id AND c.realm_id = m.realm_id\n                          AND c.subject_id = m.subject_id AND c.status = 'active') AS \"local!\",\n                      EXISTS (SELECT 1 FROM access.identity_credentials c\n                        WHERE c.tenant_id = m.tenant_id AND c.realm_id = m.realm_id\n                          AND c.subject_id = m.subject_id AND c.status = 'active'\n                          AND c.kind = 'password') AS \"password!\",\n                      (SELECT count(*) FROM access.ldap_credentials l\n                        WHERE l.tenant_id = m.tenant_id AND l.realm_id = m.realm_id\n                          AND l.subject_id = m.subject_id AND l.status = 'active') AS \"api_keys!\",\n                      (SELECT count(*) FROM access.login_sessions s\n                        WHERE s.tenant_id = m.tenant_id AND s.realm_id = m.realm_id\n                          AND s.subject_id = m.subject_id AND s.ended_ms IS NULL) AS \"sessions!\",\n                      (SELECT count(*) FROM access.oauth_grants g\n                        WHERE g.tenant_id = m.tenant_id AND g.realm_id = m.realm_id\n                          AND g.subject_id = m.subject_id AND g.revoked_ms IS NULL\n                          AND g.expires_ms > (extract(epoch FROM clock_timestamp()) * 1000)::bigint)\n                        AS \"refresh!\",\n                      (SELECT count(*) FROM access.identity_federated f\n                        WHERE f.tenant_id = m.tenant_id AND f.realm_id = m.realm_id\n                          AND f.subject_id = m.subject_id AND f.ended_ms IS NULL) AS \"linked!\"\n                 FROM access.org_memberships m\n                WHERE m.tenant_id = $1 AND m.realm_id = $2 AND m.org_id = $3\n                  AND m.ended_at IS NULL\n                ORDER BY m.joined_at, m.membership_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "owner",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "owner"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "local!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "password!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "api_keys!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "sessions!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "refresh!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "linked!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "46a47ab629878054c9732e83ae3ce939264feff347a0bf04e58f919e2920b373"
+}

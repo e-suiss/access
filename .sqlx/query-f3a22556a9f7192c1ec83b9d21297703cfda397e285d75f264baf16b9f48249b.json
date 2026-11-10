@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.org_scim_sources\n               (tenant_id, realm_id, org_id, client_name, created_exercise)\n             VALUES ($1, $2, $3, $4, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f3a22556a9f7192c1ec83b9d21297703cfda397e285d75f264baf16b9f48249b"
+}

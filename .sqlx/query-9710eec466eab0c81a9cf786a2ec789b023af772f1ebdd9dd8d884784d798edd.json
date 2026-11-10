@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.org_setup_links SET browser_hash = $4, opened_at = clock_timestamp()\n              WHERE tenant_id = $1 AND realm_id = $2 AND link_id = $3\n                AND opened_at IS NULL AND expires_at > clock_timestamp()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9710eec466eab0c81a9cf786a2ec789b023af772f1ebdd9dd8d884784d798edd"
+}

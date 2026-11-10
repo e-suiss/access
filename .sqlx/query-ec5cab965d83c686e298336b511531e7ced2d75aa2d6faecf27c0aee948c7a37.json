@@ -1,0 +1,39 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.org_sso_drafts\n                 (tenant_id, realm_id, org_id, protocol, issuer, client_id, saml_entity_id,\n                  saml_metadata_url, provider, drafted_by, created_exercise, setup_link)\n               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING draft_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "draft_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_sso_drafts",
+            "name": "draft_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ec5cab965d83c686e298336b511531e7ced2d75aa2d6faecf27c0aee948c7a37"
+}

@@ -48,6 +48,7 @@ pub mod offline;
 pub mod oidf;
 pub mod operational;
 pub mod org_authority;
+pub mod org_sso;
 pub mod orgs;
 pub mod passkeys;
 pub mod platform;

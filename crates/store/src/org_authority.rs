@@ -170,14 +170,22 @@ pub struct NewTransfer<'a> {
 pub struct SsoDraft {
     /// Its id.
     pub id: [u8; 16],
-    /// The protocol.
+    /// The protocol: `oidc` or `saml`.
     pub protocol: String,
-    /// The upstream issuer.
-    pub issuer: String,
-    /// The client id at the upstream.
-    pub client_id: String,
-    /// Who drafted it.
+    /// The upstream OIDC issuer.
+    pub issuer: Option<String>,
+    /// The client id at the upstream OIDC issuer.
+    pub client_id: Option<String>,
+    /// The SAML identity provider's entity ID.
+    pub entity_id: Option<String>,
+    /// The SAML identity provider's metadata URL.
+    pub metadata_url: Option<String>,
+    /// The wizard it was drafted with.
+    pub provider: Option<String>,
+    /// Who drafted it; zero through a setup link.
     pub drafted_by: [u8; 16],
+    /// The setup link it was drafted through.
+    pub setup_link: Option<[u8; 16]>,
     /// Withdrawn.
     pub withdrawn: bool,
 }
@@ -1019,8 +1027,8 @@ impl TenantTx {
     pub async fn sso_drafts(&mut self, org: [u8; 16]) -> Result<Vec<SsoDraft>, StoreError> {
         let (tenant, realm) = self.org_scope()?;
         let rows = sqlx::query!(
-            r#"SELECT draft_id, protocol, issuer, client_id, drafted_by,
-                      withdrawn_at IS NOT NULL AS "withdrawn!"
+            r#"SELECT draft_id, protocol, issuer, client_id, saml_entity_id, saml_metadata_url,
+                      provider, drafted_by, setup_link, withdrawn_at IS NOT NULL AS "withdrawn!"
                  FROM access.org_sso_drafts
                 WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3
                 ORDER BY draft_id"#,
@@ -1037,7 +1045,11 @@ impl TenantTx {
                     protocol: r.protocol,
                     issuer: r.issuer,
                     client_id: r.client_id,
+                    entity_id: r.saml_entity_id,
+                    metadata_url: r.saml_metadata_url,
+                    provider: r.provider,
                     drafted_by: id16(r.drafted_by)?,
+                    setup_link: r.setup_link.map(|u| *u.as_bytes()),
                     withdrawn: r.withdrawn,
                 })
             })
