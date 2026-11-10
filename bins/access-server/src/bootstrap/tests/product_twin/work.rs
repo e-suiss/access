@@ -52,7 +52,10 @@ const ROUTES: [&str; 4] = [
 fn commitment_value(commitment: &Digest, active: bool) -> (Vec<u8>, Vec<u8>) {
     let body = Value::Map(vec![
         (Value::text("active"), Value::Bool(active)),
-        (Value::text("commitment"), Value::Bytes(commitment.0.to_vec())),
+        (
+            Value::text("commitment"),
+            Value::Bytes(commitment.0.to_vec()),
+        ),
     ]);
     let tagged = dcbor::encode(
         &Value::Array(vec![Value::text("commitment_active"), body.clone()]),

@@ -36,7 +36,10 @@ pub const BINDING: &str = "commitment";
 pub fn body(commitment: &Digest, active: bool) -> Value {
     Value::Map(vec![
         (Value::text("active"), Value::Bool(active)),
-        (Value::text("commitment"), Value::Bytes(commitment.0.to_vec())),
+        (
+            Value::text("commitment"),
+            Value::Bytes(commitment.0.to_vec()),
+        ),
     ])
 }
 
