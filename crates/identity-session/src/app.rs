@@ -162,6 +162,15 @@ pub const HOOK_REFUSED: Problem = Problem {
     retry_after_s: None,
 };
 
+/// The subject's organization enforces SSO: only its identity provider signs the subject in
+/// (TN-94, OP-155 m.3 (i)).
+pub const SSO_REQUIRED: Problem = Problem {
+    status: 403,
+    code: "sso-required",
+    title: "Your organization signs you in with its identity provider",
+    retry_after_s: None,
+};
+
 /// A code was not accepted (after authentication, X34).
 pub const CODE_NOT_ACCEPTED: Problem = Problem {
     status: 401,

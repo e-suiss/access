@@ -1319,6 +1319,16 @@ where
         let assurance =
             serde_json::to_vec(&vector(&l.state.factors)).map_err(|_| SessionError::Corrupt)?;
         let target = self.external(subject)?;
+        // TN-94, OP-155 m.3 (i)
+        if matches!(l.state.purpose, Purpose::Login)
+            && !sso_signed(&l.state.factors)
+            && tx.sso_enforced(subject).await?
+        {
+            save(&mut tx, &l, "abandoned", Resume::Clear).await?;
+            audit(&mut tx, "login.sso_required", &target, &target, correlation).await?;
+            tx.commit().await?;
+            return Ok(refuse(super::SSO_REQUIRED));
+        }
         // TN-135, OP-151 m.3 (j)
         if self
             .refused_by_hook(&mut tx, &l, &result, &target, correlation)
@@ -1490,4 +1500,12 @@ where
                 .unwrap_or_default(),
         }
     }
+}
+
+/// Whether the sign-in's first factor came from an upstream identity provider: the only way an
+/// SSO-enforced organization's member signs in (TN-94).
+fn sso_signed(factors: &[Factor]) -> bool {
+    factors
+        .first()
+        .is_some_and(|f| f.method == MethodClass::Federated)
 }

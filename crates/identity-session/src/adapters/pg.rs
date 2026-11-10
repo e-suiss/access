@@ -186,6 +186,10 @@ impl SessionTx for PgTx {
         crate::app::recovery::cancel(self, subject, at_ms).await
     }
 
+    async fn sso_enforced(&mut self, subject: [u8; 16]) -> Result<bool, SessionError> {
+        Ok(!self.0.sso_enforced_orgs_of(subject).await?.is_empty())
+    }
+
     async fn sign_in_methods(
         &mut self,
         subject: [u8; 16],

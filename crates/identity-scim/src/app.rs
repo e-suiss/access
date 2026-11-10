@@ -537,7 +537,24 @@ impl<V: Vaults, C: Clock> Scim<V, C> {
         // TN-75, TN-50, Ek B 4860
         status_moved(tx, &self.naming(c, vault), subject, (from, to), &who)
             .await
-            .map_err(account)
+            .map_err(account)?;
+        // TN-95, Ek B 4873
+        if !active {
+            let orgs: Vec<[u8; 16]> =
+                tx.0.scim_source_org(&c.name)
+                    .await
+                    .map_err(unavailable)?
+                    .into_iter()
+                    .collect();
+            let invitees =
+                tx.0.identifier_indexes(subject)
+                    .await
+                    .map_err(unavailable)?;
+            tx.0.revoke_invitations_to(&orgs, &invitees)
+                .await
+                .map_err(unavailable)?;
+        }
+        Ok(())
     }
 
     /// `POST /{Users,Groups,Devices}`.

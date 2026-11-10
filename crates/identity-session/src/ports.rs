@@ -181,6 +181,12 @@ pub trait SessionTx: AccountTx + RiskTx {
         subject: [u8; 16],
         at_ms: u64,
     ) -> impl Future<Output = Result<u64, SessionError>> + Send;
+    /// Whether the subject is an active member of a live organization whose SSO is enforced
+    /// (TN-94, OP-155 m.3 (i)).
+    fn sso_enforced(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
     /// N5: the subject's active sign-in methods (S11).
     fn sign_in_methods(
         &mut self,

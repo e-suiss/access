@@ -224,6 +224,28 @@ pub async fn status_moved<T: AccountTx>(
     audit(tx, &event, who, &realm.external(subject)?).await
 }
 
+/// Ends `subject`'s identity sessions and refresh families at a new `session_epoch` because its
+/// organization enforced SSO (TN-94, OP-155 m.3 (i)): the CAEP `session-revoked`, the
+/// `session.revoked` event and the audit row go in the same transaction. Returns the new epoch,
+/// or `None` for an unknown subject.
+///
+/// # Errors
+/// [`AccountError`].
+pub async fn end_for_sso<T: AccountTx>(
+    tx: &mut T,
+    realm: &impl Naming,
+    subject: [u8; 16],
+    who: &Actor<'_>,
+) -> Result<Option<i64>, AccountError> {
+    let Some(rev) = tx.end_sessions(subject).await? else {
+        return Ok(None);
+    };
+    ended_signals(tx, subject, false).await?;
+    events::sessions_ended(tx, realm, subject, rev).await?;
+    audit(tx, "session.ended_by_sso", who, &realm.external(subject)?).await?;
+    Ok(Some(rev))
+}
+
 /// What deactivation did.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Deactivated {
