@@ -10,6 +10,7 @@ pub mod export;
 pub mod external;
 pub mod first_contact;
 pub mod hasher;
+pub mod hr;
 pub mod import;
 pub mod ldap;
 pub mod local;
