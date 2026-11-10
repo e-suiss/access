@@ -248,3 +248,18 @@ mod twin {
         assert_eq!(heard, ([7; 32], Cursor { pos: 9, idx: 2 }));
     }
 }
+
+// OP-156 m.3 (j)
+#[test]
+fn the_payload_is_the_contract_vector() {
+    let r = Ring {
+        domain: [0x0a; 32],
+        at: Cursor { pos: 1042, idx: 3 },
+        id: [0; 32],
+    };
+    let hex = hex(&r.payload());
+    assert_eq!(
+        hex,
+        "a3636964780363706f7319041266646f6d61696e58200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a"
+    );
+}

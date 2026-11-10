@@ -194,17 +194,11 @@ pub enum Report {
 /// Search kinds declared and not served yet, each owned by its lane: `discovery` (Stage 9 L3,
 /// auditor-only and advisory, OP-154 m.3 (z)), `federation-chain` (Stage 10 P6, each OIDF
 /// issuer's chain state and lapse, OP-155 m.3 (j)) and `scim-sync` (Stage 10 P3, inbound and
-/// outbound SCIM provisioning results, OP-155 m.3 (g)), `eligible-set` (Stage 11 Q16, the
-/// holders of `approve:<class>`, OP-156 m.3 (t)) and `resource-incarnation` (Stage 11 Q3, the
-/// highest incarnation seen per resource, OP-156 m.3 (k)). A search of one answers
+/// outbound SCIM provisioning results, OP-155 m.3 (g)) and `eligible-set` (Stage 11 Q16, the
+/// holders of `approve:<class>`, OP-156 m.3 (t)). A search of one answers
 /// `501 not-yet-served` (OP-154 m.4, OP-155 m.4, OP-156 m.4).
-pub const RESERVED_KINDS: [&str; 5] = [
-    "discovery",
-    "federation-chain",
-    "scim-sync",
-    "eligible-set",
-    "resource-incarnation",
-];
+pub const RESERVED_KINDS: [&str; 4] =
+    ["discovery", "federation-chain", "scim-sync", "eligible-set"];
 
 impl Query {
     /// The path segment of the search intent's resource.

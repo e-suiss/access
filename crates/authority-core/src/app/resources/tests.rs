@@ -90,3 +90,37 @@ fn a_create_must_go_above_every_incarnation_seen() {
     assert!(!reuses(&at(2, Event::Reincarnate), Some(1)));
     assert!(!reuses(&at(1, Event::Delete), Some(1)));
 }
+
+// OP-156 m.3 (k)
+#[test]
+fn the_contract_vectors_read_as_they_say() {
+    let v: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../../conformance/cddl/examples/product-seam.json"
+    ))
+    .unwrap();
+    let mut seen = 0;
+    for case in v["cases"].as_array().unwrap() {
+        let edn = case["edn"].as_str().unwrap();
+        if !edn.starts_with("[\"resource_lifecycle\"") {
+            continue;
+        }
+        seen += 1;
+        let valid = case["valid"].as_bool().unwrap();
+        let Some(hex) = case["cbor"].as_str() else {
+            assert!(!valid);
+            let (s, b) = claim(&body("ride", &[], 1, "create"));
+            assert_eq!(read(&s, Some(&b)), Err(MALFORMED));
+            continue;
+        };
+        let bytes: Vec<u8> = (0..hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+            .collect();
+        let Value::Array(pair) = dcbor::decode(&bytes, Limits::CEILING).unwrap() else {
+            panic!()
+        };
+        let (s, b) = claim(&pair[1]);
+        assert_eq!(read(&s, Some(&b)).is_ok(), valid, "{edn}");
+    }
+    assert_eq!(seen, 2);
+}

@@ -74,8 +74,12 @@ pub(crate) fn client(section: &config::Doorbell) -> Result<client::Config, Strin
     })
 }
 
-fn down(e: &DoorbellError) {
-    tracing::warn!(error = %e, "doorbell down; consumers keep polling (OP-23)");
+fn publish_failed(e: &DoorbellError) {
+    tracing::warn!(event = "doorbell.publish.failed", error = %e, "doorbell publish failed; consumers keep polling (OP-23)");
+}
+
+fn unavailable(e: &DoorbellError) {
+    tracing::warn!(event = "doorbell.unavailable", error = %e, "doorbell unavailable; consumers keep polling (OP-23)");
 }
 
 impl Doorbell {
@@ -86,7 +90,7 @@ impl Doorbell {
         let wake = Arc::new(Notify::new());
         let publishing = tokio::spawn(client::publish(cfg.clone(), rings, stopped.clone(), |r| {
             if let Report::Down(e) = r {
-                down(&e);
+                publish_failed(&e);
             }
         }));
         let woken = wake.clone();
@@ -94,7 +98,7 @@ impl Doorbell {
             cfg.clone(),
             stopped,
             move |_, _| woken.notify_one(),
-            |e| down(&e),
+            |e| unavailable(&e),
         ));
         Self {
             bell: Arc::new(queue),
