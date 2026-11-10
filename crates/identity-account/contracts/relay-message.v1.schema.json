@@ -1536,7 +1536,8 @@
           "type": "string",
           "enum": [
             "created",
-            "revoked"
+            "revoked",
+            "changed"
           ]
         },
         "application": {

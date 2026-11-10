@@ -380,10 +380,12 @@ pub enum AppPasswordChange {
     Created,
     /// One was revoked.
     Revoked,
+    /// One was replaced over LDAP (RFC 3062).
+    Changed,
 }
 
 impl AppPasswordChange {
-    const ALL: [Self; 2] = [Self::Created, Self::Revoked];
+    const ALL: [Self; 3] = [Self::Created, Self::Revoked, Self::Changed];
 
     /// Wire name.
     #[must_use]
@@ -391,6 +393,7 @@ impl AppPasswordChange {
         match self {
             Self::Created => "created",
             Self::Revoked => "revoked",
+            Self::Changed => "changed",
         }
     }
 

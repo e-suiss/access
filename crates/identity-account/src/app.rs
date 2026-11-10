@@ -9,6 +9,7 @@ pub mod export;
 pub mod external;
 pub mod hasher;
 pub mod import;
+pub mod ldap;
 pub mod local;
 pub mod login;
 pub mod privacy;
