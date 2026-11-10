@@ -9,8 +9,8 @@
 ARG RUST_IMAGE=rust@sha256:24e632c09342c20abf8312cf4f61430a911c01ed3a5e4c02b87292b1c39c5273
 # envoyproxy/envoy:distroless-v1.40.2
 ARG ENVOY_IMAGE=docker.io/envoyproxy/envoy@sha256:09ca6f2140a61ad8df11779a4a30d52b48433d444466328494f9188c9c35eded
-# caddy:2.11.9-alpine
-ARG CADDY_IMAGE=docker.io/library/caddy@sha256:0bbb055bda6793c999bde78b1b5ce3e89f829fb031af2cf50056ea1246559fee
+# caddy:2.11.7-alpine
+ARG CADDY_IMAGE=docker.io/library/caddy@sha256:e70b164da81ef698b3ad19af799ea6086ce6d9e48ed4079eb9fe26f6fbf14ee5
 
 FROM ${RUST_IMAGE} AS builder
 WORKDIR /src
@@ -37,6 +37,6 @@ COPY --from=builder /src/target/x86_64-unknown-linux-musl/release/access-proxy /
 LABEL org.opencontainers.image.title="access-proxy-caddy" \
       org.opencontainers.image.source="https://github.com/e-suiss/access" \
       org.opencontainers.image.licenses="Apache-2.0" \
-      org.opencontainers.image.base.name="docker.io/library/caddy:2.11.9-alpine"
+      org.opencontainers.image.base.name="docker.io/library/caddy:2.11.7-alpine"
 EXPOSE 8443
 ENTRYPOINT ["/usr/local/bin/access-proxy", "run", "--engine", "caddy", "--dir", "/config"]
