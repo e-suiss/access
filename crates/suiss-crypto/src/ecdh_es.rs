@@ -210,7 +210,7 @@ impl EcdhKey {
         let cek = self.cek(recipient, enc, &[], &[])?;
         let key =
             LessSafeKey::new(UnboundKey::new(enc.aead(), &cek).map_err(|_| EcdhEsError::Key)?);
-        let mut iv = [0u8; 12];
+        let mut iv = <[u8; 12]>::default();
         SystemRandom::new()
             .fill(&mut iv)
             .map_err(|_| EcdhEsError::Random)?;
