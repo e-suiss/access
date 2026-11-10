@@ -65,6 +65,13 @@ impl Directory for PgDirectory {
             .map_err(|_| Unavailable)
     }
 
+    async fn by_custom_host(&self, host: &str) -> Result<Option<RealmEntry>, Unavailable> {
+        access_store::custom_domains::route_by_custom_host(&self.router, host)
+            .await
+            .map(|r| r.and_then(|c| entry(c.route)))
+            .map_err(|_| Unavailable)
+    }
+
     async fn by_slug(&self, slug: &str) -> Result<Option<RealmEntry>, Unavailable> {
         tenancy::route_by_slug(&self.router, slug)
             .await

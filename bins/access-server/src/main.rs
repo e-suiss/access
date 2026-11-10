@@ -1172,6 +1172,15 @@ fn signup(config: &Config) -> Result<access_identity_ui::app::signup::Signup, St
     Ok(s)
 }
 
+/// The host of the configured realm base, without its port (TN-10).
+fn realm_base_host(base: &str) -> String {
+    let authority = base.strip_prefix("https://").unwrap_or(base);
+    authority
+        .rsplit_once(':')
+        .map_or(authority, |(h, _)| h)
+        .to_ascii_lowercase()
+}
+
 /// The hosted login (OP-146 m.12): the request's `Host` selects the realm as for discovery;
 /// realm keys come from the HSM on first use.
 fn login(
@@ -1193,7 +1202,8 @@ fn login(
         SignerKeys::new(identity.signer.clone()),
     );
     let hosted = Arc::new(Hosted {
-        kits: login::HsmKits::new(keks, router, app.clone(), lifetimes),
+        kits: login::HsmKits::new(keks, router, app.clone(), lifetimes)
+            .with_base(&realm_base_host(&identity.realm_base)),
         db: app,
         products,
         clock: SystemClock,

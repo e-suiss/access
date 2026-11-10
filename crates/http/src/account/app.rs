@@ -140,7 +140,8 @@ where
         slug: Option<&'a str>,
     ) -> Boxed<'a, Result<Option<RealmEntry>, ()>> {
         Box::pin(async move {
-            access_identity_oauth::app::resolve(&self.directory, authority, slug)
+            // OP-156 m.3 (i)
+            access_identity_oauth::app::resolve_hosted(&self.directory, authority, slug)
                 .await
                 .map_err(|_| ())
         })

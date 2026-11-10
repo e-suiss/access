@@ -1,7 +1,7 @@
 //! The RP ID rule (OP-156 m.3 (i), §12.1.2, §18.1, TN-17): a realm with passkeys never holds
 //! its RP ID on the Suiss base domain. Passkeys need a verified custom domain, and the RP ID is
-//! that domain or a registrable parent of it. The local profile's `*.localhost` is no Suiss
-//! domain; there is no other exception.
+//! that domain or a registrable parent of it. The local profile's `*.localhost`, and a `*.test`
+//! base that exists only in test runs, are no Suiss domain (RFC 6761); there is no switch.
 
 use access_identity_webauthn::domain::psl::Psl;
 use access_identity_webauthn::domain::rp::PublicSuffix as _;

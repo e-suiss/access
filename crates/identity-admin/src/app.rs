@@ -367,7 +367,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     async fn governing(&self, p: &Proposal, state: bool) -> Result<Governing, AdminError> {
         let mut t = TenantTx::begin(self.app, p.tenant, p.realm).await?;
         let g = idp::governance(&mut t).await?.ok_or(AdminError::NoRealm)?;
-        let current = Self::current(&mut t, &p.change, &g, state, &self.declared).await;
+        let current =
+            Self::current(&mut t, &p.change, &g, state, (&self.declared, self.base)).await;
         t.commit().await?;
         current?;
         Ok(g)
@@ -384,7 +385,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         change: &Change,
         g: &Governing,
         state: bool,
-        declared: &DeclaredTargets,
+        (declared, base): (&DeclaredTargets, &RealmBase),
     ) -> Result<(), AdminError> {
         change.check(declared)?;
         match change {
@@ -434,13 +435,25 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::AccountImport(_)
             | Change::MigrationExport(_)
             | Change::GuardianshipRecord(_) => {}
+            // IDP-5, OP-156 m.3 (i), §18.1
             Change::RpId(rp) => {
                 let issuer = g
                     .issuer
                     .as_deref()
                     .and_then(|i| Issuer::parse(i).ok())
                     .ok_or(AdminError::NoRealm)?;
-                if !rp.covers(host_of(issuer.authority())) {
+                let verified = access_store::custom_domains::verified_hosts(t).await?;
+                let base = access_identity_domain::domain::host::Base::new(host_of(
+                    base.as_str().strip_prefix("https://").unwrap_or_default(),
+                ));
+                if access_identity_domain::domain::rp::check(
+                    rp.as_str(),
+                    &base,
+                    host_of(issuer.authority()),
+                    &verified,
+                )
+                .is_err()
+                {
                     return Err(Invalid::RpId.into());
                 }
             }
@@ -1101,7 +1114,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         let g = idp::governance(&mut t.0)
             .await?
             .ok_or(AdminError::NoRealm)?;
-        Self::current(&mut t.0, &p.change, &g, true, &self.declared).await?;
+        Self::current(&mut t.0, &p.change, &g, true, (&self.declared, self.base)).await?;
         self.published(p).await?;
         let moved = account_move(&mut t.0, &p.change).await?;
         let secret = self.write(&mut t.0, bound, &p.change).await?;

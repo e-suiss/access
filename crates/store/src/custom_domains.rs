@@ -571,18 +571,16 @@ pub async fn active_certificates(t: &mut TenantTx) -> Result<Vec<CertificateRow>
 }
 
 /// The realm a request's `Host` names through a verified custom domain whose verification
-/// holds, read by the router role (§17.9.6): the realm, and what the domain is bound as.
+/// holds, read by the router role (§17.9.6): the realm's route, and what the domain is bound as.
 #[derive(Clone)]
 pub struct CustomRoute {
-    /// The tenant.
-    pub tenant: TenantId,
-    /// The realm.
-    pub realm: RealmId,
+    /// The realm's route: its slug and the issuer stored on its row.
+    pub route: crate::tenancy::RealmRoute,
     /// `issuer` or `rp_id` once bound.
     pub bound_as: Option<String>,
 }
 
-/// The realm serving the verified custom domain `hostname` (lower case), if any.
+/// The realm with an issuer serving the verified custom domain `hostname` (lower case), if any.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -591,17 +589,23 @@ pub async fn route_by_custom_host(
     hostname: &str,
 ) -> Result<Option<CustomRoute>, StoreError> {
     let row = sqlx::query!(
-        "SELECT d.tenant_id, d.realm_id, d.bound_as FROM access.realm_domains d
-           JOIN access.realms r ON r.tenant_id = d.tenant_id AND r.realm_id = d.realm_id
-          WHERE d.hostname = lower($1) AND d.status = 'verified'
-            AND d.reverify_by > clock_timestamp() AND r.status = 'active'",
+        r#"SELECT d.tenant_id, d.realm_id, d.bound_as, r.slug, r.issuer AS "issuer!"
+             FROM access.realm_domains d
+             JOIN access.realms r ON r.tenant_id = d.tenant_id AND r.realm_id = d.realm_id
+            WHERE d.hostname = lower($1) AND d.status = 'verified'
+              AND d.reverify_by > clock_timestamp() AND r.status = 'active'
+              AND r.issuer IS NOT NULL"#,
         hostname,
     )
     .fetch_optional(router)
     .await?;
     Ok(row.map(|r| CustomRoute {
-        tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
-        realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+        route: crate::tenancy::RealmRoute {
+            tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
+            realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+            slug: r.slug,
+            issuer: r.issuer,
+        },
         bound_as: r.bound_as,
     }))
 }

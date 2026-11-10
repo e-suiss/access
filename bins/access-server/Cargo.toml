@@ -22,6 +22,7 @@ access-identity-x509 = { workspace = true }
 access-identity-admin = { workspace = true }
 access-identity-events = { workspace = true }
 access-identity-oauth = { workspace = true }
+access-identity-domain = { workspace = true }
 access-identity-attest = { workspace = true }
 access-identity-edge = { workspace = true }
 access-identity-scim = { workspace = true }

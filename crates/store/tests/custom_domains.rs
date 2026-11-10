@@ -251,7 +251,7 @@ async fn one_realm_serves_a_host_and_the_router_reads_only_verified_domains() {
         .await
         .unwrap()
         .unwrap();
-    assert!(route.realm == r1);
+    assert!(route.route.realm == r1);
     assert_eq!(
         cd::served_hosts(&db.router).await.unwrap(),
         ["login.acme.example"]
@@ -301,7 +301,7 @@ async fn one_realm_serves_a_host_and_the_router_reads_only_verified_domains() {
         .await
         .unwrap()
         .unwrap();
-    assert!(route.realm == r2);
+    assert!(route.route.realm == r2);
 }
 
 // OP-73, OP-156 m.3 (i)

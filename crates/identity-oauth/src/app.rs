@@ -88,7 +88,11 @@ pub async fn resolve<D: Directory>(
         return Ok(None);
     };
     let entry = match slug {
-        None => directory.by_host(&host).await?,
+        None => match directory.by_host(&host).await? {
+            Some(e) => Some(e),
+            // OP-156 m.3 (i)
+            None => directory.by_custom_host(&host).await?,
+        },
         Some(s) if check_slug(s).is_ok() => directory.by_slug(s).await?,
         Some(_) => None,
     };
@@ -99,6 +103,27 @@ pub async fn resolve<D: Directory>(
                 path.strip_prefix(PATH_PREFIX).is_some_and(|p| p == s)
             })
     }))
+}
+
+/// The realm a hosted surface reached (the Frontend API, hosted sign-in and the account pages,
+/// OP-156 m.3 (i)): the realm [`resolve`] finds, or the realm a verified custom domain serves
+/// at its root. `Host` still only selects the realm; the issuer stays the one on its row
+/// (§17.9.6, TN-16).
+///
+/// # Errors
+/// [`Unavailable`].
+pub async fn resolve_hosted<D: Directory>(
+    directory: &D,
+    authority: &str,
+    slug: Option<&str>,
+) -> Result<Option<RealmEntry>, Unavailable> {
+    if let Some(e) = resolve(directory, authority, slug).await? {
+        return Ok(Some(e));
+    }
+    let (None, Some(host)) = (slug, host_of(authority)) else {
+        return Ok(None);
+    };
+    directory.by_custom_host(&host).await
 }
 
 impl<D: Directory, K: Keys> Discovery<D, K> {
@@ -133,6 +158,19 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
         slug: Option<&str>,
     ) -> Result<Option<RealmEntry>, Unavailable> {
         resolve(&self.directory, authority, slug).await
+    }
+
+    /// The realm a hosted surface reached: as [`Self::resolve`], or through a verified custom
+    /// domain (OP-156 m.3 (i)).
+    ///
+    /// # Errors
+    /// [`Unavailable`].
+    pub async fn resolve_hosted(
+        &self,
+        authority: &str,
+        slug: Option<&str>,
+    ) -> Result<Option<RealmEntry>, Unavailable> {
+        resolve_hosted(&self.directory, authority, slug).await
     }
 
     /// Also names the mTLS listener reached on `port` in the metadata of the realms that

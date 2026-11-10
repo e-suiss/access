@@ -240,6 +240,7 @@ struct Settings {
     signin: Option<Vec<u8>>,
     rp_id: Option<String>,
     related: Vec<String>,
+    verified: Vec<String>,
 }
 
 /// A kit and the settings it was built from.
@@ -252,6 +253,7 @@ pub(crate) struct HsmKits {
     router: Pool,
     app: Pool,
     lifetimes: SessionPolicy,
+    base: Option<access_identity_domain::domain::host::Base>,
     loaded: Mutex<HashMap<[u8; 16], Loaded>>,
 }
 
@@ -263,8 +265,17 @@ impl HsmKits {
             router,
             app,
             lifetimes,
+            base: None,
             loaded: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// These kits under the deployment's realm base host, which decides what a Suiss domain is
+    /// for the RP ID rule (OP-156 m.3 (i)).
+    #[must_use]
+    pub(crate) fn with_base(mut self, base_host: &str) -> Self {
+        self.base = Some(access_identity_domain::domain::host::Base::new(base_host));
+        self
     }
 
     /// The realm's sign-in settings as they are now, read in its own scope (TN-113).
@@ -284,11 +295,16 @@ impl HsmKits {
         let related = access_store::idp::related_origins(&mut t)
             .await
             .map_err(|_| Unavailable)?;
+        // OP-156 m.3 (i)
+        let verified = access_store::custom_domains::verified_hosts(&mut t)
+            .await
+            .map_err(|_| Unavailable)?;
         t.commit().await.map_err(|_| Unavailable)?;
         Ok(Settings {
             signin,
             rp_id,
             related,
+            verified,
         })
     }
 
@@ -318,13 +334,20 @@ impl HsmKits {
             Some(bytes) => RealmSignin::decode(bytes).ok_or("sign-in policy")?,
             None => RealmSignin::default(),
         };
-        // IDP-5, IDI-4
-        let rp_id = match &settings.rp_id {
-            Some(pinned) => RpId::parse(pinned)
-                .filter(|r| r.as_str() == host || host.ends_with(&format!(".{}", r.as_str())))
-                .ok_or("pinned rp id")?,
-            None => RpId::parse(host).ok_or("rp id")?,
-        };
+        // IDP-5, IDI-4, OP-156 m.3 (i)
+        let base = self.base.clone().unwrap_or_else(|| base_of(host));
+        let effective = access_identity_domain::domain::rp::effective(
+            settings.rp_id.as_deref(),
+            &base,
+            host,
+            &settings.verified,
+        );
+        let pinned = effective.is_some();
+        let rp_id = effective
+            .or_else(|| settings.rp_id.clone())
+            .and_then(|r| RpId::parse(&r))
+            .or_else(|| RpId::parse(host))
+            .ok_or("rp id")?;
         Ok(RealmKit {
             tenant,
             realm: entry.realm,
@@ -338,7 +361,7 @@ impl HsmKits {
                 realm: wa,
                 rp_id,
                 name: entry.slug.clone(),
-                pinned: true,
+                pinned,
                 related: settings
                     .related
                     .iter()
@@ -354,6 +377,17 @@ impl HsmKits {
             signin,
         })
     }
+}
+
+/// The base a realm issuer host sits under when the deployment's is not given: its parent for
+/// a subdomain issuer, the host itself otherwise.
+fn base_of(issuer_host: &str) -> access_identity_domain::domain::host::Base {
+    let parent = issuer_host
+        .split_once('.')
+        .map(|(_, p)| p)
+        .filter(|p| p.contains('.') || *p == "localhost" || *p == "test")
+        .unwrap_or(issuer_host);
+    access_identity_domain::domain::host::Base::new(parent)
 }
 
 impl Kits for HsmKits {

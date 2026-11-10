@@ -77,8 +77,16 @@ pub fn at_or_under(a: &str, b: &str) -> bool {
     a == b || a.strip_suffix(b).is_some_and(|head| head.ends_with('.'))
 }
 
+/// Whether `host` is under the special-use `test` name (RFC 6761 §6.2), which never resolves
+/// publicly and no public CA certifies.
+#[must_use]
+pub fn test_name(host: &str) -> bool {
+    host.rsplit('.').next() == Some("test")
+}
+
 /// The deployment's base host: realm hostnames are `<slug>.<base>` (TN-10). A base under
-/// `localhost` is the local profile's, which is no Suiss domain (OP-156 m.3 (i)).
+/// `localhost` is the local profile's, and one under `test` exists only in test runs; neither
+/// is a Suiss domain (OP-156 m.3 (i), RFC 6761).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Base(String);
 
@@ -95,10 +103,11 @@ impl Base {
         &self.0
     }
 
-    /// Whether this base is a Suiss domain: any base but the local profile's `localhost`.
+    /// Whether this base is a Suiss domain: any base a public deployment can have, that is any
+    /// but a `localhost` or `test` name (RFC 6761).
     #[must_use]
     pub fn is_suiss(&self) -> bool {
-        !localhost(&self.0)
+        !localhost(&self.0) && !test_name(&self.0)
     }
 
     /// Whether `host` is the base, under it, or above it.
@@ -193,5 +202,6 @@ mod tests {
         assert_eq!(base.realm_host("acme"), "acme.suiss.id");
         assert!(base.is_suiss());
         assert!(!Base::new("localhost").is_suiss());
+        assert!(!Base::new("access.test").is_suiss());
     }
 }

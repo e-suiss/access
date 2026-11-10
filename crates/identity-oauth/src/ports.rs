@@ -43,6 +43,16 @@ pub trait Directory: Send + Sync {
         slug: &str,
     ) -> impl Future<Output = Result<Option<RealmEntry>, Unavailable>> + Send;
 
+    /// The live realm a verified custom domain `host` (lower-cased, no port) serves (OP-156
+    /// m.3 (i)). A directory that cannot tell knows of none.
+    fn by_custom_host(
+        &self,
+        host: &str,
+    ) -> impl Future<Output = Result<Option<RealmEntry>, Unavailable>> + Send {
+        let _ = host;
+        async { Ok(None) }
+    }
+
     /// Every live realm with an issuer, for the start-up JWKS check (§17.9.7).
     fn all(&self) -> impl Future<Output = Result<Vec<RealmEntry>, Unavailable>> + Send;
 

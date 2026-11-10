@@ -225,7 +225,12 @@ pub(super) async fn realm<D: Directory, K: Keys, KI, C, M>(
     headers: &HeaderMap,
 ) -> Result<RealmEntry, Response> {
     let slug = params.get("slug").map(String::as_str);
-    match s.discovery.resolve(authority(uri, headers), slug).await {
+    // OP-156 m.3 (i)
+    match s
+        .discovery
+        .resolve_hosted(authority(uri, headers), slug)
+        .await
+    {
         Ok(Some(entry)) => Ok(entry),
         Ok(None) => Err(not_found()),
         Err(_) => Err(problem(
