@@ -48,6 +48,7 @@ up() {
         --env LDAP_ORGANISATION=Corp --env LDAP_DOMAIN=corp.example \
         --env LDAP_ADMIN_PASSWORD="$PASSWORD" --env LDAP_TLS=true \
         --env LDAP_TLS_VERIFY_CLIENT=never \
+        --env LDAP_TLS_CIPHER_SUITE="SECURE256:+SECURE128:-VERS-TLS-ALL:+VERS-TLS1.3" \
         "$OPENLDAP"
     wait_for OpenLDAP docker exec access-openldap \
         ldapsearch -x -H ldap://localhost -b "$BASE" -D "cn=admin,$BASE" -w "$PASSWORD" -s base
