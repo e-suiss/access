@@ -29,20 +29,6 @@ pub struct Planned {
     pub summary: &'static str,
 }
 
-const fn planned(
-    method: Method,
-    path: &'static str,
-    operation: &'static str,
-    summary: &'static str,
-) -> Planned {
-    Planned {
-        method,
-        path,
-        operation,
-        summary,
-    }
-}
-
 /// The forward-auth engines (OP-156 m.3 (l)); Envoy is `ext_authz` in HTTP service mode.
 pub const PROXY_ENGINES: [&str; 4] = ["nginx", "traefik", "caddy", "envoy"];
 
