@@ -861,6 +861,39 @@ export const en = {
   signalSourceIssuer: "Issuer",
   signalSourceIssuerHint: "The issuer the source's Claims are signed as",
   signalSourceRegisterSend: "Register source",
+  connectorsTitle: "Enterprise connectors",
+  connectorsIntro:
+    "Products that work beside Access. Each keeps its own job; Access decides who may act and gives them its decisions, events and signals. None of them grants anything by itself.",
+  connectorsKind: "Kind",
+  connectorsReady: "Ready for",
+  connectorsGives: "What Access gives",
+  connectorsAny: "Any product that follows the contract",
+  connectorsWhere: "Set up in",
+  connPam: "Privileged access (PAM)",
+  connPamGives:
+    "A just-in-time decision for each privileged connection over AuthZEN, and short-lived SSH certificates. Recording and the account vault stay in the PAM.",
+  connSecrets: "Secret stores",
+  connSecretsGives:
+    "The decision to release one secret (secret.release). The store releases it only for that Exercise, once.",
+  connSecretsWhere: "The secret store, with the Access SDK",
+  connIga: "Identity governance (IGA)",
+  connIgaGives:
+    "Who can act and what a removal would end, from Access's searches. A reviewer's decision reaches Access as the reviewer's own Exercise; a campaign grants nothing.",
+  connIgaWhere: "The IGA product, over the AuthZEN API",
+  connSiem: "SIEM",
+  connSiemGives:
+    "The event and audit stream as OCSF, CEF or LEEF, over syslog, HTTP or object storage. Search, correlation and alerts stay in the SIEM.",
+  connHr: "HR systems",
+  connHrGives:
+    "Starters, leavers and moves become accounts and role selections once the domain accepts the HR source.",
+  connDevices: "Device management (MDM)",
+  connDevicesGives: "Device compliance as the MDM's Claim, which can only narrow a decision.",
+  connProofing: "Identity verification",
+  connProofingGives: "The provider's proofing result as its Claim.",
+  connRisk: "Risk and fraud",
+  connRiskGives: "An external risk level as its source's Claim, which can only narrow a decision.",
+  connDlp: "Data classification (DLP)",
+  connDlpGives: "Data labels as the DLP's Claim, which can only narrow a decision.",
 } as const;
 
 export type Key = keyof typeof en;

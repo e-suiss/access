@@ -870,4 +870,37 @@ export const tr: Record<Key, string> = {
   signalSourceIssuer: "Issuer",
   signalSourceIssuerHint: "Kaynağın Claim'lerini imzaladığı issuer",
   signalSourceRegisterSend: "Kaynağı kaydet",
+  connectorsTitle: "Kurumsal bağlayıcılar",
+  connectorsIntro:
+    "Access'in yanında çalışan ürünler. Her biri kendi işini yapar; kimin hareket edebileceğine Access karar verir ve onlara kararlarını, olaylarını ve sinyallerini verir. Hiçbiri kendi başına bir şey vermez.",
+  connectorsKind: "Tür",
+  connectorsReady: "Hazır olanlar",
+  connectorsGives: "Access'in verdiği",
+  connectorsAny: "Sözleşmeye uyan her ürün",
+  connectorsWhere: "Kurulduğu yer",
+  connPam: "Ayrıcalıklı erişim (PAM)",
+  connPamGives:
+    "Her ayrıcalıklı bağlantı için AuthZEN üzerinden anında karar ve kısa ömürlü SSH sertifikaları. Kayıt ve hesap kasası PAM'de kalır.",
+  connSecrets: "Sır kasaları",
+  connSecretsGives:
+    "Tek bir sırrın serbest bırakılması kararı (secret.release). Kasa onu yalnız o Exercise için ve bir kez serbest bırakır.",
+  connSecretsWhere: "Sır kasası, Access SDK'sıyla",
+  connIga: "Kimlik yönetişimi (IGA)",
+  connIgaGives:
+    "Kimin hareket edebileceği ve bir kaldırmanın neyi bitireceği, Access'in aramalarından. Gözden geçirenin kararı Access'e kendi Exercise'ı olarak gelir; kampanya hiçbir şey vermez.",
+  connIgaWhere: "IGA ürünü, AuthZEN API'si üzerinden",
+  connSiem: "SIEM",
+  connSiemGives:
+    "Olay ve denetim akışı OCSF, CEF ya da LEEF olarak; syslog, HTTP ya da nesne deposu üzerinden. Arama, ilişkilendirme ve uyarılar SIEM'de kalır.",
+  connHr: "İK sistemleri",
+  connHrGives:
+    "İşe girişler, ayrılışlar ve görev değişiklikleri, domain İK kaynağını kabul edince hesaplara ve rol seçimlerine dönüşür.",
+  connDevices: "Cihaz yönetimi (MDM)",
+  connDevicesGives: "Cihaz uyumu MDM'in Claim'i olarak; bir kararı yalnız daraltabilir.",
+  connProofing: "Kimlik doğrulama",
+  connProofingGives: "Sağlayıcının kimlik kanıtlama sonucu, kendi Claim'i olarak.",
+  connRisk: "Risk ve dolandırıcılık",
+  connRiskGives: "Dış risk düzeyi kaynağının Claim'i olarak; bir kararı yalnız daraltabilir.",
+  connDlp: "Veri sınıflandırma (DLP)",
+  connDlpGives: "Veri etiketleri DLP'nin Claim'i olarak; bir kararı yalnız daraltabilir.",
 };

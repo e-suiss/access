@@ -4,7 +4,7 @@
 // in the domain list, never a switch.
 import { useState, type ReactElement } from "react";
 
-import { t } from "../i18n/index.js";
+import { t, type Key } from "../i18n/index.js";
 import { adminGet } from "../lib/admin.js";
 import { check, explain, type Explained, search, type SearchAnswer } from "../lib/adp.js";
 import type { Wanted } from "../lib/intents.js";
@@ -422,6 +422,7 @@ export function Integrations({ ctx }: { readonly ctx: Ctx }): ReactElement {
           )}
         </Show>
       </Panel>
+      <Connectors />
       <Panel id="webhooks" title={t("webhooksTitle")}>
         <Show l={webhooks}>
           {(v) => (
@@ -439,6 +440,90 @@ export function Integrations({ ctx }: { readonly ctx: Ctx }): ReactElement {
         </Show>
       </Panel>
     </>
+  );
+}
+
+/** One kind of product Access works beside, and what it gets from Access (§18.3, E22, IDP-39). */
+interface Connector {
+  readonly kind: Key;
+  readonly ready: readonly string[];
+  readonly gives: Key;
+  readonly where: readonly Key[] | Key;
+}
+
+/** §18.3, E22, IDP-39, OP-156 m.3 (x), Ek B 5238: one catalogue of the enterprise connectors. */
+const CONNECTORS: readonly Connector[] = [
+  {
+    kind: "connPam",
+    ready: ["Teleport", "CyberArk"],
+    gives: "connPamGives",
+    where: ["navAdmin", "screenSsh"],
+  },
+  {
+    kind: "connSecrets",
+    ready: ["OpenBao", "HashiCorp Vault"],
+    gives: "connSecretsGives",
+    where: "connSecretsWhere",
+  },
+  { kind: "connIga", ready: [], gives: "connIgaGives", where: "connIgaWhere" },
+  {
+    kind: "connSiem",
+    ready: ["Splunk", "Microsoft Sentinel", "Datadog", "Elastic"],
+    gives: "connSiemGives",
+    where: ["navAdmin", "screenSiem"],
+  },
+  {
+    kind: "connHr",
+    ready: ["Personio", "BambooHR", "HiBob", "Workday", "SAP SuccessFactors", "Kolay İK", "Logo"],
+    gives: "connHrGives",
+    where: ["navAdmin", "screenHr"],
+  },
+  {
+    kind: "connDevices",
+    ready: ["Microsoft Intune", "Jamf Pro"],
+    gives: "connDevicesGives",
+    where: ["navAdmin", "screenSignIn"],
+  },
+  {
+    kind: "connProofing",
+    ready: ["Onfido", "Persona"],
+    gives: "connProofingGives",
+    where: ["navAdmin", "screenSignIn"],
+  },
+  { kind: "connRisk", ready: [], gives: "connRiskGives", where: ["navAdmin", "screenSignIn"] },
+  { kind: "connDlp", ready: [], gives: "connDlpGives", where: ["navAdmin", "screenSignIn"] },
+];
+
+function where(w: Connector["where"]): string {
+  return typeof w === "string" ? t(w) : w.map((k) => t(k)).join(" ▸ ");
+}
+
+/** §18.3, Ek B 5238: the catalogue; it lists products and calls nothing. */
+function Connectors(): ReactElement {
+  return (
+    <Panel id="connectors" title={t("connectorsTitle")}>
+      <p>{t("connectorsIntro")}</p>
+      <table data-testid="connectors">
+        <thead>
+          <tr>
+            <th scope="col">{t("connectorsKind")}</th>
+            <th scope="col">{t("connectorsReady")}</th>
+            <th scope="col">{t("connectorsGives")}</th>
+            <th scope="col">{t("connectorsWhere")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {CONNECTORS.map((c) => (
+            <tr key={c.kind}>
+              <th scope="row">{t(c.kind)}</th>
+              <td>{c.ready.length > 0 ? c.ready.join(", ") : t("connectorsAny")}</td>
+              <td>{t(c.gives)}</td>
+              <td>{where(c.where)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Panel>
   );
 }
 
