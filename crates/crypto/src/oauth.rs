@@ -6,7 +6,7 @@ use subtle::ConstantTimeEq as _;
 use suiss_crypto::sig;
 
 use crate::AwsLcBackend;
-use crate::webauthn::{VerifyError, sha256, verify_rs256};
+use crate::webauthn::{VerifyError, sha256};
 
 /// Context of a client secret's stored digest.
 const SECRET_CONTEXT: &[u8] = b"access/client-secret/v1\0";
@@ -43,6 +43,12 @@ pub fn secret_matches(stored: &[u8; 32], presented: &[u8]) -> bool {
 #[must_use]
 pub fn pkce_matches(challenge: &[u8; 32], verifier: &str) -> bool {
     bool::from(sha256(verifier.as_bytes()).ct_eq(challenge))
+}
+
+/// The RFC 8705 §3.1 `x5t#S256` of a certificate: the base64url SHA-256 of its DER.
+#[must_use]
+pub fn cert_thumbprint(der: &[u8]) -> String {
+    access_kernel::json::b64url_encode(&sha256(der))
 }
 
 /// A client's public key, from its JWKS.
@@ -115,7 +121,10 @@ pub fn verify_client_signature(
             sig::ed25519(&AwsLcBackend, pk, input, signature)?;
             Ok(())
         }
-        (ClientAlg::Rs256, ClientKey::Rsa { n, e }) => verify_rs256(n, e, input, signature),
+        // OP-125, OP-144
+        (ClientAlg::Rs256, ClientKey::Rsa { n, e }) => {
+            crate::rsa_id::verify_strict(n, e, input, signature)
+        }
         _ => Err(VerifyError::Signature(sig::SignatureError::Invalid)),
     }
 }

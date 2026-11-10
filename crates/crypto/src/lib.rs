@@ -2,10 +2,12 @@
 //! identifiers and secret files.
 
 pub mod breach;
+pub mod client_secret_jwt;
 pub mod dpop;
 pub mod event_id;
 pub mod ip_pseudonym;
 pub mod jose;
+pub mod jwe;
 pub mod legacy_hash;
 pub mod migration_bundle;
 pub mod oauth;
@@ -18,6 +20,7 @@ pub mod pseudonym;
 pub mod random;
 pub mod realm_index;
 pub mod scim_cursor;
+pub mod rsa_id;
 pub mod sd_jwt;
 pub mod secret_file;
 pub mod token;

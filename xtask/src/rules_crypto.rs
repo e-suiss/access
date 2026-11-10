@@ -280,6 +280,8 @@ pub(crate) const HMAC_ALLOWED: &[(&str, &str)] = &[
     (
         "crates/crypto/src/scim_cursor.rs",
         "CR-3 (b): RFC 9865 SCIM cursors, issued and checked by the same SCIM server (OP-155 m.3 (g))",
+        "crates/crypto/src/client_secret_jwt.rs",
+        "CR-3, OP-148 m.16 (l): client_secret_jwt, two-party: one secret between the realm and one legacy client that registered the method",
     ),
     (
         "crates/crypto/src/webhook.rs",
