@@ -1,0 +1,4 @@
+# OP-156 m.3 (p): every sudo is a step-up Access decides, CT2 by default; never offline.
+auth       required     /usr/lib/access/pam_access.so
+account    include      common-account
+session    include      common-session-noninteractive

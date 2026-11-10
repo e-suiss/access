@@ -1,0 +1,40 @@
+# OP-156 m.3 (p), IDP-32: the Access Linux client daemon. It reaches Access only over the realm's
+# public listener with the host's client certificate and answers the NSS and PAM modules on
+# /run/access-linuxd/socket.
+[Unit]
+Description=Access Linux client
+Documentation=https://github.com/e-suiss/access/tree/main/services/linux-client
+Wants=network-online.target
+After=network-online.target
+Before=nss-user-lookup.target systemd-user-sessions.service
+Wants=nss-user-lookup.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/access-linuxd/access-linuxd.env
+ExecStart=/usr/sbin/access-linuxd
+Restart=on-failure
+RestartSec=2s
+RuntimeDirectory=access-linuxd
+RuntimeDirectoryMode=0755
+StateDirectory=access-linuxd
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+DeviceAllow=char-hidraw rw
+ReadOnlyPaths=/etc/access-linuxd
+
+[Install]
+WantedBy=multi-user.target

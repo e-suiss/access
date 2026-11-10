@@ -261,7 +261,11 @@ async fn walk() {
     assert!(d.w.domains.derive().await.is_empty());
 
     let dir = scratch("walk");
-    let socket = dir.join("socket");
+    let socket = if modules() {
+        PathBuf::from(access_linux_module::client::SOCKET)
+    } else {
+        dir.join("socket")
+    };
     let daemon = Arc::new(d.linux_daemon(&dir));
     let server = tokio::spawn(serve(
         Arc::clone(&daemon),
@@ -353,6 +357,10 @@ async fn walk() {
         }
     );
 
+    if modules() {
+        installed(&d, &passkey).await;
+    }
+
     // OP-156 m.3 (p)
     server.abort();
     let _ = server.await;
@@ -361,5 +369,79 @@ async fn walk() {
         module(&socket, Request::Getpwnam(String::from("ayse"))).await,
         Err(Unanswered)
     );
+    if modules() {
+        let (ok, _) = run(&["getent", "passwd", "ayse"]).await;
+        assert!(!ok);
+        let (ok, _) = run(&["pamtester", "access-test", "ayse", "authenticate"]).await;
+        assert!(!ok);
+    }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Whether the installed NSS and PAM modules are exercised too (the Linux CI job installs them
+/// into the runner's glibc and PAM).
+fn modules() -> bool {
+    cfg!(target_os = "linux") && std::env::var("ACCESS_LINUX_MODULES").as_deref() == Ok("1")
+}
+
+async fn run(args: &[&str]) -> (bool, String) {
+    let args: Vec<String> = args.iter().map(|a| String::from(*a)).collect();
+    let out = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        tokio::task::spawn_blocking(move || {
+            std::process::Command::new(&args[0])
+                .args(&args[1..])
+                .output()
+                .unwrap()
+        }),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
+    text.push_str(&String::from_utf8_lossy(&out.stderr));
+    (out.status.success(), text)
+}
+
+/// `getent` through `libnss_access.so.2` and `pamtester` through `pam_access.so`: the real
+/// glibc and PAM, the daemon behind them.
+async fn installed(d: &Desk, cookie: &str) {
+    use std::io::BufRead as _;
+    let (ok, text) = run(&["getent", "passwd", "ayse"]).await;
+    assert!(ok && text.starts_with("ayse:x:"), "{text}");
+    let (ok, _) = run(&["getent", "passwd", "mert"]).await;
+    assert!(!ok);
+    let (ok, text) = run(&["getent", "group", "prod-web"]).await;
+    assert!(ok && text.trim_end().ends_with(":ayse"), "{text}");
+    let mut child = std::process::Command::new("stdbuf")
+        .args(["-oL", "pamtester", "access-test", "ayse", "authenticate"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let code = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        tokio::task::spawn_blocking(move || {
+            for line in std::io::BufReader::new(stdout).lines() {
+                let line = line.unwrap();
+                if let Some((_, rest)) = line.split_once("enter ") {
+                    return String::from(rest.trim_end_matches('.').trim());
+                }
+            }
+            panic!("no device code shown");
+        }),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    d.approve_device(cookie, &code).await;
+    let status = tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        tokio::task::spawn_blocking(move || child.wait().unwrap()),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(status.success());
 }

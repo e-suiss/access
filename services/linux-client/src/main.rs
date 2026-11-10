@@ -80,6 +80,7 @@ async fn run() -> Result<(), Startup> {
     );
     let state = std::env::var("ACCESS_LINUXD_STATE")
         .map_or_else(|_| PathBuf::from("/var/lib/access-linuxd"), PathBuf::from);
+    std::fs::create_dir_all(state.join("break-glass"))?;
     let daemon = Arc::new(Daemon::new(
         access()?,
         SystemClock,

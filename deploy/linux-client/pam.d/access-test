@@ -1,0 +1,3 @@
+# OP-156 m.3 (p): the CI job's service for pamtester.
+auth       required     /usr/lib/access/pam_access.so
+account    required     pam_permit.so

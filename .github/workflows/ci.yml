@@ -685,6 +685,59 @@ jobs:
         if: always()
         run: scripts/ci/export-env.sh down
 
+  # OP-156 m.3 (p), m.5: the Linux client's NSS and PAM modules on the runner's own glibc and
+  # Linux-PAM, behind access-linuxd, against the real server path; the modules are Linux only
+  linux-client:
+    name: linux-client
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336 # 18.6-trixie
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+          POSTGRES_INITDB_ARGS: --auth=scram-sha-256 --data-checksums
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://postgres:ci-only-not-a-secret@localhost:5432/postgres
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: test
+          tools: nextest
+      - name: SoftHSM, pamtester and the PAM library
+        run: sudo apt-get install --yes --no-install-recommends softhsm2 pamtester libpam0g-dev
+      - name: The modules build alone and install into glibc and PAM
+        run: |
+          cargo clippy --locked -p access-linux-nss -p access-linux-pam -p access-linux-module --all-targets -- -D warnings
+          cargo build --locked -p access-linux-nss -p access-linux-pam
+          sudo install -m 0644 target/debug/libnss_access.so /usr/lib/x86_64-linux-gnu/libnss_access.so.2
+          sudo install -d /usr/lib/access
+          sudo install -m 0644 target/debug/libpam_access.so /usr/lib/access/pam_access.so
+          sudo install -m 0644 deploy/linux-client/pam.d/access-test /etc/pam.d/access-test
+          sudo sed -i -E 's/^(passwd|group):(.*)$/\1:\2 access/' /etc/nsswitch.conf
+          sudo install -d -o "$(id -u)" -g "$(id -g)" /run/access-linuxd
+          grep -E '^(passwd|group):' /etc/nsswitch.conf
+      - name: getent and pamtester through access-linuxd and the real server; refused with the daemon down
+        run: |
+          ACCESS_LINUX_MODULES=1 SOFTHSM2_CONF="$(scripts/softhsm-local.sh)" \
+            cargo nextest run --locked -p access-server -p access-linux-client -p access-linux-module \
+            -E 'test(/linux/) | package(access-linux-client) | package(access-linux-module)'
+
   # OP-155 m.3 (o), RR-28: the Kerberos gateway's own workspace (lint, tests, cargo-deny,
   # cargo-vet), then SPNEGO end to end against an MIT KDC with the gateway and the parser worker
   # as real processes
@@ -770,6 +823,7 @@ jobs:
       - kerberos
       - nats
       - ssh-ca
+      - linux-client
       - export-sinks
       - uniffi-kotlin
       - uniffi-swift
