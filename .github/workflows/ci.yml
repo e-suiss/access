@@ -599,14 +599,16 @@ jobs:
         with:
           cache-key: test
           tools: nextest
-      - name: OpenLDAP clients
-        run: sudo apt-get install --yes --no-install-recommends ldap-utils
+      - name: OpenLDAP clients and radclient
+        run: sudo apt-get install --yes --no-install-recommends ldap-utils freeradius-utils
       - name: OpenLDAP, MIT KDC and FreeRADIUS
         run: scripts/ci/edge-env.sh up
       - name: LDAP gateway against the OpenLDAP clients
         run: cargo nextest run --locked -p access-gw-ldap --test interop --run-ignored only
       - name: AD sync from OpenLDAP
         run: cargo nextest run --locked -p access-identity-directory --run-ignored only
+      - name: RADIUS gateway against radclient over UDP
+        run: cargo nextest run --locked -p access-gw-radius --test interop --run-ignored only
       - name: Stop the counterparts
         if: always()
         run: scripts/ci/edge-env.sh down

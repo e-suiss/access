@@ -201,6 +201,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-gw-radius"
+version = "0.4.0"
+dependencies = [
+ "access-crypto",
+ "access-edge-core",
+ "access-http",
+ "access-identity-account",
+ "access-identity-edge",
+ "access-internal-api",
+ "access-store",
+ "esuiss-crypto",
+ "esuiss-sandbox",
+ "rcgen",
+ "rustls",
+ "thiserror",
+ "tokio",
+ "tokio-rustls",
+]
+
+[[package]]
 name = "access-gw-saml"
 version = "0.4.0"
 dependencies = [

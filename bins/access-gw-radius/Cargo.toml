@@ -1,0 +1,30 @@
+[package]
+name = "access-gw-radius"
+description = "Access RADIUS gateway (§10.6.5, IDP-18, OP-155 m.3 (f)): RadSec only, PAP inside TLS, an authentication Claim for VPN and network access, reached through the mTLS edge channel."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-edge-core = { workspace = true, features = ["channel"] }
+access-internal-api = { workspace = true }
+rustls = { workspace = true, features = ["aws_lc_rs", "prefer-post-quantum", "std"] }
+suiss-crypto = { workspace = true }
+suiss-sandbox = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "time"] }
+tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }
+
+[dev-dependencies]
+access-crypto = { workspace = true, features = ["testing"] }
+access-http = { workspace = true }
+access-identity-account = { workspace = true, features = ["testing"] }
+access-identity-edge = { workspace = true }
+access-store = { workspace = true, features = ["testing"] }
+rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
+
+[lints]
+workspace = true
