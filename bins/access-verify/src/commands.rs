@@ -146,6 +146,26 @@ pub(crate) const COMMANDS: &[Command] = &[
         run: crate::artefacts::pap,
     },
     Command {
+        name: "foreign",
+        options: &[
+            "acceptance",
+            "metadata",
+            "pap",
+            "excerpt",
+            "presentation",
+            "domain",
+            "intent",
+            "nonce",
+            "now",
+            "catalog",
+            "actor-key",
+            "class",
+            "remaining",
+        ],
+        summary: "a foreign domain's PAP used here under a foreign-authority Acceptance (OP-143 m.13)",
+        run: crate::artefacts::foreign,
+    },
+    Command {
         name: "receipt",
         options: &[
             "metadata", "trusted", "receipt", "excerpt", "domain", "audience", "intent", "now",

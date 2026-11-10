@@ -97,6 +97,95 @@ pub(crate) fn pap(o: &Options) -> Result<Outcome, Usage> {
     })
 }
 
+fn slices(bytes: &[u8]) -> Option<std::collections::BTreeMap<Digest, u64>> {
+    let Value::Array(items) = dcbor::decode(bytes, Limits::CEILING).ok()? else {
+        return None;
+    };
+    let mut out = std::collections::BTreeMap::new();
+    for item in &items {
+        let Value::Array(pair) = item else {
+            return None;
+        };
+        let [term, Value::Unsigned(n)] = pair.as_slice() else {
+            return None;
+        };
+        if out.insert(Digest::from_value(term)?, *n).is_some() {
+            return None;
+        }
+    }
+    Some(out)
+}
+
+/// A foreign PAP used in `--domain` (§9.15A.2, OP-143 m.13 (d), INV-17): the `--acceptance`
+/// content must be a live `foreign-authority` gate of the PAP's domain for `--class`; then the
+/// metadata under its pinned binding keys, its freshness, L2-PAP-3 with this domain as the
+/// audience, the holder key, the class and the cutoff, in that order.
+pub(crate) fn foreign(o: &Options) -> Result<Outcome, Usage> {
+    use access_kernel::foreign::{self, ForeignGate, Presented, Use};
+    let input = || Outcome::Reject("input".to_owned());
+    let Ok(content) = dcbor::decode(&o.file("acceptance")?, Limits::CEILING) else {
+        return Ok(input());
+    };
+    let gate = match ForeignGate::of(&content) {
+        Ok(Some(g)) => g,
+        Ok(None) => return Ok(Outcome::Reject("foreign-not-accepted".to_owned())),
+        Err(_) => return Ok(input()),
+    };
+    let pap = o.file("pap")?;
+    let (class, now) = (o.text("class")?, o.uint("now")?);
+    if foreign::claimed_domain(&pap) != Some(gate.issuer.domain)
+        || !gate.opens(&gate.issuer.domain, class, now)
+    {
+        return Ok(Outcome::Reject("foreign-not-accepted".to_owned()));
+    }
+    let nonce = crate::args::unhex(o.text("nonce")?)
+        .ok_or_else(|| Usage("--nonce is not lowercase hex".to_owned()))?;
+    let domain = Digest(o.hash("domain")?);
+    let (Ok(intent), Ok(catalog), Ok(actor_key), Some(remaining)) = (
+        access_kernel::intent::IntentEnvelope::from_bytes(&o.file("intent")?),
+        access_kernel::algebra::Catalog::from_bytes(&o.file("catalog")?),
+        access_kernel::verify::cose::PublicKey::from_bytes(&o.file("actor-key")?),
+        slices(&o.file("remaining")?),
+    ) else {
+        return Ok(input());
+    };
+    let (metadata, excerpt, presentation) = (
+        o.file("metadata")?,
+        o.file("excerpt")?,
+        o.file("presentation")?,
+    );
+    let verified = foreign::verify(
+        &access_kernel::verify::PureBackend,
+        &gate,
+        &Presented {
+            metadata: &metadata,
+            pap: &pap,
+            excerpt: &excerpt,
+            presentation: &presentation,
+        },
+        &Use {
+            domain: &domain,
+            intent: &intent,
+            nonce: &nonce,
+            now,
+            catalog: &catalog,
+            actor_key: &actor_key,
+            class,
+            remaining: &remaining,
+        },
+    );
+    Ok(match verified {
+        Ok((p, _)) => match p.to_bytes() {
+            Ok(bytes) => Outcome::Accept(vec![
+                ("pap", hex(&bytes)),
+                ("foreign_domain", hex(&gate.issuer.domain.0)),
+            ]),
+            Err(_) => input(),
+        },
+        Err(e) => Outcome::Reject(e.code().to_owned()),
+    })
+}
+
 pub(crate) fn receipt(o: &Options) -> Result<Outcome, Usage> {
     let metadata = match metadata(o)? {
         Ok(m) => m,

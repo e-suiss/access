@@ -4755,6 +4755,182 @@ async fn a_foreign_pap_holds_a_bridging_grant() {
     fold_check(&db.sequencer, b).await.unwrap();
 }
 
+// INV-17, §9.15A.2, PI-3, CI-10, L25, OP-155 m.3 (q), Ek B 5068, 4739
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "a home domain, a target domain and each source that is not foreign-authority"
+)]
+async fn foreign_authority_counts_only_through_its_acceptance_and_a_bridging_ceiling() {
+    use access_authority_signer::ports::Bindings as _;
+    let db = fresh().await.unwrap();
+    let a = create_genesis(&db.sequencer, TENANT, genesis_offline(), 1_000)
+        .await
+        .unwrap();
+    let b = create_genesis(&db.sequencer, TENANT, genesis_with_buy(), 2_000)
+        .await
+        .unwrap();
+    let (socket, service) = start_signer("foreign-inv17");
+    let home_process = signing_process(&db, a, &socket);
+    onboard_signed(&home_process, a, &service).await;
+    let (home, _) = home_pap(&home_process, &db, a, b, &socket, &service).await;
+
+    let log = PgLog::new(db.sequencer.clone(), b, TENANT, "t".to_owned(), TTL);
+    let leader = Leader::acquire(log, b, EventKey::new(Secret::new([5; 32])))
+        .await
+        .unwrap();
+    let reader = PgReader::new(db.app.clone(), DomainId::from_bytes(b.0));
+    let mut core: Core = Authority::new(leader, reader, binding(), Counter(0), b);
+    onboard(&mut core, b, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, b, ALICE, ALICE_KEY, (3, 4)).await;
+    onboard(&mut core, b, BOB, BOB_KEY, (5, 6)).await;
+    let meta_basis = ExerciseBasis::Anchor(meta::meta_anchor(&b));
+    let shop = meta::object_id(&b, kind::ANCHOR, 1);
+    let mut ceiling = authority(
+        vec![action("shop", "read"), buy()],
+        ResourceSelector::Structural(Structural {
+            namespace: "shop".to_owned(),
+            prefix: vec!["item-1".to_owned()],
+            kind: None,
+            attrs: BTreeMap::new(),
+        }),
+    );
+    ceiling.constraints.validity.until = NOW + 86_400_000;
+    let issued = send(
+        &mut core,
+        meta_request(
+            b,
+            7,
+            ExerciseBasis::Anchor(shop),
+            Payload::GrantIssue(GrantContent {
+                basis: GrantBasis::Anchor(shop),
+                holder: SubjectSelector::Foreign {
+                    domain: a,
+                    class: "shop".to_owned(),
+                },
+                authority: ceiling,
+                agency: BTreeSet::from([Capacity::Own]),
+                named: None,
+            }),
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&issued);
+    let bridging = |holder| {
+        ExerciseBasis::Holding(HoldingRef {
+            grant: meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0),
+            holder,
+            since: issued.record.unwrap(),
+        })
+    };
+    let read = |nonce: u8, holder| shop_request(b, nonce, Mode::Commit, bridging(holder));
+    let named = |class: BlockerClass, subcode: &str| (class, subcode.to_owned());
+
+    assert_eq!(
+        blocked(
+            &send(
+                &mut core,
+                home.present(read(20, ALICE), ALICE_KEY, NOW),
+                ALICE_KEY
+            )
+            .await
+            .unwrap()
+        ),
+        named(BlockerClass::SourceNotAccepted, "foreign-not-accepted"),
+    );
+
+    // §9.15A.2: a proof ingested for predicate-input never selects a holder
+    allowed(
+        &send(
+            &mut core,
+            meta_request(b, 8, meta_basis, {
+                let v = claim_acceptance(ALICE, &["shop"]);
+                Payload::from_value(&Value::Map(vec![(Value::text("acceptance_establish"), v)]))
+                    .unwrap()
+            }),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    let cited = with_proofs(
+        read(21, ALICE),
+        vec![ProofRef::Claim(claim(b, ALICE, ALICE_KEY, "shop"))],
+    );
+    assert_eq!(
+        blocked(&send(&mut core, cited, ALICE_KEY).await.unwrap()),
+        named(BlockerClass::SourceNotAccepted, "foreign-not-accepted"),
+    );
+    assert_eq!(
+        blocked(
+            &send(
+                &mut core,
+                home.present(read(22, ALICE), ALICE_KEY, NOW),
+                ALICE_KEY
+            )
+            .await
+            .unwrap()
+        ),
+        named(BlockerClass::SourceNotAccepted, "foreign-not-accepted"),
+    );
+    // CI-10: foreign identity alone is only actor-binding
+    assert_eq!(
+        blocked(&send(&mut core, read(23, BOB), BOB_KEY).await.unwrap()),
+        named(BlockerClass::SourceNotAccepted, "foreign-not-accepted"),
+    );
+
+    let binding_key = SoftBinding.binding(&a).unwrap().public_key();
+    allowed(
+        &send(
+            &mut core,
+            meta_request(
+                b,
+                9,
+                meta_basis,
+                foreign_acceptance(a, &binding_key, &["shop"]),
+            ),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    let cited = with_proofs(
+        read(26, ALICE),
+        vec![ProofRef::Claim(claim(b, ALICE, ALICE_KEY, "shop"))],
+    );
+    assert_eq!(
+        blocked(&send(&mut core, cited, ALICE_KEY).await.unwrap()),
+        named(BlockerClass::SourceNotAccepted, "foreign-pap-missing"),
+    );
+    assert_eq!(
+        blocked(&send(&mut core, read(27, BOB), BOB_KEY).await.unwrap()),
+        named(BlockerClass::SourceNotAccepted, "foreign-pap-missing"),
+    );
+    allowed(
+        &send(
+            &mut core,
+            home.present(read(24, ALICE), ALICE_KEY, NOW),
+            ALICE_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    // §9.15A.2: effective = Ceiling ∩ Map(foreign chain)
+    let mut outside = read(25, ALICE);
+    outside.intent.resources = vec![ResourceRef {
+        namespace: "shop".to_owned(),
+        path: vec!["item-2".to_owned()],
+        incarnation: 0,
+    }];
+    let r = send(&mut core, home.present(outside, ALICE_KEY, NOW), ALICE_KEY)
+        .await
+        .unwrap();
+    assert_eq!(r.decision.outcome, Outcome::Deny, "{r:?}");
+    fold_check(&db.sequencer, b).await.unwrap();
+}
+
 // P52, MD-10, OP-143 m.15 (d)
 #[tokio::test]
 async fn a_pap_names_parties_by_pseudonym() {
