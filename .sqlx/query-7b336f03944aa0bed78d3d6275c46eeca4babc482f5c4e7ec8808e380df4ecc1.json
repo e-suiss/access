@@ -1,0 +1,270 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT fapi2, legacy_auth, jwt_kek_id, jwt_wrapped, jwt_nonce, jwt_ciphertext, tls_auth,\n                tls_name_kind, tls_name, tls_jwks, rs256, id_token_alg, enc_alg, enc_jwks,\n                enc_id_token, enc_userinfo, enc_jarm, userinfo_signed, saml_bearer_upstream,\n                legacy_bearer, frontchannel_logout_uri\n           FROM access.oauth_client_profiles\n          WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3\n          ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "fapi2",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "fapi2"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "legacy_auth",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "legacy_auth"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "jwt_kek_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "jwt_kek_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "jwt_wrapped",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "jwt_wrapped"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "jwt_nonce",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "jwt_nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "jwt_ciphertext",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "jwt_ciphertext"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "tls_auth",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "tls_auth"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "tls_name_kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "tls_name_kind"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "tls_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "tls_name"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "tls_jwks",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "tls_jwks"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "rs256",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "rs256"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "id_token_alg",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "id_token_alg"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "enc_alg",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "enc_alg"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "enc_jwks",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "enc_jwks"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "enc_id_token",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "enc_id_token"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "enc_userinfo",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "enc_userinfo"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "enc_jarm",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "enc_jarm"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "userinfo_signed",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "userinfo_signed"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "saml_bearer_upstream",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "saml_bearer_upstream"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "legacy_bearer",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "legacy_bearer"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "frontchannel_logout_uri",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_client_profiles",
+            "name": "frontchannel_logout_uri"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "7b336f03944aa0bed78d3d6275c46eeca4babc482f5c4e7ec8808e380df4ecc1"
+}

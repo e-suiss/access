@@ -17,6 +17,7 @@ pub mod bodies;
 pub mod certificate;
 pub mod challenges;
 pub mod claims;
+pub mod client_profiles;
 pub mod clients;
 pub mod connect;
 pub mod consents;
