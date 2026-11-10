@@ -1,5 +1,5 @@
 //! The purposes of the identity signer's keys (§9.13.8, §10.7.1, MD-6, OP-144, OP-155 m.3 (c),
-//! (d), (j), (k)): every key it holds serves exactly one purpose, signs only that purpose's
+//! (d), (j), (k), OP-156 m.3 (i), (o), (z)): every key it holds serves exactly one purpose, signs only that purpose's
 //! artefacts, and is kept under its purpose's label apart from the others. None of them is ever
 //! held by the authority signer (CMP-22a), whose keys sign authority artefacts only.
 
@@ -27,6 +27,13 @@ pub enum KeyPurpose {
     /// RS256 identity assertions for clients that opted in, RSA-3072, made on the first opt-in
     /// (MD-6, OP-155 m.3 (k)).
     RsaId,
+    /// The realm's OpenSSH user certificate authority, Ed25519 (OP-156 m.3 (o), IDP-32).
+    SshCa,
+    /// The Privacy Pass issuer key of RFC 9578 token type `0x0002`, RSA-2048: only the raw
+    /// blind private operation, never a PKCS#1 or PSS signature over a message (OP-156 m.3 (z)).
+    PrivacyPass,
+    /// The ACME account key that signs RFC 8555 requests, P-256 (OP-156 m.3 (i)).
+    Acme,
 }
 
 /// A key algorithm a purpose may hold.
@@ -40,6 +47,8 @@ pub enum KeyAlg {
     Rsa3072,
     /// ECDH-ES key agreement on P-256.
     EcdhEsP256,
+    /// RSA-2048 used only for the raw blind private operation of RFC 9474 (OP-156 m.3 (z)).
+    Rsa2048Blind,
 }
 
 impl KeyAlg {
@@ -49,7 +58,7 @@ impl KeyAlg {
         match self {
             Self::Es256 => Some(JwsAlg::Es256),
             Self::Ed25519 => Some(JwsAlg::Ed25519),
-            Self::Rsa3072 | Self::EcdhEsP256 => None,
+            Self::Rsa3072 | Self::EcdhEsP256 | Self::Rsa2048Blind => None,
         }
     }
 }
@@ -74,11 +83,17 @@ pub enum Artefact {
     JweDecrypt,
     /// An RS256 identity assertion: ID token, userinfo or introspection answer.
     Rs256Assertion,
+    /// An OpenSSH user certificate (`ssh-ed25519-cert-v01@openssh.com`) or the realm's KRL.
+    SshCertificate,
+    /// A blind signature over a blinded Privacy Pass token request.
+    BlindSignature,
+    /// A JWS of an ACME request (RFC 8555 §6.2).
+    AcmeRequest,
 }
 
 impl KeyPurpose {
     /// Every purpose.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 10] = [
         Self::Jose,
         Self::AuditCheckpoint,
         Self::ClaimIssuer,
@@ -86,6 +101,9 @@ impl KeyPurpose {
         Self::Federation,
         Self::JweEnc,
         Self::RsaId,
+        Self::SshCa,
+        Self::PrivacyPass,
+        Self::Acme,
     ];
 
     /// The purpose's label in the vault and in the protocol.
@@ -99,6 +117,9 @@ impl KeyPurpose {
             Self::Federation => "federation",
             Self::JweEnc => "jwe-enc",
             Self::RsaId => "rsa-id",
+            Self::SshCa => "ssh-ca",
+            Self::PrivacyPass => "privacy-pass",
+            Self::Acme => "acme",
         }
     }
 
@@ -113,9 +134,10 @@ impl KeyPurpose {
     pub const fn algs(self) -> &'static [KeyAlg] {
         match self {
             Self::Jose => &[KeyAlg::Es256, KeyAlg::Ed25519],
-            Self::AuditCheckpoint | Self::ClaimIssuer => &[KeyAlg::Ed25519],
+            Self::AuditCheckpoint | Self::ClaimIssuer | Self::SshCa => &[KeyAlg::Ed25519],
             Self::Saml => &[KeyAlg::Rsa3072, KeyAlg::Es256],
-            Self::Federation => &[KeyAlg::Es256],
+            Self::Federation | Self::Acme => &[KeyAlg::Es256],
+            Self::PrivacyPass => &[KeyAlg::Rsa2048Blind],
             Self::JweEnc => &[KeyAlg::EcdhEsP256],
             Self::RsaId => &[KeyAlg::Rsa3072],
         }
@@ -132,6 +154,9 @@ impl KeyPurpose {
             Self::Federation => &[Artefact::EntityStatement],
             Self::JweEnc => &[Artefact::JweDecrypt],
             Self::RsaId => &[Artefact::Rs256Assertion],
+            Self::SshCa => &[Artefact::SshCertificate],
+            Self::PrivacyPass => &[Artefact::BlindSignature],
+            Self::Acme => &[Artefact::AcmeRequest],
         }
     }
 
@@ -153,17 +178,27 @@ impl KeyPurpose {
     pub const fn on_first_opt_in(self) -> bool {
         matches!(
             self,
-            Self::Saml | Self::Federation | Self::JweEnc | Self::RsaId
+            Self::Saml
+                | Self::Federation
+                | Self::JweEnc
+                | Self::RsaId
+                | Self::SshCa
+                | Self::PrivacyPass
+                | Self::Acme
         )
     }
 }
 
-/// The purposes Stage 10 adds; the authority signer never holds one (OP-155 m.1 (b)).
-pub const IDENTITY_ONLY: [KeyPurpose; 4] = [
+/// The purposes Stages 10 and 11 add; the authority signer never holds one (OP-155 m.1 (b),
+/// OP-156 m.1 (b)).
+pub const IDENTITY_ONLY: [KeyPurpose; 7] = [
     KeyPurpose::Saml,
     KeyPurpose::Federation,
     KeyPurpose::JweEnc,
     KeyPurpose::RsaId,
+    KeyPurpose::SshCa,
+    KeyPurpose::PrivacyPass,
+    KeyPurpose::Acme,
 ];
 
 #[cfg(test)]

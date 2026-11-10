@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use super::*;
 
-const ARTEFACTS: [Artefact; 8] = [
+const ARTEFACTS: [Artefact; 11] = [
     Artefact::IdentityToken,
     Artefact::IdentityCose,
     Artefact::AuditCheckpoint,
@@ -19,6 +19,9 @@ const ARTEFACTS: [Artefact; 8] = [
     Artefact::EntityStatement,
     Artefact::JweDecrypt,
     Artefact::Rs256Assertion,
+    Artefact::SshCertificate,
+    Artefact::BlindSignature,
+    Artefact::AcmeRequest,
 ];
 
 // OP-155 m.1 (b), OP-144, §9.13.8, Ek B 5083
@@ -42,6 +45,37 @@ fn a_purpose_key_never_signs_another_purposes_artefacts() {
     assert!(!KeyPurpose::Saml.serves(Artefact::EntityStatement));
     assert!(!KeyPurpose::JweEnc.serves(Artefact::IdentityToken));
     assert!(!KeyPurpose::RsaId.serves(Artefact::SamlXml));
+}
+
+// OP-156 m.3 (i), (o), (z), m.1 (b)
+#[test]
+fn the_stage_11_purposes_sign_only_their_own_artefacts() {
+    assert_eq!(KeyPurpose::SshCa.algs(), &[KeyAlg::Ed25519]);
+    assert_eq!(KeyPurpose::PrivacyPass.algs(), &[KeyAlg::Rsa2048Blind]);
+    assert_eq!(KeyPurpose::Acme.algs(), &[KeyAlg::Es256]);
+    for p in KeyPurpose::ALL {
+        assert_eq!(
+            p.allows(KeyAlg::Rsa2048Blind),
+            p == KeyPurpose::PrivacyPass,
+            "{p:?}"
+        );
+    }
+    assert_eq!(KeyAlg::Rsa2048Blind.jws(), None);
+    for (p, own) in [
+        (KeyPurpose::SshCa, Artefact::SshCertificate),
+        (KeyPurpose::PrivacyPass, Artefact::BlindSignature),
+        (KeyPurpose::Acme, Artefact::AcmeRequest),
+    ] {
+        assert_eq!(p.artefacts(), &[own]);
+        assert!(IDENTITY_ONLY.contains(&p));
+        for other in ARTEFACTS.into_iter().filter(|a| *a != own) {
+            assert!(!p.serves(other), "{p:?} serves {other:?}");
+        }
+    }
+    assert!(!KeyPurpose::Jose.serves(Artefact::SshCertificate));
+    assert!(!KeyPurpose::ClaimIssuer.serves(Artefact::SshCertificate));
+    assert!(!KeyPurpose::Federation.serves(Artefact::AcmeRequest));
+    assert!(!KeyPurpose::RsaId.serves(Artefact::BlindSignature));
 }
 
 // OP-155 m.3 (d), (e), (j), (k), MD-6
