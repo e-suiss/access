@@ -29,6 +29,8 @@ pub(crate) mod lex;
 mod limits;
 #[path = "rules_manifest.rs"]
 mod manifest;
+#[path = "rules_money.rs"]
+mod money;
 #[path = "rules_personal.rs"]
 mod personal;
 #[path = "rules_privileged.rs"]
@@ -227,6 +229,11 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "adjacent-products",
             run: adjacent::check,
+        },
+        // MUST-NEVER-7, OP-156 m.3 (u)
+        Check {
+            name: "no-money-state",
+            run: money::check,
         },
     ]);
     all
