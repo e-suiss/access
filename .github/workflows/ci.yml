@@ -661,6 +661,30 @@ jobs:
       - name: sshd accepts the CA's certificate and refuses it once in the KRL
         run: cargo nextest run --locked -p access-identity-ssh --test sshd --run-ignored only
 
+  # OP-156 m.1 (d), m.3 (s): the export adapters against MinIO (S3 with our own SigV4, OCSF
+  # Parquet read back) and syslog-ng (syslog over TLS with CEF and LEEF), both pinned by digest
+  export-sinks:
+    name: export-sinks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: test
+          tools: nextest
+      - name: MinIO and syslog-ng
+        run: scripts/ci/export-env.sh up
+      - name: Parquet on MinIO and syslog over TLS to syslog-ng
+        run: cargo nextest run --locked -p access-identity-export --test ci_sinks --run-ignored only
+      - name: Stop MinIO and syslog-ng
+        if: always()
+        run: scripts/ci/export-env.sh down
+
   # OP-155 m.3 (o), RR-28: the Kerberos gateway's own workspace (lint, tests, cargo-deny,
   # cargo-vet), then SPNEGO end to end against an MIT KDC with the gateway and the parser worker
   # as real processes
@@ -746,6 +770,7 @@ jobs:
       - kerberos
       - nats
       - ssh-ca
+      - export-sinks
       - uniffi-kotlin
       - uniffi-swift
       - bench-instructions

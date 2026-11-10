@@ -31,6 +31,12 @@ fn the_file_reads_back_with_the_ocsf_schema() {
         .map(|(i, e)| record(e, i64::try_from(i).unwrap()))
         .collect();
     let bytes = file(&records).unwrap();
+    let text = crate::testing::parquet_rows(&bytes).unwrap();
+    assert!(
+        text.iter()
+            .all(|r| r.contains("access_record: \"copy\"") && r.contains("class_uid: ")),
+        "{text:?}"
+    );
     let reader = SerializedFileReader::new(Bytes::from(bytes)).unwrap();
     let meta = reader.metadata();
     assert_eq!(meta.file_metadata().num_rows(), 4);
