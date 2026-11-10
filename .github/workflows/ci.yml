@@ -661,6 +661,52 @@ jobs:
       - name: sshd accepts the CA's certificate and refuses it once in the KRL
         run: cargo nextest run --locked -p access-identity-ssh --test sshd --run-ignored only
 
+  # E36, OP-156 m.3 (x), m.5, Ek B 5274: a secret store twin in front of OpenBao (pinned by digest)
+  # releases a secret only for its own secret.release Exercise, on real Postgres and SoftHSM
+  secret-release:
+    name: secret-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336 # 18.6-trixie
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+          POSTGRES_INITDB_ARGS: --auth=scram-sha-256 --data-checksums
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://postgres:ci-only-not-a-secret@localhost:5432/postgres
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: test
+          tools: nextest
+      - name: SoftHSM
+        run: sudo apt-get install --yes --no-install-recommends softhsm2
+      - name: OpenBao
+        run: scripts/ci/openbao-env.sh up
+      - name: The store releases from OpenBao only for the release Exercise
+        run: |
+          SOFTHSM2_CONF="$(scripts/softhsm-local.sh)" \
+            cargo nextest run --locked -p access-server --run-ignored only -E 'test(openbao)'
+      - name: Stop OpenBao
+        if: always()
+        run: scripts/ci/openbao-env.sh down
+
   # OP-156 m.1 (d), m.3 (s): the export adapters against MinIO (S3 with our own SigV4, OCSF
   # Parquet read back) and syslog-ng (syslog over TLS with CEF and LEEF), both pinned by digest
   export-sinks:
@@ -867,6 +913,7 @@ jobs:
       - kerberos
       - nats
       - ssh-ca
+      - secret-release
       - linux-client
       - export-sinks
       - proxy-engines
