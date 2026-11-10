@@ -7,6 +7,7 @@ import { AccountSettings } from "./account/index.js";
 import { DeviceSetup } from "./hub/DeviceSetup.js";
 import { Hub, type Section } from "./hub/Hub.js";
 import { MerchantsPage } from "./merchants/Merchants.js";
+import { SaveCardPage } from "./merchants/SaveCard.js";
 import { OneTimePaymentPage } from "./payment/Payment.js";
 import { useSignature } from "./hub/Sign.js";
 import { call, FRONTEND, json, PAGE, Problem, type SessionInfo } from "./lib/api.js";
@@ -15,14 +16,14 @@ import { find, type Instance } from "./lib/instance.js";
 import { Privacy } from "./privacy/Privacy.js";
 import { SignedOutReason, SignIns } from "./signins/index.js";
 
-type Screen = "account" | Section | "merchants" | "payment";
+type Screen = "account" | Section | "merchants" | "payment" | "save-card";
 
 const SCREENS: readonly Screen[] = ["account", "authority", "activity", "changes", "merchants"];
 
 function screenOf(path: string): Screen {
   const rest = path.slice(PAGE.length).replace(/^\//, "");
   // OP-156 m.3 (v): the one-time payment is reached from the merchant's request, not the menu
-  if (rest === "payment") return "payment";
+  if (rest === "payment" || rest === "save-card") return rest;
   return SCREENS.find((s) => s === rest) ?? "account";
 }
 
@@ -114,6 +115,8 @@ export function App(): ReactElement {
           <DeviceSetup session={session} confirm={confirm} onReady={setInstance} />
         ) : screen === "merchants" ? (
           <MerchantsPage instance={instance} confirm={confirm} />
+        ) : screen === "save-card" ? (
+          <SaveCardPage instance={instance} confirm={confirm} />
         ) : screen === "payment" ? (
           <OneTimePaymentPage instance={instance} confirm={confirm} />
         ) : (

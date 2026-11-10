@@ -168,13 +168,25 @@ export async function revoke(
   grant: string,
   timeoutMs: number = ANSWER_TIMEOUT_MS,
 ): Promise<Revoking> {
+  return commitMeta(instance, confirm, "grant_revoke", { grant_revoke: { grant } }, timeoutMs);
+}
+
+/**
+ * Commits the meta write `name` with `payload` (TN-110, OP-156 m.3 (v)): drafts it, shows the
+ * Kernel's decoding on the signature screen, signs on the draft's basis and sends the commit.
+ * The answer decides what is shown, as for a revoke.
+ */
+export async function commitMeta(
+  instance: Instance,
+  confirm: Confirm,
+  name: string,
+  payload: Readonly<Record<string, unknown>>,
+  timeoutMs: number = ANSWER_TIMEOUT_MS,
+): Promise<Revoking> {
   const k = await loadKernel();
   const d = await draft(
     instance,
-    {
-      action: { namespace: "access", name: "grant_revoke", major: 1 },
-      payload: { grant_revoke: { grant } },
-    },
+    { action: { namespace: "access", name, major: 1 }, payload },
     "commit",
   );
   const anchor = d.draft.basis?.anchor;
@@ -199,7 +211,7 @@ export async function revoke(
   const resource = d.draft.intent.resources[0];
   const body = {
     subject: { type: "access_party", id: instance.party },
-    action: { name: "grant_revoke" },
+    action: { name },
     resource: { type: resource?.namespace ?? "", id: (resource?.path ?? []).join("/") },
     context: {
       domain: b64url(instance.domain),

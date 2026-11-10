@@ -196,3 +196,55 @@ test("Access unavailable says authority can't be changed and points to the runti
   );
   await expect(page.getByText(/agent disabled|queued/i)).toHaveCount(0);
 });
+
+function saveRequest(depth: number): string {
+  const authority = {
+    authority: {
+      actions: { exact: [{ namespace: "pay", name: "initiate", major: 1, schema: "cw" }] },
+      resource: { namespace: "access.party", prefix: ["c", "instrument"] },
+      params: { amount: { range: { min: 0, max: 50_000, unit: "try" } } },
+      recipient: { party: MERCHANT },
+      purpose: [{ code: "orders" }],
+    },
+    constraints: { validity: { from: 0, until: 1_798_675_200_000 } },
+    delegation: { depth },
+    requirements: [],
+  };
+  return Buffer.from(
+    JSON.stringify({ merchant: "Kaya Tekstil", party: MERCHANT, anchor: "c2VsZg", authority }),
+  ).toString("base64url");
+}
+
+test("saving a card is the customer's own grant.issue to the merchant from their self-anchor", async ({
+  page,
+  bff,
+}) => {
+  await setUp(page, `/account/save-card#request=${saveRequest(0)}`);
+  const preview = page.getByTestId("save-card");
+  await expect(preview).toContainText("Let Kaya Tekstil charge your card: up to TRY");
+  await expect(preview).toContainText("per order, until");
+  await expect(preview).toContainText("only for orders you place");
+  await axe(page);
+  await page.getByRole("button", { name: "Let Kaya Tekstil charge my card" }).click();
+  const dialog = page.getByRole("dialog", { name: "Check what you're signing" });
+  await expect(dialog).toContainText("access.grant_issue");
+  await dialog.getByRole("button", { name: "Sign" }).click();
+  await expect(page.getByTestId("outcome")).toHaveText("Done");
+  const drafted = bff.seen.find(
+    (s) => s.path.endsWith("/intents") && s.body["payload"] !== undefined,
+  );
+  const issue = (drafted?.body["payload"] as Record<string, Record<string, unknown>>)[
+    "grant_issue"
+  ];
+  expect(issue?.["basis"]).toEqual({ anchor: "c2VsZg" });
+  expect(issue?.["holder"]).toEqual({ party: MERCHANT });
+  expect(issue?.["agency"]).toEqual(["own"]);
+  const sent = bff.seen.filter((s) => s.path.endsWith("/proxy/adp/evaluation"));
+  expect((sent[0]?.body["action"] as Record<string, unknown>)["name"]).toBe("grant_issue");
+});
+
+test("a card request that lets the merchant pass it on can't be saved", async ({ page, bff }) => {
+  await setUp(page, `/account/save-card#request=${saveRequest(1)}`);
+  await expect(page.getByRole("alert")).toContainText("It can't be saved here.");
+  expect(bff.seen.some((s) => s.path.endsWith("/proxy/adp/evaluation"))).toBe(false);
+});
