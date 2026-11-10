@@ -188,6 +188,41 @@ pub struct RealmFacts {
     /// The realm offers the device authorization grant (`idp.realm.device_code`); without it
     /// neither its endpoint nor its grant type is declared (TN-35, OP-154 m.3 (dd)).
     pub device_code: bool,
+    /// The port of the mTLS listener when the server runs one and the realm publishes its
+    /// aliases (`idp.realm.mtls_aliases`); without it `mtls_endpoint_aliases` is absent
+    /// (RFC 8705 §5, OP-155 m.3 (m)).
+    pub mtls_port: Option<u16>,
+}
+
+/// The endpoints `mtls_endpoint_aliases` names on the mTLS listener (RFC 8705 §5): those a
+/// client authenticates at or presents a certificate-bound token to.
+const MTLS_ALIASED: [(Endpoint, &str); 6] = [
+    (Endpoint::Token, "token_endpoint"),
+    (Endpoint::Par, "pushed_authorization_request_endpoint"),
+    (Endpoint::Revoke, "revocation_endpoint"),
+    (Endpoint::Introspect, "introspection_endpoint"),
+    (Endpoint::Userinfo, "userinfo_endpoint"),
+    (
+        Endpoint::DeviceAuthorization,
+        "device_authorization_endpoint",
+    ),
+];
+
+/// `mtls_endpoint_aliases` (RFC 8705 §5, §10.2.5, OP-155 m.3 (m)): the declared endpoints of
+/// [`MTLS_ALIASED`] on the mTLS listener's port; nothing when the realm has no port to name.
+fn mtls_aliases(m: &mut Map<String, Value>, issuer: &Issuer, facts: &RealmFacts) {
+    let Some(port) = facts.mtls_port else {
+        return;
+    };
+    let mut aliases = Map::new();
+    for (e, key) in MTLS_ALIASED {
+        if m.contains_key(key) {
+            aliases.insert(key.into(), issuer.endpoint_on_port(port, e.path()).into());
+        }
+    }
+    if !aliases.is_empty() {
+        m.insert("mtls_endpoint_aliases".into(), Value::Object(aliases));
+    }
 }
 
 /// The RFC 7591 registration endpoint under the issuer.
@@ -379,6 +414,7 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
     if let Some(u) = &facts.domain_metadata {
         m.insert(DOMAIN_METADATA_MEMBER.into(), u.as_str().into());
     }
+    mtls_aliases(&mut m, issuer, facts);
     Value::Object(m).to_string()
 }
 

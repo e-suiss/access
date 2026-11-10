@@ -266,3 +266,48 @@ fn path_issuers_serve_every_well_known_variant() {
     );
     assert_eq!(paths(&h, Document::Jwks), ["/jwks.json"]);
 }
+
+// OP-155 m.3 (m), RFC 8705 §5, §10.2.5, Ek B 4673
+#[test]
+fn mtls_endpoint_aliases_are_declared_only_with_a_port_to_name() {
+    let i = Issuer::parse("https://id.example/realms/acme").unwrap();
+    let m = json(&authorization_server_of(
+        &i,
+        &SERVED,
+        &RealmFacts::default(),
+    ));
+    assert!(!m.contains_key("mtls_endpoint_aliases"));
+    let on = RealmFacts {
+        mtls_port: Some(8443),
+        ..RealmFacts::default()
+    };
+    let m = json(&authorization_server_of(&i, &SERVED, &on));
+    let a = m["mtls_endpoint_aliases"].as_object().unwrap();
+    assert_eq!(
+        a["token_endpoint"],
+        "https://id.example:8443/realms/acme/token"
+    );
+    assert_eq!(
+        a["pushed_authorization_request_endpoint"],
+        "https://id.example:8443/realms/acme/par"
+    );
+    assert_eq!(
+        a["revocation_endpoint"],
+        "https://id.example:8443/realms/acme/revoke"
+    );
+    assert_eq!(
+        a["introspection_endpoint"],
+        "https://id.example:8443/realms/acme/introspect"
+    );
+    assert_eq!(
+        a["userinfo_endpoint"],
+        "https://id.example:8443/realms/acme/userinfo"
+    );
+    assert!(!a.contains_key("device_authorization_endpoint"));
+    assert_eq!(m["token_endpoint"], "https://id.example/realms/acme/token");
+    let ported = Issuer::parse("https://acme.id.localhost:4443").unwrap();
+    assert_eq!(
+        ported.endpoint_on_port(9443, "/token"),
+        "https://acme.id.localhost:9443/token"
+    );
+}

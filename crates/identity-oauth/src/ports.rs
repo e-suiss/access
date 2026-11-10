@@ -55,6 +55,10 @@ pub trait Directory: Send + Sync {
 }
 
 /// What a directory knows of a realm beyond its route.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is one realm decision the metadata declares"
+)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Facts {
     /// Active clients that read the realm's public `sub` (MD-10).
@@ -67,6 +71,9 @@ pub struct Facts {
     pub dcr: bool,
     /// Whether the realm offers the device authorization grant (`idp.realm.device_code`).
     pub device_code: bool,
+    /// Whether the realm publishes `mtls_endpoint_aliases` (`idp.realm.mtls_aliases`, OP-155
+    /// m.3 (m)).
+    pub mtls_aliases: bool,
 }
 
 /// The realm keys the identity signer holds (CMP-22b, OP-143 m.9).

@@ -165,6 +165,18 @@ impl Issuer {
         out
     }
 
+    /// The URL of an endpoint at `path` under this issuer reached on `port` instead: the mTLS
+    /// listener's alias of the endpoint (RFC 8705 §5, OP-155 m.3 (m)).
+    #[must_use]
+    pub fn endpoint_on_port(&self, port: u16, path: &str) -> String {
+        let authority = self.authority();
+        let host = match authority.rsplit_once(':') {
+            Some((h, p)) if p.bytes().all(|c| c.is_ascii_digit()) => h,
+            _ => authority,
+        };
+        format!("{SCHEME}{host}:{port}{}{path}", self.path())
+    }
+
     /// The RFC 8414 / RFC 9728 well-known URL path of `suffix`: inserted between the host and
     /// the issuer's path (RFC 8414 §3.1).
     #[must_use]

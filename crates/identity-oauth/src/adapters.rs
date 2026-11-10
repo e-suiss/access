@@ -97,6 +97,7 @@ impl Directory for PgDirectory {
             .is_some_and(|s| s.cimd_enabled);
         let dcr = t.dcr_policy().await.map_err(|_| Unavailable)?.enabled;
         let device_code = t.device_code_enabled().await.map_err(|_| Unavailable)?;
+        let mtls_aliases = t.mtls_aliases().await.map_err(|_| Unavailable)?;
         t.commit().await.map_err(|_| Unavailable)?;
         Ok(Facts {
             public_sub_clients,
@@ -104,6 +105,7 @@ impl Directory for PgDirectory {
             cimd,
             dcr,
             device_code,
+            mtls_aliases,
         })
     }
 }

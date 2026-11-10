@@ -47,6 +47,7 @@ impl Directory for Rows {
             cimd: n == 3,
             dcr: false,
             device_code: false,
+            mtls_aliases: n == 3,
         })
     }
 }
@@ -314,6 +315,31 @@ async fn cimd_support_is_declared_only_where_the_realm_accepts_cimd() {
             "Claude picks CIMD only with `none` (§11.8.3)"
         );
     }
+}
+
+// OP-155 m.3 (m), RFC 8705 §5, Ek B 4673
+#[tokio::test]
+async fn mtls_aliases_need_the_listener_and_the_realms_decision() {
+    let s = service();
+    let gamma = metadata_of(
+        &s.serve(Document::AuthorizationServer, "gamma.id.example", None)
+            .await,
+    );
+    assert!(gamma.get("mtls_endpoint_aliases").is_none());
+    let s = service().with_mtls(8443);
+    let acme = metadata_of(
+        &s.serve(Document::AuthorizationServer, "acme.id.example", None)
+            .await,
+    );
+    assert!(acme.get("mtls_endpoint_aliases").is_none());
+    let gamma = metadata_of(
+        &s.serve(Document::OpenIdConfiguration, "gamma.id.example", None)
+            .await,
+    );
+    assert_eq!(
+        gamma["mtls_endpoint_aliases"]["token_endpoint"],
+        "https://gamma.id.example:8443/token"
+    );
 }
 
 // §9.15.1 k.2, MD-5, P60

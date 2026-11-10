@@ -53,6 +53,7 @@ pub struct Discovery<D, K> {
     keys: K,
     served: Served,
     suiss: Option<suiss::Settings>,
+    mtls_port: Option<u16>,
 }
 
 /// The lower-case host of a request authority, without its port; `None` for anything that
@@ -107,6 +108,7 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
             keys,
             served: SERVED,
             suiss: None,
+            mtls_port: None,
         }
     }
 
@@ -130,6 +132,14 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
         slug: Option<&str>,
     ) -> Result<Option<RealmEntry>, Unavailable> {
         resolve(&self.directory, authority, slug).await
+    }
+
+    /// Also names the mTLS listener reached on `port` in the metadata of the realms that
+    /// publish their aliases (RFC 8705 §5, OP-155 m.3 (m)).
+    #[must_use]
+    pub const fn with_mtls(mut self, port: u16) -> Self {
+        self.mtls_port = Some(port);
+        self
     }
 
     /// Serves `doc` for a request to `authority`, with `slug` from a path-issuer route.
@@ -158,6 +168,7 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
                     cimd: facts.cimd,
                     dcr: facts.dcr,
                     device_code: facts.device_code,
+                    mtls_port: self.mtls_port.filter(|_| facts.mtls_aliases),
                 };
                 Reply::Metadata(metadata::authorization_server_of(
                     &realm.issuer,
