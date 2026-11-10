@@ -640,6 +640,27 @@ jobs:
         if: always()
         run: scripts/ci/pebble-env.sh down
 
+  # OP-156 m.3 (o), m.5: the realm SSH CA's certificates and KRL against a real OpenSSH sshd,
+  # unprivileged on a loopback port
+  ssh-ca:
+    name: ssh-ca
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: test
+          tools: nextest
+      - name: OpenSSH server and client
+        run: sudo apt-get install --yes --no-install-recommends openssh-server openssh-client
+      - name: sshd accepts the CA's certificate and refuses it once in the KRL
+        run: cargo nextest run --locked -p access-identity-ssh --test sshd --run-ignored only
+
   # OP-155 m.3 (o), RR-28: the Kerberos gateway's own workspace (lint, tests, cargo-deny,
   # cargo-vet), then SPNEGO end to end against an MIT KDC with the gateway and the parser worker
   # as real processes
@@ -724,6 +745,7 @@ jobs:
       - acme-pebble
       - kerberos
       - nats
+      - ssh-ca
       - uniffi-kotlin
       - uniffi-swift
       - bench-instructions
