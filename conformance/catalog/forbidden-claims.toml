@@ -883,3 +883,76 @@ phrases = ["Access verifies identity documents", "Access performs liveness", "Ac
 negation = true
 sources = ["IDP-34", "§10.3.1", "§10.9.1"]
 honest = "Access is not a KYC application: remote identity proofing happens at an external provider, and its result is that provider's identity_proofing Claim, which the domain accepts or not."
+
+# E22, IDP-39, L28, F11, §7.6, §8.17.12, OP-156 m.3 (x), Ek B 5366
+[[claim]]
+id = "q19-pam-sessions"
+scope = "all"
+phrases = [
+  "access records sessions", "access records privileged sessions", "access brokers sessions",
+  "access brokers privileged sessions", "session recording in access", "built-in pam",
+  "access is a pam",
+]
+negation = true
+sources = ["E22", "IDP-39", "§7.9.12.4", "L28"]
+honest = "Access decides who may open a privileged session, on which condition and for how long; the PAM product brokers and records it."
+
+[[claim]]
+id = "q19-secret-vault"
+scope = "all"
+phrases = [
+  "access stores your secrets", "access keeps your secrets", "built-in secret vault",
+  "general-purpose secret vault", "access is a secrets manager", "access is a secret manager",
+]
+negation = true
+sources = ["E22", "E36", "§7.9.12.4", "IDP-39"]
+honest = "A secret store keeps the secret and releases it only for Access's secret.release Exercise; the identity plane's token vault holds only upstream OAuth tokens a person connected."
+
+[[claim]]
+id = "q19-dlp"
+scope = "all"
+phrases = ["access classifies your data", "built-in dlp", "dlp engine in access", "access is a dlp"]
+negation = true
+sources = ["E22", "IDP-39", "L28"]
+honest = "A DLP product's verdict reaches Access as its Claim and only narrows a decision."
+
+[[claim]]
+id = "q19-siem"
+scope = "all"
+phrases = [
+  "access correlates events", "access correlates your logs", "built-in siem",
+  "siem search in access", "access is a siem",
+]
+negation = true
+sources = ["E22", "IDP-39 (4)", "§7.9.12.5", "L28"]
+honest = "Access exports its OCSF event and audit stream to your SIEM; search, correlation and alerting are the SIEM's."
+
+[[claim]]
+id = "q19-mdm"
+scope = "all"
+phrases = ["access manages your devices", "built-in mdm", "access is an mdm", "access enrolls devices"]
+negation = true
+sources = ["E22", "§7.9.12.2", "IDP-39"]
+honest = "An MDM's compliance result reaches Access as a device posture Claim; a managed device is never authority by itself."
+
+[[claim]]
+id = "q19-risk-engine"
+scope = "all"
+phrases = [
+  "access scores fraud", "built-in fraud engine", "fraud scoring engine in access",
+  "risk scoring engine in access", "access is a fraud engine",
+]
+negation = true
+sources = ["E22", "IDP-39 (2)", "§7.9.12.1", "CI-2"]
+honest = "An external risk score enters as its issuer's Claim and only narrows; Access's own sign-in signals are impossible travel, breached passwords and suspicious devices."
+
+[[claim]]
+id = "q19-iga-campaigns"
+scope = "all"
+phrases = [
+  "role mining in access", "access mines roles", "sod reporting in access",
+  "access runs certification campaigns", "multi-stage approval workflows in access",
+]
+negation = true
+sources = ["E22", "IDP-39 (3)", "§7.9.12.3", "§8.17.12"]
+honest = "An IGA's review decisions reach Access as Exercise requests; Access answers who, why and revocation impact from its searches, and a campaign never produces authority."

@@ -1,6 +1,8 @@
 //! Architecture and code rules (OP-62, OP-63, OP-64, OP-66, OP-73, TI-9, R-2,
 //! SA-21, CR-3, CR-11, CR-13, SA-32, U48, TI-10, INV-26, INV-36, §9.7A.7, OP-150 (e), TN-113, OP-47, OP-67, MUST-NEVER-6, IDI-11). Each check lives in a `rules_*` module.
 
+#[path = "rules_adjacent.rs"]
+mod adjacent;
 #[path = "rules_comments.rs"]
 mod comments;
 #[path = "rules_crypto.rs"]
@@ -220,6 +222,11 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "kyc-boundary",
             run: kyc::check,
+        },
+        // E22, IDP-39, L28, OP-156 m.3 (x), Ek B 5366
+        Check {
+            name: "adjacent-products",
+            run: adjacent::check,
         },
     ]);
     all
