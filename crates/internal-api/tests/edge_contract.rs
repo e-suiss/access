@@ -10,6 +10,7 @@
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
+use access_internal_api::edge::ldap::{Authenticate, Authenticated, DirectoryPage, DirectoryRead};
 use access_internal_api::edge::{
     Audit, Audited, Hello, IssueClaim, Issued, Subject, SubjectLookup, decode_hello_request,
     hello_request,
@@ -52,13 +53,17 @@ fn served_request_examples_are_what_the_decoders_read() {
                 IssueClaim::decode(&bytes).unwrap().encode()
             }
             "audit" | "audit-with-subject" => Audit::decode(&bytes).unwrap().encode(),
+            "authenticate" | "authenticate-rotate" | "authenticate-external" => {
+                Authenticate::decode(&bytes).unwrap().encode()
+            }
+            "directory-read" => DirectoryRead::decode(&bytes).unwrap().encode(),
             other if other.ends_with("-planned") => continue,
             other => panic!("{other} has no decoder"),
         };
         assert_eq!(back, bytes, "{id}");
         seen += 1;
     }
-    assert_eq!(seen, 6);
+    assert_eq!(seen, 10);
 }
 
 // OP-155 m.3 (c), m.6 (h)
@@ -70,6 +75,12 @@ fn answer_examples_are_what_the_decoders_read() {
             "subject-found" | "subject-none" => Subject::decode(&bytes).unwrap().encode(),
             "queued" => Issued::decode(&bytes).unwrap().encode(),
             "recorded" => Audited::decode(&bytes).unwrap().encode(),
+            "authenticated" | "authenticated-rotated" | "not-authenticated" => {
+                Authenticated::decode(&bytes).unwrap().encode()
+            }
+            "directory-page" | "directory-page-last" => {
+                DirectoryPage::decode(&bytes).unwrap().encode()
+            }
             other => panic!("{other} has no decoder"),
         };
         assert_eq!(back, bytes, "{id}");

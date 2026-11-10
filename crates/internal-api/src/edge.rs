@@ -5,6 +5,8 @@
 
 use suiss_crypto::dcbor::{self, Limits, Value};
 
+pub mod ldap;
+
 /// Path prefix of every edge call on access-server.
 pub const PREFIX: &str = "/edge/v1/";
 
@@ -173,6 +175,16 @@ impl Call {
         s
     }
 
+    /// The largest answer of the call: [`ldap::MAX_DIRECTORY_BODY`] for directory reads,
+    /// [`MAX_BODY`] for every other call.
+    #[must_use]
+    pub const fn max_answer(self) -> usize {
+        match self {
+            Self::DirectoryRead => ldap::MAX_DIRECTORY_BODY,
+            _ => MAX_BODY,
+        }
+    }
+
     /// Every call.
     #[must_use]
     pub fn all() -> [Self; 7] {
@@ -265,7 +277,11 @@ fn limits() -> Limits {
 }
 
 fn decode_map(body: &[u8]) -> Result<Value, WireError> {
-    if body.len() > MAX_BODY {
+    decode_map_within(body, MAX_BODY)
+}
+
+fn decode_map_within(body: &[u8], max: usize) -> Result<Value, WireError> {
+    if body.len() > max {
         return Err(WireError::TooLarge);
     }
     let v = dcbor::decode(body, limits()).map_err(|_| WireError::Malformed)?;

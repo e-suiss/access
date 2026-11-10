@@ -156,7 +156,7 @@ impl Channel {
         tls.write_all(head.as_bytes()).await.map_err(down)?;
         tls.write_all(body).await.map_err(down)?;
         tls.flush().await.map_err(down)?;
-        let limit = MAX_HEAD.saturating_add(MAX_BODY);
+        let limit = MAX_HEAD.saturating_add(call.max_answer());
         let mut answer = Vec::new();
         let mut chunk = [0_u8; 8192];
         loop {
@@ -171,7 +171,7 @@ impl Channel {
             }
             answer.extend_from_slice(chunk.get(..n).ok_or(ChannelError::Malformed)?);
         }
-        parse(&answer)
+        parse_within(&answer, call.max_answer())
     }
 }
 
@@ -180,6 +180,14 @@ impl Channel {
 /// # Errors
 /// [`ChannelError`].
 pub fn parse(answer: &[u8]) -> Result<Vec<u8>, ChannelError> {
+    parse_within(answer, MAX_BODY)
+}
+
+/// [`parse`] with a body of at most `max` bytes.
+///
+/// # Errors
+/// [`ChannelError`].
+pub fn parse_within(answer: &[u8], max: usize) -> Result<Vec<u8>, ChannelError> {
     let mut headers = [httparse::EMPTY_HEADER; 32];
     let mut r = httparse::Response::new(&mut headers);
     let httparse::Status::Complete(at) = r.parse(answer).map_err(|_| ChannelError::Malformed)?
@@ -194,7 +202,7 @@ pub fn parse(answer: &[u8]) -> Result<Vec<u8>, ChannelError> {
         .and_then(|h| core::str::from_utf8(h.value).ok())
         .and_then(|v| v.trim().parse::<usize>().ok())
         .ok_or(ChannelError::Malformed)?;
-    if at > MAX_HEAD || length > MAX_BODY {
+    if at > MAX_HEAD || length > max {
         return Err(ChannelError::Malformed);
     }
     let body = answer

@@ -31,6 +31,36 @@
       "valid": true
     },
     {
+      "cbor": "a362646e78187569643d6164612c6f753d70656f706c652c6f3d636f72706462696e64585a0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c677375626a656374500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "edn": "{\"subject\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"bind\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c', \"dn\": \"uid=ada,ou=people,o=corp\"}",
+      "id": "authenticated",
+      "valid": true
+    },
+    {
+      "cbor": "a462646e78187569643d6164612c6f753d70656f706c652c6f3d636f72706462696e64585a0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c6673656372657458425b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b677375626a656374500a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "edn": "{\"subject\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"bind\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c', \"dn\": \"uid=ada,ou=people,o=corp\", \"secret\": h'5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b'}",
+      "id": "authenticated-rotated",
+      "valid": true
+    },
+    {
+      "cbor": "a0",
+      "edn": "{}",
+      "id": "not-authenticated",
+      "valid": true
+    },
+    {
+      "cbor": "a366636f6f6b6965583d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d67656e747269657381a262646e78187569643d6164612c6f753d70656f706c652c6f3d636f72706a61747472696275746573828262636e816361646182686d656d6265724f66817819636e3d73746166662c6f753d67726f7570732c6f3d636f7270676f7574636f6d6564646f6e65",
+      "edn": "{\"entries\": [{\"dn\": \"uid=ada,ou=people,o=corp\", \"attributes\": [[\"cn\", [\"ada\"]], [\"memberOf\", [\"cn=staff,ou=groups,o=corp\"]]]}], \"outcome\": \"done\", \"cookie\": h'0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d'}",
+      "id": "directory-page",
+      "valid": true
+    },
+    {
+      "cbor": "a267656e747269657380676f7574636f6d656a73697a655f6c696d6974",
+      "edn": "{\"entries\": [], \"outcome\": \"size_limit\"}",
+      "id": "directory-page-last",
+      "valid": true
+    },
+    {
       "edn": "{\"gateway\": \"spiffe://corp/gw\", \"realm\": \"corp\"}",
       "id": "hello-with-a-foreign-uri",
       "valid": false
@@ -38,6 +68,12 @@
     {
       "edn": "{\"subject\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"name\": \"Ada\"}",
       "id": "subject-with-a-name",
+      "valid": false
+    },
+    {
+      "cbor": "",
+      "edn": "{\"bind\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c'}",
+      "id": "bind-without-subject",
       "valid": false
     }
   ],

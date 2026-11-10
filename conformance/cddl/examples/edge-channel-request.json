@@ -37,15 +37,27 @@
       "valid": true
     },
     {
-      "cbor": "a463617070677072696e746572646e616d6568646e3d746f6b656e657265616c6d64636f72706673656372657458185a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
-      "edn": "{\"realm\": \"corp\", \"app\": \"printer\", \"name\": \"dn=token\", \"secret\": h'5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a'}",
-      "id": "authenticate-planned",
+      "cbor": "a4646e616d6568646e3d746f6b656e657265616c6d64636f72706673656372657458185a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a696d656368616e69736d6673696d706c65",
+      "edn": "{\"realm\": \"corp\", \"mechanism\": \"simple\", \"name\": \"dn=token\", \"secret\": h'5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a'}",
+      "id": "authenticate",
       "valid": true
     },
     {
-      "cbor": "a76462617365716f753d70656f706c652c64633d636f7270657265616c6d64636f72706573636f7065637375626666696c7465728263616e6482836265716b6f626a656374436c61737366706572736f6e82636e6f74826770726573656e746d6e734163636f756e744c6f636b69706167655f73697a6518646a617474726962757465738162636e6a73697a655f6c696d69741901f4",
-      "edn": "{\"realm\": \"corp\", \"base\": \"ou=people,dc=corp\", \"scope\": \"sub\", \"filter\": [\"and\", [[\"eq\", \"objectClass\", \"person\"], [\"not\", [\"present\", \"nsAccountLock\"]]]], \"attributes\": [\"cn\"], \"size_limit\": 500, \"page_size\": 100}",
-      "id": "directory-read-planned",
+      "cbor": "a5646e616d6578187569643d6164612c6f753d70656f706c652c6f3d636f7270657265616c6d64636f727066726f74617465f56673656372657458185a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a696d656368616e69736d6673696d706c65",
+      "edn": "{\"realm\": \"corp\", \"mechanism\": \"simple\", \"name\": \"uid=ada,ou=people,o=corp\", \"secret\": h'5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a', \"rotate\": true}",
+      "id": "authenticate-rotate",
+      "valid": true
+    },
+    {
+      "cbor": "a365636861696e81453003020101657265616c6d64636f7270696d656368616e69736d6865787465726e616c",
+      "edn": "{\"realm\": \"corp\", \"mechanism\": \"external\", \"chain\": [h'3003020101']}",
+      "id": "authenticate-external",
+      "valid": true
+    },
+    {
+      "cbor": "a96462617365706f753d70656f706c652c6f3d636f72706462696e64585a0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c657265616c6d64636f72706573636f70656373756266636f6f6b6965583d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d6666696c746572838263616e6402836265716b6f626a656374436c61737366706572736f6e8365636861696e686d656d6265724f667819636e3d73746166662c6f753d67726f7570732c6f3d636f727069706167655f73697a6518646a617474726962757465738262636e612b6a73697a655f6c696d69741901f4",
+      "edn": "{\"realm\": \"corp\", \"bind\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c', \"base\": \"ou=people,o=corp\", \"scope\": \"sub\", \"filter\": [[\"and\", 2], [\"eq\", \"objectClass\", \"person\"], [\"chain\", \"memberOf\", \"cn=staff,ou=groups,o=corp\"]], \"attributes\": [\"cn\", \"+\"], \"size_limit\": 500, \"page_size\": 100, \"cookie\": h'0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d'}",
+      "id": "directory-read",
       "valid": true
     },
     {
@@ -64,8 +76,21 @@
       "valid": false
     },
     {
-      "edn": "{\"realm\": \"corp\", \"base\": \"\", \"scope\": \"sub\", \"filter\": [\"present\", \"cn\"], \"attributes\": [], \"size_limit\": 5001, \"page_size\": 100}",
+      "cbor": "",
+      "edn": "{\"realm\": \"corp\", \"bind\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c', \"base\": \"\", \"scope\": \"sub\", \"filter\": [[\"present\", \"cn\"]], \"attributes\": [], \"size_limit\": 5001, \"page_size\": 100}",
       "id": "results-above-5000",
+      "valid": false
+    },
+    {
+      "cbor": "",
+      "edn": "{\"realm\": \"corp\", \"mechanism\": \"digest-md5\", \"name\": \"ada\", \"secret\": h'5a'}",
+      "id": "sasl-digest-md5",
+      "valid": false
+    },
+    {
+      "cbor": "",
+      "edn": "{\"realm\": \"corp\", \"bind\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c', \"base\": \"\", \"scope\": \"sub\", \"filter\": [[\"present\", \"cn\"]], \"attributes\": [], \"size_limit\": 10, \"page_size\": 1001}",
+      "id": "page-above-1000",
       "valid": false
     }
   ],

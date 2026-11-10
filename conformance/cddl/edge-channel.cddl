@@ -16,9 +16,10 @@
 ; `edge-too-large`, `edge-malformed`, `edge-call-not-served`, `edge-unavailable`, or a refusal
 ; code of the call.
 ;
-; `authenticate`, `session_attest` and `directory_read` are declared and answer
-; `edge-call-not-served` until their lanes serve them (P10, P2, P10); their bodies below are
-; the planned shapes, which the serving lane may refine before it serves the call.
+; `session_attest` is declared and answers `edge-call-not-served` until its lane serves it (P2);
+; its body below is the planned shape, which the serving lane may refine before it serves the
+; call. `authenticate` and `directory_read` are served for LDAP gateways (OP-155 m.3 (n)); any
+; other kind gets `edge-method`.
 
 edge-request = hello-request / subject-lookup-request / issue-claim-request / audit-request /
   authenticate-request / session-attest-request / directory-read-request
@@ -100,19 +101,37 @@ audit-code-32 = tstr .regexp "[a-z][a-z0-9._]{0,31}"
 
 audit-code-16 = tstr .regexp "[a-z][a-z0-9._]{0,15}"
 
-; --- authenticate (planned, P10) ----------------------------------------------------------
+; --- authenticate (LDAP) -----------------------------------------------------------------
 
-; A legacy credential check (LDAP bind, RADIUS PAP). The answer never tells an unknown name
-; from a wrong secret.
-authenticate-request = {
+; One LDAP bind (§10.6.3). `simple` carries an LDAP credential, as `dn=token` or under its
+; holder's DN `uid=<uid>,ou=people,o=<realm>`; the primary password never binds. `external` is
+; SASL EXTERNAL: the client certificate chain the gateway's TLS session verified, leaf first; the
+; realm's certificate sign-in rules decide. There is no SCRAM and no DIGEST-MD5. `rotate` is
+; RFC 3062 on the LDAP credential just presented: a new secret replaces it.
+authenticate-request = simple-bind / external-bind
+
+simple-bind = {
   realm: realm-slug,
-  app: tstr .size (1..256),
-  name: tstr .size (1..512),            ; the bind DN, `dn=token` form or user name
-  secret: bstr .size (1..1024),         ; secret: never logged, never stored by the gateway
+  mechanism: "simple",
+  name: tstr .size (1..512),
+  secret: bstr .size (1..1024),         ; never logged, never kept by the gateway
+  ? rotate: true,
 }
 
-authenticate-answer = {
-  ? subject: subject-id,                ; present exactly when the credential checked out
+external-bind = {
+  realm: realm-slug,
+  mechanism: "external",
+  chain: [+ bstr .size (1..8192)],     ; at most 8
+}
+
+; An unknown name and a wrong secret answer the same: an empty map. `bind` is the opaque,
+; MAC'd handle `directory_read` needs (8 hours, this gateway only); `dn` is what WhoAmI answers;
+; `secret` is the new LDAP credential after a rotation, shown once.
+authenticate-answer = {} / {
+  subject: subject-id,
+  bind: bstr .size (1..256),
+  dn: tstr .size (1..1024),
+  ? secret: bstr .size (1..1024),
 }
 
 ; --- session_attest (P2, OP-155 m.3 (c), IDI-7) ------------------------------------------
@@ -151,42 +170,46 @@ session-attest-decided = {
   decided: true,
 }
 
-; --- directory_read (planned, P10) --------------------------------------------------------
+; --- directory_read (LDAP) ---------------------------------------------------------------
 
-; A read of the realm's directory tree for the read-only LDAP gateway (IDP-16): filter depth
-; ≤ 16, results ≤ 5000, page ≤ 1000, 10 s.
+; One page of a search of the realm's read-only directory tree for a live bind (IDP-16): filter
+; depth ≤ 16 and ≤ 255 nodes, results ≤ 5000, page ≤ 1000, 10 s. The filter travels in prefix
+; order as a flat list of nodes, so its depth never becomes CBOR nesting; `and`/`or` name how many
+; filters follow. `chain` is the in-chain rule 1.2.840.113556.1.4.1941; `undefined` is any other
+; extensible match (RFC 4511 §4.5.1.7).
 directory-read-request = {
   realm: realm-slug,
+  bind: bstr .size (1..256),
   base: tstr .size (0..1024),
   scope: "base" / "one" / "sub",
-  filter: ldap-filter,
-  attributes: [* attribute-name],
+  filter: [+ filter-node],             ; at most 255
+  attributes: [* attribute-name / "*" / "+" / "1.1"],   ; at most 64
+  ? types_only: true,
   size_limit: uint .le 5000,
-  page_size: uint .le 1000,
-  ? cookie: bstr .size (1..256),        ; the HMAC'd paging cookie of the previous page
+  page_size: uint .le 1000,             ; at least 1
+  ? cookie: bstr .size (1..256),        ; the HMAC'd cookie of the previous page, 10 minutes
 }
 
-ldap-filter = ["and", [+ ldap-filter]] / ["or", [+ ldap-filter]] / ["not", ldap-filter] /
-  ["eq", attribute-name, tstr] / ["ge", attribute-name, tstr] / ["le", attribute-name, tstr] /
-  ["approx", attribute-name, tstr] / ["present", attribute-name] /
-  ["substr", attribute-name, substr-parts]
+filter-node = ["and", uint .le 255] / ["or", uint .le 255] / ["not"] /
+  ["eq", attribute-name, attribute-value] / ["ge", attribute-name, attribute-value] /
+  ["le", attribute-name, attribute-value] / ["approx", attribute-name, attribute-value] /
+  ["present", attribute-name] /
+  ["substr", attribute-name, attribute-value, [* attribute-value], attribute-value] /
+  ["chain", attribute-name, attribute-value] / ["undefined"]
 
-substr-parts = {
-  ? initial: tstr,
-  any: [* tstr],
-  ? final: tstr,
-}
-
+; At most 256 entries. An attribute may come in consecutive chunks of at most 256 values. This
+; answer alone may reach 1 MiB.
 directory-read-answer = {
-  entries: [* directory-entry],
+  entries: [* directory-entry],         ; at most 256
+  outcome: "done" / "size_limit" / "time_limit" / "no_such_object",
   ? cookie: bstr .size (1..256),        ; absent on the last page
 }
 
 directory-entry = {
   dn: tstr .size (1..1024),
-  attributes: {* attribute-name => [* attribute-value]},
+  attributes: [* [attribute-name, [* attribute-value]]],
 }
 
-attribute-name = tstr .regexp "[A-Za-z][A-Za-z0-9_.:-]{0,127}"
+attribute-name = tstr .regexp "[A-Za-z0-9][A-Za-z0-9.-]{0,127}"
 
-attribute-value = tstr .size (0..4096) / bstr .size (0..4096) / int / bool
+attribute-value = tstr .size (0..4096)
