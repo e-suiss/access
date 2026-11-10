@@ -62,6 +62,7 @@ access-crypto = { workspace = true, features = ["testing"] }
 access-identity-account = { workspace = true, features = ["testing"] }
 access-identity-signer = { path = "../../crates/identity-signer" }
 access-identity-x509 = { workspace = true, features = ["testing"] }
+access-identity-oidf = { workspace = true, features = ["testing"] }
 access-local-client = { path = "../access-local-client" }
 access-store = { workspace = true, features = ["testing"] }
 aws-lc-rs = { workspace = true }

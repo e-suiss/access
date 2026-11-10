@@ -413,4 +413,187 @@ mod admin {
         let op = ec.metadata_of("openid_provider").unwrap();
         assert!(op.get("federation_registration_endpoint").is_some());
     }
+
+    /// Federation documents served in process, by URL.
+    #[derive(Default)]
+    struct Served(std::sync::Mutex<std::collections::HashMap<String, (u16, String)>>);
+
+    impl Served {
+        fn serve(&self, url: &str, status: u16, body: &str) {
+            self.0
+                .lock()
+                .unwrap()
+                .insert(String::from(url), (status, String::from(body)));
+        }
+    }
+
+    impl access_identity_oauth::ports::oauth::ClientDocuments for Served {
+        fn vet<'a>(&'a self, _: &'a str) -> access_identity_oauth::ports::oauth::Fetch<'a, ()> {
+            Box::pin(async { Ok(()) })
+        }
+
+        fn fetch<'a>(
+            &'a self,
+            _: RealmId,
+            url: &'a str,
+            _: &'a str,
+            _: usize,
+        ) -> access_identity_oauth::ports::oauth::Fetch<
+            'a,
+            access_identity_oauth::ports::oauth::Fetched,
+        > {
+            let (status, body) = self
+                .0
+                .lock()
+                .unwrap()
+                .get(url)
+                .cloned()
+                .unwrap_or((404, String::new()));
+            Box::pin(async move {
+                Ok(access_identity_oauth::ports::oauth::Fetched {
+                    status,
+                    max_age_s: None,
+                    content_type: None,
+                    body: body.into_bytes(),
+                })
+            })
+        }
+    }
+
+    // IDI-12, IDP-20, OP-155 m.3 (j), §9.13.8 k.4, §10.7.1, Ek B 4754
+    #[tokio::test]
+    async fn a_trust_anchor_revocation_cuts_the_issuer_until_its_chain_returns() {
+        use access_identity_oauth::adapters::oidf::refresh_issuers;
+        use access_identity_oidf::testing::Entity;
+        let w = World::new().await;
+        let (t, r, d) = w.realm("oidf-idi12").await;
+        onboard(&w.plane, d, ROOT, ROOT_KEY).await;
+        access_store::claims::open_claim_ingest_day(&w.db.archive, 0)
+            .await
+            .unwrap();
+        let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
+        let issuer = realm_issuer(&mut tx).await.unwrap().unwrap();
+        tx.commit().await.unwrap();
+        let key = w.keys.open_issuer(r, issuer).await.unwrap();
+        let domain = DomainId::from_bytes(d.0);
+        let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
+        let instance = issuer_instance(&mut tx, &domain, &thumbprint(&key))
+            .await
+            .unwrap()
+            .unwrap();
+        tx.commit().await.unwrap();
+        assert_eq!(
+            w.admin().register_issuer(t, r).await.unwrap(),
+            Some(instance)
+        );
+        onboard(&w.plane, d, ALICE, ALICE_KEY).await;
+        let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
+        let alice = tx
+            .insert_subject("active", "realm-kek:1", &[9; 40])
+            .await
+            .unwrap();
+        assert!(
+            access_store::idp::bind_subject_party(&mut tx, &alice, &ALICE.0)
+                .await
+                .unwrap()
+        );
+        tx.commit().await.unwrap();
+        let ta = Entity::new(TA).unwrap();
+        let leaf = Entity::new(ENTITY).unwrap();
+        apply(
+            &w,
+            (t, r),
+            d,
+            FederationChange::Enable {
+                authority_hints: Vec::new(),
+            },
+            2,
+        )
+        .await;
+        let anchor = FederationChange::TrustAnchorAdd {
+            entity_id: String::from(TA),
+            jwks: access_crypto::jose::output::to_string(&ta.key.jwks()),
+        };
+        apply(&w, (t, r), d, anchor, 3).await;
+        let (iat, exp) = (NOW - 1_000, NOW + 3_600_000);
+        let meta = |s: &str| access_kernel::json::parse(s.as_bytes(), 1 << 16).unwrap();
+        let ta_meta = meta(&format!(
+            r#"{{"federation_entity":{{"federation_fetch_endpoint":"{}"}}}}"#,
+            ta.fetch_endpoint()
+        ));
+        let leaf_meta =
+            meta(r#"{"openid_provider":{"issuer":"https://issuer.federation.example"}}"#);
+        let fetch = format!(
+            "{}?sub={}",
+            ta.fetch_endpoint(),
+            ENTITY.replace(':', "%3A").replace('/', "%2F")
+        );
+        let docs = Served::default();
+        docs.serve(
+            &format!("{TA}/.well-known/openid-federation"),
+            200,
+            &ta.config(&[], &ta_meta, iat, exp),
+        );
+        docs.serve(
+            &format!("{ENTITY}/.well-known/openid-federation"),
+            200,
+            &leaf.config(&[TA], &leaf_meta, iat, exp),
+        );
+        let statement = ta.about(&leaf, None, iat, exp);
+        docs.serve(&fetch, 200, &statement);
+        track_issuer(
+            &w.db.app,
+            &domain,
+            (*t.as_bytes(), *r.as_bytes()),
+            ENTITY,
+            Some(issuer),
+            NOW,
+        )
+        .await
+        .unwrap();
+        let c = courier(&w);
+        let login = |at: u64| {
+            authentication(AuthFacts {
+                subject: alice,
+                method: AuthMethod::Webauthn,
+                auth_time: at,
+                assurance: BTreeMap::from([(String::from("aal"), 1)]),
+                webauthn: None,
+                evidence: None,
+                bind: Bind::None,
+            })
+        };
+        let done = refresh_issuers(&w.db.app, &docs, &domain, NOW)
+            .await
+            .unwrap();
+        assert_eq!(done.resolved, 1, "{done:?}");
+        assert!(admitted(&c.issue(t, r, &login(NOW - 9)).await.unwrap()));
+        docs.serve(&fetch, 404, "");
+        let done = refresh_issuers(&w.db.app, &docs, &domain, NOW)
+            .await
+            .unwrap();
+        assert_eq!(
+            done.unresolved, 1,
+            "the anchor no longer vouches for the issuer"
+        );
+        let head = w.plane.domains.head(d).await.unwrap();
+        assert!(
+            refused_by_chain(&c.issue(t, r, &login(NOW - 8)).await.unwrap()),
+            "the next Claim of that issuer is not ingested"
+        );
+        assert_eq!(
+            w.plane.domains.head(d).await.unwrap(),
+            head,
+            "nothing is recorded: the Acceptance stands, untouched"
+        );
+        docs.serve(&fetch, 200, &statement);
+        let done = refresh_issuers(&w.db.app, &docs, &domain, NOW)
+            .await
+            .unwrap();
+        assert_eq!(done.resolved, 1);
+        assert!(
+            admitted(&c.issue(t, r, &login(NOW - 7)).await.unwrap()),
+            "the chain is back: the Claim flows again under the same Acceptance"
+        );
+    }
 }
