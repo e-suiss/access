@@ -201,3 +201,4 @@ period-month = month
 payment-purpose = For { $purpose }
 payment-pay = Pay once
 payment-not_one_time = This request would let { $merchant } charge you again. It can't be paid here as a one-time payment.
+merchants-save_card_refused = This request doesn't say exactly how much { $merchant } could charge per order and until when, or lets it pass this on. It can't be saved here.

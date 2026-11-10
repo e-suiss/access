@@ -4303,3 +4303,10 @@ surface = "account"
 class = "notice"
 owner = "identity_plane"
 protected = false
+
+[[message]]
+key = "merchants-save_card_refused"
+surface = "account"
+class = "notice"
+owner = "identity_plane"
+protected = false

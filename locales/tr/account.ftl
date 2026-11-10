@@ -201,3 +201,4 @@ period-month = ay
 payment-purpose = Amaç: { $purpose }
 payment-pay = Bir kez öde
 payment-not_one_time = Bu istek { $merchant } işletmesinin senden yeniden ödeme almasına izin verir. Burada tek seferlik ödeme olarak ödenemez.
+merchants-save_card_refused = Bu istek { $merchant } işletmesinin sipariş başına ne kadar ve ne zamana kadar ödeme alabileceğini tam söylemiyor ya da bunu başkasına aktarmasına izin veriyor. Burada kaydedilemez.
