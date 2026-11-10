@@ -4,8 +4,12 @@
 
 pub mod attest;
 pub mod b64;
+pub mod bridge;
+pub mod browser;
 pub mod history;
+pub mod isolation;
 pub mod machine;
+pub mod profile;
 pub mod step;
 pub mod webbot;
 

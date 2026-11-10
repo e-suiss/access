@@ -66,6 +66,8 @@ enum Startup {
     Io(#[from] std::io::Error),
     #[error("{0}")]
     Store(#[from] access_executor::store::StoreError),
+    #[error("a cloud executor runs only with an attested isolation adapter, and none is built in")]
+    NoIsolation,
 }
 
 fn var(name: &'static str) -> Result<String, Startup> {
@@ -113,6 +115,10 @@ async fn run() -> Result<(), Startup> {
     let upstream = UpstreamHttps::new(roots("ACCESS_EXECUTOR_UPSTREAM_CA")?)?;
     let kind = Kind::parse(&var("ACCESS_EXECUTOR_KIND")?)
         .ok_or(Startup::Config("ACCESS_EXECUTOR_KIND"))?;
+    // E61, OP-156 m.3 (w)
+    if kind == Kind::Cloud {
+        return Err(Startup::NoIsolation);
+    }
     let pkcs8 = std::fs::read(var("ACCESS_EXECUTOR_SIGNING_KEY")?)
         .map_err(|_| Startup::Config("ACCESS_EXECUTOR_SIGNING_KEY"))?;
     let signer = SoftSigner::ed25519_from_pkcs8(&Secret::new(pkcs8))

@@ -73,6 +73,7 @@ fn started(kind: Kind, steps: Vec<StepSpec>) -> Event {
         connection: String::from("c"),
         steps,
         commit_window_ms: access_executor::domain::COMMIT_WINDOW_MS,
+        isolation: None,
         at: NOW,
     }))
 }

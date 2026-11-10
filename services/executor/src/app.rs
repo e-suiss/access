@@ -25,13 +25,15 @@ use suiss_crypto::secret::Secret;
 use suiss_crypto::signer::{Signer, sign_sign1};
 
 use crate::domain::attest::{self, Report, Reporter};
+use crate::domain::bridge::{self, BridgeError, Data, ToolStep};
 use crate::domain::history::{Confirmed, Event, Job, Outcome, Request, Started};
+use crate::domain::isolation::{self, IsolationError};
 use crate::domain::machine::{Follow, Next, next};
 use crate::domain::step::{StepSpec, check_steps};
 use crate::domain::webbot::{self, Params};
 use crate::domain::{COMMIT_WINDOW_MS, HANDOFF_WAIT_MS, Kind, MAX_CONTINUATIONS};
 use crate::drivers::{self, HttpRequest};
-use crate::ports::{Access, Clock, Random, Upstream};
+use crate::ports::{Access, Clock, Isolation, LocalTool, Random, Upstream};
 use crate::store::{Store, StoreError};
 
 /// Why a call did not do what it asked; the job is as it was.
@@ -186,6 +188,41 @@ pub struct Executor<A, U, C, R, S> {
     config: Config,
     tokens: std::sync::Arc<Tokens>,
     metadata: Mutex<BTreeMap<[u8; 32], DomainMetadata>>,
+    isolation: Option<Adapter>,
+}
+
+/// An isolation adapter and the measurement digests the executor declares.
+type Adapter = (std::sync::Arc<dyn Isolation>, Vec<[u8; 32]>);
+
+/// A bridged session of the person's own coding tool (E57 (2)): stopping it runs nothing more.
+#[derive(Debug, Default)]
+pub struct Session {
+    stopped: std::sync::atomic::AtomicBool,
+}
+
+impl Session {
+    /// Stops the session.
+    pub fn stop(&self) {
+        self.stopped
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Whether it was stopped.
+    #[must_use]
+    pub fn stopped(&self) -> bool {
+        self.stopped.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+/// One bridged step: the step, its intent's canonical bytes and the actor's `commit` AIS.
+#[derive(Clone, Debug)]
+pub struct Bridged {
+    /// The step.
+    pub step: ToolStep,
+    /// The intent; its `step` parameter is the step's digest.
+    pub intent: Vec<u8>,
+    /// The actor's `commit` AIS naming this executor as PEP.
+    pub ais: Vec<u8>,
 }
 
 impl<A: Access, U: Upstream, C: Clock, R: Random, S: Signer + Send + Sync> Executor<A, U, C, R, S> {
@@ -207,7 +244,46 @@ impl<A: Access, U: Upstream, C: Clock, R: Random, S: Signer + Send + Sync> Execu
             config,
             tokens,
             metadata: Mutex::new(BTreeMap::new()),
+            isolation: None,
         }
+    }
+
+    /// The cloud executor's isolation adapter and the measurement digests its conformance
+    /// declaration names (E61 (1)); without one a cloud executor starts no job.
+    #[must_use]
+    pub fn with_isolation(
+        mut self,
+        isolation: std::sync::Arc<dyn Isolation>,
+        declared: Vec<[u8; 32]>,
+    ) -> Self {
+        self.isolation = Some((isolation, declared));
+        self
+    }
+
+    /// The person's attested microVM for a cloud executor's job; `None` for the other kinds
+    /// (E61, OP-156 m.3 (w)).
+    async fn isolate(&self, s: &Ais) -> Result<Option<isolation::Isolated>, ExecError> {
+        if self.config.kind != Kind::Cloud {
+            return Ok(None);
+        }
+        let code = |e: IsolationError| match e {
+            IsolationError::Missing => "executor-isolation",
+            IsolationError::Measurement => "executor-measurement",
+            IsolationError::Binding => "executor-tee-binding",
+        };
+        let Some((adapter, declared)) = &self.isolation else {
+            return Err(ExecError::Conflict(code(IsolationError::Missing)));
+        };
+        let access_kernel::combinator::Capacity::For(person) = s.capacity else {
+            return Err(ExecError::Malformed("executor-capacity"));
+        };
+        let report = adapter
+            .open(person.0)
+            .await
+            .ok_or_else(|| ExecError::Unavailable(String::from("isolation")))?;
+        isolation::verify(&report, &person.0, declared)
+            .map(Some)
+            .map_err(|e| ExecError::Conflict(code(e)))
     }
 
     /// The configuration.
@@ -397,6 +473,8 @@ impl<A: Access, U: Upstream, C: Clock, R: Random, S: Signer + Send + Sync> Execu
         let exercise =
             exercise_id(&s.domain, &s.nonce).map_err(|_| ExecError::Malformed("executor-nonce"))?;
         let now = self.now()?;
+        // E61, OP-156 m.3 (w)
+        let isolation = self.isolate(&s).await?;
         // AG-40, Ek B 4600
         match self.decide(&req.ais, &s, &envelope, None, now).await? {
             Verdict::Allowed => {}
@@ -418,6 +496,7 @@ impl<A: Access, U: Upstream, C: Clock, R: Random, S: Signer + Send + Sync> Execu
             steps: req.steps,
             commit_window_ms: COMMIT_WINDOW_MS,
             at: now,
+            isolation,
         }));
         let (job, fresh) = self
             .store
@@ -692,6 +771,13 @@ impl<A: Access, U: Upstream, C: Clock, R: Random, S: Signer + Send + Sync> Execu
             Verdict::Allowed => (true, String::from("allow")),
             Verdict::Refused(c) => (false, c),
         };
+        // E59 (3), E61 (4)
+        if !allowed
+            && let (Some(i), Some((adapter, _))) = (&job.started.isolation, &self.isolation)
+            && !adapter.destroy(i.person).await
+        {
+            return Err(ExecError::Unavailable(String::from("isolation-destroy")));
+        }
         self.put(
             job,
             &Event::Decided {
@@ -702,6 +788,69 @@ impl<A: Access, U: Upstream, C: Clock, R: Random, S: Signer + Send + Sync> Execu
             },
         )
         .await
+    }
+
+    /// Runs one step of the person's own coding tool (E57 (2)–(4), A-7): only on a local
+    /// executor, only while `session` runs, only after a verified ALLOW of the step's own
+    /// Exercise, and its output comes back as data. No credential is carried or read.
+    ///
+    /// # Errors
+    /// [`ExecError`]; the tool did not run.
+    pub async fn bridge(
+        &self,
+        session: &Session,
+        tool: &dyn LocalTool,
+        b: &Bridged,
+    ) -> Result<Data, ExecError> {
+        let code = |e: BridgeError| {
+            ExecError::Conflict(match e {
+                BridgeError::Kind => "executor-bridge-kind",
+                BridgeError::Step => "executor-bridge-step",
+                BridgeError::Stopped => "executor-bridge-stopped",
+                BridgeError::Credential => "executor-bridge-credential",
+            })
+        };
+        if self.config.kind != Kind::Local {
+            return Err(code(BridgeError::Kind));
+        }
+        b.step.check().map_err(code)?;
+        if session.stopped() {
+            return Err(code(BridgeError::Stopped));
+        }
+        let envelope = IntentEnvelope::from_bytes(&b.intent)
+            .map_err(|_| ExecError::Malformed("executor-intent"))?;
+        // E57 (4)
+        let named = matches!(
+            envelope.params.get("step"),
+            Some(access_kernel::intent::ParamValue::Eq(access_kernel::model::EqValue::Bytes(d)))
+                if d.as_slice() == b.step.digest().0.as_slice()
+        );
+        let s = statement(&b.ais)?;
+        let digest =
+            intent_digest(&envelope).map_err(|_| ExecError::Malformed("executor-intent"))?;
+        if !named
+            || s.mode != Mode::Commit
+            || s.pep != self.config.pep
+            || s.intent != digest
+            || s.exercise.is_some()
+        {
+            return Err(ExecError::Malformed("executor-ais"));
+        }
+        let exercise =
+            exercise_id(&s.domain, &s.nonce).map_err(|_| ExecError::Malformed("executor-nonce"))?;
+        let now = self.now()?;
+        match self.decide(&b.ais, &s, &envelope, None, now).await? {
+            Verdict::Allowed => {}
+            Verdict::Refused(c) => return Err(ExecError::NotAllowed(c)),
+        }
+        if session.stopped() {
+            return Err(code(BridgeError::Stopped));
+        }
+        let out = tool
+            .run(&b.step)
+            .await
+            .ok_or_else(|| ExecError::Unavailable(String::from("tool")))?;
+        Ok(bridge::data(exercise, out))
     }
 
     /// The vault's release of the Exercise's token to this executor (OP-154 m.3 (t), m.12): one

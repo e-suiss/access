@@ -28,6 +28,20 @@ A job's history is an append-only list of events in PostgreSQL (`executor` schem
 
 Every request names the executor as itself (`User-Agent: access-executor/1`) and carries a Web Bot Auth signature (RFC 9421) over `@authority` and `Signature-Agent` by the executor Instance's Ed25519 key. `Signature-Agent` names the Suiss directory, never the person. There is no disguise: no borrowed browser identity, no proxy rotation, no CAPTCHA solving.
 
+## The cloud executor
+
+A `cloud` executor runs a person's agent work in that person's own microVM, never shared with anyone else. The microVM is a confidential VM (AMD SEV-SNP or Intel TDX): before a job starts, the executor checks its report, whose measurement must be one the executor declares and whose report data must bind the person and the TEE's own job key. That job key is the only key a person's device wraps their data keys to when they grant One a cloud key permission. There is no built-in isolation adapter, so a cloud executor without one starts no job and the `access-executor` binary refuses to run as `cloud`.
+
+Inside the microVM:
+
+- **Browser profile.** The profile, cookies and web sessions are sealed under the person's own `one_browser_profile` key. The microVM disk has a random key that is kept only wrapped under that same key. When the Mandate or the job ends, or a re-check is refused, the TEE is told to destroy the disk key and every wrapped key copy.
+- **One context per task.** Every task gets its own profile, cookie jar and origin sets, taken from its Mandate. A cookie or tab never crosses to another task. A profile opens for a task only under the Exercise that task runs.
+- **Passwords.** A password comes from the person's own password manager at the moment it is typed. It goes only into a page of the origin it was saved for. The model sees a note that a field was filled, never the password, a cookie or a card, and it sees nothing while a person has taken over.
+
+## Coding tools on the person's device
+
+A `local` executor can bridge the person's own Claude Code or Codex, running under the person's own account. Every step (a tool call, a file write, a command) is its own Exercise with the executor as PEP and runs only after a verified ALLOW. A stopped session runs nothing more. The tool's sign-in stays in the tool's own store: a step that carries a credential is refused, and the executor reads none. Whatever the tool prints comes back as data from an untrusted source, never as an instruction.
+
 ## What an outcome says
 
 An outcome is the executor's report, never the truth about the world: `done` (with at least one kind of evidence: an upstream confirmation, an independent recheck or a page observation), `not-done`, or `unknown` when the result could not be verified. Each one becomes an `effect_attestation` Claim through Access's Claim Ingest, with the digest of the upstream's answer as evidence reference; the answer itself never enters Access. A report never changes the decision it belongs to: an allowed Exercise whose effect did not happen stays allowed, with outcome `not-done`.

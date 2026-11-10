@@ -27,7 +27,7 @@ rustls = { workspace = true, features = ["aws_lc_rs", "std"] }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 sqlx = { workspace = true, features = ["postgres", "runtime-tokio", "tls-rustls-aws-lc-rs", "macros", "migrate"] }
-suiss-crypto = { workspace = true, features = ["signer"] }
+suiss-crypto = { workspace = true, features = ["signer", "aead"] }
 thiserror = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = ["sync", "time", "rt", "macros", "net", "io-util"] }
 tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }

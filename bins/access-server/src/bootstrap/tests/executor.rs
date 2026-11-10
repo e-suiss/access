@@ -288,6 +288,11 @@ impl Rig {
 
     /// A fresh executor process over the same database; `tokens` is its token memory.
     fn executor(&self, tokens: Arc<Tokens>) -> Exec {
+        self.executor_of(Kind::Customer, tokens)
+    }
+
+    /// [`Self::executor`] of `kind`.
+    fn executor_of(&self, kind: Kind, tokens: Arc<Tokens>) -> Exec {
         Executor::new(
             (
                 self.store.clone(),
@@ -301,7 +306,7 @@ impl Rig {
             ),
             Config {
                 pep: String::from(EXECUTOR),
-                kind: Kind::Customer,
+                kind,
                 reporter: Reporter {
                     operator: OPERATOR,
                     executor: self.instance,
@@ -929,3 +934,5 @@ async fn the_mcp_client_driver_calls_an_official_server_with_the_released_token(
     );
     rig.lab.w.domains.release().await;
 }
+
+mod cloud;

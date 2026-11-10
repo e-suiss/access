@@ -107,6 +107,9 @@ pub struct Started {
     pub commit_window_ms: u64,
     /// When.
     pub at: u64,
+    /// The person's attested microVM the job runs in, for a cloud executor (E61).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub isolation: Option<super::isolation::Isolated>,
 }
 
 /// One history event.
