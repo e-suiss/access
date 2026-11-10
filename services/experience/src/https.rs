@@ -101,6 +101,17 @@ impl Https {
         authorization: Option<&str>,
         body: &[u8],
     ) -> Option<Response> {
+        self.send(at, "POST", path, authorization, body).await
+    }
+
+    async fn send(
+        &self,
+        at: &Endpoint,
+        method: &str,
+        path: &str,
+        authorization: Option<&str>,
+        body: &[u8],
+    ) -> Option<Response> {
         let name = ServerName::try_from(at.host.clone()).ok()?;
         let tcp = TcpStream::connect((at.host.as_str(), at.port)).await.ok()?;
         let mut tls = self.connector.connect(name, tcp).await.ok()?;
@@ -108,7 +119,7 @@ impl Https {
             .map(|a| format!("Authorization: {a}\r\n"))
             .unwrap_or_default();
         let head = format!(
-            "POST {path} HTTP/1.1\r\nHost: {}:{}\r\nContent-Type: application/json\r\n\
+            "{method} {path} HTTP/1.1\r\nHost: {}:{}\r\nContent-Type: application/json\r\n\
              Accept: application/json\r\n{credential}Content-Length: {}\r\nConnection: close\r\n\r\n",
             at.host,
             at.port,
@@ -187,6 +198,41 @@ impl Upstream for Https {
         let at = self.routes.get(domain).unwrap_or(&self.default);
         let path = format!("/access/v1/search/{}", kind.search());
         match tokio::time::timeout(TIMEOUT, self.post(at, &path, None, &body)).await {
+            Ok(Some(r)) => Answer::Response(r),
+            Ok(None) => Answer::Unanswered(Fault::Unreachable),
+            Err(_) => Answer::Unanswered(Fault::Timeout),
+        }
+    }
+
+    async fn discovery(&self, realm: &str) -> Answer {
+        let path = format!("/.well-known/suiss-configuration/realms/{realm}");
+        self.get(&self.default, &path).await
+    }
+
+    async fn attention(&self, url: &str, party: &str) -> Answer {
+        let Some(rest) = url.strip_prefix("https://") else {
+            return Answer::Unanswered(Fault::Unreachable);
+        };
+        let at = rest.find('/').unwrap_or(rest.len());
+        let (origin, path) = rest.split_at(at);
+        let Some(endpoint) = Endpoint::parse(&format!("https://{origin}")) else {
+            return Answer::Unanswered(Fault::Unreachable);
+        };
+        if !party
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+            || path.contains(['?', '#', ' '])
+        {
+            return Answer::Unanswered(Fault::Unreachable);
+        }
+        let path = if path.is_empty() { "/" } else { path };
+        self.get(&endpoint, &format!("{path}?party={party}")).await
+    }
+}
+
+impl Https {
+    async fn get(&self, at: &Endpoint, path: &str) -> Answer {
+        match tokio::time::timeout(TIMEOUT, self.send(at, "GET", path, None, &[])).await {
             Ok(Some(r)) => Answer::Response(r),
             Ok(None) => Answer::Unanswered(Fault::Unreachable),
             Err(_) => Answer::Unanswered(Fault::Timeout),

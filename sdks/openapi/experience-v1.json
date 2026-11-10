@@ -367,6 +367,11 @@
             },
             "type": "array"
           },
+          "realm": {
+            "description": "The reader's realm slug: when its Suiss discovery document names a coordinator, the hub asks that coordinator's public Needs Attention endpoint for the count (OP-156 m.3 (t)).",
+            "pattern": "^[a-z][a-z0-9-]{1,62}$",
+            "type": "string"
+          },
           "viewer": {
             "description": "The reader's Party.",
             "type": "string"

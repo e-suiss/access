@@ -181,6 +181,8 @@ export interface components {
             depth: "default" | "expert" | "audit";
             /** @description The signed reads. */
             reads: components["schemas"]["SignedRead"][];
+            /** @description The reader's realm slug: when its Suiss discovery document names a coordinator, the hub asks that coordinator's public Needs Attention endpoint for the count (OP-156 m.3 (t)). */
+            realm?: string;
             /** @description The reader's Party. */
             viewer: string;
         };

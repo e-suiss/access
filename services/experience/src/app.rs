@@ -113,6 +113,35 @@ impl<U: Upstream, C: Clock, N: Random> Experience<U, C, N> {
                 }),
             }
         }
-        Ok(assemble(&req.viewer, req.depth, self.clock.now(), &domains))
+        let mut hub = assemble(&req.viewer, req.depth, self.clock.now(), &domains);
+        // OP-156 m.3 (t)
+        if let Some(realm) = req.realm.as_deref() {
+            hub.attention = self.attention(realm, &req.viewer).await;
+        }
+        Ok(hub)
+    }
+
+    /// The Needs Attention link of `realm`'s coordinator for `viewer`: none when the realm names
+    /// no coordinator, or Access or the coordinator does not answer (OP-156 m.3 (t)).
+    async fn attention(&self, realm: &str, viewer: &str) -> Option<crate::contract::Attention> {
+        let slug_ok = (2..=63).contains(&realm.len())
+            && realm.bytes().next().is_some_and(|b| b.is_ascii_lowercase())
+            && realm
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
+        if !slug_ok {
+            return None;
+        }
+        let json = |a: Answer| match a {
+            Answer::Response(r) if r.status == 200 => {
+                serde_json::from_slice::<serde_json::Value>(&r.body).ok()
+            }
+            _ => None,
+        };
+        let endpoint = crate::domain::hub::attention::coordinator_of(&json(
+            self.upstream.discovery(realm).await,
+        )?)?;
+        let answer = json(self.upstream.attention(&endpoint, viewer).await)?;
+        crate::domain::hub::attention::answered(&endpoint, &answer)
     }
 }

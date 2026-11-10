@@ -1165,6 +1165,7 @@ mod accounts;
 mod agents;
 mod certificate;
 mod consent;
+mod coordinator;
 mod cross_app;
 mod dcr;
 mod device;

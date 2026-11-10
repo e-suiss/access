@@ -160,6 +160,10 @@ pub struct HubRequest {
     pub depth: Depth,
     /// The signed reads.
     pub reads: Vec<SignedRead>,
+    /// The slug of the realm the reader signed in at: its coordinator, if it names one, gives
+    /// the Needs Attention link (OP-156 m.3 (t)).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub realm: Option<String>,
 }
 
 /// Whether what a row or domain shows is current (XI-16).
@@ -570,6 +574,7 @@ fn requests() -> Map<String, Value> {
                 "viewer": text("The reader's Party."),
                 "depth": { "type": "string", "enum": ["default", "expert", "audit"], "default": "default", "description": "§8.12: each depth explains the one before; capacity and status show at every depth." },
                 "reads": list(&r("SignedRead"), "The signed reads."),
+                "realm": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,62}$", "description": "The reader's realm slug: when its Suiss discovery document names a coordinator, the hub asks that coordinator's public Needs Attention endpoint for the count (OP-156 m.3 (t))." },
             }),
             &["viewer", "reads"],
         ),

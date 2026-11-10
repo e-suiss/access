@@ -19,6 +19,20 @@ pub trait Upstream: Send + Sync {
         kind: Kind,
         body: Vec<u8>,
     ) -> impl Future<Output = Answer> + Send;
+
+    /// `GET /.well-known/suiss-configuration/realms/{realm}` at Access (OP-149 m.3); none by
+    /// default.
+    fn discovery(&self, realm: &str) -> impl Future<Output = Answer> + Send {
+        let _ = realm;
+        async { Answer::Unanswered(access_sdk::transport::Fault::Unreachable) }
+    }
+
+    /// `GET {url}?party={party}`: the coordinator's public Needs Attention count for the reader
+    /// (OP-156 m.3 (t)); none by default.
+    fn attention(&self, url: &str, party: &str) -> impl Future<Output = Answer> + Send {
+        let _ = (url, party);
+        async { Answer::Unanswered(access_sdk::transport::Fault::Unreachable) }
+    }
 }
 
 /// Wall-clock time for "as of" (XI-16), Unix ms. Not a trusted time: no decision rests on it.
