@@ -51,6 +51,11 @@ origins, Access's origin with the trust roots, client certificate and key, the M
 endpoint and its trust roots, the realm's governing domain, and the proxy registration's name,
 namespace and action. It keeps no state.
 
+The Access Proxy images (`access-proxy-envoy`, `access-proxy-caddy`) carry it as
+`/usr/local/bin/access-mcp-gateway`. Run it as a second container of the same image beside the
+engine, with `access-mcp-gateway` as the entrypoint, and point the engine's MCP app upstream at
+its listen address.
+
 ## License
 
 Apache-2.0.

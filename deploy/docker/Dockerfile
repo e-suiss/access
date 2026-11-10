@@ -33,15 +33,6 @@ RUN cargo auditable build --release --locked \
  && scripts/checksec.sh target/release/access-server target/release/access-signer \
       target/release/access-identity-signer target/release/access-local-client target/release/access-cli
 
-# OP-156 m.3 (n), B22, AG-42: the MCP gateway, the second process of the Access Proxy images;
-# a proxy variant copies /src/target/release/access-mcp-gateway from this stage
-FROM chef AS mcp-gateway
-COPY --from=planner /src/recipe.json recipe.json
-RUN cargo chef cook --release --locked --package access-mcp-gateway --recipe-path recipe.json
-COPY . .
-RUN cargo auditable build --release --locked --package access-mcp-gateway \
- && scripts/checksec.sh target/release/access-mcp-gateway
-
 # OP-116 m.6: the Kernel's Wasm build the TypeScript SDK loads, as `just wasm` makes it
 FROM chef AS wasm
 RUN rustup target add wasm32-unknown-unknown \
