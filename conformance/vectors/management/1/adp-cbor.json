@@ -1,0 +1,338 @@
+{
+  "track": "management",
+  "version": "1",
+  "operation": "adp.cbor",
+  "rule": "OP-155 m.3 (q)",
+  "cases": [
+    {
+      "name": "evaluation-commit",
+      "route": "/access/v1/evaluation",
+      "json": {
+        "subject": {
+          "type": "access_party",
+          "id": "AwMDAwMDAwMDAwMDAwMDAw",
+          "properties": {
+            "department": "x"
+          }
+        },
+        "action": {
+          "name": "buy"
+        },
+        "resource": {
+          "type": "shop",
+          "id": "eu/item-1"
+        },
+        "context": {
+          "domain": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+          "mode": "commit",
+          "basis": {
+            "anchor": "AwMDAwMDAwMDAwMDAwMDAw"
+          },
+          "capacity": "own",
+          "intent": {
+            "action": {
+              "namespace": "shop",
+              "name": "buy",
+              "major": 1,
+              "schema": "BQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU"
+            },
+            "resources": [
+              {
+                "namespace": "shop",
+                "path": [
+                  "eu",
+                  "item-1"
+                ],
+                "incarnation": 2
+              }
+            ],
+            "validity": {
+              "from": 0,
+              "until": 100000
+            }
+          },
+          "nonce": "AgICAgICAgICAgICAgICAg"
+        }
+      },
+      "cbor": "a466616374696f6ea1646e616d656362757967636f6e74657874a6646d6f646566636f6d6d6974656261736973a166616e63686f727641774d4441774d4441774d4441774d4441774d444177656e6f6e6365764167494341674943416749434167494341674943416766646f6d61696e782b4151454241514542415145424151454241514542415145424151454241514542415145424151454241514566696e74656e74a366616374696f6ea4646e616d6563627579656d616a6f720166736368656d61782b42515546425155464251554642515546425155464251554642515546425155464251554642515546425155696e616d6573706163656473686f706876616c6964697479a26466726f6d0065756e74696c1a000186a0697265736f757263657381a3647061746882626575666974656d2d31696e616d6573706163656473686f706b696e6361726e6174696f6e02686361706163697479636f776e677375626a656374a36269647641774d4441774d4441774d4441774d4441774d44417764747970656c6163636573735f70617274796a70726f70657274696573a16a6465706172746d656e746178687265736f75726365a26269646965752f6974656d2d3164747970656473686f70",
+      "intent_digests": [
+        "568dec4bf2791e6871440077a2bfd6dcb91c0210d983cd151ebb1176cd647b1c"
+      ]
+    },
+    {
+      "name": "evaluation-check-params",
+      "route": "/access/v1/evaluation",
+      "json": {
+        "subject": {
+          "type": "access_party",
+          "id": "AwMDAwMDAwMDAwMDAwMDAw",
+          "properties": {
+            "department": "x"
+          }
+        },
+        "action": {
+          "name": "buy"
+        },
+        "resource": {
+          "type": "shop",
+          "id": "eu/item-1"
+        },
+        "context": {
+          "domain": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+          "mode": "check",
+          "basis": {
+            "anchor": "AwMDAwMDAwMDAwMDAwMDAw"
+          },
+          "capacity": "own",
+          "intent": {
+            "action": {
+              "namespace": "shop",
+              "name": "buy",
+              "major": 1,
+              "schema": "BQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU"
+            },
+            "resources": [
+              {
+                "namespace": "shop",
+                "path": [
+                  "eu",
+                  "item-1"
+                ],
+                "incarnation": 2
+              }
+            ],
+            "validity": {
+              "from": 0,
+              "until": 100000
+            },
+            "params": {
+              "amount": {
+                "amount": {
+                  "value": -1250,
+                  "unit": "chf"
+                }
+              },
+              "count": {
+                "count": 3
+              },
+              "express": {
+                "flag": true
+              },
+              "tier": {
+                "eq": -2
+              },
+              "window": {
+                "interval": {
+                  "from": 10,
+                  "until": 20
+                }
+              }
+            }
+          },
+          "nonce": "AgICAgICAgICAgICAgICAg"
+        }
+      },
+      "cbor": "a466616374696f6ea1646e616d656362757967636f6e74657874a6646d6f646565636865636b656261736973a166616e63686f727641774d4441774d4441774d4441774d4441774d444177656e6f6e6365764167494341674943416749434167494341674943416766646f6d61696e782b4151454241514542415145424151454241514542415145424151454241514542415145424151454241514566696e74656e74a466616374696f6ea4646e616d6563627579656d616a6f720166736368656d61782b42515546425155464251554642515546425155464251554642515546425155464251554642515546425155696e616d6573706163656473686f7066706172616d73a56474696572a16265712165636f756e74a165636f756e740366616d6f756e74a166616d6f756e74a264756e6974636368666576616c75653904e16677696e646f77a168696e74657276616ca26466726f6d0a65756e74696c146765787072657373a164666c6167f56876616c6964697479a26466726f6d0065756e74696c1a000186a0697265736f757263657381a3647061746882626575666974656d2d31696e616d6573706163656473686f706b696e6361726e6174696f6e02686361706163697479636f776e677375626a656374a36269647641774d4441774d4441774d4441774d4441774d44417764747970656c6163636573735f70617274796a70726f70657274696573a16a6465706172746d656e746178687265736f75726365a26269646965752f6974656d2d3164747970656473686f70",
+      "intent_digests": [
+        "0f3dbab03c3d0ce150ef15e90ac98c689c4915f3e611ceb639337250de64e543"
+      ]
+    },
+    {
+      "name": "evaluation-for-party",
+      "route": "/access/v1/evaluation",
+      "json": {
+        "subject": {
+          "type": "access_party",
+          "id": "AwMDAwMDAwMDAwMDAwMDAw",
+          "properties": {
+            "department": "x"
+          }
+        },
+        "action": {
+          "name": "buy"
+        },
+        "resource": {
+          "type": "shop",
+          "id": "eu/item-1"
+        },
+        "context": {
+          "domain": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+          "mode": "commit",
+          "basis": {
+            "anchor": "AwMDAwMDAwMDAwMDAwMDAw"
+          },
+          "capacity": {
+            "for": "AwMDAwMDAwMDAwMDAwMDAw"
+          },
+          "intent": {
+            "action": {
+              "namespace": "shop",
+              "name": "buy",
+              "major": 1,
+              "schema": "BQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU"
+            },
+            "resources": [
+              {
+                "namespace": "shop",
+                "path": [
+                  "eu",
+                  "item-1"
+                ],
+                "incarnation": 2
+              }
+            ],
+            "validity": {
+              "from": 0,
+              "until": 100000
+            }
+          },
+          "nonce": "AgICAgICAgICAgICAgICAg"
+        }
+      },
+      "cbor": "a466616374696f6ea1646e616d656362757967636f6e74657874a6646d6f646566636f6d6d6974656261736973a166616e63686f727641774d4441774d4441774d4441774d4441774d444177656e6f6e6365764167494341674943416749434167494341674943416766646f6d61696e782b4151454241514542415145424151454241514542415145424151454241514542415145424151454241514566696e74656e74a366616374696f6ea4646e616d6563627579656d616a6f720166736368656d61782b42515546425155464251554642515546425155464251554642515546425155464251554642515546425155696e616d6573706163656473686f706876616c6964697479a26466726f6d0065756e74696c1a000186a0697265736f757263657381a3647061746882626575666974656d2d31696e616d6573706163656473686f706b696e6361726e6174696f6e02686361706163697479a163666f727641774d4441774d4441774d4441774d4441774d444177677375626a656374a36269647641774d4441774d4441774d4441774d4441774d44417764747970656c6163636573735f70617274796a70726f70657274696573a16a6465706172746d656e746178687265736f75726365a26269646965752f6974656d2d3164747970656473686f70",
+      "intent_digests": [
+        "568dec4bf2791e6871440077a2bfd6dcb91c0210d983cd151ebb1176cd647b1c"
+      ]
+    },
+    {
+      "name": "evaluations-execute-all",
+      "route": "/access/v1/evaluations",
+      "json": {
+        "subject": {
+          "type": "access_party",
+          "id": "AwMDAwMDAwMDAwMDAwMDAw"
+        },
+        "action": {
+          "name": "buy"
+        },
+        "resource": {
+          "type": "shop",
+          "id": "eu/item-1"
+        },
+        "options": {
+          "evaluations_semantic": "execute_all"
+        },
+        "evaluations": [
+          {
+            "context": {
+              "domain": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+              "mode": "check",
+              "basis": {
+                "anchor": "AwMDAwMDAwMDAwMDAwMDAw"
+              },
+              "capacity": "own",
+              "intent": {
+                "action": {
+                  "namespace": "shop",
+                  "name": "buy",
+                  "major": 1,
+                  "schema": "BQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU"
+                },
+                "resources": [
+                  {
+                    "namespace": "shop",
+                    "path": [
+                      "eu",
+                      "item-1"
+                    ],
+                    "incarnation": 2
+                  }
+                ],
+                "validity": {
+                  "from": 0,
+                  "until": 100000
+                }
+              },
+              "nonce": "AgICAgICAgICAgICAgICAg"
+            }
+          },
+          {
+            "context": {
+              "domain": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+              "mode": "commit",
+              "basis": {
+                "anchor": "AwMDAwMDAwMDAwMDAwMDAw"
+              },
+              "capacity": "own",
+              "intent": {
+                "action": {
+                  "namespace": "shop",
+                  "name": "buy",
+                  "major": 1,
+                  "schema": "BQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU"
+                },
+                "resources": [
+                  {
+                    "namespace": "shop",
+                    "path": [
+                      "eu",
+                      "item-1"
+                    ],
+                    "incarnation": 2
+                  }
+                ],
+                "validity": {
+                  "from": 0,
+                  "until": 100000
+                }
+              },
+              "nonce": "AgICAgICAgICAgICAgICAg"
+            }
+          }
+        ]
+      },
+      "cbor": "a566616374696f6ea1646e616d6563627579676f7074696f6e73a1746576616c756174696f6e735f73656d616e7469636b657865637574655f616c6c677375626a656374a26269647641774d4441774d4441774d4441774d4441774d44417764747970656c6163636573735f7061727479687265736f75726365a26269646965752f6974656d2d3164747970656473686f706b6576616c756174696f6e7382a167636f6e74657874a6646d6f646565636865636b656261736973a166616e63686f727641774d4441774d4441774d4441774d4441774d444177656e6f6e6365764167494341674943416749434167494341674943416766646f6d61696e782b4151454241514542415145424151454241514542415145424151454241514542415145424151454241514566696e74656e74a366616374696f6ea4646e616d6563627579656d616a6f720166736368656d61782b42515546425155464251554642515546425155464251554642515546425155464251554642515546425155696e616d6573706163656473686f706876616c6964697479a26466726f6d0065756e74696c1a000186a0697265736f757263657381a3647061746882626575666974656d2d31696e616d6573706163656473686f706b696e6361726e6174696f6e02686361706163697479636f776ea167636f6e74657874a6646d6f646566636f6d6d6974656261736973a166616e63686f727641774d4441774d4441774d4441774d4441774d444177656e6f6e6365764167494341674943416749434167494341674943416766646f6d61696e782b4151454241514542415145424151454241514542415145424151454241514542415145424151454241514566696e74656e74a366616374696f6ea4646e616d6563627579656d616a6f720166736368656d61782b42515546425155464251554642515546425155464251554642515546425155464251554642515546425155696e616d6573706163656473686f706876616c6964697479a26466726f6d0065756e74696c1a000186a0697265736f757263657381a3647061746882626575666974656d2d31696e616d6573706163656473686f706b696e6361726e6174696f6e02686361706163697479636f776e",
+      "intent_digests": [
+        "568dec4bf2791e6871440077a2bfd6dcb91c0210d983cd151ebb1176cd647b1c",
+        "568dec4bf2791e6871440077a2bfd6dcb91c0210d983cd151ebb1176cd647b1c"
+      ]
+    }
+  ],
+  "rejections": [
+    {
+      "name": "map-keys-out-of-order",
+      "cbor": "a2616201616102",
+      "error": "cbor-key-order"
+    },
+    {
+      "name": "float",
+      "cbor": "a16161f93c00",
+      "error": "cbor-float"
+    },
+    {
+      "name": "null",
+      "cbor": "a16161f6",
+      "error": "cbor-simple"
+    },
+    {
+      "name": "byte-string",
+      "cbor": "a161614100",
+      "error": "cbor-type"
+    },
+    {
+      "name": "tag",
+      "cbor": "a16161c11a00000000",
+      "error": "cbor-tag"
+    },
+    {
+      "name": "non-text-key",
+      "cbor": "a10101",
+      "error": "cbor-type"
+    },
+    {
+      "name": "indefinite-map",
+      "cbor": "bf616101ff",
+      "error": "cbor-indefinite"
+    },
+    {
+      "name": "non-shortest-integer",
+      "cbor": "a161611801",
+      "error": "cbor-non-shortest"
+    },
+    {
+      "name": "trailing-bytes",
+      "cbor": "a1616101ff",
+      "error": "cbor-trailing-bytes"
+    }
+  ]
+}

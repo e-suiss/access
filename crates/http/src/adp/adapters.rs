@@ -70,6 +70,7 @@ struct Shared<P: Pdp> {
 
 /// The ADP routes.
 pub fn router<P: Pdp + 'static>(service: Service<P>, discovery: Discovery) -> Router {
+    let max_body = service.max_body();
     let shared = Arc::new(Shared { service, discovery });
     Router::new()
         .route("/access/v1/evaluation", post(evaluation::<P>))
@@ -96,6 +97,11 @@ pub fn router<P: Pdp + 'static>(service: Service<P>, discovery: Discovery) -> Ro
             get(domain_metadata::<P>),
         )
         .with_state(shared)
+        // OP-155 m.3 (q)
+        .layer(axum::middleware::from_fn_with_state(
+            max_body,
+            crate::adp::cbor::negotiate,
+        ))
 }
 
 async fn evaluation<P: Pdp>(
@@ -269,7 +275,8 @@ fn discovery(issuer: &str, pdp: &str) -> serde_json::Map<String, serde_json::Val
         serde_json::json!([
             "urn:suiss:access:adp:1",
             "urn:suiss:access:explain:1",
-            "urn:suiss:access:consistency-token:1"
+            "urn:suiss:access:consistency-token:1",
+            "urn:suiss:access:adp-cbor:1"
         ]),
     );
     body

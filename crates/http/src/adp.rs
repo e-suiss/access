@@ -2,6 +2,7 @@
 
 pub mod adapters;
 pub mod app;
+pub mod cbor;
 pub mod domain;
 pub mod hub;
 pub mod payload;
