@@ -1,0 +1,20 @@
+[package]
+name = "access-identity-oidf"
+description = "OpenID Federation 1.0 for the identity plane, sans I/O: entity statements, trust chains, metadata policy, trust marks and registration checks (IDP-19, IDP-20)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-crypto = { workspace = true }
+access-kernel = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+aws-lc-rs = { workspace = true }
+
+[lints]
+workspace = true
