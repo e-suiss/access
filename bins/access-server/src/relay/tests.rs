@@ -332,3 +332,206 @@ async fn the_server_does_not_start_without_the_relay_credential() {
     assert_eq!(body(Some(DELAYED_MS + 1))["notifications_delayed"], true);
     assert_eq!(body(Some(DELAYED_MS))["notifications_delayed"], false);
 }
+
+/// The webhook courier's requests, over TLS to the twin on its local port, whatever host the
+/// stream names.
+#[derive(Clone)]
+struct ToTwin(Arc<rustls::ClientConfig>, u16);
+
+impl access_identity_events::ports::Transport for ToTwin {
+    async fn post(
+        &self,
+        url: &str,
+        content_type: &str,
+        headers: &[(&str, String)],
+        body: &[u8],
+    ) -> Result<access_identity_events::ports::Reply, access_identity_events::ports::PostError>
+    {
+        use access_identity_events::ports::{PostError, Reply};
+        use access_identity_oauth::adapters::outbound::{Target, post_over, post_request};
+        let target = Target::parse(url).map_err(|_| PostError::Refused)?;
+        let request =
+            post_request(&target, content_type, headers, body).map_err(|_| PostError::Refused)?;
+        let tcp = tokio::net::TcpStream::connect(("127.0.0.1", self.1))
+            .await
+            .map_err(|_| PostError::Unreachable)?;
+        let name = rustls::pki_types::ServerName::try_from("localhost").unwrap();
+        let mut s = tokio_rustls::TlsConnector::from(self.0.clone())
+            .connect(name, tcp)
+            .await
+            .map_err(|_| PostError::Unreachable)?;
+        let a = post_over(&mut s, &request)
+            .await
+            .map_err(|_| PostError::Unreachable)?;
+        Ok(Reply {
+            status: a.status,
+            retry_after_ms: None,
+        })
+    }
+}
+
+// Ek B 5293, TN-136, E42 (4), OP-156 m.3 (c): Relay takes Access's authority events as an
+// ordinary webhook receiver, on the Suiss webhook profile and with no privilege
+#[tokio::test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one end-to-end delivery from a committed authority record"
+)]
+async fn relay_consumes_authority_events_as_an_ordinary_receiver() {
+    use access_crypto::webhook::WebhookSecret;
+    use access_identity_events::adapters::KekSealer;
+    use access_identity_events::app::streams::Streams;
+    use access_identity_events::domain::catalog::urn;
+    use access_identity_events::domain::stream::parse_stream;
+    use access_identity_oauth::adapters::SignerKeys;
+    use access_identity_oauth::adapters::oauth::OsRandom;
+    use access_identity_oauth::adapters::outbound::DeclaredTargets;
+    use access_internal_api::events::{Event, Kind, Source, Subject};
+    use access_kernel::digest::Digest;
+    use access_kernel::model::Id;
+    use access_store::authority::{CommitBatch, HeadRow, OutboxRow, acquire_lease, commit_batch};
+
+    let db = fresh().await.unwrap();
+    let tenant = create_tenant(&db.app, "pool-default").await.unwrap();
+    let domain = DomainId::from_bytes(access_crypto::random::bytes::<32>().unwrap());
+    let genesis = LogRecord {
+        pos: 0,
+        kind: "genesis",
+        recorded_at: 1,
+        leaf_hash: [7; 32],
+        envelope: vec![0xa0],
+    };
+    create_domain(&db.sequencer, &domain, *tenant.as_bytes(), &genesis, &[])
+        .await
+        .unwrap();
+    let mut t = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
+    let realm = create_realm(&mut t, &domain, "shop", "pool-default")
+        .await
+        .unwrap();
+    t.enter_realm(realm).await.unwrap();
+    assert!(
+        access_store::tenancy::set_issuer(&mut t, "https://id.test/realms/shop")
+            .await
+            .unwrap()
+    );
+    access_store::idp::create_settings(&mut t).await.unwrap();
+    t.commit().await.unwrap();
+    let store = STORE
+        .get_or_init(|| {
+            let (module, label) = hsm("relay");
+            let pin = access_crypto::Secret::new(String::from("1234-test-only"));
+            Arc::new(KeyStore::open(&module, &label, &pin).unwrap())
+        })
+        .clone();
+    store.generate_kek(&kek_label(realm.as_bytes())).unwrap();
+    if store.mac(crate::login::ID_KEY_ROOT).is_err() {
+        store.generate_mac(crate::login::ID_KEY_ROOT).unwrap();
+    }
+    let keks = RealmKeks::new(store.clone());
+    let pools = crate::events::EventPools {
+        app: db.app.clone(),
+        reader: db.reader.clone(),
+        router: db.router.clone(),
+        ids: Arc::new(crate::ids::CellIds::new(store.clone())),
+        declared: DeclaredTargets::default(),
+        outbound: None,
+    };
+    let twin = RelayTwin::start(&random_hex(), ISSUER).await;
+    let request = json!({
+        "delivery": {
+            "method": "urn:suiss:access:delivery:webhook",
+            "endpoint_url": "https://relay.test/v1/access/events",
+        },
+        "aud": "relay",
+        "events_requested": [urn("authority-revoked")],
+    });
+    let hook = Streams::new(pools.db(), KekSealer(keks.clone()), OsRandom)
+        .create(
+            tenant,
+            realm,
+            &parse_stream(&serde_json::to_vec(&request).unwrap()).unwrap(),
+        )
+        .await
+        .unwrap();
+    let secret = WebhookSecret::parse(&hook.secret.clone().unwrap()).unwrap();
+    let (lease, head) = acquire_lease(&db.sequencer, &domain, "t", Duration::from_secs(10))
+        .await
+        .unwrap();
+    let pos = head.pos + 1;
+    let event = Event {
+        kind: Kind::AuthorityRevoked,
+        domain: Digest(*domain.as_bytes()),
+        source: Source::Exercise(Digest([9; 32])),
+        subject: Subject::Grant(Id([2; 16])),
+        at: 1_793_750_400_000,
+        detail: access_internal_api::events::Detail::None,
+    };
+    let batch = CommitBatch {
+        epoch: lease.epoch,
+        after: head.pos,
+        records: vec![LogRecord {
+            pos,
+            kind: "decision",
+            recorded_at: 2,
+            leaf_hash: [8; 32],
+            envelope: vec![0xa1, 1],
+        }],
+        head: HeadRow {
+            pos,
+            epoch: lease.epoch,
+            leaf_hash: [8; 32],
+            recorded_at: 2,
+            frontier: vec![[8; 32]],
+        },
+        nonces: vec![],
+        outbox: vec![OutboxRow {
+            pos,
+            idx: 0,
+            event_id: [42; 32],
+            event: event.to_bytes().unwrap(),
+            trace_parent: None,
+        }],
+        proofs: vec![],
+        reads: vec![],
+        writes: vec![],
+        draws: vec![],
+        single_use: vec![],
+        effects: vec![],
+    };
+    commit_batch(&db.sequencer, &domain, *tenant.as_bytes(), &batch)
+        .await
+        .unwrap();
+
+    let ready = access_http::internal::Readiness::default();
+    let consumers = ready.flag("outbox.consumers");
+    consumers.set(true);
+    let delivery = crate::events::Delivery::start(
+        &pools,
+        ToTwin(
+            twin.tls.clone(),
+            twin.base.rsplit_once(':').unwrap().1.parse().unwrap(),
+        ),
+        SignerKeys::new("/nonexistent.sock".into()),
+        keks,
+        &consumers,
+    );
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while twin.received().is_empty() {
+        assert!(Instant::now() < deadline, "not delivered in 30 s");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    delivery.stop().await;
+    let got = twin.received().remove(0);
+    let h = |n: &str| {
+        got.headers
+            .iter()
+            .find(|(k, _)| k == n)
+            .map(|(_, v)| v.clone())
+            .unwrap()
+    };
+    let ts: u64 = h("webhook-timestamp").parse().unwrap();
+    assert!(secret.verify(&h("webhook-id"), ts, &got.body, &h("webhook-signature"), ts));
+    let ce: Value = serde_json::from_slice(&got.body).unwrap();
+    assert_eq!(ce["type"], urn("authority-revoked"));
+    assert_eq!(ce["specversion"], "1.0");
+}
