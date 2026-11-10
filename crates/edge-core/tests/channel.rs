@@ -828,7 +828,7 @@ mod kerberos_gateway {
             .env("ACCESS_GW_KERBEROS_KEYTAB", &keytab)
             .env("ACCESS_GW_KERBEROS_LOGIN", LOGIN)
             .env("ACCESS_GW_KERBEROS_PARSER_SOCKET", &socket)
-            .env("ACCESS_GW_KERBEROS_PARSER_UID", &uid)
+            .env("ACCESS_GW_KERBEROS_PARSER_UID", "0")
             .env("ACCESS_GW_KERBEROS_KRB5_CONF", dir.join("krb5.conf"))
             .env("ACCESS_GW_KERBEROS_RCACHE_DIR", dir.join("rcache"))
             .env("ACCESS_GW_KERBEROS_SERVER", w.addr.to_string())
