@@ -2620,21 +2620,34 @@
         "operationId": "scimListUsers",
         "summary": "SCIM: lists or filters Users; filter depth ≤ 32 and length ≤ 4 KB, at most 1000 results, pages of at most 200 with an HMAC'd RFC 9865 cursor (OP-155 m.3 (g)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       },
       "post": {
         "operationId": "scimCreateUser",
         "summary": "SCIM: creates a User; the writes go through the account use cases and the client is a Claim source, never a grantor (IDP-23).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -2648,8 +2661,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/scim/v2/Users/{id}": {
@@ -2657,8 +2669,15 @@
         "operationId": "scimGetUser",
         "summary": "SCIM: one User; a deleted one answers 404.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -2673,15 +2692,21 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       },
       "put": {
         "operationId": "scimReplaceUser",
         "summary": "SCIM: replaces a User.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -2705,15 +2730,21 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       },
       "patch": {
         "operationId": "scimPatchUser",
         "summary": "SCIM: PATCH of a User, atomic: one failed operation fails them all.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -2728,15 +2759,21 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       },
       "delete": {
         "operationId": "scimDeleteUser",
         "summary": "SCIM: soft-deletes a User with a tombstone; its id and externalId are never reused (INV-32, OP-73).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -2751,8 +2788,7 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       }
     },
     "/scim/v2/Groups": {
@@ -2760,21 +2796,34 @@
         "operationId": "scimListGroups",
         "summary": "SCIM: lists or filters Groups; filter depth ≤ 32 and length ≤ 4 KB, at most 1000 results, pages of at most 200 with an HMAC'd RFC 9865 cursor (OP-155 m.3 (g)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       },
       "post": {
         "operationId": "scimCreateGroup",
         "summary": "SCIM: creates a Group; the writes go through the account use cases and the client is a Claim source, never a grantor (IDP-23).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -2788,8 +2837,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/scim/v2/Groups/{id}": {
@@ -2797,8 +2845,15 @@
         "operationId": "scimGetGroup",
         "summary": "SCIM: one Group; a deleted one answers 404.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -2813,15 +2868,21 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       },
       "put": {
         "operationId": "scimReplaceGroup",
         "summary": "SCIM: replaces a Group.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -2845,15 +2906,21 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       },
       "patch": {
         "operationId": "scimPatchGroup",
         "summary": "SCIM: PATCH of a Group, atomic: one failed operation fails them all.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -2868,15 +2935,21 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       },
       "delete": {
         "operationId": "scimDeleteGroup",
         "summary": "SCIM: soft-deletes a Group with a tombstone; its id and externalId are never reused (INV-32, OP-73).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -2891,8 +2964,7 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       }
     },
     "/scim/v2/Devices": {
@@ -2900,21 +2972,34 @@
         "operationId": "scimListDevices",
         "summary": "SCIM: lists or filters Devices; filter depth ≤ 32 and length ≤ 4 KB, at most 1000 results, pages of at most 200 with an HMAC'd RFC 9865 cursor (OP-155 m.3 (g)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       },
       "post": {
         "operationId": "scimCreateDevice",
         "summary": "SCIM: creates a Device; the writes go through the account use cases and the client is a Claim source, never a grantor (IDP-23).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -2928,8 +3013,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/scim/v2/Devices/{id}": {
@@ -2937,8 +3021,15 @@
         "operationId": "scimGetDevice",
         "summary": "SCIM: one Device; a deleted one answers 404.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -2953,15 +3044,21 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       },
       "put": {
         "operationId": "scimReplaceDevice",
         "summary": "SCIM: replaces a Device.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -2985,15 +3082,21 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       },
       "patch": {
         "operationId": "scimPatchDevice",
         "summary": "SCIM: PATCH of a Device, atomic: one failed operation fails them all.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -3008,15 +3111,21 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       },
       "delete": {
         "operationId": "scimDeleteDevice",
         "summary": "SCIM: soft-deletes a Device with a tombstone; its id and externalId are never reused (INV-32, OP-73).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -3031,8 +3140,7 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       }
     },
     "/scim/v2/ServiceProviderConfig": {
@@ -3040,14 +3148,20 @@
         "operationId": "scimServiceProviderConfig",
         "summary": "SCIM: what the server supports; bulk.supported is false.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/scim/v2/ResourceTypes": {
@@ -3055,14 +3169,20 @@
         "operationId": "scimResourceTypes",
         "summary": "SCIM: the resource types, User, Group and Device.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/scim/v2/Schemas": {
@@ -3070,14 +3190,20 @@
         "operationId": "scimSchemas",
         "summary": "SCIM: the schemas and extensions the server knows.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/scim/v2/Bulk": {
@@ -3085,8 +3211,15 @@
         "operationId": "scimBulk",
         "summary": "SCIM Bulk is not offered and always answers 501 (OP-155 m.3 (g)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -3100,8 +3233,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/saml/metadata": {

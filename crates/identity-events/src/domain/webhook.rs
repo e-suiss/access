@@ -299,8 +299,10 @@ mod tests {
         // OP-154 m.3 (e), SI-21
         assert!(event_names(&[String::from("agent.suspended")]).is_ok());
         assert!(event_names(&[String::from("agent.sponsor_assigned")]).is_ok());
-        // OP-155 m.3 (g), (i)
-        assert!(event_names(&[String::from("scim.provisioned")]).is_err());
+        // OP-155 m.3 (g)
+        assert!(event_names(&[String::from("scim.provisioned")]).is_ok());
+        assert!(event_names(&[String::from("scim.deprovisioned")]).is_ok());
+        // OP-155 m.3 (i)
         assert!(event_names(&[String::from("org.sso_enforced")]).is_err());
     }
 
