@@ -242,6 +242,8 @@ struct Settings {
     related: Vec<String>,
     verified: Vec<String>,
     push: bool,
+    sms: bool,
+    spc: bool,
 }
 
 /// A kit and the settings it was built from.
@@ -302,6 +304,9 @@ impl HsmKits {
             .map_err(|_| Unavailable)?;
         // OP-156 m.3 (d)
         let push = t.push_enabled().await.map_err(|_| Unavailable)?;
+        // OP-156 m.3 (f), (g)
+        let sms = t.sms_otp_enabled().await.map_err(|_| Unavailable)?;
+        let spc = t.spc_enabled().await.map_err(|_| Unavailable)?;
         t.commit().await.map_err(|_| Unavailable)?;
         Ok(Settings {
             signin,
@@ -309,6 +314,8 @@ impl HsmKits {
             related,
             verified,
             push,
+            sms,
+            spc,
         })
     }
 
@@ -375,9 +382,15 @@ impl HsmKits {
                     })
                     .collect::<Result<_, _>>()?,
             },
-            webauthn: RealmPolicy::default(),
+            // MD-11, OP-156 m.3 (e)
+            webauthn: RealmPolicy {
+                platform_uv_is_factor: signin.profile.platform_uv_is_factor(),
+                ..RealmPolicy::default()
+            },
             auth: AuthPolicy {
                 push: settings.push,
+                sms: settings.sms,
+                spc: settings.spc,
                 ..signin.apply(AuthPolicy::DEFAULT)
             },
             lifetimes: self.lifetimes,

@@ -795,7 +795,12 @@ fn lockdown(config: &Config) -> Lockdown {
         lockdown = lockdown.allow_read(dir);
     }
     if let Some(dir) = &config.risk.breach_ranges_dir {
-        lockdown = lockdown.allow_read(dir);
+        // OP-156 m.3 (h)
+        lockdown = if config.risk.breach_mirror_source.is_some() {
+            lockdown.allow_read_write(dir)
+        } else {
+            lockdown.allow_read(dir)
+        };
     }
     // OP-90
     let signup = &config.signup;
@@ -1988,6 +1993,14 @@ async fn serve(
         RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
         hosted.clone(),
     );
+    // OP-156 m.3 (e), (f)
+    let payment = access_http::login::payment_router(
+        RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
+        hosted.clone(),
+        access_identity_ui::app::payment::AppFactorRoots::embedded(
+            config.app_factor.apple_app_ids.clone(),
+        ),
+    );
     // OP-156 m.3 (z), E58
     let first_contact = access_http::login::first_contact_router(
         RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
@@ -2030,6 +2043,7 @@ async fn serve(
             .merge(sign_in.merge(me).merge(certificate_login))
             .merge(ldap_credentials)
             .merge(push)
+            .merge(payment)
             .merge(first_contact)
             .merge(sso_setup)
             .merge(account_pages)

@@ -262,6 +262,7 @@ mod tests {
                 recovery_code: false,
                 passkey: false,
                 push: false,
+                sms: false,
             },
             None,
             &[],

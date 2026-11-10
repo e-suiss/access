@@ -77,6 +77,7 @@ fn examples() -> Vec<(&'static str, Ui)> {
         recovery_code: true,
         passkey: false,
         push: false,
+        sms: false,
     };
     vec![
         ("identifier", identifier.clone()),

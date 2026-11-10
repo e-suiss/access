@@ -18,6 +18,9 @@ mod support;
 #[path = "login/push.rs"]
 mod push;
 
+#[path = "login/payment.rs"]
+mod payment;
+
 use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -28,7 +31,9 @@ use access_crypto::envelope::SoftKek;
 use access_crypto::opaque_id::IdKey;
 use access_crypto::totp::{TotpAlgorithm, hotp, step_of};
 use access_crypto::webauthn::DecoyKey;
-use access_http::login::{Assets, Peer, ldap_credentials_router, me_router, push_router, router};
+use access_http::login::{
+    Assets, Peer, ldap_credentials_router, me_router, payment_router, push_router, router,
+};
 use access_identity_account::adapters::pg::PgAccounts;
 use access_identity_account::adapters::system::SystemEntropy;
 use access_identity_account::app::accounts::{
@@ -141,6 +146,7 @@ impl Notifier for Recording<'_> {
             Body::Otp { code, .. } => code.expose().clone(),
             Body::MagicLink { link, .. } => link.expose().clone(),
             Body::PushApproval { challenge, .. } => challenge.expose().clone(),
+            Body::SmsOtp { code, .. } => code.expose().clone(),
             _ => String::new(),
         };
         if let (
@@ -584,6 +590,15 @@ async fn env_legacy(
     .merge(push_router(
         Discovery::new(Dir(entry.clone()), NoKeys),
         hosted.clone(),
+    ))
+    .merge(payment_router(
+        Discovery::new(Dir(entry.clone()), NoKeys),
+        hosted.clone(),
+        access_identity_ui::app::payment::AppFactorRoots {
+            android: vec![payment::attestation_ca().1.clone()],
+            apple: Vec::new(),
+            apple_app_ids: Vec::new(),
+        },
     ))
     .merge(me_router(
         Discovery::new(Dir(entry), NoKeys),

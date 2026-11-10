@@ -87,6 +87,8 @@ pub enum Owner {
     P12,
     /// Stage 11 Q5: push verification and approvers (OP-156 m.2).
     Q5,
+    /// Stage 11 Q6: payment-class authentication (OP-156 m.2).
+    Q6,
     /// Stage 11 Q8: the SSH certificate authority.
     Q8,
     /// Stage 11 Q9: first-contact tokens.
@@ -1210,6 +1212,20 @@ pub const ROUTES: &[Route] = &[
         "/v1/approvers/{device}/retire",
         "retireApprover",
         "Retires an approver device; nothing is deleted (OP-73).",
+    ),
+    live(
+        Owner::Q6,
+        Verb::Post,
+        "/v1/approvers/{device}/activate",
+        "activateApprover",
+        "Makes an approver the app-controlled factor after a sign-in in the last 5 minutes: its key's Android key attestation or App Attest attestation for the challenge SHA-256(\"access/app-factor-attestation/v1\" 0x00 issuer 0x00 thumbprint at), and under the TR payment profile the SMS activation code (MD-11, OP-156 m.3 (e)).",
+    ),
+    live(
+        Owner::Q6,
+        Verb::Post,
+        "/v1/sms/activation",
+        "sendActivationSms",
+        "Texts the signed-in person a 6-digit activation code, 5 minutes, 3 tries, never to a line whose SIM changed in the last 90 days; the only SMS use of the TR payment profile (OP-156 m.3 (f)).",
     ),
     live(
         Owner::Q9,

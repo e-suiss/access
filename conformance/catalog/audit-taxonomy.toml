@@ -1670,3 +1670,38 @@ ocsf_class = 6003
 ocsf_activity = 99
 caep = ""
 webhook = false
+
+# ---------------------------------------------------------------- identity: Stage 11 Q6 (appended): the SMS step and the app-controlled factor (OP-156 m.3 (e), (f))
+
+[[event]]
+event = "login.sms.failed"
+plane = "identity"
+class = "authentication"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "login.sms.succeeded"
+plane = "identity"
+class = "authentication"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "app_factor.activated"
+plane = "identity"
+class = "credential"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = "credential-change"
+webhook = false

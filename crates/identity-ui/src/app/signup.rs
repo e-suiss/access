@@ -391,6 +391,7 @@ where
                                 recovery_code: e.recovery_codes,
                                 passkey: e.passkeys,
                                 push: e.push,
+                                sms: e.sms,
                             },
                             None,
                             &reqs,

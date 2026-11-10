@@ -169,6 +169,13 @@ Each source is optional; a missing one makes its signals `unavailable`, never "f
 | `geo_mmdb_path` | A GeoIP/ASN MMDB file, read again when it changes. |
 | `breach_range_api` | A k-anonymity range API base (`https://…`). |
 | `breach_ranges_dir` | A local mirror of the range files, used when no range API is set. |
+| `breach_mirror_source` | A range API base (`https://…`) the mirror is refreshed from every 24 hours; needs `breach_ranges_dir`. A refresh fills a new version directory and switches to it in one rename; the version it replaces is archived, never removed, and a refresh that fails leaves the current one served. |
+
+### `[app_factor]`
+
+| Key | Meaning |
+|---|---|
+| `apple_app_ids` | App IDs (`TEAMID.bundle.id`) whose App Attest keys may become the app-controlled factor. Android key attestation is checked against the embedded Google roots. |
 
 ### `[signup]`
 

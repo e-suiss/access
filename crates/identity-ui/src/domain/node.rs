@@ -43,11 +43,13 @@ pub enum FieldName {
     /// N5: "Don't ask for a second step on this device for 30 days" (X33, X-L2), an
     /// [`Node::Option`].
     RememberDevice,
+    /// A code sent by SMS (OP-156 m.3 (f)).
+    SmsCode,
 }
 
 impl FieldName {
     /// All names.
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 16] = [
         Self::Identifier,
         Self::Password,
         Self::TotpCode,
@@ -63,6 +65,7 @@ impl FieldName {
         Self::BotToken,
         Self::KeepSignedIn,
         Self::RememberDevice,
+        Self::SmsCode,
     ];
 
     /// The wire name.
@@ -84,6 +87,7 @@ impl FieldName {
             Self::BotToken => "bot_token",
             Self::KeepSignedIn => "keep_signed_in",
             Self::RememberDevice => "remember_device",
+            Self::SmsCode => "sms_code",
         }
     }
 
@@ -105,7 +109,7 @@ impl FieldName {
             // CR-10
             Self::PasskeyCredential => 16_384,
             // OP-153 m.3 (o)
-            Self::EmailCode | Self::InvitationCode => 16,
+            Self::EmailCode | Self::InvitationCode | Self::SmsCode => 16,
             Self::DisplayName => 200,
             Self::Acknowledged | Self::KeepSignedIn | Self::RememberDevice => 8,
             // OP-153 m.3 (d)
@@ -122,6 +126,7 @@ impl FieldName {
             Self::Password
                 | Self::TotpCode
                 | Self::RecoveryCode
+                | Self::SmsCode
                 | Self::EmailCode
                 | Self::NewPassword
                 | Self::InvitationCode
@@ -172,11 +177,15 @@ pub enum Method {
     Acknowledge,
     /// Send a push verification to the account's approvers, or check on it (OP-156 m.3 (d)).
     Push,
+    /// Send an SMS code to the account's phone number (OP-156 m.3 (f)).
+    SendSms,
+    /// The SMS code step (OP-156 m.3 (f)).
+    Sms,
 }
 
 impl Method {
     /// All methods.
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 21] = [
         Self::Identifier,
         Self::Password,
         Self::Passkey,
@@ -196,6 +205,8 @@ impl Method {
         Self::Link,
         Self::Acknowledge,
         Self::Push,
+        Self::SendSms,
+        Self::Sms,
     ];
 
     /// The wire name.
@@ -221,6 +232,8 @@ impl Method {
             Self::Link => "link",
             Self::Acknowledge => "acknowledge",
             Self::Push => "push",
+            Self::SendSms => "send_sms",
+            Self::Sms => "sms",
         }
     }
 }

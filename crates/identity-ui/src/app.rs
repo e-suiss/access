@@ -23,6 +23,7 @@ pub mod ldap;
 mod me;
 pub mod orgs;
 pub mod pages;
+pub mod payment;
 pub mod privacy;
 pub mod push;
 pub mod recovery;
@@ -887,6 +888,14 @@ where
                 .map_err(|e| failed(&e))?,
             // OP-156 m.3 (d)
             (Method::Push, _) => return self.push_step(auth, kit, b, &flow, &fref, current).await,
+            // OP-156 m.3 (f)
+            (Method::SendSms, _) => {
+                return self.sms_step(auth, kit, b, &flow, &fref, current).await;
+            }
+            (Method::Sms, _) => auth
+                .sms(&fref, field(FieldName::SmsCode), corr)
+                .await
+                .map_err(|e| failed(&e))?,
             _ => return Err(Reply::problem(INVALID_SUBMISSION)),
         };
         self.outcome(auth, kit, b, &flow, &fref, outcome).await
@@ -1002,6 +1011,7 @@ where
                     recovery_code: e.recovery_codes,
                     passkey: e.passkeys,
                     push: e.push,
+                    sms: e.sms,
                 };
                 match ended {
                     Some(why) => Current::PushEnded(offered, why),
@@ -1175,6 +1185,7 @@ where
                     recovery_code: e.recovery_codes,
                     passkey: e.passkeys,
                     push: e.push,
+                    sms: e.sms,
                 };
                 let passkey = if e.passkeys {
                     match auth
@@ -1299,6 +1310,7 @@ fn steps(method: Method) {
         Method::EmailCode => "email_code",
         Method::MagicLink => "magic_link",
         Method::Push => "push",
+        Method::Sms => "sms",
         _ => return,
     };
     SIGN_IN_FACTORS.incr([factor]);

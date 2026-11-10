@@ -196,6 +196,8 @@ pub struct SecondFactors {
     pub passkey: bool,
     /// A push to the account's approvers (OP-156 m.3 (d)).
     pub push: bool,
+    /// An SMS code to the account's phone number (OP-156 m.3 (f)).
+    pub sms: bool,
 }
 
 /// Which e-mail first steps the realm offers (TN-102). Realm policy, never the account.
@@ -467,6 +469,24 @@ impl Ui {
                 label: TextId::SendPush.into(),
             });
         }
+        // OP-156 m.3 (f)
+        if offered.sms {
+            nodes.push(Node::Submit {
+                method: Method::SendSms,
+                label: TextId::SendSms.into(),
+            });
+            nodes.push(Node::input(
+                FieldName::SmsCode,
+                Method::Sms,
+                InputKind::Code,
+                Autocomplete::OneTimeCode,
+                TextId::SmsLabel.into(),
+            ));
+            nodes.push(Node::Submit {
+                method: Method::Sms,
+                label: TextId::Verify.into(),
+            });
+        }
         if offered.recovery_code {
             nodes.push(Node::input(
                 FieldName::RecoveryCode,
@@ -702,6 +722,7 @@ mod tests {
             recovery_code: false,
             passkey: true,
             push: false,
+            sms: false,
         };
         let ui = Ui::second_factor(flow(), offered, Some(options(&[])), &[]);
         assert!(
@@ -777,6 +798,7 @@ mod tests {
                     recovery_code: true,
                     passkey: false,
                     push: false,
+                    sms: false,
                 },
                 None,
                 &policy

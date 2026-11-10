@@ -92,6 +92,19 @@ pub(crate) struct Config {
     /// only poll.
     #[serde(default)]
     pub(crate) doorbell: Option<Doorbell>,
+    /// The app-controlled factor's attestation (OP-156 m.3 (e)).
+    #[serde(default)]
+    pub(crate) app_factor: AppFactor,
+}
+
+/// The app-controlled factor (MD-11, OP-156 m.3 (e)): Android key attestation is checked against
+/// the embedded Google roots; App Attest keys are accepted only for the App IDs named here.
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub(crate) struct AppFactor {
+    /// App IDs (team identifier, a dot, bundle identifier) whose App Attest keys may become the
+    /// app-controlled factor; none by default.
+    pub(crate) apple_app_ids: Vec<String>,
 }
 
 /// The doorbell's NATS server: TLS 1.3 with a client certificate, nothing else (OP-156 m.3 (j)).
@@ -264,6 +277,10 @@ pub(crate) struct Risk {
     /// A local mirror of the range files `<PREFIX>.txt`, used when no range API is set.
     #[serde(default)]
     pub(crate) breach_ranges_dir: Option<PathBuf>,
+    /// Where the mirror refresh job downloads the range files from every 24 hours, an `https`
+    /// range API base; without it the mirror is the operator's to fill (OP-156 m.3 (h)).
+    #[serde(default)]
+    pub(crate) breach_mirror_source: Option<String>,
 }
 
 /// One declared event delivery target (OP-149 m.23).
@@ -634,6 +651,7 @@ impl Default for Config {
             signup: Signup::default(),
             migration: Migration::default(),
             doorbell: None,
+            app_factor: AppFactor::default(),
         }
     }
 }
@@ -866,6 +884,13 @@ impl Config {
         // OP-151 m.3 (o)
         if let Some(base) = &self.risk.breach_range_api
             && access_identity_risk::adapters::range_api::RangeApi::new(base, ()).is_err()
+        {
+            return Err(ConfigError::BreachRangeApi);
+        }
+        // OP-156 m.3 (h)
+        if let Some(base) = &self.risk.breach_mirror_source
+            && (self.risk.breach_ranges_dir.is_none()
+                || access_identity_risk::adapters::range_api::RangeApi::new(base, ()).is_err())
         {
             return Err(ConfigError::BreachRangeApi);
         }
