@@ -745,9 +745,13 @@ mod kerberos_gateway {
         };
         for e in entries.flatten() {
             let p = e.path();
-            if p.is_dir() {
+            let Ok(kind) = e.file_type() else {
+                continue;
+            };
+            if kind.is_dir() {
                 holding(&p, needle, out);
-            } else if std::fs::read(&p).is_ok_and(|b| b.windows(needle.len()).any(|w| w == needle))
+            } else if kind.is_file()
+                && std::fs::read(&p).is_ok_and(|b| b.windows(needle.len()).any(|w| w == needle))
             {
                 out.push(p);
             }
