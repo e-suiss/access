@@ -3,7 +3,7 @@
 
 use serde_json::{Map, Value, json};
 
-use super::{object, problems, r, text};
+use super::{object, problems, r};
 use crate::stage11::{Method, PLANNED, PROXY_ENGINES, RELAY_STATUS};
 
 /// The relay status schema.

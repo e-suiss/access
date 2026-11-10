@@ -22,6 +22,10 @@ url = "https://raw.githubusercontent.com/mozilla/supply-chain/main/audits.toml"
 [imports.zcash]
 url = "https://raw.githubusercontent.com/zcash/rust-ecosystem/main/supply-chain/audits.toml"
 
+[policy.access-identity-account]
+dependency-criteria = { rcgen = "safe-to-run" }
+notes = "rcgen is reached only through the `testing` feature (the Relay twin), which only dev-dependencies enable (OP-156 Q2)"
+
 [policy.access-identity-x509]
 dependency-criteria = { rcgen = "safe-to-run", time = "safe-to-run" }
 notes = "rcgen and time are reached only through the `testing` feature, which only dev-dependencies enable (OP-155 m.8)"
