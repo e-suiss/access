@@ -2520,6 +2520,7 @@ mod experience;
 mod first_contact;
 mod management;
 mod mcp;
+mod mcp_gateway;
 mod privacy;
 mod product_twin;
 mod proxy;

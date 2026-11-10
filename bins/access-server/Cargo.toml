@@ -65,6 +65,7 @@ access-identity-domain = { workspace = true, features = ["testing"] }
 access-identity-export = { workspace = true, features = ["testing"] }
 access-experience = { workspace = true }
 access-executor = { path = "../../services/executor", features = ["testing"] }
+access-mcp-gateway = { path = "../../services/mcp-gateway" }
 access-vc-verifier = { path = "../../services/vc-verifier", features = ["testing"] }
 # OP-156 m.2 Q14
 access-hr-connector = { path = "../../services/hr-connector", features = ["testing"] }
