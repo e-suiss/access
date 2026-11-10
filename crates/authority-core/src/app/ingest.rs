@@ -99,6 +99,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     /// # Errors
     /// [`CoreError`] when the submission gets no answer; a Claim that does not verify is an
     /// answer ([`ClaimVerdict::Rejected`]).
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one commit loop over the submission's verdict and the fields kept beside the log"
+    )]
     pub async fn ingest(&mut self, sub: &ClaimSubmission, now: u64) -> Result<Ingested, CoreError> {
         if sub.domain != self.domain {
             return Err(CoreError::Protocol("domain"));

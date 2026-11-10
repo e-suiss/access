@@ -429,7 +429,7 @@ impl Coordinator {
         principal: &Actor,
         payload: Payload,
         commitment: Option<Digest>,
-    ) -> Result<(Digest, u64), Verdict> {
+    ) -> Result<(Digest, u64), Box<Verdict>> {
         let now = server_time(&self.s.w.db.app).await.unwrap();
         let validity = Window {
             from: now - 60_000,
@@ -478,7 +478,7 @@ impl Coordinator {
         schedule(&self.s.signer);
         match verdict {
             Verdict::Committed(c) => Ok((c.exercise, c.position)),
-            other => Err(other),
+            other => Err(Box::new(other)),
         }
     }
 

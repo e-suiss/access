@@ -36,7 +36,11 @@ fn the_body_encodes_as_the_contract_example() {
             Limits::CEILING,
         )
         .unwrap();
-        let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+        let hex = bytes.iter().fold(String::new(), |mut s, b| {
+            use std::fmt::Write as _;
+            let _ = write!(s, "{b:02x}");
+            s
+        });
         assert_eq!(hex, case["cbor"].as_str().unwrap(), "{id}");
     }
 }

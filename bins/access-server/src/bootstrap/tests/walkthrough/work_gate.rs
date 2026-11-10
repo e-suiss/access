@@ -121,8 +121,7 @@ impl Desk {
     }
 }
 
-// §8.17.6.1, X7, E7, EI-4, G30, F8, §9.14, §9.14.1, P29, PI-14, OP-156 m.3 (t),
-// Ek B 5183, 5192, 5253, 5257, 5259, 5378
+// §8.17.6.1, X7, E7, EI-4, G30, F8, §9.14, P29, PI-14, OP-156 m.3 (t), Ek B 5183, 5192, 5253, 5257, 5259, 5378
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_gate_approval_is_one_ceremony_two_records_and_never_an_allow() {
     let d = Desk::open("q16-work-gate", false).await;
@@ -176,7 +175,7 @@ async fn a_gate_approval_is_one_ceremony_two_records_and_never_an_allow() {
     let step = d.ask(&mut moved);
     assert!(!matches!(step, Step::Proceed(_)), "{step:?}");
 
-    // X7: a decline is the coordinator's Declaration alone
+    // X7
     let mut declined = d.exercise(&intent, held);
     assert!(matches!(d.ask(&mut declined), Step::Wait(_)));
     let at = d.head().await;
