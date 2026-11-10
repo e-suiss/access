@@ -550,6 +550,7 @@ NOT_IMPLEMENTED = {
     "agent.answer": "agent SDK reading of an ADP answer (OP-154 m.13), not Kernel semantics; checked by the Rust and TypeScript SDK vector tests",
     "adp.cbor": "CBOR transport form of ADP documents (OP-155 m.19 (a)), not Kernel semantics; checked by crates/http adp::cbor tests",
     "approval.mapping": "vendor approval policies mapped to RequirementTerm (§5.9, OP-155 m.19 (e)); checked on the real store by authority-core commit tests",
+    "seam.schema": "product seam schema files loaded into Action Schemas (§7.9.10.3, OP-156 m.2 Q1), not Kernel semantics; checked by services/product-twin schema_vectors_match",
 }
 
 # Third-party raw data sets without an `operation`; the Kernel's own tests read them.
