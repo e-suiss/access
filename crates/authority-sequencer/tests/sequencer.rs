@@ -237,8 +237,7 @@ impl suiss_ledger::doorbell::Bell for Rang {
     }
 }
 
-// TI-6, OP-156 m.3 (j): a ring names the last durable event; nothing rings for a commit that
-// did not land
+// TI-6, OP-156 m.3 (j)
 #[tokio::test]
 async fn the_doorbell_rings_only_after_a_durable_commit() {
     let db = fresh().await.unwrap();

@@ -137,7 +137,7 @@ mod twin {
         assert!(p2.is_ok(), "an existing stream is reused");
     }
 
-    // OP-156 m.3 (j): mutual TLS only
+    // OP-156 m.3 (j)
     #[tokio::test(flavor = "multi_thread")]
     async fn a_client_without_the_operators_certificate_is_refused() {
         let pki = Pki::new().unwrap();
@@ -155,7 +155,7 @@ mod twin {
         assert!(client::tls(b"", pki.cert_pem.as_bytes(), pki.key_pem.as_bytes()).is_err());
     }
 
-    // OP-23: losing NATS is only delay
+    // OP-23
     #[tokio::test(flavor = "multi_thread")]
     async fn publish_survives_a_server_that_is_down_and_coalesces() {
         let pki = Pki::new().unwrap();

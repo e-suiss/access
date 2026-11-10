@@ -39,6 +39,7 @@ access-kernel = { workspace = true }
 access-store = { workspace = true }
 suiss-crypto = { workspace = true, features = ["pkcs11", "signer"] }
 suiss-sandbox = { workspace = true }
+suiss-ledger = { workspace = true, features = ["doorbell"] }
 access-telemetry = { workspace = true }
 axum = { workspace = true, features = ["http1", "http2", "tokio"] }
 figment = { workspace = true, features = ["env", "toml"] }
@@ -76,7 +77,7 @@ http-body-util = { workspace = true }
 rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
 saml-idp-suite = { workspace = true }
 suiss-crypto = { workspace = true, features = ["testing"] }
-suiss-ledger = { workspace = true }
+suiss-ledger = { workspace = true, features = ["testing"] }
 tower = { workspace = true, features = ["util"] }
 rustls = { workspace = true, features = ["aws_lc_rs", "std"] }
 tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }

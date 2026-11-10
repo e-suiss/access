@@ -18,6 +18,7 @@ mod ciba;
 mod claims;
 mod config;
 mod console;
+mod doorbell;
 mod edge;
 mod events;
 mod idp;
@@ -1395,9 +1396,9 @@ impl Background {
     fn start(
         config: &Config,
         pools: &Pools,
-        outbound: Outbound,
-        keks: login::RealmKeks,
+        (outbound, keks): (Outbound, login::RealmKeks),
         ids: &Arc<ids::CellIds>,
+        wake: Option<Arc<tokio::sync::Notify>>,
     ) -> Result<Self, String> {
         let identity = config.identity.as_ref().ok_or("no identity section")?;
         let logout = courier(config, pools, outbound.clone())?;
@@ -1420,7 +1421,10 @@ impl Background {
         let consumers = ready.flag("outbox.consumers");
         // OP-149 m.4, m.7, m.17
         let events = events::Delivery::outbound(
-            &event_pools(pools, ids, &outbound),
+            &events::EventPools {
+                wake,
+                ..event_pools(pools, ids, &outbound)
+            },
             outbound,
             SignerKeys::new(identity.signer.clone()),
             keks.clone(),
@@ -1509,6 +1513,7 @@ fn event_pools(pools: &Pools, ids: &Arc<ids::CellIds>, outbound: &Outbound) -> e
         reader: pools.outbox_reader.clone(),
         router: pools.router.clone(),
         ids: ids.clone(),
+        wake: None,
     }
 }
 
@@ -1581,12 +1586,19 @@ async fn serve(
     let admin_pseudonyms = risk_services.ips.clone();
     // OP-146 m.5 (f)
     jobs::open_now(&all.app, &all.archive, &holder()?).await;
+    // OP-23, OP-156 m.3 (j)
+    let doorbell = config
+        .doorbell
+        .as_ref()
+        .map(doorbell::client)
+        .transpose()?
+        .map(|c| doorbell::Doorbell::start(&c));
     let background = Background::start(
         config,
         &all,
-        prepared.outbound.clone(),
-        keks.clone(),
+        (prepared.outbound.clone(), keks.clone()),
         &cell_ids,
+        doorbell.as_ref().map(|d| d.wake.clone()),
     )?;
     let identity_section = config.identity.as_ref().ok_or("no identity section")?;
     let signer = || SignerKeys::new(identity_section.signer.clone());
@@ -1656,7 +1668,7 @@ async fn serve(
     let (issuer, limits) = (config.issuer.clone().ok_or("no issuer")?, Limits::default());
     // OP-141 m.18 (a), (e), (f), OP-149 m.16 (a)
     let actors = idp::ActorBindings::default();
-    let domains = Arc::new(Domains::new(Setup {
+    let domains = Domains::new(Setup {
         sequencer: sequencer.clone(),
         app,
         keys: prepared.keys,
@@ -1670,7 +1682,12 @@ async fn serve(
         api_base: issuer.clone(),
         // OP-105
         analysis: Arc::new(access_authority_core::ports::NoAnalysis),
-    }));
+    });
+    // OP-156 m.3 (j)
+    let domains = Arc::new(match &doorbell {
+        Some(d) => domains.with_bell(d.bell.clone()),
+        None => domains,
+    });
     // OP-150 L2, CMP-8
     let (renewing, courier) = claims::start(signer(), &platform_pools, domains.clone(), renew);
     let _publishing = status::spawn(&domains, &product_app, &sequencer, config.signer.as_ref());
@@ -1843,6 +1860,9 @@ async fn serve(
     .await;
     // OP-31
     background.stop().await;
+    if let Some(d) = doorbell {
+        d.stop().await;
+    }
     checkpointing.stop();
     renewing.stop().await;
     scim_outbound.stop().await;

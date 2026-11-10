@@ -88,6 +88,36 @@ pub(crate) struct Config {
     /// Account import and lazy migration (§12.3.7, TN-85).
     #[serde(default)]
     pub(crate) migration: Migration,
+    /// The NATS `JetStream` doorbell (OP-23, OP-156 m.3 (j)); without it the outbox consumers
+    /// only poll.
+    #[serde(default)]
+    pub(crate) doorbell: Option<Doorbell>,
+}
+
+/// The doorbell's NATS server: TLS 1.3 with a client certificate, nothing else (OP-156 m.3 (j)).
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Doorbell {
+    /// `host:port`.
+    pub(crate) addr: String,
+    /// The DNS name its certificate carries.
+    pub(crate) server_name: String,
+    /// The CA bundle its certificate chains to, PEM.
+    pub(crate) ca_file: PathBuf,
+    /// This server's client certificate chain, PEM.
+    pub(crate) cert_file: PathBuf,
+    /// Its private key, PEM, readable by its owner only.
+    pub(crate) key_file: PathBuf,
+}
+
+impl Doorbell {
+    fn valid(&self) -> bool {
+        let port_ok = self
+            .addr
+            .rsplit_once(':')
+            .is_some_and(|(h, p)| !h.is_empty() && p.parse::<u16>().is_ok_and(|p| p != 0));
+        port_ok && rustls_pki_types::ServerName::try_from(self.server_name.as_str()).is_ok()
+    }
 }
 
 /// Account import and lazy migration (§12.3.7, TN-85).
@@ -547,6 +577,7 @@ impl Default for Config {
             social: Social::default(),
             signup: Signup::default(),
             migration: Migration::default(),
+            doorbell: None,
         }
     }
 }
@@ -602,6 +633,10 @@ pub(crate) enum ConfigError {
         "migration.legacy_idp_verify_url must be an https URL with a lowercase host and a path (TN-85)"
     )]
     Migration,
+    #[error(
+        "doorbell: addr is host:port, server_name a DNS name, and ca_file, cert_file and key_file are set (OP-156 m.3 (j))"
+    )]
+    Doorbell,
     #[error(transparent)]
     SecretEnvironment(#[from] access_crypto::secret_file::SecretFileError),
     #[error(
@@ -690,6 +725,10 @@ impl Config {
         }
         // OP-148, OP-151 m.3 (b), §17.9.6
         check_listeners(self)?;
+        // OP-156 m.3 (j)
+        if self.doorbell.as_ref().is_some_and(|d| !d.valid()) {
+            return Err(ConfigError::Doorbell);
+        }
         if self.tls.is_none() {
             return Err(ConfigError::NoTls);
         }
@@ -1258,6 +1297,43 @@ mod tests {
             ..with_tls()
         };
         assert!(matches!(config.validate(), Err(ConfigError::NoSigner)));
+    }
+
+    // OP-156 m.3 (j), TI-9
+    #[test]
+    fn the_doorbell_takes_only_a_client_certificate() {
+        let doorbell = |addr: &str, name: &str| Config {
+            doorbell: Some(Doorbell {
+                addr: addr.to_owned(),
+                server_name: name.to_owned(),
+                ca_file: "/run/nats/ca.pem".into(),
+                cert_file: "/run/nats/client.pem".into(),
+                key_file: "/run/nats/client.key".into(),
+            }),
+            ..with_tls()
+        };
+        assert!(
+            doorbell("nats.internal:4222", "nats.internal")
+                .validate()
+                .is_ok()
+        );
+        for (addr, name) in [
+            ("nats.internal", "nats.internal"),
+            (":4222", "n"),
+            ("n:0", "n"),
+            ("n:4222", ""),
+        ] {
+            assert!(
+                matches!(doorbell(addr, name).validate(), Err(ConfigError::Doorbell)),
+                "{addr} {name}"
+            );
+        }
+        let plaintext: Result<Config, _> = Figment::from(Serialized::defaults(Config::default()))
+            .merge(Toml::string(
+                "[doorbell]\naddr = \"n:4222\"\nserver_name = \"n\"\nca_file = \"/c\"\ncert_file = \"/c\"\nkey_file = \"/k\"\ntoken = \"t\"",
+            ))
+            .extract();
+        assert!(plaintext.is_err());
     }
 
     // OP-63, TI-9

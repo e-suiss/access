@@ -128,8 +128,19 @@ fn process(
     holder: &str,
     signer: Option<PathBuf>,
 ) -> (Arc<TestDomains>, TestPlane) {
+    process_rung(db, keys, holder, signer, None)
+}
+
+/// [`process`], its leaders ringing `bell` after each durable commit (OP-156 m.3 (j)).
+fn process_rung(
+    db: &TestDb,
+    keys: KeyStore,
+    holder: &str,
+    signer: Option<PathBuf>,
+    bell: Option<Arc<dyn suiss_ledger::doorbell::Bell>>,
+) -> (Arc<TestDomains>, TestPlane) {
     let actors = ActorBindings::default();
-    let domains = Arc::new(Domains::new(Setup {
+    let domains = Domains::new(Setup {
         sequencer: db.sequencer.clone(),
         app: db.app.clone(),
         keys,
@@ -142,7 +153,11 @@ fn process(
         signer,
         api_base: String::from("https://access.test"),
         analysis: std::sync::Arc::new(access_authority_core::ports::NoAnalysis),
-    }));
+    });
+    let domains = Arc::new(match bell {
+        Some(b) => domains.with_bell(b),
+        None => domains,
+    });
     let plane = Plane::new(
         domains.clone(),
         db.app.clone(),
@@ -160,6 +175,15 @@ impl World {
 
     /// With an authority signer when `with_signer`.
     async fn open(name: &str, with_signer: bool) -> (Self, Option<AuthoritySigner>) {
+        Self::open_rung(name, with_signer, None).await
+    }
+
+    /// [`World::open`], its leaders ringing `bell` (OP-156 m.3 (j)).
+    async fn open_rung(
+        name: &str,
+        with_signer: bool,
+        bell: Option<Arc<dyn suiss_ledger::doorbell::Bell>>,
+    ) -> (Self, Option<AuthoritySigner>) {
         let db = fresh().await.unwrap();
         let (module, label) = hsm(name);
         let pin = Secret::new(String::from(PIN));
@@ -170,7 +194,7 @@ impl World {
         } else {
             (None, None)
         };
-        let (domains, plane) = process(&db, open(), "bootstrap-test", signer);
+        let (domains, plane) = process_rung(&db, open(), "bootstrap-test", signer, bell);
         let keys = Arc::new(open());
         Box::leak(Box::new(keys.clone()));
         let identity_signer = identity_signer(name);
@@ -2487,6 +2511,7 @@ mod account;
 mod agent;
 mod authzen;
 mod catalog;
+mod doorbell;
 mod exchange;
 mod executor;
 mod experience;

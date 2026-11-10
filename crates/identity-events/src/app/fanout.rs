@@ -38,12 +38,25 @@ pub const DOMAINS_REFRESH: Duration = Duration::from_secs(30);
 pub struct Fanout<C> {
     db: Db,
     clock: C,
+    wake: Option<std::sync::Arc<tokio::sync::Notify>>,
 }
 
 impl<C: Clock + Send + Sync> Fanout<C> {
     /// A fan-out over `db`.
     pub const fn new(db: Db, clock: C) -> Self {
-        Self { db, clock }
+        Self {
+            db,
+            clock,
+            wake: None,
+        }
+    }
+
+    /// While idle, [`Fanout::run`] also wakes when `wake` is notified: the doorbell (OP-23,
+    /// OP-156 m.3 (j)). It still reads from its cursors, and still polls without a ring.
+    #[must_use]
+    pub fn with_wake(mut self, wake: std::sync::Arc<tokio::sync::Notify>) -> Self {
+        self.wake = Some(wake);
+        self
     }
 
     /// Queues the identity outbox past the cursor, up to one batch; returns deliveries queued.
@@ -280,8 +293,22 @@ impl<C: Clock + Send + Sync> Fanout<C> {
                 }
             }
             if queued == 0 {
-                let _ = tokio::time::timeout(POLL_INTERVAL, stop.changed()).await;
+                self.idle(&mut stop).await;
             }
+        }
+    }
+
+    /// Waits one poll interval, or until `stop` changes or the doorbell rings.
+    async fn idle(&self, stop: &mut tokio::sync::watch::Receiver<bool>) {
+        let rang = async {
+            match &self.wake {
+                Some(w) => w.notified().await,
+                None => std::future::pending().await,
+            }
+        };
+        tokio::select! {
+            _ = tokio::time::timeout(POLL_INTERVAL, stop.changed()) => {}
+            () = rang => {}
         }
     }
 

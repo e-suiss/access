@@ -20,7 +20,7 @@ access-telemetry = { workspace = true }
 suiss-crypto = { workspace = true, features = ["aead"] }
 serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["sync", "time"] }
+tokio = { workspace = true, features = ["macros", "sync", "time"] }
 tracing = { workspace = true, features = ["std"] }
 zeroize = { workspace = true, features = ["alloc", "std"] }
 

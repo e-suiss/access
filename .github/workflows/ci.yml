@@ -659,6 +659,30 @@ jobs:
         if: always()
         run: scripts/ci/edge-env.sh down
 
+  # OP-156 m.1 (d), m.3 (j), Ek B 5383: the doorbell's own NATS client against a real
+  # nats-server 2.15 with JetStream and mutual TLS (the digest compose pins)
+  nats:
+    name: nats
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: nats
+          tools: nextest
+      - name: nats-server with JetStream and TLS client certificates
+        run: scripts/ci/nats-env.sh up
+      - name: Doorbell client against nats-server
+        run: cargo nextest run --locked -p esuiss-ledger --features testing --run-ignored only -E 'test(nats_server)'
+      - name: Stop nats-server
+        if: always()
+        run: scripts/ci/nats-env.sh down
+
   # OP-68, F-6, F-7: the main image is built, pushed and signed only after every check above passed
   image:
     name: image
@@ -674,6 +698,7 @@ jobs:
       - sandbox
       - edge-interop
       - kerberos
+      - nats
       - uniffi-kotlin
       - uniffi-swift
       - bench-instructions

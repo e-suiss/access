@@ -42,6 +42,8 @@ pub(crate) struct EventPools {
     /// The SSRF-guarded client the receiver fetches transmitter keys with; without it the
     /// realms take no inbound SETs (OP-151 m.3 (l)).
     pub(crate) outbound: Option<Outbound>,
+    /// What the doorbell rings, to wake the fan-out (OP-156 m.3 (j)); it polls without one.
+    pub(crate) wake: Option<Arc<tokio::sync::Notify>>,
 }
 
 impl EventPools {
@@ -75,7 +77,10 @@ impl Delivery {
         alive: &ReadyFlag,
     ) -> Self {
         let (stop, stopped) = tokio::sync::watch::channel(false);
-        let fanout = Fanout::new(pools.db(), SystemClock);
+        let fanout = match &pools.wake {
+            Some(w) => Fanout::new(pools.db(), SystemClock).with_wake(w.clone()),
+            None => Fanout::new(pools.db(), SystemClock),
+        };
         let router = pools.router.clone();
         let until = stopped.clone();
         let ended = alive.clone();
