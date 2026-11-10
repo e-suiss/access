@@ -1,0 +1,11 @@
+# IDP-30 (3), OP-156 m.3 (l): the application receives an Access-signed token for itself
+rule = "IDP-30 (3), OP-156 m.3 (l)"
+phase = "signed-in"
+app = "wiki"
+method = "POST"
+path = "/docs/1"
+
+[expect]
+status = [200]
+upstream = true
+identity = true

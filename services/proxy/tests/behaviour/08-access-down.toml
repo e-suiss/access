@@ -1,0 +1,10 @@
+# MD-8, TI-9: Access cannot be reached, so the engine refuses
+rule = "MD-8, TI-9, OP-156 m.3 (l)"
+phase = "access-down"
+app = "wiki"
+method = "GET"
+path = "/page"
+
+[expect]
+status = [500, 502, 503, 504]
+upstream = false

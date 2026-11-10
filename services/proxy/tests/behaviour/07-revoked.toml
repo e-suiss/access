@@ -1,0 +1,10 @@
+# IDP-30 (1), OP-156 m.15 (e): after the Grant is revoked the next request is refused
+rule = "IDP-30 (1), OP-156 m.15 (e)"
+phase = "revoked"
+app = "wiki"
+method = "GET"
+path = "/page"
+
+[expect]
+status = [403]
+upstream = false

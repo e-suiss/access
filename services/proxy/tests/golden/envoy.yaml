@@ -1,0 +1,180 @@
+# Rendered by access-proxy from access-proxy.toml; edit that file instead.
+static_resources:
+  listeners:
+  - name: "apps"
+    address:
+      socket_address:
+        address: "0.0.0.0"
+        port_value: 8443
+    filter_chains:
+    - filters:
+      - name: "envoy.filters.network.http_connection_manager"
+        typed_config:
+          "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager"
+          stat_prefix: "access_proxy"
+          codec_type: "AUTO"
+          path_with_escaped_slashes_action: "REJECT_REQUEST"
+          route_config:
+            name: "apps"
+            virtual_hosts:
+            - name: "wiki"
+              domains:
+              - "wiki.example.com"
+              - "wiki.example.com:*"
+              routes:
+              - match:
+                  prefix: "/"
+                route:
+                  cluster: "app-wiki"
+                  timeout: "60s"
+            - name: "grafana"
+              domains:
+              - "grafana.example.com"
+              - "grafana.example.com:*"
+              routes:
+              - match:
+                  prefix: "/"
+                route:
+                  cluster: "app-grafana"
+                  timeout: "60s"
+                request_headers_to_remove:
+                - "x-access-user"
+                - "x-access-email"
+            - name: "unknown-host"
+              domains:
+              - "*"
+              routes:
+              - match:
+                  prefix: "/"
+                direct_response:
+                  status: 404
+          http_filters:
+          - name: "envoy.filters.http.header_mutation"
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.filters.http.header_mutation.v3.HeaderMutation"
+              mutations:
+                request_mutations:
+                - remove: "access-identity"
+                - remove: "x-access-email"
+                - remove: "x-access-user"
+          - name: "envoy.filters.http.ext_authz"
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz"
+              transport_api_version: "V3"
+              failure_mode_allow: false
+              status_on_error:
+                code: "ServiceUnavailable"
+              allowed_headers:
+                patterns:
+                - exact: "cookie"
+              http_service:
+                server_uri:
+                  uri: "https://access.example.com:8443"
+                  cluster: "access"
+                  timeout: "2.000s"
+                path_prefix: "/proxy/v1/check/envoy"
+                authorization_response:
+                  allowed_upstream_headers:
+                    patterns:
+                    - exact: "access-identity"
+                    - exact: "x-access-user"
+                    - exact: "x-access-email"
+                  allowed_client_headers:
+                    patterns:
+                    - exact: "location"
+                    - exact: "set-cookie"
+                    - exact: "cache-control"
+                    - exact: "retry-after"
+                    - exact: "content-type"
+          - name: "envoy.filters.http.router"
+            typed_config:
+              "@type": "type.googleapis.com/envoy.extensions.filters.http.router.v3.Router"
+      transport_socket:
+        name: "envoy.transport_sockets.tls"
+        typed_config:
+          "@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext"
+          common_tls_context:
+            tls_params:
+              tls_minimum_protocol_version: "TLSv1_2"
+            tls_certificates:
+            - certificate_chain:
+                filename: "/etc/access-proxy/tls/apps.pem"
+              private_key:
+                filename: "/etc/access-proxy/tls/apps-key.pem"
+            alpn_protocols:
+            - "h2"
+            - "http/1.1"
+  clusters:
+  - name: "access"
+    type: "STRICT_DNS"
+    dns_lookup_family: "V4_PREFERRED"
+    connect_timeout: "2.000s"
+    load_assignment:
+      cluster_name: "access"
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: "access.example.com"
+                port_value: 8443
+    transport_socket:
+      name: "envoy.transport_sockets.tls"
+      typed_config:
+        "@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext"
+        common_tls_context:
+          tls_params:
+            tls_minimum_protocol_version: "TLSv1_3"
+            tls_maximum_protocol_version: "TLSv1_3"
+          tls_certificates:
+          - certificate_chain:
+              filename: "/etc/access-proxy/proxy.pem"
+            private_key:
+              filename: "/etc/access-proxy/proxy-key.pem"
+          validation_context:
+            trusted_ca:
+              filename: "/etc/access-proxy/access-ca.pem"
+            match_typed_subject_alt_names:
+            - san_type: "DNS"
+              matcher:
+                exact: "access.example.com"
+        sni: "access.example.com"
+  - name: "app-wiki"
+    type: "STRICT_DNS"
+    dns_lookup_family: "V4_PREFERRED"
+    connect_timeout: "5.000s"
+    load_assignment:
+      cluster_name: "app-wiki"
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: "127.0.0.1"
+                port_value: 8080
+  - name: "app-grafana"
+    type: "STRICT_DNS"
+    dns_lookup_family: "V4_PREFERRED"
+    connect_timeout: "5.000s"
+    load_assignment:
+      cluster_name: "app-grafana"
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: "grafana.internal"
+                port_value: 3000
+    transport_socket:
+      name: "envoy.transport_sockets.tls"
+      typed_config:
+        "@type": "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext"
+        common_tls_context:
+          validation_context:
+            trusted_ca:
+              filename: "/etc/access-proxy/grafana-ca.pem"
+            match_typed_subject_alt_names:
+            - san_type: "DNS"
+              matcher:
+                exact: "grafana.internal"
+        sni: "grafana.internal"

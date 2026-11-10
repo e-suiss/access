@@ -1,0 +1,17 @@
+# IDP-30 (3): identity headers the client sends never reach the application
+rule = "IDP-30 (3), OP-156 m.15 (g)"
+phase = "signed-in"
+app = "wiki"
+method = "GET"
+path = "/page"
+
+[send]
+"Access-Identity" = "forged"
+"X-Access-User" = "admin"
+"X-Access-Email" = "admin@example.com"
+
+[expect]
+status = [200]
+upstream = true
+identity = true
+plain = false

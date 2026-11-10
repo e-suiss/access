@@ -1,0 +1,73 @@
+# Rendered by access-proxy from access-proxy.toml; edit that file instead.
+http:
+  routers:
+    wiki:
+      rule: "Host(`wiki.example.com`)"
+      service: "wiki"
+      middlewares:
+      - "wiki-strip"
+      - "wiki-access"
+      tls: {}
+    grafana:
+      rule: "Host(`grafana.example.com`)"
+      service: "grafana"
+      middlewares:
+      - "grafana-strip"
+      - "grafana-access"
+      tls: {}
+  middlewares:
+    "wiki-strip":
+      headers:
+        customRequestHeaders:
+          "Access-Identity": ""
+          "X-Access-User": ""
+          "X-Access-Email": ""
+    "wiki-access":
+      forwardAuth:
+        address: "https://access.example.com:8443/proxy/v1/check/traefik"
+        trustForwardHeader: false
+        authResponseHeaders:
+        - "Access-Identity"
+        - "X-Access-User"
+        - "X-Access-Email"
+        tls:
+          ca: "/etc/access-proxy/access-ca.pem"
+          cert: "/etc/access-proxy/proxy.pem"
+          key: "/etc/access-proxy/proxy-key.pem"
+    "grafana-strip":
+      headers:
+        customRequestHeaders:
+          "Access-Identity": ""
+          "X-Access-User": ""
+          "X-Access-Email": ""
+    "grafana-access":
+      forwardAuth:
+        address: "https://access.example.com:8443/proxy/v1/check/traefik"
+        trustForwardHeader: false
+        authResponseHeaders:
+        - "Access-Identity"
+        tls:
+          ca: "/etc/access-proxy/access-ca.pem"
+          cert: "/etc/access-proxy/proxy.pem"
+          key: "/etc/access-proxy/proxy-key.pem"
+  services:
+    wiki:
+      loadBalancer:
+        servers:
+        - url: "http://127.0.0.1:8080"
+        passHostHeader: true
+    grafana:
+      loadBalancer:
+        servers:
+        - url: "https://grafana.internal:3000"
+        passHostHeader: true
+        serversTransport: "grafana-upstream"
+  serversTransports:
+    "grafana-upstream":
+      serverName: "grafana.internal"
+      rootCAs:
+      - "/etc/access-proxy/grafana-ca.pem"
+tls:
+  certificates:
+  - certFile: "/etc/access-proxy/tls/apps.pem"
+    keyFile: "/etc/access-proxy/tls/apps-key.pem"

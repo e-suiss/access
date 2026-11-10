@@ -8,9 +8,16 @@ license = "Apache-2.0"
 repository.workspace = true
 publish = false
 
+[[bin]]
+name = "access-proxy"
+path = "src/main.rs"
+
 [dependencies]
-# OP-156 m.3 (m), OP-62: public crates only
+# OP-156 m.3 (m), OP-62: public crates only; no HTTP server (Ek B 5369, xtask proxy-engine)
+serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true, features = ["std"] }
+toml = { workspace = true, features = ["std", "parse", "serde"] }
 
 [lints]
 workspace = true

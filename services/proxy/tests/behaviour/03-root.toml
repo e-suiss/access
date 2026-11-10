@@ -1,0 +1,11 @@
+# OP-156 m.15 (f): the application's root, which Envoy asks as /proxy/v1/check/envoy/
+rule = "OP-156 m.15 (f)"
+phase = "signed-in"
+app = "wiki"
+method = "GET"
+path = "/"
+
+[expect]
+status = [200]
+upstream = true
+identity = true

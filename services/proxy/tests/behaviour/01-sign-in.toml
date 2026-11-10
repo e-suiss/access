@@ -1,0 +1,11 @@
+# IDP-30 (1), OP-156 m.3 (l): no session sends the browser to Access's sign-in
+rule = "IDP-30 (1), OP-156 m.3 (l)"
+phase = "anonymous"
+app = "wiki"
+method = "GET"
+path = "/page?x=1"
+
+[expect]
+status = [302]
+upstream = false
+location = "https://access.test/realms/acme/authorize?"

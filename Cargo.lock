@@ -979,7 +979,10 @@ dependencies = [
 name = "access-proxy"
 version = "0.4.0"
 dependencies = [
+ "serde",
  "serde_json",
+ "thiserror",
+ "toml 1.1.6+spec-1.1.0",
 ]
 
 [[package]]
@@ -1023,6 +1026,7 @@ dependencies = [
  "access-linux-module",
  "access-local-client",
  "access-product-twin",
+ "access-proxy",
  "access-store",
  "access-telemetry",
  "access-vc-verifier",

@@ -1,5 +1,5 @@
-//! OP-65, OP-156 m.4: the committed Access Proxy contract (`sdks/openapi/proxy-v1.json`) is what the route
-//! table produces. `ACCESS_UPDATE_CONTRACTS=1` rewrites the document.
+//! OP-65, OP-156 m.4, m.15 (c): the committed Access Proxy contract (`sdks/openapi/proxy-v1.json`) is
+//! what the route table produces, and every reserved path is answered by Access's forward-auth check. `ACCESS_UPDATE_CONTRACTS=1` rewrites the document.
 
 #![allow(
     clippy::unwrap_used,
@@ -18,19 +18,15 @@ fn path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../sdks/openapi/proxy-v1.json")
 }
 
-// OP-65, OP-156 m.4
+// OP-65, OP-156 m.4, m.15 (c)
 #[test]
 fn committed_openapi_matches_the_code() {
     let doc = openapi();
     for r in ROUTES {
         let op = &doc["paths"][r.path][r.verb.name()];
         assert_eq!(op["operationId"], r.operation);
-        assert_eq!(
-            op["responses"].get("501").is_some(),
-            !r.live,
-            "{}",
-            r.operation
-        );
+        assert!(op["responses"].get("501").is_none(), "{}", r.operation);
+        assert_eq!(op["x-suiss-served-by"], "/proxy/v1/check/{engine}");
     }
     let ops: BTreeSet<_> = ROUTES.iter().map(|r| r.operation).collect();
     assert_eq!(ops.len(), ROUTES.len());

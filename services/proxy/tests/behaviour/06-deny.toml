@@ -1,0 +1,10 @@
+# IDP-30 (1): no Grant covers the application's resources, so Access refuses
+rule = "IDP-30 (1), OP-156 m.15 (d)"
+phase = "signed-in"
+app = "admin"
+method = "GET"
+path = "/page"
+
+[expect]
+status = [403]
+upstream = false

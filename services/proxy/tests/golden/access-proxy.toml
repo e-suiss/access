@@ -1,0 +1,30 @@
+# Access Proxy: the one file every engine is rendered from.
+
+[access]
+# Access's mTLS listener; the engine adds /proxy/v1/check/{engine}
+url = "https://access.example.com:8443"
+# the roots Access's server certificate chains to
+ca = "/etc/access-proxy/access-ca.pem"
+# the proxy's client certificate and key: Access names the proxy by this certificate
+certificate = "/etc/access-proxy/proxy.pem"
+key = "/etc/access-proxy/proxy-key.pem"
+timeout_ms = 2000
+
+[listen]
+address = "0.0.0.0:8443"
+certificate = "/etc/access-proxy/tls/apps.pem"
+key = "/etc/access-proxy/tls/apps-key.pem"
+
+[[app]]
+# the proxy registration in Access (idp.proxy.register) whose action and paths decide
+policy = "wiki"
+host = "wiki.example.com"
+upstream = "http://127.0.0.1:8080"
+# X-Access-User and X-Access-Email, only for an upstream only the proxy reaches
+plain_headers = true
+
+[[app]]
+policy = "grafana"
+host = "grafana.example.com"
+upstream = "https://grafana.internal:3000"
+upstream_ca = "/etc/access-proxy/grafana-ca.pem"

@@ -1,0 +1,53 @@
+# Rendered by access-proxy from access-proxy.toml; edit that file instead.
+{
+	admin off
+	auto_https disable_redirects
+	https_port 8443
+}
+
+wiki.example.com:8443 {
+	tls /etc/access-proxy/tls/apps.pem /etc/access-proxy/tls/apps-key.pem
+	route {
+		request_header -Access-Identity
+		request_header -X-Access-User
+		request_header -X-Access-Email
+		forward_auth https://access.example.com:8443 {
+			uri /proxy/v1/check/caddy
+			copy_headers Access-Identity X-Access-User X-Access-Email
+			transport http {
+				tls_client_auth /etc/access-proxy/proxy.pem /etc/access-proxy/proxy-key.pem
+				tls_trust_pool file /etc/access-proxy/access-ca.pem
+				tls_server_name access.example.com
+				dial_timeout 2000ms
+				response_header_timeout 2000ms
+			}
+		}
+		reverse_proxy http://127.0.0.1:8080
+	}
+}
+
+grafana.example.com:8443 {
+	tls /etc/access-proxy/tls/apps.pem /etc/access-proxy/tls/apps-key.pem
+	route {
+		request_header -Access-Identity
+		request_header -X-Access-User
+		request_header -X-Access-Email
+		forward_auth https://access.example.com:8443 {
+			uri /proxy/v1/check/caddy
+			copy_headers Access-Identity
+			transport http {
+				tls_client_auth /etc/access-proxy/proxy.pem /etc/access-proxy/proxy-key.pem
+				tls_trust_pool file /etc/access-proxy/access-ca.pem
+				tls_server_name access.example.com
+				dial_timeout 2000ms
+				response_header_timeout 2000ms
+			}
+		}
+		reverse_proxy https://grafana.internal:3000 {
+			transport http {
+				tls_trust_pool file /etc/access-proxy/grafana-ca.pem
+				tls_server_name grafana.internal
+			}
+		}
+	}
+}
