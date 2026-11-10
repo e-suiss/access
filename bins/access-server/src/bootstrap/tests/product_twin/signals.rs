@@ -477,8 +477,7 @@ async fn an_external_risk_only_narrows_and_never_holds_for_good() {
     let ask = |e| s.request(&agent, e, holding(grant, agent.party, since), Vec::new());
     let acceptance = s.accept_inputs(fraud_party, &["risk_external"]).await;
 
-    // CI-2: without a signal the Grant alone decides, and a domain that needs a known level
-    // gets no ALLOW from a missing one
+    // CI-2
     s.twin.ask(&s.domain, &ask(order(&["o-1"]))).await.unwrap();
     let r = s.twin.ask(&s.domain, &ask(order(&["o-1", "known"]))).await;
     assert!(denied(&r), "{r:?}");
@@ -496,11 +495,11 @@ async fn an_external_risk_only_narrows_and_never_holds_for_good() {
         .ask(&s.domain, &ask(order(&["o-1", "known"])))
         .await
         .unwrap();
-    // CI-2: low never turns a DENY into an ALLOW
+    // CI-2
     let r = s.twin.ask(&s.domain, &ask(order(&["o-2"]))).await;
     assert!(denied(&r), "{r:?}");
 
-    // E38: a bot management engine's verdict is a risk_external like any other
+    // E38, Ek B 5280
     let high = fraud
         .issue_signed(
             &s.domain,
@@ -516,7 +515,7 @@ async fn an_external_risk_only_narrows_and_never_holds_for_good() {
     let r = s.twin.ask(&s.domain, &ask(order(&["o-1"]))).await;
     assert!(denied(&r), "{r:?}");
 
-    // CI-2: a risk Claim that would qualify is refused
+    // CI-2, TN-46
     let qualifying = fraud
         .issue_signed(
             &s.domain,
@@ -528,7 +527,7 @@ async fn an_external_risk_only_narrows_and_never_holds_for_good() {
         .await;
     assert!(qualifying.is_err(), "{qualifying:?}");
 
-    // TN-46: a verdict counts for a day after its issue, whatever validity it declares
+    // TN-46, Ek B 5374
     let stale = s.actor().await;
     let (stale_grant, stale_since) = s
         .grant(
@@ -571,7 +570,7 @@ async fn an_external_risk_only_narrows_and_never_holds_for_good() {
         .await
         .unwrap();
 
-    // TN-46: the domain lifts a hold sooner by its own attributable Exercise
+    // TN-46, E38
     s.root(Payload::AcceptanceRevoke { acceptance }).await;
     let e = order(&["o-1"]);
     let allowed = s.twin.ask(&s.domain, &ask(e.clone())).await.unwrap();
@@ -669,7 +668,7 @@ async fn a_data_label_is_an_input_to_disclose_and_access_decides() {
         .ask(&s.domain, &ask("f-2", vec![Proof::Recorded(secret.claim)]))
         .await;
     assert!(denied(&r), "{r:?}");
-    // F11: a label carried without its body reads as unreadable
+    // F11, OP-156 m.3 (r)
     let r = s
         .twin
         .ask(

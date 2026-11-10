@@ -134,7 +134,7 @@ fn a_set_maps_to_an_account_status_claim() {
     assert_eq!(map_set(&token, &frame(&p)), Err(Refusal::CARRIER));
 }
 
-// OP-156 m.3 (r), CI-2: an SSF transmitter's CAEP events are its own signal Claims
+// OP-156 m.3 (r), CI-2
 #[test]
 fn a_caep_set_maps_to_the_pinned_issuers_signal_claim() {
     let p = pinned(3);

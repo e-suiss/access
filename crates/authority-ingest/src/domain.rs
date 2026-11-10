@@ -449,18 +449,17 @@ pub fn map_set(token: &[u8], f: &Frame<'_>) -> Result<Mapped, Refusal> {
         .strip_prefix(RISC)
         .and_then(|e| SET_EVENTS.iter().find(|(name, _)| *name == e))
         .map(|(_, s)| *s);
-    let (class, value, body) = match status {
-        Some(status) => ("account_status", EqValue::Text(String::from(status)), None),
+    let (class, value, body) = if let Some(status) = status {
+        ("account_status", EqValue::Text(String::from(status)), None)
+    } else {
         // OP-156 m.3 (r)
-        None => {
-            let provider = provider_of(&f.pinned.iss).ok_or(Refusal::EVENT)?;
-            let signal = signals::caep(uri, event, &provider).ok_or(Refusal::EVENT)?;
-            (
-                signal.class(),
-                EqValue::Bytes(signal.digest().to_vec()),
-                Some(signal.to_bytes()),
-            )
-        }
+        let provider = provider_of(&f.pinned.iss).ok_or(Refusal::EVENT)?;
+        let signal = signals::caep(uri, event, &provider).ok_or(Refusal::EVENT)?;
+        (
+            signal.class(),
+            EqValue::Bytes(signal.digest().to_vec()),
+            Some(signal.to_bytes()),
+        )
     };
     let sub = set_subject(&claims).ok_or(Refusal::CARRIER)?;
     Ok(Mapped {

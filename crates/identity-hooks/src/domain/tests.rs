@@ -72,8 +72,7 @@ fn tn_135_md_8_hooks_fail_closed() {
     );
 }
 
-// TN-135, CI-2, OP-156 m.3 (r): a risk engine at the call point only narrows, and a lost
-// answer never lets a sign-in through
+// TN-135, CI-2, OP-156 m.3 (r)
 #[test]
 fn a_call_point_risk_verdict_only_narrows() {
     let at = |body: &str| {
