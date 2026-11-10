@@ -34,7 +34,17 @@ fn every_seam_schema_loads_on_kernel_types_alone() {
         names.push(stem);
     }
     names.sort();
-    assert_eq!(names, ["commerce", "health", "pay", "ride", "serve"]);
+    assert_eq!(
+        names,
+        [
+            "commerce",
+            "health",
+            "pay",
+            "relay.interrupt",
+            "ride",
+            "serve"
+        ]
+    );
 }
 
 // §7.9.10.3

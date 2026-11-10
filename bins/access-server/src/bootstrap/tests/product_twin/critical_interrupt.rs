@@ -87,7 +87,7 @@ fn interrupt_grant(action: &ActionRef, basis: Id, holder: Id, prefix: &[&str]) -
 )]
 async fn only_the_persons_own_scoped_grant_lets_an_agent_interrupt_and_relay_asks_live() {
     let s = Seam::open("seam-relay", "relay").await;
-    let relay = schema("relay");
+    let relay = schema("relay.interrupt");
     s.twin.publish_schema(&s.domain, &relay).await.unwrap();
     s.accept_schema(&relay).await;
     let critical = relay.action("critical").unwrap();
