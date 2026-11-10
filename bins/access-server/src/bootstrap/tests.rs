@@ -2497,4 +2497,5 @@ mod recovery_authority;
 mod sample_agent;
 mod timing;
 mod vault;
+mod vc_verifier;
 mod walkthrough;

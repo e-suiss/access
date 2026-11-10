@@ -10,6 +10,8 @@ use sqlx::{AssertSqlSafe, Connection as _, Executor as _, PgConnection, PgPool};
 
 use crate::store::{Store, StoreError};
 
+pub mod wallet;
+
 fn name() -> String {
     static COUNTER: AtomicU32 = AtomicU32::new(0);
     let nanos = SystemTime::now()

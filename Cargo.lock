@@ -713,6 +713,7 @@ dependencies = [
  "access-local-client",
  "access-store",
  "access-telemetry",
+ "access-vc-verifier",
  "aws-lc-rs",
  "axum",
  "ed25519-dalek",

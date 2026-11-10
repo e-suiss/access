@@ -12,10 +12,11 @@
 //! - `ACCESS_VC_VERIFIER_DATABASE_URL`: the verifier's own PostgreSQL database.
 //! - `ACCESS_VC_VERIFIER_OPERATOR`, `ACCESS_VC_VERIFIER_INSTANCE`: base64url ids of the operator
 //!   Party and of the verifier Instance whose key signs the Claims.
-//! - `ACCESS_VC_VERIFIER_SIGNING_KEY`: PKCS#8 file of the verifier Instance's P-256 key; it signs
-//!   the Claims and the request objects.
-//! - `ACCESS_VC_VERIFIER_REQUEST_CERT`: PEM file of the request-signing certificate chain for that
-//!   key; its leaf names the `x509_hash` `client_id`.
+//! - `ACCESS_VC_VERIFIER_SIGNING_KEY`: PKCS#8 file of the verifier Instance's Ed25519 key; it
+//!   signs the Claims.
+//! - `ACCESS_VC_VERIFIER_REQUEST_KEY`, `ACCESS_VC_VERIFIER_REQUEST_CERT`: PKCS#8 file of the P-256
+//!   request-signing key and PEM file of its certificate chain; the leaf names the `x509_hash`
+//!   `client_id`.
 //! - `ACCESS_VC_VERIFIER_RESPONSE_SECRET`: file of 32 random bytes the response keys derive from.
 //! - `ACCESS_VC_VERIFIER_CALLERS`: comma-separated base64url SHA-256 digests of the caller keys.
 //! - `ACCESS_VC_VERIFIER_ISSUERS`: comma-separated issuers trusted outside the trusted lists
@@ -122,8 +123,12 @@ async fn run() -> Result<(), Startup> {
     let fetch = GuardedFetch::new(roots("ACCESS_VC_VERIFIER_FETCH_CA")?)?;
     let pkcs8 = std::fs::read(var("ACCESS_VC_VERIFIER_SIGNING_KEY")?)
         .map_err(|_| Startup::Config("ACCESS_VC_VERIFIER_SIGNING_KEY"))?;
-    let signer = SoftSigner::p256_from_pkcs8(&Secret::new(pkcs8))
+    let signer = SoftSigner::ed25519_from_pkcs8(&Secret::new(pkcs8))
         .map_err(|_| Startup::Config("ACCESS_VC_VERIFIER_SIGNING_KEY"))?;
+    let request_pkcs8 = std::fs::read(var("ACCESS_VC_VERIFIER_REQUEST_KEY")?)
+        .map_err(|_| Startup::Config("ACCESS_VC_VERIFIER_REQUEST_KEY"))?;
+    let request_signer = SoftSigner::p256_from_pkcs8(&Secret::new(request_pkcs8))
+        .map_err(|_| Startup::Config("ACCESS_VC_VERIFIER_REQUEST_KEY"))?;
     let secret: [u8; 32] = std::fs::read(var("ACCESS_VC_VERIFIER_RESPONSE_SECRET")?)
         .ok()
         .and_then(|b| b.try_into().ok())
@@ -147,6 +152,7 @@ async fn run() -> Result<(), Startup> {
             .into_iter()
             .map(|c| c.as_ref().to_vec())
             .collect(),
+        request_signer: Box::new(request_signer),
         response_secret: Secret::new(secret),
         reporter: Reporter {
             operator: id("ACCESS_VC_VERIFIER_OPERATOR")?,

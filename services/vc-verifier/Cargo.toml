@@ -15,7 +15,7 @@ path = "src/main.rs"
 [features]
 default = []
 # throwaway verifier databases for this crate's and other crates' tests
-testing = []
+testing = ["dep:rcgen"]
 
 [dependencies]
 # OP-155 m.3 (p), OP-62
@@ -24,6 +24,7 @@ access-sdk = { workspace = true, features = ["std"] }
 axum = { workspace = true, features = ["http1", "tokio", "json"] }
 httparse = { workspace = true, features = ["std"] }
 miniz_oxide = { workspace = true }
+rcgen = { workspace = true, features = ["aws_lc_rs", "pem"], optional = true }
 rustls = { workspace = true, features = ["aws_lc_rs", "std"] }
 rustls-pki-types = { workspace = true, features = ["std"] }
 rustls-webpki = { workspace = true, features = ["aws-lc-rs", "std"] }
@@ -40,7 +41,6 @@ tracing-subscriber = { workspace = true, features = ["std", "fmt", "json"] }
 [dev-dependencies]
 access-vc-verifier = { path = ".", features = ["testing"] }
 aws-lc-rs = { workspace = true }
-rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
 tokio = { workspace = true, features = ["sync", "time", "rt", "macros", "rt-multi-thread"] }
 tower = { workspace = true, features = ["util"] }
 

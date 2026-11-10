@@ -43,8 +43,10 @@ pub const MAX_FETCH: usize = 4 * 1024 * 1024;
 pub struct Config {
     /// The verifier's public origin, `https://host[:port]`.
     pub origin: String,
-    /// The verifier's certificate chain, leaf first; its leaf names the `client_id`.
+    /// The request-signing certificate chain, leaf first; its leaf names the `client_id`.
     pub chain: Vec<Vec<u8>>,
+    /// The request-signing key (ES256), the key of [`Config::chain`]'s leaf.
+    pub request_signer: Box<dyn Signer + Send + Sync>,
     /// The secret the per-request response keys derive from.
     pub response_secret: Secret<[u8; 32]>,
     /// The Claims' issuer and signer.
@@ -398,7 +400,7 @@ where
             now_ms: self.now()?,
         };
         object
-            .sign(&self.signer, &self.config.chain)
+            .sign(self.config.request_signer.as_ref(), &self.config.chain)
             .map_err(|_| VerifierError::Unavailable(String::from("sign")))
     }
 
@@ -808,14 +810,17 @@ where
                     .ingest(b64url_encode(&id.0), body.to_string().into_bytes())
                     .await;
                 let disposition = match body_of(&answer) {
-                    Some((200, b)) => serde_json::from_slice::<Value>(b)
-                        .ok()
-                        .and_then(|v| {
-                            v.get("disposition")
-                                .and_then(Value::as_str)
-                                .map(String::from)
-                        })
-                        .unwrap_or_else(|| String::from("admit")),
+                    Some((200, b)) => {
+                        let v = serde_json::from_slice::<Value>(b).unwrap_or(Value::Null);
+                        let word = v
+                            .get("disposition")
+                            .and_then(Value::as_str)
+                            .unwrap_or("admit");
+                        match v.get("reason").and_then(Value::as_str) {
+                            Some(reason) => format!("{word}:{reason}"),
+                            None => String::from(word),
+                        }
+                    }
                     Some((s, b)) if (400..500).contains(&s) => format!(
                         "refused:{}",
                         serde_json::from_slice::<Value>(b)
