@@ -1,0 +1,73 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ON (r.channel)\n                      r.channel, r.consent,\n                      (extract(epoch FROM r.created_at) * 1000)::bigint AS \"created_ms!\",\n                      s.status AS \"status?\", s.reported_ms AS \"reported_ms?\"\n                 FROM access.iys_records r\n                 LEFT JOIN LATERAL (\n                   SELECT status, reported_ms FROM access.iys_status x\n                    WHERE x.tenant_id = r.tenant_id AND x.realm_id = r.realm_id\n                      AND x.record_id = r.record_id\n                    ORDER BY x.status_id DESC LIMIT 1) s ON true\n                WHERE r.tenant_id = $1 AND r.realm_id = $2 AND r.subject_id = $3\n                ORDER BY r.channel, r.created_at DESC, r.record_id DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "channel",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.iys_records",
+            "name": "channel"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "consent",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.iys_records",
+            "name": "consent"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "created_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "status?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.iys_status",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "reported_ms?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.iys_status",
+            "name": "reported_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      false,
+      false
+    ]
+  },
+  "hash": "8b7e9b033555270210ef4b5f1d3791e733b48be7d55005689900a653fa66f782"
+}

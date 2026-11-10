@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.iys_status (tenant_id, realm_id, record_id, status, reason,\n                                            reported_ms)\n             SELECT $1, $2, record_id, $4, $5, $6 FROM access.iys_records\n              WHERE tenant_id = $1 AND realm_id = $2 AND record_id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fabdceb25210586f1d5cd9e99bfce6fc183db07b83e7dfc075db09f83121c22d"
+}
