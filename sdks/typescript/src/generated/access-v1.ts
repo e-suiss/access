@@ -484,23 +484,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/relay/v1/iys-status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Relay's report of an İYS consent record's registration state for a preference.changed event; it changes no preference (OP-156 m.3 (c)). */
-        post: operations["relayIysStatus"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/access/v1/eligibility:set": {
         parameters: {
             query?: never;
@@ -512,6 +495,23 @@ export interface paths {
         put?: never;
         /** Who may approve a Gate of a class now (§7.9.5.3, E41, OP-156 m.3 (t)): derived, advisory, never recorded, at most 1000 Parties. Only the domain's auditors and a reader holding `access:read` on `access.search:[eligible-set]` get Parties (E26); anyone else gets an empty set. A Gate being satisfied is never an ALLOW (G30, EI-4). */
         post: operations["eligibleSet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/relay/v1/iys-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Relay's report of an İYS consent record's registration state; it changes no preference and no authority (OP-156 m.3 (c), IDP-37 (4), B23). */
+        post: operations["relayIysStatus"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2110,6 +2110,26 @@ export interface components {
                 /** @constant */
                 recorded: false;
             };
+        };
+        IysStatusReport: {
+            /** @description The tenant's external id (tnt_), as the Relay message's accesstenant names it. */
+            tenant: string;
+            /**
+             * Format: uuid
+             * @description The realm, as the Relay message's accessrealm names it.
+             */
+            realm: string;
+            /**
+             * Format: uuid
+             * @description The CloudEvents id of the relay.message.iys_consent.v1 the record came in.
+             */
+            record: string;
+            /** @enum {unknown} */
+            status: "recorded" | "failed";
+            /** @description Why it failed; never with recorded. */
+            reason?: string;
+            /** @description When it happened at İYS, Unix ms. */
+            at: number;
         };
     };
     responses: never;
@@ -3963,44 +3983,6 @@ export interface operations {
             };
         };
     };
-    relayIysStatus: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The request is refused; nothing is read. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-156 m.4). */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Temporarily unavailable; retry. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
     eligibleSet: {
         parameters: {
             query?: never;
@@ -4043,6 +4025,82 @@ export interface operations {
             };
             /** @description Over a rate limit. */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporarily unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    relayIysStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IysStatusReport"];
+            };
+        };
+        responses: {
+            /** @description Kept beside its record; no preference changed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description invalid-request: the report is malformed; nothing is kept. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description client-unauthenticated: no valid platform client assertion. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description not-relay: the client is not Relay's. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description not-found: the realm has no such record. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description body-too-large */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };
