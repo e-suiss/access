@@ -475,6 +475,40 @@ impl EnumerationMode {
     }
 }
 
+/// A realm's assurance profile (MD-11, SA-54, OP-156 m.3 (e)): realm settings and requirement
+/// narrowing only.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AssuranceProfile {
+    /// No profile (the default).
+    #[default]
+    Standard,
+    /// Turkish payment and e-money institutions: CT2 and CT3 need a phishing-resistant step and
+    /// an app-controlled factor, platform biometrics are no factor, SMS only at activation and
+    /// only on a line with a fresh SIM signal.
+    TrPayment,
+}
+
+impl AssuranceProfile {
+    /// The stored name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Standard => "standard",
+            Self::TrPayment => "tr-payment",
+        }
+    }
+
+    /// From the stored name.
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "standard" => Some(Self::Standard),
+            "tr-payment" => Some(Self::TrPayment),
+            _ => None,
+        }
+    }
+}
+
 /// The shortest "keep N days" an e-mail reuse policy may name (OP-153 m.3 (i), TN-76 m.5).
 pub const MIN_EMAIL_KEEP_DAYS: u32 = 365;
 
@@ -501,6 +535,8 @@ pub struct SigninPolicy {
     /// Whether a hosted sign-in offers to bind the new sign-in to a device key (DBSC, TN-33,
     /// OP-153 m.22 (c), m.25 (b)); on by default.
     pub dbsc: bool,
+    /// The assurance profile (OP-156 m.3 (e)); standard by default.
+    pub profile: AssuranceProfile,
 }
 
 impl SigninPolicy {
@@ -571,6 +607,10 @@ impl SigninPolicy {
         // OP-153 m.25 (b)
         if !self.dbsc {
             m.push((Value::text("dbsc"), Value::Bool(false)));
+        }
+        // OP-156 m.3 (e)
+        if self.profile != AssuranceProfile::Standard {
+            m.push((Value::text("profile"), Value::text(self.profile.name())));
         }
         Value::Map(m)
     }

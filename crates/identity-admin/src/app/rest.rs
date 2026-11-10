@@ -20,7 +20,7 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 
 use super::Admin;
 use crate::AdminError;
-use crate::domain::realm::{Binding, EnumerationMode};
+use crate::domain::realm::{AssuranceProfile, Binding, EnumerationMode};
 use crate::domain::{
     Attribute, AuthMethod, Branding, Change, CimdPolicy, ClaimName, Client, ClientId, Color,
     Disclosure, ExtensionPolicy, Group, HOOK_PREFIX, HookChange, HookPoint, HookSpec, Invalid,
@@ -264,6 +264,10 @@ pub enum Op {
     PutDeviceCode,
     /// `putPush`: `idp.realm.push`, or `push_close` (OP-156 m.3 (d)).
     PutPush,
+    /// `putSmsOtp`: `idp.realm.sms_otp`, or `sms_otp_close` (OP-156 m.3 (f)).
+    PutSmsOtp,
+    /// `putSpc`: `idp.realm.spc` (OP-156 m.3 (g)).
+    PutSpc,
     /// `putCiba`: `idp.realm.ciba`, or `ciba_close` (OP-155 m.3 (l)).
     PutCiba,
     /// `putCoordinator`: `idp.realm.coordinator` (OP-156 m.3 (t)).
@@ -434,6 +438,8 @@ impl Op {
             "putFederationRegistration" => Self::PutFederationRegistration,
             "putDeviceCode" => Self::PutDeviceCode,
             "putPush" => Self::PutPush,
+            "putSmsOtp" => Self::PutSmsOtp,
+            "putSpc" => Self::PutSpc,
             "putCiba" => Self::PutCiba,
             "putCoordinator" => Self::PutCoordinator,
             "createCrossAppConnection" => Self::CreateCrossAppConnection,
@@ -1583,6 +1589,7 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     "enumeration",
                     "email_keep_days",
                     "dbsc",
+                    "profile",
                 ],
             )?;
             let set = |k| -> Result<BTreeSet<String>, Invalid> {
@@ -1617,6 +1624,14 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                 dbsc: match m.get("dbsc") {
                     None => true,
                     Some(Json::Bool(b)) => *b,
+                    Some(_) => return Err(Invalid::SigninPolicy),
+                },
+                // OP-156 m.3 (e)
+                profile: match m.get("profile") {
+                    None => AssuranceProfile::Standard,
+                    Some(Json::String(s)) => {
+                        AssuranceProfile::parse(s).ok_or(Invalid::SigninPolicy)?
+                    }
                     Some(_) => return Err(Invalid::SigninPolicy),
                 },
             })
@@ -1860,6 +1875,16 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         Op::PutPush => {
             only(m, &["enabled"])?;
             Change::Push(flag(m, "enabled")?)
+        }
+        // OP-156 m.3 (f)
+        Op::PutSmsOtp => {
+            only(m, &["enabled"])?;
+            Change::SmsOtp(flag(m, "enabled")?)
+        }
+        // OP-156 m.3 (g)
+        Op::PutSpc => {
+            only(m, &["enabled"])?;
+            Change::Spc(flag(m, "enabled")?)
         }
         // OP-155 m.3 (l)
         Op::PutCiba => {
@@ -2458,6 +2483,7 @@ pub fn default_signin() -> SigninPolicy {
         enumeration: EnumerationMode::Uniform,
         email_keep_days: None,
         dbsc: true,
+        profile: AssuranceProfile::Standard,
     }
 }
 

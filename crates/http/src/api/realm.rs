@@ -1397,6 +1397,7 @@ const UPSTREAM_PATCH: &[&str] = &[
 const SOCIAL_PATCH: &[&str] = &["client_id", "client_secret_ref"];
 const SIGNIN_PATCH: &[&str] = &[
     "dbsc",
+    "profile",
     "methods",
     "required_fields",
     "mfa_required",
@@ -1493,6 +1494,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "putCiba"
         // OP-156 m.3 (d)
         | "putPush"
+        // OP-156 m.3 (f), (g)
+        | "putSmsOtp"
+        | "putSpc"
         | "putCertificateLogin"
         | "putMtlsAliases"
         // OP-155 m.3 (f), (o)

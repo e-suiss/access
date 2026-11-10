@@ -796,6 +796,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::SecurityNotices(_)
             | Change::DeviceCode(_)
             | Change::Push(_)
+            | Change::SmsOtp(_)
+            | Change::Spc(_)
             | Change::Ciba(_)
             | Change::Coordinator(_)
             | Change::CertificateLogin(_)
@@ -1799,6 +1801,16 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-156 m.3 (d)
             Change::Push(on) => {
                 t.put_push(bound, *on).await?;
+                true
+            }
+            // OP-156 m.3 (f)
+            Change::SmsOtp(on) => {
+                t.put_sms_otp(bound, *on).await?;
+                true
+            }
+            // OP-156 m.3 (g)
+            Change::Spc(on) => {
+                t.put_spc(bound, *on).await?;
                 true
             }
             // OP-155 m.3 (l)
