@@ -959,6 +959,7 @@ dependencies = [
  "access-identity-domain",
  "access-identity-edge",
  "access-identity-events",
+ "access-identity-export",
  "access-identity-federation",
  "access-identity-hooks",
  "access-identity-oauth",

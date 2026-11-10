@@ -6,7 +6,9 @@
 
 use access_identity_export::domain::copy;
 use access_identity_export::domain::secret::seal;
-use access_identity_export::domain::sink::{Adapter, ExportChange, SinkSpec, host_port};
+use access_identity_export::domain::sink::{
+    Adapter, ExportChange, Format, Preset, SinkSpec, host_port,
+};
 use access_identity_hooks::ports::KeyVault;
 use access_identity_oauth::adapters::outbound::{DeclaredTargets, SYSLOG_TLS_PORT};
 use access_store::export::{self as store, NewSink, SinkRow};
@@ -88,7 +90,7 @@ pub(crate) async fn current(
             }
         }
         ExportChange::Retire(_) => {
-            if !stored.is_some_and(|s| s.state == "live") {
+            if stored.is_none_or(|s| s.state != "live") {
                 return Err(Invalid::NoExportSink.into());
             }
         }
@@ -149,8 +151,8 @@ pub(crate) async fn write(
             name: change.name(),
             state,
             adapter: spec.adapter.name(),
-            preset: spec.preset.map(|p| p.name()),
-            format: spec.format.map(|f| f.name()),
+            preset: spec.preset.map(Preset::name),
+            format: spec.format.map(Format::name),
             endpoint: &spec.endpoint,
             settings: &settings,
             secret: sealed.as_ref(),
