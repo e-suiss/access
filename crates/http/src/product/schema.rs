@@ -510,6 +510,21 @@ pub fn openapi() -> Value {
             ),
         }}),
     );
+    // OP-156 m.3 (t)
+    paths.insert(
+        "/.well-known/suiss-configuration/realms/{slug}".into(),
+        json!({ "get": {
+            "operationId": "getRealmSuissConfiguration",
+            "summary": "The same document of the realm `slug`, for a reader that names the realm rather than its host (OP-149 m.3); a service such as the hub reads `suiss_coordinator` here.",
+            "security": [],
+            "parameters": [path("slug", &json!({ "type": "string" }))],
+            "responses": with(
+                problems(&[("404", "No realm here."), ("503", "Temporarily unavailable.")]),
+                "200",
+                json_ok("The document.", "SuissConfiguration"),
+            ),
+        }}),
+    );
     declarations(&mut paths);
     records::paths(&mut paths, &common);
     platform::paths(&mut paths);

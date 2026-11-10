@@ -741,6 +741,55 @@
         }
       }
     },
+    "/.well-known/suiss-configuration/realms/{slug}": {
+      "get": {
+        "operationId": "getRealmSuissConfiguration",
+        "summary": "The same document of the realm `slug`, for a reader that names the realm rather than its host (OP-149 m.3); a service such as the hub reads `suiss_coordinator` here.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "No realm here.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The document.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuissConfiguration"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/.well-known/access-provider-declarations": {
       "get": {
         "operationId": "getProviderDeclarations",

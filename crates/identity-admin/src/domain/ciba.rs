@@ -40,6 +40,18 @@ pub fn endpoint_ok(e: &str) -> bool {
         && !e.chars().any(|c| c.is_control() || c.is_whitespace())
 }
 
+/// A coordinator's Needs Attention endpoint, when named, is one `https` URL (OP-156 m.3 (t)).
+///
+/// # Errors
+/// [`Invalid::Body`].
+pub fn coordinator_ok(url: Option<&str>) -> Result<(), Invalid> {
+    if url.is_none_or(endpoint_ok) {
+        Ok(())
+    } else {
+        Err(Invalid::Body)
+    }
+}
+
 impl CibaSetting {
     /// Checks the setting on its own.
     ///

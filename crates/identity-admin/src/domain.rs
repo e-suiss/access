@@ -2339,13 +2339,7 @@ impl Change {
             Self::ClientProfile { delta, .. } => delta.check(),
             Self::Ciba(c) => c.check(),
             // OP-156 m.3 (t)
-            Self::Coordinator(url) => {
-                if url.as_deref().is_none_or(ciba::endpoint_ok) {
-                    Ok(())
-                } else {
-                    Err(Invalid::Body)
-                }
-            }
+            Self::Coordinator(url) => ciba::coordinator_ok(url.as_deref()),
             Self::GatewayRadiusClientRegister(c) => c.check(),
             Self::GatewayKeytabPolicy(p) => p.check(),
             Self::GatewayKeytabEmergency { gateway, kvno } => gateway::emergency(gateway, *kvno),
