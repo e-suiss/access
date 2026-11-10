@@ -5,7 +5,9 @@
 
 use suiss_crypto::dcbor::{self, Limits, Value};
 
+pub mod kerberos;
 pub mod ldap;
+pub mod radius;
 
 /// Path prefix of every edge call on access-server.
 pub const PREFIX: &str = "/edge/v1/";
@@ -127,7 +129,8 @@ impl GatewayUri {
 pub enum Call {
     /// Who the gateway is: its registration and realm.
     Hello,
-    /// Checks a legacy credential (LDAP bind, RADIUS PAP); the protocol lanes fill it.
+    /// Checks a legacy credential (LDAP bind, RADIUS PAP) or Kerberos acceptance facts; its body
+    /// is the gateway kind's ([`ldap`], [`radius`], [`kerberos`]).
     Authenticate,
     /// Asks the realm issuer for the `authentication` Claim of a user the gateway authenticated.
     IssueClaim,

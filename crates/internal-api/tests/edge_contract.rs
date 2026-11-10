@@ -15,6 +15,7 @@ use access_internal_api::edge::{
     Audit, Audited, Hello, IssueClaim, Issued, Subject, SubjectLookup, decode_hello_request,
     hello_request,
 };
+use access_internal_api::edge::{kerberos, radius};
 use serde_json::Value;
 
 fn cases(file: &str) -> Vec<(String, Vec<u8>)> {
@@ -56,6 +57,10 @@ fn served_request_examples_are_what_the_decoders_read() {
             "authenticate" | "authenticate-rotate" | "authenticate-external" => {
                 Authenticate::decode(&bytes).unwrap().encode()
             }
+            "authenticate-radius-pap" | "authenticate-radius-client" => {
+                radius::Authenticate::decode(&bytes).unwrap().encode()
+            }
+            "authenticate-kerberos" => kerberos::Authenticate::decode(&bytes).unwrap().encode(),
             "directory-read" => DirectoryRead::decode(&bytes).unwrap().encode(),
             other if other.ends_with("-planned") => continue,
             other => panic!("{other} has no decoder"),
@@ -63,7 +68,7 @@ fn served_request_examples_are_what_the_decoders_read() {
         assert_eq!(back, bytes, "{id}");
         seen += 1;
     }
-    assert_eq!(seen, 10);
+    assert_eq!(seen, 13);
 }
 
 // OP-155 m.3 (c), m.6 (h)
@@ -77,6 +82,12 @@ fn answer_examples_are_what_the_decoders_read() {
             "recorded" => Audited::decode(&bytes).unwrap().encode(),
             "authenticated" | "authenticated-rotated" | "not-authenticated" => {
                 Authenticated::decode(&bytes).unwrap().encode()
+            }
+            "authenticated-subject" => {
+                let r = radius::Authenticated::decode(&bytes).unwrap();
+                let k = kerberos::Authenticated::decode(&bytes).unwrap();
+                assert_eq!(r.subject, k.subject);
+                r.encode()
             }
             "directory-page" | "directory-page-last" => {
                 DirectoryPage::decode(&bytes).unwrap().encode()

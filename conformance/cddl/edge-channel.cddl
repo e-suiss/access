@@ -18,8 +18,9 @@
 ;
 ; `session_attest` is declared and answers `edge-call-not-served` until its lane serves it (P2);
 ; its body below is the planned shape, which the serving lane may refine before it serves the
-; call. `authenticate` and `directory_read` are served for LDAP gateways (OP-155 m.3 (n)); any
-; other kind gets `edge-method`.
+; call. `authenticate` is served for LDAP, RADIUS and Kerberos gateways, each with its kind's body
+; (OP-155 m.3 (n), (f), (o)); `directory_read` for LDAP gateways only. Any other kind gets
+; `edge-method`.
 
 edge-request = hello-request / subject-lookup-request / issue-claim-request / audit-request /
   authenticate-request / session-attest-request / directory-read-request
@@ -108,7 +109,8 @@ audit-code-16 = tstr .regexp "[a-z][a-z0-9._]{0,15}"
 ; SASL EXTERNAL: the client certificate chain the gateway's TLS session verified, leaf first; the
 ; realm's certificate sign-in rules decide. There is no SCRAM and no DIGEST-MD5. `rotate` is
 ; RFC 3062 on the LDAP credential just presented: a new secret replaces it.
-authenticate-request = simple-bind / external-bind
+authenticate-request = simple-bind / external-bind / radius-client / radius-pap /
+  kerberos-acceptance
 
 simple-bind = {
   realm: realm-slug,
@@ -126,12 +128,56 @@ external-bind = {
 
 ; An unknown name and a wrong secret answer the same: an empty map. `bind` is the opaque,
 ; MAC'd handle `directory_read` needs (8 hours, this gateway only); `dn` is what WhoAmI answers;
-; `secret` is the new LDAP credential after a rotation, shown once.
+; `secret` is the new LDAP credential after a rotation, shown once. RADIUS and Kerberos gateways
+; get `{}` or `{ subject }`.
 authenticate-answer = {} / {
   subject: subject-id,
   bind: bstr .size (1..256),
   dn: tstr .size (1..1024),
   ? secret: bstr .size (1..1024),
+} / {
+  subject: subject-id,
+}
+
+; --- authenticate (RADIUS) ---------------------------------------------------------------
+
+; RadSec only (RFC 6614, with RADIUS/1.1 of RFC 9765); RADIUS over UDP is never answered and
+; MS-CHAPv2 never reaches access-server (§10.6.5, IDP-18). `client` is the SHA-256 of the RadSec
+; client's TLS certificate, which `idp.gateway.radius_client_register` registered with this
+; gateway; any other is refused with `edge-radius-client`. `radius-client` asks only that. PAP
+; checks a directory app password (the LDAP credential class) of the account holding `name` as
+; its user name or e-mail address; the primary password never authenticates here. The answer is
+; `{}` or `{ subject }`, the same for an unknown name and a wrong password.
+radius-client = {
+  realm: realm-slug,
+  mechanism: "client",
+  client: bstr .size 32,
+}
+
+radius-pap = {
+  realm: realm-slug,
+  mechanism: "pap",
+  client: bstr .size 32,
+  name: tstr .size (1..253),            ; User-Name
+  secret: bstr .size (1..128),          ; User-Password, never logged, never kept
+}
+
+; --- authenticate (Kerberos) -------------------------------------------------------------
+
+; The facts of one SPNEGO acceptance (RFC 4559; §10.6.4, IDP-17); the ticket never leaves the
+; gateway. access-server holds them to the gateway's keytab policy: the SPN must equal the
+; policy's exactly (`edge-spn`), the enctype must be AES256, 18 or 20 (`edge-enctype`), the key
+; version must be at least the policy's floor, not superseded for longer than a ticket lifetime
+; and not overdue for rotation (`edge-kvno`); without a policy, `edge-keytab`. The principal
+; must be a single-component `user@REALM` of the SPN's realm; `user` is looked up as a user name.
+; The answer is `{}` or `{ subject }`.
+kerberos-acceptance = {
+  realm: realm-slug,
+  mechanism: "kerberos",
+  principal: tstr .size (1..512),
+  spn: tstr .size (1..512),
+  kvno: uint .le 4294967295,
+  etype: int,
 }
 
 ; --- session_attest (P2, OP-155 m.3 (c), IDI-7) ------------------------------------------
