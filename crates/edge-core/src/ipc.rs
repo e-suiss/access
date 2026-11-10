@@ -26,13 +26,17 @@ pub enum Op {
     /// Makes the worker abort, as a memory-corruption crash would (U43 test hook; a release
     /// worker refuses it).
     Abort,
+    /// Reads an ETSI TS 119 612 trusted list into its CBOR summary (OP-155 m.3 (p)); the
+    /// segment of the reply is the summary.
+    TlRead,
 }
 
-const OPS: [(&str, Op); 4] = [
+const OPS: [(&str, Op); 5] = [
     ("xml.check", Op::XmlCheck),
     ("xml.inflate", Op::XmlInflate),
     ("der.check", Op::DerCheck),
     ("test.abort", Op::Abort),
+    ("tl.read", Op::TlRead),
 ];
 
 impl Op {

@@ -295,6 +295,7 @@ where
             "sequence": l.sequence,
             "next_update_ms": l.next_update_ms,
             "signature_verified": l.signature_verified,
+            "pinned": l.pinned,
             "usable": l.usable(now),
             "digests": l.digests.iter().map(|d| b64url_encode(d)).collect::<Vec<_>>(),
             "granted_pid_providers": pid,

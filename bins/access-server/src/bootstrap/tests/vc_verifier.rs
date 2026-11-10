@@ -258,6 +258,7 @@ async fn verifier(lab: &Lab, issuer: &Pki) -> V {
         next_update_ms: now_ms() + 86_400_000,
         digests: vec![vec![0x5a; 32]],
         signature_verified: true,
+        pinned: false,
         services: vec![Service {
             provider: String::from("Test PID Provider"),
             service_type: String::from("http://uri.etsi.org/19602/SvcType/PID/Issuance"),

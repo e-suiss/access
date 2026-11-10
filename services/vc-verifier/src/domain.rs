@@ -8,6 +8,7 @@ pub mod claims;
 pub mod dcql;
 pub mod did;
 pub mod jwe;
+pub mod lists;
 pub mod mdoc;
 pub mod presentation;
 pub mod request;

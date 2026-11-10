@@ -26,7 +26,8 @@ parser-request-header = {
 
 ; `test.abort` makes the worker abort as a memory-corruption crash would; it exists only in a
 ; debug build (U43 test hook) and a release worker refuses it with `op-refused`.
-parser-op = "xml.check" / "xml.inflate" / "der.check" / "test.abort"
+parser-op = "xml.check" / "xml.inflate" / "der.check" / "test.abort" /
+  "tl.read"                             ; P12: ETSI TS 119 612 list summary (OP-155 m.3 (p))
 
 parser-reply-header = parser-ok / parser-refused / parser-worker-failed
 
@@ -52,4 +53,23 @@ parser-refusal = "op-refused" / "frame-malformed" / "deflate-malformed" /
   "xml-too-large" / "xml-encoding" / "xml-version" / "xml-malformed" / "xml-doctype" /
   "xml-entity" / "xml-processing-instruction" / "xml-depth" / "xml-elements" /
   "xml-ratio" / "xml-multiple-roots" / "xml-unclosed" / "xml-content-outside-root" /
-  "der-too-large" / "der-depth" / "der-malformed"
+  "der-too-large" / "der-depth" / "der-malformed" /
+  "tl-malformed" / "tl-too-large"       ; P12
+
+; P12: the `ok` segment of tl.read, deterministic CBOR. Certificates are DER; the worker verifies
+; no signature.
+tl-summary = {
+  pointers: [* { location: tstr, certificates: [* bstr] }],
+  sequence: uint,
+  tsl_type: tstr,
+  next_update: tstr,                    ; RFC 3339, as listed
+  services: [* tl-service],
+  signer: [* bstr],                     ; ds:Signature KeyInfo certificates
+}
+
+tl-service = {
+  provider: tstr,
+  service_type: tstr,
+  status: tstr,
+  certificates: [* bstr],
+}

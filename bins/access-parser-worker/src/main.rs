@@ -8,6 +8,7 @@
 
 mod parse;
 mod supervisor;
+mod trusted_list;
 mod work;
 
 use std::ffi::OsString;

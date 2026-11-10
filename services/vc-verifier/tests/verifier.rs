@@ -16,7 +16,7 @@ mod support;
 
 use access_kernel::json::b64url_encode;
 use access_vc_verifier::domain::cbor::Cbor;
-use access_vc_verifier::domain::trust::TrustedLists;
+use access_vc_verifier::domain::trust::{GRANTED, TrustedLists};
 use axum::body::Body;
 use axum::http::{Request, header};
 use serde_json::{Value, json};
@@ -647,4 +647,101 @@ async fn dcql_outside_the_profile_is_refused() {
         assert_eq!(s, 400);
         assert_eq!(json_of(&b)["code"], code);
     }
+}
+
+fn summary(tsl_type: &str, next: &str, pointers: &[&str], services: &[(&str, &[u8])]) -> Vec<u8> {
+    use suiss_crypto::dcbor::{self, Limits, Value};
+    let v = Value::Map(vec![
+        (
+            Value::text("pointers"),
+            Value::Array(
+                pointers
+                    .iter()
+                    .map(|l| {
+                        Value::Map(vec![
+                            (Value::text("location"), Value::text(l)),
+                            (Value::text("certificates"), Value::Array(vec![])),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+        (Value::text("sequence"), Value::Unsigned(9)),
+        (Value::text("tsl_type"), Value::text(tsl_type)),
+        (Value::text("next_update"), Value::text(next)),
+        (
+            Value::text("services"),
+            Value::Array(
+                services
+                    .iter()
+                    .map(|(t, c)| {
+                        Value::Map(vec![
+                            (Value::text("provider"), Value::text("P")),
+                            (Value::text("service_type"), Value::text(t)),
+                            (Value::text("status"), Value::text(GRANTED[0])),
+                            (
+                                Value::text("certificates"),
+                                Value::Array(vec![Value::Bytes(c.to_vec())]),
+                            ),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+        (Value::text("signer"), Value::Array(vec![])),
+    ]);
+    dcbor::encode(&v, Limits::CEILING).unwrap()
+}
+
+// IDP-21, Ek B 4834
+#[tokio::test]
+async fn pinned_trusted_list_snapshots_from_the_parser_worker_are_used() {
+    use access_vc_verifier::domain::lists::{Document, LOTL_TYPE, ListError, assemble};
+    let issuer = pki("issuer.test");
+    let lotl = Document {
+        digest: suiss_crypto::digest::sha256(b"lotl-document"),
+        location: String::from("https://ec.example.eu/lotl.xml"),
+        summary: summary(
+            LOTL_TYPE,
+            "2099-01-01T00:00:00Z",
+            &["https://tl.example.eu/xx.xml"],
+            &[],
+        ),
+    };
+    let national = Document {
+        digest: suiss_crypto::digest::sha256(b"xx-document"),
+        location: String::from("https://tl.example.eu/xx.xml"),
+        summary: summary(
+            "national",
+            "2098-01-01T00:00:00Z",
+            &[],
+            &[(PID_TYPE, &issuer.root)],
+        ),
+    };
+    let pins = [lotl.digest, national.digest];
+    let lists = assemble(&lotl, std::slice::from_ref(&national), &pins).unwrap();
+    assert!(lists.pinned && !lists.signature_verified);
+    assert_eq!(lists.sequence, 9);
+    assert_eq!(
+        assemble(&lotl, std::slice::from_ref(&national), &pins[..1]),
+        Err(ListError::Unpinned)
+    );
+    let stray = Document {
+        location: String::from("https://elsewhere.example/tl.xml"),
+        ..national.clone()
+    };
+    assert_eq!(assemble(&lotl, &[stray], &pins), Err(ListError::Unlisted));
+    let r = rig(lists, &[]).await;
+    let (id, _, _) = answer_sd_jwt(
+        &r,
+        &pid_query(),
+        &IssuerKey::X5c(&issuer, false),
+        "urn:eudi:pid:1",
+        &["given_name", "family_name", "age_over_18"],
+        &json!({}),
+    )
+    .await;
+    let (_, out) = result(&r.router, &id, None).await;
+    assert_eq!(out["state"], "verified", "{out}");
+    assert_eq!(out["credentials"][0]["loa_eidas"], 3);
 }

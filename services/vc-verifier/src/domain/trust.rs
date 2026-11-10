@@ -104,15 +104,19 @@ pub struct TrustedLists {
     pub digests: Vec<Vec<u8>>,
     /// Whether every list's signature verified.
     pub signature_verified: bool,
+    /// Whether every list document matched an operator-pinned snapshot digest.
+    #[serde(default)]
+    pub pinned: bool,
     /// The services.
     pub services: Vec<Service>,
 }
 
 impl TrustedLists {
-    /// Whether the lists may be used at `now_ms`: signed and before their next update.
+    /// Whether the lists may be used at `now_ms`: signed or pinned, and before their next
+    /// update.
     #[must_use]
     pub fn usable(&self, now_ms: u64) -> bool {
-        self.signature_verified && now_ms <= self.next_update_ms
+        (self.signature_verified || self.pinned) && now_ms <= self.next_update_ms
     }
 
     /// The anchors of the granted services and their standing; empty when the lists are not

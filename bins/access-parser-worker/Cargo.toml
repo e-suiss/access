@@ -13,6 +13,7 @@ access-edge-core = { workspace = true }
 access-parse = { workspace = true }
 miniz_oxide = { workspace = true }
 quick-xml = { workspace = true }
+suiss-crypto = { workspace = true }
 suiss-sandbox = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]

@@ -53,6 +53,7 @@ pub fn lists(services: &[(&str, &[u8])]) -> TrustedLists {
         next_update_ms: now_ms() + 86_400_000,
         digests: vec![vec![1; 32]],
         signature_verified: true,
+        pinned: false,
         services: services
             .iter()
             .map(|(t, der)| Service {
