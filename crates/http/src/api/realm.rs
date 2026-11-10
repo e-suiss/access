@@ -611,7 +611,7 @@ const STAGE11: [Route; 46] = [
         Verb::Put,
         "/admin/v1/realms/{slug}/linux-hosts/{host}/offline-policy",
         "putLinuxOfflinePolicy",
-        "Sets a host's offline cache limits within its ValidityContract horizon: NSS data at most 12 hours, console sign-in at most 8, never sudo: idp.linux.offline_policy.",
+        "Sets a host's offline cache limits within its ValidityContract horizon: NSS data at most 12 hours, console sign-in at most 8, no step-up offline: idp.linux.offline_policy.",
     ),
     write(
         Verb::Put,

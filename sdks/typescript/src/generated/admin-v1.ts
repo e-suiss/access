@@ -2428,7 +2428,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Sets a host's offline cache limits within its ValidityContract horizon: NSS data at most 12 hours, console sign-in at most 8, never sudo: idp.linux.offline_policy. */
+        /** Sets a host's offline cache limits within its ValidityContract horizon: NSS data at most 12 hours, console sign-in at most 8, no step-up offline: idp.linux.offline_policy. */
         put: operations["putLinuxOfflinePolicy"];
         post?: never;
         delete?: never;
