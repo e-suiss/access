@@ -1,7 +1,7 @@
 //! Access as a SAML 2.0 service provider of an enterprise upstream, sans I/O (OP-155 m.3 (h),
 //! §10.6.1, §10.2.6). The `AuthnRequest` is written in canonical form and signed in the
 //! HTTP-Redirect binding with the realm's SAML key; the Response is read and its assertion's
-//! signature verified in the parser worker against the IdP's pinned certificates; what comes
+//! signature verified in the parser worker against the identity provider's pinned certificates; what comes
 //! back is checked here: issuer, audience, recipient, time and `InResponseTo`. An unsolicited
 //! Response is refused unless the connection opens it, and then only while fresh.
 
@@ -17,10 +17,10 @@ pub const SAMLP: &str = "urn:oasis:names:tc:SAML:2.0:protocol";
 /// The SAML 2.0 assertion namespace.
 pub const SAML: &str = "urn:oasis:names:tc:SAML:2.0:assertion";
 
-/// The HTTP-POST binding the IdP answers with.
+/// The HTTP-POST binding the identity provider answers with.
 pub const HTTP_POST: &str = "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST";
 
-/// The persistent NameID format asked for (TN-66: a stable, pairwise subject).
+/// The persistent `NameID` format asked for (TN-66: a stable, pairwise subject).
 pub const PERSISTENT: &str = "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent";
 
 /// The SP's view of one connection.
@@ -32,7 +32,7 @@ pub struct Sp<'a> {
     pub acs: &'a str,
 }
 
-/// The canonical `AuthnRequest` `id` at `instant` (`xs:dateTime`) to the IdP's SSO service.
+/// The canonical `AuthnRequest` `id` at `instant` (`xs:dateTime`) to the identity provider's SSO service.
 #[must_use]
 pub fn authn_request(sp: &Sp<'_>, id: &str, instant: &str, sso_url: &str) -> String {
     El::new("samlp", SAMLP, "AuthnRequest")
@@ -76,7 +76,7 @@ pub fn metadata(sp: &Sp<'_>) -> String {
 /// What a verified assertion must match.
 #[derive(Clone, Copy, Debug)]
 pub struct Expect<'a> {
-    /// The IdP's entity ID, as the connection names it.
+    /// The identity provider's entity ID, as the connection names it.
     pub idp: &'a str,
     /// The audience: Access's entity ID for the connection, or the token endpoint (RFC 7522).
     pub audience: &'a str,
@@ -93,7 +93,7 @@ pub struct Expect<'a> {
 /// Why a verified assertion is not taken.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum SamlCheck {
-    /// Another IdP issued it.
+    /// Another identity provider issued it.
     #[error("issuer")]
     Issuer,
     /// Not addressed to Access's entity for the connection, or to this ACS.
@@ -152,7 +152,7 @@ pub fn check(f: &AssertionFacts, e: &Expect<'_>) -> Result<Declared, SamlCheck> 
     }
     match (e.in_response_to, f.in_response_to.as_deref()) {
         (Some(want), Some(got)) if want == got => {}
-        // §10.6.1: IdP-initiated only when opened, and only while fresh
+        // §10.6.1
         (None, None) if e.allow_unsolicited && issued.saturating_add(IDP_INITIATED_MS) > now => {}
         _ => return Err(SamlCheck::Unsolicited),
     }

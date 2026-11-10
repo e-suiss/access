@@ -1271,6 +1271,38 @@ impl SessionAttest for Saml {
     }
 }
 
+/// The realm's SAML key signs upstream connections' `AuthnRequest`s in the HTTP-Redirect
+/// binding (OP-155 m.3 (d), (h)).
+pub(crate) struct UpstreamRequests(pub(crate) PathBuf);
+
+impl access_identity_federation::ports::SamlRequestSigner for UpstreamRequests {
+    fn redirect<'a>(
+        &'a self,
+        realm: [u8; 16],
+        location: &'a str,
+        request: &'a str,
+        relay_state: &'a str,
+    ) -> access_identity_federation::ports::Signed<'a> {
+        Box::pin(async move {
+            let signer = RealmSigner {
+                socket: &self.0,
+                realm: RealmId::from_bytes(realm),
+                signatures: std::sync::atomic::AtomicU32::new(0),
+            };
+            access_identity_saml::binding::redirect(
+                &signer,
+                location,
+                "SAMLRequest",
+                request,
+                Some(relay_state),
+                access_identity_saml::alg::SigAlg::RsaSha256,
+            )
+            .await
+            .map_err(|_| access_identity_federation::ports::Unreachable)
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, reason = "test code")]
@@ -1302,37 +1334,5 @@ mod tests {
             fields: vec![(String::from("SAMLResponse"), String::from("x"))],
         };
         assert_eq!(decode_outcome(&encode_outcome(&o)), o);
-    }
-}
-
-/// The realm's SAML key signs upstream connections' `AuthnRequest`s in the HTTP-Redirect
-/// binding (OP-155 m.3 (d), (h)).
-pub(crate) struct UpstreamRequests(pub(crate) PathBuf);
-
-impl access_identity_federation::ports::SamlRequestSigner for UpstreamRequests {
-    fn redirect<'a>(
-        &'a self,
-        realm: [u8; 16],
-        location: &'a str,
-        request: &'a str,
-        relay_state: &'a str,
-    ) -> access_identity_federation::ports::Signed<'a> {
-        Box::pin(async move {
-            let signer = RealmSigner {
-                socket: &self.0,
-                realm: RealmId::from_bytes(realm),
-                signatures: std::sync::atomic::AtomicU32::new(0),
-            };
-            access_identity_saml::binding::redirect(
-                &signer,
-                location,
-                "SAMLRequest",
-                request,
-                Some(relay_state),
-                access_identity_saml::alg::SigAlg::RsaSha256,
-            )
-            .await
-            .map_err(|_| access_identity_federation::ports::Unreachable)
-        })
     }
 }

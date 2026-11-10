@@ -186,7 +186,7 @@ pub struct UpstreamStep {
     pub connection: String,
     /// SAML rather than OIDC.
     pub saml: bool,
-    /// The verified issuer (RFC 9207) or IdP entity ID.
+    /// The verified issuer (RFC 9207) or identity provider entity ID.
     pub iss: String,
     /// `acr` or `AuthnContextClassRef`, as declared.
     pub acr: Option<String>,

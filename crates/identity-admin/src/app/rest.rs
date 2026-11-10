@@ -1204,7 +1204,7 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                             .map_err(|_| Invalid::Upstream)?,
                     ),
                 },
-                profile: upstream_profile(m)?,
+                profile: Box::new(upstream_profile(m)?),
             })
         }
         Op::RetireUpstream => {
@@ -1580,8 +1580,10 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             only(m, &["entries"])?;
             Change::UpstreamAssuranceMap {
                 name: Name::parse(key_of(key)?)?,
-                map: serde_json::from_value(Json::Object(m.clone()))
-                    .map_err(|_| Invalid::Upstream)?,
+                map: Box::new(
+                    serde_json::from_value(Json::Object(m.clone()))
+                        .map_err(|_| Invalid::Upstream)?,
+                ),
             }
         }
         // OP-154 m.3 (j)

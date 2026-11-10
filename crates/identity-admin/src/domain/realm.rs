@@ -210,8 +210,8 @@ pub struct Upstream {
     pub ssf: Option<TransmitterConfig>,
     /// The connection's own profile (OP-155 m.3 (h)): protocol, subject key, client
     /// authentication (`private_key_jwt` unless a secret method is chosen), preset,
-    /// organization and SAML IdP.
-    pub profile: access_identity_federation::domain::connection::Profile,
+    /// organization and SAML identity provider.
+    pub profile: Box<access_identity_federation::domain::connection::Profile>,
 }
 
 /// The SSF fields as JSON: the form the request carries and the store keeps.
@@ -307,7 +307,7 @@ impl Upstream {
         if let Some(r) = &self.client_secret_ref {
             m.push((Value::text("client_secret_ref"), Value::text(r)));
         }
-        if self.profile
+        if *self.profile
             != access_identity_federation::domain::connection::Profile::legacy(
                 self.client_secret_ref.is_some(),
             )

@@ -297,15 +297,15 @@ pub fn decode_verified(input: &[u8]) -> Result<String, WireError> {
 /// P4: most attributes kept from one assertion, and most values of one attribute.
 pub const MAX_ATTRIBUTES: usize = 32;
 
-/// P4: the facts of one SAML 2.0 assertion an upstream IdP issued, read from the assertion
-/// element whose enveloped signature verified with a pinned IdP certificate (OP-155 m.3 (h),
+/// P4: the facts of one SAML 2.0 assertion an upstream identity provider issued, read from the assertion
+/// element whose enveloped signature verified with a pinned identity provider certificate (OP-155 m.3 (h),
 /// IDI-8). The Response around it, when there was one, is unsigned context: only its status
 /// and `InResponseTo` are kept, and nothing is decided on them alone.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AssertionFacts {
     /// The assertion's `ID`.
     pub id: String,
-    /// The assertion's `saml:Issuer`, the IdP entity ID.
+    /// The assertion's `saml:Issuer`, the identity provider entity ID.
     pub issuer: String,
     /// `IssueInstant`, as written.
     pub issue_instant: String,

@@ -145,7 +145,7 @@ where
     let Ok(params) = Params::parse(uri.query().unwrap_or_default()) else {
         return bad();
     };
-    // TN-108; TN-98: no other parameter is read
+    // TN-108; TN-98
     let ui_locales = params.get("ui_locales").filter(|l| l.len() <= 256);
     let jar = Jar::of(&headers, peer);
     let reply = s
@@ -233,7 +233,7 @@ fn hardened(mut r: Response, csp: &str) -> Response {
     r
 }
 
-/// `POST /v1/login/upstream/{connection}/saml/acs` (OP-155 m.3 (h)): the IdP's cross-site POST
+/// `POST /v1/login/upstream/{connection}/saml/acs` (OP-155 m.3 (h)): the identity provider's cross-site POST
 /// carries no `SameSite=Lax` cookie, so it is first posted again from this origin as a
 /// top-level navigation; the second POST, with the flow cookie, is decided.
 async fn acs<D, K, KI, C, M, H, S>(

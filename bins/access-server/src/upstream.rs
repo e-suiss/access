@@ -50,7 +50,7 @@ impl AssertionReader for ParserReader {
 }
 
 /// SAML 2.0 bearer assertions (RFC 7522) of a realm's accepted SAML upstream connection (OP-155
-/// m.3 (k)): verified in the parser worker, addressed to the token endpoint, from an IdP whose
+/// m.3 (k)): verified in the parser worker, addressed to the token endpoint, from an identity provider whose
 /// issuer the governing domain accepts; the account is the one the identity is linked to.
 pub(crate) struct UpstreamSamlAssertions {
     pub(crate) app: Pool,

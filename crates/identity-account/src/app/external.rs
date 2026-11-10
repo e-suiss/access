@@ -381,7 +381,7 @@ impl Externals<'_> {
             now_ms,
         })
         .await?;
-        // IDP-34: a keyed digest, never the number
+        // IDP-34
         let national = up
             .national
             .map(|n| {

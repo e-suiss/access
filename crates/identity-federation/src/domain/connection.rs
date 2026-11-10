@@ -33,7 +33,7 @@ pub const VERIFIED_ALGS: [&str; 2] = ["ES256", "RS256"];
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConnectionProtocol {
-    /// OpenID Connect.
+    /// `OpenID` Connect.
     #[default]
     Oidc,
     /// SAML 2.0, Access in the SP role.
@@ -82,11 +82,11 @@ impl ClientAuthMethod {
     }
 }
 
-/// A SAML IdP as the connection names it.
+/// A SAML identity provider as the connection names it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SamlIdp {
-    /// The IdP's entity ID.
+    /// The identity provider's entity ID.
     pub entity_id: String,
     /// Its SSO service, HTTP-Redirect binding.
     pub sso_url: String,
@@ -119,7 +119,7 @@ pub struct Profile {
     /// SAML only: whether an unsolicited Response is accepted (off by default).
     #[serde(default, skip_serializing_if = "core::ops::Not::not")]
     pub allow_unsolicited: bool,
-    /// SAML only: the IdP.
+    /// SAML only: the identity provider.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub saml: Option<SamlIdp>,
 }
@@ -369,7 +369,7 @@ pub fn discovered(
     if !https(&authorization_endpoint) || !https(&token_endpoint) {
         return Err(ConnectionError::Discovery);
     }
-    // MD-3, OIDC Discovery §3: RS256 when the upstream names none
+    // MD-3
     let offered = strings(&doc, "id_token_signing_alg_values_supported")
         .unwrap_or_else(|| vec!["RS256".into()]);
     let algorithms: Vec<String> = offered

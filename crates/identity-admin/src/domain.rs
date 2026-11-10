@@ -1838,7 +1838,7 @@ pub enum Change {
         /// The connection.
         name: Name,
         /// The map.
-        map: access_identity_federation::domain::connection::AssuranceMap,
+        map: Box<access_identity_federation::domain::connection::AssuranceMap>,
     },
     /// `idp.client.dcr_policy`, or `dcr_policy_tighten` when it only narrows (OP-154 m.3 (j));
     /// `loosens` is resolved against the realm's current policy before the decision.
@@ -2439,7 +2439,9 @@ impl Change {
             Self::Scim(s) => s.body(),
             Self::Federation(f) => f.body(),
             Self::Saml(s) => s.body(),
-            Self::DeviceCode(on) => Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))]),
+            Self::DeviceCode(on) | Self::Hrd(on) => {
+                Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))])
+            }
             Self::Ciba(c) => c.to_value(),
             Self::CertificateLogin(c) => c.to_value(),
             Self::GatewayRadiusClientRegister(c) => c.to_value(),
@@ -2449,7 +2451,6 @@ impl Change {
                 (Value::text("kvno"), Value::Unsigned(u64::from(*kvno))),
             ]),
             Self::MtlsAliases(on) => Value::Map(vec![(Value::text("published"), Value::Bool(*on))]),
-            Self::Hrd(on) => Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))]),
             Self::UpstreamAssuranceMap { name, map } => Value::Map(vec![
                 (Value::text("name"), Value::text(name.as_str())),
                 (Value::text("map"), Value::text(&map.to_json())),
@@ -2553,7 +2554,8 @@ impl Change {
             Self::UpstreamRegister(Upstream { name, .. })
             | Self::UpstreamUpdate(Upstream { name, .. })
             | Self::UpstreamRetire(name)
-            | Self::UpstreamLink(UpstreamLink { upstream: name, .. }) => {
+            | Self::UpstreamLink(UpstreamLink { upstream: name, .. })
+            | Self::UpstreamAssuranceMap { name, .. } => {
                 path.extend([String::from("upstream"), String::from(name.as_str())]);
             }
             Self::MapperSet { claim, .. } => {
@@ -2617,9 +2619,6 @@ impl Change {
             | Self::MtlsAliases(_)
             | Self::Hrd(_)
             | Self::FrontchannelLogout => path.push(String::from("realm")),
-            Self::UpstreamAssuranceMap { name, .. } => {
-                path.extend([String::from("upstream"), String::from(name.as_str())]);
-            }
             Self::ClientProfile { client, .. } => {
                 path.extend([String::from("client"), String::from(client.as_str())]);
             }

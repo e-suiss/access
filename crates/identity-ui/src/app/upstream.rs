@@ -143,7 +143,7 @@ fn sp_urls(kit: &RealmKit, name: &str) -> (String, String) {
     (format!("{base}/metadata"), format!("{base}/acs"))
 }
 
-/// The `AuthnRequest` ID of an attempt: an NCName from its random nonce.
+/// The `AuthnRequest` ID of an attempt: an XML name from its random nonce.
 fn request_id(nonce: &str) -> String {
     format!("_{nonce}")
 }
@@ -332,21 +332,19 @@ where
 
     /// The flow device of this browser, and the cookie that sets one when it has none.
     fn device(b: &Browser<'_>) -> Result<([u8; 32], Option<String>), Reply> {
-        match b
+        if let Some(d) = b
             .flow
             .and_then(|f| b64url_decode(f).ok())
             .and_then(|d| <[u8; 32]>::try_from(d).ok())
         {
-            Some(d) => Ok((d, None)),
-            None => {
-                let d = access_crypto::random::bytes::<32>().map_err(|_| unavailable())?;
-                Ok((d, Some(set_cookie(FLOW_COOKIE, &b64url_encode(&d), None))))
-            }
+            return Ok((d, None));
         }
+        let d = access_crypto::random::bytes::<32>().map_err(|_| unavailable())?;
+        Ok((d, Some(set_cookie(FLOW_COOKIE, &b64url_encode(&d), None))))
     }
 
     /// Opens an attempt at SAML connection `c`: its `AuthnRequest` ID and `RelayState` are kept
-    /// with this browser's flow device, then signed into the IdP's SSO URL (OP-155 m.3 (h)).
+    /// with this browser's flow device, then signed into the identity provider's SSO URL (OP-155 m.3 (h)).
     async fn begin_saml(
         &self,
         kit: &RealmKit,
@@ -442,7 +440,6 @@ where
     /// `GET /v1/login/upstream/{connection}/callback` (OP-155 m.3 (h)): the attempt this
     /// browser opened is used once; the response's `iss`, the connection's Acceptance and the
     /// ID token are checked in the back end before any account is touched.
-    #[expect(clippy::too_many_lines, reason = "the callback's steps in their order")]
     pub async fn finish_upstream<H: ProviderHttp, S: SocialSecrets>(
         &self,
         entry: &RealmEntry,
@@ -488,7 +485,7 @@ where
             Ok(None) => return Reply::problem(NO_CONNECTION),
             Err(r) => return r,
         };
-        // RFC 9207
+        // RFC 9207 §2.4
         if held.resolved.discovered.check_iss(iss).is_err() {
             return Reply::problem(UPSTREAM_FAILED);
         }
@@ -673,7 +670,7 @@ where
     M: Messages,
 {
     /// `POST /v1/login/upstream/{connection}/saml/acs` (OP-155 m.3 (h), §10.6.1): the Response
-    /// is read and its assertion's signature verified in the parser worker against the IdP's
+    /// is read and its assertion's signature verified in the parser worker against the identity provider's
     /// pinned certificates; it must answer the `AuthnRequest` this browser's attempt sent, or be
     /// an unsolicited Response the connection opens, and it is used once.
     #[expect(clippy::too_many_lines, reason = "the ACS's steps in their order")]
@@ -759,7 +756,7 @@ where
                 return Reply::problem(UPSTREAM_FAILED);
             }
         };
-        // §10.6.1: one use
+        // §10.6.1
         let mut input = facts.issuer.as_bytes().to_vec();
         input.push(0);
         input.extend_from_slice(facts.id.as_bytes());
@@ -776,9 +773,8 @@ where
             Ok(false) => return Reply::problem(UPSTREAM_FAILED),
             Err(_) => return unavailable(),
         }
-        let signed = match saml_sign_in(&c, &facts, declared, &message) {
-            Ok(s) => s,
-            Err(_) => return Reply::problem(UPSTREAM_FAILED),
+        let Ok(signed) = saml_sign_in(&c, &facts, declared, &message) else {
+            return Reply::problem(UPSTREAM_FAILED);
         };
         // IDP-27
         let assurance = mapped(map.as_deref(), &signed.declared);

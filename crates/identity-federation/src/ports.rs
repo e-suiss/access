@@ -48,7 +48,7 @@ pub trait ProviderHttp: Send + Sync {
 pub type Signed<'a> = Pin<Box<dyn Future<Output = Result<String, Unreachable>> + Send + 'a>>;
 
 /// Signs the RFC 7523 client assertions of `private_key_jwt` with a key of the realm, the one
-/// its JWKS publishes (OP-155 m.3 (h)).
+/// its `JWKS` publishes (OP-155 m.3 (h)).
 pub trait ClientAssertion: Send + Sync {
     /// The compact JWS of `claims` under `alg` (`ES256` or `RS256`) at `at_ms`.
     fn sign(&self, realm: [u8; 16], alg: &'static str, claims: Vec<u8>, at_ms: u64) -> Signed<'_>;
@@ -116,8 +116,8 @@ pub type Read<'a> = Pin<
     >,
 >;
 
-/// Reads an upstream IdP's SAML Response in the parser worker and verifies its assertion's
-/// signature against `certs`, the IdP's pinned certificates (OP-155 m.3 (c), (h), IDI-8): XML
+/// Reads an upstream identity provider's SAML Response in the parser worker and verifies its assertion's
+/// signature against `certs`, the identity provider's pinned certificates (OP-155 m.3 (c), (h), IDI-8): XML
 /// is never parsed in access-server.
 pub trait AssertionReader: Send + Sync {
     /// The facts of the assertion in `message` (the decoded `SAMLResponse` or assertion).

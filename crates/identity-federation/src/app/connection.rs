@@ -30,7 +30,7 @@ pub struct Connection {
     pub client_id: String,
     /// The client secret's reference, for a secret method.
     pub secret_ref: Option<String>,
-    /// The registered JWKS.
+    /// The registered `JWKS`.
     pub jwks_uri: String,
     /// Its profile.
     pub profile: Profile,
@@ -253,7 +253,7 @@ impl Resolved {
 /// Why a SAML upstream's assertion signs nobody in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum SamlFailure {
-    /// The parser worker could not be reached, or the connection names no IdP (MD-8).
+    /// The parser worker could not be reached, or the connection names no identity provider (MD-8).
     #[error("unavailable")]
     Unavailable,
     /// The worker refused it, or it does not match the connection (§10.6.1).
@@ -265,7 +265,7 @@ pub enum SamlFailure {
 const MAIL: [&str; 3] = ["mail", "email", "urn:oid:0.9.2342.19200300.100.1.3"];
 
 /// Reads `message` (a decoded `SAMLResponse` or assertion) of SAML connection `c` in the parser
-/// worker against the IdP's pinned certificates and checks it against `e` (OP-155 m.3 (h)).
+/// worker against the identity provider's pinned certificates and checks it against `e` (OP-155 m.3 (h)).
 ///
 /// # Errors
 /// [`SamlFailure`].
@@ -293,7 +293,7 @@ pub async fn verify_saml(
 }
 
 /// The upstream sign-in of a verified SAML assertion of connection `c`: keyed by
-/// `(IdP entity ID, NameID)` (§10.1.2 SAML row); its address carries no assurance.
+/// (identity provider entity ID, `NameID`) (§10.1.2 SAML row); its address carries no assurance.
 ///
 /// # Errors
 /// [`SamlFailure::Refused`] when a preset's national identity number is missing.

@@ -230,8 +230,11 @@ pub trait SessionTx: AccountTx + RiskTx {
     fn upstream_live_sessions(
         &mut self,
         connection: &str,
-    ) -> impl Future<Output = Result<Vec<([u8; 16], [u8; 16])>, SessionError>> + Send;
+    ) -> impl Future<Output = Result<Vec<SessionOf>, SessionError>> + Send;
 }
+
+/// A session and its subject.
+pub type SessionOf = ([u8; 16], [u8; 16]);
 
 /// Opens session transactions in one realm.
 pub trait SessionDb: AccountDb<Tx: SessionTx> {}

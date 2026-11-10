@@ -350,9 +350,9 @@ fn assertion_facts(
     Ok(f)
 }
 
-/// `saml.assertion` (P4): reads an upstream IdP's `samlp:Response` or bare `saml:Assertion`
+/// `saml.assertion` (P4): reads an upstream identity provider's `samlp:Response` or bare `saml:Assertion`
 /// (a [`Context`], then the message, never deflated), verifies the assertion's own enveloped
-/// signature with one of the IdP's pinned certificates and returns the assertion's facts, read
+/// signature with one of the identity provider's pinned certificates and returns the assertion's facts, read
 /// from that element (OP-155 m.3 (h), IDI-8). A Response signature alone never suffices.
 ///
 /// # Errors

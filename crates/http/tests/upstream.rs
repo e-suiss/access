@@ -10,6 +10,9 @@
     clippy::indexing_slicing,
     clippy::too_many_lines,
     clippy::unused_async_trait_impl,
+    clippy::many_single_char_names,
+    clippy::assigning_clones,
+    clippy::assert_is_empty,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
@@ -305,7 +308,7 @@ impl ClientAssertion for Assertions {
 }
 
 /// The parser worker's answer as the test encodes it: the message is the facts' CBOR, read only
-/// with the IdP's pinned certificate (the real worker's signature checks are its own tests).
+/// with the identity provider's pinned certificate (the real worker's signature checks are its own tests).
 struct FakeReader;
 
 const IDP_CERT: &[u8] = b"pinned-idp-cert";
@@ -781,7 +784,7 @@ fn corp() -> Profile {
 }
 
 // OP-155 m.3 (h), TN-95, TN-108, TN-98, RFC 9207, §10.2.6, §10.1.2, INV-17, IDP-27,
-// Ek B 4678, 4679, 4680, 4681, 4730, 4735, 4736, 4740, 4741
+// OP-155 m.3 (h), Ek B 4678, 4679, 4680, 4681, 4730, 4735, 4736, 4740, 4741
 #[tokio::test]
 async fn an_accepted_connection_signs_in_just_in_time_and_its_claims_carry_only_digests() {
     let e = env(0x61, "up-a").await;
@@ -811,7 +814,7 @@ async fn an_accepted_connection_signs_in_just_in_time_and_its_claims_carry_only_
     let a = w.back(&e, &to, "corp", CORP).await;
     assert_eq!(a.status, StatusCode::SEE_OTHER, "{}", a.code());
     assert!(w.jar.contains_key("__Host-access-session"));
-    // OP-155 m.3 (h): private_key_jwt by default, no secret travels
+    // OP-155 m.3 (h)
     let form = e.provider.says.lock().unwrap().forms[0].clone();
     assert!(form.contains(
         "client_assertion_type=urn%3Aietf%3Aparams%3Aoauth%3Aclient-assertion-type%3Ajwt-bearer"
@@ -907,7 +910,7 @@ async fn an_accepted_connection_signs_in_just_in_time_and_its_claims_carry_only_
         "an unmapped acr is the lowest class"
     );
 
-    // RFC 9207
+    // RFC 9207 §2.4
     let mut w4 = e.browser(4);
     let d = w4.upstream(&e, "corp", "https://idp.test/evil").await;
     assert_eq!(d.status, StatusCode::UNAUTHORIZED);
@@ -978,7 +981,7 @@ async fn a_new_subject_for_a_known_address_is_a_conflict_and_never_reaches_the_a
     let bob = e.link_at(CORP, "emp-3").await.unwrap();
     e.add_email(bob, "bob@home.example").await;
 
-    // GHSA-x8cg-3c8h-gw55: another sub at the same connection
+    // GHSA-x8cg-3c8h-gw55
     e.says("emp-3-new", Some("bob@corp.example"));
     let mut w2 = e.browser(2);
     let b = w2.upstream(&e, "corp", CORP).await;
@@ -1003,7 +1006,7 @@ async fn a_new_subject_for_a_known_address_is_a_conflict_and_never_reaches_the_a
         "one notice per conflict"
     );
 
-    // GHSA-x8cg-3c8h-gw55: the same address from another issuer
+    // GHSA-x8cg-3c8h-gw55
     e.says("emp-3", Some("bob@corp.example"));
     e.provider.says.lock().unwrap().iss = Some(String::from(OTHER));
     let mut w4 = e.browser(4);
@@ -1012,7 +1015,7 @@ async fn a_new_subject_for_a_known_address_is_a_conflict_and_never_reaches_the_a
     let other = e.link_at(OTHER, "emp-3").await.unwrap();
     assert_ne!(other, bob, "never the existing account");
 
-    // TN-66: resolved only by an explicit link after a re-authentication
+    // TN-66
     e.says("emp-3-new", Some("bob@corp.example"));
     let link = w
         .send(
@@ -1106,7 +1109,7 @@ async fn home_realm_discovery_is_off_until_the_realm_turns_it_on_and_no_hint_ove
     tx.put_realm_hrd(&bound, true).await.unwrap();
     tx.commit().await.unwrap();
     let path = format!("/v1/organizations/{}/sign-in", b64url_encode(&party));
-    // §10.2.6: no verified domain, no routing
+    // §10.2.6
     assert_eq!(
         e.browser(9).send("GET", &path, None).await.status,
         StatusCode::NOT_FOUND
@@ -1126,7 +1129,7 @@ async fn home_realm_discovery_is_off_until_the_realm_turns_it_on_and_no_hint_ove
     );
     t.commit().await.unwrap();
     let mut w = e.browser(1);
-    // TN-98: the organization turned it on, the realm did not
+    // TN-98
     assert_eq!(
         w.send("GET", &path, None).await.status,
         StatusCode::NOT_FOUND
@@ -1146,7 +1149,7 @@ async fn home_realm_discovery_is_off_until_the_realm_turns_it_on_and_no_hint_ove
             .status,
         StatusCode::NOT_FOUND
     );
-    // TN-98: a hint never picks another connection
+    // TN-98
     e.connection("other", OTHER, &Profile::legacy(false), true)
         .await;
     let start = w
@@ -1213,7 +1216,7 @@ fn saml_facts(
 }
 
 impl Web {
-    /// Posts `facts` to the ACS as the IdP's browser POST, then as the page's own repost.
+    /// Posts `facts` to the ACS as the identity provider's browser POST, then as the page's own repost.
     async fn acs(
         &mut self,
         facts: &access_internal_api::saml::AssertionFacts,
@@ -1302,7 +1305,7 @@ async fn a_saml_upstream_signs_in_by_answering_its_request_and_refuses_an_unsoli
         .unwrap()
         .to_owned();
 
-    // §10.6.1: an answer to another request
+    // §10.6.1
     let mut stray = e.browser(2);
     let _ = stray.send("GET", "/v1/login/upstream/corp", None).await;
     let a = w
@@ -1343,7 +1346,7 @@ async fn a_saml_upstream_signs_in_by_answering_its_request_and_refuses_an_unsoli
     assert_eq!(body.upstream.as_ref().unwrap().iss, IDP);
     assert_eq!(e.status(sam).await, "active");
 
-    // §10.6.1: once
+    // §10.6.1
     let start = w.send("GET", "/v1/login/upstream/corp", None).await;
     let p = Params::parse(start.location().split_once('?').unwrap().1).unwrap();
     let relay3 = p.get("RelayState").unwrap().to_owned();
@@ -1366,7 +1369,7 @@ async fn a_saml_upstream_signs_in_by_answering_its_request_and_refuses_an_unsoli
         "an assertion ID is used once"
     );
 
-    // §10.2.6, Ek B 4682: unsolicited is off by default
+    // §10.2.6, Ek B 4682
     let mut idp_initiated = e.browser(3);
     let d = idp_initiated
         .acs(&saml_facts("a2", "sam-2", None), None)

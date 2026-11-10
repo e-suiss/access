@@ -489,3 +489,27 @@ severity = "warn"
 since = "unreleased"
 fields = ["error"]
 ocsf = "application_error"
+
+[[event]]
+name = "login.upstream.unreachable"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["connection"]
+ocsf = "authentication"
+
+[[event]]
+name = "login.upstream.saml.refused"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["connection"]
+ocsf = "authentication"
+
+[[event]]
+name = "login.upstream.trust.unavailable"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["error"]
+ocsf = "application_error"
