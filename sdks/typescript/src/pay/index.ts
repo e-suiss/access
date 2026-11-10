@@ -169,3 +169,57 @@ export function budgetMoney(term: unknown): Money | undefined {
   }
   return { currency: unit.toUpperCase(), minor: capacity };
 }
+
+/** "Let M charge your card: up to 500 TRY per order, until …, only for orders you place". */
+export interface SaveCard {
+  readonly perOrder: Money;
+  /** The budget over the Grant's life, when one is set. */
+  readonly total?: Money;
+  readonly until: number;
+  readonly purposes: readonly string[];
+}
+
+/** Why a merchant's request is not a card the customer can save. */
+export type NotSaveCard =
+  "not_payment" | "not_to_merchant" | "no_per_order_limit" | "passes_on" | "no_end";
+
+/**
+ * The merchant Grant a "save my card" request asks for (§8.17.5.11, §7.9.9.3, OP-156 m.24 (b),
+ * (g)), from its canonical authority JSON: only `pay` actions, the merchant as recipient, an
+ * amount bound per order, nothing passed on, and an end (there is no "forever"). The preview is
+ * read from these fields only; the Kernel decodes the signed intent.
+ */
+export function saveCardOf(authority: unknown, merchant: string): SaveCard | NotSaveCard {
+  const a = obj(authority);
+  const set = obj(a["authority"]);
+  const exact = obj(set["actions"])["exact"];
+  const actions = Array.isArray(exact) ? (exact as unknown[]) : [];
+  if (actions.length === 0 || actions.some((x) => obj(x)["namespace"] !== "pay")) {
+    return "not_payment";
+  }
+  if (obj(set["recipient"])["party"] !== merchant) return "not_to_merchant";
+  const range = obj(obj(obj(set["params"])["amount"])["range"]);
+  const max = range["max"];
+  const unit = range["unit"];
+  if (!minorOk(max) || typeof unit !== "string" || !/^[a-z]{3}$/.test(unit)) {
+    return "no_per_order_limit";
+  }
+  const depth = obj(a["delegation"])["depth"];
+  if (depth !== undefined && depth !== 0) return "passes_on";
+  const constraints = obj(a["constraints"]);
+  const until = obj(constraints["validity"])["until"];
+  if (!minorOk(until)) return "no_end";
+  const currency = unit.toUpperCase();
+  const budget = (Array.isArray(constraints["budget"]) ? (constraints["budget"] as unknown[]) : [])
+    .map(budgetMoney)
+    .find((m) => m?.currency === currency);
+  const purposes = (Array.isArray(set["purpose"]) ? (set["purpose"] as unknown[]) : [])
+    .map((p) => obj(p)["code"])
+    .filter((c): c is string => typeof c === "string");
+  return {
+    perOrder: { currency, minor: max },
+    ...(budget === undefined ? {} : { total: budget }),
+    until,
+    purposes,
+  };
+}

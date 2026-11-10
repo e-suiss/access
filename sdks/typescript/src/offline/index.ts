@@ -57,3 +57,41 @@ export function stateAt(report: OfflineReport | undefined, now: number): Offline
   if (report === undefined) return { kind: "online" };
   return now < report.until ? { kind: "offline", report } : { kind: "ended", report };
 }
+
+/** One offline slice of a PAP's validity contract: drawn from a budget term, in a unit. */
+export interface PapSlice {
+  readonly budgetTerm: string;
+  readonly amount: number;
+  /** `count`, or a currency in lower case (`eur`). */
+  readonly unit: string;
+}
+
+/**
+ * The till's report derived from what it holds (OP-156 m.3 (v), §8.17.5.8): its PAP's horizon
+ * and offline slices, the verifier's unused amount per budget term (`slice_unused`), and its
+ * Verifier Profile's `slice_max` per unit. It can act offline until the horizon; what is left of
+ * each slice, at most the profile's ceiling for its unit, is the voids left (`count`) and the
+ * money left (`eur`, as EUR minor units; a TRY amount is always CT2 and is never sliced, OP-156
+ * m.24 (f)). A spent slice reads 0. `since` is when the till itself lost Access.
+ */
+export function reportFrom(input: {
+  readonly since: number;
+  readonly horizon: number;
+  readonly slices: readonly PapSlice[];
+  readonly unused: Readonly<Record<string, number>>;
+  readonly sliceMax: Readonly<Record<string, number>>;
+}): OfflineReport | undefined {
+  let voidsLeft: number | undefined;
+  let amountLeft: Money | undefined;
+  for (const s of input.slices) {
+    const left = Math.min(input.unused[s.budgetTerm] ?? 0, input.sliceMax[s.unit] ?? 0);
+    if (s.unit === "count") voidsLeft = left;
+    else if (s.unit === "eur") amountLeft = { currency: "EUR", minor: left };
+  }
+  return reportOf({
+    since: input.since,
+    until: input.horizon,
+    ...(voidsLeft === undefined ? {} : { voids_left: voidsLeft }),
+    ...(amountLeft === undefined ? {} : { amount_left: amountLeft }),
+  });
+}

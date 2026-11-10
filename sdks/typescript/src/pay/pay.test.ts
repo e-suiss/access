@@ -1,7 +1,14 @@
 // OP-156 m.3 (u), (v), XI-14, §8.17.5.11, R8, X8, INV-20, E26
 import { describe, expect, it } from "vitest";
 
-import { budgetMoney, merchantsOf, oneTimeOf, payLimitOf, type DescribedIntent } from "./index.js";
+import {
+  budgetMoney,
+  merchantsOf,
+  oneTimeOf,
+  payLimitOf,
+  saveCardOf,
+  type DescribedIntent,
+} from "./index.js";
 
 const payment: DescribedIntent = {
   digest: "ZA",
@@ -93,5 +100,43 @@ describe("pay", () => {
     ]);
     expect(budgetMoney(merchants[0]?.budget[0])).toEqual({ currency: "TRY", minor: 50_000 });
     expect(budgetMoney({ dimension: "count", capacity: 3 })).toBeUndefined();
+  });
+});
+
+describe("save my card", () => {
+  const authority = {
+    authority: {
+      actions: { exact: [{ namespace: "pay", name: "initiate", major: 1, schema: "cw" }] },
+      resource: { namespace: "access.party", prefix: ["c", "instrument"] },
+      params: { amount: { range: { min: 0, max: 50_000, unit: "try" } } },
+      recipient: { party: "shop" },
+      purpose: [{ code: "orders" }],
+    },
+    constraints: {
+      validity: { from: 0, until: 1_798_675_200_000 },
+      budget: [{ dimension: { amount: "try" }, capacity: 200_000, window: "total" }],
+    },
+    delegation: {},
+    requirements: [],
+  };
+  // §8.17.5.11, §7.9.9.3, OP-156 m.24 (b)
+  it("reads the merchant Grant's per-order limit, end and purpose, and nothing else", () => {
+    expect(saveCardOf(authority, "shop")).toEqual({
+      perOrder: { currency: "TRY", minor: 50_000 },
+      total: { currency: "TRY", minor: 200_000 },
+      until: 1_798_675_200_000,
+      purposes: ["orders"],
+    });
+    expect(saveCardOf(authority, "other")).toBe("not_to_merchant");
+    const work = structuredClone(authority);
+    work.authority.actions.exact = [{ namespace: "work", name: "approve", major: 1, schema: "cw" }];
+    expect(saveCardOf(work, "shop")).toBe("not_payment");
+    expect(saveCardOf({ ...authority, delegation: { depth: 1 } }, "shop")).toBe("passes_on");
+    const open = structuredClone(authority);
+    open.authority.params = {} as typeof open.authority.params;
+    expect(saveCardOf(open, "shop")).toBe("no_per_order_limit");
+    const forever = structuredClone(authority);
+    forever.constraints.validity.until = Number.MAX_VALUE;
+    expect(saveCardOf(forever, "shop")).toBe("no_end");
   });
 });
