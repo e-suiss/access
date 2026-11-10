@@ -1,0 +1,19 @@
+[package]
+name = "access-identity-signals"
+description = "Signal sources of the identity plane (OP-156 m.3 (r)): KYC, MDM, risk and DLP issuers, their registration, vendor formats and the one mapping the SSF, Claim Ingest and call point paths share."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-internal-api = { workspace = true }
+access-kernel = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
+suiss-crypto = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true
