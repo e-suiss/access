@@ -1194,6 +1194,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "registerRadiusClient"
         | "putKeytabPolicy"
         | "replaceKeytab"
+        // OP-155 m.3 (h)
+        | "putHrd"
         | "createCrossAppConnection"
         | "retireCrossAppConnection"
         // OP-155 m.3 (g)
@@ -1220,6 +1222,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
             Shape::List(&["resource", "upstream", "status"]),
         ),
         "putVaultResource" => (VaultResources, w(true)),
+        // IDP-27, OP-155 m.3 (h)
+        "putUpstreamAssuranceMap" => (UpstreamIdps, w(false)),
         "disableVaultResource" | "putVaultReleaseMode" => (VaultResources, w(false)),
         // AG-8, OP-154 m.3 (a)
         "listProtectedResources" => (

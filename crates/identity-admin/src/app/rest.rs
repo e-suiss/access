@@ -206,6 +206,10 @@ pub enum Op {
     PutCertificateLogin,
     /// `putMtlsAliases`: `idp.realm.mtls_aliases` (OP-155 m.3 (m)).
     PutMtlsAliases,
+    /// `putHrd`: `idp.realm.hrd` or `hrd_close` (TN-98, OP-155 m.3 (h)).
+    PutHrd,
+    /// `putUpstreamAssuranceMap`: `idp.upstream.assurance_map` (IDP-27, OP-155 m.3 (h)).
+    PutUpstreamAssuranceMap,
     /// `registerScimClient`: `idp.scim.client_register` (OP-155 m.3 (g)).
     RegisterScimClient,
     /// `rotateScimSecret`: `idp.scim.token_rotate`.
@@ -323,6 +327,8 @@ impl Op {
             "retireCrossAppConnection" => Self::RetireCrossAppConnection,
             "putCertificateLogin" => Self::PutCertificateLogin,
             "putMtlsAliases" => Self::PutMtlsAliases,
+            "putHrd" => Self::PutHrd,
+            "putUpstreamAssuranceMap" => Self::PutUpstreamAssuranceMap,
             "registerScimClient" => Self::RegisterScimClient,
             "rotateScimSecret" => Self::RotateScimSecret,
             "retireScimClient" => Self::RetireScimClient,
@@ -1171,6 +1177,14 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     "jwks_uri",
                     "ssf",
                     "status",
+                    "display_name",
+                    "protocol",
+                    "subject_key",
+                    "client_auth",
+                    "preset",
+                    "organization",
+                    "allow_unsolicited",
+                    "saml",
                 ],
             )?;
             let name = Name::parse(key_of(key)?)?;
@@ -1190,6 +1204,7 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                             .map_err(|_| Invalid::Upstream)?,
                     ),
                 },
+                profile: upstream_profile(m)?,
             })
         }
         Op::RetireUpstream => {
@@ -1555,6 +1570,20 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                 .ok_or(Invalid::Gateway)?;
             Change::GatewayKeytabEmergency { gateway, kvno }
         }
+        // TN-98, OP-155 m.3 (h)
+        Op::PutHrd => {
+            only(m, &["enabled"])?;
+            Change::Hrd(flag(m, "enabled")?)
+        }
+        // IDP-27, OP-155 m.3 (h)
+        Op::PutUpstreamAssuranceMap => {
+            only(m, &["entries"])?;
+            Change::UpstreamAssuranceMap {
+                name: Name::parse(key_of(key)?)?,
+                map: serde_json::from_value(Json::Object(m.clone()))
+                    .map_err(|_| Invalid::Upstream)?,
+            }
+        }
         // OP-154 m.3 (j)
         Op::PutDcrPolicy => {
             only(m, &["enabled", "domains", "initial_access_tokens"])?;
@@ -1811,10 +1840,47 @@ pub fn group_view(g: &GroupRow) -> Json {
     })
 }
 
+/// An upstream registration's profile fields (OP-155 m.3 (h)); omitted ones take the
+/// profile's defaults: OIDC, `sub`, `private_key_jwt` (or `client_secret_post` when a secret
+/// reference is given), no preset, no organization, unsolicited SAML refused.
+fn upstream_profile(
+    m: &Map<String, Json>,
+) -> Result<access_identity_federation::domain::connection::Profile, Invalid> {
+    use access_identity_federation::domain::connection::Profile;
+    let has_secret = opt_text(m, "client_secret_ref")?.is_some();
+    let mut fields = Map::new();
+    for k in [
+        "display_name",
+        "protocol",
+        "subject_key",
+        "client_auth",
+        "preset",
+        "organization",
+        "allow_unsolicited",
+        "saml",
+    ] {
+        if let Some(v) = m.get(k).filter(|v| !v.is_null()) {
+            fields.insert(String::from(k), v.clone());
+        }
+    }
+    if !fields.contains_key("client_auth") {
+        fields.insert(
+            String::from("client_auth"),
+            json!(Profile::legacy(has_secret).client_auth.name()),
+        );
+    }
+    serde_json::from_value(Json::Object(fields)).map_err(|_| Invalid::Upstream)
+}
+
 /// An upstream provider's view: the secret only by its reference.
 #[must_use]
 pub fn upstream_view(u: &UpstreamRow) -> Json {
-    json!({
+    let profile = access_identity_federation::domain::connection::Profile::stored(
+        u.profile.as_deref(),
+        u.client_secret_ref.is_some(),
+    )
+    .ok();
+    let mut v = json!({
         "name": u.name,
         "issuer": u.issuer,
         "client_id": u.client_id,
@@ -1822,7 +1888,14 @@ pub fn upstream_view(u: &UpstreamRow) -> Json {
         "jwks_uri": u.jwks_uri,
         "ssf": u.ssf.as_deref().and_then(|s| serde_json::from_str::<Json>(s).ok()),
         "status": if u.active { "active" } else { "retired" },
-    })
+    });
+    if let (Some(o), Some(Json::Object(p))) = (
+        v.as_object_mut(),
+        profile.map(|p| serde_json::to_value(p).unwrap_or_default()),
+    ) {
+        o.extend(p);
+    }
+    v
 }
 
 /// Whether a client is a native app: a redirect URI with a private-use scheme or a loopback

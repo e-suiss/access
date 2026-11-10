@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.idp_upstreams SET issuer = $4, client_id = $5, client_secret_ref = $6,\n                    jwks_uri = $7, ssf = $8, domain_id = $9, decision_pos = $10, profile = $11\n              WHERE tenant_id = $1 AND realm_id = $2 AND name = $3 AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7c5d3143d8b4433fb82701d1f94e4c95b372eec69f1805bae9e1127718a3e400"
+}

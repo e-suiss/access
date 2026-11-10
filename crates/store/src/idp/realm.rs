@@ -41,6 +41,8 @@ pub struct UpstreamRow {
     pub jwks_uri: String,
     /// The provider's SSF transmitter configuration.
     pub ssf: Option<String>,
+    /// The connection's own profile, canonical JSON (OP-155 m.3 (h)); `None` before it had one.
+    pub profile: Option<String>,
     /// Whether it is active.
     pub active: bool,
     /// Position of the decision that last changed it.
@@ -335,7 +337,7 @@ fn upstream_row(
     client_id: String,
     client_secret_ref: Option<String>,
     jwks_uri: String,
-    ssf: Option<String>,
+    (ssf, profile): (Option<String>, Option<String>),
     status: &str,
     position: i64,
 ) -> Result<UpstreamRow, StoreError> {
@@ -346,6 +348,7 @@ fn upstream_row(
         client_secret_ref,
         jwks_uri,
         ssf,
+        profile,
         active: status == "active",
         position: pos(position)?,
     })
@@ -358,7 +361,7 @@ fn upstream_row(
 pub async fn upstream(t: &mut TenantTx, name: &str) -> Result<Option<UpstreamRow>, StoreError> {
     let (tenant, realm) = scope(t)?;
     let row = sqlx::query!(
-        "SELECT name, issuer, client_id, client_secret_ref, jwks_uri, ssf,
+        "SELECT name, issuer, client_id, client_secret_ref, jwks_uri, ssf, profile,
                 status, decision_pos
            FROM access.idp_upstreams WHERE tenant_id = $1 AND realm_id = $2 AND name = $3",
         tenant,
@@ -374,7 +377,7 @@ pub async fn upstream(t: &mut TenantTx, name: &str) -> Result<Option<UpstreamRow
             r.client_id,
             r.client_secret_ref,
             r.jwks_uri,
-            r.ssf,
+            (r.ssf, r.profile),
             &r.status,
             r.decision_pos,
         )
@@ -393,7 +396,7 @@ pub async fn upstreams(
 ) -> Result<Vec<UpstreamRow>, StoreError> {
     let (tenant, realm) = scope(t)?;
     let rows = sqlx::query!(
-        "SELECT name, issuer, client_id, client_secret_ref, jwks_uri, ssf,
+        "SELECT name, issuer, client_id, client_secret_ref, jwks_uri, ssf, profile,
                 status, decision_pos
            FROM access.idp_upstreams WHERE tenant_id = $1 AND realm_id = $2 AND name > $3
           ORDER BY name LIMIT $4",
@@ -412,7 +415,7 @@ pub async fn upstreams(
                 r.client_id,
                 r.client_secret_ref,
                 r.jwks_uri,
-                r.ssf,
+                (r.ssf, r.profile),
                 &r.status,
                 r.decision_pos,
             )
@@ -435,8 +438,8 @@ pub async fn put_upstream(
     let done = if insert {
         sqlx::query!(
             "INSERT INTO access.idp_upstreams (tenant_id, realm_id, name, issuer, client_id,
-                    client_secret_ref, jwks_uri, ssf, domain_id, decision_pos)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+                    client_secret_ref, jwks_uri, ssf, domain_id, decision_pos, profile)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
             tenant,
             realm,
             u.name,
@@ -447,13 +450,14 @@ pub async fn put_upstream(
             u.ssf,
             domain,
             bound.position,
+            u.profile,
         )
         .execute(&mut *t.tx)
         .await?
     } else {
         sqlx::query!(
             "UPDATE access.idp_upstreams SET issuer = $4, client_id = $5, client_secret_ref = $6,
-                    jwks_uri = $7, ssf = $8, domain_id = $9, decision_pos = $10
+                    jwks_uri = $7, ssf = $8, domain_id = $9, decision_pos = $10, profile = $11
               WHERE tenant_id = $1 AND realm_id = $2 AND name = $3 AND status = 'active'",
             tenant,
             realm,
@@ -465,6 +469,7 @@ pub async fn put_upstream(
             u.ssf,
             domain,
             bound.position,
+            u.profile,
         )
         .execute(&mut *t.tx)
         .await?

@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_realm_hrd_settings\n               (tenant_id, realm_id, version, enabled, domain_id, decision_pos)\n             SELECT $1, $2,\n                    COALESCE((SELECT max(version) FROM access.idp_realm_hrd_settings\n                               WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,\n                    $3, $4, $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bool",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ba17eb5a1aceb32247bf4463d2e8e0e6f16c1a1df1d3180e33b63d02d39675ff"
+}

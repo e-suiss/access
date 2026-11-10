@@ -1828,6 +1828,18 @@ pub enum Change {
     /// `idp.realm.mtls_aliases` (CT2): whether the realm publishes `mtls_endpoint_aliases`
     /// (OP-155 m.3 (m), §10.4.3).
     MtlsAliases(bool),
+    /// `idp.realm.hrd` (`true`, CT2) or `hrd_close` (`false`, CT1): home realm discovery
+    /// (TN-98, OP-155 m.3 (h)).
+    Hrd(bool),
+    /// `idp.upstream.assurance_map` (reserved, CT3): how a connection's `acr`, `amr` or
+    /// `AuthnContextClassRef` reach assurance; anything unmapped is the lowest class (IDP-27,
+    /// OP-155 m.3 (h)).
+    UpstreamAssuranceMap {
+        /// The connection.
+        name: Name,
+        /// The map.
+        map: access_identity_federation::domain::connection::AssuranceMap,
+    },
     /// `idp.client.dcr_policy`, or `dcr_policy_tighten` when it only narrows (OP-154 m.3 (j));
     /// `loosens` is resolved against the realm's current policy before the decision.
     DcrPolicy {
@@ -2144,6 +2156,10 @@ impl Change {
             Self::KeyRotate { .. } => IdpAction::RealmKeyRotate,
             Self::KeyDrop { .. } => IdpAction::RealmKeyDrop,
             Self::ClientSecretRotate(_) => IdpAction::ClientSecretRotate,
+            // L6 (ii), TN-117, OP-148 m.4 (b), Ek B 4907, 5097
+            Self::GroupCreate(g) if matches!(g.issuer, MembershipIssuer::Upstream(_)) => {
+                IdpAction::UpstreamMapping
+            }
             Self::GroupCreate(_) => IdpAction::GroupCreate,
             Self::GroupUpdate(_) => IdpAction::GroupUpdate,
             Self::GroupRetire(_) => IdpAction::GroupRetire,
@@ -2200,6 +2216,9 @@ impl Change {
             Self::GatewayKeytabPolicy(_) => IdpAction::GatewayKeytabPolicy,
             Self::GatewayKeytabEmergency { .. } => IdpAction::GatewayKeytabEmergency,
             Self::MtlsAliases(_) => IdpAction::RealmMtlsAliases,
+            Self::Hrd(true) => IdpAction::RealmHrd,
+            Self::Hrd(false) => IdpAction::RealmHrdClose,
+            Self::UpstreamAssuranceMap { .. } => IdpAction::UpstreamAssuranceMap,
             Self::ClientProfile { delta, .. } => delta.action(),
             Self::FrontchannelLogout => IdpAction::RealmFrontchannelLogout,
             Self::DcrPolicy { loosens: true, .. } => IdpAction::ClientDcrPolicy,
@@ -2279,6 +2298,7 @@ impl Change {
                 }
             }
             Self::CertificateLogin(c) => c.check(),
+            Self::UpstreamAssuranceMap { map, .. } => map.check().map_err(|_| Invalid::Upstream),
             Self::ClientProfile { delta, .. } => delta.check(),
             Self::Ciba(c) => c.check(),
             Self::GatewayRadiusClientRegister(c) => c.check(),
@@ -2288,6 +2308,7 @@ impl Change {
             | Self::FrontchannelLogout
             | Self::DeviceCode(_)
             | Self::MtlsAliases(_)
+            | Self::Hrd(_)
             | Self::CspMode { .. }
             | Self::OrgInviteRevoke { .. }
             | Self::SocialDisable(_)
@@ -2428,6 +2449,11 @@ impl Change {
                 (Value::text("kvno"), Value::Unsigned(u64::from(*kvno))),
             ]),
             Self::MtlsAliases(on) => Value::Map(vec![(Value::text("published"), Value::Bool(*on))]),
+            Self::Hrd(on) => Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))]),
+            Self::UpstreamAssuranceMap { name, map } => Value::Map(vec![
+                (Value::text("name"), Value::text(name.as_str())),
+                (Value::text("map"), Value::text(&map.to_json())),
+            ]),
             Self::ClientProfile { client, delta } => Value::Map(vec![
                 (Value::text("client_id"), Value::text(client.as_str())),
                 (Value::text("profile"), delta.to_value()),
@@ -2589,7 +2615,11 @@ impl Change {
             | Self::Ciba(_)
             | Self::CertificateLogin(_)
             | Self::MtlsAliases(_)
+            | Self::Hrd(_)
             | Self::FrontchannelLogout => path.push(String::from("realm")),
+            Self::UpstreamAssuranceMap { name, .. } => {
+                path.extend([String::from("upstream"), String::from(name.as_str())]);
+            }
             Self::ClientProfile { client, .. } => {
                 path.extend([String::from("client"), String::from(client.as_str())]);
             }

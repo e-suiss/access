@@ -734,11 +734,20 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     return Err(Invalid::NoSocial.into());
                 }
             }
+            Change::UpstreamAssuranceMap { name, .. } => {
+                if !resources::upstream(t, name.as_str())
+                    .await?
+                    .is_some_and(|u| u.active)
+                {
+                    return Err(Invalid::NoUpstream.into());
+                }
+            }
             Change::CimdPolicy(_)
             | Change::DeviceCode(_)
             | Change::Ciba(_)
             | Change::CertificateLogin(_)
             | Change::MtlsAliases(_)
+            | Change::Hrd(_)
             | Change::FrontchannelLogout
             | Change::ClientProfile { .. }
             | Change::MapperSet { .. }
@@ -1715,6 +1724,17 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 t.put_mtls_aliases(bound, *on).await?;
                 true
             }
+            // TN-98, OP-155 m.3 (h)
+            Change::Hrd(on) => {
+                t.put_realm_hrd(bound, *on).await?;
+                true
+            }
+            // IDP-27, OP-155 m.3 (h)
+            Change::UpstreamAssuranceMap { name, map } => {
+                t.put_upstream_assurance_map(bound, name.as_str(), &map.to_json())
+                    .await?;
+                true
+            }
             // IDP-24, OP-155 m.3 (k)
             Change::FrontchannelLogout => {
                 access_store::client_profiles::enable_frontchannel(t, bound).await?;
@@ -2571,6 +2591,7 @@ fn upstream_row(u: &Upstream) -> UpstreamRow {
             .ssf
             .as_ref()
             .map(|s| crate::domain::realm::ssf_json(s).to_string()),
+        profile: Some(u.profile.to_json()),
         active: true,
         position: 0,
     }

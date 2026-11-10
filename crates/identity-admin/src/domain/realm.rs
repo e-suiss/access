@@ -208,6 +208,10 @@ pub struct Upstream {
     /// The provider as an SSF transmitter the realm receives from (OP-151 m.3 (l), m.7 (g)):
     /// push only here, since a poll credential is a secret this surface never carries.
     pub ssf: Option<TransmitterConfig>,
+    /// The connection's own profile (OP-155 m.3 (h)): protocol, subject key, client
+    /// authentication (`private_key_jwt` unless a secret method is chosen), preset,
+    /// organization and SAML IdP.
+    pub profile: access_identity_federation::domain::connection::Profile,
 }
 
 /// The SSF fields as JSON: the form the request carries and the store keeps.
@@ -282,7 +286,9 @@ impl Upstream {
         let urls_ok = super::https(&self.issuer)
             && super::https(&self.jwks_uri)
             && self.ssf.as_ref().is_none_or(|s| s.poll_endpoint.is_none());
-        if id_ok && ref_ok && urls_ok {
+        // OP-155 m.3 (h)
+        let profile_ok = self.profile.check(self.client_secret_ref.is_some()).is_ok();
+        if id_ok && ref_ok && urls_ok && profile_ok {
             Ok(())
         } else {
             Err(Invalid::Upstream)
@@ -300,6 +306,13 @@ impl Upstream {
         ];
         if let Some(r) = &self.client_secret_ref {
             m.push((Value::text("client_secret_ref"), Value::text(r)));
+        }
+        if self.profile
+            != access_identity_federation::domain::connection::Profile::legacy(
+                self.client_secret_ref.is_some(),
+            )
+        {
+            m.push((Value::text("profile"), Value::text(&self.profile.to_json())));
         }
         if let Some(s) = &self.ssf {
             m.push((

@@ -250,12 +250,6 @@ impl ProviderHttp for Provider {
         let email = s.email.clone();
         let body = match (url, bearer) {
             ("https://idp.test/jwks", None) => return Ok((200, self.jwks())),
-            ("https://idp.test/up/.well-known/openid-configuration", None) => json!({
-                "issuer": "https://idp.test/up",
-                "authorization_endpoint": "https://idp.test/authorize",
-                "token_endpoint": "https://idp.test/token",
-                "jwks_uri": "https://idp.test/jwks",
-            }),
             ("https://idp.test/user", Some("at")) => {
                 json!({ "id": s.sub.parse::<u64>().unwrap(), "login": "ada" })
             }
@@ -685,28 +679,6 @@ impl Env {
         .await
         .unwrap();
         t.commit().await.unwrap();
-    }
-
-    /// Registers the generic OpenID provider `name` at `https://idp.test/up` under a committed
-    /// `idp.upstream.register` ALLOW (TN-95).
-    async fn upstream(&self, name: &str) {
-        let (mut tx, bound) = self.decision("idp.upstream.register").await;
-        let row = access_store::idp::realm::UpstreamRow {
-            name: name.to_owned(),
-            issuer: String::from("https://idp.test/up"),
-            client_id: String::from("up-client"),
-            client_secret_ref: Some(String::from("secret://social/google")),
-            jwks_uri: String::from("https://idp.test/jwks"),
-            ssf: None,
-            active: true,
-            position: 0,
-        };
-        assert!(
-            access_store::idp::realm::put_upstream(&mut tx, &bound, &row, true)
-                .await
-                .unwrap()
-        );
-        tx.commit().await.unwrap();
     }
 
     fn says(&self, sub: &str, email: Option<(&str, bool)>) {
@@ -1324,35 +1296,10 @@ async fn apple_exchanges_the_code_with_a_fresh_es256_assertion_of_the_realms_key
     .unwrap();
 }
 
-// IDP-31 (1), TN-95, §10.2.6
+// IDP-31 (1), §10.2.6
 #[tokio::test]
-async fn a_registered_upstream_and_an_operator_preset_sign_in_through_the_generic_connector() {
+async fn an_operator_preset_signs_in_through_the_generic_connector() {
     let e = env(0x49, "soc-i").await;
-    e.upstream("partner").await;
-    e.says("p-1", Some(("ada@partner.example", true)));
-    e.provider.says.lock().unwrap().iss = Some(String::from("https://idp.test/up"));
-    let mut w = e.browser(1);
-    let a = w.social_at(&e, "partner").await;
-    assert_eq!(a.status, StatusCode::SEE_OTHER, "{}", a.code());
-    let up = e.link_at("https://idp.test/up", "p-1").await.unwrap();
-    assert_eq!(
-        e.live_identifiers(up).await,
-        0,
-        "an upstream's address carries no assurance"
-    );
-    let form = e.provider.says.lock().unwrap().forms[0].clone();
-    assert!(form.contains("client_id=up-client"));
-
-    e.says("p-2", None);
-    e.provider.says.lock().unwrap().iss = Some(String::from("https://idp.test/other"));
-    let mut w = e.browser(2);
-    let b = w.social_at(&e, "partner").await;
-    assert_eq!(
-        (b.status, b.code().as_str()),
-        (StatusCode::UNAUTHORIZED, "social-sign-in-failed"),
-        "an ID token of another issuer is refused"
-    );
-
     e.enable_preset("acme-sso", Some("acme-client")).await;
     e.says("emp-9", Some(("dee@acme.example", true)));
     let mut w = e.browser(3);

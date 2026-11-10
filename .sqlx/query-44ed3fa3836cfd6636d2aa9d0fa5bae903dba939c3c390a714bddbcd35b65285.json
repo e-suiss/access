@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.session_id, s.subject_id FROM access.upstream_sessions u\n               JOIN access.login_sessions s\n                 ON s.tenant_id = u.tenant_id AND s.realm_id = u.realm_id\n                AND s.session_id = u.session_id\n              WHERE u.tenant_id = $1 AND u.realm_id = $2 AND u.connection = $3\n                AND s.ended_ms IS NULL\n              ORDER BY s.session_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "subject_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "44ed3fa3836cfd6636d2aa9d0fa5bae903dba939c3c390a714bddbcd35b65285"
+}

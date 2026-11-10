@@ -67,6 +67,7 @@ pub mod ssf;
 pub mod status;
 pub mod tenancy;
 pub mod throttle;
+pub mod upstream;
 pub mod vault;
 pub mod workloads;
 

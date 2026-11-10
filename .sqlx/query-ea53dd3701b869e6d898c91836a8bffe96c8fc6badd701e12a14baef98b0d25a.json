@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.upstream_sessions (tenant_id, realm_id, session_id, connection,\n                    created_ms)\n             VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ea53dd3701b869e6d898c91836a8bffe96c8fc6badd701e12a14baef98b0d25a"
+}

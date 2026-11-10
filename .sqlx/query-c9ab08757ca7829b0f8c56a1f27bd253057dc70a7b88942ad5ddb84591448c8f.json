@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT name, issuer, client_id, client_secret_ref, jwks_uri, ssf,\n                status, decision_pos\n           FROM access.idp_upstreams WHERE tenant_id = $1 AND realm_id = $2 AND name = $3",
+  "query": "SELECT name, issuer, client_id, client_secret_ref, jwks_uri, ssf, profile,\n                status, decision_pos\n           FROM access.idp_upstreams WHERE tenant_id = $1 AND realm_id = $2 AND name = $3",
   "describe": {
     "columns": [
       {
@@ -71,6 +71,17 @@
       },
       {
         "ordinal": 6,
+        "name": "profile",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_upstreams",
+            "name": "profile"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
         "name": "status",
         "type_info": "Text",
         "origin": {
@@ -81,7 +92,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "decision_pos",
         "type_info": "Int8",
         "origin": {
@@ -106,9 +117,10 @@
       true,
       false,
       true,
+      true,
       false,
       false
     ]
   },
-  "hash": "7c2fb7f57f0881cd994634b52389a0c80365677743e70e72e36446aa7ae8bdb5"
+  "hash": "c9ab08757ca7829b0f8c56a1f27bd253057dc70a7b88942ad5ddb84591448c8f"
 }
