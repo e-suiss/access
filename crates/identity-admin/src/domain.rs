@@ -2451,9 +2451,7 @@ impl Change {
             Self::GatewayRadiusClientRegister(c) => c.check(),
             Self::GatewayKeytabPolicy(p) => p.check(),
             Self::GatewayKeytabEmergency { gateway, kvno } => gateway::emergency(gateway, *kvno),
-            // IDP-37 (4)
             Self::Iys { recipient_type, .. } => iys_recipient(recipient_type),
-            // OP-153 m.3 (ee)
             Self::PreferenceTopics(topics) => preference_topics(topics),
             Self::AccountBind(_)
             | Self::RelayResend(_)
