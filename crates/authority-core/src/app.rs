@@ -2070,6 +2070,7 @@ mod regime;
 pub mod resources;
 pub mod roles;
 pub mod sources;
+pub mod ssh;
 pub mod vault;
 mod workload;
 

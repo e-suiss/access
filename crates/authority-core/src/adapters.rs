@@ -47,6 +47,7 @@ mod binding;
 mod consent;
 mod projection;
 mod reconcile;
+mod ssh;
 mod vault;
 mod workload;
 pub use audit::{

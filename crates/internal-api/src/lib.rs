@@ -10,6 +10,7 @@ pub mod idp;
 pub mod instances;
 pub mod projections;
 pub mod saml;
+pub mod ssh;
 
 #[cfg(test)]
 pub(crate) fn block_on<F: std::future::Future>(f: F) -> F::Output {
