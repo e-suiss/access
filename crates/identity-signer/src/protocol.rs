@@ -427,6 +427,7 @@ impl Request {
         }
     }
 
+    #[expect(clippy::too_many_lines, reason = "one branch per request kind")]
     fn from_value(v: &Value) -> Result<Self, FrameError> {
         if v.get("ping").is_some() {
             return Ok(Self::Ping);
