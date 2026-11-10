@@ -147,6 +147,10 @@ const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   retireSshHostGroup: ["idp.ssh", "host_group_retire"],
   registerExportSink: ["idp.export", "sink_register"],
   retireExportSink: ["idp.export", "sink_retire"],
+  registerLinuxHost: ["idp.linux", "host_register"],
+  retireLinuxHost: ["idp.linux", "host_retire"],
+  putLinuxOfflinePolicy: ["idp.linux", "offline_policy"],
+  putLinuxBreakGlassPolicy: ["idp.linux", "break_glass_policy"],
 };
 
 export interface Write {

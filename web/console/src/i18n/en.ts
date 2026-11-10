@@ -750,6 +750,33 @@ export const en = {
   exportSecret: "Secret",
   exportSecretHint: "Token, API key or secret access key; stored sealed and never shown again",
   exportRegisterSend: "Register",
+  screenLinux: "Linux computers",
+  linuxHostsTitle: "Linux computers",
+  linuxHostsIntro:
+    "A computer lets in exactly the people whose ssh.login access names its server group. They sign in at the console with their phone or browser, and sudo asks for a security key every time.",
+  linuxHostLive: "In use",
+  linuxHostRetired: "Retired",
+  linuxOffline: "Without a connection",
+  linuxOfflineLimits: "users known for {nss} h, sign-in reused for {console} h",
+  linuxSudo: "sudo",
+  linuxSudoTier: "security key required (CT{ct}), never offline",
+  linuxBreakGlass: "Emergency access",
+  linuxBreakGlassOn: "Allowed with a one-time emergency proof",
+  linuxBreakGlassOff: "Not allowed",
+  linuxBreakGlassEnable: "Allow emergency access on {name}",
+  linuxBreakGlassDisable: "Stop emergency access on {name}",
+  linuxBreakGlassNote:
+    "Emergency access works only with a proof issued in advance, once, and needs the highest approval.",
+  linuxOfflineOff: "Stop offline sign-in on {name}",
+  linuxHostRetire: "Retire {name}",
+  linuxHostRegister: "Register a computer",
+  linuxHostName: "Computer name",
+  linuxHostGroup: "Server group",
+  linuxHostCertificate: "Certificate fingerprint",
+  linuxHostCertificateHint:
+    "The SHA-256 of the computer's client certificate, base64url (x5t#S256)",
+  linuxHostRegisterSend: "Register",
+  linuxSetupTitle: "Computer setup",
 } as const;
 
 export type Key = keyof typeof en;
