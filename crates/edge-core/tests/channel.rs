@@ -24,8 +24,12 @@ use access_identity_account::app::{Actor, Realm};
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::status::AccountStatus;
 use access_identity_account::ports::{AccountDb as _, AccountTx as _};
-use access_identity_edge::adapters::{PgRegistry, register, retire};
+use access_identity_edge::adapters::{
+    PgRegistry, keytab_emergency, keytab_policy, register, retire,
+};
+use access_identity_edge::app::kerberos::Kerberos;
 use access_identity_edge::app::{Edge, Vaults};
+use access_internal_api::edge::kerberos::{self as krb, Authenticated};
 use access_internal_api::edge::{Call, GatewayKind, IssueClaim};
 use access_store::authority::{
     CommitBatch, HeadRow, LogRecord, NonceRow, acquire_lease, commit_batch, create_domain,
@@ -237,6 +241,36 @@ impl World {
         s
     }
 
+    /// An active account with user name `user`.
+    async fn person(&self, user: &str) -> [u8; 16] {
+        let pg = PgAccounts::sealed(self.db.app.clone(), self.vault.clone());
+        let id = Identifier::new(IdentifierKind::Username, user).unwrap();
+        let s = create(&pg, &self.realm(), &[id], &ADMIN).await.unwrap();
+        let mut tx = pg.begin(self.tenant, self.corp).await.unwrap();
+        tx.set_status(s, AccountStatus::Staged, AccountStatus::PendingUserAction)
+            .await
+            .unwrap();
+        tx.set_status(s, AccountStatus::PendingUserAction, AccountStatus::Active)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        s
+    }
+
+    async fn keytab(&self, name: &str, spn: &str, emergency: Option<u32>) {
+        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.corp)
+            .await
+            .unwrap();
+        if let Some(kvno) = emergency {
+            let b = self.bound(&mut tx, "idp.gateway.keytab_emergency").await;
+            keytab_emergency(&mut tx, &b, name, kvno).await.unwrap();
+        } else {
+            let b = self.bound(&mut tx, "idp.gateway.keytab_policy").await;
+            keytab_policy(&mut tx, &b, name, spn, 30).await.unwrap();
+        }
+        tx.commit().await.unwrap();
+    }
+
     fn channel(&self, chain: &str, key: &str) -> Channel {
         Channel::new(&ChannelConfig {
             addr: self.addr.to_string(),
@@ -295,8 +329,13 @@ async fn world(seed: u8) -> World {
         TestVaults(vault.clone()),
         db.app.clone(),
     );
+    let kerberos = Kerberos::new(TestVaults(vault.clone()), db.app.clone());
+    let protocols = access_http::edge::Protocols {
+        kerberos: Some(Arc::new(kerberos)),
+        ..access_http::edge::Protocols::default()
+    };
     let app = access_http::harden(
-        access_http::edge::router(edge).merge(access_http::ingest::router(
+        access_http::edge::router_protocols(edge, protocols).merge(access_http::ingest::router(
             access_internal_api::claims::Unserved,
         )),
         access_http::Limits::default(),
@@ -519,4 +558,97 @@ async fn a_gateway_certificate_reaches_no_route_but_the_edge_calls() {
     let core = EdgeCore::connect(w.channel(&chain, &key)).await.unwrap();
     let not_yet = core.raw(Call::Authenticate, &[0xa0]).await.unwrap_err();
     assert_eq!(refused(&not_yet), (501, "edge-call-not-served"));
+}
+
+const SPN: &str = "HTTP/access.corp.example@CORP.EXAMPLE";
+
+async fn accept(
+    core: &EdgeCore,
+    principal: &str,
+    spn: &str,
+    kvno: u32,
+    etype: i32,
+) -> Result<Authenticated, EdgeError> {
+    let q = krb::Authenticate {
+        realm: String::from("corp"),
+        principal: String::from(principal),
+        spn: String::from(spn),
+        kvno,
+        etype,
+    };
+    let body = core.raw(Call::Authenticate, &q.encode()).await?;
+    Ok(Authenticated::decode(&body).unwrap())
+}
+
+// IDP-17, OP-155 m.3 (o), §10.6.4
+#[tokio::test]
+async fn kerberos_acceptances_are_held_to_the_keytab_policy() {
+    let w = world(57).await;
+    let ada = w.person("ada").await;
+    let (chain, key, cert) = leaf(&w.ca, "urn:suiss:access:gw:kerberos:corp-krb");
+    w.register(GatewayKind::Kerberos, "corp-krb", cert).await;
+    let core = EdgeCore::connect(w.channel(&chain, &key)).await.unwrap();
+    let none = accept(&core, "ada@CORP.EXAMPLE", SPN, 3, krb::AES256_SHA1).await;
+    assert_eq!(refused(&none.unwrap_err()), (403, "edge-keytab"));
+    w.keytab("corp-krb", SPN, None).await;
+    let ok = accept(&core, "ada@CORP.EXAMPLE", SPN, 3, krb::AES256_SHA1)
+        .await
+        .unwrap();
+    assert_eq!(ok.subject, Some(ada));
+    core.issue(None, ada, "kerberos", now_ms(), None)
+        .await
+        .unwrap();
+    let other_spn = accept(
+        &core,
+        "ada@CORP.EXAMPLE",
+        "HTTP/other.corp.example@CORP.EXAMPLE",
+        3,
+        krb::AES256_SHA1,
+    )
+    .await;
+    assert_eq!(refused(&other_spn.unwrap_err()), (403, "edge-spn"));
+    let rc4 = accept(&core, "ada@CORP.EXAMPLE", SPN, 3, 23).await;
+    assert_eq!(refused(&rc4.unwrap_err()), (403, "edge-enctype"));
+    for stranger in [
+        "ada@OTHER.EXAMPLE",
+        "HTTP/host@CORP.EXAMPLE",
+        "nobody@CORP.EXAMPLE",
+    ] {
+        let a = accept(&core, stranger, SPN, 3, krb::AES256_SHA384)
+            .await
+            .unwrap();
+        assert_eq!(a.subject, None, "{stranger}");
+    }
+    w.keytab("corp-krb", SPN, Some(5)).await;
+    let old = accept(&core, "ada@CORP.EXAMPLE", SPN, 3, krb::AES256_SHA1).await;
+    assert_eq!(refused(&old.unwrap_err()), (403, "edge-kvno"));
+    let new = accept(&core, "ada@CORP.EXAMPLE", SPN, 5, krb::AES256_SHA1)
+        .await
+        .unwrap();
+    assert_eq!(new.subject, Some(ada));
+    let (audit, outbox) = w.rows().await;
+    assert!(
+        audit.contains(&String::from("login.kerberos.succeeded")),
+        "{audit:?}"
+    );
+    assert!(
+        audit.contains(&String::from("login.kerberos.failed")),
+        "{audit:?}"
+    );
+    assert!(
+        outbox.iter().any(|k| k.ends_with("authentication")),
+        "{outbox:?}"
+    );
+}
+
+// §13.2, OP-155 m.3 (o)
+#[tokio::test]
+async fn only_a_kerberos_gateway_reports_kerberos_acceptances() {
+    let w = world(58).await;
+    w.person("ada").await;
+    let (chain, key, cert) = leaf(&w.ca, "urn:suiss:access:gw:ldap:corp-ldap");
+    w.register(GatewayKind::Ldap, "corp-ldap", cert).await;
+    let core = EdgeCore::connect(w.channel(&chain, &key)).await.unwrap();
+    let r = accept(&core, "ada@CORP.EXAMPLE", SPN, 3, krb::AES256_SHA1).await;
+    assert!(r.is_err());
 }
