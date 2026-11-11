@@ -36,11 +36,17 @@ pub enum Kind {
     /// A break-glass Grant was used on the subject's account: its notice is written with the
     /// decision, and the identity plane delivers it (OP-157 m.3 (h)).
     BreakglassUsed,
+    /// `domain_handover`: the domain moved to a new provider or re-anchored its binding at the
+    /// recorded position (§9.16, OP-158 m.3 (l)).
+    DomainHandover,
+    /// `domain_recover`: the domain was recovered from its previous provider at the recorded
+    /// position (§9.16, OP-158 m.3 (m)).
+    DomainRecovered,
 }
 
 impl Kind {
     /// Every kind, in order.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 13] = [
         Self::AuthorityRevoked,
         Self::AuthorityNarrowed,
         Self::AuthorityExpired,
@@ -52,6 +58,8 @@ impl Kind {
         Self::PartyDisabled,
         Self::PartyCompromised,
         Self::BreakglassUsed,
+        Self::DomainHandover,
+        Self::DomainRecovered,
     ];
 
     /// The event name; the type URN is `urn:suiss:access:event:<name>`.
@@ -69,6 +77,8 @@ impl Kind {
             Self::PartyDisabled => "party.disabled",
             Self::PartyCompromised => "party.compromised",
             Self::BreakglassUsed => "breakglass.used",
+            Self::DomainHandover => "domain-handover",
+            Self::DomainRecovered => "domain-recovered",
         }
     }
 
@@ -105,6 +115,8 @@ pub enum Subject {
     Acceptance(Id),
     /// A projection, by its digest.
     Projection(Digest),
+    /// The domain itself, by its id (OP-158 m.3 (cc)).
+    Domain(Digest),
 }
 
 impl Subject {
@@ -119,6 +131,7 @@ impl Subject {
             Self::Policy(_) => "policy",
             Self::Acceptance(_) => "acceptance",
             Self::Projection(_) => "projection",
+            Self::Domain(_) => "domain",
         }
     }
 
@@ -132,7 +145,7 @@ impl Subject {
             | Self::Party(i)
             | Self::Policy(i)
             | Self::Acceptance(i) => &i.0,
-            Self::Projection(d) => &d.0,
+            Self::Projection(d) | Self::Domain(d) => &d.0,
         }
     }
 }
@@ -207,6 +220,12 @@ pub enum Detail {
         until: u64,
         /// Whether the use is a drill.
         drill: bool,
+    },
+    /// `domain-handover`, `domain-recovered`: the record position of the handover or recovery
+    /// meta-action (h or N, OP-158 m.3 (l), (m)).
+    Domain {
+        /// The record position.
+        position: u64,
     },
 }
 
@@ -413,6 +432,7 @@ impl Event {
                 m.push((text("until"), Value::Unsigned(*until)));
                 m.push((text("drill"), Value::Bool(*drill)));
             }
+            Detail::Domain { position } => m.push((text("position"), Value::Unsigned(*position))),
         }
         Value::Map(m)
     }
@@ -445,6 +465,7 @@ impl Event {
             ("policy", raw) => Subject::Policy(Id(as_bytes(raw)?)),
             ("acceptance", raw) => Subject::Acceptance(Id(as_bytes(raw)?)),
             ("projection", raw) => Subject::Projection(Digest(as_bytes(raw)?)),
+            ("domain", raw) => Subject::Domain(Digest(as_bytes(raw)?)),
             _ => return Err(Malformed),
         };
         let detail = match kind {
@@ -489,6 +510,9 @@ impl Event {
                     _ => return Err(Malformed),
                 },
             },
+            Kind::DomainHandover | Kind::DomainRecovered => Detail::Domain {
+                position: as_u64(get(&map, "position")?)?,
+            },
             _ => Detail::None,
         };
         Ok(Self {
@@ -530,13 +554,18 @@ mod tests {
                     until: 10,
                     drill: false,
                 },
+                Kind::DomainHandover | Kind::DomainRecovered => Detail::Domain { position: 12 },
                 _ => Detail::None,
+            };
+            let subject = match kind {
+                Kind::DomainHandover | Kind::DomainRecovered => Subject::Domain(d),
+                _ => Subject::Party(Id([1; 16])),
             };
             let e = Event {
                 kind,
                 domain: d,
                 source: Source::Exercise(d),
-                subject: Subject::Party(Id([1; 16])),
+                subject,
                 at: 9,
                 detail,
             };

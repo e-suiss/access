@@ -862,3 +862,204 @@ severity = "info"
 since = "unreleased"
 fields = ["purpose", "key", "op", "caller", "count"]
 ocsf = "api_activity"
+
+# Stage 13 (OP-158 m.4 (a), appended)
+[[event]]
+name = "checkpoint.witness.pending"
+plane = "authority"
+severity = "warn"
+since = "unreleased"
+fields = ["age_ms"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "checkpoint.coalesced"
+plane = "authority"
+severity = "debug"
+since = "unreleased"
+fields = ["waiters"]
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "witness.unreachable"
+plane = "authority"
+severity = "warn"
+since = "unreleased"
+fields = ["witness"]
+ocsf = "application_error"
+
+[[event]]
+name = "witness.equivocation.detected"
+plane = "authority"
+severity = "error"
+since = "unreleased"
+fields = ["witness", "size"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "witness.cosign.refused"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "replica.ack.timeout"
+plane = "authority"
+severity = "warn"
+since = "unreleased"
+fields = ["age_ms"]
+ocsf = "application_error"
+
+[[event]]
+name = "replica.lag"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["records"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "replay.divergence.found"
+plane = "ops"
+severity = "error"
+since = "unreleased"
+fields = ["kind"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "sequencer.time.mismatch"
+plane = "authority"
+severity = "error"
+since = "unreleased"
+fields = ["skew_ms"]
+ocsf = "application_error"
+
+[[event]]
+name = "sequencer.hotkey.busy"
+plane = "authority"
+severity = "info"
+since = "unreleased"
+fields = ["retries"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "sequencer.version.gate"
+plane = "authority"
+severity = "warn"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "failover.fence.missing"
+plane = "ops"
+severity = "error"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "identity.degraded.entered"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = ["dependency"]
+ocsf = "application_error"
+
+[[event]]
+name = "identity.degraded.exited"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["duration_s"]
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "quota.exceeded"
+plane = "authority"
+severity = "info"
+since = "unreleased"
+fields = ["dimension", "kind"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "cache.advisory.bypassed"
+plane = "authority"
+severity = "debug"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "audit.partition.detached"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["partition"]
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "ephemeral.partition.dropped"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["partition"]
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "kek.rotation.progress"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["done", "total"]
+ocsf = "entity_management"
+
+[[event]]
+name = "mds.refresh.failed"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "application_error"
+
+[[event]]
+name = "signer.kat.failed"
+plane = "signer"
+severity = "error"
+since = "unreleased"
+fields = ["algorithm"]
+ocsf = "application_error"
+
+[[event]]
+name = "signer.hsm.closed"
+plane = "signer"
+severity = "info"
+since = "unreleased"
+fields = ["sessions"]
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "restore.reshred.pending"
+plane = "ops"
+severity = "error"
+since = "unreleased"
+fields = ["generation"]
+ocsf = "application_error"
+
+[[event]]
+name = "upgrade.check.result"
+plane = "ops"
+severity = "info"
+since = "unreleased"
+fields = ["code"]
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "load.run.finished"
+plane = "ops"
+severity = "info"
+since = "unreleased"
+fields = ["scenario", "total"]
+ocsf = "application_lifecycle"

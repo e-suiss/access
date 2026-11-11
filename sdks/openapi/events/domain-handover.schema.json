@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:event:domain-handover:1",
+  "title": "The domain moved to a new provider or re-anchored its binding (§9.16, OP-158 m.3 (l))",
+  "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:domain-handover`. A `domain_handover` meta-action committed at record position `position`; the old provider's binding is fenced after it. Re-query the domain's metadata.",
+  "type": "object",
+  "required": [
+    "domain",
+    "source",
+    "subject",
+    "at",
+    "position",
+    "access_position"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "domain": {
+      "$ref": "#/$defs/b64url32"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "domain"
+        },
+        "id": {
+          "$ref": "#/$defs/b64url32"
+        }
+      }
+    },
+    "at": {
+      "$ref": "#/$defs/ms"
+    },
+    "position": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The record position of the meta-action."
+    },
+    "access_position": {
+      "$ref": "#/$defs/access_position"
+    }
+  },
+  "$defs": {
+    "b64url32": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "b64url16": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{22}$"
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix time, milliseconds."
+    },
+    "source": {
+      "description": "The Exercise whose decision recorded the event, or the Claim whose record admitted it.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "exercise"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "exercise": {
+              "$ref": "#/$defs/b64url32"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "claim"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "claim": {
+              "$ref": "#/$defs/b64url16"
+            }
+          }
+        }
+      ]
+    },
+    "access_position": {
+      "type": "object",
+      "description": "The event's monotone version field (OP-22): it only grows within its source, the domain for an authority event and the issuer for an identity event. A receiver that has applied a later or equal position re-queries instead of applying this event.",
+      "required": [
+        "pos",
+        "idx"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "pos": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idx": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

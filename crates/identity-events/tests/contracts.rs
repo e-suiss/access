@@ -280,6 +280,10 @@ fn sample(kind: Kind) -> Event {
         ),
         Kind::ProjectionInvalidated => (Subject::Projection(Digest([3; 32])), Detail::None),
         Kind::AcceptanceChanged => (Subject::Acceptance(Id([10; 16])), Detail::None),
+        // OP-158 m.3 (cc)
+        Kind::DomainHandover | Kind::DomainRecovered => {
+            (Subject::Domain(d), Detail::Domain { position: 12 })
+        }
         Kind::MandateEnded | Kind::AuthorityExpired => {
             (Subject::Mandate(Id([5; 16])), Detail::None)
         }

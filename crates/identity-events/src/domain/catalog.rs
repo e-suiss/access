@@ -22,7 +22,7 @@ pub const OUTBOX_PREFIX: &str = "event.";
 /// Every event name, authority events first; the identity events of OP-151 m.3 (i) last, then
 /// the agent events of OP-154, the enterprise events of OP-155 and the integration events of
 /// OP-156 (appended).
-pub const NAMES: [&str; 39] = [
+pub const NAMES: [&str; 41] = [
     "authority-revoked",
     "authority-narrowed",
     "authority-expired",
@@ -62,6 +62,8 @@ pub const NAMES: [&str; 39] = [
     "export.sink_failed",
     "support.access_changed",
     "breakglass.used",
+    "domain-handover",
+    "domain-recovered",
 ];
 
 /// The Access semantic events that close CAEP's agent gap: an agent is an Instance, so these
@@ -87,8 +89,15 @@ pub fn urn(name: &str) -> String {
 /// (g)), the SSH certificate authority `ssh.certificate_issued` (OP-156 m.3 (o)), the export
 /// pass `export.sink_failed` (OP-156 m.3 (s)). `org.sso_enforced` waits for
 /// `idp.org.sso_enforce` (OP-155 m.3 (i)); the other Stage 11 events wait for the HR job and
-/// `idp.proxy.register` (OP-156 m.3 (l), (q)).
-pub const UNPRODUCED: [&str; 3] = ["org.sso_enforced", "hr.record_due", "proxy.registered"];
+/// `idp.proxy.register` (OP-156 m.3 (l), (q)); the domain events wait for handover and recovery
+/// (OP-158 m.3 (cc)).
+pub const UNPRODUCED: [&str; 5] = [
+    "org.sso_enforced",
+    "hr.record_due",
+    "proxy.registered",
+    "domain-handover",
+    "domain-recovered",
+];
 
 /// Whether a webhook or stream may subscribe to `name`: a catalog event with a producer.
 #[must_use]
@@ -951,6 +960,9 @@ pub fn authority_ready(e: &Event, event_id: &[u8; 32]) -> Ready {
             m.insert("at".into(), e.at.into());
             if let Detail::Instance { party: p } = &e.detail {
                 m.insert("party".into(), party(&p.0));
+            }
+            if let Detail::Domain { position } = &e.detail {
+                m.insert("position".into(), (*position).into());
             }
         }
     }

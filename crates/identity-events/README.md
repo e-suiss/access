@@ -178,3 +178,8 @@ the commercial message channels a change touched, for realms that record consent
 
 `support.access_changed` is raised when support access to an account is given, ends or is
 revoked; `breakglass.used` when break-glass is used.
+
+The authority events `domain-handover` (a domain moved to a new provider or re-anchored its
+binding) and `domain-recovered` (a domain was recovered from its previous provider) carry the
+record position of the meta-action. They reach subscribers through streams and are catalogued
+and refused the same way until handover and recovery raise them.

@@ -83,6 +83,32 @@ const UNPRODUCED: &[&str] = &[
     // OP-157 m.4 (a)
     "mapping.pinned",
     "policy.default_changed",
+    // OP-158 m.4 (a)
+    "checkpoint.published",
+    "checkpoint.cosigned",
+    "witness.equivocation",
+    "replica.acked",
+    "replica.lagging",
+    "export.streamed",
+    "replay.divergence",
+    "divergence.quarantined",
+    "domain.frozen",
+    "domain.handover",
+    "domain.recovered",
+    "domain.sealed",
+    "domain.accepted",
+    "realm.rehomed",
+    "failover.promoted",
+    "failover.unfenced_attempt",
+    "upgrade.activated",
+    "restore.reshredded",
+    "drill.restore",
+    "identity.degraded",
+    "audit.tier_moved",
+    "audit.shard_frozen",
+    "kek.rotated",
+    "binding.cloned",
+    "mds.refreshed",
 ];
 
 // OP-41, OP-47, §17.8.1
