@@ -1648,9 +1648,9 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-157 m.3 (w)
             Change::Review(r) => review::write(t, bound, r).await?,
             // OP-157 m.4 (a)
-            Change::DelegatedAdmin(_)
-            | Change::ApprovalInline(_)
-            | Change::ApprovalBatch(_) => return Err(Invalid::NotYetServed.into()),
+            Change::DelegatedAdmin(_) | Change::ApprovalInline(_) | Change::ApprovalBatch(_) => {
+                return Err(Invalid::NotYetServed.into());
+            }
             Change::ClientRegister(c) | Change::ClientUpdate(c) => {
                 let (done, s) = self
                     .write_client(t, bound, c, matches!(change, Change::ClientRegister(_)))
