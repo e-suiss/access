@@ -17,6 +17,7 @@ pub mod counter;
 pub mod metadata;
 pub mod offline;
 pub mod profile;
+pub mod replay;
 pub mod report;
 pub mod status;
 #[cfg(feature = "testing")]

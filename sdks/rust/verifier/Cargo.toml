@@ -25,6 +25,7 @@ miniz_oxide = { workspace = true }
 [dev-dependencies]
 esuiss-access-verifier = { path = ".", features = ["testing"] }
 ed25519-dalek = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
 
 [lints]
 workspace = true

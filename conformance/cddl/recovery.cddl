@@ -32,3 +32,12 @@ divergence-notice = {
   items: uint .ge 1,
   suggested: quarantine-pattern,
 }
+
+; OP-158 m.4 (b), lane W4: a divergence set with the replaying party's Ed25519 signature over the
+; set's deterministic CBOR. `key` is the raw public key; a replica agent uses the key the domain
+; declared for its acks.
+signed-divergence-set = {
+  set: divergence-set,
+  key: bstr .size 32,
+  sig: bstr .size 64,
+}

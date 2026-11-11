@@ -9,6 +9,7 @@ It builds on the open [`esuiss-access-kernel`](https://crates.io/crates/esuiss-a
 - **Verifier Profile.** Declare what the verifier can do; contracts issued against another profile, or that it does not cover, are refused.
 - **Trusted time and counters.** Clock and tamper-evident counter are ports with a guard that refuses a clock that jumps, freezes or goes back (measured from its anchor, within a fixed term plus a drift proportional to the elapsed monotonic time) and a counter that is rolled back or wiped. A refusing clock guard, or one after a reboot, is re-anchored only on a time taken from an artefact verified online. A shared counter bounds a verifier group. An emulator ships behind the `testing` feature.
 - **Status lists and witnessed metadata.** Token Status Lists are verified under the domain's `status-list` key and inflated within a size limit; Domain Metadata is fresh only while an independent witness has cosigned the domain's checkpoint recently enough.
+- **Replay.** A domain's records fold into state from Genesis, and every decision is re-evaluated against the state just before it, as far as the record carries its inputs: its state basis, single-use consumption and the lineage of its basis. What does not replay comes out as a signed divergence set; redacted records are reported as digest coverage.
 - **Offline Exercise Report.** Every use of a projection is chained as it happens; a report cut on reconnect carries the unused slice and continues the chain of the last one.
 
 ```rust,ignore

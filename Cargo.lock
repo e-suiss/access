@@ -2497,6 +2497,7 @@ dependencies = [
  "esuiss-access-verifier",
  "esuiss-crypto",
  "miniz_oxide",
+ "serde_json",
  "thiserror",
 ]
 
