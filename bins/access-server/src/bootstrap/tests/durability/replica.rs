@@ -513,7 +513,7 @@ async fn a_revocation_is_acknowledged_only_once_a_real_replica_holds_it_and_a_re
         export,
         bindings: keys.clone(),
     };
-    // SEC23: declared nothing, a revocation is never acknowledged
+    // SEC23
     let none = revoke(&p).await;
     assert_eq!(none["context"]["ack"], "pending", "{none}");
     let mut replica = Replica::start(
@@ -592,7 +592,7 @@ async fn a_revocation_is_acknowledged_only_once_a_real_replica_holds_it_and_a_re
     let caught_up = p.w.domains.head(p.domain).await.unwrap().0 + 1;
     assert!(replica.acked(caught_up, ACK_WAIT).is_some());
     assert!(board().wait(p.domain, caught_up, ACK_WAIT).await.is_ok());
-    // TI-13: the replica holds it and the witness cosigned it before the answer says so
+    // TI-13
     let witnessed = revoke(&p).await;
     assert_eq!(witnessed["context"]["ack"], "witnessed", "{witnessed}");
     let through: u64 = witnessed["context"]["witnessed_through"]
@@ -603,8 +603,7 @@ async fn a_revocation_is_acknowledged_only_once_a_real_replica_holds_it_and_a_re
     let pos = p.w.domains.head(p.domain).await.unwrap().0;
     assert!(stored_ack(&p, "acme-replica").await > pos.saturating_sub(1));
     assert!(through >= pos, "{through} < {pos}");
-    // CL-2: a killed replica: the revocation is effective, its answer says pending, and the
-    // witness is not sent what no replica holds (mirror before witness)
+    // CL-2, TI-13
     replica.kill().unwrap();
     let pending = revoke(&p).await;
     assert_eq!(pending["context"]["ack"], "pending", "{pending}");
