@@ -1,0 +1,96 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ON (s.name) s.name, s.state, s.period_days, s.scope, s.version,\n                      s.decision_pos,\n                      (SELECT (EXTRACT(EPOCH FROM f.created_at) * 1000)::bigint\n                         FROM access.review_schedules f\n                        WHERE f.tenant_id = s.tenant_id AND f.realm_id = s.realm_id\n                          AND f.name = s.name AND f.version = 1) AS \"first_ms!\"\n                 FROM access.review_schedules s\n                WHERE s.tenant_id = $1 AND s.realm_id = $2\n                ORDER BY s.name, s.version DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.review_schedules",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.review_schedules",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "period_days",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.review_schedules",
+            "name": "period_days"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "scope",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.review_schedules",
+            "name": "scope"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.review_schedules",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.review_schedules",
+            "name": "decision_pos"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "first_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "00271bed86c4739d6d61337b8f41ab2dc3513109b9154a0c5bb071a40d33e81a"
+}

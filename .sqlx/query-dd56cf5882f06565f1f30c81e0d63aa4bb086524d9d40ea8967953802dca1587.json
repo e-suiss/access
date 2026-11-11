@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.review_schedules (tenant_id, realm_id, name, version, state,\n                    period_days, scope, domain_id, decision_pos)\n             SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5, $6, $7, $8\n               FROM access.review_schedules\n              WHERE tenant_id = $1 AND realm_id = $2 AND name = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Int4",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dd56cf5882f06565f1f30c81e0d63aa4bb086524d9d40ea8967953802dca1587"
+}

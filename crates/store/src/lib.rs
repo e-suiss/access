@@ -94,6 +94,8 @@ pub mod vault;
 pub mod workloads;
 // OP-157 m.3 (v)
 pub mod offboarding;
+// OP-157 m.3 (w)
+pub mod review;
 
 #[cfg(feature = "testing")]
 pub mod testing;
