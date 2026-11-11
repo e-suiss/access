@@ -152,6 +152,12 @@ The hosted page at `/v1/approve` shows the request exactly as the decision point
 
 Access doesn't own your approval UI. Any surface that passes the WYSIWYS vectors in `conformance/vectors/approval/1/` can collect approvals: Access keeps the approval rules, the digest and the required assurance, the surface shows the render faithfully and takes the user's act, your coordinator says why, and your product carries out the effect. A notification or an agent's summary is only an invitation, never the approval.
 
+### Delegated administration
+
+An admin role is a named, versioned set of meta-actions held through an ordinary Grant, listed one by one in the console's Roles screen, with protected actions apart. A realm opens the path with `PUT /admin/v1/realms/{slug}/settings/delegated-admin` (`{"enabled": true}`, a signed Exercise like any other change), and new admin Grants are refused until it does. Closing it refuses new ones and leaves the ones already issued alone.
+
+Nobody gives more than they hold, and moving a role to a new version is an explicit `grant.amend` you can preview. Where a domain declares separation of duties, the requester's own approval does not count; collecting approvals belongs to the coordinator (a Work Gate or your IGA tool), so Access keeps no list of pending changes, and approvers need no seat.
+
 ### Produce events on purpose
 
 Your product's end-to-end tests can make Access emit the events it subscribes to:
