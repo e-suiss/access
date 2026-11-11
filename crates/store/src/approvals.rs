@@ -257,3 +257,266 @@ pub async fn finish_approval(
     .await?;
     Ok(done.rows_affected() == 1)
 }
+
+/// The latest answer to whether the realm opened an approval channel (OP-157 m.3 (m)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ApprovalChannel {
+    /// CT1 approval inside the approver notification (`idp.realm.approval_inline`).
+    Inline,
+    /// CT1 batch approval (`idp.realm.approval_batch`).
+    Batch,
+}
+
+impl ApprovalChannel {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Inline => "inline",
+            Self::Batch => "batch",
+        }
+    }
+}
+
+/// Whether the realm opened the channel; off by default.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn approval_channel_enabled(
+    t: &mut TenantTx,
+    channel: ApprovalChannel,
+) -> Result<bool, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    Ok(sqlx::query_scalar!(
+        "SELECT enabled FROM access.idp_approval_channels
+          WHERE tenant_id = $1 AND realm_id = $2 AND channel = $3
+          ORDER BY version DESC LIMIT 1",
+        tenant,
+        realm,
+        channel.name(),
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?
+    .unwrap_or(false))
+}
+
+/// Writes the channel's next setting under `bound` (`idp.realm.approval_inline`,
+/// `approval_batch`, and their `_close` pair).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn put_approval_channel(
+    t: &mut TenantTx,
+    bound: &crate::idp::Bound,
+    channel: ApprovalChannel,
+    enabled: bool,
+) -> Result<(), StoreError> {
+    let (tenant, realm) = scope(t)?;
+    sqlx::query!(
+        "INSERT INTO access.idp_approval_channels
+           (tenant_id, realm_id, channel, version, enabled, domain_id, decision_pos)
+         SELECT $1, $2, $3,
+                COALESCE((SELECT max(version) FROM access.idp_approval_channels
+                           WHERE tenant_id = $1 AND realm_id = $2 AND channel = $3), 0) + 1,
+                $4, $5, $6",
+        tenant,
+        realm,
+        channel.name(),
+        enabled,
+        bound.domain().as_bytes().as_slice(),
+        bound.raw_position(),
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(())
+}
+
+/// One invitation for a pushed request (OP-157 m.3 (m)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InviteRow {
+    /// Id.
+    pub id: [u8; 16],
+    /// The pushed request it invites to.
+    pub request: [u8; 16],
+    /// The requester's Party.
+    pub requester: [u8; 16],
+    /// The invited approver's subject.
+    pub approver: [u8; 16],
+    /// The intent digest.
+    pub intent: [u8; 32],
+    /// The tier the decision point held the intent to.
+    pub tier: u8,
+    /// When it was made, Unix ms.
+    pub created_ms: u64,
+    /// When it was answered.
+    pub answered_ms: Option<u64>,
+    /// `approved` or `denied`.
+    pub outcome: Option<String>,
+}
+
+/// A new invitation.
+#[derive(Clone, Copy, Debug)]
+pub struct NewInvite {
+    /// The pushed request.
+    pub request: [u8; 16],
+    /// The requester's Party.
+    pub requester: [u8; 16],
+    /// The approver's subject.
+    pub approver: [u8; 16],
+    /// The intent digest.
+    pub intent: [u8; 32],
+    /// The tier.
+    pub tier: u8,
+    /// Now, Unix ms.
+    pub now_ms: u64,
+}
+
+/// `requester`'s invitations to `approver` since `since_ms`, and the oldest one's time.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn invites_since(
+    t: &mut TenantTx,
+    requester: &[u8; 16],
+    approver: &[u8; 16],
+    since_ms: u64,
+) -> Result<(u32, Option<u64>), StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let row = sqlx::query!(
+        r#"SELECT count(*) AS "count!", min(created_ms) AS oldest
+             FROM access.approval_invites
+            WHERE tenant_id = $1 AND realm_id = $2 AND requester = $3 AND approver = $4
+              AND created_ms >= $5"#,
+        tenant,
+        realm,
+        requester.as_slice(),
+        Uuid::from_bytes(*approver),
+        signed(since_ms)?,
+    )
+    .fetch_one(&mut *t.tx)
+    .await?;
+    Ok((
+        u32::try_from(row.count).unwrap_or(u32::MAX),
+        row.oldest.map(unsigned).transpose()?,
+    ))
+}
+
+/// Records the invitation; `false` when this approver was already invited for this intent.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn insert_invite(t: &mut TenantTx, i: &NewInvite) -> Result<bool, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let done = sqlx::query!(
+        "INSERT INTO access.approval_invites
+           (tenant_id, realm_id, request_id, requester, approver, intent, tier, created_ms)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (tenant_id, realm_id, approver, intent) DO NOTHING",
+        tenant,
+        realm,
+        Uuid::from_bytes(i.request),
+        i.requester.as_slice(),
+        Uuid::from_bytes(i.approver),
+        i.intent.as_slice(),
+        i16::from(i.tier),
+        signed(i.now_ms)?,
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(done.rows_affected() == 1)
+}
+
+/// The approver's invitation for the intent, locked for its answer.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn invite(
+    t: &mut TenantTx,
+    approver: &[u8; 16],
+    intent: &[u8; 32],
+) -> Result<Option<InviteRow>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let row = sqlx::query!(
+        "SELECT invite_id, request_id, requester, approver, intent, tier, created_ms,
+                answered_ms, outcome
+           FROM access.approval_invites
+          WHERE tenant_id = $1 AND realm_id = $2 AND approver = $3 AND intent = $4
+          FOR UPDATE",
+        tenant,
+        realm,
+        Uuid::from_bytes(*approver),
+        intent.as_slice(),
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    row.map(|r| {
+        Ok(InviteRow {
+            id: *r.invite_id.as_bytes(),
+            request: *r.request_id.as_bytes(),
+            requester: <[u8; 16]>::try_from(r.requester.as_slice())
+                .map_err(|_| StoreError::Corrupt)?,
+            approver: *r.approver.as_bytes(),
+            intent: hash(r.intent)?,
+            tier: u8::try_from(r.tier).map_err(|_| StoreError::Corrupt)?,
+            created_ms: unsigned(r.created_ms)?,
+            answered_ms: r.answered_ms.map(unsigned).transpose()?,
+            outcome: r.outcome,
+        })
+    })
+    .transpose()
+}
+
+/// Records the answer; `false` when the invitation was answered already.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn answer_invite(
+    t: &mut TenantTx,
+    id: &[u8; 16],
+    outcome: &str,
+    now_ms: u64,
+) -> Result<bool, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let done = sqlx::query!(
+        "UPDATE access.approval_invites SET answered_ms = $4, outcome = $5
+          WHERE tenant_id = $1 AND realm_id = $2 AND invite_id = $3 AND answered_ms IS NULL",
+        tenant,
+        realm,
+        Uuid::from_bytes(*id),
+        signed(now_ms)?,
+        outcome,
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(done.rows_affected() == 1)
+}
+
+/// Records an approval the approver's device gave inside a notification: the statement it
+/// signed and the Exercise it became, with no browser session (OP-157 m.3 (m)).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn finish_inline(
+    t: &mut TenantTx,
+    id: &[u8; 16],
+    statement: &[u8; 32],
+    aas: &[u8],
+    exercise: &[u8; 32],
+    now_ms: u64,
+) -> Result<bool, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let done = sqlx::query!(
+        "UPDATE access.approval_requests
+            SET statement = $4, aas = $5, started_ms = $6, finished_ms = $6, exercise = $7
+          WHERE tenant_id = $1 AND realm_id = $2 AND request_id = $3
+            AND started_ms IS NULL AND finished_ms IS NULL",
+        tenant,
+        realm,
+        Uuid::from_bytes(*id),
+        statement.as_slice(),
+        aas,
+        signed(now_ms)?,
+        exercise.as_slice(),
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(done.rows_affected() == 1)
+}
