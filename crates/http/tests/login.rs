@@ -2750,7 +2750,7 @@ async fn an_approval_runs_on_the_hosted_surface() {
             .starts_with("text/html")
     );
     assert!(page.headers.contains_key("content-security-policy"));
-    assert!(String::from_utf8_lossy(&page.body).contains("/v1/approve/app.js"));
+    assert!(String::from_utf8_lossy(&page.body).contains("<script src=\"approve/app.js\">"));
     assert_eq!(c.get(&call(&digest)).await.status, StatusCode::OK);
     let unknown = c.get(&call(&b64url_encode(&[0x77; 32]))).await;
     assert_eq!(unknown.status, StatusCode::NOT_FOUND);
