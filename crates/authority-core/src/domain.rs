@@ -462,7 +462,8 @@ pub(crate) fn lineage_hops_at(
         let g: GrantState = read(view, kind::GRANT, &at)?;
         let next = g.content.basis;
         // EI-5
-        let scoped = crate::app::commitment::status(view, &at, &g, now);
+        let scoped = crate::app::commitment::status(view, &at, &g, now)
+            .or_else(|| crate::app::templates::support::status(view, &g, now));
         chain.push((g, scoped));
         match next {
             GrantBasis::Anchor(a) => {
@@ -1678,9 +1679,28 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             Ok(out) => {
                 // EI-5, OP-156 m.3 (t)
                 let admissible = crate::app::commitment::admissible(snapshot, &req.intent, payload);
+                // MD-9, TN-71, OP-157 m.3 (c)
+                let support = crate::app::templates::support::admissible(snapshot, payload, now);
                 let missing = snapshot.missing();
                 if !missing.is_empty() {
                     return Pass::Need(missing);
+                }
+                if let Err(reason) = support {
+                    let class = if reason == crate::app::templates::support::PROTECTED_ACTION {
+                        BlockerClass::Restricted
+                    } else {
+                        BlockerClass::NoCoveringAuthority
+                    };
+                    return Pass::Done(Evaluation {
+                        decision: deny(class, reason, Resolver::Actor),
+                        effects: Vec::new(),
+                        draws: Vec::new(),
+                        releases: Vec::new(),
+                        expansion: false,
+                        action: None,
+                        foreign: None,
+                        agency: Vec::new(),
+                    });
                 }
                 if !admissible {
                     return Pass::Done(Evaluation {

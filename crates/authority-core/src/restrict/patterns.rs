@@ -212,6 +212,33 @@ pub fn content(pattern: &Pattern) -> Option<Value> {
     .ok()
 }
 
+/// V1: `support-protected` (§8.16 #3, MD-9, OP-157 m.3 (c)): a forbid with no way through on
+/// every `For` Exercise of a protected `idp.account` action, whatever its basis. A `For` Exercise
+/// is someone acting on another's behalf; the e-mail change, the bulk export and every reserved
+/// account action are the person's own. A break-glass basis passes only where a forbid rule
+/// declares itself exempt. The domain installs it with its own `policy.set`.
+#[must_use]
+pub fn support_protected() -> Option<Value> {
+    let actions: BTreeSet<String> = crate::app::templates::support::PROTECTED
+        .iter()
+        .map(|a| format!("{}:{}", a.namespace(), a.name()))
+        .collect();
+    let source = format!(
+        "@id(\"support-protected\") forbid(principal, action, resource) when {{ context.capacity == \"for\" && {}.contains(context.action) }};",
+        list(&actions)
+    );
+    let content = Value::Map(vec![
+        (Value::text("schema"), Value::text(RESTRICTION_SCHEMA)),
+        (Value::text("source"), Value::text(&source)),
+        (Value::text("target"), Value::text("domain")),
+    ]);
+    dcbor::decode(
+        &dcbor::encode(&content, Limits::CEILING).ok()?,
+        Limits::CEILING,
+    )
+    .ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -279,5 +306,29 @@ mod tests {
             })
             .is_none()
         );
+    }
+
+    // §8.16 #3, MD-9, OP-157 m.3 (c), Ek B 5510
+    #[test]
+    fn support_protected_compiles_and_names_every_protected_action() {
+        let c = support_protected().unwrap();
+        assert!(
+            super::super::compile(&c).is_ok(),
+            "{:?}",
+            super::super::compile(&c).err()
+        );
+        let Some(Value::Text(source)) = c.get("source") else {
+            panic!("source");
+        };
+        assert!(source.starts_with("@id(\"support-protected\") forbid"));
+        assert!(!source.contains("@require"));
+        for a in crate::app::templates::support::PROTECTED {
+            assert!(
+                source.contains(&format!("\"idp.account:{}\"", a.name())),
+                "{}",
+                a.name()
+            );
+        }
+        assert!(crate::app::templates::support::PROTECTED.len() <= MAX_NAMES);
     }
 }

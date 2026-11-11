@@ -25,6 +25,8 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 
 use crate::restrict::patterns::MAX_NAMES;
 
+pub mod support;
+
 /// The Claim class an authentication proof has (§10.1.5).
 pub const AUTHENTICATION: &str = "authentication";
 
