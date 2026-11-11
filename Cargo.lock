@@ -308,6 +308,7 @@ dependencies = [
  "esuiss-access-kernel",
  "esuiss-access-sdk",
  "esuiss-crypto",
+ "futures-util",
  "http-body-util",
  "hyper-util",
  "proptest",
@@ -1047,6 +1048,14 @@ dependencies = [
 [[package]]
 name = "access-replica"
 version = "0.5.0"
+dependencies = [
+ "axum",
+ "esuiss-access-kernel",
+ "esuiss-crypto",
+ "esuiss-ledger",
+ "serde_json",
+ "tokio",
+]
 
 [[package]]
 name = "access-server"
