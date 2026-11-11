@@ -577,6 +577,56 @@ impl BreakglassAlarm {
 /// Longest canonical render an in-notification approval carries, base64url (OP-157 m.3 (m)).
 pub const INLINE_RENDER_MAX: usize = 16 * 1024;
 
+/// The dependency a degraded-mode alarm names (OP-158 m.3 (s), (t)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DegradedDependency {
+    /// The database.
+    Database,
+    /// The HSM.
+    Hsm,
+    /// A signer process.
+    Signer,
+    /// The domain's witnesses.
+    Witness,
+    /// The domain's replicas.
+    Replica,
+    /// The trusted time sources.
+    Time,
+    /// The derived read layer.
+    Derived,
+}
+
+impl DegradedDependency {
+    /// Every dependency.
+    pub const ALL: [Self; 7] = [
+        Self::Database,
+        Self::Hsm,
+        Self::Signer,
+        Self::Witness,
+        Self::Replica,
+        Self::Time,
+        Self::Derived,
+    ];
+
+    /// Its name on the wire.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Database => "database",
+            Self::Hsm => "hsm",
+            Self::Signer => "signer",
+            Self::Witness => "witness",
+            Self::Replica => "replica",
+            Self::Time => "time",
+            Self::Derived => "derived",
+        }
+    }
+
+    fn parse(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|e| e.name() == s)
+    }
+}
+
 /// What the message says.
 pub enum Body {
     /// A one-time code (`relay.message.otp.v1`).
@@ -875,6 +925,89 @@ pub enum Body {
         /// Unix ms when the campaign's period ends.
         due_ms: u64,
     },
+    /// The domain was recovered from its previous provider (`relay.message.domain_recovered.v1`,
+    /// OP-158 m.3 (bb), (m)), to every root participant and domain administrator. The name is
+    /// attacker input rendered as text.
+    DomainRecovered {
+        /// The domain's display name, at most 200 characters.
+        domain: String,
+        /// The record position N it was recovered at.
+        position: u64,
+        /// Unix ms after which changes may be lost and revocations must be made again.
+        lost_after_ms: u64,
+        /// When, Unix ms.
+        at_ms: u64,
+        /// The `https` link to the domain's history, at most 2048 bytes.
+        link: Secret<String>,
+    },
+    /// The domain moved to a new provider or re-anchored its binding
+    /// (`relay.message.domain_handover.v1`, OP-158 m.3 (bb), (l)), to the domain administrators.
+    /// The names are attacker input rendered as text.
+    DomainHandover {
+        /// The domain's display name, at most 200 characters.
+        domain: String,
+        /// The new provider's name, at most 200 characters.
+        provider: String,
+        /// The record position h of the handover.
+        position: u64,
+        /// When, Unix ms.
+        at_ms: u64,
+        /// The `https` link to the domain's history, at most 2048 bytes.
+        link: Secret<String>,
+    },
+    /// A recorded decision did not replay the same way (`relay.message.divergence_notice.v1`,
+    /// OP-158 m.3 (bb), (i)), critical, to the root and the Security Party. The name is attacker
+    /// input rendered as text.
+    DivergenceNotice {
+        /// The domain's display name, at most 200 characters.
+        domain: String,
+        /// How many records differ; at least one.
+        items: u32,
+        /// The first record position of the replayed range.
+        from: u64,
+        /// The last record position of the replayed range.
+        to: u64,
+        /// When, Unix ms.
+        at_ms: u64,
+        /// The `https` link to the divergence set, at most 2048 bytes.
+        link: Secret<String>,
+    },
+    /// Two cosigned heads of one size with different roots (`relay.message.equivocation_alarm.v1`,
+    /// OP-158 m.3 (bb), (d)), critical, to the on-call Parties. The names are attacker input
+    /// rendered as text.
+    EquivocationAlarm {
+        /// The domain's display name, at most 200 characters.
+        domain: String,
+        /// The witness that saw the second head, at most 200 characters.
+        witness: String,
+        /// The tree size both heads claim.
+        size: u64,
+        /// When, Unix ms.
+        at_ms: u64,
+        /// The `https` link to the evidence, at most 2048 bytes.
+        link: Secret<String>,
+    },
+    /// A dependency went degraded (`relay.message.degraded_alarm.v1`, OP-158 m.3 (bb), (s)), to the
+    /// on-call Parties.
+    DegradedAlarm {
+        /// What is degraded.
+        dependency: DegradedDependency,
+        /// Since when, Unix ms.
+        since_ms: u64,
+        /// The `https` link to the status page, at most 2048 bytes.
+        link: Secret<String>,
+    },
+    /// The domain's close starts its export and handover window
+    /// (`relay.message.decommission_notice.v1`, OP-158 m.3 (bb), (g)), to the domain
+    /// administrators. The name is attacker input rendered as text.
+    DecommissionNotice {
+        /// The domain's display name, at most 200 characters.
+        domain: String,
+        /// Unix ms when the window ends and crypto-shredding starts.
+        closes_at_ms: u64,
+        /// The `https` link to the export, at most 2048 bytes.
+        link: Secret<String>,
+    },
 }
 
 /// An İYS message channel (IDP-37 (4)).
@@ -1162,12 +1295,74 @@ impl fmt::Debug for Body {
                 .field("link", &"[redacted]")
                 .field("due_ms", due_ms)
                 .finish(),
+            Self::DomainRecovered {
+                position,
+                lost_after_ms,
+                at_ms,
+                ..
+            } => f
+                .debug_struct("DomainRecovered")
+                .field("domain", &"[redacted]")
+                .field("position", position)
+                .field("lost_after_ms", lost_after_ms)
+                .field("at_ms", at_ms)
+                .field("link", &"[redacted]")
+                .finish(),
+            Self::DomainHandover {
+                position, at_ms, ..
+            } => f
+                .debug_struct("DomainHandover")
+                .field("domain", &"[redacted]")
+                .field("provider", &"[redacted]")
+                .field("position", position)
+                .field("at_ms", at_ms)
+                .field("link", &"[redacted]")
+                .finish(),
+            Self::DivergenceNotice {
+                items,
+                from,
+                to,
+                at_ms,
+                ..
+            } => f
+                .debug_struct("DivergenceNotice")
+                .field("domain", &"[redacted]")
+                .field("items", items)
+                .field("from", from)
+                .field("to", to)
+                .field("at_ms", at_ms)
+                .field("link", &"[redacted]")
+                .finish(),
+            Self::EquivocationAlarm { size, at_ms, .. } => f
+                .debug_struct("EquivocationAlarm")
+                .field("domain", &"[redacted]")
+                .field("witness", &"[redacted]")
+                .field("size", size)
+                .field("at_ms", at_ms)
+                .field("link", &"[redacted]")
+                .finish(),
+            Self::DegradedAlarm {
+                dependency,
+                since_ms,
+                ..
+            } => f
+                .debug_struct("DegradedAlarm")
+                .field("dependency", dependency)
+                .field("since_ms", since_ms)
+                .field("link", &"[redacted]")
+                .finish(),
+            Self::DecommissionNotice { closes_at_ms, .. } => f
+                .debug_struct("DecommissionNotice")
+                .field("domain", &"[redacted]")
+                .field("closes_at_ms", closes_at_ms)
+                .field("link", &"[redacted]")
+                .finish(),
         }
     }
 }
 
 /// Every kind of the contract, as outbox kind and `CloudEvents` `type`.
-pub const KINDS: [&str; 44] = [
+pub const KINDS: [&str; 50] = [
     "relay.message.otp.v1",
     "relay.message.magic_link.v1",
     "relay.message.password_changed.v1",
@@ -1212,6 +1407,12 @@ pub const KINDS: [&str; 44] = [
     "relay.message.breakglass_alarm.v1",
     "relay.message.approval_inline.v1",
     "relay.message.review_campaign.v1",
+    "relay.message.domain_recovered.v1",
+    "relay.message.domain_handover.v1",
+    "relay.message.divergence_notice.v1",
+    "relay.message.equivocation_alarm.v1",
+    "relay.message.degraded_alarm.v1",
+    "relay.message.decommission_notice.v1",
 ];
 
 impl Body {
@@ -1245,6 +1446,12 @@ impl Body {
             Self::BreakglassAlarm { .. } => KINDS[41],
             Self::ApprovalInline { .. } => KINDS[42],
             Self::ReviewCampaign { .. } => KINDS[43],
+            Self::DomainRecovered { .. } => KINDS[44],
+            Self::DomainHandover { .. } => KINDS[45],
+            Self::DivergenceNotice { .. } => KINDS[46],
+            Self::EquivocationAlarm { .. } => KINDS[47],
+            Self::DegradedAlarm { .. } => KINDS[48],
+            Self::DecommissionNotice { .. } => KINDS[49],
         }
     }
 
@@ -1282,7 +1489,9 @@ impl Body {
                     Err(Invalid("code"))
                 }
             }
-            Self::MagicLink { link, .. } | Self::Link { link, .. } => https_link(link.expose()),
+            Self::MagicLink { link, .. }
+            | Self::Link { link, .. }
+            | Self::DegradedAlarm { link, .. } => https_link(link.expose()),
             Self::Invitation {
                 link,
                 organization,
@@ -1461,6 +1670,49 @@ impl Body {
             }
             Self::ReviewCampaign { campaign, link, .. } => {
                 name(campaign, "campaign")?;
+                https_link(link.expose())
+            }
+            // OP-158 m.3 (bb)
+            Self::DomainRecovered { domain, link, .. }
+            | Self::DecommissionNotice { domain, link, .. } => {
+                name(domain, "domain")?;
+                https_link(link.expose())
+            }
+            Self::DomainHandover {
+                domain,
+                provider,
+                link,
+                ..
+            } => {
+                name(domain, "domain")?;
+                name(provider, "provider")?;
+                https_link(link.expose())
+            }
+            Self::DivergenceNotice {
+                domain,
+                items,
+                from,
+                to,
+                link,
+                ..
+            } => {
+                name(domain, "domain")?;
+                if *items == 0 {
+                    return Err(Invalid("items"));
+                }
+                if to < from {
+                    return Err(Invalid("to"));
+                }
+                https_link(link.expose())
+            }
+            Self::EquivocationAlarm {
+                domain,
+                witness,
+                link,
+                ..
+            } => {
+                name(domain, "domain")?;
+                name(witness, "witness")?;
                 https_link(link.expose())
             }
             _ => Ok(()),
@@ -1673,13 +1925,21 @@ impl Message {
             | Body::BreakglassUsed { .. }
             | Body::BreakglassAlarm { .. }
             | Body::ApprovalInline { .. }
-            | Body::ReviewCampaign { .. } => match self
-                .body
-                .stage11_members(&mut m, "_ms", |ms| Ok::<_, Infallible>(ms.into()))
-            {
-                Ok(()) => {}
-                Err(never) => match never {},
-            },
+            | Body::ReviewCampaign { .. }
+            | Body::DomainRecovered { .. }
+            | Body::DomainHandover { .. }
+            | Body::DivergenceNotice { .. }
+            | Body::EquivocationAlarm { .. }
+            | Body::DegradedAlarm { .. }
+            | Body::DecommissionNotice { .. } => {
+                match self
+                    .body
+                    .stage11_members(&mut m, "_ms", |ms| Ok::<_, Infallible>(ms.into()))
+                {
+                    Ok(()) => {}
+                    Err(never) => match never {},
+                }
+            }
             Body::AccountStatus { status, at_ms } => {
                 m.insert("status".into(), status.name().into());
                 m.insert("at_ms".into(), (*at_ms).into());
@@ -1780,6 +2040,46 @@ impl Message {
                 render: text("render")?.to_owned(),
                 render_digest: text("render_digest")?.to_owned(),
                 expires_at_ms: int("expires_at_ms")?,
+            },
+            "relay.message.domain_recovered.v1" => Body::DomainRecovered {
+                domain: text("domain")?.to_owned(),
+                position: int("position")?,
+                lost_after_ms: int("lost_after_ms")?,
+                at_ms: int("at_ms")?,
+                link: Secret::new(text("link")?.to_owned()),
+            },
+            "relay.message.domain_handover.v1" => Body::DomainHandover {
+                domain: text("domain")?.to_owned(),
+                provider: text("provider")?.to_owned(),
+                position: int("position")?,
+                at_ms: int("at_ms")?,
+                link: Secret::new(text("link")?.to_owned()),
+            },
+            "relay.message.divergence_notice.v1" => Body::DivergenceNotice {
+                domain: text("domain")?.to_owned(),
+                items: u32::try_from(int("items")?).map_err(|_| Invalid("items"))?,
+                from: int("from")?,
+                to: int("to")?,
+                at_ms: int("at_ms")?,
+                link: Secret::new(text("link")?.to_owned()),
+            },
+            "relay.message.equivocation_alarm.v1" => Body::EquivocationAlarm {
+                domain: text("domain")?.to_owned(),
+                witness: text("witness")?.to_owned(),
+                size: int("size")?,
+                at_ms: int("at_ms")?,
+                link: Secret::new(text("link")?.to_owned()),
+            },
+            "relay.message.degraded_alarm.v1" => Body::DegradedAlarm {
+                dependency: DegradedDependency::parse(text("dependency")?)
+                    .ok_or(Invalid("dependency"))?,
+                since_ms: int("since_ms")?,
+                link: Secret::new(text("link")?.to_owned()),
+            },
+            "relay.message.decommission_notice.v1" => Body::DecommissionNotice {
+                domain: text("domain")?.to_owned(),
+                closes_at_ms: int("closes_at_ms")?,
+                link: Secret::new(text("link")?.to_owned()),
             },
             "relay.message.review_campaign.v1" => Body::ReviewCampaign {
                 campaign: text("campaign")?.to_owned(),
@@ -1998,7 +2298,13 @@ impl Message {
             | Body::BreakglassUsed { .. }
             | Body::BreakglassAlarm { .. }
             | Body::ApprovalInline { .. }
-            | Body::ReviewCampaign { .. } => {
+            | Body::ReviewCampaign { .. }
+            | Body::DomainRecovered { .. }
+            | Body::DomainHandover { .. }
+            | Body::DivergenceNotice { .. }
+            | Body::EquivocationAlarm { .. }
+            | Body::DegradedAlarm { .. }
+            | Body::DecommissionNotice { .. } => {
                 self.body
                     .stage11_members(&mut m, "", |ms| rfc3339(ms).map(Value::from))?;
             }
@@ -2211,6 +2517,79 @@ impl Body {
                 m.insert("items".into(), (*items).into());
                 m.insert("link".into(), text(link.expose()));
                 put_time(m, "due", *due_ms)?;
+            }
+            // OP-158 m.3 (bb)
+            Self::DomainRecovered {
+                domain,
+                position,
+                lost_after_ms,
+                at_ms,
+                link,
+            } => {
+                m.insert("domain".into(), text(domain));
+                m.insert("position".into(), (*position).into());
+                put_time(m, "lost_after", *lost_after_ms)?;
+                put_time(m, "at", *at_ms)?;
+                m.insert("link".into(), text(link.expose()));
+            }
+            Self::DomainHandover {
+                domain,
+                provider,
+                position,
+                at_ms,
+                link,
+            } => {
+                m.insert("domain".into(), text(domain));
+                m.insert("provider".into(), text(provider));
+                m.insert("position".into(), (*position).into());
+                put_time(m, "at", *at_ms)?;
+                m.insert("link".into(), text(link.expose()));
+            }
+            Self::DivergenceNotice {
+                domain,
+                items,
+                from,
+                to,
+                at_ms,
+                link,
+            } => {
+                m.insert("domain".into(), text(domain));
+                m.insert("items".into(), (*items).into());
+                m.insert("from".into(), (*from).into());
+                m.insert("to".into(), (*to).into());
+                put_time(m, "at", *at_ms)?;
+                m.insert("link".into(), text(link.expose()));
+            }
+            Self::EquivocationAlarm {
+                domain,
+                witness,
+                size,
+                at_ms,
+                link,
+            } => {
+                m.insert("domain".into(), text(domain));
+                m.insert("witness".into(), text(witness));
+                m.insert("size".into(), (*size).into());
+                put_time(m, "at", *at_ms)?;
+                m.insert("link".into(), text(link.expose()));
+            }
+            Self::DegradedAlarm {
+                dependency,
+                since_ms,
+                link,
+            } => {
+                m.insert("dependency".into(), dependency.name().into());
+                put_time(m, "since", *since_ms)?;
+                m.insert("link".into(), text(link.expose()));
+            }
+            Self::DecommissionNotice {
+                domain,
+                closes_at_ms,
+                link,
+            } => {
+                m.insert("domain".into(), text(domain));
+                put_time(m, "closes_at", *closes_at_ms)?;
+                m.insert("link".into(), text(link.expose()));
             }
             _ => {}
         }

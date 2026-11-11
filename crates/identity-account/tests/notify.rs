@@ -35,9 +35,9 @@ use access_identity_account::notify::envelope::{EventId, Header, parse, seal};
 use access_identity_account::notify::http::{HttpRelay, HttpRelayConfig, RelayEndpoint};
 use access_identity_account::notify::lease::{CourierLease, TTL, Term};
 use access_identity_account::notify::message::{
-    Address, AgentNotice, AppPasswordChange, Body, BreakglassAlarm, IysChannel, IysRecipient,
-    KINDS, LinkPurpose, Message, Notice, NoticeReason, OtpPurpose, Prompt, SecurityEvent,
-    SignInMethod, SupportEvent,
+    Address, AgentNotice, AppPasswordChange, Body, BreakglassAlarm, DegradedDependency, IysChannel,
+    IysRecipient, KINDS, LinkPurpose, Message, Notice, NoticeReason, OtpPurpose, Prompt,
+    SecurityEvent, SignInMethod, SupportEvent,
 };
 use access_identity_account::notify::notifier::OutboxNotifier;
 use access_identity_account::notify::pg::PgCourierStore;
@@ -1093,6 +1093,7 @@ fn every_kind_matches_the_json_schema() {
     .chain(stage11_messages(s))
     .chain(iys_messages(s))
     .chain(stage12_messages(s))
+    .chain(stage13_messages(s))
     .collect::<Vec<_>>();
     assert_eq!(messages.len(), KINDS.len());
     for (m, kind) in messages.iter().zip(KINDS) {
@@ -1757,6 +1758,83 @@ fn the_stage_12_bodies_keep_their_channels_and_hide_their_names() {
         "id.example",
         "quarterly",
     ] {
+        assert!(!printed.contains(hidden), "{printed}");
+    }
+}
+
+fn stage13_messages(s: [u8; 16]) -> Vec<Message> {
+    let email = || Address::Email(EMAIL.to_owned());
+    let since = Some(START_MS - 86_400_000);
+    let with = |body: Body| Message {
+        subject: s,
+        to: email(),
+        locale: None,
+        valid_since_ms: since,
+        body,
+    };
+    let link = |l: &str| Secret::new(format!("https://console.example/{l}"));
+    vec![
+        with(Body::DomainRecovered {
+            domain: "Acme Shop".to_owned(),
+            position: 4_096,
+            lost_after_ms: START_MS - 60_000,
+            at_ms: START_MS,
+            link: link("h"),
+        }),
+        with(Body::DomainHandover {
+            domain: "Acme Shop".to_owned(),
+            provider: "Northwind Cloud".to_owned(),
+            position: 4_000,
+            at_ms: START_MS,
+            link: link("h"),
+        }),
+        with(Body::DivergenceNotice {
+            domain: "Acme Shop".to_owned(),
+            items: 2,
+            from: 10,
+            to: 900,
+            at_ms: START_MS,
+            link: link("d"),
+        }),
+        with(Body::EquivocationAlarm {
+            domain: "Acme Shop".to_owned(),
+            witness: "witness.northwind".to_owned(),
+            size: 77,
+            at_ms: START_MS,
+            link: link("e"),
+        }),
+        with(Body::DegradedAlarm {
+            dependency: DegradedDependency::Witness,
+            since_ms: START_MS,
+            link: link("s"),
+        }),
+        with(Body::DecommissionNotice {
+            domain: "Acme Shop".to_owned(),
+            closes_at_ms: START_MS + 90 * 86_400_000,
+            link: link("x"),
+        }),
+    ]
+}
+
+// OP-158 m.3 (bb)
+#[test]
+fn the_stage_13_bodies_validate_and_hide_their_names() {
+    let mut m = stage13_messages([7; 16]);
+    for one in &m {
+        assert!(one.validate().is_ok(), "{one:?}");
+    }
+    if let Body::DivergenceNotice { items, .. } = &mut m[2].body {
+        *items = 0;
+    }
+    assert!(
+        m[2].validate().is_err(),
+        "a divergence names at least one record"
+    );
+    m[4].to = Address::Device("A".repeat(43));
+    m[4].valid_since_ms = None;
+    assert!(m[4].validate().is_err(), "an alarm is not a device push");
+    let printed = format!("{:?}", stage13_messages([7; 16]));
+    for hidden in ["Acme", "Northwind", "console.example"] {
         assert!(!printed.contains(hidden), "{printed}");
     }
 }

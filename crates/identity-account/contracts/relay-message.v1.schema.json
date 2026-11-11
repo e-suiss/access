@@ -74,7 +74,13 @@
         "relay.message.breakglass_used.v1",
         "relay.message.breakglass_alarm.v1",
         "relay.message.approval_inline.v1",
-        "relay.message.review_campaign.v1"
+        "relay.message.review_campaign.v1",
+        "relay.message.domain_recovered.v1",
+        "relay.message.domain_handover.v1",
+        "relay.message.divergence_notice.v1",
+        "relay.message.equivocation_alarm.v1",
+        "relay.message.degraded_alarm.v1",
+        "relay.message.decommission_notice.v1"
       ]
     },
     "subject": {
@@ -801,6 +807,102 @@
         "properties": {
           "data": {
             "$ref": "#/$defs/relay.message.review_campaign.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.domain_recovered.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.domain_recovered.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.domain_handover.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.domain_handover.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.divergence_notice.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.divergence_notice.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.equivocation_alarm.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.equivocation_alarm.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.degraded_alarm.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.degraded_alarm.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.decommission_notice.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.decommission_notice.v1"
           }
         }
       }
@@ -2390,6 +2492,289 @@
         "due": {
           "type": "string",
           "format": "date-time"
+        }
+      }
+    },
+    "relay.message.domain_recovered.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "domain",
+        "position",
+        "lost_after",
+        "at",
+        "link"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "domain": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the domain's display name, rendered as text."
+        },
+        "position": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The record position N the domain was recovered at (OP-158 m.3 (m))."
+        },
+        "lost_after": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Changes after this time may be lost; revocations after it must be made again."
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the link to the domain's history. Never logged."
+        }
+      }
+    },
+    "relay.message.domain_handover.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "domain",
+        "provider",
+        "position",
+        "at",
+        "link"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "domain": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the domain's display name, rendered as text."
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the new provider's name, rendered as text."
+        },
+        "position": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The record position h of the handover (OP-158 m.3 (l))."
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the link to the domain's history. Never logged."
+        }
+      }
+    },
+    "relay.message.divergence_notice.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "domain",
+        "items",
+        "from",
+        "to",
+        "at",
+        "link"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "domain": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the domain's display name, rendered as text."
+        },
+        "items": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Critical: how many recorded decisions replayed differently (OP-158 m.3 (i))."
+        },
+        "from": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "to": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the link to the divergence set. Never logged."
+        }
+      }
+    },
+    "relay.message.equivocation_alarm.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "domain",
+        "witness",
+        "size",
+        "at",
+        "link"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "domain": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the domain's display name, rendered as text."
+        },
+        "witness": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the witness that saw the second head, rendered as text."
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Critical: the tree size both cosigned heads claim (OP-158 m.3 (d))."
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the link to the evidence. Never logged."
+        }
+      }
+    },
+    "relay.message.degraded_alarm.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "dependency",
+        "since",
+        "link"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "dependency": {
+          "enum": [
+            "database",
+            "hsm",
+            "signer",
+            "witness",
+            "replica",
+            "time",
+            "derived"
+          ],
+          "description": "What is degraded; delivered to the on-call Parties (OP-158 m.3 (s))."
+        },
+        "since": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the link to the status page. Never logged."
+        }
+      }
+    },
+    "relay.message.decommission_notice.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "domain",
+        "closes_at",
+        "link"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "domain": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the domain's display name, rendered as text."
+        },
+        "closes_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The end of the export and handover window; crypto-shredding starts after it (OP-158 m.3 (g))."
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the link to the export. Never logged."
         }
       }
     }
