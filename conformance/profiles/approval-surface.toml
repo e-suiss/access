@@ -6,6 +6,6 @@ v = 1
 profile = "approval-surface"
 title = "Approval Surface"
 shared_with = ["work"]
-vectors = ["core/1"]
+vectors = ["core/1", "approval/1"]
 pep_cases = []
 cddl = ["kernel.cddl", "approval-inline.cddl", "push-challenge.cddl"]

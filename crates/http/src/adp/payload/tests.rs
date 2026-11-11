@@ -404,3 +404,38 @@ fn an_action_schema_carries_its_reversibility_and_absent_is_irreversible() {
     declared["reversibility"] = serde_json::json!("undoable");
     assert!(super::action_schema_from_json(&declared).is_err());
 }
+
+// PI-19, C18, OP-157 m.3 (r), Ek B 5665
+#[test]
+fn a_schema_definition_acceptance_pins_mapping_digests_in_json() {
+    let publisher = b64url_encode(&[2; 16]);
+    let digest = b64url_encode(&[7; 32]);
+    let acceptance = |mappings: Option<serde_json::Value>, use_: &str| {
+        let mut content = json!({
+            "issuer": publisher,
+            "use": use_,
+            "classes": ["action_schema"],
+            "subject": "public",
+            "validity": { "from": 0, "until": 9_000_000 },
+        });
+        if use_ == "schema-definition" {
+            content["spp"] = json!({
+                "publisher": publisher,
+                "namespace": "shop",
+                "catalog_version": 2,
+                "actions": [{ "name": "pay", "major": 2, "effect_class": "irreversible" }],
+            });
+        }
+        if let Some(m) = mappings {
+            content["mappings"] = m;
+        }
+        json!({ "acceptance_establish": content })
+    };
+    let pinned = from_json(&acceptance(Some(json!([digest])), "schema-definition")).unwrap();
+    assert_eq!(
+        to_json_value(&pinned).unwrap()["acceptance_establish"]["mappings"],
+        json!([digest])
+    );
+    assert!(from_json(&acceptance(Some(json!([digest])), "predicate-input")).is_err());
+    assert!(from_json(&acceptance(Some(json!(["AA"])), "schema-definition")).is_err());
+}

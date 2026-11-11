@@ -94,6 +94,13 @@ fn a_profile_runs_its_cases_and_names_what_else_it_requires() {
     assert_eq!(listed.status.code(), Some(0), "{text}");
     assert!(text.contains("requires cddl     doorbell.cddl"), "{text}");
 
+    for role in access_pep_conformance::profile::ROLES {
+        let run = profile_run(role, Some(env!("CARGO_BIN_EXE_pep-sdk")));
+        let text = String::from_utf8_lossy(&run.stdout);
+        assert_eq!(run.status.code(), Some(0), "{role}: {text}");
+        assert!(text.contains("not endorsement"), "{role}: {text}");
+    }
+
     let needs = profile_run("decision-pep", None);
     assert_eq!(needs.status.code(), Some(2));
     assert_eq!(profile_run("certified", None).status.code(), Some(2));

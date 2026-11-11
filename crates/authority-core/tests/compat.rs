@@ -691,3 +691,52 @@ async fn a_pinned_narrowing_mapping_needs_an_approval_through_its_probation() {
     .unwrap();
     denied(&r, BlockerClass::NoCoveringAuthority);
 }
+
+// PI-19, OP-157 m.3 (r), Ek B 5667
+#[tokio::test]
+async fn revoking_the_acceptance_drops_the_pin() {
+    let db = fresh().await.unwrap();
+    let (mut core, d, holding) = ready(&db).await;
+    let m = publish_v2(&db, d, Relation::Narrowing).await;
+    allowed(
+        &accept_v2(&mut core, d, 10, &[mapping_digest(&m).unwrap()], NOW)
+            .await
+            .unwrap(),
+    );
+    allowed(
+        &send_at(
+            &mut core,
+            pay_request(d, 11, 2, holding),
+            ALICE_KEY,
+            NOW + 15 * DAY_MS,
+        )
+        .await
+        .unwrap(),
+    );
+    allowed(
+        &send_at(
+            &mut core,
+            meta_request(
+                d,
+                12,
+                ExerciseBasis::Anchor(meta::meta_anchor(&d)),
+                Payload::AcceptanceRevoke {
+                    acceptance: acceptance(d),
+                },
+            ),
+            ROOT_KEY,
+            NOW + 15 * DAY_MS,
+        )
+        .await
+        .unwrap(),
+    );
+    let r = send_at(
+        &mut core,
+        pay_request(d, 13, 2, holding),
+        ALICE_KEY,
+        NOW + 16 * DAY_MS,
+    )
+    .await
+    .unwrap();
+    denied(&r, BlockerClass::SchemaNotAccepted);
+}
