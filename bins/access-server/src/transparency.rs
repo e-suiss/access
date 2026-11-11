@@ -12,7 +12,7 @@ use access_store::authority::{read_head, read_log};
 use access_store::scope::DomainId;
 use access_store::witness::{cosigns, latest_witnessed, leaf_hashes, witnessed_through};
 use suiss_crypto::dcbor::{self, Limits, Value};
-use suiss_ledger::checkpoint::proof::inclusion;
+use suiss_ledger::checkpoint::proof::{inclusion, tile, tile_width};
 
 /// The only field an inclusion bundle opens (§17.6.1 rule 5, T19).
 pub(crate) const OPENED: &str = "artifacts";
@@ -109,5 +109,28 @@ impl Checkpoints for PgCheckpoints {
             (Value::text("size"), Value::Unsigned(size)),
         ]);
         dcbor::encode(&bundle, Limits::CEILING).map_err(down)
+    }
+
+    async fn tile(
+        &self,
+        domain: Digest,
+        level: u32,
+        index: u64,
+        width: u64,
+    ) -> Result<Vec<u8>, InclusionError> {
+        let id = DomainId::from_bytes(domain.0);
+        let row = latest_witnessed(&self.app, &id, None)
+            .await
+            .map_err(down)?
+            .ok_or(InclusionError::NotWitnessed)?;
+        if tile_width(row.size, level, index) != width {
+            return Err(InclusionError::Unknown);
+        }
+        let leaves = leaf_hashes(&self.app, &id, 0, row.size)
+            .await
+            .map_err(down)?;
+        let hashes =
+            tile(leaves.as_slice(), level, index, width).map_err(|_| InclusionError::Unknown)?;
+        Ok(hashes.concat())
     }
 }

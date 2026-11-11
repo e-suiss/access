@@ -159,3 +159,49 @@ fn subproof<L: Leaves + ?Sized>(
     }
     Ok(())
 }
+
+/// Hashes per full tile (C2SP `tlog-tiles`).
+pub const TILE_WIDTH: u64 = 256;
+
+/// How many hashes tile `index` of `level` holds in a tree of `size` leaves: [`TILE_WIDTH`]
+/// when full, fewer for the right edge, 0 when it does not exist yet.
+#[must_use]
+pub fn tile_width(size: u64, level: u32, index: u64) -> u64 {
+    let Some(shift) = level.checked_mul(8) else {
+        return 0;
+    };
+    let at_level = size.checked_shr(shift).unwrap_or(0);
+    let start = index.saturating_mul(TILE_WIDTH);
+    at_level.saturating_sub(start).min(TILE_WIDTH)
+}
+
+/// The `width` hashes of tile `index` at `level` (C2SP `tlog-tiles`): each the tree hash of
+/// one complete subtree of `2^(8·level)` leaves.
+///
+/// # Errors
+/// [`BuildError`].
+pub fn tile<L: Leaves + ?Sized>(
+    leaves: &L,
+    level: u32,
+    index: u64,
+    width: u64,
+) -> Result<Vec<Hash>, BuildError<L::Error>> {
+    let span = level
+        .checked_mul(8)
+        .and_then(|s| 1_u64.checked_shl(s))
+        .ok_or(BuildError::Range)?;
+    if width == 0 || width > TILE_WIDTH {
+        return Err(BuildError::Range);
+    }
+    let first = index.checked_mul(TILE_WIDTH).ok_or(BuildError::Range)?;
+    let mut out = Vec::new();
+    for i in 0..width {
+        let lo = first
+            .checked_add(i)
+            .and_then(|n| n.checked_mul(span))
+            .ok_or(BuildError::Range)?;
+        let hi = lo.checked_add(span).ok_or(BuildError::Range)?;
+        out.push(leaves.subtree(lo, hi)?);
+    }
+    Ok(out)
+}

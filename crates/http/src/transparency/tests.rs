@@ -35,6 +35,20 @@ impl Checkpoints for One {
             Ok(vec![0xa0])
         })
     }
+
+    fn tile(
+        &self,
+        _: Digest,
+        _: u32,
+        index: u64,
+        width: u64,
+    ) -> impl Future<Output = Result<Vec<u8>, InclusionError>> + Send {
+        std::future::ready(if index == 1_234_067 && width == 5 {
+            Ok(vec![1; 160])
+        } else {
+            Err(InclusionError::Unknown)
+        })
+    }
 }
 
 fn w(independent: bool) -> Declared {
@@ -108,4 +122,35 @@ async fn an_inclusion_bundle_needs_a_pep_and_a_witnessed_checkpoint() {
         .0,
         StatusCode::NOT_FOUND
     );
+}
+
+// K15, C2SP tlog-tiles
+#[test]
+fn tile_paths_are_canonical() {
+    assert_eq!(tile_index("000"), Some((0, 256)));
+    assert_eq!(tile_index("x001/x234/067"), Some((1_234_067, 256)));
+    assert_eq!(tile_index("x001/x234/067.p/5"), Some((1_234_067, 5)));
+    for bad in [
+        "1",
+        "x000/001",
+        "x1/234",
+        "001/002",
+        "067.p/256",
+        "067.p/0",
+        "067.p/05",
+    ] {
+        assert_eq!(tile_index(bad), None, "{bad}");
+    }
+}
+
+// K15
+#[tokio::test]
+async fn a_tile_is_served_as_concatenated_hashes() {
+    let (s, body) = get(
+        router(One(vec![])),
+        &format!("/access/v1/domains/{}/tile/0/x001/x234/067.p/5", d()),
+        false,
+    )
+    .await;
+    assert_eq!((s, body.len()), (StatusCode::OK, 160));
 }

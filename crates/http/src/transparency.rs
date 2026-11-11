@@ -6,6 +6,9 @@
 //! - `GET /access/v1/domains/{domain}/checkpoints/{size}/inclusion/{pos}`: the inclusion proof
 //!   bundle of one record for an authenticated PEP: the leaf core with only `artifacts`
 //!   opened, the Merkle path and the witnessed checkpoint of `size` (T19, §17.6.1 rule 5).
+//! - `GET /access/v1/domains/{domain}/tile/{level}/{index}[.p/{width}]`: C2SP `tlog-tiles`
+//!   hash tiles of the witnessed tree, so anyone can follow the log as a transparency log
+//!   (K15); entries are not published, they are confidential records.
 
 use std::future::Future;
 use std::sync::Arc;
@@ -26,6 +29,12 @@ pub const CHECKPOINTS_PATH: &str = "/access/v1/domains/{domain}/checkpoints";
 
 /// The inclusion bundle route.
 pub const INCLUSION_PATH: &str = "/access/v1/domains/{domain}/checkpoints/{size}/inclusion/{pos}";
+
+/// The hash tile route (C2SP `tlog-tiles`).
+pub const TILE_PATH: &str = "/access/v1/domains/{domain}/tile/{level}/{*index}";
+
+/// `Cache-Control` of a full tile: it never changes.
+pub const FULL_TILE_CACHE: &str = "public, max-age=31536000, immutable";
 
 /// Media type of an inclusion bundle.
 pub const BUNDLE_CONTENT_TYPE: &str = "application/cbor";
@@ -94,14 +103,56 @@ pub trait Checkpoints: Send + Sync {
         size: u64,
         pos: u64,
     ) -> impl Future<Output = Result<Vec<u8>, InclusionError>> + Send;
+
+    /// Hash tile `index` of `level` with `width` hashes, of the witnessed tree: the hashes
+    /// concatenated. A width the witnessed tree does not have is [`InclusionError::Unknown`].
+    fn tile(
+        &self,
+        domain: Digest,
+        level: u32,
+        index: u64,
+        width: u64,
+    ) -> impl Future<Output = Result<Vec<u8>, InclusionError>> + Send;
 }
 
-/// The two routes over `store`.
+/// The routes over `store`.
 pub fn router<C: Checkpoints + 'static>(store: C) -> Router {
     Router::new()
         .route(CHECKPOINTS_PATH, get(listing::<C>))
         .route(INCLUSION_PATH, get(inclusion::<C>))
+        .route(TILE_PATH, get(tile::<C>))
         .with_state(Arc::new(store))
+}
+
+/// A C2SP tile index path: three-digit groups, all but the last prefixed `x`, and an optional
+/// `.p/<width>` for a partial tile; `(index, width)` with width 256 for a full tile.
+#[must_use]
+pub fn tile_index(path: &str) -> Option<(u64, u64)> {
+    let (path, width) = match path.split_once(".p/") {
+        Some((p, w)) => {
+            let w = number(w).filter(|w| (1..256).contains(w))?;
+            (p, w)
+        }
+        None => (path, 256),
+    };
+    let groups: Vec<&str> = path.split('/').collect();
+    let (last, rest) = groups.split_last()?;
+    let mut index = 0_u64;
+    for (i, g) in rest
+        .iter()
+        .map(|g| g.strip_prefix('x'))
+        .chain([Some(*last)])
+        .enumerate()
+    {
+        let g = g.filter(|g| g.len() == 3 && g.bytes().all(|b| b.is_ascii_digit()))?;
+        if i == 0 && !rest.is_empty() && g == "000" {
+            return None;
+        }
+        index = index
+            .checked_mul(1000)?
+            .checked_add(g.parse::<u64>().ok()?)?;
+    }
+    Some((index, width))
 }
 
 fn problem(e: InclusionError) -> Response {
@@ -186,6 +237,42 @@ async fn inclusion<C: Checkpoints>(
             bundle,
         )
             .into_response(),
+        Err(e) => problem(e),
+    }
+}
+
+async fn tile<C: Checkpoints>(
+    State(store): State<Arc<C>>,
+    Path((domain, level, index)): Path<(String, String, String)>,
+) -> Response {
+    let (Some(d), Some(level), Some((index, width))) = (
+        crate::adp::adapters::domain_id(&domain),
+        number(&level)
+            .and_then(|l| u32::try_from(l).ok())
+            .filter(|l| *l < 8),
+        tile_index(&index),
+    ) else {
+        return problem(InclusionError::Unknown);
+    };
+    match store.tile(d, level, index, width).await {
+        Ok(hashes) => {
+            let cache = if width == 256 {
+                FULL_TILE_CACHE
+            } else {
+                "public, max-age=30"
+            };
+            (
+                [
+                    (
+                        header::CONTENT_TYPE,
+                        HeaderValue::from_static("application/octet-stream"),
+                    ),
+                    (header::CACHE_CONTROL, HeaderValue::from_static(cache)),
+                ],
+                hashes,
+            )
+                .into_response()
+        }
         Err(e) => problem(e),
     }
 }

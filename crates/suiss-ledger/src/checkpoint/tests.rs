@@ -206,3 +206,24 @@ fn the_add_checkpoint_body_round_trips() {
         assert_eq!(parse_add_checkpoint(bad), Err(WireError), "{bad}");
     }
 }
+
+// K15, C2SP tlog-tiles
+#[test]
+fn tiles_hold_complete_subtree_hashes() {
+    let l = leaves(70_000);
+    assert_eq!(proof::tile_width(70_000, 0, 0), 256);
+    assert_eq!(proof::tile_width(70_000, 0, 273), 112);
+    assert_eq!(proof::tile_width(70_000, 0, 274), 0);
+    assert_eq!(proof::tile_width(70_000, 1, 1), 17);
+    assert_eq!(proof::tile_width(70_000, 2, 0), 1);
+    let t0 = proof::tile(l.as_slice(), 0, 1, 3).unwrap();
+    assert_eq!(t0, l[256..259].to_vec());
+    let t1 = proof::tile(l.as_slice(), 1, 0, 2).unwrap();
+    assert_eq!(t1[1], tree_root(&l[256..512]));
+    let t2 = proof::tile(l.as_slice(), 2, 0, 1).unwrap();
+    assert_eq!(t2[0], tree_root(&l[..65_536]));
+    assert_eq!(
+        proof::tile(l.as_slice(), 0, 0, 257),
+        Err(proof::BuildError::Range)
+    );
+}

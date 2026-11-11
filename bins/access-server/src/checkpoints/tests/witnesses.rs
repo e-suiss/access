@@ -712,6 +712,30 @@ async fn a_witnessed_bundle_opens_only_artifacts_and_dates_the_record() {
     ]);
     assert!(ok && text.contains("size: 3"), "{text}");
 
+    // K15
+    let (status, tile) = http(
+        router(),
+        &format!("/access/v1/domains/{origin}/tile/0/000.p/3"),
+        false,
+    )
+    .await;
+    assert_eq!(status, 200);
+    let hashes: Vec<[u8; 32]> = tile.chunks(32).map(|c| c.try_into().unwrap()).collect();
+    let mut rebuilt = Frontier::default();
+    for h in &hashes {
+        rebuilt.push(*h).unwrap();
+    }
+    assert_eq!(rebuilt.root(), row.root);
+    assert_eq!(
+        http(
+            router(),
+            &format!("/access/v1/domains/{origin}/tile/0/000.p/4"),
+            false
+        )
+        .await
+        .0,
+        404
+    );
     // T19
     let uri = format!("/access/v1/domains/{origin}/checkpoints/3/inclusion/1");
     assert_eq!(http(router(), &uri, false).await.0, 401);
