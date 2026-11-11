@@ -46,12 +46,14 @@ fn config(dir: &Path, token: &str) -> PathBuf {
     std::fs::write(
         &path,
         format!(
-            "socket = {socket:?}\nvault = {vault:?}\ncallers = [{uid}]\ncell = \"local\"\n\
-             [hsm]\nmodule = {module:?}\ntoken = {token:?}\npin_file = {pin:?}\n\
-             kek = \"access/identity-signer/kek\"\npaths = [{tokens:?}]\n",
-            socket = dir.join("s.sock"),
-            module = module(),
-            tokens = tokens_dir(),
+            "socket = \"{socket}\"\nvault = \"{vault}\"\ncallers = [{uid}]\ncell = \"local\"\n\
+             [hsm]\nmodule = \"{module}\"\ntoken = {token:?}\npin_file = \"{pin}\"\n\
+             kek = \"access/identity-signer/kek\"\npaths = [\"{tokens}\"]\n",
+            socket = dir.join("s.sock").display(),
+            vault = vault.display(),
+            module = module().display(),
+            pin = pin.display(),
+            tokens = tokens_dir().display(),
         ),
     )
     .unwrap();
@@ -69,7 +71,7 @@ fn signer(config: &Path, args: &[&str]) -> Child {
 }
 
 fn wait(child: &mut Child, limit: Duration) -> std::process::ExitStatus {
-    let deadline = Instant::now() + limit;
+    let deadline = Instant::now().checked_add(limit).unwrap();
     loop {
         if let Some(status) = child.try_wait().unwrap() {
             return status;
