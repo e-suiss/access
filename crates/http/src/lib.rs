@@ -14,6 +14,7 @@ pub mod internal;
 pub mod linux;
 pub mod login;
 pub mod mcp_gateway;
+pub mod mirror;
 pub mod oauth;
 pub mod path;
 pub mod platform;

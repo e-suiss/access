@@ -14,24 +14,6 @@ pub use crate::stage11::{Method, Planned};
 pub const PLANNED: &[Planned] = &[
     Planned {
         method: Method::Get,
-        path: "/access/v1/domains/{domain}/mirror",
-        operation: "getMirror",
-        summary: "The Replica Mirror from `from` (a tree size): a resumable, long-polled CBOR sequence of records, bodies and checkpoints (mirror.cddl) for a Party holding the domain's access.audit.export Grant; replicas answer signed replica_ack frames (T21, TI-13, OP-158 m.3 (f)).",
-    },
-    Planned {
-        method: Method::Post,
-        path: "/access/v1/domains/{domain}/exports",
-        operation: "startExport",
-        summary: "Starts a Record Export: the body is the access.audit.export Exercise with its AIS; the package streams as a CBOR sequence (export.cddl) in chunks of at most 10 000 records, and billing, quota or plan never close it (AP-14, OP-158 m.3 (g)).",
-    },
-    Planned {
-        method: Method::Get,
-        path: "/access/v1/domains/{domain}/exports/{export}",
-        operation: "getExport",
-        summary: "A started export's stream, resumable from its last position (OP-158 m.3 (g)).",
-    },
-    Planned {
-        method: Method::Get,
         path: "/access/v1/domains/{domain}/watch",
         operation: "watchDomain",
         summary: "Changes from `from` (a record position) by long polling, each with witnessed_through; advisory, never a source of ALLOW (OP-158 m.3 (u)).",

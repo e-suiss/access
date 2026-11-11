@@ -164,6 +164,7 @@ fn party_components() -> Value {
 mod developer;
 mod eligibility;
 mod iys;
+mod mirror;
 mod platform;
 mod records;
 mod ssf;
@@ -538,6 +539,7 @@ pub fn openapi() -> Value {
     stage6::paths(&mut paths, &common);
     ssf::paths(&mut paths);
     developer::paths(&mut paths);
+    mirror::paths(&mut paths);
     stage11::paths(&mut paths);
     stage13::paths(&mut paths);
     transparency::paths(&mut paths);

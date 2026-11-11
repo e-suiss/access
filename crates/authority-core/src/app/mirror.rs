@@ -10,6 +10,9 @@ use std::time::Duration;
 use access_kernel::digest::Digest;
 use tokio::sync::Notify;
 
+pub use access_store::mirror::{ExportRun, RunKind};
+pub use suiss_ledger::replica::mirror::{Frame, SignedReplicaAck};
+
 /// One declared replica: its name, the Ed25519 key its acks are signed with, its operator and
 /// whether that operator is outside the provider (CMP-21).
 #[derive(Clone, Debug, PartialEq, Eq)]
