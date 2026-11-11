@@ -1760,8 +1760,12 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         ),
         "resendRelayMessage" => (RelayUndelivered, w(false)),
         // OP-157 m.4 (a)
-        "listCaseSystems" => (ResourceKind::CaseSystems, Shape::Planned("Page")),
-        "registerCaseSystem" | "retireCaseSystem" => (ResourceKind::CaseSystems, Shape::Planned("WriteResult")),
+        "listCaseSystems" => (
+            ResourceKind::CaseSystems,
+            Shape::List(&["name", "provider", "status"]),
+        ),
+        "registerCaseSystem" => (ResourceKind::CaseSystems, CREATE),
+        "retireCaseSystem" => (ResourceKind::CaseSystems, w(false)),
         "listSupportGrants" => (ResourceKind::SupportGrants, Shape::Planned("Page")),
         "putSupportArtifactPolicy" | "putDelegatedAdmin" | "putApprovalInline" | "putApprovalBatch" => (Settings, Shape::Planned("WriteResult")),
         // OP-157 m.3 (h)

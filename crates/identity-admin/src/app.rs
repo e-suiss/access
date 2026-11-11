@@ -25,6 +25,7 @@ pub mod signal_sources;
 mod signals;
 pub mod ssh;
 mod sso;
+mod support;
 pub mod transfers;
 pub mod vault;
 pub mod workloads;
@@ -502,6 +503,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Linux(l) => linux::current(t, l).await?,
             // OP-156 m.3 (q)
             Change::Hr(h) => hr::current(t, h).await?,
+            // OP-157 m.3 (e)
+            Change::CaseSystem(c) => support::current(t, c).await?,
             Change::McpPin(p) => proxy::current_pins(t, p).await?,
             // OP-154 m.3 (j)
             Change::DcrPolicy { policy, loosens } => {
@@ -817,7 +820,6 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::SigninPolicy(_)
             | Change::SessionPolicy(_)
             | Change::ExtensionPolicy(_)
-            | Change::CaseSystem(_)
             | Change::SupportArtifactPolicy(_)
             | Change::Review(_)
             | Change::DelegatedAdmin(_)
@@ -1623,9 +1625,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     ) -> Result<Option<ClientSecret>, AdminError> {
         let mut secret = None;
         let done = match change {
+            // OP-157 m.3 (e)
+            Change::CaseSystem(c) => support::write(t, bound, c).await?,
             // OP-157 m.4 (a)
-            Change::CaseSystem(_)
-            | Change::SupportArtifactPolicy(_)
+            Change::SupportArtifactPolicy(_)
             | Change::Review(_)
             | Change::DelegatedAdmin(_)
             | Change::ApprovalInline(_)

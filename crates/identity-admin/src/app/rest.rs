@@ -3108,6 +3108,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 items: super::ssh::list(t, key).await?,
                 last: None,
             },
+            // OP-157 m.3 (e)
+            (Kind::CaseSystems, _) => Read {
+                items: super::support::list(t, key).await?,
+                last: None,
+            },
             // OP-156 m.3 (r)
             (Kind::SignalSources, _) => Read {
                 items: super::signal_sources::list(t, key).await?,
@@ -3397,8 +3402,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-157 m.4 (a)
             (Kind::Deliveries | Kind::SsoPreview, None)
             | (
-                Kind::CaseSystems
-                | Kind::SupportGrants
+                Kind::SupportGrants
                 | Kind::Reviews
                 | Kind::ReviewItems
                 | Kind::OffboardingPreviews,

@@ -387,7 +387,16 @@ fn schemas() -> Value {
         },
         "CaseSystem": {
             "type": "object",
-            "description": "A support case system: name, issuer, provider and format (OP-157 m.3 (e)); its lane names its members when it serves it.",
+            "description": "A support case system: a registered issuer of support_case Claims, which hold support Grants once the domain accepts them as predicate-input (OP-157 m.3 (e)).",
+            "required": ["name", "issuer", "provider", "format", "status", "version"],
+            "properties": {
+                "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$" },
+                "issuer": { "type": "string", "description": "The issuer Party, base64url." },
+                "provider": { "type": "string", "enum": ["zendesk", "freshdesk", "servicenow", "jira-service-management"] },
+                "format": { "type": "string", "enum": ["product-seam/v1"] },
+                "status": { "type": "string", "enum": ["live", "retired"] },
+                "version": { "type": "integer", "minimum": 1 },
+            },
         },
         "SupportGrant": {
             "type": "object",

@@ -42,13 +42,16 @@ const ADMIN: [&str; 22] = [
 ];
 
 /// The Stage 12 admin rows their lanes serve.
-const SERVED: [&str; 6] = [
+const SERVED: [&str; 9] = [
     "listBreakglassAccounts",
     "markBreakglassAccount",
     "clearBreakglassAccount",
     "listBreakglassDrills",
     "listBreakglassReviews",
     "reviewBreakglassUse",
+    "listCaseSystems",
+    "registerCaseSystem",
+    "retireCaseSystem",
 ];
 
 // OP-157 m.4 (a)

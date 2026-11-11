@@ -85,6 +85,7 @@ pub mod signals;
 pub mod ssf;
 pub mod ssh;
 pub mod status;
+pub mod support;
 pub mod tenancy;
 pub mod throttle;
 pub mod upstream;

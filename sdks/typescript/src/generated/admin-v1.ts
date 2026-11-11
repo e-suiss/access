@@ -3541,8 +3541,19 @@ export interface components {
             pending_invitations?: number;
             totals?: Record<string, never>;
         };
-        /** @description A support case system: name, issuer, provider and format (OP-157 m.3 (e)); its lane names its members when it serves it. */
-        CaseSystem: Record<string, never>;
+        /** @description A support case system: a registered issuer of support_case Claims, which hold support Grants once the domain accepts them as predicate-input (OP-157 m.3 (e)). */
+        CaseSystem: {
+            name: string;
+            /** @description The issuer Party, base64url. */
+            issuer: string;
+            /** @enum {string} */
+            provider: "zendesk" | "freshdesk" | "servicenow" | "jira-service-management";
+            /** @enum {string} */
+            format: "product-seam/v1";
+            /** @enum {string} */
+            status: "live" | "retired";
+            version: number;
+        };
         /** @description A support Grant: operator, subject, case, scope and end (OP-157 m.3 (c)); its lane names its members when it serves it. */
         SupportGrant: Record<string, never>;
         /** @description A break-glass marked account; the mark carries no authority (INV-28, OP-157 m.3 (h)). */
@@ -12753,7 +12764,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -12780,7 +12790,7 @@ export interface operations {
         };
         responses: {
             /** @description Committed: the Exercise record (TN-110). */
-            200: {
+            201: {
                 headers: {
                     "Request-Id": components["headers"]["Request-Id"];
                     "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
@@ -12798,7 +12808,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -12845,7 +12854,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
