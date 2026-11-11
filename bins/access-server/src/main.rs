@@ -2750,7 +2750,7 @@ async fn listen(
         let ((), (), p, m, i, t) = tokio::join!(
             shutdown,
             // OP-53
-            lifecycle::ready_after_jitter(|| {
+            lifecycle::ready_after(lifecycle::jitter(), || {
                 if !stopping.load(std::sync::atomic::Ordering::SeqCst) {
                     ready.ready();
                 }
@@ -2763,7 +2763,12 @@ async fn listen(
         p.and(m).and(i).and(t).map_err(|e| e.to_string())
     };
     // OP-50
-    Box::pin(lifecycle::bounded(Box::pin(served), deadline_rx)).await
+    Box::pin(lifecycle::bounded(
+        Box::pin(served),
+        deadline_rx,
+        lifecycle::SHUTDOWN,
+    ))
+    .await
 }
 
 /// The port of the realms' public origin, from `identity.realm_base`; none for 443 (OP-155
