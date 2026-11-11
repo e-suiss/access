@@ -31,6 +31,19 @@ CREATE TRIGGER append_only_truncate BEFORE TRUNCATE ON access.realm_governors
   FOR EACH STATEMENT EXECUTE FUNCTION access.reject_mutation();
 GRANT SELECT, INSERT ON access.realm_governors TO access_app;
 
+-- OP-158 m.3 (o): the domains that govern or governed one tenant's realms in this cell, for a silo
+-- move
+CREATE FUNCTION access.tenant_domains(t uuid) RETURNS SETOF bytea
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog AS $$
+  SELECT d FROM (
+    SELECT r.governing_domain_id AS d, r.created_at AS at FROM access.realms r WHERE r.tenant_id = t
+    UNION
+    SELECT g.domain_id, g.created_at FROM access.realm_governors g WHERE g.tenant_id = t
+  ) x GROUP BY d ORDER BY min(at), d
+$$;
+REVOKE ALL ON FUNCTION access.tenant_domains(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION access.tenant_domains(uuid) TO access_app;
+
 CREATE FUNCTION access.realm_governed() RETURNS trigger
   LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
 BEGIN

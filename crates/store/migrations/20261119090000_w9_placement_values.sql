@@ -16,21 +16,22 @@ $$;
 REVOKE ALL ON FUNCTION access.placement_cell(text, bytea) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION access.placement_cell(text, bytea) TO access_app, access_router;
 
--- OP-158 m.3 (o): the tenant of a domain this cell holds, for a placement or a rehome target
+-- OP-158 m.3 (o): the tenant of a domain this cell holds, for a placement or a rehome target; the
+-- domain scope is set for the one read and restored on return
 CREATE FUNCTION access.domain_tenant(d bytea) RETURNS uuid
-  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog AS $$
-  SELECT a.tenant_id FROM access.authority_domain a WHERE a.domain_id = d
+  LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog AS $$
+DECLARE
+  t uuid;
+  prev text := current_setting('app.domain_id', true);
+BEGIN
+  PERFORM set_config('app.domain_id', encode(d, 'hex'), true);
+  SELECT a.tenant_id INTO t FROM access.authority_domain a WHERE a.domain_id = d;
+  PERFORM set_config('app.domain_id', coalesce(prev, ''), true);
+  RETURN t;
+END
 $$;
 REVOKE ALL ON FUNCTION access.domain_tenant(bytea) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION access.domain_tenant(bytea) TO access_app;
-
--- OP-158 m.3 (o): the domains of one tenant in this cell, for a silo move
-CREATE FUNCTION access.tenant_domains(t uuid) RETURNS SETOF bytea
-  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog AS $$
-  SELECT a.domain_id FROM access.authority_domain a WHERE a.tenant_id = t ORDER BY a.created_at, a.domain_id
-$$;
-REVOKE ALL ON FUNCTION access.tenant_domains(uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION access.tenant_domains(uuid) TO access_app;
 
 -- OP-158 m.3 (o), (p): this cell as its configuration declares it
 CREATE TABLE access_ops.cell_profile (
