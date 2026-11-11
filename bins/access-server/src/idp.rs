@@ -1206,6 +1206,7 @@ pub(crate) mod federation;
 mod linux;
 mod one;
 mod ssh;
+mod support;
 pub(crate) mod vault;
 
 #[cfg(test)]

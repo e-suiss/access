@@ -14,6 +14,7 @@ pub mod projections;
 pub mod saml;
 pub mod signals;
 pub mod ssh;
+pub mod support;
 
 #[cfg(test)]
 pub(crate) fn block_on<F: std::future::Future>(f: F) -> F::Output {
