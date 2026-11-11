@@ -280,7 +280,7 @@ async fn a_campaign_shows_each_manager_its_own_team_and_writes_no_authority() {
     // IDP-39 (3)
     assert_eq!(items(&w, at, "q4", ALICE).await, [xavi.grant]);
     assert_eq!(items(&w, at, "q4", BOB).await, [yara.grant]);
-    assert!(items(&w, at, "q4", XAVI).await.is_empty());
+    assert_eq!(items(&w, at, "q4", XAVI).await, Vec::<Id>::new());
     let everyone = items(&w, at, "q4", ROOT).await;
     for g in [alice.grant, bob.grant, xavi.grant, yara.grant] {
         assert!(everyone.contains(&g), "the root roots the anchor");
@@ -361,7 +361,7 @@ async fn a_campaign_shows_each_manager_its_own_team_and_writes_no_authority() {
             .await
             .unwrap(),
     );
-    assert!(items(&w, at, "q4", ALICE).await.is_empty());
+    assert_eq!(items(&w, at, "q4", ALICE).await, Vec::<Id>::new());
     assert_eq!(items(&w, at, "q4", BOB).await, [yara.grant]);
 
     // OP-157 m.3 (w)

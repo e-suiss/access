@@ -174,7 +174,7 @@ pub fn marks(
 ) -> Option<Hygiene> {
     let a = &state.content.authority;
     let until = a.constraints.validity.until;
-    let expiring = until > now && until - now <= EXPIRING_DAYS.saturating_mul(DAY_MS);
+    let expiring = until > now && until.saturating_sub(now) <= EXPIRING_DAYS.saturating_mul(DAY_MS);
     let old =
         issued_at.is_some_and(|t| now.saturating_sub(t) >= UNUSED_DAYS.saturating_mul(DAY_MS));
     let unused = old && covered && !used;

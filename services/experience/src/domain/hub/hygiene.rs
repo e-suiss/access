@@ -67,6 +67,6 @@ mod tests {
         );
         assert!(r.iter().all(|r| r.suggestion == SUGGESTION && r.derived));
         assert_eq!(r[0].grants, ["g1", "g2"]);
-        assert!(rows(&inv[..1], ("d", None)).is_empty());
+        assert_eq!(rows(&inv[..1], ("d", None)), Vec::new());
     }
 }

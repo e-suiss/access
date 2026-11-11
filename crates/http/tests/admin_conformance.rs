@@ -172,7 +172,7 @@ fn every_management_write_answers_with_its_committed_exercise() {
             if matches!(id, "draftIntent" | "draftPlatformIntent") {
                 continue;
             }
-            // OP-157 m.3 (w): a keep records review.kept and is no Exercise
+            // OP-157 m.3 (w)
             if id == "keepReviewItem" {
                 continue;
             }

@@ -95,7 +95,13 @@ pub(crate) async fn write(
 pub fn next_run(first_ms: u64, period_days: u32, now: u64) -> u64 {
     let period = u64::from(period_days).saturating_mul(DAY_MS).max(1);
     let elapsed = now.saturating_sub(first_ms);
-    first_ms.saturating_add((elapsed / period).saturating_add(1).saturating_mul(period))
+    first_ms.saturating_add(
+        elapsed
+            .checked_div(period)
+            .unwrap_or(0)
+            .saturating_add(1)
+            .saturating_mul(period),
+    )
 }
 
 fn schedule_view(r: &ReviewScheduleRow, now: u64) -> Json {

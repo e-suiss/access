@@ -788,11 +788,10 @@ fn body_of(row: &Route) -> &'static str {
     match (row.operation_id, spec(row.operation_id)) {
         ("getPlatformSurface" | "getRealmSurface", _) => "SurfaceRoot",
         (_, Some((_, Shape::Planned(name)))) => name,
-        (_, Some((_, Shape::List(_)))) => "Page",
+        (_, Some((_, Shape::List(_) | Shape::ReviewItems))) => "Page",
         (_, Some((_, Shape::Draft))) => "IntentDraft",
         (_, Some((_, Shape::Write { .. } | Shape::Offboarding))) => "WriteResult",
         // OP-157 m.3 (w)
-        (_, Some((_, Shape::ReviewItems))) => "Page",
         (_, Some((_, Shape::ReviewKeep))) => "ReviewItem",
         (_, Some((kind, Shape::Get))) => match kind {
             ResourceKind::Clients => "Client",
@@ -852,6 +851,14 @@ fn path_params(path: &str) -> Vec<Value> {
             })
         })
         .collect()
+}
+
+fn takes_write_body(shape: &super::realm::Shape) -> bool {
+    use super::realm::Shape;
+    matches!(
+        shape,
+        Shape::Write { .. } | Shape::Offboarding | Shape::ReviewKeep
+    )
 }
 
 fn operation(row: &Route) -> Value {
@@ -927,15 +934,7 @@ fn operation(row: &Route) -> Value {
     ) {
         (Some((_, super::realm::Shape::Draft)), _)
         | (_, Some((_, super::platform::Shape::Draft))) => Some("DraftRequest"),
-        (
-            Some((
-                _,
-                super::realm::Shape::Write { .. }
-                | super::realm::Shape::Offboarding
-                | super::realm::Shape::ReviewKeep,
-            )),
-            _,
-        ) => Some("WriteBody"),
+        (Some((_, shape)), _) if takes_write_body(&shape) => Some("WriteBody"),
         (Some((_, super::realm::Shape::Planned(_))), _) if write => Some("WriteBody"),
         (_, Some((super::ports::PlatformKind::Tenants, super::platform::Shape::Create))) => {
             Some("TenantCreate")
