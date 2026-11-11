@@ -8,8 +8,13 @@ use access_kernel::model::PurposeRef;
 
 use super::*;
 
-/// `actor`'s own meta-Exercise of `payload` on `basis`: whether it committed.
-async fn committed(s: &Seam, actor: &Actor, basis: ExerciseBasis, payload: Payload) -> bool {
+/// `actor`'s own meta-Exercise of `payload` on `basis`: the plane's verdict.
+async fn verdict(
+    s: &Seam,
+    actor: &Actor,
+    basis: ExerciseBasis,
+    payload: Payload,
+) -> Result<Verdict, Unavailable> {
     let now = server_time(&s.w.db.app).await.unwrap();
     let validity = Window {
         from: now - 60_000,
@@ -51,7 +56,15 @@ async fn committed(s: &Seam, actor: &Actor, basis: ExerciseBasis, payload: Paylo
     ))
     .await;
     schedule(&s.signer);
-    matches!(verdict, Ok(Verdict::Committed(_)))
+    verdict
+}
+
+/// Whether `actor`'s own meta-Exercise of `payload` on `basis` committed.
+async fn committed(s: &Seam, actor: &Actor, basis: ExerciseBasis, payload: Payload) -> bool {
+    matches!(
+        verdict(s, actor, basis, payload).await,
+        Ok(Verdict::Committed(_))
+    )
 }
 
 fn hold(action: &ActionRef, account: &str, purpose: Option<&str>) -> IntentEnvelope {
@@ -251,4 +264,44 @@ async fn a_twins_court_order_and_ownership_change_act_only_through_the_grants_wr
         "nor does a Party that is not the root"
     );
     s.only_public();
+}
+
+// C26, X5, X20, §8.17.9.5, §12.5.2, OP-157 m.3 (u), Ek B 5558
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_first_admins_quorum_request_waits_and_access_keeps_no_queue() {
+    let s = Seam::open("seam-quorum", "pay").await;
+    let (first, second) = (s.actor().await, s.actor().await);
+    let (exercise, _) = s
+        .root(Payload::AnchorCreate {
+            scope: meta::AnchorScope::Resource(structural("pay.instrument", &[])),
+            root: Root::Joint {
+                parties: BTreeSet::from([first.party, second.party]),
+                k: 2,
+            },
+            root_terms: BTreeSet::new(),
+        })
+        .await;
+    let joint = meta::object_id(&exercise, kind::ANCHOR, 0);
+    let answer = verdict(
+        &s,
+        &first,
+        ExerciseBasis::Anchor(joint),
+        Payload::AnchorCreate {
+            scope: meta::AnchorScope::Resource(structural("pay.instrument", &["eu"])),
+            root: Root::Sole(first.party),
+            root_terms: BTreeSet::new(),
+        },
+    )
+    .await
+    .unwrap();
+    match answer {
+        Verdict::NotAllowed { decision, .. } => {
+            assert_eq!(
+                decision.outcome,
+                access_kernel::combinator::Outcome::RequireAction,
+                "{decision:?}"
+            );
+        }
+        other => panic!("{other:?}"),
+    }
 }
