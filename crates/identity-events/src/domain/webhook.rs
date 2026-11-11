@@ -315,7 +315,8 @@ mod tests {
         // OP-158 m.3 (cc)
         assert!(event_names(&[String::from("domain-handover")]).is_err());
         // OP-158 m.3 (m), Ek B 5883
-        assert!(event_names(&[String::from("domain-recovered")]).is_ok());
+        assert!(crate::domain::catalog::subscribable("domain-recovered"));
+        assert!(event_names(&[String::from("domain-recovered")]).is_err());
         // OP-157 m.3 (aa)
         assert!(event_names(&[String::from("proxy.registered")]).is_err());
         // OP-157 m.3 (h)
