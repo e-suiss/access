@@ -193,6 +193,8 @@ export function Ciba() {
           state: flowState,
         }),
       );
+      // OP-157 m.3 (l)
+      if (typeof started.flow !== "string") throw new NotSigned("not approvable");
       pushed.current = { uri: push.request_uri, state: flowState };
       setState({ phase: "render", preview, started });
     } catch {

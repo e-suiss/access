@@ -15,7 +15,28 @@
     ],
     "reason": "The customer reported that the parcel arrived damaged.",
     "tier": 1,
-    "expires_at": "2026-01-01T00:05:00Z"
+    "expires_at": "2026-01-01T00:05:00Z",
+    "capacity": "You approve as: an approver for Acme",
+    "still_needed": [
+      "Still needed: 1 more · not the requester · a different person"
+    ],
+    "does": {
+      "title": "What this does",
+      "lines": [
+        "Records your approval. Access then re-checks the request.",
+        "If it is allowed, shop carries it out."
+      ]
+    },
+    "does_not": {
+      "title": "What this doesn't do",
+      "lines": [
+        "Approving meets this one request only and grants nothing else.",
+        "It doesn't give anyone new authority."
+      ]
+    },
+    "assurance_action": "Confirm with your passkey",
+    "requester_note": "Requester's note",
+    "approvable": true
   },
   "options": {
     "challenge": "TU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU0",

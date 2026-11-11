@@ -5,16 +5,25 @@
 //! commits the contribution. The smallest hosted page that does it lives here as well; visual
 //! work is Stage 8. Nothing here grants authority: the approval meets a requirement (INV-16).
 
-use access_kernel::combinator::Capacity;
+use std::collections::{BTreeMap, BTreeSet};
+
+use access_internal_api::approvals::Contributed;
+use access_kernel::codec::Canonical;
+use access_kernel::combinator::{Capacity, Unmet};
 use access_kernel::digest::Digest;
+use access_kernel::intent::{IntentEnvelope, intent_digest};
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_kernel::meta::{ExerciseBasis, HoldingRef};
-use access_kernel::model::{Id, Window};
+use access_kernel::model::{Id, Independence, ProofKind, Window};
+use access_kernel::render::Render;
+use access_kernel::schema::Reversibility;
+use access_kernel::tier::Tier;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use suiss_crypto::digest::context_digest;
 
 use super::frontend::{REQUEST_URI_PREFIX, rfc3339, unix_ms};
+use super::message::TextId;
 use super::schema::{object, r};
 
 /// `POST`: a coordinator pushes a request for the surface (XI-7: a short-lived copy).
@@ -25,6 +34,9 @@ pub const FLOWS_PATH: &str = "/v1/approve/flows";
 pub const FLOW_PATH: &str = "/v1/approve/flows/{flow}";
 /// `GET`: the page's script.
 pub const APP_PATH: &str = "/v1/approve/app.js";
+/// `GET`: the MCP authorization server's consent step, sent on to the Approval Surface;
+/// `POST` answers 405 (§11.4.5, §11.6, OP-157 m.3 (l)).
+pub const CONSENT_PATH: &str = "/consent";
 
 /// The conformance profile this surface reports in the statement (§9.14 `surface`).
 pub const SURFACE_PROFILE: &str = "suiss-approval-surface";
@@ -108,6 +120,29 @@ pub struct ApprovalPush {
     pub request: Value,
     /// The pre-signed contribution.
     pub contribution: ContributionEnvelope,
+    /// The intent as the decision point evaluated it, base64url of its dCBOR: needed with
+    /// `body`, so the surface reads the authority-opaque digests the intent digest binds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent: Option<String>,
+    /// Authority-opaque bodies the approver must see, base64url, by parameter name (§8.17.6.2,
+    /// OP-157 m.3 (l)): each must match the intent's opaque digest or nothing can be approved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<BTreeMap<String, String>>,
+}
+
+/// What the surface keeps of a push beside the request (XI-7): the contribution, and the
+/// intent and bodies when the coordinator sent them; dropped with the push.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Kept {
+    /// The pre-signed contribution.
+    pub contribution: ContributionEnvelope,
+    /// As [`ApprovalPush::intent`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intent: Option<String>,
+    /// As [`ApprovalPush::body`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<BTreeMap<String, String>>,
 }
 
 /// A pushed request.
@@ -158,18 +193,65 @@ pub struct RenderView {
     pub tier: u8,
     /// When the statement expires, RFC 3339 (§13.7.3 "AAS `expires_at`").
     pub expires_at: String,
+    /// "You approve as: …" (OP-157 m.3 (l), §8.17.6.1).
+    pub capacity: String,
+    /// The requirement lines still open, "Still needed: 1 more · not the requester · a
+    /// different person" (§8.17.6.4); never the word "independent".
+    pub still_needed: Vec<String>,
+    /// "These count as one approval" when one Party approved twice, or is about to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub counts_as_one: Option<String>,
+    /// What approving does, from the effect class and reversibility.
+    pub does: Section,
+    /// What approving doesn't do.
+    pub does_not: Section,
+    /// The concrete act the assurance asks for (§8.17.6.3): "Confirm with your passkey".
+    pub assurance_action: String,
+    /// The heading the requester's reason is shown under, second to the render (E32).
+    pub requester_note: String,
+    /// Authority-opaque bodies, each matched against the intent's digest (§8.17.6.2).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bodies: Vec<BodyView>,
+    /// Whether this viewer can approve here; otherwise `blocked` says why and there is no
+    /// button.
+    pub approvable: bool,
+    /// Why it can't be approved here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked: Option<String>,
+}
+
+/// A titled list of lines.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Section {
+    /// The heading.
+    pub title: String,
+    /// The lines.
+    pub lines: Vec<String>,
+}
+
+/// An authority-opaque body the coordinator sent, shown after its digest matched (§8.17.6.2).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BodyView {
+    /// The opaque parameter.
+    pub name: String,
+    /// Its text, or its size when it is not text.
+    pub text: String,
 }
 
 /// A started flow.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ApprovalStarted {
-    /// The flow handle.
-    pub flow: String,
+    /// The flow handle; absent when the viewer can't approve here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flow: Option<String>,
     /// What to show.
     pub render: RenderView,
-    /// `PublicKeyCredentialRequestOptionsJSON`; its challenge is H(AAS).
-    pub options: Value,
+    /// `PublicKeyCredentialRequestOptionsJSON`; its challenge is H(AAS). Absent with `flow`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options: Option<Value>,
     /// Secure Payment Confirmation's request data, from the canonical render, when the realm
     /// decided `idp.realm.spc` and the request is a payment (OP-156 m.3 (g)).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -449,6 +531,280 @@ pub fn cooling_text(available_ms: u64) -> String {
     )
 }
 
+/// Digest context of an authority-opaque body (§9.14.2 body digest rule, P30, OP-157 m.3 (l)):
+/// the raw bytes, as the domain computed `intent.opaque[name]`.
+pub const BODY_DIGEST_CONTEXT: &str = "access/opaque-body/v1";
+
+/// Largest authority-opaque body the surface shows, in bytes.
+pub const MAX_BODY_BYTES: usize = 32 * 1024;
+
+/// The digest an authority-opaque body must have.
+#[must_use]
+pub fn body_digest(body: &[u8]) -> Digest {
+    Digest(context_digest(BODY_DIGEST_CONTEXT, body).0)
+}
+
+/// A text with its placeholders filled (TN-131: plain text, no markup).
+#[must_use]
+pub fn say(id: TextId, args: &[(&str, &str)]) -> String {
+    let mut text = String::from(id.default_text());
+    for (name, value) in args {
+        text = text.replace(&format!("{{ ${name} }}"), value);
+    }
+    text
+}
+
+/// Why pushed bodies do not match the intent (PI-17).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("approval-body-mismatch")]
+pub struct BodyMismatch;
+
+/// The bodies the coordinator sent, each checked against the intent's authority-opaque digest
+/// (§8.17.6.2, PI-17, OP-157 m.3 (l)): the intent must decode and have `target` as its digest,
+/// and every body must be named in `intent.opaque` with the digest of its bytes. Access keeps
+/// neither past the push (E26).
+///
+/// # Errors
+/// [`BodyMismatch`].
+pub fn bodies(
+    intent: Option<&str>,
+    body: Option<&BTreeMap<String, String>>,
+    target: &Digest,
+) -> Result<Vec<BodyView>, BodyMismatch> {
+    let Some(body) = body.filter(|b| !b.is_empty()) else {
+        return Ok(Vec::new());
+    };
+    let envelope = intent
+        .and_then(|i| b64url_decode(i).ok())
+        .and_then(|b| suiss_crypto::dcbor::decode(&b, suiss_crypto::dcbor::Limits::CEILING).ok())
+        .and_then(|v| IntentEnvelope::from_value(&v).ok())
+        .ok_or(BodyMismatch)?;
+    if intent_digest(&envelope).map_err(|_| BodyMismatch)? != *target {
+        return Err(BodyMismatch);
+    }
+    body.iter()
+        .map(|(name, b64)| {
+            let bytes = b64url_decode(b64)
+                .ok()
+                .filter(|b| b.len() <= MAX_BODY_BYTES)
+                .ok_or(BodyMismatch)?;
+            if envelope.opaque.get(name) != Some(&body_digest(&bytes)) {
+                return Err(BodyMismatch);
+            }
+            let text = String::from_utf8(bytes)
+                .ok()
+                .filter(|t| !t.chars().any(|c| c.is_control() && c != '\n' && c != '\t'))
+                .unwrap_or_else(|| format!("{} bytes", b64url_decode(b64).map_or(0, |b| b.len())));
+            Ok(BodyView {
+                name: name.clone(),
+                text,
+            })
+        })
+        .collect()
+}
+
+/// Whether the render can be shown faithfully for the pushed request (§8.17.6.2, E10): it is
+/// the decision point's render of the target, from the Action Schema the request names.
+#[must_use]
+pub fn faithful(shown: &Render, request: &Value, target: &Digest) -> bool {
+    let schema = request
+        .get("action")
+        .and_then(|a| b64(a.get("schema"), 32))
+        .and_then(|b| <[u8; 32]>::try_from(b).ok());
+    shown.intent == *target && schema == Some(shown.schema.0)
+}
+
+/// The capacity line (OP-157 m.3 (l), §8.17.6.1): what the approver's basis makes it.
+#[must_use]
+pub fn capacity_text(basis: &ExerciseBasis, class: &str, realm: &str) -> String {
+    let role = match (basis, class) {
+        (ExerciseBasis::Anchor(_), _) => String::from("yourself, on your own account"),
+        (ExerciseBasis::Public(_), _) => format!("anyone {realm} lets approve"),
+        (ExerciseBasis::Holding(_), DEFAULT_CLASS) => format!("an approver for {realm}"),
+        (ExerciseBasis::Holding(_), c) => format!("a {c} contributor for {realm}"),
+    };
+    say(TextId::ApprovalCapacity, &[("capacity", &role)])
+}
+
+/// The words of a term's independence, never "independent" (§8.17.6.3, SEC10).
+fn independence_words(independence: Independence) -> Vec<TextId> {
+    match independence {
+        Independence::None => Vec::new(),
+        Independence::DistinctParty | Independence::DistinctIssuer => vec![
+            TextId::ApprovalNotRequester,
+            TextId::ApprovalDifferentPerson,
+        ],
+        Independence::DistinctInstance => vec![
+            TextId::ApprovalNotRequester,
+            TextId::ApprovalDifferentDevice,
+        ],
+        Independence::DistinctSurface => {
+            vec![TextId::ApprovalNotRequester, TextId::ApprovalDifferentApp]
+        }
+    }
+}
+
+/// What one counted contribution is keyed by under a term's independence: one per Party,
+/// Instance, or each on its own; a surface path is not recorded, so none counts (OP-157 m.8
+/// (l)).
+fn counted_key(c: &Contributed, independence: Independence) -> Option<[u8; 17]> {
+    let mut k = [0; 17];
+    let (tag, id) = match independence {
+        Independence::None | Independence::DistinctSurface => return None,
+        Independence::DistinctParty | Independence::DistinctIssuer => (1, c.party),
+        Independence::DistinctInstance => (2, c.instance),
+    };
+    k[0] = tag;
+    k[1..].copy_from_slice(&id.0);
+    Some(k)
+}
+
+/// The quorum lines of a waiting approval (§8.17.6.4, L13, OP-157 m.3 (l)).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Quorum {
+    /// "Still needed: …" per open contribution term.
+    pub lines: Vec<String>,
+    /// Whether one Party's approvals count once here: it approved twice, or the viewer already
+    /// approved.
+    pub counts_as_one: bool,
+}
+
+/// The quorum of the contribution terms of `class` the decision left unmet, given what was
+/// recorded since (`counted` false counts nothing recorded): the same Party twice counts once
+/// under a distinct-person term.
+#[must_use]
+pub fn quorum(
+    unmet: &[Unmet],
+    contributed: &[Contributed],
+    counted: bool,
+    class: &str,
+    viewer: &Id,
+) -> Quorum {
+    let mut out = Quorum::default();
+    for u in unmet {
+        let term = &u.term;
+        if term.proof_kind != ProofKind::Contribution || term.class != class {
+            continue;
+        }
+        let mine: Vec<&Contributed> = contributed
+            .iter()
+            .filter(|c| counted && c.class == term.class)
+            .collect();
+        let done = if term.independence == Independence::None {
+            u64::try_from(mine.len()).unwrap_or(u64::MAX)
+        } else {
+            let keys: BTreeSet<[u8; 17]> = mine
+                .iter()
+                .filter_map(|c| counted_key(c, term.independence))
+                .collect();
+            u64::try_from(keys.len()).unwrap_or(u64::MAX)
+        };
+        let parties: BTreeSet<Id> = mine.iter().map(|c| c.party).collect();
+        if matches!(
+            term.independence,
+            Independence::DistinctParty | Independence::DistinctIssuer
+        ) && (parties.len() < mine.len() || parties.contains(viewer))
+        {
+            out.counts_as_one = true;
+        }
+        let left = u.missing.saturating_sub(done);
+        if left == 0 {
+            continue;
+        }
+        let more = left.to_string();
+        let mut parts = vec![say(TextId::ApprovalMore, &[("count", &more)])];
+        parts.extend(
+            independence_words(term.independence)
+                .into_iter()
+                .map(|t| String::from(t.default_text())),
+        );
+        out.lines.push(say(
+            TextId::ApprovalStillNeeded,
+            &[("needed", &parts.join(" · "))],
+        ));
+    }
+    out
+}
+
+/// The concrete act the approval's assurance asks for (§8.17.6.3, OP-157 m.3 (l)): a security
+/// key when an open term asks for a key that is not synced, else a passkey.
+#[must_use]
+pub fn assurance_action(unmet: &[Unmet]) -> String {
+    let hardware = unmet.iter().any(|u| {
+        u.term.assurance.get(access_kernel::requirement::SYNCED) == Some(&0)
+            || u.term
+                .assurance
+                .get(access_kernel::assurance::HARDWARE_BOUND)
+                .is_some_and(|f| *f >= 1)
+    });
+    String::from(
+        if hardware {
+            TextId::ApprovalConfirmSecurityKey
+        } else {
+            TextId::ApprovalConfirmPasskey
+        }
+        .default_text(),
+    )
+}
+
+/// What approving does and doesn't do, from the render's effect class and reversibility
+/// (OP-157 m.3 (l), X29): approving records a contribution; Access re-checks the request; the
+/// domain carries it out.
+#[must_use]
+pub fn effect(shown: Option<&Render>, tier: Tier) -> (Section, Section) {
+    let effecting = shown.is_some_and(|r| {
+        r.reversibility.is_some()
+            || r.fields.iter().any(|f| {
+                f.material
+                    && ![
+                        access_kernel::render::ACTION,
+                        access_kernel::render::RESOURCE,
+                        access_kernel::render::RECIPIENT,
+                        access_kernel::render::VALIDITY,
+                    ]
+                    .contains(&f.name.as_str())
+            })
+    });
+    let mut does = vec![String::from(
+        "Records your approval. Access then re-checks the request.",
+    )];
+    if effecting {
+        let by = shown
+            .and_then(|r| r.fields.first())
+            .and_then(|f| f.text.split('/').next())
+            .unwrap_or("the requesting service");
+        does.push(format!("If it is allowed, {by} carries it out."));
+    }
+    match shown.and_then(|r| r.reversibility) {
+        Some(Reversibility::Reversible) => {
+            does.push(String::from(TextId::ApprovalReversible.default_text()));
+        }
+        Some(Reversibility::Irreversible) => {
+            does.push(String::from(TextId::ApprovalIrreversible.default_text()));
+        }
+        Some(Reversibility::Compensable) => {
+            does.push(String::from("It can't be undone, only offset afterwards."));
+        }
+        None if tier >= Tier::Ct3 => {
+            does.push(String::from(TextId::ApprovalIrreversible.default_text()));
+        }
+        None => {}
+    }
+    (
+        Section {
+            title: String::from(TextId::ApprovalDoes.default_text()),
+            lines: does,
+        },
+        Section {
+            title: String::from(TextId::ApprovalDoesNot.default_text()),
+            lines: vec![
+                String::from("Approving meets this one request only and grants nothing else."),
+                String::from("It doesn't give anyone new authority."),
+            ],
+        },
+    )
+}
+
 /// The page (OP-150 m.3 (r)): one element the script fills. Its script is [`PAGE_JS`] at
 /// [`APP_PATH`], so the hosted login's CSP (`script-src 'self'`) holds.
 pub const PAGE_HTML: &str = "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Approve</title>\n</head>\n<body>\n<main id=\"approve\"><p>Loading the request…</p></main>\n<script src=\"/v1/approve/app.js\"></script>\n</body>\n</html>\n";
@@ -459,6 +815,8 @@ pub const PAGE_HTML: &str = "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta 
 pub const PAGE_JS: &str = r#"(async () => {
   const q = new URLSearchParams(location.search);
   const el = (tag, text) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; return e; };
+  const list = (lines) => { const ul = el("ul"); for (const line of lines) ul.append(el("li", line)); return ul; };
+  const section = (cls, s) => { const e = el("section"); e.className = cls; e.append(el("h2", s.title), list(s.lines)); return e; };
   const root = document.getElementById("approve");
   const say = (text) => root.replaceChildren(el("p", text));
   const headers = () => ({ "content-type": "application/json", "idempotency-key": crypto.randomUUID() });
@@ -467,11 +825,20 @@ pub const PAGE_JS: &str = r#"(async () => {
   if (started.status === 401) { say("Sign in first, then open this request again."); return; }
   const s = await started.json().catch(() => ({}));
   if (!started.ok) { say(s.title || "This request cannot be approved."); return; }
-  const list = el("dl");
-  for (const f of s.render.fields) { const dd = el("dd", f.text); if (f.material) dd.className = "material"; list.append(el("dt", f.name), dd); }
-  const button = el("button", "Approve with your passkey");
-  root.replaceChildren(el("h1", "Approve this request?"), list, el("p", s.render.reason),
-    el("p", "Approving meets this one request only and grants nothing else. The statement expires at " + s.render.expires_at + "."), button);
+  const v = s.render;
+  const fields = el("dl"); fields.className = "render";
+  for (const f of v.fields) { const dd = el("dd", f.text); if (f.material) dd.className = "material"; fields.append(el("dt", f.name), dd); }
+  const parts = [el("h1", "Approve this request?"), fields];
+  if (v.bodies && v.bodies.length) { const b = el("dl"); b.className = "bodies"; for (const x of v.bodies) b.append(el("dt", x.name), el("dd", x.text)); parts.push(b); }
+  const capacity = el("p", v.capacity); capacity.className = "capacity"; parts.push(capacity);
+  if (v.still_needed.length) { const n = list(v.still_needed); n.className = "still-needed"; parts.push(n); }
+  if (v.counts_as_one) { const c = el("p", v.counts_as_one); c.className = "counts-as-one"; parts.push(c); }
+  parts.push(section("does", v.does), section("does-not", v.does_not));
+  const note = el("section"); note.className = "requester-note"; note.append(el("h2", v.requester_note), el("p", v.reason)); parts.push(note);
+  parts.push(el("p", "The statement expires at " + v.expires_at + "."));
+  if (!s.flow) { const why = el("p", v.blocked || "This request cannot be approved here."); why.className = "blocked"; why.setAttribute("role", "status"); root.replaceChildren(...parts, why); return; }
+  const button = el("button", v.assurance_action);
+  root.replaceChildren(...parts, button);
   const confirmPayment = async () => {
     const b64 = (t) => Uint8Array.from(atob(t.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
     const data = Object.assign({}, s.spc, { rpId: s.options.rpId, challenge: b64(s.options.challenge), credentialIds: s.options.allowCredentials.map((c) => b64(c.id)), timeout: s.options.timeout });
@@ -545,6 +912,12 @@ pub fn components() -> Value {
             &json!({
                 "request": { "type": "object", "description": "The typed authority request (conformance/cddl/authority-request.schema.json) with its require_action." },
                 "contribution": r("ContributionEnvelope"),
+                "intent": b64_schema("The intent envelope as the decision point evaluated it, dCBOR (kernel.cddl intent-envelope); required with body. Its digest must be require_action.intent."),
+                "body": {
+                    "type": "object",
+                    "additionalProperties": b64_schema("The authority-opaque body, at most 32 KiB."),
+                    "description": "Authority-opaque bodies the approver must see, by opaque parameter name (§8.17.6.2, OP-157 m.3 (l)). Each must hash to intent.opaque[name] under access/opaque-body/v1, or the request can't be approved; Access drops them with the push.",
+                },
             }),
             &["request", "contribution"],
         ),
@@ -572,23 +945,47 @@ pub fn components() -> Value {
             }),
             &["name", "text", "material"],
         ),
+        "Section": object(
+            &json!({
+                "title": { "type": "string" },
+                "lines": { "type": "array", "items": { "type": "string" } },
+            }),
+            &["title", "lines"],
+        ),
+        "BodyView": object(
+            &json!({
+                "name": { "type": "string", "description": "The authority-opaque parameter." },
+                "text": { "type": "string", "description": "The body as text, or its size when it is not text." },
+            }),
+            &["name", "text"],
+        ),
         "RenderView": object(
             &json!({
-                "fields": { "type": "array", "items": r("FieldView"), "description": "The render the decision point produced from the accepted Action Schema (§9.13.3); the surface shows nothing else." },
-                "reason": { "type": "string" },
+                "fields": { "type": "array", "items": r("FieldView"), "description": "The render the decision point produced from the accepted Action Schema (§9.13.3); the surface shows nothing else. Empty when it can't be shown faithfully." },
+                "reason": { "type": "string", "description": "The requester's note, shown second under requester_note (E32)." },
                 "tier": { "type": "integer", "minimum": 0, "maximum": 3 },
                 "expires_at": time_field("When the statement expires: CT1 15 min, CT2/CT3 5 min after it was built (§13.7.3)."),
+                "capacity": { "type": "string", "description": "You approve as: … (OP-157 m.3 (l))." },
+                "still_needed": { "type": "array", "items": { "type": "string" }, "description": "One line per open contribution term: how many more, not the requester, a different person, device or approval app (§8.17.6.4)." },
+                "counts_as_one": { "type": "string", "description": "Present when one Party's approvals count once here." },
+                "does": r("Section"),
+                "does_not": r("Section"),
+                "assurance_action": { "type": "string", "description": "The concrete act: Confirm with your passkey, or with your security key (§8.17.6.3)." },
+                "requester_note": { "type": "string" },
+                "bodies": { "type": "array", "items": r("BodyView") },
+                "approvable": { "type": "boolean" },
+                "blocked": { "type": "string", "description": "Why this viewer can't approve here: not shown faithfully (E10), a body that doesn't match (PI-17), or not eligible (E26)." },
             }),
-            &["fields", "reason", "tier", "expires_at"],
+            &["fields", "reason", "tier", "expires_at", "capacity", "still_needed", "does", "does_not", "assurance_action", "requester_note", "approvable"],
         ),
         "ApprovalStarted": object(
             &json!({
-                "flow": { "type": "string" },
+                "flow": { "type": "string", "description": "Absent when the viewer can't approve here; render.blocked says why." },
                 "render": r("RenderView"),
                 "options": { "type": "object", "description": "PublicKeyCredentialRequestOptionsJSON; the challenge is H(AAS) (§9.14.1 step 3). userVerification is required from CT2." },
                 "spc": { "type": "object", "description": "Secure Payment Confirmation's request data (payeeName, payeeOrigin, total, instrument) from the canonical render, when the realm decided idp.realm.spc and the request is a payment; a payment.get assertion counts only when it shows exactly these (OP-156 m.3 (g))." },
             }),
-            &["flow", "render", "options"],
+            &["render"],
         ),
         "ApprovalFinish": object(
             &json!({
@@ -670,6 +1067,7 @@ pub fn paths(paths: &mut Map<String, Value>) {
             "parameters": [idempotency()],
             "requestBody": body("ApprovalStart"),
             "responses": {
+                "200": json_response("Shown, but this viewer can't approve here: no flow is opened (render.approvable false, render.blocked says why).", "ApprovalStarted"),
                 "201": json_response("The render and the options.", "ApprovalStarted"),
                 "400": problem("invalid-approval-request, invalid-state, invalid-redirect-uri, invalid-request or approval-domain (the request's domain is not the realm's)."),
                 "401": problem("No live session (session-required)."),
@@ -826,13 +1224,269 @@ mod tests {
         assert!(text.contains("2026-01-01T00:00:00Z"));
     }
 
+    fn term(
+        class: &str,
+        count: u64,
+        independence: Independence,
+    ) -> access_kernel::model::RequirementTerm {
+        access_kernel::model::RequirementTerm {
+            proof_kind: ProofKind::Contribution,
+            class: String::from(class),
+            count,
+            binding: access_kernel::model::Binding::IntentDigest,
+            freshness_ms: None,
+            independence,
+            consumption: access_kernel::model::Consumption::SingleUse,
+            source: None,
+            assurance: BTreeMap::new(),
+        }
+    }
+
+    fn unmet(t: access_kernel::model::RequirementTerm, missing: u64) -> Unmet {
+        Unmet {
+            term: t,
+            missing,
+            position: access_kernel::combinator::Position::Anchor,
+            satisfiable_by_actor: false,
+        }
+    }
+
+    fn by(party: u8, instance: u8) -> Contributed {
+        Contributed {
+            class: String::from(DEFAULT_CLASS),
+            party: Id([party; 16]),
+            instance: Id([instance; 16]),
+            since: u64::from(instance),
+        }
+    }
+
+    // §8.17.6.4, L13, OP-157 m.3 (l), Ek B 5555
+    #[test]
+    fn the_same_party_twice_counts_as_one_approval() {
+        let open = [unmet(term("approve", 2, Independence::DistinctParty), 2)];
+        let viewer = Id([9; 16]);
+        let none = quorum(&open, &[], true, "approve", &viewer);
+        assert_eq!(
+            none.lines,
+            ["Still needed: 2 more · not the requester · a different person"]
+        );
+        assert!(!none.counts_as_one);
+        let twice = quorum(&open, &[by(1, 1), by(1, 2)], true, "approve", &viewer);
+        assert_eq!(
+            twice.lines,
+            ["Still needed: 1 more · not the requester · a different person"]
+        );
+        assert!(twice.counts_as_one);
+        let two = quorum(&open, &[by(1, 1), by(2, 2)], true, "approve", &viewer);
+        assert!(two.lines.is_empty() && !two.counts_as_one);
+        let mine = quorum(&open, &[by(9, 1)], true, "approve", &viewer);
+        assert!(mine.counts_as_one);
+        let uncounted = quorum(&open, &[by(1, 1), by(2, 2)], false, "approve", &viewer);
+        assert_eq!(uncounted.lines.len(), 1);
+        assert!(uncounted.lines[0].starts_with("Still needed: 2 more"));
+    }
+
+    // §8.17.6.3, SEC10, OP-157 m.3 (l), m.8 (l), Ek B 5557
+    #[test]
+    fn independence_is_named_in_checkable_words_only() {
+        let viewer = Id([9; 16]);
+        let device = quorum(
+            &[unmet(term("approve", 2, Independence::DistinctInstance), 2)],
+            &[by(1, 1), by(1, 1)],
+            true,
+            "approve",
+            &viewer,
+        );
+        assert_eq!(
+            device.lines,
+            ["Still needed: 1 more · not the requester · a different device"]
+        );
+        let app = quorum(
+            &[unmet(term("approve", 1, Independence::DistinctSurface), 1)],
+            &[by(1, 1)],
+            true,
+            "approve",
+            &viewer,
+        );
+        assert_eq!(
+            app.lines,
+            ["Still needed: 1 more · not the requester · a different approval app"]
+        );
+        let plain = quorum(
+            &[unmet(term("approve", 3, Independence::None), 3)],
+            &[by(1, 1), by(1, 1)],
+            true,
+            "approve",
+            &viewer,
+        );
+        assert_eq!(plain.lines, ["Still needed: 1 more"]);
+        let other = quorum(
+            &[unmet(term("review", 1, Independence::None), 1)],
+            &[],
+            true,
+            "approve",
+            &viewer,
+        );
+        assert!(other.lines.is_empty());
+        for id in TextId::ALL {
+            assert!(
+                !id.default_text().to_lowercase().contains("independent"),
+                "{id:?}"
+            );
+        }
+    }
+
+    // §8.17.6.3, OP-157 m.3 (l), Ek B 5420
+    #[test]
+    fn the_assurance_is_a_concrete_act() {
+        assert_eq!(assurance_action(&[]), "Confirm with your passkey");
+        let mut t = term("approve", 1, Independence::None);
+        t.proof_kind = ProofKind::Claim;
+        t.assurance
+            .insert(String::from(access_kernel::requirement::SYNCED), 0);
+        assert_eq!(
+            assurance_action(&[unmet(t, 1)]),
+            "Confirm with your security key"
+        );
+    }
+
+    fn shown(reversibility: Option<Reversibility>, material: bool) -> Render {
+        Render {
+            schema: Digest([1; 32]),
+            intent: Digest([4; 32]),
+            locale: String::from("en"),
+            template: None,
+            fields: vec![
+                access_kernel::render::Field {
+                    name: String::from("action"),
+                    text: String::from("shop/refund@1"),
+                    material: true,
+                },
+                access_kernel::render::Field {
+                    name: String::from("amount"),
+                    text: String::from("4200 eur_cent"),
+                    material,
+                },
+            ],
+            reversibility,
+        }
+    }
+
+    // §9.13.3, §9.14, §8.17.6.1, OP-157 m.3 (l), Ek B 5471, 5629
+    #[test]
+    fn effect_and_reversibility_come_from_the_render() {
+        let (does, does_not) = effect(
+            Some(&shown(Some(Reversibility::Irreversible), true)),
+            Tier::Ct2,
+        );
+        assert_eq!(does.title, "What this does");
+        assert!(
+            does.lines
+                .iter()
+                .any(|l| l == "If it is allowed, shop carries it out.")
+        );
+        assert!(does.lines.iter().any(|l| l == "This can't be undone"));
+        assert_eq!(does_not.title, "What this doesn't do");
+        assert!(
+            does_not
+                .lines
+                .iter()
+                .any(|l| l.contains("grants nothing else"))
+        );
+        let (none, _) = effect(Some(&shown(None, false)), Tier::Ct1);
+        assert_eq!(none.lines.len(), 1);
+        let (reversible, _) = effect(
+            Some(&shown(Some(Reversibility::Reversible), true)),
+            Tier::Ct1,
+        );
+        assert!(reversible.lines.iter().any(|l| l == "This can be undone"));
+        let basis = ExerciseBasis::Holding(HoldingRef {
+            grant: Id([1; 16]),
+            holder: Id([2; 16]),
+            since: 0,
+        });
+        assert_eq!(
+            capacity_text(&basis, "approve", "Acme"),
+            "You approve as: an approver for Acme"
+        );
+        assert_eq!(
+            capacity_text(&ExerciseBasis::Anchor(Id([3; 16])), "approve", "Acme"),
+            "You approve as: yourself, on your own account"
+        );
+    }
+
+    // §8.17.6.2, E10, OP-157 m.3 (l), Ek B 5627
+    #[test]
+    fn only_the_render_of_the_named_schema_and_target_is_faithful() {
+        let r = shown(None, true);
+        let req = request();
+        assert!(faithful(&r, &req, &Digest([4; 32])));
+        assert!(!faithful(&r, &req, &Digest([5; 32])));
+        let mut other = req.clone();
+        other["action"]["schema"] = json!(b64url_encode(&[2; 32]));
+        assert!(!faithful(&r, &other, &Digest([4; 32])));
+        let mut none = req;
+        none["action"].as_object_mut().unwrap().remove("schema");
+        assert!(!faithful(&r, &none, &Digest([4; 32])));
+    }
+
+    // PI-17, §8.17.6.2, P30, OP-157 m.3 (l), Ek B 5628
+    #[test]
+    fn a_body_must_match_the_intents_opaque_digest() {
+        let text = b"Dear supplier, the payment is on its way.";
+        let mut env = IntentEnvelope {
+            action: access_kernel::model::ActionRef {
+                namespace: String::from("mail"),
+                name: String::from("send"),
+                major: 1,
+                schema: Digest([1; 32]),
+            },
+            resources: vec![access_kernel::model::ResourceRef {
+                namespace: String::from("mail"),
+                path: vec![String::from("outbox")],
+                incarnation: 0,
+            }],
+            params: BTreeMap::new(),
+            opaque: BTreeMap::from([(String::from("body"), body_digest(text))]),
+            recipient: None,
+            purpose: None,
+            context: access_kernel::intent::ContextRefs::default(),
+            provenance: BTreeMap::new(),
+            validity: Window { from: 0, until: 1 },
+        };
+        let target = intent_digest(&env).unwrap();
+        let encoded = b64url_encode(&env.to_bytes().unwrap());
+        let sent = BTreeMap::from([(String::from("body"), b64url_encode(text))]);
+        let shown = bodies(Some(&encoded), Some(&sent), &target).unwrap();
+        assert_eq!(shown[0].text, String::from_utf8(text.to_vec()).unwrap());
+        assert_eq!(bodies(None, None, &target), Ok(Vec::new()));
+        let changed = BTreeMap::from([(String::from("body"), b64url_encode(b"Pay someone else."))]);
+        assert_eq!(
+            bodies(Some(&encoded), Some(&changed), &target),
+            Err(BodyMismatch)
+        );
+        let unnamed = BTreeMap::from([(String::from("note"), b64url_encode(text))]);
+        assert_eq!(
+            bodies(Some(&encoded), Some(&unnamed), &target),
+            Err(BodyMismatch)
+        );
+        assert_eq!(bodies(None, Some(&sent), &target), Err(BodyMismatch));
+        env.validity.until = 2;
+        let other = b64url_encode(&env.to_bytes().unwrap());
+        assert_eq!(
+            bodies(Some(&other), Some(&sent), &target),
+            Err(BodyMismatch)
+        );
+    }
+
     // OP-146 m.12 (f)
     #[test]
     fn the_page_fits_the_hosted_csp() {
         assert!(PAGE_HTML.contains("<script src=\"/v1/approve/app.js\"></script>"));
         assert!(!PAGE_HTML.contains("<script>"));
         assert!(!PAGE_JS.contains("innerHTML") && !PAGE_JS.contains("eval("));
-        assert!(PAGE_JS.contains("grants nothing else"));
+        assert!(PAGE_JS.contains("v.does_not") && PAGE_JS.contains("v.blocked"));
+        assert!(PAGE_JS.contains("v.requester_note") && !PAGE_JS.contains("ndependent"));
         assert!(PAGE_JS.contains("\"/v1/approve/flows\""));
         let d = request_digest(b"{}");
         assert_eq!(d, context_digest(REQUEST_DIGEST_CONTEXT, b"{}").0);

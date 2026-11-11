@@ -204,3 +204,5 @@ support-give_terms = { $what } · case { $case } · for { $minutes } minutes · 
 action-give_access = Give access
 support-declined = You didn't give access. Nothing changed.
 breakglass-sso_refused = This account signs in only with its own security key.
+approval-more = { $count } more
+approval-not_eligible_hidden = You can't approve this. Who can approve it isn't shown to you.

@@ -44,13 +44,15 @@ use super::{Browser, Hosted, Reply, SESSION_REQUIRED, failed, signin};
 use crate::app::credential;
 use crate::domain::approval::app_factor_message;
 use crate::domain::approval::{
-    ApprovalFinish, ApprovalPush, ApprovalStart, ContributionEnvelope, Envelope, FieldView,
-    PAGE_HTML, Pushed, RenderView, SURFACE_PROFILE, SURFACE_VERSION, cooling_text, envelope,
-    kept_until, pushed, request_digest, request_uri,
+    ApprovalFinish, ApprovalPush, ApprovalStart, Envelope, FieldView, Kept, PAGE_HTML, Pushed,
+    RenderView, SURFACE_PROFILE, SURFACE_VERSION, assurance_action, bodies, capacity_text,
+    cooling_text, effect, envelope, faithful, kept_until, pushed, quorum, request_digest,
+    request_uri, say,
 };
 use crate::domain::frontend::{
     ApprovalRequest, ApproveQuery, ApproveRejection, approval_redirect, approval_request, rfc3339,
 };
+use crate::domain::message::TextId;
 use crate::domain::spc;
 use crate::ports::{ApprovalClaims, Approvals, Kits, Messages, RealmKit};
 
@@ -70,10 +72,11 @@ const UNKNOWN: Problem = Problem {
     retry_after_s: None,
 };
 
+// L14, §8.17.6.2
 const CHANGED: Problem = Problem {
     status: 409,
     code: "approval-request-changed",
-    title: "The request changed after you approved it; nothing was approved",
+    title: "The request changed after you approved; your approval no longer applies",
     retry_after_s: None,
 };
 
@@ -173,18 +176,39 @@ async fn call(
     row.ok_or_else(|| Reply::problem(UNKNOWN))
 }
 
-fn render_view(r: &render::Render, reason: &str, tier: Tier, expires_at: u64) -> RenderView {
+/// What the page shows (§8.17.6, OP-157 m.3 (l)): the decision point's render when it can be
+/// shown faithfully, the approver's capacity, the open requirement lines, what approving does
+/// and doesn't do, the concrete act, and the requester's note second.
+fn render_view(
+    shown: Option<&render::Render>,
+    p: &Pushed,
+    env: &Envelope,
+    opening: &access_internal_api::approvals::Opening,
+    (tier, expires_at): (Tier, u64),
+    (realm, viewer): (&str, &Id),
+) -> RenderView {
+    let q = quorum(
+        &opening.unmet,
+        &opening.contributed,
+        opening.counted,
+        &env.class,
+        viewer,
+    );
+    let (does, does_not) = effect(shown, tier);
     RenderView {
-        fields: r
-            .fields
-            .iter()
-            .map(|f| FieldView {
-                name: f.name.clone(),
-                text: f.text.clone(),
-                material: f.material,
+        fields: shown
+            .map(|r| {
+                r.fields
+                    .iter()
+                    .map(|f| FieldView {
+                        name: f.name.clone(),
+                        text: f.text.clone(),
+                        material: f.material,
+                    })
+                    .collect()
             })
-            .collect(),
-        reason: String::from(reason),
+            .unwrap_or_default(),
+        reason: p.reason.clone(),
         tier: match tier {
             Tier::Ct0 => 0,
             Tier::Ct1 => 1,
@@ -192,7 +216,34 @@ fn render_view(r: &render::Render, reason: &str, tier: Tier, expires_at: u64) ->
             Tier::Ct3 => 3,
         },
         expires_at: rfc3339(expires_at),
+        capacity: capacity_text(&env.basis, &env.class, realm),
+        still_needed: q.lines,
+        counts_as_one: q
+            .counts_as_one
+            .then(|| String::from(TextId::ApprovalCountsAsOne.default_text())),
+        does,
+        does_not,
+        assurance_action: assurance_action(&opening.unmet),
+        requester_note: String::from(TextId::ApprovalRequesterNote.default_text()),
+        bodies: Vec::new(),
+        approvable: shown.is_some(),
+        blocked: None,
     }
+}
+
+/// The Grant a contribution's basis names, if it names one.
+const fn basis_grant(basis: &access_kernel::meta::ExerciseBasis) -> Option<Id> {
+    match basis {
+        access_kernel::meta::ExerciseBasis::Holding(h) => Some(h.grant),
+        _ => None,
+    }
+}
+
+/// A page that shows why the viewer can't approve here, with no flow and no button.
+fn blocked(mut view: RenderView, why: String) -> Reply {
+    view.approvable = false;
+    view.blocked = Some(why);
+    Reply::json(200, json!({ "render": view }))
 }
 
 impl<K, C, M> Hosted<K, C, M>
@@ -216,13 +267,25 @@ where
         if let Err(e) = envelope(&body.contribution) {
             return problem(400, e.code(), "The pushed contribution is not valid");
         }
+        // §8.17.6.2, OP-157 m.3 (l)
+        if body.body.as_ref().is_some_and(|b| !b.is_empty()) && body.intent.is_none() {
+            return problem(
+                400,
+                "invalid-approval-request",
+                "A body needs the intent it belongs to",
+            );
+        }
         let until = match kept_until(p.expires_at, now) {
             Ok(u) => u,
             Err(e) => return problem(400, e.code(), "The pushed request has expired"),
         };
         let (Ok(request), Ok(contribution)) = (
             serde_json::to_vec(&body.request),
-            serde_json::to_vec(&body.contribution),
+            serde_json::to_vec(&Kept {
+                contribution: body.contribution.clone(),
+                intent: body.intent.clone(),
+                body: body.body.clone(),
+            }),
         ) else {
             return problem(400, "invalid-request", "The request is not valid");
         };
@@ -321,10 +384,81 @@ where
             Ok(s) => s,
             Err(r) => return r,
         };
-        let (p, env) = match self.opened(&kit, &row).await {
+        let (p, kept, env, request) = match self.opened(&kit, &row).await {
             Ok(o) => o,
             Err(r) => return r,
         };
+        let viewer = match self.viewer_party(&kit, &session.subject).await {
+            Ok(v) => v,
+            Err(r) => return r,
+        };
+        // §9.14.5
+        let opening = match devices.approvals.opening(p.domain, p.intent).await {
+            Ok(Some(o)) => o,
+            Ok(None) => return Reply::problem(CHANGED),
+            Err(_) => return unavailable(),
+        };
+        let Some(tier) = tier_of(opening.tier) else {
+            return Reply::problem(CHANGED);
+        };
+        let shown = opening
+            .render
+            .as_deref()
+            .and_then(|bytes| render::decode(bytes).ok())
+            .filter(|r| faithful(r, &request, &p.intent));
+        let ceiling = now.saturating_add(assurance::aas_expiry_ceiling(tier));
+        let mut view = render_view(
+            shown.as_ref(),
+            &p,
+            &env,
+            &opening,
+            (tier, ceiling),
+            (&kit.name, &viewer.unwrap_or(Id([0; 16]))),
+        );
+        // E10, §8.17.6.2
+        let Some(shown) = shown else {
+            return blocked(
+                view,
+                String::from(TextId::ApprovalUnfaithful.default_text()),
+            );
+        };
+        // PI-17, §8.17.6.2
+        match bodies(kept.intent.as_deref(), kept.body.as_ref(), &p.intent) {
+            Ok(b) => view.bodies = b,
+            Err(_) => {
+                return blocked(
+                    view,
+                    String::from(TextId::ApprovalBodyMismatch.default_text()),
+                );
+            }
+        }
+        // §8.17.6.1, E26
+        let Some(viewer) = viewer else {
+            return blocked(view, say(TextId::ApprovalNotEligibleHidden, &[]));
+        };
+        match devices
+            .approvals
+            .eligibility(p.domain, &env.class, viewer, basis_grant(&env.basis))
+            .await
+        {
+            Ok(e) if e.eligible => {}
+            Ok(e) => {
+                let why = e.named.map_or_else(
+                    || say(TextId::ApprovalNotEligibleHidden, &[]),
+                    |n| {
+                        say(
+                            TextId::ApprovalNotEligible,
+                            &[
+                                ("eligible", &format!("approvers for {}", kit.name)),
+                                ("count", &n.to_string()),
+                            ],
+                        )
+                    },
+                );
+                return blocked(view, why);
+            }
+            Err(_) => return unavailable(),
+        }
         // §9.14.1
         let approver = match self.approver(&kit, &session.subject, &env.ais).await {
             Ok(Some(a)) => a,
@@ -337,21 +471,6 @@ where
             }
             Err(r) => return r,
         };
-        // §9.14.5
-        let opening = match devices.approvals.opening(p.domain, p.intent).await {
-            Ok(Some(o)) => o,
-            Ok(None) => return Reply::problem(CHANGED),
-            Err(_) => return unavailable(),
-        };
-        let (Some(tier), Some(shown)) = (
-            tier_of(opening.tier),
-            opening
-                .render
-                .as_deref()
-                .and_then(|bytes| render::decode(bytes).ok()),
-        ) else {
-            return Reply::problem(CHANGED);
-        };
         let act = statement_of(
             &p,
             &env,
@@ -361,7 +480,6 @@ where
             tier,
             now,
         );
-        let expires_at = act.expires_at;
         let (Ok(aas_bytes), Ok(statement)) = (act.to_bytes(), aas::digest(&act)) else {
             return unavailable();
         };
@@ -387,7 +505,7 @@ where
             }
             Err(_) => return unavailable(),
         }
-        let view = render_view(&shown, &p.reason, tier, expires_at);
+        view.expires_at = rfc3339(act.expires_at);
         let mut out = json!({
             "flow": b64url_encode(&row.id),
             "render": view,
@@ -403,6 +521,18 @@ where
             );
         }
         Reply::json(201, out)
+    }
+
+    /// The Party of the session's subject, if it has one.
+    async fn viewer_party(&self, kit: &RealmKit, subject: &[u8; 16]) -> Result<Option<Id>, Reply> {
+        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
+            .await
+            .map_err(|_| unavailable())?;
+        let party = idp::subject_party(&mut t, subject)
+            .await
+            .map_err(|_| unavailable())?;
+        t.commit().await.map_err(|_| unavailable())?;
+        Ok(party.map(Id))
     }
 
     /// The live session of the approver's browser.
@@ -422,15 +552,20 @@ where
         }
     }
 
-    /// The pushed request and contribution of `row`, in this realm's domain.
-    async fn opened(&self, kit: &RealmKit, row: &ApprovalRow) -> Result<(Pushed, Envelope), Reply> {
-        let (Ok(request), Ok(contribution)) = (
+    /// The pushed request, what was kept beside it and the contribution of `row`, in this
+    /// realm's domain.
+    async fn opened(
+        &self,
+        kit: &RealmKit,
+        row: &ApprovalRow,
+    ) -> Result<(Pushed, Kept, Envelope, Value), Reply> {
+        let (Ok(request), Ok(kept)) = (
             serde_json::from_slice::<Value>(&row.request),
-            serde_json::from_slice::<ContributionEnvelope>(&row.contribution),
+            serde_json::from_slice::<Kept>(&row.contribution),
         ) else {
             return Err(unavailable());
         };
-        let (Ok(p), Ok(env)) = (pushed(&request), envelope(&contribution)) else {
+        let (Ok(p), Ok(env)) = (pushed(&request), envelope(&kept.contribution)) else {
             return Err(unavailable());
         };
         let domain = governing(&self.db, kit).await?;
@@ -441,7 +576,7 @@ where
                 "The request is not in this realm's domain",
             ));
         }
-        Ok((p, env))
+        Ok((p, kept, env, request))
     }
 
     /// The approver: the session subject's active device Instance whose key signed `ais`.
@@ -574,14 +709,16 @@ where
         if let Err(r) = call(&self.db, &self.products, &kit, &query, now).await {
             return r;
         }
-        let (Ok(act_value), Ok(contribution)) = (
+        let (Ok(act_value), Ok(kept)) = (
             dcbor::decode(&aas_bytes, Limits::CEILING),
-            serde_json::from_slice::<ContributionEnvelope>(&row.contribution),
+            serde_json::from_slice::<Kept>(&row.contribution),
         ) else {
             return unavailable();
         };
-        let (Ok(act), Ok(env)) = (ApprovalAct::from_value(&act_value), envelope(&contribution))
-        else {
+        let (Ok(act), Ok(env)) = (
+            ApprovalAct::from_value(&act_value),
+            envelope(&kept.contribution),
+        ) else {
             return unavailable();
         };
         let (tier, shown) = match still_asked(devices, &act, now).await {

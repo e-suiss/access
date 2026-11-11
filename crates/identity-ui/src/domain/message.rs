@@ -561,11 +561,18 @@ pub enum TextId {
     /// V3: a break-glass account never signs in through SSO or an upstream provider (OP-157 m.3 (h)).
     #[serde(rename = "breakglass.sso_refused")]
     BreakglassSsoRefused,
+    /// V6 (OP-157 m.4 (b)): how many more approvals a term needs, before its other words.
+    #[serde(rename = "approval.more")]
+    ApprovalMore,
+    /// V6 (OP-157 m.4 (b)): the viewer is not eligible and the domain does not show it who is
+    /// (E26).
+    #[serde(rename = "approval.not_eligible_hidden")]
+    ApprovalNotEligibleHidden,
 }
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 185] = [
+    pub const ALL: [Self; 187] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -751,6 +758,8 @@ impl TextId {
         Self::GiveAccess,
         Self::SupportDeclined,
         Self::BreakglassSsoRefused,
+        Self::ApprovalMore,
+        Self::ApprovalNotEligibleHidden,
     ];
 
     /// The stable id on the wire.
@@ -943,6 +952,8 @@ impl TextId {
             Self::GiveAccess => "action.give_access",
             Self::SupportDeclined => "support.declined",
             Self::BreakglassSsoRefused => "breakglass.sso_refused",
+            Self::ApprovalMore => "approval.more",
+            Self::ApprovalNotEligibleHidden => "approval.not_eligible_hidden",
         }
     }
 
@@ -1219,6 +1230,10 @@ impl TextId {
             Self::GiveAccess => "Give access",
             Self::SupportDeclined => "You didn't give access. Nothing changed.",
             Self::BreakglassSsoRefused => "This account signs in only with its own security key.",
+            Self::ApprovalMore => "{ $count } more",
+            Self::ApprovalNotEligibleHidden => {
+                "You can't approve this. Who can approve it isn't shown to you."
+            }
         }
     }
 
@@ -1348,6 +1363,8 @@ impl TextId {
                 | Self::GiveAccess
                 | Self::SupportDeclined
                 | Self::BreakglassSsoRefused
+                | Self::ApprovalMore
+                | Self::ApprovalNotEligibleHidden
         )
     }
 }

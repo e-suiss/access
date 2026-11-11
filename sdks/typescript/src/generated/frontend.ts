@@ -365,6 +365,12 @@ export interface components {
             /** @description The typed authority request (conformance/cddl/authority-request.schema.json) with its require_action. */
             request: Record<string, never>;
             contribution: components["schemas"]["ContributionEnvelope"];
+            /** @description The intent envelope as the decision point evaluated it, dCBOR (kernel.cddl intent-envelope); required with body. Its digest must be require_action.intent. */
+            intent?: string;
+            /** @description Authority-opaque bodies the approver must see, by opaque parameter name (§8.17.6.2, OP-157 m.3 (l)). Each must hash to intent.opaque[name] under access/opaque-body/v1, or the request can't be approved; Access drops them with the push. */
+            body?: {
+                [key: string]: string;
+            };
         };
         ApprovalPushed: {
             /** @description urn:ietf:params:oauth:request_uri:… to open GET /v1/approve with. */
@@ -387,9 +393,20 @@ export interface components {
             text: string;
             material: boolean;
         };
+        Section: {
+            title: string;
+            lines: string[];
+        };
+        BodyView: {
+            /** @description The authority-opaque parameter. */
+            name: string;
+            /** @description The body as text, or its size when it is not text. */
+            text: string;
+        };
         RenderView: {
-            /** @description The render the decision point produced from the accepted Action Schema (§9.13.3); the surface shows nothing else. */
+            /** @description The render the decision point produced from the accepted Action Schema (§9.13.3); the surface shows nothing else. Empty when it can't be shown faithfully. */
             fields: components["schemas"]["FieldView"][];
+            /** @description The requester's note, shown second under requester_note (E32). */
             reason: string;
             tier: number;
             /**
@@ -397,12 +414,28 @@ export interface components {
              * @description When the statement expires: CT1 15 min, CT2/CT3 5 min after it was built (§13.7.3).
              */
             expires_at: string;
+            /** @description You approve as: … (OP-157 m.3 (l)). */
+            capacity: string;
+            /** @description One line per open contribution term: how many more, not the requester, a different person, device or approval app (§8.17.6.4). */
+            still_needed: string[];
+            /** @description Present when one Party's approvals count once here. */
+            counts_as_one?: string;
+            does: components["schemas"]["Section"];
+            does_not: components["schemas"]["Section"];
+            /** @description The concrete act: Confirm with your passkey, or with your security key (§8.17.6.3). */
+            assurance_action: string;
+            requester_note: string;
+            bodies?: components["schemas"]["BodyView"][];
+            approvable: boolean;
+            /** @description Why this viewer can't approve here: not shown faithfully (E10), a body that doesn't match (PI-17), or not eligible (E26). */
+            blocked?: string;
         };
         ApprovalStarted: {
-            flow: string;
+            /** @description Absent when the viewer can't approve here; render.blocked says why. */
+            flow?: string;
             render: components["schemas"]["RenderView"];
             /** @description PublicKeyCredentialRequestOptionsJSON; the challenge is H(AAS) (§9.14.1 step 3). userVerification is required from CT2. */
-            options: Record<string, never>;
+            options?: Record<string, never>;
             /** @description Secure Payment Confirmation's request data (payeeName, payeeOrigin, total, instrument) from the canonical render, when the realm decided idp.realm.spc and the request is a payment; a payment.get assertion counts only when it shows exactly these (OP-156 m.3 (g)). */
             spc?: Record<string, never>;
         };
@@ -938,6 +971,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Shown, but this viewer can't approve here: no flow is opened (render.approvable false, render.blocked says why). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalStarted"];
+                };
+            };
             /** @description The render and the options. */
             201: {
                 headers: {

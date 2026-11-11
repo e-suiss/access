@@ -653,6 +653,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Shown, but this viewer can't approve here: no flow is opened (render.approvable false, render.blocked says why).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalStarted"
+                }
+              }
+            }
+          },
           "201": {
             "description": "The render and the options.",
             "content": {
@@ -1326,6 +1336,20 @@
           },
           "contribution": {
             "$ref": "#/components/schemas/ContributionEnvelope"
+          },
+          "intent": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "The intent envelope as the decision point evaluated it, dCBOR (kernel.cddl intent-envelope); required with body. Its digest must be require_action.intent."
+          },
+          "body": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]*$",
+              "description": "The authority-opaque body, at most 32 KiB."
+            },
+            "description": "Authority-opaque bodies the approver must see, by opaque parameter name (§8.17.6.2, OP-157 m.3 (l)). Each must hash to intent.opaque[name] under access/opaque-body/v1, or the request can't be approved; Access drops them with the push."
           }
         }
       },
@@ -1394,6 +1418,43 @@
           }
         }
       },
+      "Section": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "lines"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "BodyView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "text"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The authority-opaque parameter."
+          },
+          "text": {
+            "type": "string",
+            "description": "The body as text, or its size when it is not text."
+          }
+        }
+      },
       "RenderView": {
         "type": "object",
         "additionalProperties": false,
@@ -1401,7 +1462,14 @@
           "fields",
           "reason",
           "tier",
-          "expires_at"
+          "expires_at",
+          "capacity",
+          "still_needed",
+          "does",
+          "does_not",
+          "assurance_action",
+          "requester_note",
+          "approvable"
         ],
         "properties": {
           "fields": {
@@ -1409,10 +1477,11 @@
             "items": {
               "$ref": "#/components/schemas/FieldView"
             },
-            "description": "The render the decision point produced from the accepted Action Schema (§9.13.3); the surface shows nothing else."
+            "description": "The render the decision point produced from the accepted Action Schema (§9.13.3); the surface shows nothing else. Empty when it can't be shown faithfully."
           },
           "reason": {
-            "type": "string"
+            "type": "string",
+            "description": "The requester's note, shown second under requester_note (E32)."
           },
           "tier": {
             "type": "integer",
@@ -1423,6 +1492,47 @@
             "type": "string",
             "format": "date-time",
             "description": "When the statement expires: CT1 15 min, CT2/CT3 5 min after it was built (§13.7.3)."
+          },
+          "capacity": {
+            "type": "string",
+            "description": "You approve as: … (OP-157 m.3 (l))."
+          },
+          "still_needed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "One line per open contribution term: how many more, not the requester, a different person, device or approval app (§8.17.6.4)."
+          },
+          "counts_as_one": {
+            "type": "string",
+            "description": "Present when one Party's approvals count once here."
+          },
+          "does": {
+            "$ref": "#/components/schemas/Section"
+          },
+          "does_not": {
+            "$ref": "#/components/schemas/Section"
+          },
+          "assurance_action": {
+            "type": "string",
+            "description": "The concrete act: Confirm with your passkey, or with your security key (§8.17.6.3)."
+          },
+          "requester_note": {
+            "type": "string"
+          },
+          "bodies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BodyView"
+            }
+          },
+          "approvable": {
+            "type": "boolean"
+          },
+          "blocked": {
+            "type": "string",
+            "description": "Why this viewer can't approve here: not shown faithfully (E10), a body that doesn't match (PI-17), or not eligible (E26)."
           }
         }
       },
@@ -1430,13 +1540,12 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "flow",
-          "render",
-          "options"
+          "render"
         ],
         "properties": {
           "flow": {
-            "type": "string"
+            "type": "string",
+            "description": "Absent when the viewer can't approve here; render.blocked says why."
           },
           "render": {
             "$ref": "#/components/schemas/RenderView"

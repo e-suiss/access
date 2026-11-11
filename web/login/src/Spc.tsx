@@ -98,7 +98,8 @@ export function Spc() {
 
   useEffect(() => {
     void call("/v1/approve/flows", call_).then(async (r) => {
-      if (r.ok) setState({ phase: "ready", started: (await r.json()) as SpcStarted });
+      // OP-157 m.3 (l)
+      if (r.status === 201) setState({ phase: "ready", started: (await r.json()) as SpcStarted });
       else setState({ phase: "failed" });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps

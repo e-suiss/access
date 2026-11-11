@@ -204,3 +204,5 @@ support-give_terms = { $what } · vaka { $case } · { $minutes } dakika · giri�
 action-give_access = Erişim ver
 support-declined = Erişim vermedin. Hiçbir şey değişmedi.
 breakglass-sso_refused = Bu hesap yalnız kendi güvenlik anahtarıyla giriş yapar.
+approval-more = { $count } onay daha
+approval-not_eligible_hidden = Bunu onaylayamazsın. Kimlerin onaylayabileceği sana gösterilmiyor.

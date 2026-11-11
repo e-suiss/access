@@ -14,7 +14,7 @@
 use access_identity_ui::domain::approval::{
     APP_PATH, ApprovalFinish, ApprovalFinished, ApprovalPush, ApprovalPushed, ApprovalStart,
     ApprovalStarted, BasisRef, ContributionEnvelope, FLOW_PATH, FLOWS_PATH, FieldView,
-    REQUESTS_PATH, RenderView,
+    REQUESTS_PATH, RenderView, Section,
 };
 use access_identity_ui::domain::frontend::{
     AUTH_CONTEXT_PATH, AuthContextIssued, AuthContextRequest, BINDINGS_PATH, CHALLENGES_PATH,
@@ -223,6 +223,8 @@ fn approval_examples_match_the_code_and_the_schema() {
                 ais: b64(0xd2, 180),
                 work_gate: None,
             },
+            intent: None,
+            body: None,
         },
     );
     example(
@@ -250,7 +252,7 @@ fn approval_examples_match_the_code_and_the_schema() {
         "ApprovalStarted",
         "approval-started",
         &ApprovalStarted {
-            flow: b64(0x3c, 16),
+            flow: Some(b64(0x3c, 16)),
             render: RenderView {
                 fields: vec![
                     FieldView {
@@ -267,14 +269,40 @@ fn approval_examples_match_the_code_and_the_schema() {
                 reason: String::from("The customer reported that the parcel arrived damaged."),
                 tier: 1,
                 expires_at: rfc3339(1_767_225_900_000),
+                capacity: String::from("You approve as: an approver for Acme"),
+                still_needed: vec![String::from(
+                    "Still needed: 1 more · not the requester · a different person",
+                )],
+                counts_as_one: None,
+                does: Section {
+                    title: String::from("What this does"),
+                    lines: vec![
+                        String::from("Records your approval. Access then re-checks the request."),
+                        String::from("If it is allowed, shop carries it out."),
+                    ],
+                },
+                does_not: Section {
+                    title: String::from("What this doesn't do"),
+                    lines: vec![
+                        String::from(
+                            "Approving meets this one request only and grants nothing else.",
+                        ),
+                        String::from("It doesn't give anyone new authority."),
+                    ],
+                },
+                assurance_action: String::from("Confirm with your passkey"),
+                requester_note: String::from("Requester's note"),
+                bodies: Vec::new(),
+                approvable: true,
+                blocked: None,
             },
-            options: json!({
+            options: Some(json!({
                 "challenge": b64(0x4d, 32),
                 "rpId": "acme.example",
                 "allowCredentials": [{ "type": "public-key", "id": b64(0x6e, 20), "transports": ["internal"] }],
                 "userVerification": "preferred",
                 "timeout": 300_000,
-            }),
+            })),
             spc: None,
         },
     );

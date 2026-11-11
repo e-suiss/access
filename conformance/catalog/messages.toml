@@ -4784,3 +4784,19 @@ surface = "mail"
 class = "notice"
 owner = "identity_plane"
 protected = false
+
+[[message]]
+key = "approval-more"
+text_id = "approval.more"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-not_eligible_hidden"
+text_id = "approval.not_eligible_hidden"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false

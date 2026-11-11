@@ -765,7 +765,9 @@
           "support.give_terms",
           "action.give_access",
           "support.declined",
-          "breakglass.sso_refused"
+          "breakglass.sso_refused",
+          "approval.more",
+          "approval.not_eligible_hidden"
         ]
       },
       "Text": {
