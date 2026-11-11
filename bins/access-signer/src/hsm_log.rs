@@ -110,7 +110,7 @@ impl Journal {
         *head = (seq.checked_add(1).ok_or(JournalError::Chain)?, hash);
         drop(head);
         tracing::info!(
-            event = AUDIT_EVENT,
+            event = "signer.hsm_used",
             purpose,
             key,
             op,

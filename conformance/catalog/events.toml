@@ -852,3 +852,11 @@ severity = "warn"
 since = "unreleased"
 fields = ["seq", "leader_unhealthy", "flags"]
 ocsf = "entity_management"
+
+[[event]]
+name = "signer.hsm_used"
+plane = "signer"
+severity = "info"
+since = "unreleased"
+fields = ["purpose", "key", "op", "caller", "count"]
+ocsf = "api_activity"

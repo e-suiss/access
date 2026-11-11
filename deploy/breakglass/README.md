@@ -77,6 +77,6 @@ trail and the alarm record it, and nothing is applied.
 ## Operator database access
 
 Operators read the database only as `access_operator`: certificate login, read-only, no table
-grant by default, and every statement and connection logged. Apply `operator-role.sql` once and
+grant by default, and every statement and connection logged. Apply `crates/store/bootstrap/operator.sql` once and
 add `pg_hba-operator.conf` and `pg_ident-operator.conf` to the cluster's configuration. There is
 no standing emergency administrator account in the database.

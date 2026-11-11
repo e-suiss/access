@@ -179,7 +179,7 @@ pub(crate) async fn tick(
     state
 }
 
-/// The role operators read the database as (`deploy/breakglass/operator-role.sql`).
+/// The role operators read the database as (`crates/store/bootstrap/operator.sql`).
 pub(crate) const OPERATOR_ROLE: &str = "access_operator";
 
 /// How often operator database sessions are looked for (PD).

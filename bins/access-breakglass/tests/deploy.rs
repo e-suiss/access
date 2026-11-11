@@ -7,7 +7,7 @@ use std::path::Path;
 fn read(name: &str) -> String {
     std::fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../deploy/breakglass")
+            .join("../..")
             .join(name),
     )
     .unwrap()
@@ -16,7 +16,7 @@ fn read(name: &str) -> String {
 // SEC19, OP-157 m.3 (k), OP-54-RL10
 #[test]
 fn sec19_operator_database_reads_are_logged_and_never_a_standing_admin() {
-    let sql = read("operator-role.sql");
+    let sql = read("crates/store/bootstrap/operator.sql");
     for setting in [
         "ALTER ROLE access_operator SET log_statement = 'all';",
         "ALTER ROLE access_operator SET log_connections = 'on';",
@@ -48,7 +48,7 @@ fn sec19_operator_database_reads_are_logged_and_never_a_standing_admin() {
     for never in ["GRANT ", "SUPERUSER LOGIN", "PASSWORD '"] {
         assert!(!upper.contains(never), "{never}");
     }
-    let hba = read("pg_hba-operator.conf");
+    let hba = read("deploy/breakglass/pg_hba-operator.conf");
     let rules: Vec<&str> = hba
         .lines()
         .filter(|l| !l.trim_start().starts_with('#') && !l.trim().is_empty())
