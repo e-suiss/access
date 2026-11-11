@@ -43,7 +43,7 @@ fn lockdown(config: &Config, hsm: &config::Hsm) -> Lockdown {
     for path in &hsm.paths {
         lockdown = lockdown.allow_read_write(path);
     }
-    // CR-29: the transcript is re-read each round; the ceremony commands replace it
+    // CR-29
     if let Some(dir) = config.ceremony.as_ref().and_then(|c| c.transcript.parent()) {
         lockdown = lockdown.allow_read(dir);
     }

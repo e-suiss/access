@@ -516,3 +516,88 @@ async fn a_protected_message_is_never_overridden() {
         dcbor::encode(&ok.to_value(), Limits::CEILING).unwrap()
     );
 }
+
+async fn records(w: &World, d: Digest) -> usize {
+    let last = u64::try_from(i64::MAX).unwrap();
+    access_store::authority::read_log(&w.db.app, &DomainId::from_bytes(d.0), 0, last)
+        .await
+        .unwrap()
+        .len()
+}
+
+// §10.1.7, MD-14, TN-118, CR-27, OP-157 m.3 (x), (gg), Ek B 5676
+#[tokio::test]
+async fn a_scheduled_rotation_writes_no_exercise_and_its_policy_is_a_reserved_exercise() {
+    use access_internal_api::idp::IdpAction;
+    let w = World::new().await;
+    let (tenant, realm, d) = w.realm("scheduled").await;
+    onboard(&w.plane, d, ROOT, ROOT_KEY).await;
+    onboard(&w.plane, d, ALICE, ALICE_KEY).await;
+    let before = records(&w, d).await;
+    let first = kids(&w, realm)[0];
+
+    let ours = SignerRealm(*realm.as_bytes());
+    let day = 86_400_000;
+    let mut rotated = Vec::new();
+    let mut now = LEAD;
+    while now <= Policy::REALM.lifetime_ms * 5 / 2 {
+        w.keys.now.store(now, std::sync::atomic::Ordering::SeqCst);
+        let report = w.keys.signer.lock().unwrap().round(now, 7);
+        assert!(report.troubled.is_empty(), "{now}");
+        rotated.extend(
+            report
+                .rotated()
+                .filter(|(r, _)| **r == ours)
+                .map(|(_, kid)| *kid),
+        );
+        now += day;
+    }
+    assert!(rotated.len() >= 2, "{rotated:?}");
+    assert_eq!(
+        access_identity_signer::service::AUDIT_EVENT_ROTATED,
+        "signer.rotated"
+    );
+    let current = kids(&w, realm);
+    assert_ne!(current[0], first);
+    assert!(rotated.contains(&current[0]));
+    assert_eq!(records(&w, d).await, before, "no Exercise, no record");
+    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    assert!(key_changes(&mut t).await.unwrap().is_empty());
+    t.commit().await.unwrap();
+
+    // MD-14, §13.7.1
+    let mut slower = Policy::REALM;
+    slower.lifetime_ms = 120 * day;
+    slower.window_ms = 240 * day;
+    let change = Change::KeyPolicy(slower);
+    assert!(change.action().reserved());
+    assert!(IdpAction::RealmKeyPolicy.schema().reserved);
+    assert!(IdpAction::RealmKeyRotate.schema().reserved);
+    let by_alice = proposal((tenant, realm), change.clone(), 1, idp_anchor(d), 48);
+    assert!(!matches!(
+        exercise(&w, &by_alice, ALICE_KEY).await,
+        Ok(Applied::Written { .. } | Applied::AlreadyWritten { .. })
+    ));
+    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    assert!(key_changes(&mut t).await.unwrap().is_empty());
+    t.commit().await.unwrap();
+    let by_root = proposal((tenant, realm), change, 2, idp_anchor(d), 48);
+    let at = records(&w, d).await;
+    written(&exercise(&w, &by_root, ROOT_KEY).await.unwrap());
+    assert!(records(&w, d).await > at);
+    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let actions: Vec<String> = key_changes(&mut t)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|c| c.action)
+        .collect();
+    t.commit().await.unwrap();
+    assert_eq!(actions, ["idp.realm.key_policy"]);
+    // OP-155 m.3 (o), OP-157 m.3 (x)
+    for a in [IdpAction::GatewayKeytabPolicy, IdpAction::SamlCertPolicy] {
+        assert!(!a.schema().reserved, "{a:?}");
+    }
+    assert!(IdpAction::GatewayKeytabEmergency.schema().reserved);
+    assert!(IdpAction::SamlCertEmergency.schema().reserved);
+}

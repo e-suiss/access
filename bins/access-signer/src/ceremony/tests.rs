@@ -108,7 +108,6 @@ fn the_binding_key_is_made_and_used_only_under_a_quorate_activation() {
     let t = dir.join("ceremony.transcript");
     let p = dir.join("permit.cbor");
 
-    // init: every member approves; two of three is not enough
     permit(&t, &p, &["roster", s(&roster)], &keys, &[0, 1]);
     assert!(matches!(
         cmd(&["sign", s(&t), s(&p)]),
@@ -145,14 +144,12 @@ fn the_binding_key_is_made_and_used_only_under_a_quorate_activation() {
     let open =
         |s: &mut Service<_, _, _>, d| s.handle(Request::Open(Box::new(template(d))), now_ms());
 
-    // a binding key operation without a permit is refused, and no key is made
     assert_eq!(
         open(service, 1),
         Response::Error(String::from("signer-binding"))
     );
     assert!(store.signer(&binding_label(&Digest([1; 32]))).is_err());
 
-    // a permit one member signed is refused
     permit(&t, &p, &["activate", "1"], &keys, &[0]);
     assert!(matches!(
         cmd(&["sign", s(&t), s(&p)]),
@@ -165,7 +162,6 @@ fn the_binding_key_is_made_and_used_only_under_a_quorate_activation() {
         Response::Error(String::from("signer-binding"))
     );
 
-    // the second approval makes it quorate; the signer adopts it and the binding key is made
     cmd(&["approve", s(&t), s(&p), "2", "ed25519", s(&keys[2])]).unwrap();
     cmd(&["sign", s(&t), s(&p)]).unwrap();
     assert!(matches!(
@@ -185,7 +181,6 @@ fn the_binding_key_is_made_and_used_only_under_a_quorate_activation() {
         Response::Metadata(_)
     ));
 
-    // deactivation stops the binding key signing
     permit(&t, &p, &["deactivate"], &keys, &[1, 2]);
     cmd(&["sign", s(&t), s(&p)]).unwrap();
     crate::refresh(&t, &pin, &gate, &mut seen);

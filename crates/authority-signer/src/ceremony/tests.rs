@@ -214,13 +214,11 @@ fn a_transcript_reopens_only_on_an_unbroken_chain_from_its_pinned_genesis() {
     let a = reopened.state().activation.unwrap();
     assert_eq!((a.until, a.seq), (NOW + 2 * HOUR, 3));
 
-    // a flipped byte anywhere breaks the transcript
     for i in [0, bytes.len() / 3, bytes.len() / 2, bytes.len() - 1] {
         let mut broken = bytes.clone();
         broken[i] ^= 1;
         assert!(Transcript::open(&broken, &genesis).is_err(), "byte {i}");
     }
-    // another genesis, a dropped entry, an entry cut short
     let (_, other) = started(&keys(3));
     assert_eq!(
         Transcript::open(&bytes, &other.state().genesis).map(|_| ()),
