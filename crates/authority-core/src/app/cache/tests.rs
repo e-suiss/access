@@ -31,6 +31,7 @@ fn answer(outcome: Outcome) -> Response {
         explained: None,
         causal: None,
         witnessed_through: None,
+        ack: None,
     }
 }
 

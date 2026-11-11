@@ -2805,8 +2805,7 @@
     "/access/v1/domains/{domain}/watch": {
       "get": {
         "operationId": "watchDomain",
-        "summary": "Changes from `from` (a record position) by long polling, each with witnessed_through; advisory, never a source of ALLOW (OP-158 m.3 (u)).",
-        "x-suiss-status": "planned",
+        "summary": "Changes after `from` (a record position) by long polling: each record's position, trusted time and the kinds of state it changed, and `witnessed_through`, the largest tree size a witness has cosigned. For an authenticated PEP; advisory, never cached and never a source of ALLOW (§9.7A.2, §9.7A.4, OP-158 m.3 (u)).",
         "parameters": [
           {
             "name": "domain",
@@ -2817,11 +2816,51 @@
               "minLength": 1,
               "maxLength": 128
             }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "wait",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 25000,
+              "default": 10000
+            }
           }
         ],
         "responses": {
           "400": {
-            "description": "The request is refused; nothing is read.",
+            "description": "`from` or `wait` is missing or malformed; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No authenticated PEP.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`as-of-expired`: the first record after `from` is older than the 24 hour history window; read from the head.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2831,7 +2870,7 @@
             }
           },
           "503": {
-            "description": "Temporarily unavailable; retry.",
+            "description": "`from` is past the head, or temporarily unavailable; retry.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2840,12 +2879,73 @@
               }
             }
           },
-          "501": {
-            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)).",
-            "content": {
-              "application/problem+json": {
+          "200": {
+            "description": "The records after `from`, oldest first, at most 100; empty when none came within `wait`.",
+            "headers": {
+              "Cache-Control": {
                 "schema": {
-                  "$ref": "#/components/schemas/Problem"
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "changes",
+                    "next",
+                    "head",
+                    "witnessed_through",
+                    "advisory"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "changes": {
+                      "type": "array",
+                      "maxItems": 100,
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "position",
+                          "recorded_at",
+                          "kinds"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "position": {
+                            "type": "string",
+                            "pattern": "^[1-9][0-9]{0,19}$"
+                          },
+                          "recorded_at": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "kinds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "next": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "head": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "witnessed_through": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "advisory": {
+                      "const": true
+                    }
+                  }
                 }
               }
             }

@@ -577,7 +577,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Changes from `from` (a record position) by long polling, each with witnessed_through; advisory, never a source of ALLOW (OP-158 m.3 (u)). */
+        /** Changes after `from` (a record position) by long polling: each record's position, trusted time and the kinds of state it changed, and `witnessed_through`, the largest tree size a witness has cosigned. For an authenticated PEP; advisory, never cached and never a source of ALLOW (§9.7A.2, §9.7A.4, OP-158 m.3 (u)). */
         get: operations["watchDomain"];
         put?: never;
         post?: never;
@@ -4510,7 +4510,10 @@ export interface operations {
     };
     watchDomain: {
         parameters: {
-            query?: never;
+            query: {
+                from: number;
+                wait?: number;
+            };
             header?: never;
             path: {
                 domain: string;
@@ -4519,7 +4522,28 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The request is refused; nothing is read. */
+            /** @description The records after `from`, oldest first, at most 100; empty when none came within `wait`. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        changes: {
+                            position: string;
+                            recorded_at: number;
+                            kinds: string[];
+                        }[];
+                        next: number;
+                        head: number;
+                        witnessed_through: number;
+                        /** @constant */
+                        advisory: true;
+                    };
+                };
+            };
+            /** @description `from` or `wait` is missing or malformed; nothing is read. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4528,8 +4552,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)). */
-            501: {
+            /** @description No authenticated PEP. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4537,7 +4561,16 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Temporarily unavailable; retry. */
+            /** @description `as-of-expired`: the first record after `from` is older than the 24 hour history window; read from the head. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `from` is past the head, or temporarily unavailable; retry. */
             503: {
                 headers: {
                     [name: string]: unknown;

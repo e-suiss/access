@@ -11,14 +11,12 @@ use axum::routing::{get, post};
 pub use crate::stage11::{Method, Planned};
 
 /// Every declared, not yet served route.
-pub const PLANNED: &[Planned] = &[
-    Planned {
-        method: Method::Post,
-        path: "/access/v1/domains/{domain}/divergence",
-        operation: "declareDivergence",
-        summary: "Records a signed divergence set (recovery.cddl) as a divergence_notice Claim for the domain's root and Security Party; it never stops an exit and writes no restriction (G32, G33, OP-158 m.3 (i)).",
-    },
-];
+pub const PLANNED: &[Planned] = &[Planned {
+    method: Method::Post,
+    path: "/access/v1/domains/{domain}/divergence",
+    operation: "declareDivergence",
+    summary: "Records a signed divergence set (recovery.cddl) as a divergence_notice Claim for the domain's root and Security Party; it never stops an exit and writes no restriction (G32, G33, OP-158 m.3 (i)).",
+}];
 
 async fn not_yet_served() -> Response {
     crate::problem::codes::NOT_YET_SERVED
