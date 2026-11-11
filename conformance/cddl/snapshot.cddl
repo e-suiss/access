@@ -16,3 +16,12 @@ signed-snapshot = {
   kid: bstr .size 32,
   sig: bstr .size 64,
 }
+
+; OP-158 m.4 (b), lane W4: how Access signs a snapshot. The domain's signer signs checkpoint
+; bodies only, so a snapshot is the checkpoint note of size `pos + 1` with `root`, and two more
+; lines: `access-snapshot sha-256:<state_digest, base64url>` and `access-snapshot-issued <at>`.
+; A cold start verifies the note under the key of the stored checkpoint of that size.
+noted-snapshot = {
+  snapshot: snapshot,
+  note: tstr .size (1..65536),
+}
