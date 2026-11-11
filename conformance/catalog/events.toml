@@ -985,7 +985,7 @@ fields = ["dimension", "kind"]
 ocsf = "detection_finding"
 
 [[event]]
-name = "cache.advisory.bypassed"
+name = "cache.advisory.skipped"
 plane = "authority"
 severity = "debug"
 since = "unreleased"
