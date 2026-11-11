@@ -10,10 +10,13 @@
 
 pub mod case;
 pub mod discovery;
+pub mod provider;
+pub mod replica;
 pub mod review;
 pub mod schema;
 pub mod twin;
 pub mod wire;
+pub mod witness;
 
 pub use schema::Schema;
 pub use twin::{

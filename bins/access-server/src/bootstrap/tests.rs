@@ -2600,3 +2600,6 @@ mod walkthrough;
 mod operator_breakglass;
 // OP-157 m.4 (b)
 mod fixtures;
+// OP-158 m.4 (a)
+mod durability;
+mod faults;
