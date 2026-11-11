@@ -1,0 +1,150 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, kind, source, declared_by, range_from, range_to, items, first_position,\n                set_bytes, set_digest, resolved_at IS NOT NULL AS \"resolved!\",\n                relayed_at IS NOT NULL AS \"relayed!\"\n           FROM access.divergence_notices WHERE domain_id = $1 ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.divergence_notices",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.divergence_notices",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "source",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.divergence_notices",
+            "name": "source"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "declared_by",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.divergence_notices",
+            "name": "declared_by"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "range_from",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.divergence_notices",
+            "name": "range_from"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "range_to",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.divergence_notices",
+            "name": "range_to"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "items",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.divergence_notices",
+            "name": "items"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "first_position",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.divergence_notices",
+            "name": "first_position"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "set_bytes",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.divergence_notices",
+            "name": "set_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "set_digest",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.divergence_notices",
+            "name": "set_digest"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "resolved!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "relayed!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "2bad515f0c496d65ee9fcb5302e4e31d46892bbe37e497adb5f528c020f23471"
+}

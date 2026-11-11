@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.divergence_notices SET resolved_at = now()\n          WHERE domain_id = $1 AND kind = 'fold' AND resolved_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a823718f623b2f591c666420e3f309990bd06d5ed15bddc1335a45fafdd902f1"
+}

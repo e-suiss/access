@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.snapshots (domain_id, tenant_id, pos, root, state_digest, state, note)\n         VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (domain_id, pos) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Int8",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "be730a01d2b68bd347d9f2f6f103cdb061bba51526324fcb3190e4e604626be6"
+}

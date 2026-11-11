@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.authority_state SET value = NULL, version = 0\n          WHERE domain_id = $1 AND NOT (key = ANY($2))\n            AND (value IS NOT NULL OR version <> 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "ByteaArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "02e336a29f741967aee94eef4807fd817db4a1e3024952ebc021729a7d485e05"
+}

@@ -111,6 +111,8 @@ pub mod mds;
 pub mod realm_crypto;
 // OP-158 m.3 (v)
 pub mod quota;
+// OP-158 m.3 (h), (i)
+pub mod divergence;
 
 #[cfg(feature = "testing")]
 pub mod testing;

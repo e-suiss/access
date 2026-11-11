@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.divergence_notices SET relayed_at = now()\n          WHERE domain_id = $1 AND id = $2 AND relayed_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e088c222a8d804c3a7f8ff024ae983586ae5e6f35daff5d7722aa1b758bbab9b"
+}
