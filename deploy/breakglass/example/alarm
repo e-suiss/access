@@ -1,0 +1,6 @@
+#!/bin/sh
+# OP-46, §17.7.3: called as `alarm <event> <cell> <document>`; exit 0 only once every on-call
+# person has been paged. The tool applies nothing when this fails.
+set -eu
+logger -p authpriv.alert -t access-breakglass "break-glass $1 on cell $2 (document $3)"
+exec /usr/local/libexec/page-on-call --severity critical --summary "Access break-glass $1 on $2"

@@ -1,0 +1,9 @@
+# OP-46, CMP-25: /etc/access/breakglass/<cell>/keys — one line per approver key of this cell only.
+# Replace each <public key> with the line `access-breakglass keygen` printed (Ed25519), or with
+# the uncompressed P-256 point of a FIDO2 credential made for relying party `rp`.
+generation 1
+threshold 2
+rp access-breakglass
+ed25519 alice <public key>
+ed25519 bora <public key>
+es256 chen <public key>

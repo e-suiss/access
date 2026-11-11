@@ -1,0 +1,9 @@
+# OP-46, OP-157 m.3 (j): /etc/access/breakglass/<cell>/cell
+name eu-1
+ops /var/lib/access/ops
+alarm /usr/local/libexec/access-breakglass-alarm
+syslog unix:/dev/log
+siem siem-relay.internal:6514
+config /etc/access/access.toml
+health 127.0.0.1:9090
+state /var/lib/access/breakglass/eu-1
