@@ -55,7 +55,6 @@ async fn hl_31_an_async_dr_promote_signs_everyone_out_and_declares_its_rpo() {
             .is_err_and(|e| e.contains("realm platform declares no async DR profile")),
         "{still:?}"
     );
-    // the platform realm declares through its own idp.* Exercise, signed by its root
     let platform = routes.iter().find(|r| r.slug == "platform").unwrap();
     let mut t = TenantTx::begin(&c.w.db.app, platform.tenant, platform.realm)
         .await
@@ -99,10 +98,10 @@ async fn hl_31_an_async_dr_promote_signs_everyone_out_and_declares_its_rpo() {
     assert_eq!(promoted.realms.len(), 2);
     assert_eq!(promoted.realms[1].rpo_s, 600);
     let acme = &promoted.realms[0];
-    // HL-31: the declared RPO is above zero and everyone signs in again
+    // HL-31
     assert_eq!((acme.slug.as_str(), acme.rpo_s), ("acme", 300));
     assert!(acme.signed_out >= 1, "{promoted:?}");
-    // OP-42: closed until the shred journal is applied again
+    // OP-42
     assert_eq!(
         access_store::restore::pending_reshred(&c.w.db.app)
             .await
@@ -111,7 +110,7 @@ async fn hl_31_an_async_dr_promote_signs_everyone_out_and_declares_its_rpo() {
     );
     assert!(crate::reshred::gate(&c.w.db.app, None).await.is_err());
 
-    // FA-13: the async copy does not continue a domain's lineage by itself
+    // FA-13
     let domain = c.domain;
     let unled = c.w.domains.take_over(domain).await;
     assert!(
@@ -143,7 +142,7 @@ async fn hl_31_an_async_dr_promote_signs_everyone_out_and_declares_its_rpo() {
         .unwrap();
     assert!(epoch > head.epoch);
     c.w.domains.take_over(domain).await.unwrap();
-    // HL-31: the console's own session was issued before the promote and has ended
+    // HL-31
     let after = c
         .put_setting("dr-profile", "putDrProfile", serde_json::json!({}))
         .await;

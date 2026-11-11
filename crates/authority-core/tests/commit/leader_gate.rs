@@ -59,12 +59,10 @@ async fn g64_after_the_activation_record_only_nodes_of_the_new_semantics_lead() 
         .unwrap();
     let old = process(&db, "old", vec![d]);
     let new = process(&db, "new", vec![d]).with_semantics(v(2));
-    // (a) every node runs the new build but evaluates the old version: either may lead
     onboard(&old, d).await;
     allowed(&old.exercise(&read(d, 10)).await.unwrap());
     old.release().await;
     allowed(&new.exercise(&read(d, 11)).await.unwrap());
-    // (b) the activation record commits
     let meta = ExerciseBasis::Anchor(meta::meta_anchor(&d));
     let activate = incoming(
         meta_request(d, 12, meta, Payload::VersionActivate { versions: v(2) }),
@@ -78,7 +76,6 @@ async fn g64_after_the_activation_record_only_nodes_of_the_new_semantics_lead() 
         Some(v(2))
     );
     new.release().await;
-    // (c) a node that does not evaluate it never leads again, so no two semantics commit
     assert_eq!(
         unavailable(old.exercise(&read(d, 13)).await),
         "version-gate"
@@ -111,24 +108,15 @@ async fn op_31_a_graceful_step_down_hands_the_domain_over_without_waiting_for_th
         started.elapsed() < TTL,
         "the next leader waited for the lease"
     );
-    // the stepped-down process takes no lease again
     b.release().await;
     assert_eq!(unavailable(a.exercise(&read(d, 13)).await), "stepping-down");
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
 async fn count_of(db: &TestDb, event: &str) -> i64 {
-    access_store::testing::admin_text(
-        db,
-        &format!(
-            "SELECT count(*)::text FROM access_ops.authority_audit WHERE event_type = '{event}'"
-        ),
-    )
-    .await
-    .unwrap()
-    .unwrap()
-    .parse()
-    .unwrap()
+    access_store::testing::authority_events(db, event, None)
+        .await
+        .unwrap()
 }
 
 // TI-2, EI-20, U33, §17.4.1 item 1, T28, Ek B 5720, 5767, 5992, 6090
@@ -142,7 +130,6 @@ async fn ti_2_a_sealed_cell_appends_nothing_and_the_target_continues_at_the_next
     let a = process(&source, "cell-a", vec![d]);
     onboard(&a, d).await;
     allowed(&a.exercise(&read(d, 10)).await.unwrap());
-    // the leader of the source cell keeps its lease: the seal waits for it
     assert!(matches!(
         cell::seal(&source.sequencer, &source.app, d, "mover").await,
         Err(MoveError::Sequencer(SequencerError::Store(
@@ -150,36 +137,37 @@ async fn ti_2_a_sealed_cell_appends_nothing_and_the_target_continues_at_the_next
         )))
     ));
     a.release().await;
-    let (q, e) = cell::seal(&source.sequencer, &source.app, d, "mover")
+    let (sealed_at, epoch) = cell::seal(&source.sequencer, &source.app, d, "mover")
         .await
         .unwrap();
-    // U33, EI-20: nothing appends on the sealed source, whoever leads
+    // U33, EI-20
     assert_eq!(unavailable(a.exercise(&read(d, 11)).await), "sealed");
     let b_source = process(&source, "other", vec![d]);
     assert_eq!(unavailable(b_source.exercise(&read(d, 12)).await), "sealed");
-    // the target replays the image and accepts it at (q, e + 1)
-    assert!(matches!(
+    assert!(
         cell::accept(
             &source.sequencer,
             &target.sequencer,
             &target.app,
             Digest([0x55; 32])
         )
-        .await,
-        Err(_)
-    ));
+        .await
+        .is_err()
+    );
     let accepted = cell::accept(&source.sequencer, &target.sequencer, &target.app, d)
         .await
         .unwrap();
-    assert_eq!(accepted, e + 1);
+    assert_eq!(accepted, epoch + 1);
     let id = DomainId::from_bytes(d.0);
     let head = access_store::cells::cell_head(&target.sequencer, &id)
         .await
         .unwrap()
         .unwrap();
-    assert_eq!((head.head.pos, head.accepted_epoch), (q, Some(e + 1)));
+    assert_eq!(
+        (head.head.pos, head.accepted_epoch),
+        (sealed_at, Some(epoch + 1))
+    );
     fold_check(&target.sequencer, d).await.unwrap();
-    // accepted once; the domain and its lineage are the same, only the cell changed
     assert!(
         cell::accept(&source.sequencer, &target.sequencer, &target.app, d)
             .await
@@ -194,7 +182,7 @@ async fn ti_2_a_sealed_cell_appends_nothing_and_the_target_continues_at_the_next
     let next = b.exercise(&read(d, 16)).await.unwrap();
     allowed(&next);
     let at = next.record.unwrap();
-    assert!(at > q, "no position is reused");
+    assert!(at > sealed_at, "no position is reused");
     access_authority_sequencer::adapters::verify_chain(&target.sequencer, d, 0, at)
         .await
         .unwrap();
@@ -203,7 +191,7 @@ async fn ti_2_a_sealed_cell_appends_nothing_and_the_target_continues_at_the_next
             .await
             .unwrap()
             .pos,
-        q
+        sealed_at
     );
     fold_check(&target.sequencer, d).await.unwrap();
     assert_eq!(count_of(&source, "domain.sealed").await, 1);
@@ -213,30 +201,28 @@ async fn ti_2_a_sealed_cell_appends_nothing_and_the_target_continues_at_the_next
 // FA-13, OP-54-RL12, §17.4.1 item 2, T28, Ek B 5993, 6091, 6092
 #[tokio::test]
 async fn op_54_rl12_an_unplanned_continuation_needs_a_fence_proof_and_the_lost_head() {
-    let lost = fresh().await.unwrap();
+    let gone = fresh().await.unwrap();
     let target = fresh().await.unwrap();
-    let d = create_genesis(&lost.sequencer, TENANT, genesis(), 1_000)
+    let d = create_genesis(&gone.sequencer, TENANT, genesis(), 1_000)
         .await
         .unwrap();
-    let a = process(&lost, "lost", vec![d]);
+    let a = process(&gone, "lost", vec![d]);
     onboard(&a, d).await;
     allowed(&a.exercise(&read(d, 10)).await.unwrap());
     a.release().await;
     let id = DomainId::from_bytes(d.0);
-    // the async copy, taken before the last commit of the lost cell
-    let copy = access_store::cells::image(&lost.sequencer, &id)
+    let copy = access_store::cells::image(&gone.sequencer, &id)
         .await
         .unwrap();
     allowed(&a.exercise(&read(d, 11)).await.unwrap());
     a.release().await;
-    let last_head = access_store::authority::read_head(&lost.sequencer, &id)
+    let lost_head = access_store::authority::read_head(&gone.sequencer, &id)
         .await
         .unwrap();
     let last = Point {
-        pos: last_head.pos,
-        leaf: last_head.leaf_hash,
+        pos: lost_head.pos,
+        leaf: lost_head.leaf_hash,
     };
-    // no fence proof: refused, sev-1, nothing accepted
     assert!(matches!(
         cell::accept_unplanned(&target.sequencer, &target.app, d, &copy, None, None).await,
         Err(MoveError::Unfenced)
@@ -245,15 +231,13 @@ async fn op_54_rl12_an_unplanned_continuation_needs_a_fence_proof_and_the_lost_h
         evidence: String::from("stonith: cell-a primary powered off by the cloud API"),
         last,
     };
-    // the async copy lacks the last committed head: it is never promoted into the lineage
     assert!(matches!(
         cell::accept_unplanned(&target.sequencer, &target.app, d, &copy, Some(&fence), None).await,
         Err(MoveError::Uncovered(_))
     ));
-    let full = access_store::cells::image(&lost.sequencer, &id)
+    let full = access_store::cells::image(&gone.sequencer, &id)
         .await
         .unwrap();
-    // a witnessed checkpoint the copy does not reproduce
     let wrong = Witnessed {
         size: 2,
         root: [9; 32],
@@ -285,7 +269,6 @@ async fn op_54_rl12_an_unplanned_continuation_needs_a_fence_proof_and_the_lost_h
         cell::accept_unplanned(&target.sequencer, &target.app, d, &full, Some(&empty), None).await,
         Err(MoveError::Unfenced)
     ));
-    // fenced and covered: the lineage continues at the next epoch
     let witnessed = cell::replay(d, &full, None).unwrap();
     let epoch = cell::accept_unplanned(
         &target.sequencer,

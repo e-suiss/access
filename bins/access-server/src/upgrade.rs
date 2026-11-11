@@ -146,7 +146,7 @@ mod tests {
         );
     }
 
-    // G64, OP-56: a build that no longer evaluates the core version in force cannot roll in
+    // G64, OP-56
     #[test]
     fn g64_a_target_that_drops_the_semantics_in_force_is_a_recreate() {
         let now = m("0.6.0", "0.5.0", 2);

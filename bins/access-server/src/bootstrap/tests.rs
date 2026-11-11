@@ -184,11 +184,11 @@ impl World {
         with_signer: bool,
         bell: Option<Arc<dyn suiss_ledger::doorbell::Bell>>,
     ) -> (Self, Option<AuthoritySigner>) {
-        Self::open_on(name, with_signer, bell, fresh().await.unwrap()).await
+        Self::open_on(name, with_signer, bell, fresh().await.unwrap())
     }
 
     /// [`World::open_rung`] over `db`, such as one on a replicated test cell (OP-158 m.3 (n)).
-    async fn open_on(
+    fn open_on(
         name: &str,
         with_signer: bool,
         bell: Option<Arc<dyn suiss_ledger::doorbell::Bell>>,

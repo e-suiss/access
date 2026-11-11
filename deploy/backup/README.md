@@ -23,7 +23,7 @@ wal-g is a documented alternative to pgBackRest; the configuration here is pgBac
   every write.
 - With `[database.topology]` declared, every standby of the quorum is declared, each in a zone of
   its own away from the primary, and a standby in another region is accepted only in the
-  multi-region sync class under a 10 ms round trip. Synchronous writing across continents is
+  multi-region sync class under the OP-28 round-trip ceiling. Synchronous writing across continents is
   refused.
 - No logical replication subscription and no multi-primary extension (`bdr`, `pglogical`,
   `spock`, `pgactive`) writes into the canonical store: last-writer-wins and quorum-less

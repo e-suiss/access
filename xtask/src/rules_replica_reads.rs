@@ -38,7 +38,9 @@ pub(crate) fn check(root: &Path) -> Result<Vec<Violation>, String> {
     let mut out = Vec::new();
     for path in walk(root)? {
         let r = rel(root, &path);
-        if !r.ends_with(".rs")
+        if std::path::Path::new(&r)
+            .extension()
+            .is_none_or(|e| e != "rs")
             || is_test_file(&r)
             || r.starts_with("xtask/")
             || HOLDERS.contains(&r.as_str())
@@ -59,7 +61,7 @@ pub(crate) fn check(root: &Path) -> Result<Vec<Violation>, String> {
                 path: r.clone().into(),
                 message: format!(
                     "line {}: only the admin listing readers hold the read replica; security reads go to the primary (OPI-2, OP-54-RL2)",
-                    i + 1
+                    i.saturating_add(1)
                 ),
             });
         }

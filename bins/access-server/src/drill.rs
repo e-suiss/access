@@ -244,8 +244,7 @@ async fn domain_log(
             w.size
         ));
     }
-    // OP-57, FA-10: a log behind what the witnesses saw is not opened; its suffix comes from the
-    // replica, or the domain is recovered
+    // OP-57, FA-10
     let size = img.head.head.pos.saturating_add(1);
     if let Some(mark) = base.domains.get(&b64(&d))
         && mark.witnessed > size

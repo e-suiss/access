@@ -340,7 +340,7 @@ async fn pi_23_a_member_reading_an_earlier_members_write_is_handed_back() {
     assert_eq!(l.log.state().commits, 1);
 }
 
-// OP-9, TI-6: a group that fails to commit acknowledges nobody and steps the leader down
+// OP-9, TI-6
 #[tokio::test]
 async fn op_9_a_failed_group_acknowledges_none_of_its_members() {
     let (log, d) = MemLog::with_genesis();
@@ -358,7 +358,7 @@ async fn op_9_a_failed_group_acknowledges_none_of_its_members() {
     ));
 }
 
-// OP-9: at most 64 commits join a group, and none waits more than 2 ms for others
+// OP-9
 #[tokio::test]
 async fn op_9_a_group_closes_at_64_or_after_2_ms() {
     use super::group::{GROUP_MAX, GROUP_WAIT, gather};
@@ -373,5 +373,5 @@ async fn op_9_a_group_closes_at_64_or_after_2_ms() {
     assert_eq!(gather(&mut rx).await, vec![7]);
     assert!(started.elapsed() >= GROUP_WAIT);
     drop(tx);
-    assert!(gather(&mut rx).await.is_empty());
+    assert_eq!(gather(&mut rx).await, Vec::<u32>::new());
 }

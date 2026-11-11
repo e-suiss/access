@@ -26,7 +26,7 @@ const WEAK: [&str; 3] = ["local", "off", "remote_write"];
 pub(crate) fn weakened(line: &str) -> Option<&'static str> {
     let lower = line.to_ascii_lowercase();
     let at = lower.find("synchronous_commit")?;
-    let rest = lower.get(at + "synchronous_commit".len()..)?;
+    let rest = lower.get(at.saturating_add("synchronous_commit".len())..)?;
     let value: String = rest
         .trim_start_matches(|c: char| {
             c.is_whitespace() || matches!(c, '"' | '\'' | ',' | ':' | '=' | ')')
@@ -65,7 +65,13 @@ pub(crate) fn check(root: &Path) -> Result<Vec<Violation>, String> {
         let text_file = [".rs", ".sql", ".toml", ".yaml", ".yml", ".conf", ".sh"]
             .iter()
             .any(|e| r.ends_with(e));
-        if !text_file || (r.ends_with(".rs") && is_test_file(&r)) || r.starts_with("xtask/") {
+        if !text_file
+            || (std::path::Path::new(&r)
+                .extension()
+                .is_some_and(|e| e == "rs")
+                && is_test_file(&r))
+            || r.starts_with("xtask/")
+        {
             continue;
         }
         let Ok(src) = read(&path) else { continue };
@@ -75,7 +81,7 @@ pub(crate) fn check(root: &Path) -> Result<Vec<Violation>, String> {
                     &r,
                     format!(
                         "line {}: synchronous_commit = {w}; security writes wait for the synchronous quorum (OP-24, OP-54-RL6)",
-                        i + 1
+                        i.saturating_add(1)
                     ),
                 ));
             }

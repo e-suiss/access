@@ -50,14 +50,14 @@ fn now_ms() -> Result<i64, String> {
 /// # Errors
 /// Why it refused; nothing is recorded when a realm declares no profile.
 pub(crate) async fn promote(app: &Pool, router: &Pool) -> Result<Promoted, String> {
-    let routes = access_store::tenancy::routes(router)
+    let live = access_store::tenancy::routes(router)
         .await
         .map_err(|e| e.to_string())?;
     let profiles = access_store::cells::dr_profiles(app)
         .await
         .map_err(|e| e.to_string())?;
-    let mut declared = Vec::with_capacity(routes.len());
-    for r in &routes {
+    let mut declared = Vec::with_capacity(live.len());
+    for r in &live {
         let rpo = profiles
             .iter()
             .find(|(t, realm, _)| t == r.tenant.as_bytes() && realm == r.realm.as_bytes())
@@ -70,7 +70,7 @@ pub(crate) async fn promote(app: &Pool, router: &Pool) -> Result<Promoted, Strin
         };
         declared.push((r, rpo_s));
     }
-    let n = u32::try_from(routes.len()).map_err(|_| String::from("too many realms"))?;
+    let n = u32::try_from(live.len()).map_err(|_| String::from("too many realms"))?;
     let generation = access_store::cells::mark_dr_promoted(app, n)
         .await
         .map_err(|e| e.to_string())?;

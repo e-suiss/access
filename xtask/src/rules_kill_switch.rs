@@ -24,12 +24,14 @@ const AUTHORITY_TABLES: [&str; 11] = [
     "proof_store",
 ];
 
-/// Where those tables may be written: the store's authority module, its test harness and the
-/// migrations that create them.
-const WRITERS: [&str; 3] = [
+/// Where those tables may be written: the store's authority module, its test harness, the
+/// migrations that create them, and the cell move, which writes only the replayed records and
+/// state another cell committed (OP-158 m.3 (n), m.4 (b) W7).
+const WRITERS: [&str; 4] = [
     "crates/store/src/authority.rs",
     "crates/store/src/testing.rs",
     "crates/store/migrations/",
+    "crates/store/src/cells.rs",
 ];
 
 /// The statements that write a table, assembled so that this file holds none of them.

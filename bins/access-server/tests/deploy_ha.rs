@@ -1,5 +1,5 @@
 //! Configuration-output tests of the cell's HA and backup deployment (OP-24, OP-25, OP-57,
-//! SA-47, FA-13, OP-158 m.3 (n), (r)): the CloudNativePG and Patroni templates and the pgBackRest
+//! SA-47, FA-13, OP-158 m.3 (n), (r)): the `CloudNativePG` and Patroni templates and the `pgBackRest`
 //! configuration say what the spec asks. The multi-zone cluster and the object store are the
 //! operator's; these tests check what Access ships.
 
@@ -69,7 +69,8 @@ fn op_25_patroni_runs_strict_quorum_sync_with_the_failsafe_and_no_standby_cluste
         .sum::<u64>();
     assert_eq!(failover, 30, "SA-47: failover in 30 s");
     assert!(
-        !p.lines().any(|l| l.trim_start().starts_with("standby_cluster:")),
+        !p.lines()
+            .any(|l| l.trim_start().starts_with("standby_cluster:")),
         "no cross-cluster failover"
     );
 }

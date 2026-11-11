@@ -33,6 +33,9 @@ const SCRIPT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../scripts/pg-ha.s
 const PASSWORD: &str = "local-only-not-a-secret";
 const TENANT: [u8; 16] = [0x37; 16];
 
+/// An acknowledged record: its position and leaf hash.
+type Acked = (u64, [u8; 32]);
+
 fn base_port() -> u16 {
     std::env::var("ACCESS_PG_HA_PORT")
         .ok()
@@ -181,7 +184,7 @@ impl Log {
 async fn pg_ha_u32_every_acknowledged_record_survives_a_promote_after_sigkill() {
     let db = cell().await;
     let mut log = Log::create(&db, 0x41).await;
-    let acked: Arc<Mutex<Vec<(u64, [u8; 32])>>> = Arc::default();
+    let acked: Arc<Mutex<Vec<Acked>>> = Arc::default();
     let seen = acked.clone();
     let killer = tokio::spawn(async move {
         let deadline = Instant::now() + Duration::from_secs(60);
@@ -222,7 +225,7 @@ async fn pg_ha_u32_every_acknowledged_record_survives_a_promote_after_sigkill() 
             .unwrap_or_else(|| panic!("acknowledged record {pos} lost in the promote"));
         assert_eq!(&r.leaf_hash, l);
     }
-    // TI-2: the next leader on the promoted standby fences the old epoch and continues
+    // TI-2
     let head = read_head(&promoted.sequencer, &log.id).await.unwrap();
     assert!(head.pos >= last);
     let lease = next_leader(&promoted, &log.id, "w7-next").await;
@@ -267,7 +270,6 @@ async fn pg_ha_opi_4_one_standby_or_a_local_security_connection_is_refused() {
             .as_deref(),
         Some("ANY 1 (sb_a, sb_b)")
     );
-    // a role default of `local` on a security login: the store's own startup options keep `on`
     sqlx::query(sqlx::AssertSqlSafe(String::from(
         "ALTER ROLE access_test_app SET synchronous_commit TO local",
     )))
@@ -299,7 +301,6 @@ async fn pg_ha_opi_4_one_standby_or_a_local_security_connection_is_refused() {
         .await
         .unwrap();
     check_server(&store, 8, false, r, None).await.unwrap();
-    // one standby: a single loss would hang every write
     sh(&[
         "sql",
         "primary",
@@ -346,8 +347,6 @@ async fn pg_ha_op_26_the_pool_follows_the_writable_host_and_evicts_the_old_one()
         log.push(&f.pool()).await.unwrap();
     }
     sh(&["kill", "primary"]).await;
-    // no host accepts writes until the orchestrator promotes: the pool answers errors, never a
-    // read-only write, and backs off
     assert!(f.check().await.is_err());
     assert!(log.push(&f.pool()).await.is_err());
     assert_eq!(
@@ -408,7 +407,6 @@ async fn pg_ha_opi_2_the_replica_serves_listings_only_while_it_keeps_up() {
     let mut log = Log::create(&db, 0x43).await;
     log.push(&db.sequencer).await.unwrap();
     let written = current_lsn(&db.app).await.unwrap();
-    // read-your-writes: the replica only once it replayed the user's write
     let deadline = Instant::now() + Duration::from_secs(20);
     while !standby(reads.own_profile(Some(written)).await).await {
         assert!(
@@ -419,7 +417,6 @@ async fn pg_ha_opi_2_the_replica_serves_listings_only_while_it_keeps_up() {
     }
     let ahead = access_store::replica_reads::Lsn(written.0 + (1 << 40));
     assert!(!standby(reads.own_profile(Some(ahead)).await).await);
-    // a frozen replica falls out of use and every read goes to the primary
     sh(&["stop", "sb_b"]).await;
     for _ in 0..3 {
         log.push(&db.sequencer).await.unwrap();
@@ -444,8 +441,6 @@ async fn pg_ha_sa_47_a_partitioned_old_primary_acknowledges_nothing_after_the_pr
     sh(&["stop", "primary"]).await;
     sh(&["promote", "sb_a"]).await;
     sh(&["cont", "primary"]).await;
-    // grace 0: the old primary still runs but has no synchronous standby left, so its commit is
-    // never acknowledged
     let old = PgPoolOptions::new()
         .max_connections(1)
         .acquire_timeout(Duration::from_secs(5))
@@ -477,7 +472,7 @@ async fn pg_ha_sa_47_a_partitioned_old_primary_acknowledges_nothing_after_the_pr
         frontier: log.frontier.clone(),
     };
     next.push(&promoted.sequencer).await.unwrap();
-    // TI-2: the old leader's epoch no longer commits on the cell
+    // TI-2
     log.pos = before + 1;
     assert!(matches!(
         log.push(&promoted.sequencer).await,

@@ -16,7 +16,9 @@
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-use access_store::testing::{admin_text, attach_at, fresh_at, superuser};
+use access_store::testing::{
+    archived_wal, attach_at, authority_events, clock_text, fresh_at, superuser, switch_wal,
+};
 
 use super::super::*;
 use crate::drill::{self, Status};
@@ -89,7 +91,7 @@ async fn pg_ha_op_57_the_restore_drill_runs_its_nine_items_on_a_point_in_time_re
     sh(&["up"]).await;
     let db = fresh_at(&url(base_port())).await.unwrap();
     let name = db.name.clone();
-    let (w, _) = World::open_on("drill-pitr", false, None, db).await;
+    let (w, _) = World::open_on("drill-pitr", false, None, db);
     w.run(&plan()).await;
     sh(&["base"]).await;
     let (baseline, _) = run_drill(&w, &w.db, None).await;
@@ -99,26 +101,13 @@ async fn pg_ha_op_57_the_restore_drill_runs_its_nine_items_on_a_point_in_time_re
         ["acme", "platform"]
     );
     assert!(baseline.kids.values().all(|k| !k.is_empty()));
-    let target = admin_text(&w.db, "SELECT clock_timestamp()::text")
-        .await
-        .unwrap()
-        .unwrap();
-    // a later write the restore to `target` must not bring back
+    let target = clock_text(&w.db).await.unwrap();
     w.admin_realm("later").await;
     w.domains.release().await;
-    let wal = admin_text(&w.db, "SELECT pg_walfile_name(pg_switch_wal())")
-        .await
-        .unwrap()
-        .unwrap();
+    let wal = switch_wal(&w.db).await.unwrap();
     let deadline = Instant::now() + Duration::from_secs(60);
     loop {
-        let archived = admin_text(
-            &w.db,
-            "SELECT coalesce(last_archived_wal, '') FROM pg_stat_archiver",
-        )
-        .await
-        .unwrap()
-        .unwrap_or_default();
+        let archived = archived_wal(&w.db).await.unwrap();
         if archived >= wal {
             break;
         }
@@ -147,18 +136,13 @@ async fn pg_ha_op_57_the_restore_drill_runs_its_nine_items_on_a_point_in_time_re
         report.items
     );
     assert!(report.passed);
-    // the report's digest is in the restored cell's audit log, under its signed checkpoint
-    let row = admin_text(
-        &restored,
-        &format!(
-            "SELECT target FROM access_ops.authority_audit WHERE event_type = 'drill.restore' AND target = 'report:{}'",
-            report.digest
-        ),
-    )
-    .await
-    .unwrap();
-    assert!(row.is_some());
-    // the live cell, with a realm the baseline lacks, fails the drill
+    let target_row = format!("report:{}", report.digest);
+    assert_eq!(
+        authority_events(&restored, "drill.restore", Some(&target_row))
+            .await
+            .unwrap(),
+        1
+    );
     let (_, live) = run_drill(&w, &w.db, Some(&baseline)).await;
     let live = live.unwrap();
     assert!(!live.passed);

@@ -985,3 +985,63 @@ pub async fn superuser(db: &TestDb) -> Result<PgPool, TestDbError> {
         .await
         .at("connect as administrator")
 }
+
+/// How many operational authority audit rows of `event` there are, with `target` when given
+/// (OP-41, OP-158 m.3 (n), (r)).
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn authority_events(
+    db: &TestDb,
+    event: &str,
+    target: Option<&str>,
+) -> Result<i64, TestDbError> {
+    let mut c = PgConnection::connect_with(&db.admin)
+        .await
+        .at("connect as administrator")?;
+    let n: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM access_ops.authority_audit
+          WHERE event_type = $1 AND ($2::text IS NULL OR target = $2)",
+    )
+    .bind(event)
+    .bind(target)
+    .fetch_one(&mut c)
+    .await
+    .at("authority audit rows")?;
+    c.close().await.at("close")?;
+    Ok(n)
+}
+
+/// Switches to a new WAL segment and returns the name of the one just closed, so it is
+/// archived (OP-57, the PITR drill).
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn switch_wal(db: &TestDb) -> Result<String, TestDbError> {
+    Ok(admin_text(db, "SELECT pg_walfile_name(pg_switch_wal())")
+        .await?
+        .unwrap_or_default())
+}
+
+/// The newest archived WAL segment's name; empty before the first.
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn archived_wal(db: &TestDb) -> Result<String, TestDbError> {
+    Ok(admin_text(
+        db,
+        "SELECT coalesce(last_archived_wal, '') FROM pg_stat_archiver",
+    )
+    .await?
+    .unwrap_or_default())
+}
+
+/// The server's clock as PostgreSQL writes a timestamp, for a recovery target.
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn clock_text(db: &TestDb) -> Result<String, TestDbError> {
+    Ok(admin_text(db, "SELECT clock_timestamp()::text")
+        .await?
+        .unwrap_or_default())
+}

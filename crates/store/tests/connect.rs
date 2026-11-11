@@ -112,7 +112,6 @@ fn op_54_rl6_one_standby_or_local_commits_are_refused() {
     );
     check_durability("on", "ANY 1 (sb_a, sb_b)", r).unwrap();
     check_durability("remote_apply", "ANY 1 (sb_a, sb_b)", r).unwrap();
-    // one standby: losing it hangs every write
     for one in [
         "ANY 1 (sb_a)",
         "sb_a",

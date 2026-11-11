@@ -40,6 +40,10 @@ impl<L: DomainLog> Leader<L> {
     ///
     /// # Errors
     /// [`SequencerError::SteppedDown`] before anything is tried; the batch's own failure.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the members' checks, the grouping and the one transaction, in order"
+    )]
     pub async fn commit_group(
         &mut self,
         now: TrustedTime,
