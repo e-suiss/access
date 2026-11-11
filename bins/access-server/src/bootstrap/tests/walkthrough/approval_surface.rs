@@ -218,6 +218,38 @@ async fn the_page_shows_the_bound_render_with_capacity_needs_and_effect() {
     d.close().await;
 }
 
+// SA-54, §14.9, §9.4 G, OP-157 m.3 (l), Ek B 5602
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_approval_is_bound_to_the_recipient_and_the_values_it_showed() {
+    let d = Desk::open("v6-linking", false).await;
+    let (_, held) = d.agent_grant().await;
+    let mut intent = d.intent_json("main").await;
+    intent["recipient"] = json!(b64url_encode(&[0x41; 16]));
+    let mut ex = d.exercise(&intent, held);
+    assert!(matches!(d.ask(&mut ex), Step::Wait(_)));
+    let (status, s) = d.surface(&ex, &intent, |_| {}).await;
+    assert_eq!(status, 201, "{s}");
+    let fields = s["render"]["fields"].as_array().unwrap();
+    let recipient = fields.iter().find(|f| f["name"] == "recipient").unwrap();
+    assert_eq!(recipient["text"], "41".repeat(16));
+    assert_eq!(recipient["material"], true);
+    let approved = d.approve(&ex, &intent).await;
+
+    let mut payee = intent.clone();
+    payee["recipient"] = json!(b64url_encode(&[0x42; 16]));
+    let mut value = intent.clone();
+    value["params"]["ledger"] = json!({ "eq": "other" });
+    for changed in [payee, value] {
+        let mut other = d.exercise(&changed, held);
+        assert!(matches!(d.ask(&mut other), Step::Wait(_)), "{changed}");
+        other.prove(Proof::Contribution(approved)).unwrap();
+        assert!(!matches!(d.ask(&mut other), Step::Proceed(_)), "{changed}");
+    }
+    ex.prove(Proof::Contribution(approved)).unwrap();
+    assert!(matches!(d.ask(&mut ex), Step::Proceed(_)));
+    d.close().await;
+}
+
 fn distinct_people(count: u64) -> RequirementTerm {
     RequirementTerm {
         proof_kind: ProofKind::Contribution,
