@@ -62,7 +62,7 @@ jobs:
           components: rust-src
       # OP-69, OP-140 m.4
       - name: SoftHSM
-        run: sudo apt-get install --yes --no-install-recommends softhsm2
+        run: scripts/ci/apt-install.sh softhsm2
       - name: Test suite under the sanitizer
         env:
           SANITIZER: ${{ matrix.sanitizer }}
@@ -90,7 +90,7 @@ jobs:
           components: rust-src
       - name: MIT Kerberos headers, libclang and cargo-fuzz
         run: |
-          sudo apt-get install --yes --no-install-recommends libkrb5-dev libclang-dev
+          scripts/ci/apt-install.sh libkrb5-dev libclang-dev
           cargo install --locked cargo-fuzz --version 0.13.1
       - name: Kerberos gateway tests under AddressSanitizer
         working-directory: bins/access-gw-kerberos

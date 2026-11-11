@@ -79,7 +79,7 @@ jobs:
           tools: nextest
       # OP-69, OP-140 m.4: the PKCS#11 key store is tested against SoftHSM
       - name: SoftHSM
-        run: sudo apt-get install --yes --no-install-recommends softhsm2
+        run: scripts/ci/apt-install.sh softhsm2
       - name: Tests (SA-59 phase 0 layers)
         run: just test
       # OP-116 m.6
@@ -188,7 +188,7 @@ jobs:
       - name: Restriction change analysis with the pinned cvc5 in its sandbox (OP-105, F-2)
         run: just smt-test
       - name: SoftHSM
-        run: sudo apt-get install --yes --no-install-recommends softhsm2
+        run: scripts/ci/apt-install.sh softhsm2
       # OP-157 m.3 (n), OP-153 m.3 (gg)
       - name: policy.set polarity through the server's analysis port with the pinned cvc5
         run: |
@@ -203,7 +203,7 @@ jobs:
       - name: Parser worker prctl trace
         if: failure()
         run: |
-          sudo apt-get install --yes --no-install-recommends strace
+          scripts/ci/apt-install.sh strace
           bin="$(cargo test --locked -p access-parser-worker --test worker --no-run --message-format=json | jq -r 'select(.executable != null and .target.name == "worker") | .executable')"
           sudo strace -f -e trace=prctl,prlimit64,setrlimit,execve,seccomp -o "$RUNNER_TEMP/worker.strace" "$bin" --ignored --test-threads=1 limits_refuse_before_parsing || true
           grep -v 'PR_CAPBSET_READ' "$RUNNER_TEMP/worker.strace" | tail -150 || true
@@ -355,7 +355,7 @@ jobs:
       - name: Parser worker prctl trace
         if: failure()
         run: |
-          sudo apt-get install --yes --no-install-recommends strace
+          scripts/ci/apt-install.sh strace
           bin="$(cargo test --locked -p access-parser-worker --test worker --no-run --message-format=json | jq -r 'select(.executable != null and .target.name == "worker") | .executable')"
           sudo strace -f -e trace=prctl,prlimit64,setrlimit,execve,seccomp -o "$RUNNER_TEMP/worker.strace" "$bin" --ignored --test-threads=1 limits_refuse_before_parsing || true
           grep -v 'PR_CAPBSET_READ' "$RUNNER_TEMP/worker.strace" | tail -150 || true
@@ -414,7 +414,7 @@ jobs:
           cache-key: bench
           tools: gungraun
       - name: Install Valgrind
-        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends valgrind
+        run: scripts/ci/apt-install.sh valgrind
       # OP-72
       - name: Baseline (base commit)
         env:
@@ -613,7 +613,7 @@ jobs:
           cache-key: test
           tools: nextest
       - name: OpenLDAP clients and radclient
-        run: sudo apt-get install --yes --no-install-recommends ldap-utils freeradius-utils
+        run: scripts/ci/apt-install.sh ldap-utils freeradius-utils
       - name: OpenLDAP, MIT KDC and FreeRADIUS
         run: scripts/ci/edge-env.sh up
       - name: LDAP gateway against the OpenLDAP clients
@@ -667,7 +667,7 @@ jobs:
           cache-key: test
           tools: nextest
       - name: OpenSSH server and client
-        run: sudo apt-get install --yes --no-install-recommends openssh-server openssh-client
+        run: scripts/ci/apt-install.sh openssh-server openssh-client
       - name: sshd accepts the CA's certificate and refuses it once in the KRL
         run: cargo nextest run --locked -p access-identity-ssh --test sshd --run-ignored only
 
@@ -706,7 +706,7 @@ jobs:
           cache-key: test
           tools: nextest
       - name: SoftHSM
-        run: sudo apt-get install --yes --no-install-recommends softhsm2
+        run: scripts/ci/apt-install.sh softhsm2
       - name: OpenBao
         run: scripts/ci/openbao-env.sh up
       - name: The store releases from OpenBao only for the release Exercise
@@ -776,7 +776,7 @@ jobs:
           cache-key: test
           tools: nextest
       - name: SoftHSM and pamtester
-        run: sudo apt-get install --yes --no-install-recommends softhsm2 pamtester
+        run: scripts/ci/apt-install.sh softhsm2 pamtester
       - name: The modules build alone and install into glibc and PAM
         run: |
           cargo clippy --locked -p access-linux-nss -p access-linux-pam -p access-linux-module --all-targets -- -D warnings
@@ -828,7 +828,7 @@ jobs:
           cache-key: kerberos
           tools: deny vet
       - name: MIT Kerberos headers and clients, libclang for the bindings
-        run: sudo apt-get install --yes --no-install-recommends libkrb5-dev krb5-user libclang-dev jq curl
+        run: scripts/ci/apt-install.sh libkrb5-dev krb5-user libclang-dev jq curl
       - name: OpenLDAP, MIT KDC and FreeRADIUS
         run: scripts/ci/edge-env.sh up
       - name: Kerberos workspace and SPNEGO end to end
@@ -897,7 +897,7 @@ jobs:
           cache-key: test
           tools: nextest
       - name: SoftHSM
-        run: sudo apt-get install --yes --no-install-recommends softhsm2
+        run: scripts/ci/apt-install.sh softhsm2
       - name: The four engine images
         run: scripts/ci/proxy-engines.sh pull
       - name: The shared behaviour cases on every engine

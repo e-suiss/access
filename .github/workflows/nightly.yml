@@ -112,7 +112,7 @@ jobs:
           tools: nextest
       # OP-69, OP-140 m.4
       - name: SoftHSM
-        run: sudo apt-get install --yes --no-install-recommends softhsm2
+        run: scripts/ci/apt-install.sh softhsm2
       - name: Full suite, including long-running tests
         run: just test-full
 
@@ -278,7 +278,7 @@ jobs:
         with:
           cache-key: test
       - name: Install Valgrind
-        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends valgrind
+        run: scripts/ci/apt-install.sh valgrind
       # CR-39 m.5, SA-T13, SAI-42
       - name: Secret comparisons under Valgrind with secret bytes undefined
         run: just ctgrind
