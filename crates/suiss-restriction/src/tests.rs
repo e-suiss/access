@@ -400,3 +400,94 @@ fn limits_only_narrow() {
         Err(WiderLimit)
     );
 }
+
+fn run_as(e: &Engine, r: &Req, breakglass: bool) -> Result<Outcome, InputRejected> {
+    let context = format!(
+        r#"{{"amount":{},"lineage_depth":{},"cited_claims":{},"risk":{},"new_device":false,"now":1790000000}}"#,
+        r.amount, r.depth, r.claims, r.risk
+    );
+    let entities = format!(
+        r#"[{{"uid":{{"type":"Actor","id":"a1"}},"attrs":{{"tenant":"t1","assurance":2}},"parents":[]}},
+            {{"uid":{{"type":"Resource","id":"r1"}},"attrs":{{"tenant":"{}","kind":"order"}},"parents":[]}}]"#,
+        r.resource_tenant
+    );
+    let action = format!(r#"Action::"{}""#, r.action);
+    e.evaluate_as(
+        &RequestJson {
+            principal: r#"Actor::"a1""#,
+            action: &action,
+            resource: r#"Resource::"r1""#,
+            context: &context,
+            entities: &entities,
+        },
+        breakglass,
+    )
+}
+
+// TN-93, §12.3.8 (6), OP-157 m.3 (h), Ek B 5538
+#[test]
+fn a_breakglass_exemption_lifts_only_its_own_blocking_rule() {
+    let e = engine(
+        r#"
+@id("freeze") @breakglass_exempt forbid(principal, action, resource) when { context.risk >= 50 };
+@id("cross-tenant") forbid(principal, action, resource) when { principal.tenant != resource.tenant };
+@id("big-transfer") @require("rs-step-up")
+forbid(principal, action == Action::"transfer", resource) when { context.amount > 10000 };
+"#,
+    );
+    let risky = Req {
+        risk: 60,
+        ..Req::default()
+    };
+    let denied = Outcome::Deny(Denial::Forbid {
+        policies: vec![String::from("freeze")],
+        undisclosed: false,
+    });
+    assert_eq!(run_as(&e, &risky, false), Ok(denied.clone()));
+    assert_eq!(run(&e, &risky), Ok(denied));
+    assert_eq!(run_as(&e, &risky, true), Ok(Outcome::NoObjection));
+    let elsewhere = Req {
+        risk: 60,
+        resource_tenant: "t2",
+        ..Req::default()
+    };
+    assert_eq!(
+        run_as(&e, &elsewhere, true),
+        Ok(Outcome::Deny(Denial::Forbid {
+            policies: vec![String::from("cross-tenant")],
+            undisclosed: false,
+        }))
+    );
+    let big = Req {
+        risk: 60,
+        amount: 20_000,
+        ..Req::default()
+    };
+    assert_eq!(run_as(&e, &big, true), Ok(require(&["rs-step-up"])));
+    let views = e.policies().unwrap();
+    assert!(views.iter().any(|v| v.id == "freeze" && v.exempt));
+    assert!(views.iter().all(|v| v.id == "freeze" || !v.exempt));
+}
+
+// TN-93
+#[test]
+fn a_breakglass_exemption_on_a_requirement_does_not_compile() {
+    let err = Engine::compile(
+        SCHEMA,
+        r#"@id("x") @require("rs-step-up") @breakglass_exempt forbid(principal, action, resource);"#,
+        Limits::default(),
+    )
+    .err();
+    assert_eq!(err, Some(CompileError::ExemptNotBlocking));
+    assert_eq!(
+        CompileError::ExemptNotBlocking.code(),
+        "policy-exempt-not-blocking"
+    );
+    let err = Engine::compile(
+        SCHEMA,
+        r#"@id("x") @breakglass_exempt("no") forbid(principal, action, resource);"#,
+        Limits::default(),
+    )
+    .err();
+    assert_eq!(err, Some(CompileError::BadAnnotation));
+}

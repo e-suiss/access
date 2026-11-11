@@ -163,9 +163,14 @@ pub enum CompileError {
     /// Missing, repeated or invalid `@id`.
     #[error("bad or duplicate @id")]
     BadId,
-    /// An annotation outside `@id`, `@require`, `@undisclosed`, `@doc`, or a bad value.
+    /// An annotation outside `@id`, `@require`, `@undisclosed`, `@breakglass_exempt`, `@doc`,
+    /// or a bad value.
     #[error("bad annotation")]
     BadAnnotation,
+    /// `@breakglass_exempt` on a `forbid` that asks for a requirement: only a blocking rule may
+    /// be exempt (TN-93, OP-157 m.3 (h)).
+    #[error("@breakglass_exempt on a rule that is not blocking")]
+    ExemptNotBlocking,
     /// AST deeper than the limit.
     #[error("policy AST too deep")]
     AstTooDeep,
@@ -194,6 +199,7 @@ impl CompileError {
             Self::PermitNotAllowed => "policy-permit",
             Self::BadId => "policy-bad-id",
             Self::BadAnnotation => "policy-bad-annotation",
+            Self::ExemptNotBlocking => "policy-exempt-not-blocking",
             Self::AstTooDeep => "policy-ast-too-deep",
             Self::CostTooHigh => "policy-cost-too-high",
             Self::Validation => "policy-validation",
@@ -253,6 +259,7 @@ struct Meta {
     id: String,
     require: Option<String>,
     undisclosed: bool,
+    exempt: bool,
 }
 
 /// A compiled user policy with its annotations, for the control-plane SMT analysis (OP-105).
@@ -262,6 +269,8 @@ pub struct PolicyView<'a> {
     pub id: &'a str,
     /// `@require` reference; `None` for a plain DENY `forbid`.
     pub require: Option<&'a str>,
+    /// `@breakglass_exempt`: a blocking rule a break-glass Exercise is not stopped by.
+    pub exempt: bool,
     /// The Cedar policy under its engine-internal id.
     pub policy: &'a Policy,
 }
@@ -295,21 +304,27 @@ fn valid_id(s: &str) -> bool {
 }
 
 fn meta_of(policy: &Policy) -> Result<Meta, CompileError> {
-    let (mut id, mut require, mut undisclosed) = (None, None, false);
+    let (mut id, mut require, mut undisclosed, mut exempt) = (None, None, false, false);
     for (k, v) in policy.annotations() {
         match k {
             "id" if valid_id(v) => id = Some(v.to_owned()),
             "id" => return Err(CompileError::BadId),
             "require" if valid_ref(v) => require = Some(v.to_owned()),
             "undisclosed" if v.is_empty() || v == "true" => undisclosed = true,
+            "breakglass_exempt" if v.is_empty() || v == "true" => exempt = true,
             "doc" => {}
             _ => return Err(CompileError::BadAnnotation),
         }
+    }
+    // TN-93, §12.3.8 (6)
+    if exempt && require.is_some() {
+        return Err(CompileError::ExemptNotBlocking);
     }
     Ok(Meta {
         id: id.ok_or(CompileError::BadId)?,
         require,
         undisclosed,
+        exempt,
     })
 }
 
@@ -402,6 +417,7 @@ impl Engine {
                     .map(|policy| PolicyView {
                         id: &m.id,
                         require: m.require.as_deref(),
+                        exempt: m.exempt,
                         policy,
                     })
             })
@@ -413,6 +429,20 @@ impl Engine {
     /// # Errors
     /// [`InputRejected`]: input outside the limits or the schema.
     pub fn evaluate(&self, req: &RequestJson<'_>) -> Result<Outcome, InputRejected> {
+        self.evaluate_as(req, false)
+    }
+
+    /// [`Engine::evaluate`] for a request that is or is not a break-glass Exercise: a matching
+    /// `@breakglass_exempt` rule does not stop a break-glass one; every other rule, and every
+    /// requirement, applies as for any request (TN-93, OP-157 m.3 (h)).
+    ///
+    /// # Errors
+    /// [`InputRejected`]: input outside the limits or the schema.
+    pub fn evaluate_as(
+        &self,
+        req: &RequestJson<'_>,
+        breakglass: bool,
+    ) -> Result<Outcome, InputRejected> {
         let l = &self.limits;
         if req
             .context
@@ -451,20 +481,23 @@ impl Engine {
         let reasons: BTreeSet<String> = diagnostics.reason().map(ToString::to_string).collect();
         Ok(match response.decision() {
             Decision::Allow if reasons.iter().all(|r| r == BASE_PERMIT) => Outcome::NoObjection,
-            Decision::Deny => self.classify(&reasons),
+            Decision::Deny => self.classify(&reasons, breakglass),
             Decision::Allow => Outcome::Deny(Denial::Internal),
         })
     }
 
-    fn classify(&self, reasons: &BTreeSet<String>) -> Outcome {
+    fn classify(&self, reasons: &BTreeSet<String>, breakglass: bool) -> Outcome {
         let mut forbids = Vec::new();
         let mut undisclosed = false;
         let mut refs = BTreeSet::new();
+        let mut exempted = false;
         for r in reasons {
             let Some(m) = self.meta.get(r) else {
                 return Outcome::Deny(Denial::Internal);
             };
-            if let Some(reference) = &m.require {
+            if breakglass && m.exempt {
+                exempted = true;
+            } else if let Some(reference) = &m.require {
                 refs.insert(reference.clone());
             } else {
                 forbids.push(m.id.clone());
@@ -477,6 +510,8 @@ impl Engine {
                 policies: forbids,
                 undisclosed,
             })
+        } else if refs.is_empty() && exempted {
+            Outcome::NoObjection
         } else if refs.is_empty() {
             Outcome::Deny(Denial::Internal)
         } else {
