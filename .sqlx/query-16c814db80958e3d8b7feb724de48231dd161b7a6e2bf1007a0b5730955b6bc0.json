@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT pos, epoch, leaf_hash, recorded_at, frontier, sealed_at, accepted_epoch\n           FROM access.domain_head WHERE domain_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.domain_head",
+            "name": "pos"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "epoch",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.domain_head",
+            "name": "epoch"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "leaf_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.domain_head",
+            "name": "leaf_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "recorded_at",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.domain_head",
+            "name": "recorded_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "frontier",
+        "type_info": "ByteaArray",
+        "origin": {
+          "Table": {
+            "table": "access.domain_head",
+            "name": "frontier"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "sealed_at",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.domain_head",
+            "name": "sealed_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "accepted_epoch",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.domain_head",
+            "name": "accepted_epoch"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "16c814db80958e3d8b7feb724de48231dd161b7a6e2bf1007a0b5730955b6bc0"
+}

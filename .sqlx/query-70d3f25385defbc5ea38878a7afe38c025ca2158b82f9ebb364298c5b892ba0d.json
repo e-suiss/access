@@ -1,0 +1,72 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT current_setting('server_version_num')::int AS \"version!\",\n                  current_setting('password_encryption') AS \"scram!\",\n                  current_setting('max_connections')::int AS \"max!\",\n                  coalesce((SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()), false) AS \"tls!\",\n                  current_setting('synchronous_commit') AS \"commit!\",\n                  current_setting('synchronous_standby_names') AS \"standbys!\",\n                  (SELECT count(*) FROM pg_subscription s\n                     WHERE s.subdbid = (SELECT oid FROM pg_database WHERE datname = current_database())) AS \"subscriptions!\",\n                  (SELECT string_agg(extname, ',' ORDER BY extname) FROM pg_extension\n                     WHERE extname = ANY ($1::text[])) AS \"multi_primary\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "scram!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "max!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "tls!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "commit!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "standbys!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "subscriptions!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "multi_primary",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "70d3f25385defbc5ea38878a7afe38c025ca2158b82f9ebb364298c5b892ba0d"
+}

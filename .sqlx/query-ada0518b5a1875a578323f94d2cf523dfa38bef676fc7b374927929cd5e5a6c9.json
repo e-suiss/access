@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.domain_head SET epoch = $4\n          WHERE domain_id = $1 AND pos = $2 AND leaf_hash = $3 AND epoch < $4 AND sealed_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ada0518b5a1875a578323f94d2cf523dfa38bef676fc7b374927929cd5e5a6c9"
+}

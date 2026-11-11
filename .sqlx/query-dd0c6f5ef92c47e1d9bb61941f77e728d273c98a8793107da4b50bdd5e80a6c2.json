@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT digest, bytes FROM access.proof_store WHERE domain_id = $1 ORDER BY digest",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "digest",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.proof_store",
+            "name": "digest"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "bytes",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.proof_store",
+            "name": "bytes"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "dd0c6f5ef92c47e1d9bb61941f77e728d273c98a8793107da4b50bdd5e80a6c2"
+}

@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT NOT pg_is_in_recovery() AS \"w!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "w!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7d3bcdc7b6b633674cb9d8be5c89343bf90955945716fb898e74ce2797dd4fe4"
+}

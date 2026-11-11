@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.cell_moves (domain_id, kind, epoch, pos, leaf_hash, root, fence)\n         VALUES ($1, 'accept_unplanned', $2, $3, $4, $5, $6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Int8",
+        "Bytea",
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "47c081f6ba6edf05041561abf566bc4546cc760e60d15fede89f177d3fde419f"
+}

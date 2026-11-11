@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.sequencer_lease SET epoch = $2, released_at = now()\n          WHERE domain_id = $1 AND epoch < $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8eca88464f33460af196ba699fff7702ca63ccc88d02626341d10c0d996a60a7"
+}

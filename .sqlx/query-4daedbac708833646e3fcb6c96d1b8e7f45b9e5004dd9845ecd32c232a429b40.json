@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT rpo_s FROM access.realm_dr_profiles\n          WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rpo_s",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.realm_dr_profiles",
+            "name": "rpo_s"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "4daedbac708833646e3fcb6c96d1b8e7f45b9e5004dd9845ecd32c232a429b40"
+}

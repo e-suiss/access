@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier\n           FROM access.authority_nonce WHERE domain_id = $1 ORDER BY decision_pos, nonce",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "nonce",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_nonce",
+            "name": "nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "actor",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_nonce",
+            "name": "actor"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "intent_digest",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_nonce",
+            "name": "intent_digest"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.authority_nonce",
+            "name": "decision_pos"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "outcome",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.authority_nonce",
+            "name": "outcome"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "render_digest",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_nonce",
+            "name": "render_digest"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "tier",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "access.authority_nonce",
+            "name": "tier"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "d201187ab1709721ca8e831ba60c074cfe8ccd36746df78c366ddcf972ff6f4b"
+}

@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.domain_head SET sealed_at = pos\n          WHERE domain_id = $1 AND epoch = $2 AND sealed_at IS NULL AND frozen_at IS NULL\n          RETURNING pos, epoch, leaf_hash, recorded_at, frontier",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.domain_head",
+            "name": "pos"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "epoch",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.domain_head",
+            "name": "epoch"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "leaf_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.domain_head",
+            "name": "leaf_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "recorded_at",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.domain_head",
+            "name": "recorded_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "frontier",
+        "type_info": "ByteaArray",
+        "origin": {
+          "Table": {
+            "table": "access.domain_head",
+            "name": "frontier"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "baf93e68e300a11594b47ffb846aef2845d596f18c9bf042568901a0d4e52639"
+}

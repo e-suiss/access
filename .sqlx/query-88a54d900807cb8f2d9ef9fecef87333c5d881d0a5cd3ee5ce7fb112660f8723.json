@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.domain_head (domain_id, pos, epoch, leaf_hash, recorded_at, frontier, accepted_epoch)\n         VALUES ($1, $2, $3, $4, $5, $6, $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Int8",
+        "Bytea",
+        "Int8",
+        "ByteaArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "88a54d900807cb8f2d9ef9fecef87333c5d881d0a5cd3ee5ce7fb112660f8723"
+}

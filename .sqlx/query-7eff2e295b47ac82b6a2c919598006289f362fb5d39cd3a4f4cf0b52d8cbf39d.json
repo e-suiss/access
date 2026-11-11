@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT key, pos FROM access.authority_single_use WHERE domain_id = $1 ORDER BY key",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_single_use",
+            "name": "key"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.authority_single_use",
+            "name": "pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "7eff2e295b47ac82b6a2c919598006289f362fb5d39cd3a4f4cf0b52d8cbf39d"
+}

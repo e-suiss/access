@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.cell_moves (domain_id, kind, epoch, pos, leaf_hash, root, fence)\n         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "Int8",
+        "Int8",
+        "Bytea",
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d37ae85255796a47b60ce9c87bea2fda5f25822ca9e8d63ad7a0c88c8feffa21"
+}
