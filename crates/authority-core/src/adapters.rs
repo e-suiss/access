@@ -53,6 +53,8 @@ mod reconcile;
 mod ssh;
 mod vault;
 mod workload;
+// OP-157 m.4 (d)
+mod offboarding;
 pub use audit::{
     AUDIT_EVENT_EXPORT, AUDIT_EVENT_READ, AUDIT_EVENT_REJECTED, audit_text, is_rejection, txn,
 };

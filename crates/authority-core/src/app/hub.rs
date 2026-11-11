@@ -490,7 +490,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     /// episode is current or stale; a closed one ended when the latest Claim meeting a conjunct
     /// stopped selecting, the earliest such end over the conjuncts; `None` when no Claim ever met
     /// every conjunct.
-    async fn selection(
+    pub(crate) async fn selection(
         &self,
         state: &GrantState,
         conjuncts: &BTreeSet<Conjunct>,

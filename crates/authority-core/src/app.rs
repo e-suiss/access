@@ -2148,6 +2148,8 @@ pub mod templates;
 pub mod vault;
 mod window;
 mod workload;
+// OP-157 m.4 (d)
+pub mod offboarding;
 
 pub use ingest::{Ingested, Lane, Lanes, Turn, lane_of};
 pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};
