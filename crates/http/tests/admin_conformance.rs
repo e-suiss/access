@@ -172,6 +172,10 @@ fn every_management_write_answers_with_its_committed_exercise() {
             if matches!(id, "draftIntent" | "draftPlatformIntent") {
                 continue;
             }
+            // OP-157 m.3 (w): a keep records review.kept and is no Exercise
+            if id == "keepReviewItem" {
+                continue;
+            }
             let responses = op["responses"].as_object().unwrap();
             assert!(!responses.contains_key("202"), "{method} {path}: 202");
             for (code, response) in responses.iter().filter(|(c, _)| c.starts_with('2')) {
