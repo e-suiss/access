@@ -56,6 +56,16 @@ Kernel 0.4.1 adds semantics without changing the core version: every 0.4.0 artef
 - **Policy defaults.** `policy_set` may carry `defaults`; each value is written to its `policy_default` key. A larger `ct3_delay_s` or `mapping_probation_days`, a smaller `breakglass_review_h` or `support_max_min`, or a subset of `approval_surfaces` tightens; anything else widens and makes the change an expansion (CT3). A key never set compares with its default (86,400 s, 14 days, 72 h, the two Suiss surfaces); `support_max_min` has none, so its first value tightens.
 - **Structural `policy_set` polarity.** Amending a restriction policy narrows (CT1) only when the schema, the target and every old requirement set stay, every old statement appears again byte for byte, and every added statement is a `forbid`. Statements are split at top-level `;`, outside string literals and `//` comments, and trimmed. Anything else widens (CT3). A control-plane analysis may raise a narrowing to expansion; it never lowers one.
 
+## Kernel 0.6.0 semantics
+
+- **Self-restriction.** The root of a Party's self-anchor may run a narrowing `policy_set` on `{anchor: A}` with basis `{anchor: A}` (L0-META-27a).
+- **Conditional transfer.** `anchor_transfer` may rest on a holding of a Grant the Anchor's root wrote that names `anchor_transfer` and carries a `claim_held` condition; the holder becomes the sole root (L0-META-20a).
+- **Handover and recovery.** `domain_handover` and `domain_recover` alone rewrite `["provider_binding"]`; recovery needs the Genesis recovery entry and passes the rollback guard (`recovery.guard`), and closes earlier AISs whose nonce the lineage does not hold (`recovery.pre_recovery`) (L0-META-36).
+- **Versions and algorithms.** `version_activate` lowering the activated versions is expansion with a 24-hour least time-lock (`version.downgrade`); a raised minimum binds after 90 days (`version.transition`); `algorithm_retire` only narrows (L0-META-37, L0-META-38).
+- **Superseded keys.** An artefact under a superseded binding key needs exact-content inclusion in a witnessed cited checkpoint, and after a handover a consistency path (`inclusion.verify`, L0-SIG-80).
+
+The vectors are in `handover/1/`, `recovery/1/` and `version/1/`.
+
 ## Approval Surface render
 
 The render an Approval Surface shows is Kernel semantics, so F0 recomputes it from the intent and its accepted Action Schema (`approval.render`): the action, the primary resource, every parameter by name, the recipient and the validity, each with its canonical text and whether it is material, its `access/render/v1` digest and the sorted material fields. `approval.wysiwys` is the surface's conformance check: the render shown must be canonical and carry the decision point's `render_digest`, the statement must name exactly its material fields, and every authority-opaque body must hash under `access/opaque-body/v1` to the digest the intent carries for it. The vectors are in `conformance/vectors/approval/1/`.
