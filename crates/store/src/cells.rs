@@ -145,7 +145,8 @@ pub struct Image {
     pub proofs: Vec<ProofRow>,
 }
 
-/// Reads the whole image of `domain` in one snapshot (§17.4.1 item 1).
+/// Reads the whole image of `domain` in one transaction (§17.4.1 item 1). It is read from a
+/// sealed source or a copy, which no longer change; a torn read would not replay.
 ///
 /// # Errors
 /// [`StoreError`]; `Corrupt` when the domain has no head.
@@ -155,9 +156,6 @@ pub struct Image {
 )]
 pub async fn image(sequencer: &PgPool, domain: &DomainId) -> Result<Image, StoreError> {
     let mut t = DomainTx::begin(sequencer, domain).await?;
-    sqlx::query!("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
-        .execute(&mut *t.tx)
-        .await?;
     let id = domain.as_bytes().as_slice();
     let tenant = sqlx::query_scalar!(
         "SELECT tenant_id FROM access.authority_domain WHERE domain_id = $1",
