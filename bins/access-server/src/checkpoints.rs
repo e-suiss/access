@@ -3,15 +3,21 @@
 //! `audit-checkpoint` key (OP-38, OP-44, OP-150 m.3 (h)); every domain this process leads has
 //! its committed head signed by the authority signer at the cadence, a quiet one included
 //! (CMP-6, T16, OP-143 m.10), and the note is appended with its key excerpt. A signer that is
-//! down leaves nothing behind and the next tick retries (CR-23, G42).
+//! down leaves nothing behind and the next tick retries (CR-23, G42). A domain checkpoint is
+//! due every 60 s or 1 000 records, whichever comes first, as a heartbeat when nothing changed,
+//! and out of cycle when a commit waits for its cosignature (coalesced, OP-38, OP-158 m.3 (c));
+//! each is sent to the declared witnesses and compared with what they hold (§16.6).
+
+pub(crate) mod publish;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
 use access_authority_sequencer::adapters::{PgHeads, SocketSigner, SourcesClock};
-use access_authority_sequencer::checkpoint::{CheckpointError, checkpoint};
-use access_authority_sequencer::ports::{Clock as _, Heads, NoteSigner as DomainSigner};
+use access_authority_sequencer::checkpoint::{CheckpointError, SignedCheckpoint, checkpoint};
+use access_authority_sequencer::ports::{Heads, NoteSigner as DomainSigner};
+use access_authority_sequencer::witness::board;
 use access_identity_audit::AuditError;
 use access_identity_audit::adapters::{Held, PgAudit, PgOperational, SignerNotes};
 use access_identity_audit::app::{identity_step, step};
@@ -22,15 +28,17 @@ use access_kernel::record::RecordEnvelope;
 use access_kernel::verify::key_scope::SpecVersions;
 use access_store::Pool;
 use access_store::audit_lease::{AuditChain, acquire_audit_lease};
-use access_store::authority_checkpoint::{AuthorityCheckpoint, append};
+use access_store::authority_checkpoint::{AuthorityCheckpoint, append, latest};
 use access_store::scope::DomainId;
+use suiss_ledger::checkpoint::cadence::Cadence;
 
 /// How often the audit chains are integrated and published: half the identity MMD of 1 s, so a
 /// row is in a published checkpoint within it (PD; U52, OP-38, OP-158 m.3 (w)).
 pub(crate) const AUDIT_INTERVAL: Duration = Duration::from_millis(500);
 
-/// The domain checkpoint cadence (T16 POLICY DEFAULT 60 s).
-pub(crate) const DOMAIN_INTERVAL: Duration = Duration::from_secs(60);
+/// How often the domain cadences are looked at; the cadence itself is T16's 60 s or 1 000
+/// records (`suiss_ledger::checkpoint::cadence`).
+pub(crate) const DOMAIN_TICK: Duration = Duration::from_secs(1);
 
 /// How long a replica's lease on a cell audit chain lasts unless renewed (PD; OP-152 m.5 (k)).
 pub(crate) const AUDIT_LEASE: Duration = Duration::from_secs(10);
@@ -152,25 +160,78 @@ async fn versions(app: &Pool, domain: Digest) -> Result<SpecVersions, Checkpoint
 }
 
 /// Signs and appends the checkpoint of one domain's committed head at `now`.
+#[cfg(test)]
 pub(crate) async fn domain_checkpoint<H: Heads + Sync, S: DomainSigner + Sync>(
     (heads, signer): (&H, &S),
     (app, sequencer): (&Pool, &Pool),
     domain: Digest,
     now: u64,
 ) -> Result<AuthorityCheckpoint, CheckpointError> {
+    signed_checkpoint((heads, signer), (app, sequencer), domain, now)
+        .await
+        .map(|(row, _)| row)
+}
+
+/// [`domain_checkpoint`] with the signed checkpoint the witnesses get.
+pub(crate) async fn signed_checkpoint<H: Heads + Sync, S: DomainSigner + Sync>(
+    (heads, signer): (&H, &S),
+    (app, sequencer): (&Pool, &Pool),
+    domain: Digest,
+    now: u64,
+) -> Result<(AuthorityCheckpoint, SignedCheckpoint), CheckpointError> {
     let versions = versions(app, domain).await?;
     let noted = checkpoint(heads, signer, domain, &versions, now).await?;
     let row = AuthorityCheckpoint {
         issued_at: now,
         size: noted.checkpoint.size,
         root: noted.checkpoint.root,
-        note: noted.note,
-        excerpt: noted.excerpt,
+        note: noted.note.clone(),
+        excerpt: noted.excerpt.clone(),
     };
     append(sequencer, &DomainId::from_bytes(domain.0), &row)
         .await
         .map_err(|e| CheckpointError::Store(e.into()))?;
-    Ok(row)
+    Ok((row, noted))
+}
+
+/// One cadence step of `domain` at `now`: the checkpoint when one is due, published.
+pub(crate) async fn domain_step<H: Heads + Sync, S: DomainSigner + Sync>(
+    (heads, keys, witnesses): (&H, &S, &publish::Publisher),
+    (app, sequencer): (&Pool, &Pool),
+    (domain, cadence): (Digest, &mut Cadence),
+    now: u64,
+) -> Result<Option<(AuthorityCheckpoint, publish::Published)>, CheckpointError> {
+    let id = DomainId::from_bytes(domain.0);
+    if cadence.last().is_none()
+        && let Some(last) = latest(app, &id)
+            .await
+            .map_err(|e| CheckpointError::Store(e.into()))?
+    {
+        *cadence = cadence.resume(last.size, last.issued_at);
+    }
+    if let Some(wanted) = board().wanted(&domain) {
+        cadence.want(wanted);
+    }
+    let head = heads.committed(&domain).await?;
+    let size = head.pos.saturating_add(1);
+    if cadence.due(size, now).is_none() {
+        return Ok(None);
+    }
+    let (row, noted) = signed_checkpoint((heads, keys), (app, sequencer), domain, now).await?;
+    cadence.issued(row.size, now);
+    let recorded_at =
+        access_authority_sequencer::checkpoint::extensions(&noted.checkpoint)?.recorded_at;
+    let outcome = publish::publish(
+        witnesses,
+        (app, sequencer),
+        domain,
+        (&row, &noted, recorded_at),
+    )
+    .await;
+    if !witnesses.targets.is_empty() {
+        publish::gossip(witnesses, (app, sequencer), domain, now).await;
+    }
+    Ok(Some((row, outcome)))
 }
 
 fn wall_ms() -> u64 {
@@ -200,6 +261,8 @@ pub(crate) struct Inputs {
     pub(crate) holder: String,
     /// Where the identity audit checkpoints are published (OP-37, U52).
     pub(crate) publication: crate::publication::Targets,
+    /// The witnesses and sinks of the led domains' checkpoints (OP-158 m.3 (d)).
+    pub(crate) publisher: publish::Publisher,
 }
 
 impl Checkpointers {
@@ -216,6 +279,7 @@ impl Checkpointers {
             authority_signer,
             holder,
             publication,
+            publisher,
         } = inputs;
         let audit = tokio::spawn(async move {
             let signer = SignerNotes(identity_signer);
@@ -232,17 +296,29 @@ impl Checkpointers {
             let heads = PgHeads(app.clone());
             let signer = SocketSigner::new(authority_signer);
             let mut clock = SourcesClock::new(sequencer.clone());
-            let mut every = tokio::time::interval(DOMAIN_INTERVAL);
+            let mut cadences: std::collections::HashMap<Digest, Cadence> =
+                std::collections::HashMap::new();
+            let mut every = tokio::time::interval(DOMAIN_TICK);
             every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             loop {
-                every.tick().await;
-                let Ok(now) = clock.now().await else {
+                tokio::select! {
+                    _ = every.tick() => {}
+                    () = board().woken() => {}
+                }
+                // TI-RT2: read past the witness gate so a later cosignature can reopen it
+                let Ok(now) = clock.sources().await else {
                     tracing::warn!("no trusted time; domain checkpoints not signed");
                     continue;
                 };
                 for domain in led() {
-                    if let Err(error) =
-                        domain_checkpoint((&heads, &signer), (&app, &sequencer), domain, now).await
+                    let cadence = cadences.entry(domain).or_default();
+                    if let Err(error) = domain_step(
+                        (&heads, &signer, &publisher),
+                        (&app, &sequencer),
+                        (domain, cadence),
+                        now,
+                    )
+                    .await
                     {
                         tracing::warn!(%error, "domain checkpoint not appended");
                     }

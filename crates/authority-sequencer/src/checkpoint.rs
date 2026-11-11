@@ -62,6 +62,8 @@ pub struct SignedCheckpoint {
     pub note: String,
     /// Binding-signed excerpt of the operational key (CR-58 m.1).
     pub excerpt: Vec<u8>,
+    /// The signed Domain Metadata the checkpoint names; witnesses verify the key under it.
+    pub metadata: Vec<u8>,
 }
 
 /// The Access lines a checkpoint carries after its root.
@@ -203,6 +205,7 @@ pub async fn checkpoint<H: Heads, S: NoteSigner>(
         checkpoint: cp,
         note,
         excerpt: noted.excerpt,
+        metadata,
     })
 }
 

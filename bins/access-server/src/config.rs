@@ -110,7 +110,11 @@ pub(crate) struct Config {
     /// U52); none by default.
     #[serde(default)]
     pub(crate) audit_publication: AuditPublication,
+    /// Witnesses, checkpoint sinks and Roughtime servers (OP-158 m.3 (c), (d), (k)).
+    #[serde(default)]
+    pub(crate) transparency: Transparency,
 }
+
 
 /// The declared HTTPS hooks that receive every identity audit checkpoint's signed note (OP-37,
 /// U52, OP-158 m.3 (w)).
@@ -139,6 +143,93 @@ pub(crate) struct AuditHook {
 pub(crate) struct AuditCold {
     /// The directory.
     pub(crate) dir: PathBuf,
+}
+
+
+/// Where checkpoints go and where time comes from (§16.6, CMP-6, T17, TI-RT2, OP-158 m.3).
+/// Without witnesses, no checkpoint is cosigned and `witnessed_through` stays 0: nothing the
+/// SEC23 class commits is acknowledged as witnessed (fail closed).
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub(crate) struct Transparency {
+    /// The provider operator's name; a witness of the same operator is not independent
+    /// (SI-12, B13).
+    pub(crate) operator: Option<String>,
+    /// The witnesses every led domain's checkpoints are sent to.
+    pub(crate) witnesses: Vec<WitnessEntry>,
+    /// Directories each cosigned checkpoint is copied to, one file per checkpoint (§9.16, P32).
+    pub(crate) sinks: Vec<PathBuf>,
+    /// Roughtime servers, the third time source (OP-158 m.3 (k)).
+    pub(crate) roughtime: Vec<RoughtimeEntry>,
+}
+
+/// One witness.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct WitnessEntry {
+    /// `http://host:port[/prefix]` of its `add-checkpoint` endpoint.
+    pub(crate) url: String,
+    /// Its cosigner `vkey`.
+    pub(crate) vkey: String,
+    /// The operator it declares.
+    pub(crate) operator: String,
+}
+
+/// One Roughtime server.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RoughtimeEntry {
+    /// `host:port` (UDP).
+    pub(crate) addr: String,
+    /// Its long-term Ed25519 public key, base64url.
+    pub(crate) key: String,
+}
+
+impl Transparency {
+    /// The declared witnesses.
+    pub(crate) fn targets(
+        &self,
+    ) -> Result<Vec<access_authority_sequencer::witness::Target>, ConfigError> {
+        let provider = self.operator.as_deref().unwrap_or_default();
+        self.witnesses
+            .iter()
+            .map(|w| {
+                access_authority_sequencer::witness::Target::new(
+                    &w.url,
+                    &w.vkey,
+                    &w.operator,
+                    provider,
+                )
+                .map_err(|_| ConfigError::Transparency)
+            })
+            .collect()
+    }
+
+    /// The Roughtime servers.
+    pub(crate) fn roughtime(
+        &self,
+    ) -> Result<Vec<access_authority_sequencer::witness::RoughtimeServer>, ConfigError> {
+        self.roughtime
+            .iter()
+            .map(|r| {
+                let key = access_kernel::json::b64url_decode(&r.key)
+                    .ok()
+                    .and_then(|k| <[u8; 32]>::try_from(k).ok())
+                    .ok_or(ConfigError::Transparency)?;
+                if !r
+                    .addr
+                    .rsplit_once(':')
+                    .is_some_and(|(h, p)| !h.is_empty() && p.parse::<u16>().is_ok())
+                {
+                    return Err(ConfigError::Transparency);
+                }
+                Ok(access_authority_sequencer::witness::RoughtimeServer {
+                    addr: r.addr.clone(),
+                    key,
+                })
+            })
+            .collect()
+    }
 }
 
 /// The control-plane analysis of `policy.set` changes (OP-105, OP-157 m.3 (n)): with
@@ -737,6 +828,7 @@ impl Default for Config {
             breakglass: None,
             audit_cold: None,
             audit_publication: AuditPublication::default(),
+            transparency: Transparency::default(),
         }
     }
 }
@@ -816,6 +908,10 @@ pub(crate) enum ConfigError {
         "mtls_listen must differ from listen, management_listen and internal_listen, and mtls_public_port must not be 0 (OP-155 m.3 (m))"
     )]
     MtlsListener,
+    #[error(
+        "transparency: operator is required with witnesses, each witness an http://host:port URL with a cosigner vkey and an operator, each roughtime server host:port with a 32-byte base64url key (OP-158 m.3 (d), (k))"
+    )]
+    Transparency,
 }
 
 /// Whether two listen addresses would take the same socket: one port, and one address or the
@@ -892,6 +988,18 @@ impl Config {
         if self.doorbell.as_ref().is_some_and(|d| !d.valid()) {
             return Err(ConfigError::Doorbell);
         }
+        // OP-158 m.3 (d), (k)
+        if !self.transparency.witnesses.is_empty()
+            && self
+                .transparency
+                .operator
+                .as_deref()
+                .is_none_or(|o| o.trim().is_empty())
+        {
+            return Err(ConfigError::Transparency);
+        }
+        self.transparency.targets()?;
+        self.transparency.roughtime()?;
         if self.tls.is_none() {
             return Err(ConfigError::NoTls);
         }

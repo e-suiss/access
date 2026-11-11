@@ -2014,9 +2014,28 @@ async fn serve(
                 &prepared.outbound,
                 product_app.clone(),
             )?,
+            // OP-158 m.3 (d)
+            publisher: checkpoints::publish::Publisher {
+                targets: config.transparency.targets().map_err(|e| e.to_string())?,
+                sinks: config.transparency.sinks.clone(),
+            },
         },
         move || led.led(),
     );
+    // TI-RT2, OP-158 m.3 (k)
+    let roughtime_servers = config.transparency.roughtime().map_err(|e| e.to_string())?;
+    let sampling_time = tokio::spawn(async move {
+        if roughtime_servers.is_empty() {
+            return;
+        }
+        let mut every = tokio::time::interval(std::time::Duration::from_secs(30));
+        loop {
+            every.tick().await;
+            access_authority_sequencer::witness::roughtime()
+                .sample(&roughtime_servers)
+                .await;
+        }
+    });
     // OP-62, MD-14, TN-111
     let idp_plane = idp::Plane::new(
         domains.clone(),
@@ -2273,6 +2292,7 @@ async fn serve(
         d.abort();
     }
     watching_operators.abort();
+    sampling_time.abort();
     reviewing.abort();
     renewing.stop().await;
     scim_outbound.stop().await;

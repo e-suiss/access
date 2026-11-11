@@ -280,10 +280,13 @@ impl SourcesClock {
     }
 }
 
-impl Clock for SourcesClock {
-    async fn now(&mut self) -> Result<u64, SequencerError> {
-        // TI-RT2, OP-158 m.3 (k)
-        crate::witness::time_check()?;
+impl SourcesClock {
+    /// The sources' trusted time without the witness gate: the checkpointer keeps signing
+    /// while the gate is closed, so that a later cosignature can reopen it (TI-RT2).
+    ///
+    /// # Errors
+    /// [`SequencerError::Time`] or the server clock's store error.
+    pub async fn sources(&mut self) -> Result<u64, SequencerError> {
         let server = server_time(&self.pool).await?;
         let system = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -295,5 +298,13 @@ impl Clock for SourcesClock {
         let mut samples = vec![Sample::exact(system), Sample::exact(server)];
         samples.extend(crate::witness::roughtime().current());
         Ok(self.combiner.read_samples(&samples, mono)?)
+    }
+}
+
+impl Clock for SourcesClock {
+    async fn now(&mut self) -> Result<u64, SequencerError> {
+        // TI-RT2, OP-158 m.3 (k)
+        crate::witness::time_check()?;
+        self.sources().await
     }
 }
