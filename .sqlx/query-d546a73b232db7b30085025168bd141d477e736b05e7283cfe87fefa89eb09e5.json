@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.issued_at, c.size, c.root, c.note, c.excerpt FROM access.authority_checkpoint c\n          WHERE c.domain_id = $1 AND ($2::bigint IS NULL OR c.size = $2)\n            AND EXISTS (SELECT 1 FROM access.witness_cosign w\n                         WHERE w.domain_id = c.domain_id AND w.issued_at = c.issued_at\n                           AND w.independent)\n          ORDER BY c.size DESC, c.issued_at DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "issued_at",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.authority_checkpoint",
+            "name": "issued_at"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.authority_checkpoint",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "root",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_checkpoint",
+            "name": "root"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.authority_checkpoint",
+            "name": "note"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "excerpt",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_checkpoint",
+            "name": "excerpt"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d546a73b232db7b30085025168bd141d477e736b05e7283cfe87fefa89eb09e5"
+}

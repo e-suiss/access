@@ -21,21 +21,25 @@ fn wall() -> u64 {
     access_authority_signer::adapters::now_ms()
 }
 
-/// The `access-witness` binary of this target directory, built when it is missing.
-fn witness_bin() -> PathBuf {
+/// A binary of this target directory, built when it is missing.
+fn bin(package: &str, name: &str) -> PathBuf {
     let exe = std::env::current_exe().unwrap();
     let dir = exe.parent().and_then(Path::parent).unwrap().to_path_buf();
-    let bin = dir.join("access-witness");
+    let bin = dir.join(name);
     if !bin.exists() {
         let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
         let status = Command::new(cargo)
-            .args(["build", "-p", "access-witness", "--bin", "access-witness"])
+            .args(["build", "-p", package, "--bin", name])
             .status()
             .unwrap();
-        assert!(status.success(), "access-witness did not build");
+        assert!(status.success(), "{name} did not build");
     }
-    assert!(bin.exists(), "no access-witness at {}", bin.display());
+    assert!(bin.exists(), "no {name} at {}", bin.display());
     bin
+}
+
+fn witness_bin() -> PathBuf {
+    bin("access-witness", "access-witness")
 }
 
 struct Witness {
@@ -240,6 +244,76 @@ impl Log {
 
     fn size(&self) -> u64 {
         self.frontier.size()
+    }
+
+    /// Appends one real claim record with an `artifacts` field and a withheld `secret`.
+    async fn push_record(&mut self, db: &TestDb, artifact: [u8; 32], recorded_at: u64) {
+        use access_kernel::record::{Header, Opened, RecordKind};
+        use suiss_crypto::dcbor::Value;
+        let pos = self.frontier.size();
+        let salt = |n: &str| {
+            let mut s = self.leaf.to_vec();
+            s.extend_from_slice(n.as_bytes());
+            suiss_crypto::digest::sha256(&s)
+        };
+        let envelope = RecordEnvelope {
+            header: Header {
+                domain: Some(self.domain),
+                pos,
+                kind: RecordKind::Claim,
+                recorded_at,
+                prev: Some(Digest(self.leaf)),
+            },
+            fields: std::collections::BTreeMap::from([
+                (
+                    String::from("artifacts"),
+                    Opened {
+                        value: Value::Array(vec![Value::Bytes(artifact.to_vec())]),
+                        salt: salt("artifacts"),
+                    },
+                ),
+                (
+                    String::from("secret"),
+                    Opened {
+                        value: Value::text("lineage stays closed"),
+                        salt: salt("secret"),
+                    },
+                ),
+            ]),
+        };
+        let leaf = envelope.leaf_hash().unwrap();
+        let after = pos - 1;
+        self.frontier.push(leaf).unwrap();
+        self.leaf = leaf;
+        let batch = CommitBatch {
+            epoch: self.lease.epoch,
+            after,
+            records: vec![LogRecord {
+                pos,
+                kind: "claim",
+                recorded_at,
+                leaf_hash: leaf,
+                envelope: access_kernel::codec::Canonical::to_bytes(&envelope).unwrap(),
+            }],
+            head: HeadRow {
+                pos,
+                epoch: self.lease.epoch,
+                leaf_hash: leaf,
+                recorded_at,
+                frontier: self.frontier.nodes().to_vec(),
+            },
+            nonces: vec![],
+            outbox: vec![],
+            proofs: vec![],
+            reads: vec![],
+            writes: vec![],
+            draws: vec![],
+            single_use: vec![],
+            effects: vec![],
+        };
+        commit_batch(&db.sequencer, &self.id, [0x31; 16], &batch)
+            .await
+            .unwrap();
     }
 }
 
@@ -522,5 +596,201 @@ async fn real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation() {
     ));
     assert!(clock.sources().await.is_ok());
     drop((own, third));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The log's `vkey` from a checkpoint's key excerpt.
+fn log_vkey(origin: &str, excerpt: &[u8]) -> String {
+    let sign1 = suiss_crypto::cose::parse_sign1(excerpt).unwrap();
+    let ex =
+        access_kernel::verify::key_scope::KeyExcerpt::from_bytes(sign1.payload.as_deref().unwrap())
+            .unwrap();
+    let suiss_crypto::cose::PublicKey::Ed25519(k) = ex.key.key else {
+        panic!("ed25519");
+    };
+    suiss_crypto::note::Verifier::ed25519(origin, k)
+        .unwrap()
+        .to_vkey()
+}
+
+async fn http(router: axum::Router, uri: &str, pep: bool) -> (axum::http::StatusCode, Vec<u8>) {
+    use tower::ServiceExt as _;
+    let mut req = axum::http::Request::get(uri)
+        .body(axum::body::Body::empty())
+        .unwrap();
+    if pep {
+        req.extensions_mut()
+            .insert(access_http::adp::adapters::Pep("pep-w2".into()));
+    }
+    let r = router.oneshot(req).await.unwrap();
+    let status = r.status();
+    let body = axum::body::to_bytes(r.into_body(), 1 << 22).await.unwrap();
+    (status, body.to_vec())
+}
+
+fn verify(args: &[&str]) -> (bool, String) {
+    let out = Command::new(bin("esuiss-access-verify", "access-verify"))
+        .args(args)
+        .output()
+        .unwrap();
+    (
+        out.status.success(),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
+}
+
+// T19, §17.6.1 rule 5, U21, U49, TI-RT5, P18, U9, HL-7; Ek B 5779, 5829, 5834, 5846, 5849,
+// 5893, 5945, 6074
+#[tokio::test(flavor = "multi_thread")]
+#[allow(clippy::too_many_lines, reason = "one walkthrough of the bundle and its checks")]
+async fn a_witnessed_bundle_opens_only_artifacts_and_dates_the_record() {
+    let db = fresh().await.unwrap();
+    let mut log = Log::create(&db).await;
+    let d = log.domain;
+    let artifact = suiss_crypto::digest::sha256(&wall().to_be_bytes());
+    log.push_record(&db, artifact, wall() - 30_000).await;
+    log.push_record(
+        &db,
+        suiss_crypto::digest::sha256(&artifact),
+        wall() - 20_000,
+    )
+    .await;
+    let socket = wall_signer("bundle", d).await;
+    let (heads, signer) = (PgHeads(db.app.clone()), SocketSigner::new(socket));
+    let key = binding(&signer, d).await;
+    let root = std::env::temp_dir().join(format!("aw-bundle-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    let witness = Witness::start(&root, "w-only", "Example Witness Ltd", d, key);
+    let target = witness.target("Example Witness Ltd");
+    let publisher = Publisher {
+        targets: vec![target.clone()],
+        sinks: vec![],
+    };
+    let pools = (&db.app, &db.sequencer);
+    let (row, out) = domain_step(
+        (&heads, &signer, &publisher),
+        pools,
+        (d, &mut Cadence::default()),
+        wall(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!((row.size, out.independent), (3, 1), "{out:?}");
+    let router = || {
+        access_http::transparency::router(crate::transparency::PgCheckpoints {
+            app: db.app.clone(),
+            witnesses: vec![target.clone()],
+        })
+    };
+    let origin = access_authority_sequencer::checkpoint::origin(&d);
+
+    // §9.16, P32, 6074: anyone may copy the witnessed checkpoint; one witness claims nothing
+    let (status, body) = http(
+        router(),
+        &format!("/access/v1/domains/{origin}/checkpoints"),
+        false,
+    )
+    .await;
+    assert_eq!(status, 200);
+    let listing: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(listing["witnessed_through"], 3);
+    assert_eq!(listing["claims"]["equivocation_detectable"], false);
+    let note = listing["checkpoint"]["note"].as_str().unwrap().to_owned();
+    let vkey = log_vkey(&origin, &row.excerpt);
+    // U49: the cosigned checkpoint verifies with the witness keys alone
+    let note_file = root.join("checkpoint.note");
+    std::fs::write(&note_file, &note).unwrap();
+    let (ok, text) = verify(&[
+        "checkpoint",
+        "--note",
+        note_file.to_str().unwrap(),
+        "--origin",
+        &origin,
+        "--log",
+        &vkey,
+        "--cosigners",
+        &witness.vkey,
+    ]);
+    assert!(ok && text.contains("size: 3"), "{text}");
+
+    // T19: a PEP gets the bundle of position 1, `artifacts` open and nothing else
+    let uri = format!("/access/v1/domains/{origin}/checkpoints/3/inclusion/1");
+    assert_eq!(http(router(), &uri, false).await.0, 401);
+    assert_eq!(
+        http(
+            router(),
+            &format!("/access/v1/domains/{origin}/checkpoints/9/inclusion/1"),
+            true
+        )
+        .await
+        .0,
+        409
+    );
+    let (status, bundle) = http(router(), &uri, true).await;
+    assert_eq!(status, 200);
+    let bundle_file = root.join("bundle.cbor");
+    std::fs::write(&bundle_file, &bundle).unwrap();
+    let decoded =
+        suiss_crypto::dcbor::decode(&bundle, suiss_crypto::dcbor::Limits::CEILING).unwrap();
+    let Some(suiss_crypto::dcbor::Value::Bytes(disclosure)) = decoded.get("disclosure") else {
+        panic!("disclosure");
+    };
+    let disclosure = access_kernel::record::Disclosure::from_bytes(disclosure).unwrap();
+    assert_eq!(disclosure.opened.keys().collect::<Vec<_>>(), ["artifacts"]);
+    assert!(disclosure.withheld.contains_key("secret"));
+
+    // U21: it existed by the witness's cosignature, and not before it
+    let now_s = wall() / 1000;
+    let existed = |before: u64| {
+        verify(&[
+            "existed",
+            "--bundle",
+            bundle_file.to_str().unwrap(),
+            "--origin",
+            &origin,
+            "--log",
+            &vkey,
+            "--cosigners",
+            &witness.vkey,
+            "--before",
+            &before.to_string(),
+        ])
+    };
+    let (ok, text) = existed(now_s + 5);
+    assert!(
+        ok && text.contains("pos: 1") && text.contains("opened: artifacts"),
+        "{text}"
+    );
+    let (ok, text) = existed(now_s - 3_600);
+    assert!(!ok && text.contains("reject: after"), "{text}");
+
+    // TI-RT5, P18, 5945: the metadata is fresh by the cosignature, not by its own iat
+    let metadata = DomainSigner::metadata(&signer, d).await.unwrap();
+    let metadata_file = root.join("metadata.cose");
+    std::fs::write(&metadata_file, &metadata).unwrap();
+    let fresh = |now: u64| {
+        verify(&[
+            "fresh",
+            "--metadata",
+            metadata_file.to_str().unwrap(),
+            "--note",
+            note_file.to_str().unwrap(),
+            "--origin",
+            &origin,
+            "--log",
+            &vkey,
+            "--cosigners",
+            &witness.vkey,
+            "--now",
+            &now.to_string(),
+        ])
+    };
+    let (ok, text) = fresh(wall());
+    assert!(ok, "{text}");
+    let (ok, text) = fresh(wall() + 2 * 3_600_000);
+    assert!(!ok && text.contains("stale"), "{text}");
+    drop(witness);
     let _ = std::fs::remove_dir_all(&root);
 }

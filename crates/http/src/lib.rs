@@ -31,6 +31,7 @@ pub mod stage12;
 pub mod stage13;
 pub mod status;
 pub mod tls;
+pub mod transparency;
 
 use std::time::Duration;
 

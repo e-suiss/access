@@ -55,6 +55,7 @@ mod status;
 #[cfg(test)]
 mod testing;
 mod tiers;
+mod transparency;
 mod upstream;
 // OP-158 m.3 (y)
 mod kek_rotation;
@@ -2117,7 +2118,13 @@ async fn serve(
         },
     ));
     // OP-155 m.3 (q)
-    let public_adp = access_http::adp::pep::with_tokens(adp.clone(), pep_tokens, issuer);
+    // OP-158 m.3 (c), (d)
+    let checkpoints = access_http::transparency::router(transparency::PgCheckpoints {
+        app: product_app.clone(),
+        witnesses: config.transparency.targets().map_err(|e| e.to_string())?,
+    });
+    let public_adp =
+        access_http::adp::pep::with_tokens(adp.clone().merge(checkpoints), pep_tokens, issuer);
     // OP-151 m.3, m.2 M1, m.12
     let management_origin = config
         .suiss

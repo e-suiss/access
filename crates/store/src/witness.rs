@@ -292,3 +292,40 @@ pub async fn equivocations(pool: &PgPool, domain: &DomainId) -> Result<u64, Stor
     t.commit().await?;
     n.map_or(Ok(0), unsigned)
 }
+
+/// The newest checkpoint of `domain` an independent witness cosigned, the largest first; with
+/// `size`, only one of exactly that size (T19: the bundle's checkpoint).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn latest_witnessed(
+    pool: &PgPool,
+    domain: &DomainId,
+    size: Option<u64>,
+) -> Result<Option<AuthorityCheckpoint>, StoreError> {
+    let wanted = size.map(signed).transpose()?;
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let row = sqlx::query!(
+        "SELECT c.issued_at, c.size, c.root, c.note, c.excerpt FROM access.authority_checkpoint c
+          WHERE c.domain_id = $1 AND ($2::bigint IS NULL OR c.size = $2)
+            AND EXISTS (SELECT 1 FROM access.witness_cosign w
+                         WHERE w.domain_id = c.domain_id AND w.issued_at = c.issued_at
+                           AND w.independent)
+          ORDER BY c.size DESC, c.issued_at DESC LIMIT 1",
+        domain.as_bytes().as_slice(),
+        wanted,
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    row.map(|r| {
+        Ok(AuthorityCheckpoint {
+            issued_at: unsigned(r.issued_at)?,
+            size: unsigned(r.size)?,
+            root: r.root.try_into().map_err(|_| StoreError::Corrupt)?,
+            note: r.note,
+            excerpt: r.excerpt,
+        })
+    })
+    .transpose()
+}
