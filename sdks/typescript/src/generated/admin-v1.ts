@@ -3014,7 +3014,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Records the reviewer's keep as a review.kept identity audit record; writes no authority (OP-157 m.3 (w)). */
+        /** Records the reviewer's keep, signed with the reviewer's AIS, as a review.kept identity audit record; writes no authority (OP-157 m.3 (w)). */
         post: operations["keepReviewItem"];
         delete?: never;
         options?: never;
@@ -3029,10 +3029,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** What offboarding a Party would touch, channel by channel: direct Grants (keep or revoke), Instances (terminate), rule-shaped holdings (retain, exclude or restrict), the self-anchor (retire or hand over) and re-entry (allowed or blocked); there are no defaults and it changes nothing (OP-157 m.3 (v)). */
+        get: operations["previewOffboarding"];
         put?: never;
-        /** What offboarding a Party would do with one explicit choice per channel: direct Grants keep or revoke, Instances terminate, rule-shaped holdings retain, exclude or restrict, the self-anchor retire or transfer, re-entry allowed or blocked; no defaults, changes nothing (OP-157 m.3 (v)). */
-        post: operations["previewOffboarding"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -13316,9 +13316,13 @@ export interface operations {
     keepReviewItem: {
         parameters: {
             query?: never;
-            header?: {
+            header: {
                 /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
                 traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
             };
             path: {
                 slug: components["parameters"]["Slug"];
@@ -13329,9 +13333,13 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
         responses: {
-            /** @description The resource. */
+            /** @description Committed: the Exercise record (TN-110). */
             200: {
                 headers: {
                     "Request-Id": components["headers"]["Request-Id"];
@@ -13340,12 +13348,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Declared"];
+                    "application/json": components["schemas"]["WriteResult"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
             501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];

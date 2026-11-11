@@ -366,11 +366,13 @@ async fn a_catalog_1_realm_refuses_the_version_2_actions_until_its_upgrade_commi
             ("idp.proxy", "accepted"),
             ("idp.realm", "accepted"),
             ("idp.relay", "accepted"),
+            ("idp.review", "accepted"),
             ("idp.saml", "accepted"),
             ("idp.scim", "accepted"),
             ("idp.signal", "accepted"),
             ("idp.social", "accepted"),
             ("idp.ssh", "accepted"),
+            ("idp.support", "accepted"),
             ("idp.upstream", "accepted"),
             ("idp.vault", "accepted"),
             ("idp.vc", "accepted"),
@@ -443,6 +445,7 @@ async fn a_catalog_3_realm_refuses_the_version_4_actions_until_its_upgrade_commi
     assert_eq!(
         namespaces,
         vec![
+            ("idp.account", "accepted"),
             ("idp.agent", "accepted"),
             ("idp.client", "accepted"),
             ("idp.domain", "accepted"),
@@ -455,10 +458,12 @@ async fn a_catalog_3_realm_refuses_the_version_4_actions_until_its_upgrade_commi
             ("idp.proxy", "accepted"),
             ("idp.realm", "accepted"),
             ("idp.relay", "accepted"),
+            ("idp.review", "accepted"),
             ("idp.saml", "accepted"),
             ("idp.scim", "accepted"),
             ("idp.signal", "accepted"),
             ("idp.ssh", "accepted"),
+            ("idp.support", "accepted"),
             ("idp.upstream", "accepted"),
             ("idp.vault", "accepted"),
             ("idp.vc", "accepted"),
@@ -529,6 +534,7 @@ async fn a_catalog_4_realm_refuses_the_version_5_actions_until_its_upgrade_commi
     assert_eq!(
         namespaces,
         vec![
+            ("idp.account", "accepted"),
             ("idp.client", "accepted"),
             ("idp.domain", "accepted"),
             ("idp.export", "accepted"),
@@ -540,10 +546,12 @@ async fn a_catalog_4_realm_refuses_the_version_5_actions_until_its_upgrade_commi
             ("idp.proxy", "accepted"),
             ("idp.realm", "accepted"),
             ("idp.relay", "accepted"),
+            ("idp.review", "accepted"),
             ("idp.saml", "accepted"),
             ("idp.scim", "accepted"),
             ("idp.signal", "accepted"),
             ("idp.ssh", "accepted"),
+            ("idp.support", "accepted"),
             ("idp.upstream", "accepted"),
             ("idp.vc", "accepted"),
         ]
@@ -614,15 +622,19 @@ async fn a_catalog_5_realm_refuses_the_version_6_actions_until_its_upgrade_commi
     assert_eq!(
         namespaces,
         vec![
+            ("idp.account", "accepted"),
             ("idp.domain", "accepted"),
             ("idp.export", "accepted"),
             ("idp.hr", "accepted"),
             ("idp.linux", "accepted"),
+            ("idp.org", "accepted"),
             ("idp.proxy", "accepted"),
             ("idp.realm", "accepted"),
             ("idp.relay", "accepted"),
+            ("idp.review", "accepted"),
             ("idp.signal", "accepted"),
             ("idp.ssh", "accepted"),
+            ("idp.support", "accepted"),
         ]
     );
     for action in IdpAction::ALL {

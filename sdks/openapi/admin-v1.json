@@ -19471,15 +19471,13 @@
     "/admin/v1/realms/{slug}/reviews/{review}/items/{item}/keep": {
       "post": {
         "operationId": "keepReviewItem",
-        "summary": "Records the reviewer's keep as a review.kept identity audit record; writes no authority (OP-157 m.3 (w)).",
+        "summary": "Records the reviewer's keep, signed with the reviewer's AIS, as a review.kept identity audit record; writes no authority (OP-157 m.3 (w)).",
         "tags": [
           "realm"
         ],
         "security": [
           {
-            "read_token": [
-              "realm.read"
-            ]
+            "ais": []
           }
         ],
         "parameters": [
@@ -19508,11 +19506,17 @@
               "maxLength": 255
             },
             "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
           }
         ],
         "responses": {
           "200": {
-            "description": "The resource.",
+            "description": "Committed: the Exercise record (TN-110).",
             "headers": {
               "Request-Id": {
                 "$ref": "#/components/headers/Request-Id"
@@ -19527,7 +19531,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Declared"
+                  "$ref": "#/components/schemas/WriteResult"
                 }
               }
             }
@@ -19547,20 +19551,39 @@
           "503": {
             "$ref": "#/components/responses/Unavailable"
           },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
           "501": {
             "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
         "x-access-surface": "realm",
-        "x-access-scope": "realm.read",
-        "x-access-visibility": "hidden"
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
       }
     },
     "/admin/v1/realms/{slug}/offboarding/{party}/preview": {
-      "post": {
+      "get": {
         "operationId": "previewOffboarding",
-        "summary": "What offboarding a Party would do with one explicit choice per channel: direct Grants keep or revoke, Instances terminate, rule-shaped holdings retain, exclude or restrict, the self-anchor retire or transfer, re-entry allowed or blocked; no defaults, changes nothing (OP-157 m.3 (v)).",
+        "summary": "What offboarding a Party would touch, channel by channel: direct Grants (keep or revoke), Instances (terminate), rule-shaped holdings (retain, exclude or restrict), the self-anchor (retire or hand over) and re-entry (allowed or blocked); there are no defaults and it changes nothing (OP-157 m.3 (v)).",
         "tags": [
           "realm"
         ],

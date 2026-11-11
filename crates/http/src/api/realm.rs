@@ -794,22 +794,17 @@ const STAGE12: [Route; 21] = [
         "listReviewItems",
         "The campaign's items for the caller: the Grants of the caller's team, re-checked against what the caller may see; removing one is the caller's own grant.revoke Exercise.",
     ),
-    Route {
-        verb: Verb::Post,
-        ..read(
-            "/admin/v1/realms/{slug}/reviews/{review}/items/{item}/keep",
-            "keepReviewItem",
-            "Records the reviewer's keep as a review.kept identity audit record; writes no authority (OP-157 m.3 (w)).",
-        )
-    },
-    Route {
-        verb: Verb::Post,
-        ..read(
-            "/admin/v1/realms/{slug}/offboarding/{party}/preview",
-            "previewOffboarding",
-            "What offboarding a Party would do with one explicit choice per channel: direct Grants keep or revoke, Instances terminate, rule-shaped holdings retain, exclude or restrict, the self-anchor retire or transfer, re-entry allowed or blocked; no defaults, changes nothing (OP-157 m.3 (v)).",
-        )
-    },
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/reviews/{review}/items/{item}/keep",
+        "keepReviewItem",
+        "Records the reviewer's keep, signed with the reviewer's AIS, as a review.kept identity audit record; writes no authority (OP-157 m.3 (w)).",
+    ),
+    read(
+        "/admin/v1/realms/{slug}/offboarding/{party}/preview",
+        "previewOffboarding",
+        "What offboarding a Party would touch, channel by channel: direct Grants (keep or revoke), Instances (terminate), rule-shaped holdings (retain, exclude or restrict), the self-anchor (retire or hand over) and re-entry (allowed or blocked); there are no defaults and it changes nothing (OP-157 m.3 (v)).",
+    ),
     write(
         Verb::Post,
         "/admin/v1/realms/{slug}/offboarding/{party}/commit",
@@ -1771,7 +1766,7 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "scheduleReview" | "closeReview" => (ResourceKind::Reviews, Shape::Planned("WriteResult")),
         "getReview" => (ResourceKind::Reviews, Shape::Planned("Declared")),
         "listReviewItems" => (ResourceKind::ReviewItems, Shape::Planned("Page")),
-        "keepReviewItem" => (ResourceKind::ReviewItems, Shape::Planned("Declared")),
+        "keepReviewItem" => (ResourceKind::ReviewItems, Shape::Planned("WriteResult")),
         "previewOffboarding" => (ResourceKind::OffboardingPreviews, Shape::Planned("Declared")),
         "commitOffboarding" => (ResourceKind::OffboardingPreviews, Shape::Planned("WriteResult")),
         o if declared(o) => (Settings, Shape::Planned(planned_body(o))),

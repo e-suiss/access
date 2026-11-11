@@ -341,6 +341,8 @@ pub enum Op {
     /// `commitOffboarding`: the caller's signed offboarding Exercises, one explicit choice per
     /// channel (OP-157 m.3 (v)).
     CommitOffboarding,
+    /// `keepReviewItem`: the reviewer's keep, an identity audit record (OP-157 m.3 (w)).
+    KeepReviewItem,
 }
 
 impl Op {
@@ -499,6 +501,7 @@ impl Op {
             "putApprovalInline" => Self::PutApprovalInline,
             "putApprovalBatch" => Self::PutApprovalBatch,
             "commitOffboarding" => Self::CommitOffboarding,
+            "keepReviewItem" => Self::KeepReviewItem,
             _ => return None,
         })
     }
@@ -2221,7 +2224,7 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             only(m, &["enabled"])?;
             Change::ApprovalBatch(flag(m, "enabled")?)
         }
-        Op::CommitOffboarding => return Err(Invalid::NotYetServed),
+        Op::CommitOffboarding | Op::KeepReviewItem => return Err(Invalid::NotYetServed),
         Op::ResendRelay => {
             only(m, &[])?;
             Change::RelayResend(super::relay::event_id(key_of(key)?)?)
