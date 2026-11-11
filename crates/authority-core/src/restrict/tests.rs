@@ -55,6 +55,7 @@ fn outcome(source: &str, signals: Signals) -> RestrictionOutcome {
         tier: 1,
         signals,
         derived: derived::Derived::empty(),
+        ..Facts::default()
     };
     results_with(
         &[policy(source)],

@@ -789,6 +789,23 @@ fn top_anchor(view: &dyn View, basis: &ExerciseBasis) -> Option<access_kernel::m
     None
 }
 
+/// Whether `req` uses a break-glass Grant, and the self-anchor its basis rests on, if it rests
+/// on one (OP-157 m.3 (h)).
+fn breakglass_facts(view: &dyn View, req: &Request) -> (bool, Option<access_kernel::model::Id>) {
+    let used = match req.basis {
+        ExerciseBasis::Holding(h) => {
+            let g = read::<GrantState>(view, kind::GRANT, &h.grant);
+            crate::app::breakglass::of(req, g.as_ref()).is_some()
+        }
+        _ => false,
+    };
+    let self_anchor = top_anchor(view, &req.basis).filter(|a| {
+        read::<AnchorState>(view, kind::ANCHOR, a)
+            .is_some_and(|s| matches!(s.scope, meta::AnchorScope::Party(_)))
+    });
+    (used, self_anchor)
+}
+
 /// The live restriction policies that apply to a request (OP-141 m.27 (c)).
 fn applicable_policies(
     view: &dyn View,
@@ -1864,12 +1881,20 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         expansion,
         schema.as_deref(),
     );
+    // G29, TN-93, TN-71
+    let (breakglass, self_anchor) = breakglass_facts(snapshot, req);
+    let missing = snapshot.missing();
+    if !missing.is_empty() {
+        return Pass::Need(missing);
+    }
     // E54 (1), §11.19
     let facts = crate::restrict::Facts {
         agent: actor_is_agent,
         tier: crate::app::approval::tier_code(tier),
         signals: signals.clone(),
         derived: derived.clone(),
+        breakglass,
+        self_anchor,
     };
     let mut restrictions = match crate::restrict::results_with(
         &applicable,

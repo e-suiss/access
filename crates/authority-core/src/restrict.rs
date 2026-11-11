@@ -64,6 +64,23 @@ pub struct Facts {
     pub signals: Signals,
     /// The `derived.*` values (§16.5, OP-157 m.3 (o)).
     pub derived: derived::Derived,
+    /// The request is a use of a break-glass Grant (OP-157 m.3 (h)).
+    pub breakglass: bool,
+    /// The self-anchor the request's basis rests on: a `@breakglass_exempt` in a policy on it
+    /// does not count, so the subject's own restriction stops break-glass too (TN-71 #8).
+    pub self_anchor: Option<Id>,
+}
+
+impl Facts {
+    /// Whether a matching `@breakglass_exempt` rule of a policy with `content` lets this request
+    /// through (TN-93, §12.6).
+    #[must_use]
+    pub fn exempt_under(&self, content: &Value) -> bool {
+        let on_self = self.self_anchor.is_some_and(|a| {
+            content.get("target") == Some(&Value::Map(vec![(Value::text("anchor"), a.to_value())]))
+        });
+        self.breakglass && !on_self
+    }
 }
 
 /// The external signals the domain accepted, as the restriction context names them
@@ -274,7 +291,10 @@ pub fn results_with(
         // OP-104 m.2
         let outcome = match cache.engine(&version, &state.content) {
             None => deny(false),
-            Some(engine) => match engine.evaluate(&request).map_err(|_| Rejection::Input)? {
+            Some(engine) => match engine
+                .evaluate_as(&request, facts.exempt_under(&state.content))
+                .map_err(|_| Rejection::Input)?
+            {
                 Outcome::NoObjection => RestrictionOutcome::NoObjection,
                 Outcome::Deny(Denial::Forbid { undisclosed, .. }) => deny(undisclosed),
                 Outcome::Deny(_) => deny(false),

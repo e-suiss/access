@@ -872,6 +872,19 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 {
                     return Err(CoreError::Protocol("policy"));
                 }
+                // G29, TN-93
+                if let Payload::GrantIssue(g) = p
+                    && breakglass::is_breakglass(&g.authority.authority)
+                    && !breakglass::well_formed(g)
+                {
+                    return Err(CoreError::Protocol("breakglass-grant"));
+                }
+                if let Payload::GrantAmend { authority, .. } = p
+                    && breakglass::is_breakglass(&authority.authority)
+                    && !breakglass::well_formed_authority(authority)
+                {
+                    return Err(CoreError::Protocol("breakglass-grant"));
+                }
                 // L0-META-30
                 if let Payload::Contribute { class, .. } = p {
                     let target = ResourceRef {
@@ -997,14 +1010,19 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             evaluation.action.as_deref(),
         );
         let validity = &req.intent.validity;
-        if validity.until.saturating_sub(validity.from)
-            > access_kernel::tier::validity_ceiling(tier)
-        {
+        let span = validity.until.saturating_sub(validity.from);
+        if span > access_kernel::tier::validity_ceiling(tier) {
+            return Err(CoreError::Protocol("intent-validity"));
+        }
+        // G29, §13.7.3, OP-157 m.3 (h)
+        let used = self.breakglass(req).await?;
+        if used.is_some() && span > breakglass::USE_MAX_MS {
             return Err(CoreError::Protocol("intent-validity"));
         }
         if tier != access_kernel::tier::Tier::Ct3
             || evaluation.decision.outcome != Outcome::Allow
             || req.payload.is_none()
+            || used.is_some()
         {
             return Ok(());
         }
@@ -2089,6 +2107,7 @@ pub mod agents;
 pub mod approval;
 pub mod audit;
 mod binding;
+pub mod breakglass;
 pub mod commitment;
 pub mod consent;
 pub mod discovery;

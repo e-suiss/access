@@ -10,6 +10,8 @@
 mod agents;
 #[path = "commit/policy_engine.rs"]
 mod policy_engine;
+#[path = "commit/breakglass.rs"]
+mod breakglass;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
