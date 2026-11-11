@@ -30,6 +30,8 @@ pub mod totp;
 pub mod webauthn;
 pub mod webhook;
 pub mod xmlsec;
+// OP-157 m.3 (j)
+pub mod breakglass;
 
 pub use suiss_crypto::{dit, envelope, secret};
 
