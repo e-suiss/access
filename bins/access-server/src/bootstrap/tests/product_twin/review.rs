@@ -108,7 +108,7 @@ resource_types = ["entry"]
 
 // XI-19, §8.17.12, OP-157 m.3 (w), OP-153 m.3 (gg), Ek B 5566
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn hygiene_marks_unused_expiring_and_broad_delegations_and_changes_nothing() {
+async fn hygiene_marks_expiring_and_broad_delegations_and_a_read_changes_nothing() {
     let s = Seam::open("seam-hygiene", "iga").await;
     let app = Schema::parse(LEDGER).unwrap();
     s.twin.publish_schema(&s.domain, &app).await.unwrap();
@@ -281,7 +281,7 @@ async fn a_jit_activation_gets_no_allow_without_its_approval_threshold() {
     let host = teleport.host(&request);
     let path: Vec<&str> = host.iter().map(String::as_str).collect();
 
-    // §8.17.12: JIT = standing Grant + Gate
+    // §8.17.12
     let threshold = RequirementTerm {
         proof_kind: ProofKind::Contribution,
         class: String::from(JIT_CLASS),
@@ -338,7 +338,7 @@ async fn a_jit_activation_gets_no_allow_without_its_approval_threshold() {
         "Teleport opens nothing without Access's ALLOW"
     );
 
-    // §8.17.12: the activation is a timed Mandate
+    // §8.17.12
     let kid = access_kernel::verify::key_scope::thumbprint(&alice.key.public_key());
     let instance =
         s.w.domains
@@ -396,7 +396,7 @@ async fn a_jit_activation_gets_no_allow_without_its_approval_threshold() {
         "the activation never lifts the threshold: {activated:?}"
     );
 
-    // G30: a contribution the domain never recorded does not count
+    // G30
     let forged = s
         .twin
         .ask(
