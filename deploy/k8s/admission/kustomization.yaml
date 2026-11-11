@@ -1,0 +1,6 @@
+# §14.5, U49: the admission policy, applied with the sigstore policy-controller installed; the
+# access namespace opts in with the policy.sigstore.dev/include label
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - cluster-image-policy.yaml

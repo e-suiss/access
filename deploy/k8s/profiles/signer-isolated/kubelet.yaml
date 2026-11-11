@@ -1,0 +1,8 @@
+# CR-40 m.4: the kubelet settings of a node that isolates signer cores; full-pcpus-only keeps
+# an SMT sibling from going to another container
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+cpuManagerPolicy: static
+cpuManagerPolicyOptions:
+  full-pcpus-only: "true"
+reservedSystemCPUs: "0-1"

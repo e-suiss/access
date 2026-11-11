@@ -1,0 +1,12 @@
+# CR-40 m.4, OP-158 m.3 (y): the signers on cores of their own. Every container asks for whole
+# CPUs with requests equal to limits, so the pod is Guaranteed and the kubelet's static CPU
+# manager (kubelet.yaml) pins each signer to full physical cores no other container uses.
+# Use it with `components: [profiles/signer-isolated]`; with profiles/dedicated the host is
+# reserved too.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - path: statefulset.yaml
+    target:
+      kind: StatefulSet
+      name: access-server

@@ -1,0 +1,23 @@
+# U54: only reserved nodes, labelled by the provisioning that set the kernel arguments
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: access-server
+spec:
+  template:
+    spec:
+      nodeSelector:
+        access.suiss.dev/compute: dedicated
+      tolerations:
+        - key: access.suiss.dev/dedicated
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: access.suiss.dev/kernel-mitigations
+                    operator: In
+                    values: ["auto-nosmt"]

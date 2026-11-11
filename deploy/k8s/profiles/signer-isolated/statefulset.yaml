@@ -1,0 +1,22 @@
+# CR-40 m.4: Guaranteed QoS with whole CPUs for every container
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: access-server
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: authority-signer
+          resources:
+            requests: { cpu: "1", memory: 256Mi }
+            limits: { cpu: "1", memory: 256Mi }
+        - name: identity-signer
+          resources:
+            requests: { cpu: "1", memory: 256Mi }
+            limits: { cpu: "1", memory: 256Mi }
+      containers:
+        - name: access-server
+          resources:
+            requests: { cpu: "2", memory: 2Gi }
+            limits: { cpu: "2", memory: 2Gi }

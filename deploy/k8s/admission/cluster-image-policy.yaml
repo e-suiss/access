@@ -1,0 +1,20 @@
+# §14.5, U49, OP-158 m.3 (y): sigstore policy-controller admits an Access image only with a
+# keyless cosign signature that CI's image or release workflow made on main or a v* tag. An
+# unsigned image, or one signed by any other identity, is refused at admission.
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: access-images
+spec:
+  mode: enforce
+  images:
+    - glob: "ghcr.io/e-suiss/access**"
+  authorities:
+    - name: access-ci
+      keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: ^https://github\.com/e-suiss/access/\.github/workflows/(image|release)\.yml@refs/(heads/main|tags/v[0-9]+\.[0-9]+\.[0-9]+)$
+      ctlog:
+        url: https://rekor.sigstore.dev

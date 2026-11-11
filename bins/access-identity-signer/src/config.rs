@@ -231,6 +231,34 @@ mod tests {
         }
     }
 
+    /// The `name: |` block of the k8s configmap, unindented (OP-158 m.3 (y)).
+    fn configmap_toml(name: &str) -> String {
+        let text = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/k8s/configmap.yaml"
+        ))
+        .unwrap();
+        let head = format!("  {name}: |");
+        text.lines()
+            .skip_while(|l| *l != head)
+            .skip(1)
+            .take_while(|l| l.is_empty() || l.starts_with("    "))
+            .map(|l| l.strip_prefix("    ").unwrap_or(l))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    // CMP-22b, CR-34, OP-158
+    #[test]
+    fn the_k8s_configuration_is_valid() {
+        let config: Config = Figment::from(Serialized::defaults(Config::default()))
+            .merge(Toml::string(&configmap_toml("identity-signer.toml")))
+            .extract()
+            .unwrap();
+        config.validate().unwrap();
+        assert_eq!(config.secret_memory, SecretMemoryKind::MemfdSecret);
+    }
+
     // CR-34, OP-158
     #[test]
     fn a_signer_runs_paranoid_with_a_named_secret_memory_backend() {
@@ -238,18 +266,19 @@ mod tests {
             Figment::from(Serialized::defaults(Config::default()))
                 .merge(Toml::string(extra))
                 .extract::<Config>()
+                .ok()
         };
         let default = parse("").unwrap();
         assert_eq!(default.hardening, Hardening::Paranoid);
         assert_eq!(default.secret_memory, SecretMemoryKind::MemfdSecret);
         for mode in ["balanced", "dev", "none"] {
-            assert!(parse(&format!("hardening = {mode:?}")).is_err(), "{mode}");
+            assert!(parse(&format!("hardening = {mode:?}")).is_none(), "{mode}");
         }
         assert_eq!(
             parse("secret_memory = \"mlock\"").unwrap().secret_memory,
             SecretMemoryKind::Mlock
         );
-        assert!(parse("secret_memory = \"heap\"").is_err());
+        assert!(parse("secret_memory = \"heap\"").is_none());
         for slots in [0, 15, 65_537] {
             let bad = Config {
                 secret_slots: slots,

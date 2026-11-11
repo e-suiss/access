@@ -6,6 +6,7 @@ resources:
   - namespace.yaml
   - serviceaccount.yaml
   - configmap.yaml
+  - secretproviderclass.yaml
   - statefulset.yaml
   - service.yaml
   - poddisruptionbudget.yaml

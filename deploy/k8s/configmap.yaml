@@ -77,6 +77,9 @@ data:
     socket = "/run/access/signer.sock"
     vault = "/var/lib/access/signer"
     callers = [65532]
+    # CR-34, OP-158 m.3 (y): paranoid, keys in memfd_secret; a node without it refuses the start
+    hardening = "paranoid"
+    secret_memory = "memfd_secret"
 
     [hsm]
     module = "/opt/pkcs11/module.so"
@@ -94,6 +97,9 @@ data:
     socket = "/run/access/identity-signer.sock"
     vault = "/var/lib/access/identity-signer"
     callers = [65532]
+    # CR-34, OP-158 m.3 (y): paranoid, keys in memfd_secret; a node without it refuses the start
+    hardening = "paranoid"
+    secret_memory = "memfd_secret"
     cell = "access"
 
     [hsm]

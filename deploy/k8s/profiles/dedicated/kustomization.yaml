@@ -1,0 +1,10 @@
+# MD-17, SA-25, U54, OP-158 m.3 (y): dedicated compute (B4). The pod runs only on nodes reserved
+# for the tenant whose kernels boot with `mitigations=auto,nosmt` (node.grub.cfg), so no
+# co-tenant shares a core or its SMT sibling. Use it with `components: [profiles/dedicated]`.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - path: statefulset.yaml
+    target:
+      kind: StatefulSet
+      name: access-server

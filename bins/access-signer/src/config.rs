@@ -170,3 +170,49 @@ impl Config {
         Ok(config)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, reason = "test code")]
+
+    use super::*;
+
+    /// The `name: |` block of the k8s configmap, unindented (OP-158 m.3 (y)).
+    fn configmap_toml(name: &str) -> String {
+        let text = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/k8s/configmap.yaml"
+        ))
+        .unwrap();
+        let head = format!("  {name}: |");
+        text.lines()
+            .skip_while(|l| *l != head)
+            .skip(1)
+            .take_while(|l| l.is_empty() || l.starts_with("    "))
+            .map(|l| l.strip_prefix("    ").unwrap_or(l))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    // CMP-22a, CR-34, OP-158
+    #[test]
+    fn the_deployed_configurations_parse() {
+        for text in [
+            configmap_toml("signer.toml"),
+            std::fs::read_to_string(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../deploy/compose/access/access-signer.toml"
+            ))
+            .unwrap(),
+        ] {
+            let config: Config = Figment::from(Serialized::defaults(Config::default()))
+                .merge(Toml::string(&text))
+                .extract()
+                .unwrap();
+            assert!(config.hsm.is_some() && config.ceremony.is_some());
+            assert_ne!(config.callers.len(), 0);
+            assert_eq!(config.hardening, Hardening::Paranoid);
+            assert!((16..=65_536).contains(&config.secret_slots));
+        }
+    }
+}
