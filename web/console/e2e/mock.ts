@@ -162,6 +162,17 @@ const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   retireHrConnector: ["idp.hr", "connector_retire"],
   registerSignalSource: ["idp.signal", "source_register"],
   retireSignalSource: ["idp.signal", "source_retire"],
+  // OP-157 m.4 (a)
+  registerCaseSystem: ["idp.support", "case_system_register"],
+  retireCaseSystem: ["idp.support", "case_system_retire"],
+  putSupportArtifactPolicy: ["idp.support", "artifact_policy"],
+  markBreakglassAccount: ["idp.org", "member_breakglass"],
+  clearBreakglassAccount: ["idp.org", "member_breakglass_clear"],
+  scheduleReview: ["idp.review", "schedule"],
+  closeReview: ["idp.review", "schedule_close"],
+  putDelegatedAdmin: ["idp.realm", "delegated_admin"],
+  putApprovalInline: ["idp.realm", "approval_inline"],
+  putApprovalBatch: ["idp.realm", "approval_batch"],
 };
 
 export interface Write {

@@ -28,6 +28,9 @@ export const SCREENS = {
     "linux",
     "proxy",
     "hr",
+    "breakglass",
+    "reviews",
+    "support",
     "sign-in",
   ],
   developer: ["schemas", "integrations", "lab", "logs"],
@@ -51,6 +54,11 @@ const idp = (namespace: string, name: string): Probe => ({
   major: 1,
   resource: "realm",
 });
+/**
+ * A screen whose lane has not served it yet asks nothing and so is never shown: there are no
+ * disabled stubs (IA-5, OP-157 m.4 (a)). Its lane drops the wrapper.
+ */
+const planned = (probes: readonly Probe[]): readonly Probe[] => probes.slice(0, 0);
 // OP-151 m.8 (h)
 const AUDIT: Probe = { namespace: "access", name: "read", major: 1, resource: "audit" };
 
@@ -84,6 +92,16 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
   proxy: [idp("proxy", "register"), idp("proxy", "retire"), idp("proxy", "plain_headers")],
   // OP-156 m.3 (q)
   hr: [idp("hr", "source_register"), idp("hr", "import"), idp("hr", "connector_register")],
+  // OP-157 m.3 (h)
+  breakglass: planned([idp("org", "member_breakglass"), idp("org", "member_breakglass_clear")]),
+  // OP-157 m.3 (w)
+  reviews: planned([idp("review", "schedule"), idp("review", "schedule_close")]),
+  // OP-157 m.3 (c), (e), (g)
+  support: planned([
+    idp("support", "case_system_register"),
+    idp("support", "case_system_retire"),
+    idp("support", "artifact_policy"),
+  ]),
   "sign-in": [
     idp("realm", "signin_policy"),
     idp("realm", "branding"),

@@ -12,6 +12,7 @@ import * as D from "./Developer.js";
 import { Offboarding } from "./Offboarding.js";
 import * as O from "./Organizations.js";
 import type { Ctx } from "./parts.js";
+import { Planned } from "./Planned.js";
 import { Proxy } from "./Proxy.js";
 import { SignInSettings } from "./SignInSettings.js";
 import { Export as SiemExport } from "./Export.js";
@@ -36,6 +37,9 @@ export const SCREEN_TITLE: Readonly<Record<Screen, Key>> = {
   linux: "screenLinux",
   proxy: "screenProxy",
   hr: "screenHr",
+  breakglass: "screenBreakglass",
+  reviews: "screenReviews",
+  support: "screenSupport",
   "sign-in": "screenSignIn",
   schemas: "screenSchemas",
   integrations: "screenIntegrations",
@@ -95,6 +99,12 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
       return <Proxy ctx={ctx} />;
     case "hr":
       return <Hr ctx={ctx} />;
+    case "breakglass":
+      return <Planned />;
+    case "reviews":
+      return <Planned />;
+    case "support":
+      return <Planned />;
     case "sign-in":
       return <SignInSettings ctx={ctx} />;
     case "schemas":
