@@ -102,6 +102,8 @@ suiss-ledger = { workspace = true, features = ["testing"] }
 tower = { workspace = true, features = ["util"] }
 rustls = { workspace = true, features = ["aws_lc_rs", "std"] }
 tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }
+# OP-158 m.3 (t): the failure-ownership table
+toml = { workspace = true, features = ["std", "parse", "serde"] }
 
 [lints]
 workspace = true

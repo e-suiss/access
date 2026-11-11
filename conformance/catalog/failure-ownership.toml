@@ -1,11 +1,14 @@
-# XI-20, §16.7, §16.7.1, OP-158 m.3 (t): who owns each failure and what the user is told.
+# XI-20, §7.9.14, §16.7, §16.7.1, OP-158 m.3 (t): who owns each failure and what the user is told.
 #
-# plane        "authority" or "identity"
-# failure      the failure, as the §16.7 / §16.7.1 tables name it
-#
-# Lane W8 adds, per failure: owner, unknown (what cannot be known yet), missing (the
-# information that is not available), safe_default and the fault-injection test that proves the
-# row (bins/access-server/src/bootstrap/tests/faults/).
+# plane         "authority" or "identity"
+# failure       the failure, as the §16.7 / §16.7.1 tables name it
+# owner         who is responsible: access, operator, domain, idp, relay, executor, provider, verifier
+# unknown       what cannot be known yet (shown as UNKNOWN)
+# missing       the information that is not available
+# safe_default  the fail-closed default shown until it is known
+# text          the Fluent message the surfaces show for it
+# tests         the fault-injection tests that prove the row (path::fn)
+# pending       for a row whose test belongs to another lane: what it waits for
 
 version = 1
 
@@ -13,108 +16,248 @@ version = 1
 id = "FO-01"
 plane = "authority"
 failure = "leader crash before or after commit"
+owner = "access"
+unknown = "whether the commit landed before the crash"
+missing = "the outcome of the request in flight"
+safe_default = "the client asks again with the same nonce; nothing is done twice (TI-8)"
+text = "outcome-not_confirmed_checking"
+tests = ["bins/access-server/src/bootstrap/tests.rs::a_one_shot_change_commits_while_another_process_leads", "bins/access-server/src/bootstrap/tests/authzen.rs::the_cbor_and_json_forms_give_the_same_decision_record"]
 
 [[failure]]
 id = "FO-02"
 plane = "authority"
 failure = "database primary failover"
+owner = "operator"
+unknown = "when the synchronous standby is promoted"
+missing = "the head until a primary answers"
+safe_default = "commit stops and nothing is answered as allowed; no acknowledged record is lost (FA-1)"
+text = "outcome-not_confirmed_checking"
+tests = ["bins/access-server/src/bootstrap/tests/faults/database.rs::fo_02_with_the_authority_database_gone_nothing_commits_and_nothing_is_allowed"]
+pending = "the promote itself: lane W7's scripts/pg-ha.sh suite"
 
 [[failure]]
 id = "FO-03"
 plane = "authority"
 failure = "region loss"
+owner = "operator"
+unknown = "whether the lost region's last records reached a replica"
+missing = "the suffix after the last fenced head"
+safe_default = "no promote without fence proof; the domain takes no commit; the way back is domain.recover"
+text = "status-access_unavailable"
+tests = []
+pending = "lane W7's fence and cell seal tests"
 
 [[failure]]
 id = "FO-04"
 plane = "authority"
 failure = "time sources disagree"
+owner = "access"
+unknown = "which time source is right"
+missing = "trusted time"
+safe_default = "commit stops until the sources agree; no early widening and no longer horizon (K-2)"
+text = "outcome-time_check"
+tests = ["bins/access-server/src/bootstrap/tests/faults/time.rs::fo_04_a_clock_ahead_of_its_witness_stops_every_commit_until_they_agree"]
 
 [[failure]]
 id = "FO-05"
 plane = "authority"
 failure = "derived outage"
+owner = "access"
+unknown = "how far derived reads lag"
+missing = "fresh advisory and search answers"
+safe_default = "commit goes on; a status list is never signed with an iat fresher than the position it reflects (G43)"
+text = "status-stale"
+tests = ["bins/access-server/src/bootstrap/tests/faults/derived.rs::fo_05_with_derived_down_commits_go_on_and_a_list_is_never_fresher_than_its_position"]
 
 [[failure]]
 id = "FO-06"
 plane = "authority"
 failure = "witness outage"
+owner = "access"
+unknown = "when an independent witness cosigns"
+missing = "the witness acknowledgement"
+safe_default = "the revocation is in force at once; it is never shown as confirmed without a cosign (SEC23, CL-2)"
+text = "outcome-revoked_confirming"
+tests = ["bins/access-server/src/bootstrap/tests/faults/witness.rs::fo_06_without_a_witness_a_revocation_is_recorded_and_its_ack_waits", "bins/access-server/src/bootstrap/tests/durability/replica.rs::a_revocation_is_acknowledged_only_once_a_real_replica_holds_it_and_a_real_witness_cosigned_it"]
 
 [[failure]]
 id = "FO-07"
 plane = "authority"
 failure = "replica outage"
+owner = "domain"
+unknown = "when the declared replica holds the record"
+missing = "the replica acknowledgement"
+safe_default = "the record is in force; its ack waits and it is never shown as confirmed (SEC23)"
+text = "outcome-revoked_confirming"
+tests = ["bins/access-server/src/bootstrap/tests/durability/replica.rs::a_revocation_is_acknowledged_only_once_a_real_replica_holds_it_and_a_real_witness_cosigned_it"]
 
 [[failure]]
 id = "FO-08"
 plane = "authority"
 failure = "HSM outage"
+owner = "operator"
+unknown = "when signing comes back"
+missing = "the signed artefact"
+safe_default = "the record commits and its artefact waits; no unsigned artefact leaves (TI-12)"
+text = "outcome-not_confirmed_checking"
+tests = ["bins/access-server/src/bootstrap/tests/faults/signer.rs::fo_09_with_the_signer_gone_a_decision_carries_no_signed_artefact", "crates/authority-signer/src/app/tests.rs::an_outage_delays_artefacts_after_the_window"]
 
 [[failure]]
 id = "FO-09"
 plane = "authority"
 failure = "signer crash"
+owner = "access"
+unknown = "when the signer is back"
+missing = "the signed receipt or projection"
+safe_default = "no signature and no signed ALLOW artefact; the outcome is recorded and asked again with the same nonce"
+text = "outcome-not_confirmed_checking"
+tests = ["bins/access-server/src/bootstrap/tests/faults/signer.rs::fo_09_with_the_signer_gone_a_decision_carries_no_signed_artefact"]
 
 [[failure]]
 id = "FO-10"
 plane = "authority"
 failure = "hot domain or hot key"
+owner = "access"
+unknown = "when the domain's slot frees"
+missing = "the decision"
+safe_default = "bounded retries, then busy with Retry-After; never an ALLOW without a commit (TI-9)"
+text = "outcome-busy"
+tests = ["bins/access-server/src/bootstrap/tests/faults/hot_key.rs::fo_10_a_held_domain_answers_busy_and_never_allows"]
 
 [[failure]]
 id = "FO-11"
 plane = "authority"
 failure = "rebuild-diff difference"
+owner = "access"
+unknown = "which state is right until the fold decides"
+missing = "the live state"
+safe_default = "commit stops; the fold from Genesis decides; derived never overwrites canonical (TI-RT1)"
+text = "status-access_unavailable"
+tests = ["bins/access-server/src/bootstrap/tests/durability/replay.rs::a_fold_difference_stops_commits_until_the_log_rebuilds_the_live_state"]
 
 [[failure]]
 id = "FO-12"
 plane = "authority"
 failure = "forced recovery"
+owner = "domain"
+unknown = "which changes after the recovered position are lost"
+missing = "the lost suffix"
+safe_default = "pre-recovery AIS whose nonce is not in the lineage is DENY; revocations are repeated"
+text = "recovery-changes_lost"
+tests = []
+pending = "lane W6's forced recovery tests"
 
 [[failure]]
 id = "FO-13"
 plane = "authority"
 failure = "cooperative handover"
+owner = "domain"
+unknown = "when offline devices see the new binding"
+missing = "the old provider's late artefacts"
+safe_default = "old-key artefacts outside the lineage are refused; offline devices are issued again"
+text = "history-handover"
+tests = []
+pending = "lane W5's handover tests"
 
 [[failure]]
 id = "FO-14"
 plane = "authority"
 failure = "client timeout"
+owner = "access"
+unknown = "whether the request was recorded"
+missing = "the outcome"
+safe_default = "the same nonce is retried within the intent window, then only the outcome is read; nothing happens twice (TI-8)"
+text = "outcome-not_confirmed_checking"
+tests = ["bins/access-server/src/bootstrap/tests/authzen.rs::the_cbor_and_json_forms_give_the_same_decision_record", "bins/access-server/src/bootstrap/tests/read_path.rs::an_archived_nonce_stays_in_the_lookup_and_is_never_opened_again"]
 
 [[failure]]
 id = "FO-15"
 plane = "identity"
 failure = "PostgreSQL primary failover"
+owner = "operator"
+unknown = "when the standby is promoted"
+missing = "the session store"
+safe_default = "writes answer 503 with Retry-After, never invalid_grant"
+text = "login-unavailable"
+tests = []
+pending = "lane W7's identity pool failover test on scripts/pg-ha.sh"
 
 [[failure]]
 id = "FO-16"
 plane = "identity"
 failure = "every sync standby gone"
+owner = "operator"
+unknown = "when a standby returns"
+missing = "durable writes"
+safe_default = "writes answer 503 with Retry-After; reads and signed-token checks go on"
+text = "login-unavailable"
+tests = []
+pending = "lane W7's standby loss test on scripts/pg-ha.sh"
 
 [[failure]]
 id = "FO-17"
 plane = "identity"
 failure = "stale node-local epoch cache"
+owner = "access"
+unknown = "whether a revocation happened on another node"
+missing = "the subject's current epoch"
+safe_default = "a cache miss asks the primary; without it the check denies; a cache hit is no proof (OPI-3)"
+text = "degraded-unknown"
+tests = ["crates/identity-session/tests/signin.rs::the_epoch_cache_fails_closed_and_learns_revocations"]
 
 [[failure]]
 id = "FO-18"
 plane = "identity"
 failure = "identity database unreachable"
+owner = "access"
+unknown = "whether a token was revoked during the outage"
+missing = "revocations made elsewhere"
+safe_default = "no new sign-in, refresh, registration, admin write or revocation (503 with Retry-After); introspection active=false; resource servers check tokens locally only within their lifetime (OP-45)"
+text = "login-degraded"
+tests = ["bins/access-server/src/bootstrap/tests/faults/identity_db.rs::fo_18_with_the_identity_database_cut_off_nothing_is_issued_and_introspection_is_inactive", "crates/identity-oauth/tests/oauth.rs::with_the_identity_database_cut_off_only_local_verification_goes_on", "crates/identity-session/tests/signin.rs::login_fails_closed_when_the_database_is_unreachable"]
 
 [[failure]]
 id = "FO-19"
 plane = "identity"
 failure = "identity region loss"
+owner = "operator"
+unknown = "which writes of the loss window are gone"
+missing = "identity writes after the last copy"
+safe_default = "a DR promote only under a declared RPO>0 profile, then every session and refresh epoch rises"
+text = "login-degraded"
+tests = []
+pending = "lane W7's dr-promote test"
 
 [[failure]]
 id = "FO-20"
 plane = "identity"
 failure = "identity plane outage seen by the authority plane"
+owner = "idp"
+unknown = "whether the person would authenticate"
+missing = "a fresh authentication Claim"
+safe_default = "the RequirementTerm is unmet: REQUIRE_ACTION or DENY; device-bound Instances keep signing AIS (E25)"
+text = "login-degraded"
+tests = []
+pending = "a fault test of the authority plane without the identity plane"
 
 [[failure]]
 id = "FO-21"
 plane = "identity"
 failure = "Argon2 pool full"
+owner = "access"
+unknown = "when capacity frees"
+missing = "the password check"
+safe_default = "capacity shedding with 503 and Retry-After; never a check skipped"
+text = "login-unavailable"
+tests = ["crates/identity-account/tests/accounts.rs::a_full_semaphore_sheds_with_503"]
 
 [[failure]]
 id = "FO-22"
 plane = "identity"
 failure = "identity signer unreachable"
+owner = "access"
+unknown = "when the identity signer is back"
+missing = "the realm keys"
+safe_default = "token issuance stops with 503; there is no signing path without the signer"
+text = "login-unavailable"
+tests = ["bins/access-server/src/bootstrap/tests/faults/identity_signer.rs::fo_22_without_the_identity_signer_nothing_is_signed_and_the_answer_is_503"]

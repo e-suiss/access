@@ -1077,3 +1077,26 @@ pub async fn refuse_connections(db: &TestDb, refuse: bool) -> Result<(), TestDbE
     }
     Ok(())
 }
+
+/// Holds a row lock on a domain's head, as a slow or stuck writer would, until the returned
+/// transaction is dropped (OP-158 m.3 (t), FO-10).
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn hold_head(
+    db: &TestDb,
+    domain: [u8; 32],
+) -> Result<sqlx::Transaction<'static, sqlx::Postgres>, TestDbError> {
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(db.admin.clone())
+        .await
+        .at("connect admin")?;
+    let mut tx = pool.begin().await.at("begin")?;
+    sqlx::query("SELECT pos FROM access.domain_head WHERE domain_id = $1 FOR UPDATE")
+        .bind(domain.as_slice())
+        .fetch_one(&mut *tx)
+        .await
+        .at("lock head")?;
+    Ok(tx)
+}

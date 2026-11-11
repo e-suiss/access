@@ -259,6 +259,13 @@ impl Reply {
         }
     }
 
+    /// RFC 7662 `{"active": false}`: what introspection answers when freshness cannot be proven
+    /// (OP-45 rule 3, EP-3, MD-8).
+    #[must_use]
+    pub fn oauth_inactive() -> Self {
+        Self::json(200, &json!({ "active": false }))
+    }
+
     /// An OAuth error body (RFC 6749 §5.2).
     #[must_use]
     pub fn oauth_error(status: u16, error: &str, description: &str) -> Self {
