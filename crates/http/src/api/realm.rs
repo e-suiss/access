@@ -1673,7 +1673,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         // OP-156 m.3 (o)
         | "putSshCa"
         | "rotateSshCa"
-        | "replaceSshCa" => (Settings, w(false)),
+        | "replaceSshCa"
+        // OP-157 m.3 (g)
+        | "putSupportArtifactPolicy" => (Settings, w(false)),
         "revokeAllAgentInstances" => (Agents, Shape::RevokeAll),
         // OP-154 m.3 (t)
         "listVaultResources" => (
@@ -1772,7 +1774,7 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "registerCaseSystem" => (ResourceKind::CaseSystems, CREATE),
         "retireCaseSystem" => (ResourceKind::CaseSystems, w(false)),
         "listSupportGrants" => (ResourceKind::SupportGrants, Shape::Planned("Page")),
-        "putSupportArtifactPolicy" | "putDelegatedAdmin" | "putApprovalInline" | "putApprovalBatch" => (Settings, Shape::Planned("WriteResult")),
+        "putDelegatedAdmin" | "putApprovalInline" | "putApprovalBatch" => (Settings, Shape::Planned("WriteResult")),
         // OP-157 m.3 (h)
         "listBreakglassAccounts" => (ResourceKind::BreakglassAccounts, Shape::List(&[])),
         "markBreakglassAccount" => (ResourceKind::BreakglassAccounts, CREATE),

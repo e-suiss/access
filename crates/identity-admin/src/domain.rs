@@ -2637,11 +2637,11 @@ impl Change {
             Self::PreferenceTopics(topics) => preference_topics(topics),
             // OP-157 m.3 (e)
             Self::CaseSystem(c) => c.check(),
-            // OP-157 m.4 (a)
+            // OP-157 m.3 (g)
             Self::SupportArtifactPolicy(p) => {
-                p.as_ref().map_or(Ok(()), support::ArtifactPolicy::check)?;
-                Err(Invalid::NotYetServed)
+                p.as_ref().map_or(Ok(()), support::ArtifactPolicy::check)
             }
+            // OP-157 m.4 (a)
             Self::Review(r) => {
                 r.check()?;
                 Err(Invalid::NotYetServed)

@@ -1630,9 +1630,20 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         let done = match change {
             // OP-157 m.3 (e)
             Change::CaseSystem(c) => support::write(t, bound, c).await?,
+            // OP-157 m.3 (g)
+            Change::SupportArtifactPolicy(p) => {
+                t.put_support_artifact_policy(
+                    bound,
+                    p.map(|p| access_store::support_access::ArtifactPolicy {
+                        max_bytes: u32::try_from(p.max_bytes).unwrap_or(u32::MAX),
+                        retention_days: p.retention_days,
+                    }),
+                )
+                .await?;
+                true
+            }
             // OP-157 m.4 (a)
-            Change::SupportArtifactPolicy(_)
-            | Change::Review(_)
+            Change::Review(_)
             | Change::DelegatedAdmin(_)
             | Change::ApprovalInline(_)
             | Change::ApprovalBatch(_) => return Err(Invalid::NotYetServed.into()),
