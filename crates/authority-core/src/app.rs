@@ -2169,6 +2169,8 @@ mod workload;
 pub mod offboarding;
 // OP-157 m.4 (d)
 pub mod compat;
+// OP-157 m.4 (d)
+pub mod review;
 
 pub use ingest::{Ingested, Lane, Lanes, Turn, lane_of};
 pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};

@@ -31,6 +31,14 @@ pub fn encode(entry: &Entry) -> Out {
         Entry::Holding(h) => holding(h),
         Entry::Rooted(r) => rooted(r),
         Entry::Use(u) => used(u),
+        // §8.17.12, OP-157 m.3 (w)
+        Entry::Hygiene(h) => json!({
+            "type": "hygiene",
+            "grant": id(&h.grant),
+            "unused": h.unused,
+            "expiring": h.expiring,
+            "broad": h.broad,
+        }),
     }
 }
 

@@ -57,6 +57,8 @@ mod vault;
 mod workload;
 // OP-157 m.4 (d)
 mod offboarding;
+// OP-157 m.4 (d)
+mod review;
 pub use audit::{
     AUDIT_EVENT_EXPORT, AUDIT_EVENT_READ, AUDIT_EVENT_REJECTED, audit_text, is_rejection, txn,
 };

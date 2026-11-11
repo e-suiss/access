@@ -251,6 +251,22 @@ pub enum Entry {
     Rooted(Rooted),
     /// A use.
     Use(Use),
+    /// V10, OP-157 m.4 (b): a delegation's hygiene marks (§8.17.12, XI-19).
+    Hygiene(Hygiene),
+}
+
+/// A delegation the viewer gave or that acts for the viewer, marked for inventory hygiene
+/// (§8.17.12, XI-19, OP-157 m.3 (w)): a suggestion only; nothing changes by itself.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Hygiene {
+    /// The Grant.
+    pub grant: Id,
+    /// Not used for 90 days.
+    pub unused: bool,
+    /// Ends within 7 days.
+    pub expiring: bool,
+    /// Any resource of a namespace, an action prefix, or onward delegation.
+    pub broad: bool,
 }
 
 /// The Claim classes that are regime key-events (SI-13, U26).
@@ -364,6 +380,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         }
         let mut next = None;
         let mut rows = 0usize;
+        let mut recent = None;
         for (key, value, _) in self.scan(&prefix_of(kind::GRANT)).await? {
             let (Some(grant), Some(_)) = (id_of_key(&key), value) else {
                 continue;
@@ -382,7 +399,28 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 break;
             }
             rows = rows.saturating_add(1);
+            // §8.17.12, XI-19
+            let delegation = row
+                .groups
+                .iter()
+                .any(|g| matches!(g, Group::SharedFromYou | Group::ActingForYou));
             hits.push(Hit::Entry(Box::new(Entry::Holding(Box::new(row)))));
+            if delegation {
+                if recent.is_none() {
+                    recent = Some(self.recent_uses(now).await?);
+                }
+                let r = recent.as_ref().ok_or(CoreError::Unavailable("uses"))?;
+                let issued_at = self.reader.recorded_at(state.since).await?;
+                if let Some(h) = crate::app::review::marks(
+                    grant,
+                    &state,
+                    now,
+                    issued_at,
+                    (r.grants.contains(&grant), r.covered),
+                ) {
+                    hits.push(Hit::Entry(Box::new(Entry::Hygiene(h))));
+                }
+            }
         }
         Ok(Found {
             hits,
