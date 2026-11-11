@@ -203,6 +203,8 @@ pub struct Authority<L: DomainLog, R: Reader, B: Binding, S: Salts> {
     past: Option<Past>,
     pseudonyms: Option<access_crypto::pseudonym::PseudonymKey>,
     pub(crate) analysis: std::sync::Arc<dyn crate::ports::PolicyAnalysis>,
+    /// The verified statements of a handover batch, staged for the next commit (HO-6).
+    handover: Vec<handover::Statement>,
 }
 
 /// The rebuilt decision of an explanation as a trace event (§9.7.1, §9.16.3): operator
@@ -335,6 +337,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             past: None,
             pseudonyms: None,
             analysis: std::sync::Arc::new(crate::ports::NoAnalysis),
+            handover: Vec::new(),
         }
     }
 
@@ -1656,6 +1659,9 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         self.draw_quota(req, now).await?;
         // OP-157 m.3 (r), C18
         let bodies = Box::pin(self.pinned_bodies(req)).await?;
+        // §16.6 HO-6, OP-158 m.3 (l)
+        let statements = self.statement_items()?;
+        self.handover.clear();
         for _ in 0..MAX_RETRIES {
             let head = self.leader.head().pos;
             let mut resolved = self.resolve(req, actor.map(|a| a.party), now, head).await?;
@@ -1665,7 +1671,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 None => self.recovery_binding(req, actor, now).await?,
             };
             let signals = Box::pin(self.signals(actor, req, &resolved, now)).await?;
-            let records = u64::try_from(resolved.claims.len())
+            let records = u64::try_from(resolved.claims.len().saturating_add(statements.len()))
                 .map_err(|_| CoreError::Protocol("proofs"))?
                 .saturating_add(u64::from(!open))
                 .saturating_add(1);
@@ -1738,6 +1744,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 }
             }
             let mut items = self.items(inc, &shape, &evaluation, &snapshot, &resolved, &derived)?;
+            items.splice(0..0, statements.iter().cloned());
             // OP-157 m.3 (r), C18
             if allowed && let Some(decision) = items.last_mut() {
                 decision.proofs.extend(bodies.iter().cloned());
@@ -2292,6 +2299,8 @@ pub mod federation;
 pub mod divergence;
 // OP-158 m.4 (f)
 pub mod snapshot;
+// OP-158 m.4 (f)
+pub mod handover;
 
 pub use ingest::{Ingested, Lane, Lanes, Turn, lane_of};
 pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};

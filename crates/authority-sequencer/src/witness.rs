@@ -218,13 +218,28 @@ pub async fn add_checkpoint(
     note: &str,
     excerpt: &[u8],
 ) -> Result<(String, u64), WitnessError> {
+    add_checkpoint_moving(target, domain, (base, proof), (note, excerpt), None).await
+}
+
+/// [`add_checkpoint`] for the checkpoint that ends with the `domain_handover` record `change`,
+/// from which the witness learns the new binding and fences the old one (§16.6 HO-7, U11).
+///
+/// # Errors
+/// As [`add_checkpoint`].
+pub async fn add_checkpoint_moving(
+    target: &Target,
+    domain: &Digest,
+    (base, proof): (Option<Base>, &[[u8; 32]]),
+    (note, excerpt): (&str, &[u8]),
+    change: Option<suiss_ledger::checkpoint::witness::BindingChange>,
+) -> Result<(String, u64), WitnessError> {
     let body = CosignRequest {
         domain: domain.0,
         note: note.to_owned(),
         excerpt: excerpt.to_vec(),
         base,
         consistency: proof.to_vec(),
-        binding_change: None,
+        binding_change: change,
     }
     .to_bytes()
     .map_err(|_| WitnessError::Cosignature)?;

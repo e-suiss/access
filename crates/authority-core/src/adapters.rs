@@ -60,6 +60,9 @@ mod workload;
 mod offboarding;
 // OP-157 m.4 (d)
 mod review;
+// OP-158 m.4 (f)
+mod handover;
+pub use handover::{Frozen, transcript};
 pub use audit::{
     AUDIT_EVENT_EXPORT, AUDIT_EVENT_READ, AUDIT_EVENT_REJECTED, audit_text, is_rejection, txn,
 };
@@ -1309,6 +1312,9 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                 return Err(CoreError::Unavailable("consistency"));
             }
         }
+        // OP-158 m.3 (l), U11
+        let statements = self.handover_gate(inc, led.core.head()).await?;
+        led.core.stage_handover(statements);
         // §9.7A.4, U61, G51
         let head = led.core.head();
         let advisory = crate::app::cache::request_key(inc, subject, head);

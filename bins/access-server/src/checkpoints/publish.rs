@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use access_authority_sequencer::checkpoint::SignedCheckpoint;
 use access_authority_sequencer::witness::{
-    Base, Target, WitnessError, add_checkpoint, board, cross_check, latest,
+    Base, Target, WitnessError, add_checkpoint_moving, board, cross_check, latest,
 };
 use access_kernel::digest::Digest;
 use access_store::Pool;
@@ -81,6 +81,39 @@ async fn base_and_proof(
     Ok((Some((old, root)), p))
 }
 
+/// The `domain_handover` record a checkpoint of `size` ends with, and its inclusion path, for
+/// the witnesses to learn the new binding from (§16.6 HO-7, U11, OP-158 m.3 (l)).
+async fn binding_change(
+    app: &Pool,
+    id: &DomainId,
+    leaves: &mut Option<Vec<[u8; 32]>>,
+    size: u64,
+) -> Result<Option<suiss_ledger::checkpoint::witness::BindingChange>, WitnessError> {
+    let Some(last) = size.checked_sub(1) else {
+        return Ok(None);
+    };
+    let Some(row) = access_store::authority::read_log(app, id, last, last)
+        .await
+        .map_err(|_| WitnessError::Unreachable)?
+        .into_iter()
+        .next()
+    else {
+        return Ok(None);
+    };
+    if !access_authority_core::app::handover::moves_binding(&row.envelope) {
+        return Ok(None);
+    }
+    leaves_of(app, id, leaves, size).await?;
+    let all = leaves.as_deref().unwrap_or_default();
+    let inclusion = suiss_ledger::checkpoint::proof::inclusion(all, last, size)
+        .map_err(|_| WitnessError::Conflict(size))?;
+    Ok(Some(suiss_ledger::checkpoint::witness::BindingChange {
+        position: last,
+        record: row.envelope,
+        inclusion,
+    }))
+}
+
 async fn one(
     target: &Target,
     app: &Pool,
@@ -93,9 +126,18 @@ async fn one(
     let mut old = witness_base(app, id, &target.vkey)
         .await
         .map_err(|_| WitnessError::Unreachable)?;
+    let change = binding_change(app, id, &mut leaves, size).await?;
     for _ in 0..2 {
         let (base, p) = base_and_proof(app, id, &mut leaves, old, size).await?;
-        match add_checkpoint(target, d, (base, &p), &signed.note, &signed.excerpt).await {
+        match add_checkpoint_moving(
+            target,
+            d,
+            (base, &p),
+            (&signed.note, &signed.excerpt),
+            change.clone(),
+        )
+        .await
+        {
             Err(WitnessError::Said(Refused::Inconsistent, _)) => {
                 // §16.6
                 let held = match latest(target, d).await {

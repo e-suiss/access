@@ -16,6 +16,8 @@ access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 access-store = { workspace = true }
 access-telemetry = { workspace = true }
+# OP-158 m.3 (l): the incoming provider replays the export with the open Reference Verifier (HO-5)
+access-verifier = { workspace = true }
 miniz_oxide = { workspace = true }
 access-authority-sequencer = { path = "../authority-sequencer" }
 suiss-crypto = { workspace = true, features = ["pkcs11"] }
