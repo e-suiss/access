@@ -480,6 +480,50 @@ async fn allowed_receipt(
     Ok((exercise_id, receipt))
 }
 
+/// Opens the Approval Surface for a request without approving it (§9.14.1 A steps 1 and 2,
+/// §8.17.6): signs in, attaches the device, pushes the request with the contribution the device
+/// signed after `adjust` has changed the push body, and starts the flow; returns the start
+/// answer's status and body, whatever it is.
+///
+/// # Errors
+/// [`ClientError`] for a push the surface refuses or a call that fails.
+pub async fn open_surface(
+    http: &Http,
+    a: &Approve<'_>,
+    adjust: impl FnOnce(&mut Value),
+) -> Result<(u16, Value), ClientError> {
+    let intent = crate::intent::parse(a.intent)?;
+    let digest = intent_digest(&intent).map_err(|_| ClientError::Encode)?;
+    let now = now_ms();
+    let mut jar = sign_in(http, a.issuer, a.identifier, Credential::Passkey(a.passkey)).await?;
+    attach_device(http, a.issuer, &mut jar, a.device).await?;
+    let (request, _) = opened(http, a, &intent, digest, now).await?;
+    let mut body = json!({ "request": request, "contribution": contribution(a, digest, now)? });
+    adjust(&mut body);
+    let mut coordinator = Jar::default();
+    let pushed = post_json(
+        http,
+        &format!("{}/v1/approve/requests", a.issuer),
+        &mut coordinator,
+        Some(body),
+    )
+    .await?;
+    if pushed.status != 201 {
+        return Err(unexpected("push", &pushed));
+    }
+    let request_uri =
+        text_at(&pushed.json(), &["request_uri"]).ok_or_else(|| unexpected("push", &pushed))?;
+    let state = random_text::<8>()?;
+    let started = post_json(
+        http,
+        &format!("{}/v1/approve/flows", a.issuer),
+        &mut jar,
+        Some(json!({ "request": request_uri, "redirect_uri": a.redirect_uri, "state": state })),
+    )
+    .await?;
+    Ok((started.status, started.json()))
+}
+
 /// Runs the approval and returns `{instance, exercise, contribution, claim, step_up,
 /// render_digest, request_uri, receipt}`: the device Instance the approval session was bound to,
 /// the allowed Exercise with its verified receipt when this client exercised the intent, the
