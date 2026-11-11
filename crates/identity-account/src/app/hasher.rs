@@ -416,7 +416,7 @@ impl Hasher {
 }
 
 #[cfg(test)]
-mod profile_tests {
+mod tests {
     #![allow(clippy::unwrap_used, reason = "test code")]
 
     use super::*;
@@ -456,13 +456,6 @@ mod profile_tests {
         assert!(v.matched && v.rehash);
         assert_eq!(h.metrics().hashes(), 3);
     }
-}
-
-#[cfg(test)]
-mod cpu_tests {
-    #![allow(clippy::unwrap_used, reason = "test code")]
-
-    use super::*;
 
     // §17.5.1, OP-32
     #[test]
@@ -492,14 +485,6 @@ mod cpu_tests {
             h.metrics().hash_cpu_ns()
         );
     }
-}
-
-#[cfg(test)]
-mod view_tests {
-    #![allow(clippy::unwrap_used, reason = "test code")]
-
-    use super::*;
-    use crate::domain::password::HashProfile;
 
     // CR-15, OP-158
     #[tokio::test]

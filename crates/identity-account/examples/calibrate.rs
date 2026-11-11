@@ -7,6 +7,10 @@
     clippy::print_stdout,
     reason = "a calibration tool reports to the terminal"
 )]
+#![allow(
+    clippy::expect_used,
+    reason = "a calibration tool on constants; a failure ends the run"
+)]
 
 use std::time::Instant;
 
@@ -17,7 +21,7 @@ use access_identity_account::domain::password::{
 const ROUNDS: usize = 12;
 
 fn salt() -> [u8; 16] {
-    access_crypto::random::bytes::<16>().unwrap_or_else(|_| std::process::abort())
+    access_crypto::random::bytes::<16>().expect("a calibration salt")
 }
 
 /// Milliseconds of each of `rounds` hashes run by `threads` threads at once, sorted.
@@ -26,15 +30,12 @@ fn measure(policy: HashPolicy, threads: usize, rounds: usize) -> Vec<f64> {
         .map(|_| {
             std::thread::spawn(move || {
                 let pw = Password::new("correct horse battery staple")
-                    .unwrap_or_else(|_| std::process::abort());
+                    .expect("a valid calibration password");
                 (0..rounds)
                     .map(|_| {
                         let salt = salt();
                         let started = Instant::now();
-                        let ok = hash_with(&policy, &pw, &salt).is_ok();
-                        if !ok {
-                            std::process::abort();
-                        }
+                        hash_with(&policy, &pw, &salt).expect("a calibration hash");
                         started.elapsed().as_secs_f64() * 1000.0
                     })
                     .collect::<Vec<_>>()

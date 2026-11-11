@@ -589,7 +589,7 @@ impl Kits for HsmKits {
 }
 
 #[cfg(test)]
-mod dek_cache_tests {
+mod tests {
     #![allow(clippy::unwrap_used, reason = "test code")]
 
     use std::sync::atomic::{AtomicU64, Ordering};

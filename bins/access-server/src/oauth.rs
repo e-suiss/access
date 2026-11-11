@@ -333,7 +333,7 @@ pub(crate) fn hooks(
 }
 
 #[cfg(test)]
-mod nonce_tests {
+mod tests {
     #![allow(clippy::unwrap_used, reason = "test code")]
 
     use super::*;

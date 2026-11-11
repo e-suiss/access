@@ -2,6 +2,11 @@
 //! nightly `bench-wallclock` job runs it on the bench runner; `cargo xtask calibrate` measures
 //! the same on the target host.
 
+#![allow(
+    clippy::expect_used,
+    reason = "bench setup on constants; a failure is a broken bench, not a request-path error"
+)]
+
 use access_identity_account::domain::password::{
     Argon2Params, HashPolicy, HashProfile, Password, hash_with, verify_with,
 };
@@ -12,11 +17,11 @@ fn main() {
 }
 
 fn password() -> Password {
-    Password::new("correct horse battery staple").unwrap_or_else(|_| std::process::abort())
+    Password::new("correct horse battery staple").expect("a valid bench password")
 }
 
 fn salt() -> [u8; 16] {
-    access_crypto::random::bytes::<16>().unwrap_or_else(|_| std::process::abort())
+    access_crypto::random::bytes::<16>().expect("a bench salt")
 }
 
 // CR-36
@@ -52,6 +57,6 @@ fn pbkdf2_sha256_fips(b: divan::Bencher<'_, '_>) {
 fn argon2id_canonical_verify(b: divan::Bencher<'_, '_>) {
     let (pw, salt) = (password(), salt());
     let policy = HashPolicy::Argon2(Argon2Params::CANONICAL);
-    let phc = hash_with(&policy, &pw, &salt).unwrap_or_else(|_| std::process::abort());
+    let phc = hash_with(&policy, &pw, &salt).expect("a bench hash");
     b.bench(|| verify_with(&pw, black_box(&phc), &policy).is_ok());
 }
