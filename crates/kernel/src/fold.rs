@@ -319,5 +319,14 @@ pub fn rollback_guard(
     }
 }
 
+/// Whether an Actor Intent Statement issued at `iat` is closed by a forced recovery at
+/// `recovered_at`: issued before it and with a nonce the continuing lineage, archive included,
+/// does not hold (`nonce_known`). A re-commit of a nonce the lineage holds returns its decision
+/// and is never closed (TI-RT3, U28, SEC22 R1 (c), §9.6 `nonce-closed/pre-recovery`).
+#[must_use]
+pub const fn pre_recovery(iat: u64, recovered_at: u64, nonce_known: bool) -> bool {
+    iat < recovered_at && !nonce_known
+}
+
 #[cfg(test)]
 mod tests;

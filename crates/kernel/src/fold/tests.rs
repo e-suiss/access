@@ -197,3 +197,4 @@ fn a_decision_without_an_outcome_member_is_rejected() {
 }
 
 mod guard;
+mod pre_recovery;

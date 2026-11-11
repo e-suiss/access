@@ -296,6 +296,10 @@ def run_recovery_guard(case, document):
         return {"error": error.code}, None
 
 
+def run_pre_recovery(case, document):
+    return {"closed": fold.pre_recovery(case["iat"], case["recovered_at"], case["nonce_known"])}, None
+
+
 def run_version_downgrade(case, document):
     if document.get("delay_ms") != version_check.DOWNGRADE_DELAY_MS:
         return {"delay_ms": document.get("delay_ms")}, "delay"
@@ -577,6 +581,7 @@ OPERATIONS = {
     "version.check": (run_version_check, ("valid", "error", "track")),
     "version.downgrade": (run_version_downgrade, ("expansion",)),
     "recovery.guard": (run_recovery_guard, ("guard", "from", "until", "error")),
+    "recovery.pre_recovery": (run_pre_recovery, ("closed",)),
     "version.transition": (run_version_transition, ("minimum",)),
     "algebra.meet": (run_algebra_meet, ("meet", "bottom", "rejection")),
     "digest.intent": (run_digest_intent, ("digest", "rejection")),

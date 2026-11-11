@@ -13,7 +13,11 @@ const NOW: u64 = 10_000_000;
 
 #[allow(clippy::unnecessary_wraps, reason = "a declared witness's entry")]
 fn head(size: u64, root: u8, age: u64) -> Option<WitnessHead> {
-    Some(WitnessHead::new(size, [root; 32], NOW.checked_sub(age).unwrap()))
+    Some(WitnessHead::new(
+        size,
+        [root; 32],
+        NOW.checked_sub(age).unwrap(),
+    ))
 }
 
 fn heads_value(heads: &[Option<WitnessHead>]) -> Value {

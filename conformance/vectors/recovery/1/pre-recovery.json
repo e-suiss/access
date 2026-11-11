@@ -1,0 +1,12 @@
+{
+ "rule": "OP-158",
+ "track": "recovery",
+ "version": 1,
+ "operation": "recovery.pre_recovery",
+ "cases": [
+  {"id": "issued-before-with-an-unknown-nonce-is-closed", "rules": ["TI-RT3", "U28"], "iat": 4999, "recovered_at": 5000, "nonce_known": false, "closed": true},
+  {"id": "issued-before-with-a-known-nonce-re-commits", "rules": ["TI-RT3", "U28"], "iat": 4999, "recovered_at": 5000, "nonce_known": true, "closed": false},
+  {"id": "issued-at-the-recovery-is-open", "rules": ["TI-RT3", "U28"], "iat": 5000, "recovered_at": 5000, "nonce_known": false, "closed": false},
+  {"id": "issued-after-is-open", "rules": ["TI-RT3", "U28"], "iat": 6000, "recovered_at": 5000, "nonce_known": false, "closed": false}
+ ]
+}

@@ -105,3 +105,8 @@ def rollback_guard(heads, replica, cited, cited_root, fork, now):
     if replica is not None and all_fresh and not forked and replica == highest and cited == replica:
         return {"guard": "pass"}
     return {"guard": "lossy", "from": cited, "until": highest}
+
+
+def pre_recovery(iat, recovered_at, nonce_known):
+    # TI-RT3, U28: issued before the recovery and not in the continuing lineage
+    return iat < recovered_at and not nonce_known
