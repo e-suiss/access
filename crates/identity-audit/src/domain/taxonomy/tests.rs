@@ -81,8 +81,6 @@ const UNPRODUCED: &[&str] = &[
     "signal.refused",
     "cloud_key.destroyed",
     // OP-157 m.4 (a)
-    "approval.inline",
-    "approval.batch",
     "mapping.pinned",
     "policy.default_changed",
 ];

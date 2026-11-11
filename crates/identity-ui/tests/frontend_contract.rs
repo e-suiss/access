@@ -225,6 +225,8 @@ fn approval_examples_match_the_code_and_the_schema() {
             },
             intent: None,
             body: None,
+            redirect_uri: None,
+            state: None,
         },
     );
     example(
@@ -235,6 +237,7 @@ fn approval_examples_match_the_code_and_the_schema() {
             request_uri: format!("urn:ietf:params:oauth:request_uri:{}", b64(0x1f, 32)),
             digest: b64(0x2e, 32),
             expires_at: rfc3339(1_767_225_600_000),
+            facts: None,
         },
     );
     example(

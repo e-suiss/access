@@ -14,7 +14,8 @@ use access_identity_oauth::domain::request::Params;
 use access_identity_oauth::ports::{Directory, Keys};
 use access_identity_ui::app::{Devices, Hosted, Reply};
 use access_identity_ui::domain::approval::{
-    APP_PATH, ApprovalFinish, ApprovalPush, ApprovalStart, CONSENT_PATH, FLOW_PATH, FLOWS_PATH,
+    APP_PATH, ApprovalFinish, ApprovalPush, ApprovalStart, BATCH_FLOW_PATH, BATCH_PATH,
+    BatchFinish, BatchStart, CONSENT_PATH, FLOW_PATH, FLOWS_PATH, INLINE_PATH, InlineAnswer,
     PAGE_JS, REQUESTS_PATH,
 };
 use access_identity_ui::domain::frontend::{
@@ -114,6 +115,19 @@ where
             .route(
                 &format!("{prefix}{FLOW_PATH}"),
                 post(finish_approval::<D, K, KI, C, M, A, I, P, Q>),
+            )
+            // OP-157 m.3 (m)
+            .route(
+                &format!("{prefix}{BATCH_PATH}"),
+                post(start_batch::<D, K, KI, C, M, A, I, P, Q>),
+            )
+            .route(
+                &format!("{prefix}{BATCH_FLOW_PATH}"),
+                post(finish_batch::<D, K, KI, C, M, A, I, P, Q>),
+            )
+            .route(
+                &format!("{prefix}{INLINE_PATH}"),
+                post(answer_inline::<D, K, KI, C, M, A, I, P, Q>),
             );
         reads = reads
             .route(
@@ -315,7 +329,7 @@ handler! {
         let _ = (&p, &uri, &jar);
         json_only(&headers)?;
         let req: ApprovalPush = body(&bytes)?;
-        Ok(s.login.hosted.push_approval(&entry, &req).await)
+        Ok(s.login.hosted.push_approval(&s.devices, &entry, &req).await)
     }
 }
 
@@ -340,6 +354,37 @@ handler! {
             .hosted
             .finish_approval(&s.devices, &entry, &jar.browser(), flow, &req)
             .await)
+    }
+}
+
+handler! {
+    /// `POST /v1/approve/batch` (OP-157 m.3 (m)).
+    start_batch(s, entry, jar, p, bytes, headers, uri) true {
+        let _ = (&p, &uri);
+        json_only(&headers)?;
+        let req: BatchStart = body(&bytes)?;
+        Ok(s.login.hosted.start_batch(&s.devices, &entry, &jar.browser(), &req).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/approve/batch/{flow}` (OP-157 m.3 (m)).
+    finish_batch(s, entry, jar, p, bytes, headers, uri) true {
+        let _ = &uri;
+        json_only(&headers)?;
+        let req: BatchFinish = body(&bytes)?;
+        let flow = p.get("flow").map_or("", String::as_str);
+        Ok(s.login.hosted.finish_batch(&s.devices, &entry, &jar.browser(), flow, &req).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/approve/inline` (OP-157 m.3 (m)): the approver device's answer; no session.
+    answer_inline(s, entry, jar, p, bytes, headers, uri) true {
+        let _ = (&p, &uri, &jar);
+        json_only(&headers)?;
+        let req: InlineAnswer = body(&bytes)?;
+        Ok(s.login.hosted.answer_inline(&s.devices, &entry, &req).await)
     }
 }
 

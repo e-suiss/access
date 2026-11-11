@@ -39,6 +39,7 @@ use access_store::issuer::{DeviceKeyRow, subject_device_keys};
 use serde_json::{Value, json};
 use suiss_crypto::dcbor::{self, Limits};
 
+use super::approve_inline::{facts, invite_limit};
 use super::me::{Devices, governing, unavailable};
 use super::{Browser, Hosted, Reply, SESSION_REQUIRED, failed, signin};
 use crate::app::credential;
@@ -56,7 +57,7 @@ use crate::domain::message::TextId;
 use crate::domain::spc;
 use crate::ports::{ApprovalClaims, Approvals, Kits, Messages, RealmKit};
 
-fn problem(status: u16, code: &'static str, title: &'static str) -> Reply {
+pub(super) fn problem(status: u16, code: &'static str, title: &'static str) -> Reply {
     Reply::problem(Problem {
         status,
         code,
@@ -72,15 +73,20 @@ const UNKNOWN: Problem = Problem {
     retry_after_s: None,
 };
 
+/// The reply for a request that is not waiting here.
+pub(super) fn unknown_reply() -> Reply {
+    Reply::problem(UNKNOWN)
+}
+
 // L14, §8.17.6.2
-const CHANGED: Problem = Problem {
+pub(super) const CHANGED: Problem = Problem {
     status: 409,
     code: "approval-request-changed",
     title: "The request changed after you approved; your approval no longer applies",
     retry_after_s: None,
 };
 
-fn tier_of(code: u8) -> Option<Tier> {
+pub(super) fn tier_of(code: u8) -> Option<Tier> {
     match code {
         0 => Some(Tier::Ct0),
         1 => Some(Tier::Ct1),
@@ -91,7 +97,7 @@ fn tier_of(code: u8) -> Option<Tier> {
 }
 
 /// The `kid` of a `COSE_Sign1`'s protected header.
-fn kid_of(sign1: &[u8]) -> Option<[u8; 32]> {
+pub(super) fn kid_of(sign1: &[u8]) -> Option<[u8; 32]> {
     let msg = cose::parse_sign1(sign1).ok()?;
     let header = dcbor::decode(&msg.protected, Limits::CEILING).ok()?;
     let dcbor::Value::Map(entries) = header else {
@@ -105,7 +111,7 @@ fn kid_of(sign1: &[u8]) -> Option<[u8; 32]> {
     })
 }
 
-fn public_key(row: &DeviceKeyRow) -> Option<PublicKey> {
+pub(super) fn public_key(row: &DeviceKeyRow) -> Option<PublicKey> {
     match row.key_type.as_str() {
         "OKP" => <[u8; 32]>::try_from(row.public_key.as_slice())
             .ok()
@@ -116,7 +122,7 @@ fn public_key(row: &DeviceKeyRow) -> Option<PublicKey> {
 }
 
 /// The pushed request a call names, if it is kept and not expired.
-async fn find(
+pub(super) async fn find(
     t: &mut TenantTx,
     named: &ApprovalRequest,
     now: u64,
@@ -149,7 +155,7 @@ async fn registered_redirect(
 
 /// The call's checks shared by the page and the flow: parameters, a registered redirect URI, a
 /// kept request.
-async fn call(
+pub(super) async fn call(
     db: &access_store::Pool,
     products: &access_store::Pool,
     kit: &RealmKit,
@@ -232,7 +238,7 @@ fn render_view(
 }
 
 /// The Grant a contribution's basis names, if it names one.
-const fn basis_grant(basis: &access_kernel::meta::ExerciseBasis) -> Option<Id> {
+pub(super) const fn basis_grant(basis: &access_kernel::meta::ExerciseBasis) -> Option<Id> {
     match basis {
         access_kernel::meta::ExerciseBasis::Holding(h) => Some(h.grant),
         _ => None,
@@ -240,7 +246,7 @@ const fn basis_grant(basis: &access_kernel::meta::ExerciseBasis) -> Option<Id> {
 }
 
 /// A page that shows why the viewer can't approve here, with no flow and no button.
-fn blocked(mut view: RenderView, why: String) -> Reply {
+pub(super) fn blocked(mut view: RenderView, why: String) -> Reply {
     view.approvable = false;
     view.blocked = Some(why);
     Reply::json(200, json!({ "render": view }))
@@ -254,7 +260,16 @@ where
 {
     /// `POST /v1/approve/requests` (OP-149 m.9, XI-7): keeps a coordinator's request and the
     /// approver's pre-signed contribution until the request expires.
-    pub async fn push_approval(&self, entry: &RealmEntry, body: &ApprovalPush) -> Reply {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one push: checks, opening, invitation, stored atomically"
+    )]
+    pub async fn push_approval<A, I, P: Approvals, Q>(
+        &self,
+        devices: &Devices<A, I, P, Q>,
+        entry: &RealmEntry,
+        body: &ApprovalPush,
+    ) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -264,9 +279,10 @@ where
             Ok(p) => p,
             Err(e) => return problem(400, e.code(), "The pushed request is not valid"),
         };
-        if let Err(e) = envelope(&body.contribution) {
-            return problem(400, e.code(), "The pushed contribution is not valid");
-        }
+        let env = match envelope(&body.contribution) {
+            Ok(e) => e,
+            Err(e) => return problem(400, e.code(), "The pushed contribution is not valid"),
+        };
         // §8.17.6.2, OP-157 m.3 (l)
         if body.body.as_ref().is_some_and(|b| !b.is_empty()) && body.intent.is_none() {
             return problem(
@@ -305,9 +321,25 @@ where
         }
         let uri = request_uri(&random);
         let digest = request_digest(&request);
+        // §13.7.3, OP-157 m.3 (m)
+        let invitation = match self
+            .approval_invitation(devices, &kit, &body.request, &p, &env)
+            .await
+        {
+            Ok(i) => i,
+            Err(r) => return r,
+        };
+        let facts = invitation.as_ref().map(|i| facts(i, &env.class));
         let stored = async {
             let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
-            store::push_approval(
+            // A-3, C30, OP-157 m.3 (m)
+            if let Some(i) = &invitation
+                && !self.window_open(&mut t, i, now).await?
+            {
+                t.rollback().await?;
+                return Ok::<_, access_store::StoreError>(false);
+            }
+            let request_id = store::push_approval(
                 &mut t,
                 &NewApproval {
                     digest,
@@ -318,17 +350,27 @@ where
                 },
             )
             .await?;
-            t.commit().await
+            if let Some(i) = &invitation {
+                self.invite(&kit, &mut t, i, request_id, &digest, body, now)
+                    .await?;
+            }
+            t.commit().await?;
+            Ok(true)
         };
         match stored.await {
-            Ok(()) => Reply::json(
-                201,
-                json!({
+            Ok(true) => {
+                let mut pushed = json!({
                     "request_uri": uri,
                     "digest": b64url_encode(&digest),
                     "expires_at": rfc3339(until),
-                }),
-            ),
+                });
+                // §8.17.11.1, OP-157 m.3 (m)
+                if let (Some(f), Some(m)) = (facts, pushed.as_object_mut()) {
+                    m.insert(String::from("facts"), f);
+                }
+                Reply::json(201, pushed)
+            }
+            Ok(false) => Reply::problem(invite_limit()),
             Err(_) => unavailable(),
         }
     }
@@ -359,10 +401,6 @@ where
     /// `POST /v1/approve/flows` (§9.14.1 A step 2): the signed-in approver opens the pushed
     /// request; the statement is built from the render the decision point kept and the
     /// approver's device Instance whose key signed the contribution.
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one opening: faithful render, bodies, eligibility, approver, statement, options"
-    )]
     pub async fn start_approval<A, I, P: Approvals, Q>(
         &self,
         devices: &Devices<A, I, P, Q>,
@@ -388,112 +426,22 @@ where
             Ok(s) => s,
             Err(r) => return r,
         };
-        let (p, kept, env, request) = match self.opened(&kit, &row).await {
-            Ok(o) => o,
-            Err(r) => return r,
-        };
-        let viewer = match self.viewer_party(&kit, &session.subject).await {
-            Ok(v) => v,
-            Err(r) => return r,
-        };
-        // §9.14.5
-        let opening = match devices.approvals.opening(p.domain, p.intent).await {
-            Ok(Some(o)) => o,
-            Ok(None) => return Reply::problem(CHANGED),
-            Err(_) => return unavailable(),
-        };
-        let Some(tier) = tier_of(opening.tier) else {
-            return Reply::problem(CHANGED);
-        };
-        let shown = opening
-            .render
-            .as_deref()
-            .and_then(|bytes| render::decode(bytes).ok())
-            .filter(|r| faithful(r, &request));
-        let ceiling = now.saturating_add(assurance::aas_expiry_ceiling(tier));
-        let mut view = render_view(
-            shown.as_ref(),
-            &p,
-            &env,
-            &opening,
-            (tier, ceiling),
-            (&kit.name, &viewer.unwrap_or(Id([0; 16]))),
-        );
-        // E10, §8.17.6.2
-        let Some(shown) = shown else {
-            return blocked(
-                view,
-                String::from(TextId::ApprovalUnfaithful.default_text()),
-            );
-        };
-        // PI-17, §8.17.6.2
-        match bodies(kept.intent.as_deref(), kept.body.as_ref(), &p.intent) {
-            Ok(b) => view.bodies = b,
-            Err(_) => {
-                return blocked(
-                    view,
-                    String::from(TextId::ApprovalBodyMismatch.default_text()),
-                );
-            }
-        }
-        // §8.17.6.1, E26
-        let Some(viewer) = viewer else {
-            return blocked(view, say(TextId::ApprovalNotEligibleHidden, &[]));
-        };
-        match devices
-            .approvals
-            .eligibility(p.domain, &env.class, viewer, basis_grant(&env.basis))
-            .await
-        {
-            Ok(e) if e.eligible => {}
-            Ok(e) => {
-                let why = e.named.map_or_else(
-                    || say(TextId::ApprovalNotEligibleHidden, &[]),
-                    |n| {
-                        say(
-                            TextId::ApprovalNotEligible,
-                            &[
-                                ("eligible", &format!("approvers for {}", kit.name)),
-                                ("count", &n.to_string()),
-                            ],
-                        )
-                    },
-                );
-                return blocked(view, why);
-            }
-            Err(_) => return unavailable(),
-        }
-        // §9.14.1
-        let approver = match self.approver(&kit, &session.subject, &env.ais).await {
-            Ok(Some(a)) => a,
-            Ok(None) => {
-                return problem(
-                    403,
-                    "approver-instance",
-                    "No device of yours signed this contribution",
-                );
-            }
-            Err(r) => return r,
-        };
-        let act = statement_of(
-            &p,
-            &env,
-            &approver,
-            opening.render_digest,
-            &shown,
-            tier,
-            now,
-        );
-        let (Ok(aas_bytes), Ok(statement)) = (act.to_bytes(), aas::digest(&act)) else {
-            return unavailable();
-        };
-        let options = match self
-            .options(&kit, &session.subject, &statement.0, tier)
+        let opened = match self
+            .opening_of(devices, &kit, &session.subject, &row, now)
             .await
         {
             Ok(o) => o,
             Err(r) => return r,
         };
+        let Prepared {
+            mut view,
+            act,
+            aas_bytes,
+            statement,
+            options,
+            shown,
+            tier: _,
+        } = opened;
         let started = async {
             let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
             let ok =
@@ -527,8 +475,123 @@ where
         Reply::json(201, out)
     }
 
+    /// What opening a pushed request shows and signs (§9.14.1 A step 2): the render, the
+    /// statement and the assertion options, or the reply that says why the viewer can't.
+    pub(super) async fn opening_of<A, I, P: Approvals, Q>(
+        &self,
+        devices: &Devices<A, I, P, Q>,
+        kit: &RealmKit,
+        subject: &[u8; 16],
+        row: &ApprovalRow,
+        now: u64,
+    ) -> Result<Prepared, Reply> {
+        let (p, kept, env, request) = self.opened(kit, row).await?;
+        let viewer = self.viewer_party(kit, subject).await?;
+        // §9.14.5
+        let opening = match devices.approvals.opening(p.domain, p.intent).await {
+            Ok(Some(o)) => o,
+            Ok(None) => return Err(Reply::problem(CHANGED)),
+            Err(_) => return Err(unavailable()),
+        };
+        let Some(tier) = tier_of(opening.tier) else {
+            return Err(Reply::problem(CHANGED));
+        };
+        let shown = opening
+            .render
+            .as_deref()
+            .and_then(|bytes| render::decode(bytes).ok())
+            .filter(|r| faithful(r, &request));
+        let ceiling = now.saturating_add(assurance::aas_expiry_ceiling(tier));
+        let mut view = render_view(
+            shown.as_ref(),
+            &p,
+            &env,
+            &opening,
+            (tier, ceiling),
+            (&kit.name, &viewer.unwrap_or(Id([0; 16]))),
+        );
+        // E10, §8.17.6.2
+        let Some(shown) = shown else {
+            return Err(blocked(
+                view,
+                String::from(TextId::ApprovalUnfaithful.default_text()),
+            ));
+        };
+        // PI-17, §8.17.6.2
+        match bodies(kept.intent.as_deref(), kept.body.as_ref(), &p.intent) {
+            Ok(b) => view.bodies = b,
+            Err(_) => {
+                return Err(blocked(
+                    view,
+                    String::from(TextId::ApprovalBodyMismatch.default_text()),
+                ));
+            }
+        }
+        // §8.17.6.1, E26
+        let Some(viewer) = viewer else {
+            return Err(blocked(view, say(TextId::ApprovalNotEligibleHidden, &[])));
+        };
+        match devices
+            .approvals
+            .eligibility(p.domain, &env.class, viewer, basis_grant(&env.basis))
+            .await
+        {
+            Ok(e) if e.eligible => {}
+            Ok(e) => {
+                let why = e.named.map_or_else(
+                    || say(TextId::ApprovalNotEligibleHidden, &[]),
+                    |n| {
+                        say(
+                            TextId::ApprovalNotEligible,
+                            &[
+                                ("eligible", &format!("approvers for {}", kit.name)),
+                                ("count", &n.to_string()),
+                            ],
+                        )
+                    },
+                );
+                return Err(blocked(view, why));
+            }
+            Err(_) => return Err(unavailable()),
+        }
+        // §9.14.1
+        let Some(approver) = self.approver(kit, subject, &env.ais).await? else {
+            return Err(problem(
+                403,
+                "approver-instance",
+                "No device of yours signed this contribution",
+            ));
+        };
+        let act = statement_of(
+            &p,
+            &env,
+            &approver,
+            opening.render_digest,
+            &shown,
+            tier,
+            now,
+        );
+        let (Ok(aas_bytes), Ok(statement)) = (act.to_bytes(), aas::digest(&act)) else {
+            return Err(unavailable());
+        };
+        let options = self.options(kit, subject, &statement.0, tier).await?;
+        Ok(Prepared {
+            view,
+            act,
+            aas_bytes,
+            statement,
+            options,
+            shown,
+            tier,
+        })
+    }
+
     /// The Party of the session's subject, if it has one.
-    async fn viewer_party(&self, kit: &RealmKit, subject: &[u8; 16]) -> Result<Option<Id>, Reply> {
+    pub(super) async fn viewer_party(
+        &self,
+        kit: &RealmKit,
+        subject: &[u8; 16],
+    ) -> Result<Option<Id>, Reply> {
         let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
             .await
             .map_err(|_| unavailable())?;
@@ -540,7 +603,7 @@ where
     }
 
     /// The live session of the approver's browser.
-    async fn approver_session(
+    pub(super) async fn approver_session(
         &self,
         kit: &RealmKit,
         b: &Browser<'_>,
@@ -558,7 +621,7 @@ where
 
     /// The pushed request, what was kept beside it and the contribution of `row`, in this
     /// realm's domain.
-    async fn opened(
+    pub(super) async fn opened(
         &self,
         kit: &RealmKit,
         row: &ApprovalRow,
@@ -584,7 +647,7 @@ where
     }
 
     /// The approver: the session subject's active device Instance whose key signed `ais`.
-    async fn approver(
+    pub(super) async fn approver(
         &self,
         kit: &RealmKit,
         subject: &[u8; 16],
@@ -673,10 +736,6 @@ where
     /// `POST /v1/approve/flows/{flow}` (§9.14.1 A steps 3 and 4): the assertion over H(AAS)
     /// becomes the `authentication` Claim bound to the statement, issued at once, and the
     /// contribution is committed with the statement and the Claim.
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one approval: statement, SPC, assertion, app factor, cooling, Claim, contribution"
-    )]
     pub async fn finish_approval<A, I, P: Approvals, Q: ApprovalClaims>(
         &self,
         devices: &Devices<A, I, P, Q>,
@@ -694,92 +753,91 @@ where
             Ok(s) => s,
             Err(r) => return r,
         };
+        match self
+            .finish_flow(
+                devices,
+                &kit,
+                &session.subject,
+                &session.id,
+                flow,
+                body,
+                now,
+            )
+            .await
+        {
+            Ok(f) => finished_reply(body, &f.exercise, &f.render_digest, &f.claim),
+            Err(r) => r,
+        }
+    }
+
+    /// One started flow's assertion and contribution.
+    #[expect(clippy::too_many_arguments, reason = "one approval's facts")]
+    pub(super) async fn finish_flow<A, I, P: Approvals, Q: ApprovalClaims>(
+        &self,
+        devices: &Devices<A, I, P, Q>,
+        kit: &RealmKit,
+        subject: &[u8; 16],
+        session: &[u8; 16],
+        flow: &str,
+        body: &ApprovalFinish,
+        now: u64,
+    ) -> Result<Finished, Reply> {
         let credential_json = match &body.credential {
             Value::String(t) => t.clone(),
             other => other.to_string(),
         };
         let Some(assertion) = credential::assertion(&credential_json) else {
-            return problem(400, "invalid-request", "The credential does not decode");
+            return Err(problem(
+                400,
+                "invalid-request",
+                "The credential does not decode",
+            ));
         };
-        let (row, statement, aas_bytes) = match self.started(&kit, flow, &session.id, now).await {
-            Ok(s) => s,
-            Err(r) => return r,
-        };
+        let (row, statement, aas_bytes) = self.started(kit, flow, session, now).await?;
         let query = ApproveQuery {
             request: row.request_uri.clone(),
             redirect_uri: body.redirect_uri.clone(),
             state: body.state.clone(),
         };
-        if let Err(r) = call(&self.db, &self.products, &kit, &query, now).await {
-            return r;
-        }
+        call(&self.db, &self.products, kit, &query, now).await?;
         let (Ok(act_value), Ok(kept)) = (
             dcbor::decode(&aas_bytes, Limits::CEILING),
             serde_json::from_slice::<Kept>(&row.contribution),
         ) else {
-            return unavailable();
+            return Err(unavailable());
         };
         let (Ok(act), Ok(env)) = (
             ApprovalAct::from_value(&act_value),
             envelope(&kept.contribution),
         ) else {
-            return unavailable();
+            return Err(unavailable());
         };
-        let (tier, shown) = match still_asked(devices, &act, now).await {
-            Ok(t) => t,
-            Err(r) => return r,
-        };
+        let (tier, shown) = still_asked(devices, &act, now).await?;
         // §9.14.1 step 3, OP-156 m.3 (g)
-        let payment = match self
-            .payment(&kit, &session.subject, &assertion, shown.as_ref())
-            .await
-        {
-            Ok(p) => p,
-            Err(r) => return r,
-        };
-        let mut verified = match self
-            .assert(&kit, &session.subject, &statement, tier, &assertion, now)
-            .await
-        {
-            Ok(v) => v,
-            Err(r) => return r,
-        };
+        let payment = self
+            .payment(kit, subject, &assertion, shown.as_ref())
+            .await?;
+        let mut verified = self
+            .assert(kit, subject, &statement, tier, &assertion, now)
+            .await?;
         // MD-11, SA-54, OP-156 m.3 (e)
-        if let Err(r) = self
-            .app_factor(
-                &kit,
-                &session.subject,
-                &statement,
-                tier,
-                body,
-                &mut verified,
-                now,
-            )
-            .await
-        {
-            return r;
-        }
+        self.app_factor(kit, subject, &statement, tier, body, &mut verified, now)
+            .await?;
         if payment {
-            self.spc_audit(&kit, &session.subject, "spc.approved").await;
+            self.spc_audit(kit, subject, "spc.approved").await;
         }
         // SEC18, §8.13
-        if let Err(r) = cooled(tier, verified.created_ms, now) {
-            return r;
-        }
-        let claim = match issue_claim(
+        cooled(tier, verified.created_ms, now)?;
+        let claim = issue_claim(
             devices,
-            &kit,
-            session.subject,
+            kit,
+            *subject,
             statement,
             act.instance,
             &verified,
             now,
         )
-        .await
-        {
-            Ok(c) => c,
-            Err(r) => return r,
-        };
+        .await?;
         // §9.14.1 step 4
         let verdict = devices
             .approvals
@@ -797,10 +855,7 @@ where
                 pep: devices.pep.clone(),
             })
             .await;
-        let exercise = match committed(verdict) {
-            Ok(e) => e,
-            Err(r) => return r,
-        };
+        let exercise = committed(verdict)?;
         let finished = async {
             let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
             let ok = store::finish_approval(&mut t, &row.id, &exercise.0, now).await?;
@@ -808,13 +863,17 @@ where
             Ok::<_, access_store::StoreError>(ok)
         };
         if finished.await.is_err() {
-            return unavailable();
+            return Err(unavailable());
         }
-        finished_reply(body, &exercise.0, &act.render_digest.0, &claim.0)
+        Ok(Finished {
+            exercise: exercise.0,
+            render_digest: act.render_digest.0,
+            claim: claim.0,
+        })
     }
 
     /// The started, unfinished flow `flow` of `session`: its row, H(AAS) and the statement.
-    async fn started(
+    pub(super) async fn started(
         &self,
         kit: &RealmKit,
         flow: &str,
@@ -957,29 +1016,40 @@ where
         Ok(Verified {
             factors: vec![factor.clone()],
             levels: levels(&vector(&[factor])),
-            detail: WebauthnDetail {
+            detail: Some(WebauthnDetail {
                 aaguid: stored.aaguid.0,
                 sign_count: u64::from(verified.sign_count),
                 up: true,
                 uv: verified.assurance.user_verified,
                 be: stored.backup_eligible,
                 bs: verified.backup_state,
-            },
+            }),
             evidence,
             created_ms: stored.created_at.saturating_mul(1_000),
         })
     }
 }
 
+/// One opened request: what the page shows and the statement the assertion signs.
+pub(super) struct Prepared {
+    pub(super) view: RenderView,
+    pub(super) act: ApprovalAct,
+    pub(super) aas_bytes: Vec<u8>,
+    pub(super) statement: Digest,
+    pub(super) options: Value,
+    pub(super) shown: render::Render,
+    pub(super) tier: Tier,
+}
+
 /// The approver Instance and its Party.
-struct Approver {
-    instance: Id,
-    party: Id,
+pub(super) struct Approver {
+    pub(super) instance: Id,
+    pub(super) party: Id,
 }
 
 /// §9.14.2, XI-7: the decision point's render must still be the one the statement names, and
 /// the statement must not have expired; the tier the approval is held to.
-async fn still_asked<A, I, P: Approvals, Q>(
+pub(super) async fn still_asked<A, I, P: Approvals, Q>(
     devices: &Devices<A, I, P, Q>,
     act: &ApprovalAct,
     now: u64,
@@ -1007,7 +1077,7 @@ async fn still_asked<A, I, P: Approvals, Q>(
 
 /// SEC18, §8.13, X38: a binding younger than 24 h meets no CT2+ approval; the refusal names
 /// when it will.
-fn cooled(tier: Tier, created_ms: u64, now: u64) -> Result<(), Reply> {
+pub(super) fn cooled(tier: Tier, created_ms: u64, now: u64) -> Result<(), Reply> {
     assurance::cooled(tier, created_ms, now).map_err(|available| {
         Reply::json(
             403,
@@ -1024,7 +1094,7 @@ fn cooled(tier: Tier, created_ms: u64, now: u64) -> Result<(), Reply> {
 
 /// The answer of a finished approval (`ApprovalFinished`, OP-149 m.9, m.33 (c)): where the
 /// browser goes, the contribution Exercise, the render digest and the approver's Claim.
-fn finished_reply(
+pub(super) fn finished_reply(
     body: &ApprovalFinish,
     exercise: &[u8; 32],
     render: &[u8; 32],
@@ -1044,7 +1114,7 @@ fn finished_reply(
 /// SI-5, §10.1.5, OP-149 m.33 (c): the `authentication` Claim bound to the statement and to the
 /// approver's Instance, issued now through the realm's courier; only an admitted Claim is a
 /// proof.
-async fn issue_claim<A, I, P, Q: ApprovalClaims>(
+pub(super) async fn issue_claim<A, I, P, Q: ApprovalClaims>(
     devices: &Devices<A, I, P, Q>,
     kit: &RealmKit,
     subject: [u8; 16],
@@ -1055,10 +1125,14 @@ async fn issue_claim<A, I, P, Q: ApprovalClaims>(
 ) -> Result<Id, Reply> {
     let order = claims::authentication(AuthFacts {
         subject,
-        method: AuthMethod::Webauthn,
+        method: if verified.detail.is_some() {
+            AuthMethod::Webauthn
+        } else {
+            AuthMethod::DeviceKey
+        },
         auth_time: now,
         assurance: verified.levels.clone(),
-        webauthn: Some(verified.detail),
+        webauthn: verified.detail,
         evidence: Some(verified.evidence),
         bind: Bind::Statement {
             statement,
@@ -1091,7 +1165,7 @@ async fn issue_claim<A, I, P, Q: ApprovalClaims>(
 
 /// The statement of an approval (§9.14 fields): act, approver, target, `exercise_ref`, surface,
 /// render, material fields, times within the tier's ceiling.
-fn statement_of(
+pub(super) fn statement_of(
     p: &Pushed,
     env: &Envelope,
     approver: &Approver,
@@ -1125,7 +1199,7 @@ fn statement_of(
 /// The Exercise a contribution verdict names, or the reply that says why there is none: a
 /// statement over another render is "the request changed" (§9.14.2); a DENY or `REQUIRE_ACTION`
 /// is reported with its outcome, a refusal with its reason.
-fn committed(
+pub(super) fn committed(
     verdict: Result<Verdict, access_internal_api::idp::Unavailable>,
 ) -> Result<Digest, Reply> {
     match verdict {
@@ -1168,13 +1242,20 @@ fn committed(
     }
 }
 
+/// One finished approval.
+pub(super) struct Finished {
+    pub(super) exercise: [u8; 32],
+    pub(super) render_digest: [u8; 32],
+    pub(super) claim: [u8; 16],
+}
+
 /// What a verified approval assertion established.
-struct Verified {
-    factors: Vec<Factor>,
-    levels: std::collections::BTreeMap<String, u64>,
-    detail: WebauthnDetail,
-    evidence: Digest,
-    created_ms: u64,
+pub(super) struct Verified {
+    pub(super) factors: Vec<Factor>,
+    pub(super) levels: std::collections::BTreeMap<String, u64>,
+    pub(super) detail: Option<WebauthnDetail>,
+    pub(super) evidence: Digest,
+    pub(super) created_ms: u64,
 }
 
 impl<K, C, M> Hosted<K, C, M>

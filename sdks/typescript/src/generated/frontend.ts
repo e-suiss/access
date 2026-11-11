@@ -126,6 +126,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/approve/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in a realm that opened idp.realm.approval_batch (OP-157 m.3 (m), §13.7.3). */
+        post: operations["startBatchApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approve/batch/{flow}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** One assertion per item, each over that item's H(AAS); each committed contribution stands on its own (OP-157 m.3 (m)). */
+        post: operations["finishBatchApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approve/inline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key (surface_profile suiss-approver-sdk); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m), §13.7.3, SEC26). */
+        post: operations["answerInlineApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/approve/requests": {
         parameters: {
             query?: never;
@@ -367,6 +418,10 @@ export interface components {
             contribution: components["schemas"]["ContributionEnvelope"];
             /** @description The intent envelope as the decision point evaluated it, dCBOR (kernel.cddl intent-envelope); required with body. Its digest must be require_action.intent. */
             intent?: string;
+            /** @description A registered redirect URI the approver returns to; without it the push sends no e-mail invitation (OP-157 m.3 (m)). */
+            redirect_uri?: string;
+            /** @description Echoed on that return. */
+            state?: string;
             /** @description Authority-opaque bodies the approver must see, by opaque parameter name (§8.17.6.2, OP-157 m.3 (l)). Each must hash to intent.opaque[name] under access/opaque-body/v1, or the request can't be approved; Access drops them with the push. */
             body?: {
                 [key: string]: string;
@@ -382,6 +437,41 @@ export interface components {
              * @description When the surface stops showing it: the request's expires_at, at most 72 h from the push.
              */
             expires_at: string;
+            /** @description What Access gives the coordinator for ranking (§8.17.11.1, OP-157 m.3 (m)): class, amount when the render has one, reserved and, when read, budget_ratio. Never a score, rank or urgency. */
+            facts?: {
+                class: string;
+                amount?: string;
+                reserved: boolean;
+                budget_ratio?: number;
+            };
+        };
+        BatchStart: {
+            /** @description Each as GET /v1/approve request; every item is listed and gets its own statement and assertion (§13.7.3, OP-157 m.3 (m)). */
+            requests: string[];
+            redirect_uri: string;
+            state: string;
+        };
+        BatchStarted: {
+            /** @description The batch's handle for POST /v1/approve/batch/{flow}. */
+            flow: string;
+            /** @description "Approve these N requests"; there is no "Approve all" (§8.17.6.3). */
+            title: string;
+            items: Record<string, never>[];
+        };
+        BatchFinish: {
+            items: {
+                flow: string;
+                /** @description The PublicKeyCredential JSON of the item's assertion over its H(AAS). */
+                credential: unknown;
+            }[];
+            redirect_uri: string;
+            state: string;
+        };
+        InlineAnswer: {
+            /** @description The signed deterministic CBOR approval-inline-answer. */
+            answer: string;
+            /** @description ES256 raw r‖s by the approver device key. */
+            signature: string;
         };
         ApprovalStart: {
             request: string;
@@ -903,6 +993,172 @@ export interface operations {
             };
         };
     };
+    startBatchApproval: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchStart"];
+            };
+        };
+        responses: {
+            /** @description Every item opened, each with its own statement and options. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchStarted"];
+                };
+            };
+            /** @description approval-batch-invalid: more than 10 items, another requester or action class, a tier above CT1, or a batch the realm did not open; the whole batch is refused. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The approver has no live session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporarily unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    finishBatchApproval: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                flow: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchFinish"];
+            };
+        };
+        responses: {
+            /** @description Each item's result: its Exercise or its problem. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description approval-batch-invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporarily unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    answerInlineApproval: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InlineAnswer"];
+            };
+        };
+        responses: {
+            /** @description Approved or denied. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description approver-unknown: not an activated approver key, or a signature that does not verify. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description approval-inline-off, or a request above CT1. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description approval-request-unknown: no invitation for this device, or it was answered already. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The render or the request changed. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporarily unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     pushApprovalRequest: {
         parameters: {
             query?: never;
@@ -938,6 +1194,15 @@ export interface operations {
             };
             /** @description The request or the contribution is larger than 64 KiB. */
             413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description approval-invite-limit: this requester has reached this approver's hourly invitation limit (OP-157 m.3 (m)). */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

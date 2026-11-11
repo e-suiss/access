@@ -8,6 +8,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use access_internal_api::approvals::Contributed;
+use access_kernel::aas::ApprovalAct;
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::{Capacity, Unmet};
 use access_kernel::digest::Digest;
@@ -37,6 +38,24 @@ pub const APP_PATH: &str = "/v1/approve/app.js";
 /// `GET`: the MCP authorization server's consent step, sent on to the Approval Surface;
 /// `POST` answers 405 (§11.4.5, §11.6, OP-157 m.3 (l)).
 pub const CONSENT_PATH: &str = "/consent";
+
+/// `POST`: a CT1 batch approval starts (OP-157 m.3 (m)).
+pub const BATCH_PATH: &str = "/v1/approve/batch";
+/// `POST`: a CT1 batch approval finishes, one assertion per item.
+pub const BATCH_FLOW_PATH: &str = "/v1/approve/batch/{flow}";
+/// `POST`: an approver device's answer to a CT1 notification.
+pub const INLINE_PATH: &str = "/v1/approve/inline";
+
+/// The most items a batch holds (§13.7.3).
+pub const BATCH_MAX: usize = 10;
+/// The most invitations a requester can send one approver in an hour (PD, OP-157 m.3 (m)).
+pub const INVITES_PER_HOUR: u32 = 5;
+/// The invitation window, in milliseconds.
+pub const INVITE_WINDOW_MS: u64 = 3_600_000;
+
+/// The profile the approver SDK reports in a statement it signs on the approver's device
+/// (OP-157 m.3 (m)).
+pub const SDK_SURFACE_PROFILE: &str = "suiss-approver-sdk";
 
 /// The conformance profile this surface reports in the statement (§9.14 `surface`).
 pub const SURFACE_PROFILE: &str = "suiss-approval-surface";
@@ -128,6 +147,13 @@ pub struct ApprovalPush {
     /// OP-157 m.3 (l)): each must match the intent's opaque digest or nothing can be approved.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub body: Option<BTreeMap<String, String>>,
+    /// Where the approver goes after the Approval Surface; a realm client's registered
+    /// `redirect_uri`, without which the push sends no e-mail invitation (OP-157 m.3 (m)).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub redirect_uri: Option<String>,
+    /// Echoed on that return.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
 }
 
 /// What the surface keeps of a push beside the request (XI-7): the contribution, and the
@@ -155,6 +181,9 @@ pub struct ApprovalPushed {
     pub digest: String,
     /// When the surface stops showing it, RFC 3339.
     pub expires_at: String,
+    /// Facts for the coordinator's ranking (§8.17.11.1, OP-157 m.3 (m)): never a score.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facts: Option<Value>,
 }
 
 /// `POST /v1/approve/flows`: the call's parameters, from the page.
@@ -316,6 +345,147 @@ pub struct ApprovalFinished {
     /// approver's Instance, so the product passes it as `claim_ref` when its `REQUIRE_ACTION`
     /// also left an `authentication` term unmet (OP-149 m.33 (c), §13.7.3).
     pub claim: String,
+}
+
+/// `POST /v1/approve/batch` (OP-157 m.3 (m)): the requests the page lists, at most
+/// [`BATCH_MAX`], and the call's parameters.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BatchStart {
+    /// Each as `GET /v1/approve` `request`, in display order.
+    pub requests: Vec<String>,
+    /// As `GET /v1/approve`.
+    pub redirect_uri: String,
+    /// As `GET /v1/approve`.
+    pub state: String,
+}
+
+/// `POST /v1/approve/batch/{flow}`: one assertion per item, each over that item's H(AAS).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BatchFinish {
+    /// Assertions in the batch's order.
+    pub items: Vec<BatchItem>,
+    /// As `GET /v1/approve`.
+    pub redirect_uri: String,
+    /// As `GET /v1/approve`.
+    pub state: String,
+}
+
+/// One item's assertion.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BatchItem {
+    /// The item's flow, as `POST /v1/approve/batch` answered it.
+    pub flow: String,
+    /// The `PublicKeyCredential` JSON of the assertion.
+    pub credential: Value,
+}
+
+/// `POST /v1/approve/inline`: the deterministic CBOR the device key signed and its signature
+/// (`approval-inline.cddl`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InlineAnswer {
+    /// The signed answer, base64url.
+    pub answer: String,
+    /// ES256 `r ‖ s` by the device key, base64url.
+    pub signature: String,
+}
+
+/// An inline answer's decision.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum InlineDecision {
+    /// Approve, with the statement the device signed.
+    Approve(Box<ApprovalAct>),
+    /// Refuse.
+    Deny,
+}
+
+/// A read `approval-inline-answer`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InlineBody {
+    /// The intent digest the invitation named.
+    pub intent: [u8; 32],
+    /// What the device decided.
+    pub decision: InlineDecision,
+    /// The render digest the device computed.
+    pub render_digest: [u8; 32],
+    /// The signing key's thumbprint.
+    pub device_key: [u8; 32],
+}
+
+/// Why an inline answer can't be read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("invalid-inline-answer")]
+pub struct BadInline;
+
+fn cbor_32(v: Option<&suiss_crypto::dcbor::Value>) -> Result<[u8; 32], BadInline> {
+    match v {
+        Some(suiss_crypto::dcbor::Value::Bytes(b)) => {
+            <[u8; 32]>::try_from(b.as_slice()).map_err(|_| BadInline)
+        }
+        _ => Err(BadInline),
+    }
+}
+
+/// Reads an inline answer (`approval-inline.cddl`); an approval carries its statement.
+///
+/// # Errors
+/// [`BadInline`].
+pub fn inline_answer(bytes: &[u8]) -> Result<InlineBody, BadInline> {
+    use suiss_crypto::dcbor::{self, Limits, Value as Cbor};
+    let v = dcbor::decode(bytes, Limits::CEILING).map_err(|_| BadInline)?;
+    let Cbor::Map(entries) = &v else {
+        return Err(BadInline);
+    };
+    let get = |name: &str| {
+        entries.iter().find_map(|(k, val)| match k {
+            Cbor::Text(t) if t == name => Some(val),
+            _ => None,
+        })
+    };
+    let render_digest = cbor_32(get("render_digest"))?;
+    let digest = |value: Option<&Cbor>| cbor_32(value);
+    let decision = match get("decision") {
+        Some(Cbor::Text(d)) if d == "approve" => {
+            let aas = get("aas").ok_or(BadInline)?;
+            InlineDecision::Approve(Box::new(
+                ApprovalAct::from_value(aas).map_err(|_| BadInline)?,
+            ))
+        }
+        Some(Cbor::Text(d)) if d == "deny" => InlineDecision::Deny,
+        _ => return Err(BadInline),
+    };
+    Ok(InlineBody {
+        intent: digest(get("invite"))?,
+        decision,
+        render_digest,
+        device_key: digest(get("device_key"))?,
+    })
+}
+
+/// The requester's Party a pushed request names (`requester.party`).
+#[must_use]
+pub fn requester_party(request: &Value) -> Option<[u8; 16]> {
+    let party = request.get("requester")?.get("party")?.as_str()?;
+    <[u8; 16]>::try_from(b64url_decode(party).ok()?).ok()
+}
+
+/// A pushed request's action, as `namespace.name` and major: what "same action class" compares
+/// (§13.7.3).
+#[must_use]
+pub fn action_class(request: &Value, contribute: &str) -> Option<String> {
+    let action = request.get("action")?;
+    let name = action.as_str().map(String::from).or_else(|| {
+        Some(format!(
+            "{}.{}.{}",
+            action.get("namespace")?.as_str()?,
+            action.get("name")?.as_str()?,
+            action.get("major")?.as_u64()?
+        ))
+    })?;
+    Some(format!("{name}/{contribute}"))
 }
 
 /// What the surface reads from a pushed request.
@@ -983,6 +1153,8 @@ pub fn components() -> Value {
                 "request": { "type": "object", "description": "The typed authority request (conformance/cddl/authority-request.schema.json) with its require_action." },
                 "contribution": r("ContributionEnvelope"),
                 "intent": b64_schema("The intent envelope as the decision point evaluated it, dCBOR (kernel.cddl intent-envelope); required with body. Its digest must be require_action.intent."),
+                "redirect_uri": { "type": "string", "description": "A registered redirect URI the approver returns to; without it the push sends no e-mail invitation (OP-157 m.3 (m))." },
+                "state": { "type": "string", "description": "Echoed on that return." },
                 "body": {
                     "type": "object",
                     "additionalProperties": b64_schema("The authority-opaque body, at most 32 KiB."),
@@ -996,8 +1168,65 @@ pub fn components() -> Value {
                 "request_uri": { "type": "string", "description": "urn:ietf:params:oauth:request_uri:… to open GET /v1/approve with." },
                 "digest": b64_schema("Digest of the pushed request bytes under access/authority-request-bytes/v1, 32 bytes; request=<digest> opens it too."),
                 "expires_at": time_field("When the surface stops showing it: the request's expires_at, at most 72 h from the push."),
+                "facts": {
+                    "type": "object",
+                    "description": "What Access gives the coordinator for ranking (§8.17.11.1, OP-157 m.3 (m)): class, amount when the render has one, reserved and, when read, budget_ratio. Never a score, rank or urgency.",
+                    "properties": {
+                        "class": { "type": "string" },
+                        "amount": { "type": "string" },
+                        "reserved": { "type": "boolean" },
+                        "budget_ratio": { "type": "number" },
+                    },
+                    "required": ["class", "reserved"],
+                },
             }),
             &["request_uri", "digest", "expires_at"],
+        ),
+        "BatchStart": object(
+            &json!({
+                "requests": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": BATCH_MAX,
+                    "items": { "type": "string" },
+                    "description": "Each as GET /v1/approve request; every item is listed and gets its own statement and assertion (§13.7.3, OP-157 m.3 (m)).",
+                },
+                "redirect_uri": { "type": "string" },
+                "state": { "type": "string" },
+            }),
+            &["requests", "redirect_uri", "state"],
+        ),
+        "BatchStarted": object(
+            &json!({
+                "flow": { "type": "string", "description": "The batch's handle for POST /v1/approve/batch/{flow}." },
+                "title": { "type": "string", "description": "\"Approve these N requests\"; there is no \"Approve all\" (§8.17.6.3)." },
+                "items": { "type": "array", "items": { "type": "object" } },
+            }),
+            &["flow", "title", "items"],
+        ),
+        "BatchFinish": object(
+            &json!({
+                "items": {
+                    "type": "array",
+                    "items": object(
+                        &json!({
+                            "flow": { "type": "string" },
+                            "credential": { "description": "The PublicKeyCredential JSON of the item's assertion over its H(AAS)." },
+                        }),
+                        &["flow", "credential"],
+                    ),
+                },
+                "redirect_uri": { "type": "string" },
+                "state": { "type": "string" },
+            }),
+            &["items", "redirect_uri", "state"],
+        ),
+        "InlineAnswer": object(
+            &json!({
+                "answer": b64_schema("The signed deterministic CBOR approval-inline-answer."),
+                "signature": b64_schema("ES256 raw r‖s by the approver device key."),
+            }),
+            &["answer", "signature"],
         ),
         "ApprovalStart": object(
             &json!({
@@ -1113,7 +1342,54 @@ fn body(schema: &str) -> Value {
 }
 
 /// The paths of this contract.
+#[expect(clippy::too_many_lines, reason = "one table of the contract's paths")]
 pub fn paths(paths: &mut Map<String, Value>) {
+    paths.insert(
+        BATCH_PATH.to_owned(),
+        json!({ "post": {
+            "operationId": "startBatchApproval",
+            "summary": "Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in a realm that opened idp.realm.approval_batch (OP-157 m.3 (m), §13.7.3).",
+            "parameters": [idempotency()],
+            "requestBody": body("BatchStart"),
+            "responses": {
+                "201": json_response("Every item opened, each with its own statement and options.", "BatchStarted"),
+                "400": problem("approval-batch-invalid: more than 10 items, another requester or action class, a tier above CT1, or a batch the realm did not open; the whole batch is refused."),
+                "401": problem("The approver has no live session."),
+                "503": problem("Temporarily unavailable."),
+            },
+        }}),
+    );
+    paths.insert(
+        BATCH_FLOW_PATH.to_owned(),
+        json!({ "post": {
+            "operationId": "finishBatchApproval",
+            "summary": "One assertion per item, each over that item's H(AAS); each committed contribution stands on its own (OP-157 m.3 (m)).",
+            "parameters": [idempotency(), { "name": "flow", "in": "path", "required": true, "schema": { "type": "string" } }],
+            "requestBody": body("BatchFinish"),
+            "responses": {
+                "200": { "description": "Each item's result: its Exercise or its problem." },
+                "400": problem("approval-batch-invalid."),
+                "503": problem("Temporarily unavailable."),
+            },
+        }}),
+    );
+    paths.insert(
+        INLINE_PATH.to_owned(),
+        json!({ "post": {
+            "operationId": "answerInlineApproval",
+            "summary": "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key (surface_profile suiss-approver-sdk); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m), §13.7.3, SEC26).",
+            "parameters": [idempotency()],
+            "requestBody": body("InlineAnswer"),
+            "responses": {
+                "200": { "description": "Approved or denied." },
+                "401": problem("approver-unknown: not an activated approver key, or a signature that does not verify."),
+                "403": problem("approval-inline-off, or a request above CT1."),
+                "404": problem("approval-request-unknown: no invitation for this device, or it was answered already."),
+                "409": problem("The render or the request changed."),
+                "503": problem("Temporarily unavailable."),
+            },
+        }}),
+    );
     paths.insert(
         REQUESTS_PATH.to_owned(),
         json!({ "post": {
@@ -1125,6 +1401,7 @@ pub fn paths(paths: &mut Map<String, Value>) {
                 "201": json_response("Pushed.", "ApprovalPushed"),
                 "400": problem("invalid-approval-request, invalid-contribution, invalid-expiry or invalid-request."),
                 "413": problem("The request or the contribution is larger than 64 KiB."),
+                "429": problem("approval-invite-limit: this requester has reached this approver's hourly invitation limit (OP-157 m.3 (m))."),
                 "503": problem("Temporarily unavailable."),
             },
         }}),
@@ -1552,6 +1829,53 @@ mod tests {
             bodies(Some(&other), Some(&sent), &target),
             Err(BodyMismatch)
         );
+    }
+
+    // §13.7.3, OP-157 m.3 (m)
+    #[test]
+    fn an_inline_answer_reads_as_its_cddl_says() {
+        use suiss_crypto::dcbor::{self, Limits, Value as Cbor};
+        let map = |decision: &str, invite: Vec<u8>| {
+            dcbor::encode(
+                &Cbor::Map(vec![
+                    (Cbor::text("invite"), Cbor::Bytes(invite)),
+                    (Cbor::text("decision"), Cbor::text(decision)),
+                    (Cbor::text("device_key"), Cbor::Bytes(vec![2; 32])),
+                    (Cbor::text("render_digest"), Cbor::Bytes(vec![3; 32])),
+                ]),
+                Limits::CEILING,
+            )
+            .unwrap()
+        };
+        let deny = inline_answer(&map("deny", vec![1; 32])).unwrap();
+        assert_eq!(deny.decision, InlineDecision::Deny);
+        assert_eq!(deny.intent, [1; 32]);
+        assert_eq!(inline_answer(&map("approve", vec![1; 32])), Err(BadInline));
+        assert_eq!(inline_answer(&map("maybe", vec![1; 32])), Err(BadInline));
+        assert_eq!(inline_answer(&map("deny", vec![1; 31])), Err(BadInline));
+    }
+
+    // §13.7.3, OP-157 m.3 (m)
+    #[test]
+    fn a_batch_compares_one_requester_and_one_action_class() {
+        let party = b64url_encode(&[9; 16]);
+        let r = |namespace: &str| {
+            json!({
+                "requester": { "party": party },
+                "action": { "namespace": namespace, "name": "refund", "major": 1 },
+            })
+        };
+        assert_eq!(requester_party(&r("pay")), Some([9; 16]));
+        assert_eq!(requester_party(&json!({})), None);
+        assert_ne!(
+            action_class(&r("pay"), "approve"),
+            action_class(&r("work"), "approve")
+        );
+        assert_ne!(
+            action_class(&r("pay"), "approve"),
+            action_class(&r("pay"), "review")
+        );
+        assert_eq!(BATCH_MAX, 10);
     }
 
     // OP-146 m.12 (f)

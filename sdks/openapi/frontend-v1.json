@@ -4980,8 +4980,15 @@
         "operationId": "startBatchApproval",
         "summary": "Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in a realm that opened idp.realm.approval_batch (OP-157 m.3 (m)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -4995,8 +5002,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/approve/batch/{flow}": {
@@ -5004,8 +5010,15 @@
         "operationId": "finishBatchApproval",
         "summary": "Finishes a batch approval with one assertion per item; any item outside the batch rules refuses the whole batch with approval-batch-invalid.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -5029,8 +5042,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/approve/inline": {
@@ -5038,8 +5050,15 @@
         "operationId": "answerInlineApproval",
         "summary": "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key (surface_profile suiss-approver-sdk); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -5053,8 +5072,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/consent": {

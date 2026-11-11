@@ -1395,21 +1395,21 @@ pub const ROUTES: &[Route] = &[
         "putSupportBlock",
         "Turns Block support access on, a CT1 narrowing policy.set on the person's self-anchor, or off as the person's own Exercise (OP-157 m.3 (c)).",
     ),
-    planned(
+    live(
         Owner::V7,
         Verb::Post,
         "/v1/approve/batch",
         "startBatchApproval",
         "Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in a realm that opened idp.realm.approval_batch (OP-157 m.3 (m)).",
     ),
-    planned(
+    live(
         Owner::V7,
         Verb::Post,
         "/v1/approve/batch/{flow}",
         "finishBatchApproval",
         "Finishes a batch approval with one assertion per item; any item outside the batch rules refuses the whole batch with approval-batch-invalid.",
     ),
-    planned(
+    live(
         Owner::V7,
         Verb::Post,
         "/v1/approve/inline",

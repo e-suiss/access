@@ -558,6 +558,217 @@
         }
       }
     },
+    "/v1/approve/batch": {
+      "post": {
+        "operationId": "startBatchApproval",
+        "summary": "Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in a realm that opened idp.realm.approval_batch (OP-157 m.3 (m), §13.7.3).",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchStart"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Every item opened, each with its own statement and options.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchStarted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "approval-batch-invalid: more than 10 items, another requester or action class, a tier above CT1, or a batch the realm did not open; the whole batch is refused.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The approver has no live session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/approve/batch/{flow}": {
+      "post": {
+        "operationId": "finishBatchApproval",
+        "summary": "One assertion per item, each over that item's H(AAS); each committed contribution stands on its own (OP-157 m.3 (m)).",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          },
+          {
+            "name": "flow",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchFinish"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Each item's result: its Exercise or its problem."
+          },
+          "400": {
+            "description": "approval-batch-invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/approve/inline": {
+      "post": {
+        "operationId": "answerInlineApproval",
+        "summary": "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key (surface_profile suiss-approver-sdk); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m), §13.7.3, SEC26).",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InlineAnswer"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Approved or denied."
+          },
+          "401": {
+            "description": "approver-unknown: not an activated approver key, or a signature that does not verify.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "approval-inline-off, or a request above CT1.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "approval-request-unknown: no invitation for this device, or it was answered already.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The render or the request changed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/approve/requests": {
       "post": {
         "operationId": "pushApprovalRequest",
@@ -606,6 +817,16 @@
           },
           "413": {
             "description": "The request or the contribution is larger than 64 KiB.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "approval-invite-limit: this requester has reached this approver's hourly invitation limit (OP-157 m.3 (m)).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1342,6 +1563,14 @@
             "pattern": "^[A-Za-z0-9_-]*$",
             "description": "The intent envelope as the decision point evaluated it, dCBOR (kernel.cddl intent-envelope); required with body. Its digest must be require_action.intent."
           },
+          "redirect_uri": {
+            "type": "string",
+            "description": "A registered redirect URI the approver returns to; without it the push sends no e-mail invitation (OP-157 m.3 (m))."
+          },
+          "state": {
+            "type": "string",
+            "description": "Echoed on that return."
+          },
           "body": {
             "type": "object",
             "additionalProperties": {
@@ -1375,6 +1604,135 @@
             "type": "string",
             "format": "date-time",
             "description": "When the surface stops showing it: the request's expires_at, at most 72 h from the push."
+          },
+          "facts": {
+            "type": "object",
+            "description": "What Access gives the coordinator for ranking (§8.17.11.1, OP-157 m.3 (m)): class, amount when the render has one, reserved and, when read, budget_ratio. Never a score, rank or urgency.",
+            "properties": {
+              "class": {
+                "type": "string"
+              },
+              "amount": {
+                "type": "string"
+              },
+              "reserved": {
+                "type": "boolean"
+              },
+              "budget_ratio": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "class",
+              "reserved"
+            ]
+          }
+        }
+      },
+      "BatchStart": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "requests",
+          "redirect_uri",
+          "state"
+        ],
+        "properties": {
+          "requests": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "items": {
+              "type": "string"
+            },
+            "description": "Each as GET /v1/approve request; every item is listed and gets its own statement and assertion (§13.7.3, OP-157 m.3 (m))."
+          },
+          "redirect_uri": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      },
+      "BatchStarted": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "flow",
+          "title",
+          "items"
+        ],
+        "properties": {
+          "flow": {
+            "type": "string",
+            "description": "The batch's handle for POST /v1/approve/batch/{flow}."
+          },
+          "title": {
+            "type": "string",
+            "description": "\"Approve these N requests\"; there is no \"Approve all\" (§8.17.6.3)."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "BatchFinish": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "redirect_uri",
+          "state"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "flow",
+                "credential"
+              ],
+              "properties": {
+                "flow": {
+                  "type": "string"
+                },
+                "credential": {
+                  "description": "The PublicKeyCredential JSON of the item's assertion over its H(AAS)."
+                }
+              }
+            }
+          },
+          "redirect_uri": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      },
+      "InlineAnswer": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "answer",
+          "signature"
+        ],
+        "properties": {
+          "answer": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "The signed deterministic CBOR approval-inline-answer."
+          },
+          "signature": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "ES256 raw r‖s by the approver device key."
           }
         }
       },

@@ -12,6 +12,8 @@
 
 mod account;
 mod approve;
+mod approve_batch;
+mod approve_inline;
 pub mod certificate;
 pub mod cloud_key;
 mod credential;
