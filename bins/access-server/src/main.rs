@@ -61,6 +61,10 @@ mod transparency;
 mod upstream;
 // OP-158 m.3 (y)
 mod kek_rotation;
+// OP-158 m.3 (q), (r)
+mod dr;
+mod drill;
+mod upgrade;
 // OP-158 m.3 (y)
 mod mds;
 // OP-158 m.3 (i)
@@ -169,7 +173,7 @@ struct Pools {
     /// The management listener's `access_app` pool (OP-53, OP-158 m.3 (v)).
     admin: Pool,
     /// Admin search and listing (OP-27): the replica when one is configured, else `app`.
-    reads: Pool,
+    reads: access_store::replica_reads::ReplicaReads,
     deriver: Pool,
     router: Pool,
     archive: Pool,
@@ -194,6 +198,12 @@ enum Command {
     /// `rotate-kek <realm slug>`: rotate the realm's KEK, or resume its open rotation
     /// (OP-138, OP-158 m.3 (y)).
     RotateKek(String),
+    /// `upgrade-check --to <manifest.json>` or `upgrade-check --manifest` (OP-56, OP-158 m.3 (q)).
+    UpgradeCheck(Option<PathBuf>),
+    /// `dr-promote`: serve a cell promoted from its async DR copy again (OP-29, OP-158 m.3 (r)).
+    DrPromote,
+    /// `drill baseline` or `drill restore <baseline.json>` (OP-57, OP-158 m.3 (r)).
+    Drill(Option<PathBuf>),
 }
 
 /// A one-shot job over the bootstrap plan.
@@ -219,6 +229,17 @@ fn command(args: &[OsString]) -> Option<Command> {
         [c] if c == "migrate" => Some(Command::Migrate),
         [c] if c == "reshred" => Some(Command::Reshred),
         [c, slug] if c == "rotate-kek" => Some(Command::RotateKek(text(slug)?)),
+        [c, flag] if c == "upgrade-check" && flag == "--manifest" => {
+            Some(Command::UpgradeCheck(None))
+        }
+        [c, flag, file] if c == "upgrade-check" && flag == "--to" => {
+            Some(Command::UpgradeCheck(Some(PathBuf::from(file))))
+        }
+        [c] if c == "dr-promote" => Some(Command::DrPromote),
+        [c, step] if c == "drill" && step == "baseline" => Some(Command::Drill(None)),
+        [c, step, file] if c == "drill" && step == "restore" => {
+            Some(Command::Drill(Some(PathBuf::from(file))))
+        }
         [c, plan] if c == "bootstrap" => Some(Command::Local(PathBuf::from(plan), Job::Bootstrap)),
         [c, plan, product, name] if c == "client-update" => Some(Command::Local(
             PathBuf::from(plan),
@@ -248,11 +269,17 @@ fn main() -> ExitCode {
             eprintln!(
                 "usage: access-server [migrate | bootstrap <plan.toml> | client-update <plan.toml> \
                  <product> <display name> | client-retire <plan.toml> <product> | \
-                 import-accounts <realm> <file.jsonl> | reshred | rotate-kek <realm>]"
+                 import-accounts <realm> <file.jsonl> | reshred | rotate-kek <realm> | \
+                 upgrade-check --to <manifest.json> | upgrade-check --manifest | dr-promote | \
+                 drill baseline | drill restore <baseline.json>]"
             );
         }
         return ExitCode::FAILURE;
     };
+    // OP-56
+    if let Command::UpgradeCheck(to) = &command {
+        return upgrade_check_main(to.as_deref());
+    }
     let config = match Config::load() {
         Ok(config) => config,
         Err(error) => {
@@ -275,7 +302,10 @@ fn main() -> ExitCode {
         | Command::Local(..)
         | Command::Import(..)
         | Command::Reshred
-        | Command::RotateKek(..) => {
+        | Command::RotateKek(..)
+        | Command::UpgradeCheck(..)
+        | Command::DrPromote
+        | Command::Drill(..) => {
             settings.otlp_endpoint = None;
             access_telemetry::install(&settings, std::io::stderr)
         }
@@ -302,6 +332,190 @@ fn main() -> ExitCode {
         Command::Import(slug, file) => import_main(&config, &slug, &file),
         Command::Reshred => reshred_main(&config),
         Command::RotateKek(slug) => rotate_kek_main(&config, &slug),
+        Command::UpgradeCheck(to) => upgrade_check_main(to.as_deref()),
+        Command::DrPromote => dr_promote_main(&config),
+        Command::Drill(baseline) => drill_main(&config, baseline.as_deref()),
+    }
+}
+
+/// `upgrade-check`: prints this build's manifest, or decides a rolling upgrade to the build of
+/// `to` and exits with OP-56's code (0 rolling, 3 recreate, 4 switched off).
+fn upgrade_check_main(to: Option<&Path>) -> ExitCode {
+    let me = upgrade::Manifest::this();
+    let Some(to) = to else {
+        return match serde_json::to_string_pretty(&me) {
+            Ok(json) => {
+                #[allow(clippy::print_stdout)]
+                {
+                    println!("{json}");
+                }
+                ExitCode::SUCCESS
+            }
+            Err(_) => ExitCode::FAILURE,
+        };
+    };
+    let target = std::fs::read(to)
+        .map_err(|e| format!("{}: {e}", to.display()))
+        .and_then(|b| serde_json::from_slice::<upgrade::Manifest>(&b).map_err(|e| e.to_string()));
+    let rolling = match Config::upgrade_only() {
+        Ok(u) => u.rolling,
+        Err(error) => {
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("access-server: invalid configuration: {error}");
+            }
+            return ExitCode::FAILURE;
+        }
+    };
+    let verdict = match target {
+        Ok(t) => upgrade::verdict(&me, &t, rolling),
+        Err(error) => {
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("access-server: the target manifest does not read: {error}");
+            }
+            upgrade::Verdict::Recreate
+        }
+    };
+    let code = verdict as u8;
+    #[allow(clippy::print_stdout)]
+    {
+        println!(
+            "{}",
+            serde_json::json!({ "code": code, "verdict": format!("{verdict:?}").to_lowercase() })
+        );
+    }
+    ExitCode::from(code)
+}
+
+/// `dr-promote`: the identity side of an async DR promote, printing what it did as JSON
+/// (OP-29, HL-31).
+fn dr_promote_main(config: &Config) -> ExitCode {
+    let run = || -> Result<String, String> {
+        let prepared = prepare(config, tls_config(config)?)?;
+        let runtime = locked(config)?;
+        let promoted = runtime.block_on(async {
+            let all = pools(config, &prepared).await?;
+            dr::promote(&all.app, &all.router).await
+        })?;
+        serde_json::to_string_pretty(&promoted).map_err(|e| e.to_string())
+    };
+    match run() {
+        Ok(json) => {
+            #[allow(clippy::print_stdout)]
+            {
+                println!("{json}");
+            }
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            tracing::error!(%error, "the DR promote was refused; the cell stays closed");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `drill`: the restore drill's baseline, or its nine items against a baseline, as JSON; a
+/// failed item fails the command (OP-57).
+fn drill_main(config: &Config, baseline: Option<&Path>) -> ExitCode {
+    let run = || -> Result<(String, bool), String> {
+        let base = baseline
+            .map(|p| {
+                std::fs::read(p)
+                    .map_err(|e| format!("{}: {e}", p.display()))
+                    .and_then(|b| {
+                        serde_json::from_slice::<drill::Baseline>(&b).map_err(|e| e.to_string())
+                    })
+            })
+            .transpose()?;
+        let migrator = config
+            .database
+            .as_ref()
+            .and_then(|d| d.migrator.as_ref())
+            .map(|_| migrator_credentials(config))
+            .transpose()?;
+        let prepared = prepare(config, tls_config(config)?)?;
+        let runtime = locked(config)?;
+        runtime.block_on(async {
+            let all = pools(config, &prepared).await?;
+            let identity = config.identity.as_ref().ok_or("no identity section")?;
+            let keyring = idp::RealmKeyring::new(
+                SignerKeys::new(identity.signer.clone()),
+                prepared.identity_keys.clone(),
+            );
+            let migrator_pool = match (&migrator, config.database.as_ref()) {
+                (Some((root, password)), Some(db)) => {
+                    let role = db.migrator.as_ref().ok_or("no migrator")?;
+                    let target = Target {
+                        host: &db.host,
+                        port: db.port,
+                        database: &db.name,
+                        user: &role.user,
+                        password: password.value().expose(),
+                        root_cert: root,
+                    };
+                    Some(pool(options(&target), 1).await.map_err(|e| e.to_string())?)
+                }
+                _ => None,
+            };
+            let cold = config.audit_cold.as_ref().map(|c| {
+                access_identity_export::adapters::cold_file::FileCold {
+                    root: c.dir.clone(),
+                }
+            });
+            let keys = &prepared.keys;
+            let event_key = |d: &access_kernel::digest::Digest| {
+                access_authority_core::ports::Keys::event_key(keys, d).is_ok()
+            };
+            let env = drill::Env {
+                app: &all.app,
+                router: &all.router,
+                sequencer: &all.sequencer,
+                migrator: migrator_pool.as_ref(),
+                realm_keys: &keyring,
+                event_key: &event_key,
+                cold: cold.as_ref(),
+                breakglass: None,
+            };
+            match base {
+                None => {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .ok()
+                        .and_then(|d| u64::try_from(d.as_millis()).ok())
+                        .unwrap_or(0);
+                    let b = drill::baseline(&env, now).await?;
+                    Ok((
+                        serde_json::to_string_pretty(&b).map_err(|e| e.to_string())?,
+                        true,
+                    ))
+                }
+                Some(base) => {
+                    let r = drill::restore(&env, &base).await?;
+                    Ok((
+                        serde_json::to_string_pretty(&r).map_err(|e| e.to_string())?,
+                        r.passed,
+                    ))
+                }
+            }
+        })
+    };
+    match run() {
+        Ok((json, passed)) => {
+            #[allow(clippy::print_stdout)]
+            {
+                println!("{json}");
+            }
+            if passed {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+        Err(error) => {
+            tracing::error!(%error, "the restore drill stopped");
+            ExitCode::FAILURE
+        }
     }
 }
 
@@ -491,7 +705,8 @@ fn migrate(config: &Config) -> Result<(), String> {
             .await
             .map_err(|e| format!("{}: {e}", role.user))?;
         // OP-52
-        check_server(&migrator, 1, true, durability(db))
+        let topology = db.topology.as_ref().map(config::Topology::checked);
+        check_server(&migrator, 1, true, durability(db), topology.as_ref())
             .await
             .map_err(|e| e.to_string())?;
         access_store::connect::migrate(&migrator)
@@ -962,8 +1177,16 @@ fn holder() -> Result<String, String> {
 /// The management listener's pool size when `admin_pool` is unset (OP-53, PD).
 const ADMIN_POOL: u32 = 4;
 
+/// How often each pool checks that its host still accepts writes, and the replica its lag
+/// (OP-26, §17.4.6, PD).
+const HEALTH_EVERY: std::time::Duration = std::time::Duration::from_secs(1);
+
 async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
     let db = config.database.as_ref().ok_or("no database section")?;
+    // OP-26, OP-88
+    let hosts: Vec<String> = std::iter::once(db.host.clone())
+        .chain(db.hosts.iter().cloned())
+        .collect();
     let open = async |role: &Role, password: &SecretFile| {
         let target = Target {
             host: &db.host,
@@ -973,13 +1196,16 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
             password: password.value().expose(),
             root_cert: &prepared.root_cert,
         };
-        pool(options(&target), role.pool)
-            .await
-            .map_err(|e| format!("{}: {e}", role.user))
+        let pool =
+            access_store::connect::Failover::open(options(&target), hosts.clone(), role.pool)
+                .await
+                .map_err(|e| format!("{}: {e}", role.user))?;
+        tokio::spawn(pool.clone().watch(HEALTH_EVERY));
+        Ok::<_, String>(pool.pool())
     };
     let sequencer = open(&db.sequencer, &prepared.sequencer_password).await?;
     let app = open(&db.app, &prepared.app_password).await?;
-    // OP-27
+    // OP-27, OPI-2, OP-54-RL2
     let reads = match &db.replica_host {
         Some(host) => {
             let target = Target {
@@ -990,11 +1216,19 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
                 password: prepared.app_password.value().expose(),
                 root_cert: &prepared.root_cert,
             };
-            pool(options(&target), db.app.pool)
+            let replica = pool(options(&target), db.app.pool)
                 .await
-                .map_err(|e| format!("replica {}: {e}", db.app.user))?
+                .map_err(|e| format!("replica {}: {e}", db.app.user))?;
+            let lag = db.replica_max_lag_ms.map_or(
+                access_store::replica_reads::MAX_LAG,
+                std::time::Duration::from_millis,
+            );
+            let reads = access_store::replica_reads::ReplicaReads::new(app.clone(), replica, lag);
+            reads.probe().await;
+            tokio::spawn(reads.clone().watch(HEALTH_EVERY));
+            reads
         }
-        None => app.clone(),
+        None => access_store::replica_reads::ReplicaReads::primary_only(app.clone()),
     };
     // OP-53, OP-158 m.3 (v)
     let admin_size = db.admin_pool.unwrap_or(ADMIN_POOL);
@@ -1013,6 +1247,7 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
     let outbox_reader = open(&db.outbox_reader, &prepared.outbox_password).await?;
     let checkpointer = open(&db.checkpointer, &prepared.checkpointer_password).await?;
     let durability = durability(db);
+    let topology = db.topology.as_ref().map(config::Topology::checked);
     let total = db
         .sequencer
         .pool
@@ -1034,7 +1269,7 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
         &outbox_reader,
         &checkpointer,
     ] {
-        check_server(p, total, true, durability)
+        check_server(p, total, true, durability, topology.as_ref())
             .await
             .map_err(|e| e.to_string())?;
     }
@@ -2357,7 +2592,8 @@ async fn serve(
     reviewing.abort();
     renewing.stop().await;
     scim_outbound.stop().await;
-    domains.release().await;
+    // OP-31
+    domains.step_down().await;
     served
 }
 

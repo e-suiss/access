@@ -49,7 +49,7 @@ pub(crate) struct Realms<P> {
     pub(crate) app: Pool,
     /// Admin listing (OP-27, §17.4.6): the read replica when one is configured, else `app`.
     /// One resource, which a conditional write compares against, is read from `app`.
-    pub(crate) reads: Pool,
+    pub(crate) reads: access_store::replica_reads::ReplicaReads,
     /// The checkpointer role, which alone reads when an audit row was checkpointed (OP-38).
     pub(crate) checkpointer: Pool,
     pub(crate) router: Pool,
@@ -642,7 +642,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
         let ids = self.ids.key().ok_or(Unavailable)?;
         // OP-27
         let pool = if q.key.is_none() {
-            &self.reads
+            self.reads.listing()
         } else {
             &self.app
         };
@@ -848,7 +848,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
         )
         .await
         .map_err(|_| Unavailable)?;
-        let mut t = TenantTx::begin(&self.reads, tenant, realm)
+        let mut t = TenantTx::begin(self.reads.listing(), tenant, realm)
             .await
             .map_err(|_| Unavailable)?;
         let rows = t
@@ -931,7 +931,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
         else {
             return Ok(None);
         };
-        let mut t = TenantTx::begin(&self.reads, tenant, realm_id)
+        let mut t = TenantTx::begin(self.reads.listing(), tenant, realm_id)
             .await
             .map_err(|_| Unavailable)?;
         let rows = t

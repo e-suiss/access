@@ -407,7 +407,7 @@ pub(super) async fn console_declaring(
         &w.keys,
         crate::admin::realm::Realms {
             app: w.db.app.clone(),
-            reads: w.db.app.clone(),
+            reads: access_store::replica_reads::ReplicaReads::primary_only(w.db.app.clone()),
             checkpointer: w.db.checkpointer.clone(),
             router: w.db.router.clone(),
             ids: Arc::clone(&ids),
@@ -1202,3 +1202,5 @@ mod review;
 mod delegated;
 // OP-158 m.4 (b) (W11)
 mod limits;
+// OP-158 m.4 (b) (W7)
+mod dr;

@@ -973,3 +973,15 @@ pub async fn archive_only_nonce(
     }
     Ok(())
 }
+
+/// A superuser pool on `db`, for the restore drill's schema check (OP-57 item 4).
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn superuser(db: &TestDb) -> Result<PgPool, TestDbError> {
+    PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(db.admin.clone())
+        .await
+        .at("connect as administrator")
+}

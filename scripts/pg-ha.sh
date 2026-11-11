@@ -129,6 +129,9 @@ CONF
 stop_all() {
   local n
   set -- "${1:-}" "${2:-}"
+  if [[ "$mode" == native && -f "$dir/pitr/postmaster.pid" ]]; then
+    "$bin/pg_ctl" -D "$dir/pitr" -m immediate -w stop >/dev/null 2>&1 || true
+  fi
   for n in "${nodes[@]}"; do
     if [[ "$mode" == container ]]; then
       docker rm -f "$(container "$n")" >/dev/null 2>&1 || true
@@ -289,12 +292,7 @@ case "${1:-}" in
     wait_sync primary 2
     url primary
     ;;
-  down)
-    stop_all
-    if [[ "$mode" == native && -d "$dir/pitr" ]]; then
-      "$bin/pg_ctl" -D "$dir/pitr" -m immediate -w stop >/dev/null 2>&1 || true
-    fi
-    ;;
+  down) stop_all ;;
   url) url "${2:-primary}" ;;
   port) node_port "${2:?node}" ;;
   role) role "${2:?node}" ;;
@@ -310,7 +308,7 @@ case "${1:-}" in
   base)
     [[ "$mode" == native ]] || die "base is native-only"
     rm -rf "$dir/base"
-    "$bin/pg_basebackup" -h 127.0.0.1 -p "$(node_port "${2:-primary}")" -U postgres -D "$dir/base" -X stream
+    "$bin/pg_basebackup" -h 127.0.0.1 -p "$(node_port "${2:-primary}")" -U postgres -D "$dir/base" -X stream -c fast
     ;;
   pitr) pitr "${2:?target time}" "${3:?port}" ;;
   *)

@@ -184,7 +184,16 @@ impl World {
         with_signer: bool,
         bell: Option<Arc<dyn suiss_ledger::doorbell::Bell>>,
     ) -> (Self, Option<AuthoritySigner>) {
-        let db = fresh().await.unwrap();
+        Self::open_on(name, with_signer, bell, fresh().await.unwrap()).await
+    }
+
+    /// [`World::open_rung`] over `db`, such as one on a replicated test cell (OP-158 m.3 (n)).
+    async fn open_on(
+        name: &str,
+        with_signer: bool,
+        bell: Option<Arc<dyn suiss_ledger::doorbell::Bell>>,
+        db: TestDb,
+    ) -> (Self, Option<AuthoritySigner>) {
         let (module, label) = hsm(name);
         let pin = Secret::new(String::from(PIN));
         let open = || KeyStore::open(&module, &label, &pin).unwrap();
@@ -2368,7 +2377,7 @@ mod provision {
     fn surface(w: &World) -> crate::admin::realm::Realms<TestPlane> {
         crate::admin::realm::Realms {
             app: w.db.app.clone(),
-            reads: w.db.app.clone(),
+            reads: access_store::replica_reads::ReplicaReads::primary_only(w.db.app.clone()),
             checkpointer: w.db.checkpointer.clone(),
             router: w.db.router.clone(),
             ids: Arc::new(crate::ids::CellIds::new(w.keys.clone())),

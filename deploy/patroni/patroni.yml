@@ -1,0 +1,58 @@
+# OP-24, OP-25, FA-1, FA-13, SA-47, OP-158 m.3 (n): the cell's canonical PostgreSQL under Patroni
+# outside Kubernetes. Quorum synchronous replication (`ANY 1` of the standbys), strict so no
+# commit is acknowledged without a standby, the DCS failsafe on so losing etcd degrades to read
+# only instead of an outage. There is no `standby_cluster` section: Patroni never fails over
+# across clusters, and a cross-cell move is a seal and an acceptance, or domain.recover.
+scope: access-cell
+namespace: /access/
+name: "{{ node_name }}"
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: "{{ node_address }}:8008"
+
+etcd3:
+  hosts: "{{ etcd_hosts }}"
+
+bootstrap:
+  dcs:
+    # SA-47 (PD): ttl + loop_wait + retry_timeout = 30 s to failover
+    ttl: 20
+    loop_wait: 5
+    retry_timeout: 5
+    maximum_lag_on_failover: 0
+    synchronous_mode: quorum
+    synchronous_mode_strict: true
+    synchronous_node_count: 1
+    failsafe_mode: true
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        synchronous_commit: "on"
+        password_encryption: scram-sha-256
+        wal_level: replica
+        wal_log_hints: "on"
+        hot_standby: "on"
+        max_connections: 400
+        track_commit_timestamp: "on"
+        archive_mode: "on"
+        archive_command: "pgbackrest --stanza=access-cell archive-push %p"
+
+postgresql:
+  listen: 0.0.0.0:5432
+  connect_address: "{{ node_address }}:5432"
+  data_dir: /var/lib/postgresql/18/main
+  authentication:
+    replication:
+      username: replicator
+      password: "{{ replication_password_file }}"
+    superuser:
+      username: postgres
+      password: "{{ superuser_password_file }}"
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false

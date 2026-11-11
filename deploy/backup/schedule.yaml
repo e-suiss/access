@@ -1,0 +1,75 @@
+# OP-57, OP-158 m.3 (r): when the cell is backed up and verified (PD): a full backup weekly, a
+# differential daily, an incremental hourly, both repositories verified daily. The restore drill
+# (`access-server drill restore`) runs quarterly against a side restore. PGBACKREST_IMAGE is the
+# operator's pgBackRest image, pinned by digest (OP-49).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: access-backup-full
+  namespace: access
+spec:
+  schedule: "0 2 * * 0"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: pgbackrest
+              image: ${PGBACKREST_IMAGE}
+              args: ["--stanza=access-cell", "--type=full", "--repo=1", "backup"]
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: access-backup-diff
+  namespace: access
+spec:
+  schedule: "0 2 * * 1-6"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: pgbackrest
+              image: ${PGBACKREST_IMAGE}
+              args: ["--stanza=access-cell", "--type=diff", "--repo=1", "backup"]
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: access-backup-incr
+  namespace: access
+spec:
+  schedule: "15 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: pgbackrest
+              image: ${PGBACKREST_IMAGE}
+              args: ["--stanza=access-cell", "--type=incr", "--repo=1", "backup"]
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: access-backup-verify
+  namespace: access
+spec:
+  schedule: "30 4 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: pgbackrest
+              image: ${PGBACKREST_IMAGE}
+              args: ["--stanza=access-cell", "verify"]

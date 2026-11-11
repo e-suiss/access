@@ -1,0 +1,47 @@
+# OP-24, OP-25, FA-1, FA-13, SA-47, OP-158 m.3 (n): the cell's canonical PostgreSQL under
+# CloudNativePG. Three instances in three zones, a quorum of one of the two standbys for every
+# commit, failover only inside this cluster. There is no `replica` section: a replica cluster
+# in another region is never promoted into this cell's lineage (cross-cell moves are a seal and
+# an acceptance, or domain.recover).
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: access-cell
+  namespace: access
+spec:
+  instances: 3
+  imageName: ghcr.io/cloudnative-pg/postgresql@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  primaryUpdateStrategy: unsupervised
+  # SA-47 (PD): no grace for a lost primary's writes, failover after 30 s
+  failoverDelay: 30
+  switchoverDelay: 30
+  enablePDB: true
+  postgresql:
+    # OP-24: ANY 1 (sb_a, sb_b); a commit waits for one standby, and without one it waits
+    synchronous:
+      method: any
+      number: 1
+      dataDurability: required
+    parameters:
+      synchronous_commit: "on"
+      password_encryption: scram-sha-256
+      wal_log_hints: "on"
+      max_connections: "400"
+      track_commit_timestamp: "on"
+      archive_mode: "on"
+      archive_command: "pgbackrest --stanza=access-cell archive-push %p"
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+    topologyKey: topology.kubernetes.io/zone
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          cnpg.io/cluster: access-cell
+  storage:
+    size: 100Gi
+  walStorage:
+    size: 50Gi

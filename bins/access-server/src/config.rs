@@ -118,6 +118,23 @@ pub(crate) struct Config {
     /// Witnesses, checkpoint sinks and Roughtime servers (OP-158 m.3 (c), (d), (k)).
     #[serde(default)]
     pub(crate) transparency: Transparency,
+    /// Rolling upgrades of this deployment (OP-56, OP-158 m.3 (q)).
+    #[serde(default)]
+    pub(crate) upgrade: Upgrade,
+}
+
+/// How this deployment upgrades (OP-56).
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub(crate) struct Upgrade {
+    /// Whether rolling upgrades are used; off, `upgrade-check` answers 4 (feature disabled).
+    pub(crate) rolling: bool,
+}
+
+impl Default for Upgrade {
+    fn default() -> Self {
+        Self { rolling: true }
+    }
 }
 
 /// The declared HTTPS hooks that receive every identity audit checkpoint's signed note (OP-37,
@@ -781,6 +798,82 @@ pub(crate) struct Database {
     /// report requests never wait behind sign-in, nor sign-in behind them. Four when unset.
     #[serde(default)]
     pub(crate) admin_pool: Option<u32>,
+    /// The cell's other database hosts, tried after `host` for the one that accepts writes; the
+    /// pools follow it across a failover (OP-26, OP-88).
+    #[serde(default)]
+    pub(crate) hosts: Vec<String>,
+    /// How far behind, in milliseconds, the read replica may be before its reads go to the
+    /// primary (§17.4.6); 5000 when unset.
+    #[serde(default)]
+    pub(crate) replica_max_lag_ms: Option<u64>,
+    /// The declared zones and regions of the primary and its synchronous standbys, checked
+    /// against the quorum at start (OP-24, OP-28).
+    #[serde(default)]
+    pub(crate) topology: Option<Topology>,
+}
+
+/// Where a node of the cell runs.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Site {
+    /// Availability zone.
+    pub(crate) zone: String,
+    /// Region.
+    pub(crate) region: String,
+}
+
+/// One declared synchronous standby.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Standby {
+    /// Its `application_name` in `synchronous_standby_names`.
+    pub(crate) name: String,
+    /// Availability zone.
+    pub(crate) zone: String,
+    /// Region.
+    pub(crate) region: String,
+    /// Measured round trip from the primary, milliseconds.
+    #[serde(default)]
+    pub(crate) rtt_ms: Option<u32>,
+}
+
+/// The cell's topology (OP-24, OP-28).
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Topology {
+    /// Where the primary runs.
+    pub(crate) primary: Site,
+    /// The `multi-region sync` DR class (§17.4.1).
+    #[serde(default)]
+    pub(crate) multi_region_sync: bool,
+    /// The synchronous standbys.
+    pub(crate) standbys: Vec<Standby>,
+}
+
+impl Topology {
+    /// The store's form of it.
+    pub(crate) fn checked(&self) -> access_store::connect::Topology {
+        use access_store::connect as c;
+        c::Topology {
+            primary: c::Site {
+                zone: self.primary.zone.clone(),
+                region: self.primary.region.clone(),
+            },
+            multi_region_sync: self.multi_region_sync,
+            standbys: self
+                .standbys
+                .iter()
+                .map(|s| c::Standby {
+                    name: s.name.clone(),
+                    site: c::Site {
+                        zone: s.zone.clone(),
+                        region: s.region.clone(),
+                    },
+                    rtt_ms: s.rtt_ms,
+                })
+                .collect(),
+        }
+    }
 }
 
 /// The PKCS#11 token holding the domains' keys.
@@ -837,6 +930,7 @@ impl Default for Config {
             audit_cold: None,
             audit_publication: AuditPublication::default(),
             transparency: Transparency::default(),
+            upgrade: Upgrade::default(),
         }
     }
 }
@@ -981,6 +1075,21 @@ impl Config {
             .map_err(Box::new)?;
         config.validate()?;
         Ok(config)
+    }
+
+    /// Only the `[upgrade]` section, from the same sources as [`Config::load`]: `upgrade-check`
+    /// runs before a deployment's full configuration is at hand (OP-56).
+    ///
+    /// # Errors
+    /// [`ConfigError::Parse`].
+    pub(crate) fn upgrade_only() -> Result<Upgrade, ConfigError> {
+        let file = std::env::var("ACCESS_CONFIG").unwrap_or_else(|_| "access.toml".to_owned());
+        let figment = Figment::from(Serialized::defaults(Self::default()))
+            .merge(Toml::file(file))
+            .merge(Env::prefixed("ACCESS_").ignore(&["CONFIG"]));
+        figment
+            .extract_inner::<Upgrade>("upgrade")
+            .map_err(|e| ConfigError::Parse(Box::new(e)))
     }
 
     fn validate(&self) -> Result<(), ConfigError> {
@@ -1153,6 +1262,9 @@ mod tests {
                 migrator: None,
                 replica_host: None,
                 admin_pool: None,
+                hosts: Vec::new(),
+                replica_max_lag_ms: None,
+                topology: None,
             }),
             signer: Some("/run/access/signer.sock".into()),
             hsm: Some(Hsm {
