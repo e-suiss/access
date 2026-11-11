@@ -32,7 +32,7 @@ use crate::exit::{self, Code};
 /// `domain recover` arguments.
 #[derive(Debug, Args)]
 pub(crate) struct RecoverArgs {
-    /// The DomainID, unpadded base64url.
+    /// The `DomainID`, unpadded base64url.
     #[arg(long, value_name = "DOMAIN")]
     pub(crate) domain: String,
     /// A declared witness, `http://host:port=<vkey>`; repeat for each. All of them are asked.
@@ -98,7 +98,7 @@ pub(crate) fn roots_of(p: &Streamed) -> Result<Vec<[u8; 32]>, String> {
     Ok(roots)
 }
 
-fn head_view(h: &Option<WitnessHead>, t: &Target) -> Value {
+fn head_view(h: Option<&WitnessHead>, t: &Target) -> Value {
     match h {
         Some(h) => json!({
             "witness": t.url,
@@ -192,7 +192,7 @@ async fn report(args: &RecoverArgs) -> Result<Value, String> {
                 heads
                     .iter()
                     .zip(&targets)
-                    .map(|(h, t)| head_view(h, t))
+                    .map(|(h, t)| head_view(h.as_ref(), t))
                     .collect(),
             ),
         );

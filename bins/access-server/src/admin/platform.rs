@@ -578,12 +578,17 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                         "root": root,
                         "recovery": recovery.name(),
                     });
-                    match recovery {
-                        Recovery::Available { threshold, keys } => {
-                            genesis["recovery_threshold"] = json!({ "k": threshold, "n": keys });
-                        }
-                        Recovery::NotAvailable(r) => {
-                            genesis["recovery_reason"] = json!(r.code());
+                    if let Some(g) = genesis.as_object_mut() {
+                        match recovery {
+                            Recovery::Available { threshold, keys } => {
+                                g.insert(
+                                    "recovery_threshold".to_owned(),
+                                    json!({ "k": threshold, "n": keys }),
+                                );
+                            }
+                            Recovery::NotAvailable(r) => {
+                                g.insert("recovery_reason".to_owned(), json!(r.code()));
+                            }
                         }
                     }
                     o.insert("genesis".to_owned(), genesis);

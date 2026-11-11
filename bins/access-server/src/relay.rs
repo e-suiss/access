@@ -378,33 +378,18 @@ pub(crate) async fn notices_step<K: access_identity_events::adapters::RealmKek>(
             let Ok(ev) = Event::from_bytes(&row.event) else {
                 continue;
             };
-            // OP-157 m.3 (h), TN-71
-            if ev.kind == access_internal_api::events::Kind::BreakglassUsed {
-                if breakglass_used(&mut t, (&*kek, ids), &ev, (&r.slug, &r.issuer)).await? {
-                    queued = queued.saturating_add(1);
-                }
+            if let Some(n) = directed(
+                &mut t,
+                (&*kek, ids),
+                &ev,
+                (&pools.app, &domain),
+                (&r.slug, &r.issuer),
+            )
+            .await?
+            {
+                queued = queued.saturating_add(n);
                 continue;
             }
-            // §13.6, OP-158 m.3 (m)
-            if ev.kind == access_internal_api::events::Kind::DomainRecovered {
-                let sent = domain_recovered(
-                    &mut t,
-                    (&*kek, ids),
-                    &ev,
-                    (&pools.app, &domain),
-                    (&r.slug, &r.issuer),
-                )
-                .await?;
-                queued = queued.saturating_add(sent);
-                continue;
-            }
-            // OP-157 m.3 (f), SI-21
-            if support_revoked(&mut t, (&*kek, ids), &ev, &r.slug).await? {
-                queued = queued.saturating_add(1);
-                continue;
-            }
-            // OP-157 m.3 (h), §12.3.8 (5)
-            breakglass_departed(&mut t, (&*kek, ids), &ev, &r.issuer).await?;
             if !open {
                 continue;
             }
@@ -520,6 +505,36 @@ async fn acting_org(
         .into_iter()
         .next()
         .map(|(o, _)| o))
+}
+
+/// The notices an event sends whatever the realm's notice setting, to the people it names:
+/// break-glass use (OP-157 m.3 (h), TN-71), a forced recovery (§13.6, OP-158 m.3 (m)) and a
+/// revoked support access (OP-157 m.3 (f), SI-21); `None` for any other event, after the
+/// rotation alarm of a departed break-glass account.
+async fn directed(
+    t: &mut TenantTx,
+    (kek, ids): (&(dyn suiss_crypto::envelope::Kek + Send + Sync), &IdKey),
+    ev: &access_internal_api::events::Event,
+    at: (&Pool, &access_store::scope::DomainId),
+    (slug, issuer): (&str, &str),
+) -> Result<Option<u32>, String> {
+    use access_internal_api::events::Kind;
+    if ev.kind == Kind::BreakglassUsed {
+        return Ok(Some(u32::from(
+            breakglass_used(t, (kek, ids), ev, (slug, issuer)).await?,
+        )));
+    }
+    if ev.kind == Kind::DomainRecovered {
+        return domain_recovered(t, (kek, ids), ev, at, (slug, issuer))
+            .await
+            .map(Some);
+    }
+    if support_revoked(t, (kek, ids), ev, slug).await? {
+        return Ok(Some(1));
+    }
+    // OP-157 m.3 (h), §12.3.8 (5)
+    breakglass_departed(t, (kek, ids), ev, issuer).await?;
+    Ok(None)
 }
 
 /// The console page the forced-recovery notice opens, under the realm issuer (§8.17.9.7).

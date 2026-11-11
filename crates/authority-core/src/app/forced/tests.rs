@@ -163,10 +163,10 @@ fn the_plan_takes_arm_one_two_or_the_reproduced_branch() {
     assert_eq!((p.n, p.arm), (3, Arm::Lossy));
     assert_eq!(p.lost_suffix.map(|l| (l.from, l.to)), Some((3, 5)));
 
-    let forged = suiss_crypto::digest::sha256(b"a branch no record reproduces");
+    let other_branch = suiss_crypto::digest::sha256(b"a branch no record reproduces");
     let forked = [
         Some(head(&d, 5, roots[5], at)),
-        Some(head(&d, 5, forged, at)),
+        Some(head(&d, 5, other_branch, at)),
     ];
     let p = plan(&forked, &roots, true, now).unwrap();
     assert_eq!((p.n, p.fork.len()), (5, 2));

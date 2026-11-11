@@ -225,7 +225,7 @@ async fn recoverable_core(db: &TestDb, keys: &Keys3) -> (Core, Digest, [u64; 2])
             key: public_of(k),
             mandate: None,
         };
-        let nonce = 40 + u8::try_from(i).unwrap();
+        let nonce = 40_u8.checked_add(u8::try_from(i).unwrap()).unwrap();
         allowed(
             &send_by(
                 &mut core,
@@ -241,7 +241,7 @@ async fn recoverable_core(db: &TestDb, keys: &Keys3) -> (Core, Digest, [u64; 2])
 
 fn instance_of(d: Digest, i: u8) -> Id {
     meta::object_id(
-        &meta::exercise_id(&d, &[40 + i; 16]).unwrap(),
+        &meta::exercise_id(&d, &[40_u8.checked_add(i).unwrap(); 16]).unwrap(),
         kind::INSTANCE,
         0,
     )
@@ -360,12 +360,12 @@ async fn with_recover_contributions(
     assert_eq!(asked.decision.outcome, Outcome::RequireAction, "{asked:?}");
     let digest = access_kernel::intent::intent_digest(&target.intent).unwrap();
     let reader = PgReader::new(db.app.clone(), DomainId::from_bytes(d.0));
-    let render = reader.opening(&digest).await.unwrap().unwrap().render;
+    let shown = reader.opening(&digest).await.unwrap().unwrap().render;
     let mut proofs = Vec::new();
     for (party, grant, instance, key, nonce) in from {
         let given = send_by(
             core,
-            recover_contribution(d, (*party, *grant, *instance), *nonce, digest, render),
+            recover_contribution(d, (*party, *grant, *instance), *nonce, digest, shown),
             key,
             (NOW, NOW),
         )

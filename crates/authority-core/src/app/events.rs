@@ -71,6 +71,21 @@ fn acceptance_changed(req: &Request, exercise: Digest, now: u64) -> Option<Event
     }
 }
 
+/// `domain-recovered` (§13.6): a `domain_recover` moved the domain to its new provider from N.
+fn domain_recovered(req: &Request, exercise: Digest, now: u64) -> Option<Event> {
+    match &req.payload {
+        Some(Payload::DomainRecover(r)) => Some(Event {
+            kind: Kind::DomainRecovered,
+            domain: req.domain,
+            source: Source::Exercise(exercise),
+            subject: Subject::Domain(req.domain),
+            at: now,
+            detail: Detail::Domain { position: r.n },
+        }),
+        _ => None,
+    }
+}
+
 /// OP-149 m.7: a declared `occurred_at` is a non-negative integer value.
 /// A `party_compromise` Claim's declared occurredAt: a non-negative integer value.
 pub(crate) fn occurred(value: Option<&EqValue>) -> Option<u64> {
@@ -94,6 +109,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let domain = req.domain;
         let mut events = self.decision_events(req, exercise, now).await?;
         events.extend(acceptance_changed(req, exercise, now));
+        // §13.6, OP-158 m.3 (m)
+        events.extend(domain_recovered(req, exercise, now));
         out.ended = self.ended_by_decision(req, &events).await?;
         let source = Source::Exercise(exercise);
         events.extend(self.invalidations(domain, source, &out.ended, now).await?);
@@ -215,14 +232,6 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 for g in revoked(disposition) {
                     events.push(base(Kind::AuthorityRevoked, g, Detail::None));
                 }
-            }
-            // §13.6, OP-158 m.3 (m)
-            Some(Payload::DomainRecover(r)) => {
-                events.push(base(
-                    Kind::DomainRecovered,
-                    Subject::Domain(domain),
-                    Detail::Domain { position: r.n },
-                ));
             }
             // OP-149 m.7
             Some(Payload::ClaimIssue {

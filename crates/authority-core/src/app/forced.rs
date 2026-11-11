@@ -299,7 +299,7 @@ pub fn plan(
 
 /// FR-2: the recovering provider's own reading of each declared witness's latest cosigned
 /// head of `domain`; a witness that does not answer or whose answer does not verify gives
-/// none, which leaves the quorum incomplete (REQUIRE_ACTION, never a guess).
+/// none, which leaves the quorum incomplete (`REQUIRE_ACTION`, never a guess).
 pub async fn fetch_witness_heads(
     targets: &[access_authority_sequencer::witness::Target],
     domain: &Digest,
