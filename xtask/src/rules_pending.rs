@@ -104,10 +104,19 @@ mod tests {
     // X5, C26, §8.17.9.5, OP-157 m.3 (u), Ek B 5558
     #[test]
     fn x5_a_pending_change_table_or_route_is_refused() {
-        assert_eq!(scan("CREATE TABLE access.pending_changes (id uuid);").len(), 1);
-        assert_eq!(scan(r#".route("/admin/v1/pending-changes", get(h))"#).len(), 1);
+        assert_eq!(
+            scan("CREATE TABLE access.pending_changes (id uuid);").len(),
+            1
+        );
+        assert_eq!(
+            scan(r#".route("/admin/v1/pending-changes", get(h))"#).len(),
+            1
+        );
         assert_eq!(scan(r#""operationId": "listPendingApprovals""#).len(), 1);
-        assert_eq!(scan("CREATE TABLE access.approval_queue (id uuid);").len(), 1);
+        assert_eq!(
+            scan("CREATE TABLE access.approval_queue (id uuid);").len(),
+            1
+        );
         assert!(scan("SELECT pending FROM access.relay_outbox").is_empty());
         assert!(scan("-- a pending change lives in the coordinator").is_empty());
         assert!(scan("// no pending change queue here").is_empty());

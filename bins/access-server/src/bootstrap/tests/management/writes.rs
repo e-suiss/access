@@ -621,7 +621,7 @@ impl Console {
     }
 
     /// A Grant of `v1`-shaped authority to the founder, issued from the realm's `idp` Anchor.
-    async fn issue_to_founder(&self) -> Id {
+    pub(super) async fn issue_to_founder(&self) -> Id {
         let idp = kmeta::object_id(&self.domain, kind::ANCHOR, IDP_ANCHOR);
         let issue = serde_json::json!({ "grant_issue": {
             "basis": { "anchor": b64url_encode(&idp.0) },
@@ -768,6 +768,15 @@ async fn a_bulk_job_revokes_grants_one_exercise_each() {
 #[tokio::test]
 async fn a_delegated_admin_signs_a_meta_write_on_its_own_holding() {
     let c = console("mgmt-holding", true).await;
+    // OP-157 m.3 (t)
+    let open = c
+        .put_setting(
+            "delegated-admin",
+            "putDelegatedAdmin",
+            serde_json::json!({ "enabled": true }),
+        )
+        .await;
+    assert_eq!(open.status, StatusCode::OK, "{}", open.body);
     let admin = AuthoritySet {
         actions: ActionSet {
             exact: std::iter::once(kmeta::core_action("grant_revoke")).collect(),

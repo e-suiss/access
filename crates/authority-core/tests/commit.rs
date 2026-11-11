@@ -14,6 +14,8 @@ mod breakglass;
 mod containment;
 #[path = "commit/policy_engine.rs"]
 mod policy_engine;
+#[path = "commit/sod.rs"]
+mod sod;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;

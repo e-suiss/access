@@ -178,6 +178,7 @@ fn action_name(s: &str) -> bool {
 }
 
 pub mod legal;
+pub mod sod;
 pub mod transfer;
 
 #[cfg(test)]
