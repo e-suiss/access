@@ -47,7 +47,7 @@ XML
     DocumentRoot /var/www/html
     <Location /secure>
         AuthType shibboleth
-        ShibRequestSession On
+        ShibRequireSession On
         Require shib-session
     </Location>
 </VirtualHost>

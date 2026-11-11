@@ -17,7 +17,7 @@ This file is generated from [`lab.toml`](lab.toml) by `cargo xtask interop-table
 | System | Role | Version tested | How | Profile | Oracle | Tests | CI job |
 |---|---|---|---|---|---|---|---|
 | xmlsec1 | XML signature verifier | Debian 13.2 package | container `debian` (`sha256:4bcb9db66237`) | none | yes | 1 | `differential` |
-| SimpleSAMLphp | service provider | simplesamlphp/saml2-legacy 4.20.3, the SAML library of SimpleSAMLphp 2.5 | container `composer` (`sha256:5248900ab8b5`) | none | no | 1 | `differential` |
+| SimpleSAMLphp | service provider | simplesamlphp/saml2-legacy 4.20.3, the SAML library of SimpleSAMLphp 2.5 | container `composer` (`sha256:b09bccd91a78`) | none | no | 1 | `differential` |
 | Shibboleth SP | service provider | 3, Debian 13.2 package behind Apache | container `debian` (`sha256:4bcb9db66237`) | none | no | 1 | `differential` |
 | Salesforce | service provider | request shape of the vendor's SAML guide | recorded or documented requests | `saml.salesforce` | no | 3 | `interop-lab` |
 | ServiceNow | service provider | request shape of the vendor's SAML guide | recorded or documented requests | `saml.servicenow` | no | 3 | `interop-lab` |

@@ -80,7 +80,7 @@ protocol = "saml"
 role = "service provider"
 kind = "container"
 version = "simplesamlphp/saml2-legacy 4.20.3, the SAML library of SimpleSAMLphp 2.5"
-image = "composer@sha256:5248900ab8b5f7f880c2d62180e40960cd87f60149ec9a1abfd62ac72a02577c"
+image = "composer@sha256:b09bccd91a78fe8a9ab4b33d707b862e8fe54fec17782e32683ad2a69c46867d"
 job = "differential"
 tests = [
     "bins/access-server::bootstrap::tests::management::saml::simplesamlphp_accepts_a_real_response_and_refuses_a_tampered_one",
