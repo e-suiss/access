@@ -8,6 +8,8 @@
 //!
 //! The identity plane keeps what E22 and IDP-39 assign to it: the token vault of upstream OAuth
 //! tokens (`identity-vault`, E36) and its own sign-in risk signals (`identity-risk`, IDP-39 (2)).
+//! Access also keeps the basic access review campaign, a view over a manager's team that is never
+//! a queue (IDP-39 (3), OP-157 m.3 (w)).
 
 use std::path::{Path, PathBuf};
 
@@ -48,7 +50,6 @@ const MARKERS: &[(&str, &str)] = &[
     ("risk_model", "a risk or fraud scoring engine"),
     ("anomaly_model", "a risk or fraud scoring engine"),
     ("compute_risk", "a risk or fraud scoring engine"),
-    ("review_campaign", "IGA campaigns"),
     ("certification_campaign", "IGA campaigns"),
     ("access_certification", "IGA campaigns"),
     ("role_mining", "IGA role mining"),
