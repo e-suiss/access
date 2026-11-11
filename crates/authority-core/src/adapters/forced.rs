@@ -54,14 +54,13 @@ impl<K, B: Binding, S: Salts, C> Domains<K, B, S, C> {
         if !super::open_keyring(path, domain).await {
             return Err(CoreError::Unavailable("signer-binding"));
         }
-        let signed = match tokio::time::timeout(
+        let Ok(Ok(SignResponse::Metadata(signed))) = tokio::time::timeout(
             super::SIGNER_DEADLINE,
             call(path, &SignRequest::Metadata(domain)),
         )
         .await
-        {
-            Ok(Ok(SignResponse::Metadata(cose))) => cose,
-            _ => return Err(CoreError::Unavailable("metadata")),
+        else {
+            return Err(CoreError::Unavailable("metadata"));
         };
         let msg = access_kernel::verify::cose::parse_sign1(&signed)
             .map_err(|_| CoreError::Unavailable("metadata"))?;

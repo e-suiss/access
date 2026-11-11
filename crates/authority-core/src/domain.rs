@@ -1776,7 +1776,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             catalog,
         };
         let applied = meta::apply(&ctx, payload, snapshot);
-        // L0-EVAL-26a: a `recover` contribution reads the entry and the actor Instance
+        // L0-EVAL-26a
         let missing = snapshot.missing();
         if !missing.is_empty() {
             return Pass::Need(missing);

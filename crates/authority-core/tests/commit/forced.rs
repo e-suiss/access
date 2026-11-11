@@ -290,7 +290,14 @@ fn recover_contribution(
     }];
     let p = r.payload.clone().unwrap();
     r.intent.opaque = BTreeMap::from([("payload".to_owned(), p.digest().unwrap())]);
-    let mut act = approval_act(d, nonce, target, render, at - 1_000, at + 60_000);
+    let mut act = approval_act(
+        d,
+        nonce,
+        target,
+        render,
+        at.saturating_sub(1_000),
+        at.saturating_add(60_000),
+    );
     act.act = Act::Contribution(class.to_owned());
     act.party = party;
     act.instance = instance;
@@ -302,10 +309,10 @@ fn recover_contribution(
             subject: party,
             class: "authentication".to_owned(),
             value: Some(EqValue::Bytes(vec![0xaa; 32])),
-            issued_at: at - 5_000,
+            issued_at: at.saturating_sub(5_000),
             validity: Window {
-                from: at - 5_000,
-                until: at + 12 * 3_600_000,
+                from: at.saturating_sub(5_000),
+                until: at.saturating_add(12 * 3_600_000),
             },
             assurance: [
                 ("aal", 3),
@@ -1000,17 +1007,17 @@ async fn a_domain_is_recovered_on_a_second_install_and_the_old_provider_is_fence
     let keys = [runtime_key(), runtime_key(), runtime_key()];
     let (a_key, b_key) = (bind_a.key(), bind_b.key());
     assert_ne!(a_key.kid, b_key.kid);
-    let (g, grant) = install_genesis(&keys, &a_key);
-    let d = create_genesis(&dba.sequencer, TENANT, g, wall())
+    let (founding, grant) = install_genesis(&keys, &a_key);
+    let d = create_genesis(&dba.sequencer, TENANT, founding, wall())
         .await
         .unwrap();
     let id = DomainId::from_bytes(d.0);
     let sock_a = install_signer("a", bind_a, d).await;
-    let mut a = install_core(&dba, d, &keys).await;
-    register_at(&mut a, d, (ROOT, &signing(ROOT_KEY)), (1, 2)).await;
-    register_at(&mut a, d, (ALICE, &signing(ALICE_KEY)), (3, 4)).await;
+    let mut install_a = install_core(&dba, d, &keys).await;
+    register_at(&mut install_a, d, (ROOT, &signing(ROOT_KEY)), (1, 2)).await;
+    register_at(&mut install_a, d, (ALICE, &signing(ALICE_KEY)), (3, 4)).await;
     for (i, k) in keys.iter().enumerate() {
-        instance_at(&mut a, d, (ROOT, k), 40 + u8::try_from(i).unwrap()).await;
+        instance_at(&mut install_a, d, (ROOT, k), 40 + u8::try_from(i).unwrap()).await;
     }
     let suiss_crypto::cose::PublicKey::Ed25519(a_raw) = a_key.key else {
         panic!("ed25519 binding");
@@ -1031,7 +1038,7 @@ async fn a_domain_is_recovered_on_a_second_install_and_the_old_provider_is_fence
         .map(|w| Verifier::parse(&w.vkey).unwrap())
         .collect();
 
-    // FR-0: the witnesses cosign C_N of A's log
+    // FR-0
     let n = access_store::authority::read_head(&dba.app, &id)
         .await
         .unwrap()
@@ -1039,18 +1046,18 @@ async fn a_domain_is_recovered_on_a_second_install_and_the_old_provider_is_fence
         + 1;
     let (note, excerpt, root_n, _) = sign_checkpoint(&dba, &sock_a, d, n).await;
     let mut cosigned = note.clone();
-    for t in &targets {
-        let (line, _) = add_checkpoint(t, &d, (None, &[]), &note, &excerpt)
+    for target in &targets {
+        let (line, _) = add_checkpoint(target, &d, (None, &[]), &note, &excerpt)
             .await
             .unwrap();
         cosigned.push_str(&line);
     }
 
-    // FR-1: the honest provider's records to N
+    // FR-1
     let rows = access_store::authority::read_log(&dba.app, &id, 0, n - 1)
         .await
         .unwrap();
-    let (mut s, mut package) = Streamer::start(
+    let (mut stream, mut package) = Streamer::start(
         d,
         (0, n - 1),
         Coverage::Full,
@@ -1059,28 +1066,28 @@ async fn a_domain_is_recovered_on_a_second_install_and_the_old_provider_is_fence
     )
     .unwrap();
     for r in &rows {
-        package.extend(s.push(&r.envelope, &r.leaf_hash).unwrap());
+        package.extend(stream.push(&r.envelope, &r.leaf_hash).unwrap());
     }
-    package.extend(s.finish(&[(n, root_n, cosigned.clone())]).unwrap());
+    package.extend(stream.finish(&[(n, root_n, cosigned.clone())]).unwrap());
 
-    // G21: A goes on writing past N; nothing it writes reaches a witness
-    register_at(&mut a, d, (BOB, &signing(BOB_KEY)), (5, 6)).await;
+    // G21
+    register_at(&mut install_a, d, (BOB, &signing(BOB_KEY)), (5, 6)).await;
     let lost = access_store::authority::read_log(&dba.app, &id, n, n)
         .await
         .unwrap();
 
-    // FR-1, FR-4: install B adopts records 0..N − 1 and supersedes A's binding at C_N
+    // FR-1, FR-4
     let received = access_authority_core::app::handover::receive(&package, (n, root_n)).unwrap();
     let run = access_crypto::random::bytes::<16>().unwrap();
-    let t = take_over(
+    let taken = take_over(
         &received,
         (&cosigned, &verifiers),
         std::slice::from_ref(&a_key),
         run,
     )
     .unwrap();
-    assert_eq!((t.h, t.at), (n - 1, root_n));
-    access_store::handover::adopt(&dbb.sequencer, &id, TENANT, &t.adoption)
+    assert_eq!((taken.h, taken.at), (n - 1, root_n));
+    access_store::handover::adopt(&dbb.sequencer, &id, TENANT, &taken.adoption)
         .await
         .unwrap();
     let sock_b = install_signer("b", bind_b, d).await;
@@ -1091,7 +1098,7 @@ async fn a_domain_is_recovered_on_a_second_install_and_the_old_provider_is_fence
                 &sock_b,
                 &R::Supersede {
                     domain: d,
-                    keys: t.superseded.clone(),
+                    keys: taken.superseded.clone(),
                 },
             )
             .await
@@ -1099,9 +1106,9 @@ async fn a_domain_is_recovered_on_a_second_install_and_the_old_provider_is_fence
             A::Opened
         );
     }
-    let mut b = install_core(&dbb, d, &keys).await;
+    let mut install_b = install_core(&dbb, d, &keys).await;
 
-    // FR-2: B reads every witness itself and records their heads ahead of the decision
+    // FR-2
     let heads = fetch_witness_heads(&targets, &d).await;
     assert!(heads.iter().all(Option::is_some));
     let leaves: Vec<[u8; 32]> = received
@@ -1109,18 +1116,22 @@ async fn a_domain_is_recovered_on_a_second_install_and_the_old_provider_is_fence
         .iter()
         .map(|r| r.leaf_hash().unwrap())
         .collect();
-    let p = plan(&heads, &prefix_roots(&leaves).unwrap(), true, wall()).unwrap();
-    assert_eq!((p.n, p.arm), (n, Arm::Replica));
+    let planned = plan(&heads, &prefix_roots(&leaves).unwrap(), true, wall()).unwrap();
+    assert_eq!((planned.n, planned.arm), (n, Arm::Replica));
     let flat: Vec<_> = heads.into_iter().flatten().collect();
-    let claims = b.record_witness_heads(&flat, wall()).await.unwrap();
+    let claims = install_b.record_witness_heads(&flat, wall()).await.unwrap();
 
-    // FR-3, L0-EVAL-26a: a sole root recovers with two of its own entry keys
-    let mut input = RecoverInput::new(n, p.cited, BTreeMap::from([(b_key.kid, b_key.clone())]));
+    // FR-3, L0-EVAL-26a
+    let mut input = RecoverInput::new(
+        n,
+        planned.cited,
+        BTreeMap::from([(b_key.kid, b_key.clone())]),
+    );
     input.witness_claims = claims.into_iter().collect();
-    input.replica_head = p.replica_head;
+    input.replica_head = planned.replica_head;
     let instance = |i: u8| instance_of(d, i);
     let done = with_recover_contributions_at(
-        &mut b,
+        &mut install_b,
         &dbb,
         d,
         (recover_request(d, 70, input), 71),
@@ -1132,7 +1143,7 @@ async fn a_domain_is_recovered_on_a_second_install_and_the_old_provider_is_fence
     )
     .await;
     allowed(&done);
-    let r = done.record.unwrap();
+    let recorded = done.record.unwrap();
     assert!(state_of(&dbb, d, &recovered_key()).await.is_some());
     assert!(
         state_of(
@@ -1149,22 +1160,26 @@ async fn a_domain_is_recovered_on_a_second_install_and_the_old_provider_is_fence
         .unwrap();
     assert_ne!(kept[0].leaf_hash, lost[0].leaf_hash);
 
-    // FR-5: each witness re-anchors from C_N to the checkpoint that ends with the recovery
-    let (note_b, excerpt_b, _, leaves_b) = sign_checkpoint(&dbb, &sock_b, d, r + 1).await;
-    let record = access_store::authority::read_log(&dbb.app, &id, r, r)
+    // FR-5
+    let (note_b, excerpt_b, _, leaves_b) = sign_checkpoint(&dbb, &sock_b, d, recorded + 1).await;
+    let record = access_store::authority::read_log(&dbb.app, &id, recorded, recorded)
         .await
         .unwrap();
     let change = BindingChange {
-        position: r,
+        position: recorded,
         record: record[0].envelope.clone(),
-        inclusion: suiss_ledger::checkpoint::proof::inclusion(leaves_b.as_slice(), r, r + 1)
-            .unwrap(),
+        inclusion: suiss_ledger::checkpoint::proof::inclusion(
+            leaves_b.as_slice(),
+            recorded,
+            recorded + 1,
+        )
+        .unwrap(),
     };
     let proof =
-        suiss_ledger::checkpoint::proof::consistency(leaves_b.as_slice(), n, r + 1).unwrap();
-    for t in &targets {
+        suiss_ledger::checkpoint::proof::consistency(leaves_b.as_slice(), n, recorded + 1).unwrap();
+    for target in &targets {
         let got = add_checkpoint_moving(
-            t,
+            target,
             &d,
             (Some((n, root_n)), &proof),
             (&note_b, &excerpt_b),
@@ -1179,7 +1194,7 @@ async fn a_domain_is_recovered_on_a_second_install_and_the_old_provider_is_fence
     let at = wall();
     allowed(
         &send_by(
-            &mut b,
+            &mut install_b,
             meta_request(
                 d,
                 74,
@@ -1196,7 +1211,7 @@ async fn a_domain_is_recovered_on_a_second_install_and_the_old_provider_is_fence
         .await,
     );
 
-    // U11: the old provider's next checkpoint is fenced at N by every witness
+    // U11
     let a_size = access_store::authority::read_head(&dba.app, &id)
         .await
         .unwrap()
@@ -1205,16 +1220,22 @@ async fn a_domain_is_recovered_on_a_second_install_and_the_old_provider_is_fence
     let (note_a, excerpt_a, _, leaves_a) = sign_checkpoint(&dba, &sock_a, d, a_size).await;
     let proof_a =
         suiss_ledger::checkpoint::proof::consistency(leaves_a.as_slice(), n, a_size).unwrap();
-    for t in &targets {
-        let fenced =
-            add_checkpoint(t, &d, (Some((n, root_n)), &proof_a), &note_a, &excerpt_a).await;
+    for target in &targets {
+        let fenced = add_checkpoint(
+            target,
+            &d,
+            (Some((n, root_n)), &proof_a),
+            &note_a,
+            &excerpt_a,
+        )
+        .await;
         assert!(
             matches!(fenced, Err(WitnessError::Said(Refused::Fenced, 403))),
             "{fenced:?}"
         );
     }
 
-    // U27, PR-0: an artefact of A's key no longer verifies against B's metadata
+    // U27, PR-0
     let msg = {
         use access_authority_signer::protocol::{Request as R, Response as A};
         let A::Metadata(bytes) = access_authority_signer::adapters::call(&sock_b, &R::Metadata(d))

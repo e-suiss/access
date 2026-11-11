@@ -95,7 +95,7 @@ async fn cosign_request(State(w): State<Arc<Witness>>, body: Bytes) -> Response 
         return refuse(Refused::UnknownKey);
     };
     let mut chain = chain.lock().await;
-    // FR-5: a recovery's checkpoint is signed by the binding its record names
+    // FR-5
     let recovering = req.binding_change.as_ref().and_then(|c| {
         <access_kernel::record::RecordEnvelope as access_kernel::codec::Canonical>::from_bytes(
             &c.record,
