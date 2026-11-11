@@ -11,6 +11,7 @@ use access_authority_sequencer::adapters::{PgHeads, SocketSigner};
 use access_authority_sequencer::witness::{Target, board};
 use access_authority_signer::adapters::call as sign_call;
 use access_authority_signer::protocol::{Request as SignRequest, Response as SignResponse};
+use access_kernel::codec::Canonical as _;
 use access_kernel::combinator::Mode;
 use access_kernel::intent::ParamValue;
 use access_kernel::json::b64url_encode;
@@ -19,6 +20,7 @@ use access_product_twin::witness::Witness;
 use access_store::authority::read_head;
 use access_store::scope::DomainId;
 use axum::http::StatusCode;
+use suiss_crypto::signer::Signer as _;
 use suiss_ledger::checkpoint::cadence::Cadence;
 
 use super::super::authzen::pdp;
@@ -211,5 +213,50 @@ async fn the_recovering_side_plans_from_real_witnesses_and_the_exported_records(
             .as_str()
             .unwrap()
             .contains("own revoke Exercise")
+    );
+}
+
+// §13.6, RR-5, OP-158 m.3 (m), Ek B 6030
+#[tokio::test(flavor = "multi_thread")]
+async fn a_domain_with_a_recovery_entry_declares_it_in_its_metadata() {
+    let (w, signer) = super::super::World::open("w6-declare", true).await;
+    let signer = signer.unwrap();
+    super::super::schedule(&signer);
+    let root = super::super::root_party(&super::super::root_key(&w.keys).unwrap().public_key());
+    let entry = access_kernel::recovery::RecoveryEntry::new(
+        2,
+        [b"a".as_slice(), b"b", b"c"]
+            .into_iter()
+            .map(suiss_crypto::digest::sha256)
+            .collect(),
+        2,
+        access_kernel::recovery::KeyHolding::Device,
+        std::collections::BTreeSet::from([root]),
+    );
+    let (_, created) = w.admin_realm_with("recoverable", None, Some(entry)).await;
+    let signed = w.domains.metadata(created.domain).await.unwrap();
+    let msg = access_kernel::verify::cose::parse_sign1(&signed).unwrap();
+    let m = access_kernel::verify::key_scope::DomainMetadata::from_bytes(
+        msg.payload.as_deref().unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        m.declared.recovery,
+        Some(access_kernel::verify::key_scope::Recovery::Available)
+    );
+    let (_, plain) = w.admin_realm_with("plain", None, None).await;
+    let signed = w.domains.metadata(plain.domain).await;
+    let declared = signed.map(|s| {
+        let msg = access_kernel::verify::cose::parse_sign1(&s).unwrap();
+        access_kernel::verify::key_scope::DomainMetadata::from_bytes(
+            msg.payload.as_deref().unwrap(),
+        )
+        .unwrap()
+        .declared
+        .recovery
+    });
+    assert_ne!(
+        declared.flatten(),
+        Some(access_kernel::verify::key_scope::Recovery::Available)
     );
 }

@@ -330,6 +330,16 @@ fn declared_value(d: &Declarations) -> Value {
             ]),
         ));
     }
+    // OP-158 m.3 (m)
+    if let Some(r) = d.recovery {
+        entries.push((
+            "recovery",
+            Value::text(match r {
+                access_kernel::verify::key_scope::Recovery::Available => "available",
+                access_kernel::verify::key_scope::Recovery::NotAvailable => "not-available",
+            }),
+        ));
+    }
     map(entries)
 }
 
@@ -399,6 +409,17 @@ fn declared_of(v: Option<&Value>) -> Result<Declarations, FrameError> {
         };
         d.residency = Some(Residency::new(text_of(r.get("region"))?, class));
     }
+    // OP-158 m.3 (m)
+    d.recovery = match v.get("recovery") {
+        None => None,
+        Some(Value::Text(t)) if t == "available" => {
+            Some(access_kernel::verify::key_scope::Recovery::Available)
+        }
+        Some(Value::Text(t)) if t == "not-available" => {
+            Some(access_kernel::verify::key_scope::Recovery::NotAvailable)
+        }
+        Some(_) => return Err(FrameError::Malformed),
+    };
     if let Some(m) = v.get("mmd") {
         d.mmd = Some(Mmd::new(
             uint_of(m.get("authority_ms"))?,

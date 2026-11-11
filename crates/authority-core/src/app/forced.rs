@@ -334,7 +334,8 @@ pub fn prefix_roots(leaves: &[[u8; 32]]) -> Result<Vec<[u8; 32]>, PlanError> {
 /// FR-1, FR-4: what the recovering provider adopts from the records `0..N − 1` an export or
 /// the replica carried, once `note` is `C_N` over exactly those records with a cosignature of a
 /// `witnesses` key. The outgoing binding keys are superseded at `C_N`, citing it (PR-0); the
-/// recovery batch then starts at N. The adoption for the store, as run `run`.
+/// recovery batch then starts at N. The adoption for the store, as run `run`, recorded as the
+/// adopted run whose first and last kept position is N − 1.
 ///
 /// # Errors
 /// [`crate::app::handover::HandoverError::Batch`].
@@ -409,7 +410,7 @@ pub fn take_over(
         at: cp.root,
         adoption: access_store::handover::Adoption {
             run,
-            k: n,
+            k: h,
             cited_root: cp.root,
             records: rows.clone(),
             head: access_store::authority::HeadRow {

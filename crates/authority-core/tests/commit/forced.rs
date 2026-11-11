@@ -65,6 +65,8 @@ async fn send_by(
     key: &ed25519_dalek::SigningKey,
     (iat, now): (u64, u64),
 ) -> Response {
+    let mut request = request;
+    fit(&mut request, now);
     let mut inc = incoming(request, ROOT_KEY);
     let statement = Statement {
         domain: inc.request.domain,
@@ -79,6 +81,17 @@ async fn send_by(
     };
     inc.ais = Some(cose(key, CONTENT_TYPE, &statement.to_bytes().unwrap()));
     core.exercise(&inc, now).await.unwrap()
+}
+
+/// Moves an intent whose validity the fixed test clock chose to a window around `now`, for the
+/// walkthroughs on the wall clock.
+fn fit(r: &mut Request, now: u64) {
+    if r.intent.validity.until < now {
+        r.intent.validity = Window {
+            from: now.saturating_sub(60_000),
+            until: now.saturating_add(3_600_000),
+        };
+    }
 }
 
 /// `name`'s cosigned note over `size` and `root` of `d`, at `seconds`, and its vkey.
@@ -369,6 +382,8 @@ async fn with_recover_contributions_at(
     at: u64,
 ) -> Response {
     let root = signing(ROOT_KEY);
+    let mut target = target;
+    fit(&mut target, at);
     let asked = send_by(core, target.clone(), &root, (at, at)).await;
     assert_eq!(asked.decision.outcome, Outcome::RequireAction, "{asked:?}");
     let digest = access_kernel::intent::intent_digest(&target.intent).unwrap();
@@ -577,4 +592,668 @@ async fn an_anonymous_request_cannot_recover_a_domain() {
     assert_eq!(state_of(&db, d, &binding_key()).await.unwrap(), before);
     assert!(state_of(&db, d, &recovered_key()).await.is_none());
     fold_check(&db.sequencer, d).await.unwrap();
+}
+
+fn wall() -> u64 {
+    access_authority_signer::adapters::now_ms()
+}
+
+/// One install's binding key, generated at run time and never shared with the other install.
+#[derive(Clone)]
+struct InstallBinding(std::sync::Arc<suiss_crypto::secret::Secret<Vec<u8>>>);
+
+impl InstallBinding {
+    fn new() -> Self {
+        Self(std::sync::Arc::new(
+            suiss_crypto::signer::SoftSigner::generate_ed25519()
+                .unwrap()
+                .1,
+        ))
+    }
+
+    fn public(&self) -> PublicKey {
+        use suiss_crypto::signer::Signer as _;
+        suiss_crypto::signer::SoftSigner::ed25519_from_pkcs8(&self.0)
+            .unwrap()
+            .public_key()
+    }
+
+    fn key(&self) -> BindingKey {
+        let key = self.public();
+        BindingKey {
+            kid: thumbprint(&key),
+            alg: access_kernel::verify::cose::Algorithm::Ed25519,
+            key,
+            scope: BindingScope::Domain,
+            superseded: None,
+        }
+    }
+}
+
+impl access_authority_signer::ports::Bindings for InstallBinding {
+    fn binding(
+        &mut self,
+        _: &Digest,
+    ) -> Result<Box<dyn suiss_crypto::signer::Signer + Send>, suiss_crypto::signer::SignError> {
+        Ok(Box::new(
+            suiss_crypto::signer::SoftSigner::ed25519_from_pkcs8(&self.0)?,
+        ))
+    }
+}
+
+/// An authority signer of its own install on the wall clock, with `d`'s keyring open.
+async fn install_signer(name: &str, binding: InstallBinding, d: Digest) -> std::path::PathBuf {
+    use access_authority_signer::adapters::{DirVault, SealedFactory, now_ms, serve};
+    use access_authority_signer::protocol::{Request as R, Response as A};
+    let dir = std::env::temp_dir().join(format!("w6-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let policy = suiss_crypto::rotation::Policy {
+        publish_lead_ms: 0,
+        ..suiss_crypto::rotation::Policy::AUTHORITY
+    };
+    let service = std::sync::Arc::new(std::sync::Mutex::new(
+        access_authority_signer::service::Service::start(
+            SealedFactory::new(suiss_crypto::envelope::SoftKek::new("kek", [4; 32])),
+            binding,
+            DirVault::new(&dir),
+            policy,
+            now_ms(),
+        )
+        .unwrap(),
+    ));
+    let socket = dir.join("a.sock");
+    let uid = std::os::unix::fs::MetadataExt::uid(&std::fs::metadata(&dir).unwrap());
+    tokio::spawn(serve(
+        tokio::net::UnixListener::bind(&socket).unwrap(),
+        std::sync::Arc::clone(&service),
+        vec![uid],
+        now_ms,
+    ));
+    let open = R::Open(Box::new(access_authority_signer::domain::default_template(
+        d,
+    )));
+    assert_eq!(
+        access_authority_signer::adapters::call(&socket, &open)
+            .await
+            .unwrap(),
+        A::Opened
+    );
+    for _ in 0..2 {
+        service.lock().unwrap().tick(now_ms(), 1);
+    }
+    socket
+}
+
+/// A running `access-witness` process of this target directory.
+struct ProcWitness {
+    child: std::process::Child,
+    url: String,
+    vkey: String,
+}
+
+impl Drop for ProcWitness {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+fn witness_bin() -> std::path::PathBuf {
+    let exe = std::env::current_exe().unwrap();
+    let dir = exe
+        .parent()
+        .and_then(std::path::Path::parent)
+        .unwrap()
+        .to_path_buf();
+    let bin = dir.join("access-witness");
+    if !bin.exists() {
+        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+        let status = std::process::Command::new(cargo)
+            .args(["build", "-p", "access-witness", "--bin", "access-witness"])
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+    bin
+}
+
+fn start_witness(dir: &std::path::Path, name: &str, d: Digest, binding: [u8; 32]) -> ProcWitness {
+    use std::io::BufRead as _;
+    let bin = witness_bin();
+    let key = dir.join(format!("{name}.pk8"));
+    let out = std::process::Command::new(&bin)
+        .arg("keygen")
+        .arg(&key)
+        .arg(name)
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let vkey = String::from_utf8_lossy(&out.stdout)
+        .trim()
+        .strip_prefix("vkey ")
+        .unwrap()
+        .to_owned();
+    let config = dir.join(format!("{name}.conf"));
+    std::fs::write(
+        &config,
+        format!(
+            "name {name}\nkey {}\nstate {}\nlisten 127.0.0.1:0\noperator {name} Ltd\nlog {} {}\n",
+            key.display(),
+            dir.join(format!("{name}-state")).display(),
+            access_kernel::json::b64url_encode(&d.0),
+            access_kernel::json::b64url_encode(&binding),
+        ),
+    )
+    .unwrap();
+    let mut child = std::process::Command::new(&bin)
+        .arg("serve")
+        .arg(&config)
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut line = String::new();
+        let _ = std::io::BufReader::new(stdout).read_line(&mut line);
+        let _ = tx.send(line);
+    });
+    let line = rx.recv_timeout(std::time::Duration::from_secs(30)).unwrap();
+    let addr = line.trim().strip_prefix("listening ").unwrap().to_owned();
+    ProcWitness {
+        child,
+        url: format!("http://{addr}"),
+        vkey,
+    }
+}
+
+/// The install Genesis: ROOT alone roots the meta-anchor with a 2-of-3 recovery entry of its
+/// own `keys` and holds the Grant to contribute, ALICE issues `authentication` Claims, and the
+/// provider binding is `binding`; the index of ROOT's Grant.
+fn install_genesis(
+    keys: &[ed25519_dalek::SigningKey; 3],
+    binding: &BindingKey,
+) -> (BTreeMap<String, Opened>, u64) {
+    let mut g = genesis();
+    let kids = keys.iter().map(|k| thumbprint(&public_of(k))).collect();
+    let e = RecoveryEntry::new(2, kids, 2, KeyHolding::Device, BTreeSet::from([ROOT]));
+    let opened = |value| Opened {
+        value,
+        salt: [3; 32],
+    };
+    g.insert(
+        "meta_anchor".to_owned(),
+        opened(Value::Map(vec![
+            (Value::text("root"), sole(ROOT)),
+            (Value::text("recovery"), e.to_value()),
+        ])),
+    );
+    g.insert(
+        "binding".to_owned(),
+        opened(Value::Array(vec![binding.to_value()])),
+    );
+    let wide = |actions, resource| {
+        let mut a = authority(actions, resource);
+        a.constraints.validity = Window {
+            from: 0,
+            until: u64::MAX / 4,
+        };
+        a.to_value()
+    };
+    let mut grants = vec![Value::Map(vec![
+        (Value::text("anchor"), Value::Unsigned(0)),
+        (Value::text("holder"), SubjectSelector::Public.to_value()),
+        (
+            Value::text("authority"),
+            wide(
+                vec![
+                    action("access", "party_register"),
+                    action("access", "instance_create"),
+                ],
+                selector("access.party"),
+            ),
+        ),
+        (
+            Value::text("agency"),
+            Value::Array(vec![meta::capacity_value(Capacity::Own)]),
+        ),
+    ])];
+    grants.push(Value::Map(vec![
+        (Value::text("anchor"), Value::Unsigned(0)),
+        (
+            Value::text("holder"),
+            SubjectSelector::Party(ROOT).to_value(),
+        ),
+        (
+            Value::text("authority"),
+            wide(
+                vec![action("access", "contribute")],
+                selector("access.contribution"),
+            ),
+        ),
+        (
+            Value::text("agency"),
+            Value::Array(vec![meta::capacity_value(Capacity::Own)]),
+        ),
+    ]));
+    grants.sort_by_key(|v| dcbor::encode(v, Limits::CEILING).unwrap());
+    let holder = SubjectSelector::Party(ROOT).to_value();
+    let index = grants
+        .iter()
+        .position(|v| v.get("holder") == Some(&holder))
+        .unwrap();
+    g.insert("grants".to_owned(), opened(Value::Array(grants)));
+    add_acceptances(
+        &mut g,
+        vec![Value::Map(vec![
+            (Value::text("issuer"), ALICE.to_value()),
+            (Value::text("use"), Value::text("predicate-input")),
+            (
+                Value::text("classes"),
+                Value::Array(vec![Value::text("authentication")]),
+            ),
+            (Value::text("subject"), SubjectSelector::Public.to_value()),
+            (
+                Value::text("validity"),
+                Value::Array(vec![Value::Unsigned(0), Value::Unsigned(u64::MAX)]),
+            ),
+            (
+                Value::text("quota"),
+                Value::Map(vec![
+                    (Value::text("count"), Value::Unsigned(100)),
+                    (Value::text("window_s"), Value::Unsigned(3_600)),
+                ]),
+            ),
+        ])],
+    );
+    (g, u64::try_from(index).unwrap())
+}
+
+/// The install's leader of `d` on `db`, every test key bound to its Party.
+async fn install_core(db: &TestDb, d: Digest, keys: &[ed25519_dalek::SigningKey; 3]) -> Core {
+    let log = PgLog::new(db.sequencer.clone(), d, TENANT, "t".to_owned(), TTL);
+    let leader = Leader::acquire(log, d, EventKey::new(Secret::new([5; 32])))
+        .await
+        .unwrap();
+    let reader = PgReader::new(db.app.clone(), DomainId::from_bytes(d.0));
+    let mut bound = binding();
+    for k in keys {
+        bound
+            .0
+            .insert(thumbprint(&public_of(k)), (ROOT, public_of(k)));
+    }
+    Authority::new(leader, reader, bound, Counter(0), d)
+}
+
+async fn register_at(
+    core: &mut Core,
+    d: Digest,
+    (party, key): (Id, &ed25519_dalek::SigningKey),
+    nonces: (u8, u8),
+) {
+    let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
+    let t = wall();
+    allowed(
+        &send_by(
+            core,
+            meta_request(
+                d,
+                nonces.0,
+                public_basis,
+                Payload::PartyRegister {
+                    party,
+                    root: Root::Sole(party),
+                    actor_kind: ActorKind::Human,
+                },
+            ),
+            key,
+            (t, t),
+        )
+        .await,
+    );
+    instance_at(core, d, (party, key), nonces.1).await;
+}
+
+async fn instance_at(
+    core: &mut Core,
+    d: Digest,
+    (party, key): (Id, &ed25519_dalek::SigningKey),
+    nonce: u8,
+) {
+    let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
+    let t = wall();
+    allowed(
+        &send_by(
+            core,
+            meta_request(
+                d,
+                nonce,
+                public_basis,
+                Payload::InstanceCreate {
+                    party,
+                    key: public_of(key),
+                    mandate: None,
+                },
+            ),
+            key,
+            (t, t),
+        )
+        .await,
+    );
+}
+
+/// `d`'s checkpoint of the first `size` records on `db`, signed by the install's signer: the
+/// note, its excerpt, the root and the leaves.
+async fn sign_checkpoint(
+    db: &TestDb,
+    socket: &std::path::Path,
+    d: Digest,
+    size: u64,
+) -> (String, Vec<u8>, [u8; 32], Vec<[u8; 32]>) {
+    use access_authority_sequencer::ports::NoteSigner as _;
+    let leaves = access_store::witness::leaf_hashes(&db.app, &DomainId::from_bytes(d.0), 0, size)
+        .await
+        .unwrap();
+    let mut f = suiss_ledger::merkle::Frontier::default();
+    for l in &leaves {
+        f.push(*l).unwrap();
+    }
+    let body = Checkpoint {
+        origin: access_authority_signer::domain::origin(&d),
+        size,
+        root: f.root(),
+        extensions: vec![format!("issued_at {}", wall())],
+    }
+    .to_body()
+    .unwrap();
+    let signed = access_authority_sequencer::adapters::SocketSigner::new(socket.to_path_buf())
+        .sign_note(d, body.clone(), wall())
+        .await
+        .unwrap();
+    (
+        format!("{body}\n{}", signed.line),
+        signed.excerpt,
+        f.root(),
+        leaves,
+    )
+}
+
+// §16.6 FR-0…FR-5, §13.6 PR-0, PR-1, SEC20, SEC21, SEC22, U11, G21, L0-EVAL-26a,
+// OP-158 m.3 (m), m.19 (c), Ek B 5754, 5764, 5781, 6022, 6023, 6026
+#[tokio::test(flavor = "multi_thread")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one walkthrough of a forced recovery"
+)]
+async fn a_domain_is_recovered_on_a_second_install_and_the_old_provider_is_fenced() {
+    use access_authority_core::app::forced::{
+        Arm, fetch_witness_heads, plan, prefix_roots, take_over,
+    };
+    use access_authority_core::domain::export::{Coverage, Streamer};
+    use access_authority_sequencer::witness::{
+        Target, WitnessError, add_checkpoint, add_checkpoint_moving,
+    };
+    use suiss_ledger::checkpoint::witness::{BindingChange, Refused};
+    let (dba, dbb) = (fresh().await.unwrap(), fresh().await.unwrap());
+    let (bind_a, bind_b) = (InstallBinding::new(), InstallBinding::new());
+    let keys = [runtime_key(), runtime_key(), runtime_key()];
+    let (a_key, b_key) = (bind_a.key(), bind_b.key());
+    assert_ne!(a_key.kid, b_key.kid);
+    let (g, grant) = install_genesis(&keys, &a_key);
+    let d = create_genesis(&dba.sequencer, TENANT, g, wall())
+        .await
+        .unwrap();
+    let id = DomainId::from_bytes(d.0);
+    let sock_a = install_signer("a", bind_a, d).await;
+    let mut a = install_core(&dba, d, &keys).await;
+    register_at(&mut a, d, (ROOT, &signing(ROOT_KEY)), (1, 2)).await;
+    register_at(&mut a, d, (ALICE, &signing(ALICE_KEY)), (3, 4)).await;
+    for (i, k) in keys.iter().enumerate() {
+        instance_at(&mut a, d, (ROOT, k), 40 + u8::try_from(i).unwrap()).await;
+    }
+    let suiss_crypto::cose::PublicKey::Ed25519(a_raw) = a_key.key else {
+        panic!("ed25519 binding");
+    };
+    let dir = std::env::temp_dir().join(format!("w6-wit-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let witnesses = [
+        start_witness(&dir, "w6-independent", d, a_raw),
+        start_witness(&dir, "w6-own", d, a_raw),
+    ];
+    let targets: Vec<Target> = witnesses
+        .iter()
+        .map(|w| Target::new(&w.url, &w.vkey, "Example Witness Ltd", "Suiss").unwrap())
+        .collect();
+    let verifiers: Vec<Verifier> = witnesses
+        .iter()
+        .map(|w| Verifier::parse(&w.vkey).unwrap())
+        .collect();
+
+    // FR-0: the witnesses cosign C_N of A's log
+    let n = access_store::authority::read_head(&dba.app, &id)
+        .await
+        .unwrap()
+        .pos
+        + 1;
+    let (note, excerpt, root_n, _) = sign_checkpoint(&dba, &sock_a, d, n).await;
+    let mut cosigned = note.clone();
+    for t in &targets {
+        let (line, _) = add_checkpoint(t, &d, (None, &[]), &note, &excerpt)
+            .await
+            .unwrap();
+        cosigned.push_str(&line);
+    }
+
+    // FR-1: the honest provider's records to N
+    let rows = access_store::authority::read_log(&dba.app, &id, 0, n - 1)
+        .await
+        .unwrap();
+    let (mut s, mut package) = Streamer::start(
+        d,
+        (0, n - 1),
+        Coverage::Full,
+        Digest(suiss_crypto::digest::sha256(b"the honest export")),
+        &[],
+    )
+    .unwrap();
+    for r in &rows {
+        package.extend(s.push(&r.envelope, &r.leaf_hash).unwrap());
+    }
+    package.extend(s.finish(&[(n, root_n, cosigned.clone())]).unwrap());
+
+    // G21: A goes on writing past N; nothing it writes reaches a witness
+    register_at(&mut a, d, (BOB, &signing(BOB_KEY)), (5, 6)).await;
+    let lost = access_store::authority::read_log(&dba.app, &id, n, n)
+        .await
+        .unwrap();
+
+    // FR-1, FR-4: install B adopts records 0..N − 1 and supersedes A's binding at C_N
+    let received = access_authority_core::app::handover::receive(&package, (n, root_n)).unwrap();
+    let run = access_crypto::random::bytes::<16>().unwrap();
+    let t = take_over(
+        &received,
+        (&cosigned, &verifiers),
+        std::slice::from_ref(&a_key),
+        run,
+    )
+    .unwrap();
+    assert_eq!((t.h, t.at), (n - 1, root_n));
+    access_store::handover::adopt(&dbb.sequencer, &id, TENANT, &t.adoption)
+        .await
+        .unwrap();
+    let sock_b = install_signer("b", bind_b, d).await;
+    {
+        use access_authority_signer::protocol::{Request as R, Response as A};
+        assert_eq!(
+            access_authority_signer::adapters::call(
+                &sock_b,
+                &R::Supersede {
+                    domain: d,
+                    keys: t.superseded.clone(),
+                },
+            )
+            .await
+            .unwrap(),
+            A::Opened
+        );
+    }
+    let mut b = install_core(&dbb, d, &keys).await;
+
+    // FR-2: B reads every witness itself and records their heads ahead of the decision
+    let heads = fetch_witness_heads(&targets, &d).await;
+    assert!(heads.iter().all(Option::is_some));
+    let leaves: Vec<[u8; 32]> = received
+        .records
+        .iter()
+        .map(|r| r.leaf_hash().unwrap())
+        .collect();
+    let p = plan(&heads, &prefix_roots(&leaves).unwrap(), true, wall()).unwrap();
+    assert_eq!((p.n, p.arm), (n, Arm::Replica));
+    let flat: Vec<_> = heads.into_iter().flatten().collect();
+    let claims = b.record_witness_heads(&flat, wall()).await.unwrap();
+
+    // FR-3, L0-EVAL-26a: a sole root recovers with two of its own entry keys
+    let mut input = RecoverInput::new(n, p.cited, BTreeMap::from([(b_key.kid, b_key.clone())]));
+    input.witness_claims = claims.into_iter().collect();
+    input.replica_head = p.replica_head;
+    let instance = |i: u8| instance_of(d, i);
+    let done = with_recover_contributions_at(
+        &mut b,
+        &dbb,
+        d,
+        (recover_request(d, 70, input), 71),
+        &[
+            (ROOT, grant, instance(0), &keys[0], (72, RECOVER)),
+            (ROOT, grant, instance(1), &keys[1], (73, RECOVER)),
+        ],
+        wall(),
+    )
+    .await;
+    allowed(&done);
+    let r = done.record.unwrap();
+    assert!(state_of(&dbb, d, &recovered_key()).await.is_some());
+    assert!(
+        state_of(
+            &dbb,
+            d,
+            &access_kernel::recovery::superseded_key(&a_key.kid)
+        )
+        .await
+        .is_some()
+    );
+    // G21
+    let kept = access_store::authority::read_log(&dbb.app, &id, n, n)
+        .await
+        .unwrap();
+    assert_ne!(kept[0].leaf_hash, lost[0].leaf_hash);
+
+    // FR-5: each witness re-anchors from C_N to the checkpoint that ends with the recovery
+    let (note_b, excerpt_b, _, leaves_b) = sign_checkpoint(&dbb, &sock_b, d, r + 1).await;
+    let record = access_store::authority::read_log(&dbb.app, &id, r, r)
+        .await
+        .unwrap();
+    let change = BindingChange {
+        position: r,
+        record: record[0].envelope.clone(),
+        inclusion: suiss_ledger::checkpoint::proof::inclusion(leaves_b.as_slice(), r, r + 1)
+            .unwrap(),
+    };
+    let proof =
+        suiss_ledger::checkpoint::proof::consistency(leaves_b.as_slice(), n, r + 1).unwrap();
+    for t in &targets {
+        let got = add_checkpoint_moving(
+            t,
+            &d,
+            (Some((n, root_n)), &proof),
+            (&note_b, &excerpt_b),
+            Some(change.clone()),
+        )
+        .await;
+        assert!(got.is_ok(), "{got:?}");
+    }
+
+    // PR-1, SEC22 R1 (b)
+    let content = access_authority_core::restrict::patterns::post_recovery_quarantine().unwrap();
+    let at = wall();
+    allowed(
+        &send_by(
+            &mut b,
+            meta_request(
+                d,
+                74,
+                ExerciseBasis::Anchor(meta::meta_anchor(&d)),
+                Payload::PolicySet {
+                    policy: None,
+                    content,
+                    defaults: None,
+                },
+            ),
+            &signing(ROOT_KEY),
+            (at, at),
+        )
+        .await,
+    );
+
+    // U11: the old provider's next checkpoint is fenced at N by every witness
+    let a_size = access_store::authority::read_head(&dba.app, &id)
+        .await
+        .unwrap()
+        .pos
+        + 1;
+    let (note_a, excerpt_a, _, leaves_a) = sign_checkpoint(&dba, &sock_a, d, a_size).await;
+    let proof_a =
+        suiss_ledger::checkpoint::proof::consistency(leaves_a.as_slice(), n, a_size).unwrap();
+    for t in &targets {
+        let fenced =
+            add_checkpoint(t, &d, (Some((n, root_n)), &proof_a), &note_a, &excerpt_a).await;
+        assert!(
+            matches!(fenced, Err(WitnessError::Said(Refused::Fenced, 403))),
+            "{fenced:?}"
+        );
+    }
+
+    // U27, PR-0: an artefact of A's key no longer verifies against B's metadata
+    let msg = {
+        use access_authority_signer::protocol::{Request as R, Response as A};
+        let A::Metadata(bytes) = access_authority_signer::adapters::call(&sock_b, &R::Metadata(d))
+            .await
+            .unwrap()
+        else {
+            panic!("metadata");
+        };
+        bytes
+    };
+    let mut trusted = access_kernel::verify::cose::KeySet::default();
+    trusted.insert(b_key.kid, b_key.key.clone()).unwrap();
+    trusted
+        .allowed
+        .insert(access_kernel::verify::cose::Algorithm::Ed25519);
+    let m = access_kernel::verify::key_scope::verify_metadata(
+        &access_kernel::verify::PureBackend,
+        &msg,
+        &trusted,
+    )
+    .unwrap();
+    assert!(
+        m.binding[&a_key.kid].superseded.is_some(),
+        "{:?}",
+        m.binding
+    );
+    let refused = access_kernel::verify::key_scope::operational_key(
+        &access_kernel::verify::PureBackend,
+        &m,
+        &d,
+        &excerpt,
+        access_kernel::verify::key_scope::KeyUsage::Checkpoint,
+        wall(),
+    );
+    assert_eq!(
+        refused.err(),
+        Some(access_kernel::verify::key_scope::KeyScopeError::Superseded)
+    );
+    fold_check(&dbb.sequencer, d).await.unwrap();
+    drop(witnesses);
+    let _ = std::fs::remove_dir_all(&dir);
 }

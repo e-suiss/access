@@ -272,6 +272,16 @@ impl World {
         slug: &str,
         ct3_delay_s: Option<u64>,
     ) -> (TenantId, access_identity_admin::app::CreatedRealm) {
+        self.admin_realm_with(slug, ct3_delay_s, None).await
+    }
+
+    /// [`World::admin_realm_timed`] whose meta-anchor carries `recovery` (OP-158 m.3 (m)).
+    async fn admin_realm_with(
+        &self,
+        slug: &str,
+        ct3_delay_s: Option<u64>,
+        recovery: Option<access_kernel::recovery::RecoveryEntry>,
+    ) -> (TenantId, access_identity_admin::app::CreatedRealm) {
         let ids = cell_ids(&self.db.app, &self.keys).await.unwrap();
         let declared = DeclaredTargets::default();
         let bootstrap = Bootstrap {
@@ -288,19 +298,22 @@ impl World {
         let tenant = create_tenant(&self.db.app, PLACEMENT).await.unwrap();
         let root = root_party(&root_key(&self.keys).unwrap().public_key());
         let created = admin
-            .create_realm(&NewRealm {
-                tenant,
-                slug,
-                style: IssuerStyle::Path,
-                placement: PLACEMENT,
-                root: Root::Sole(root),
-                ct3_delay_s,
-                causal_binding: false,
-                schemas: Vec::new(),
-                acceptances: Vec::new(),
-                issuer_predicate_input: Vec::new(),
-                provisioned_by: None,
-            })
+            .create_realm_with(
+                &NewRealm {
+                    tenant,
+                    slug,
+                    style: IssuerStyle::Path,
+                    placement: PLACEMENT,
+                    root: Root::Sole(root),
+                    ct3_delay_s,
+                    causal_binding: false,
+                    schemas: Vec::new(),
+                    acceptances: Vec::new(),
+                    issuer_predicate_input: Vec::new(),
+                    provisioned_by: None,
+                },
+                recovery,
+            )
             .await
             .unwrap();
         (tenant, created)
@@ -2370,6 +2383,7 @@ mod provision {
         })
         .unwrap();
         assert_eq!((entry.threshold, entry.keys.len()), (2, 3));
+
         assert_eq!(
             access_identity_admin::domain::provision::recovery(&joint, None).0,
             Recovery::NotAvailable(NotAvailable::NoKeys)

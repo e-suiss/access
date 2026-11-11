@@ -51,6 +51,9 @@ impl<K, B: Binding, S: Salts, C> Domains<K, B, S, C> {
             .signer
             .as_deref()
             .ok_or(CoreError::Unavailable("signer"))?;
+        if !super::open_keyring(path, domain).await {
+            return Err(CoreError::Unavailable("signer-binding"));
+        }
         let signed = match tokio::time::timeout(
             super::SIGNER_DEADLINE,
             call(path, &SignRequest::Metadata(domain)),
