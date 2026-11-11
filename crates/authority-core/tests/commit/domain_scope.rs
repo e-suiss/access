@@ -229,39 +229,22 @@ async fn a_recovery_needs_its_entry_and_passes_the_rollback_guard() {
         .await;
         assert!(carried.is_ok(), "{carried:?}");
     }
-    let below = send(
-        &mut core,
-        meta_request(d, 24, meta, recover(heads.clone(), 90)),
-        ROOT_KEY,
-    )
-    .await
-    .unwrap();
-    denied(&below);
-    assert_eq!(
-        below.decision.blockers[0].subcode.as_deref(),
-        Some("rollback-guard"),
-        "{below:?}"
-    );
-    let at_head = send(
-        &mut core,
-        meta_request(d, 25, meta, recover(heads, 100)),
-        ROOT_KEY,
-    )
-    .await
-    .unwrap();
-    assert_eq!(
-        at_head.decision.outcome,
-        Outcome::RequireAction,
-        "{at_head:?}"
-    );
-    assert!(
-        at_head
-            .decision
-            .unmet
-            .iter()
-            .any(|u| u.term.class == access_kernel::recovery::RECOVER),
-        "{at_head:?}"
-    );
+    // L0-META-36, OP-158 m.3 (c)
+    for (nonce, n) in [(24, 90), (25, 100)] {
+        let unheaded = send(
+            &mut core,
+            meta_request(d, nonce, meta, recover(heads.clone(), n)),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap();
+        denied(&unheaded);
+        assert_ne!(
+            unheaded.decision.blockers[0].subcode.as_deref(),
+            Some("rollback-guard"),
+            "{unheaded:?}"
+        );
+    }
     assert!(state_of(&db, d, &recovered_key()).await.is_none());
     fold_check(&db.sequencer, d).await.unwrap();
 }

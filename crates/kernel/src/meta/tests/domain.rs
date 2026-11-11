@@ -212,18 +212,17 @@ fn handover_vectors_match() {
 
 fn checkpoint_claim(r: &mut Recorder, id: u8, size: u64, root: u8, age: u64) -> Id {
     let cid = Id([id; 16]);
-    let value = dcbor::encode(
-        &CheckpointRef::new(size, Digest([root; 32])).to_value(),
-        Limits::CEILING,
-    )
-    .unwrap();
+    r.run.state.0.insert(
+        crate::recovery::witness_head_key(&cid),
+        CheckpointRef::new(size, Digest([root; 32])).to_value(),
+    );
     let state = crate::claim::ClaimState {
         statement: crate::claim::Statement {
             domain: DOMAIN,
             issuer: Id([0x77; 16]),
             subject: Id([0x77; 16]),
             class: String::from(crate::claim::CHECKPOINT),
-            value: Some(EqValue::Bytes(value)),
+            value: Some(EqValue::Bytes(alloc::vec![0xcd; 32])),
             issued_at: r.run.now.checked_sub(age).unwrap(),
             validity: Window {
                 from: 0,

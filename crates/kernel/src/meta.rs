@@ -4119,7 +4119,8 @@ fn recover_guard(
     let mut heads = Vec::new();
     for id in &r.witness_claims {
         let c: crate::claim::ClaimState = read(view, kind::CLAIM, id)?;
-        heads.push(crate::recovery::witness_head(&c, ctx.now));
+        let head = view.get(&crate::recovery::witness_head_key(id));
+        heads.push(crate::recovery::witness_head(&c, head.as_ref(), ctx.now));
     }
     let guard = crate::fold::rollback_guard(
         &heads,

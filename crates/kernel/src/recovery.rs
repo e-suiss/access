@@ -576,11 +576,24 @@ pub fn entry_terms(entry: &RecoveryEntry) -> BTreeSet<crate::model::RequirementT
     }])
 }
 
-/// The head a witness `checkpoint` Claim states: its value is `dCBOR(checkpoint-ref)` as bytes,
-/// its time `issued_at`; `None` for a Claim of another class, ended or outside its validity.
+/// `dCBOR(["witness_head", ClaimID])`: the `checkpoint-ref` a witness `checkpoint` Claim
+/// states, written by the checkpoint ingest beside the Claim (OP-158 m.3 (b), (c)).
+#[must_use]
+pub fn witness_head_key(claim: &Id) -> alloc::vec::Vec<u8> {
+    suiss_crypto::dcbor::encode(
+        &Value::Array(alloc::vec![Value::text("witness_head"), claim.to_value()]),
+        suiss_crypto::dcbor::Limits::CEILING,
+    )
+    .unwrap_or_default()
+}
+
+/// The head of a witness `checkpoint` Claim: its `witness_head` entry `head`, timed at the
+/// Claim's `issued_at`; `None` for a Claim of another class, ended, outside its validity, or
+/// without an entry that decodes.
 #[must_use]
 pub fn witness_head(
     claim: &crate::claim::ClaimState,
+    head: Option<&Value>,
     now: u64,
 ) -> Option<crate::fold::WitnessHead> {
     let s = &claim.statement;
@@ -591,11 +604,7 @@ pub fn witness_head(
     {
         return None;
     }
-    let Some(crate::model::EqValue::Bytes(bytes)) = &s.value else {
-        return None;
-    };
-    let value = suiss_crypto::dcbor::decode(bytes, suiss_crypto::dcbor::Limits::CEILING).ok()?;
-    let head = CheckpointRef::from_value(&value).ok()?;
+    let head = CheckpointRef::from_value(head?).ok()?;
     Some(crate::fold::WitnessHead::new(
         head.size,
         head.root.0,

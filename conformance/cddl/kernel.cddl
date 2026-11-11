@@ -1268,5 +1268,7 @@ recovered-state = { at: uint, pos: uint, n: uint }
 versions-state = { floor: spec-versions, activated: spec-versions, at: uint }
 ; dCBOR(["retired_algorithms"]): the algorithms the domain declared broken (§15.16).
 retired-algorithms = [+ cose-alg]
-; The value of a witness `checkpoint` Claim: the bytes of dCBOR(checkpoint-ref).
-checkpoint-claim-value = bytes .cbor checkpoint-ref
+; dCBOR(["witness_head", ClaimID]): the head a witness `checkpoint` Claim states, written by the
+; checkpoint ingest beside the Claim; the guard reads it with the Claim's issued_at. The Claim's
+; own body and value stay as checkpoint.cddl defines them.
+witness-head-state = checkpoint-ref

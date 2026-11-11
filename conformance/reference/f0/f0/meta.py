@@ -700,7 +700,7 @@ class Apply:
             state = self.read("claim", cid)
             if state is None:
                 refuse("meta-unknown")
-            heads.append(witness_head(state, self.now))
+            heads.append(witness_head(state, self.state.get(encode(["witness_head", cid])), self.now))
         replica = body["replica_head"]["size"] if "replica_head" in body else None
         try:
             guard = fold_rules.rollback_guard(heads, replica, body["n"], cited["root"][1], "fork" in body, self.now)
@@ -1400,20 +1400,14 @@ def acceptance_narrows(new, old):
     return True
 
 
-def witness_head(state, now):
-    # L0-META-36: a live checkpoint Claim within its validity, its value dCBOR(checkpoint-ref)
+def witness_head(state, head, now):
+    # L0-META-36: a live checkpoint Claim within its validity, with its ["witness_head", id] entry
     validity = state.get("validity", [0, 2**64 - 1])
-    value = state.get("value")
-    if ("ended" in state or state.get("class") != "checkpoint" or not validity[0] <= now <= validity[1]
-            or not isinstance(value, (bytes, bytearray))):
+    if "ended" in state or state.get("class") != "checkpoint" or not validity[0] <= now <= validity[1]:
         return None
-    try:
-        ref = decode_canonical(bytes(value))
-    except Rejection:
+    if not isinstance(head, dict) or set(head) != {"size", "root"}:
         return None
-    if not isinstance(ref, dict) or set(ref) != {"size", "root"}:
-        return None
-    return {"size": ref["size"], "root": bytes(ref["root"][1]), "at": state.get("issued_at", 0)}
+    return {"size": head["size"], "root": bytes(head["root"][1]), "at": state.get("issued_at", 0)}
 
 
 def core_action(name):
