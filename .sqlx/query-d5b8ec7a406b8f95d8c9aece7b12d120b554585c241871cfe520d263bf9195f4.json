@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.domain_head SET frozen_at = NULL WHERE domain_id = $1 AND frozen_at IS NOT NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d5b8ec7a406b8f95d8c9aece7b12d120b554585c241871cfe520d263bf9195f4"
+}

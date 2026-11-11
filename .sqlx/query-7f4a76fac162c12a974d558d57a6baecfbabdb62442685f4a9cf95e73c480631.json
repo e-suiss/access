@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.domain_head SET frozen_at = $2\n          WHERE domain_id = $1 AND frozen_at IS NULL AND sealed_at IS NULL\n         RETURNING pos",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.domain_head",
+            "name": "pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7f4a76fac162c12a974d558d57a6baecfbabdb62442685f4a9cf95e73c480631"
+}

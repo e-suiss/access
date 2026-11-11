@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.handover_runs (domain_id, run, step, role, k, h) VALUES ($1, $2, 'thawed', $3, $4, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7093e305032d95f6b191fb720475a6fe4f556d09152ce34d39d9d8c4a2ad79d5"
+}

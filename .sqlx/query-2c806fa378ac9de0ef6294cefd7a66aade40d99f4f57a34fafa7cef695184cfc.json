@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT frozen_at FROM access.domain_head WHERE domain_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "frozen_at",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.domain_head",
+            "name": "frozen_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "2c806fa378ac9de0ef6294cefd7a66aade40d99f4f57a34fafa7cef695184cfc"
+}
