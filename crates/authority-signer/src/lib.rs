@@ -4,6 +4,7 @@
 
 pub mod adapters;
 pub mod app;
+pub mod ceremony;
 pub mod domain;
 pub mod genesis;
 pub mod kat;
