@@ -159,10 +159,7 @@ pub const MAX_CT3_DELAY_S: u64 = 30 * 86_400;
 pub enum NotAvailable {
     /// No recovery keys were named.
     NoKeys,
-    /// A sole root: the Kernel never counts the actor Party's own contributions toward an
-    /// independent term (SEC10), so its own recovery keys could never recover it.
-    SoleRoot,
-    /// Fewer than three keys, or keys held by fewer Parties than the threshold.
+    /// Fewer than three keys.
     TooFewKeys,
     /// A key is held by a Party outside the founding root (SEC20).
     HolderNotRoot,
@@ -176,7 +173,6 @@ impl NotAvailable {
     pub const fn code(self) -> &'static str {
         match self {
             Self::NoKeys => "no-recovery-keys",
-            Self::SoleRoot => "sole-root",
             Self::TooFewKeys => "too-few-recovery-keys",
             Self::HolderNotRoot => "recovery-holder-not-root",
             Self::DuplicateKey => "duplicate-recovery-key",
@@ -245,9 +241,9 @@ pub const ORGANIZATION_KEYS: usize = 5;
 pub const SMALL_KEYS: usize = 3;
 
 /// The recovery a Genesis with `root` and the founders' `keys` declares, and the entry it
-/// carries (§13.6, SEC20, OP-158 m.3 (m)): five or more keys build 3-of-n, three or four build
-/// 2-of-n; at least two are hardware-bound, every holder is a root Party, and the keys are spread
-/// over at least `threshold` Parties, since the actor's own contributions never count (SEC10).
+/// carries (§13.6, SEC20, OP-158 m.3 (m), m.19 (c)): five or more keys build 3-of-n, three or
+/// four build 2-of-n; at least two are hardware-bound and every holder is a root Party. A sole
+/// root's own keys count: a recovery's independence is the keys' custody (L0-EVAL-26a).
 #[must_use]
 pub fn recovery(
     root: &Root,
@@ -257,16 +253,16 @@ pub fn recovery(
     let Some(keys) = keys.filter(|k| !k.keys.is_empty()) else {
         return not(NotAvailable::NoKeys);
     };
-    let parties = match root {
-        Root::Sole(_) => return not(NotAvailable::SoleRoot),
-        Root::Joint { parties, .. } => parties,
+    let parties: BTreeSet<Id> = match root {
+        Root::Sole(p) => BTreeSet::from([*p]),
+        Root::Joint { parties, .. } => parties.clone(),
     };
     let kids: std::collections::BTreeSet<[u8; 32]> = keys.keys.iter().map(|k| k.kid).collect();
     if kids.len() != keys.keys.len() {
         return not(NotAvailable::DuplicateKey);
     }
     let holders: std::collections::BTreeSet<Id> = keys.keys.iter().map(|k| k.party).collect();
-    if !holders.is_subset(parties) {
+    if !holders.is_subset(&parties) {
         return not(NotAvailable::HolderNotRoot);
     }
     let threshold: u64 = match kids.len() {
@@ -274,9 +270,6 @@ pub fn recovery(
         n if n >= SMALL_KEYS => 2,
         _ => return not(NotAvailable::TooFewKeys),
     };
-    if u64::try_from(holders.len()).unwrap_or(0) < threshold {
-        return not(NotAvailable::TooFewKeys);
-    }
     let n = u64::try_from(kids.len()).unwrap_or(u64::MAX);
     let entry = access_kernel::recovery::RecoveryEntry::new(
         threshold,

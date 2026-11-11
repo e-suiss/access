@@ -796,7 +796,7 @@ fn schemas() -> Value {
                     "type": "object",
                     "additionalProperties": false,
                     "required": ["keys"],
-                    "description": "The founders' recovery keys, by thumbprint only: the keys stay on their own devices or offline, never with the provider (§13.6, SEC20). Five or more keys build a 3-of-n entry, three or four a 2-of-n one; every holder is a root Party, and a sole root cannot be recovered. Without them the Genesis says `recovery: not_available`.",
+                    "description": "The founders' recovery keys, by thumbprint only: the keys stay on their own devices or offline, never with the provider (§13.6, SEC20). Five or more keys build a 3-of-n entry, three or four a 2-of-n one; every holder is a root Party; a sole root recovers with its own keys. Without them the Genesis says `recovery: not_available`.",
                     "properties": {
                         "held_on": { "type": "string", "enum": ["device", "offline"], "default": "device" },
                         "keys": {
@@ -842,7 +842,7 @@ fn schemas() -> Value {
                     "description": "How many of the entry's keys a recovery needs.",
                     "properties": { "k": { "type": "integer" }, "n": { "type": "integer" } },
                 },
-                "recovery_reason": text("Why recovery is not available: `no-recovery-keys`, `sole-root`, `too-few-recovery-keys`, `recovery-holder-not-root` or `duplicate-recovery-key`."),
+                "recovery_reason": text("Why recovery is not available: `no-recovery-keys`, `too-few-recovery-keys`, `recovery-holder-not-root` or `duplicate-recovery-key`."),
             },
         },
         "PlatformWriteResult": {

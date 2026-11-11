@@ -81,10 +81,19 @@ fn the_template_builds_the_recovery_entry_or_says_why_not() {
     use NotAvailable as N;
     let cases = [
         (joint(2, 3), None, Recovery::NotAvailable(N::NoKeys)),
+        // L0-EVAL-26a, OP-158 m.19 (c)
         (
             Root::Sole(Id([1; 16])),
             Some(keys(&[1, 1, 1])),
-            Recovery::NotAvailable(N::SoleRoot),
+            Recovery::Available {
+                threshold: 2,
+                keys: 3,
+            },
+        ),
+        (
+            Root::Sole(Id([1; 16])),
+            Some(keys(&[1, 2, 1])),
+            Recovery::NotAvailable(N::HolderNotRoot),
         ),
         (
             joint(2, 3),
@@ -94,7 +103,10 @@ fn the_template_builds_the_recovery_entry_or_says_why_not() {
         (
             joint(2, 3),
             Some(keys(&[1, 1, 1])),
-            Recovery::NotAvailable(N::TooFewKeys),
+            Recovery::Available {
+                threshold: 2,
+                keys: 3,
+            },
         ),
         (
             joint(2, 3),
@@ -127,10 +139,9 @@ fn the_template_builds_the_recovery_entry_or_says_why_not() {
                 e.hardware_bound_min,
                 access_kernel::recovery::HARDWARE_BOUND_MIN
             );
-            let Root::Joint { parties, .. } = &root else {
-                panic!("joint")
-            };
-            assert!(e.holders.is_subset(parties));
+            if let Root::Joint { parties, .. } = &root {
+                assert!(e.holders.is_subset(parties));
+            }
         }
     }
     let mut twice = keys(&[1, 2, 3]);
