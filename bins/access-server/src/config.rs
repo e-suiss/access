@@ -798,8 +798,8 @@ pub(crate) struct Database {
     /// report requests never wait behind sign-in, nor sign-in behind them. Four when unset.
     #[serde(default)]
     pub(crate) admin_pool: Option<u32>,
-    /// The cell's other database hosts, tried after `host` for the one that accepts writes; the
-    /// pools follow it across a failover (OP-26, OP-88).
+    /// The cell's other database hosts (`name` or `name:port`), tried after `host` for the one that
+    /// accepts writes; the pools follow it across a failover (OP-26, OP-88).
     #[serde(default)]
     pub(crate) hosts: Vec<String>,
     /// How far behind, in milliseconds, the read replica may be before its reads go to the
