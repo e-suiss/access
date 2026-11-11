@@ -117,3 +117,13 @@ fn closing_never_reaches_back_a_narrowing_or_keeping_amend_stays() {
     let current = state(revoke_only);
     assert!(needs_open(&amend(both), Some(&current)));
 }
+
+// §8.17.9.8, TN-Y2, X20, OP-157 m.3 (t), Ek B 5453
+#[test]
+fn an_upstream_group_mapping_is_protected_and_the_flag_does_not_open_it() {
+    use access_internal_api::idp::IdpAction;
+    assert!(IdpAction::UpstreamMapping.reserved());
+    assert!(IdpAction::SamlSpMapping.reserved());
+    let mapper = set(&[action("idp.upstream", "mapping")], &[]);
+    assert!(!needs_open(&issue(mapper), None));
+}
