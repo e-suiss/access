@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT access.commit_quota($1, $2, $3, $4)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "commit_quota",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Int8Array",
+        "Int8Array"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "125f9025eff371355fe35e149b0ca616beefc5862df90de860f640d3fb77cd19"
+}

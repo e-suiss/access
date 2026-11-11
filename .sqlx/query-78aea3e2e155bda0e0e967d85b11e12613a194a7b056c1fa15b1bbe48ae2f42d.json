@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT access.realm_quota($1, $2, $3, $4, $5, $6)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "realm_quota",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int4",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "78aea3e2e155bda0e0e967d85b11e12613a194a7b056c1fa15b1bbe48ae2f42d"
+}

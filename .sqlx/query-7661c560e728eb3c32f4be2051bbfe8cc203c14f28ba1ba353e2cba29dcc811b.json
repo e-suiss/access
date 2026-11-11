@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT rps FROM access.realm_rate_limits\n          WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rps",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.realm_rate_limits",
+            "name": "rps"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7661c560e728eb3c32f4be2051bbfe8cc203c14f28ba1ba353e2cba29dcc811b"
+}

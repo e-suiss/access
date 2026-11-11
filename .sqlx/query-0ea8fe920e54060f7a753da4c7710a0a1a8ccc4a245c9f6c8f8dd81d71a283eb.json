@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.tenants SET status = CASE WHEN $2 THEN 'suspended' ELSE 'active' END\n          WHERE tenant_id = $1 AND status IN ('active', 'suspended')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0ea8fe920e54060f7a753da4c7710a0a1a8ccc4a245c9f6c8f8dd81d71a283eb"
+}
