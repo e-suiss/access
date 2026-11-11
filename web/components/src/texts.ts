@@ -149,7 +149,21 @@ export const EN: Readonly<Record<string, string>> = {
   "payment.not_one_time":
     "This request would let { $merchant } charge you again. It can't be paid here as a one-time payment.",
   "action.cancel": "Cancel",
-  "action.revoke": "Revoke",
+  "action.revoke": "Revoke", // OP-157 m.4 (a): support access (V2), the approval preview (V6) and batch approval (V7)
+  "support.banner":
+    "Acting for { $person } with their support access (case { $case }) · { $mode } · ends { $time } · every action is recorded under your name",
+  "support.read_only": "read-only",
+  "support.can_change": "can change settings",
+  "support.protected": "Protected action — not included in support access",
+  "support.request": "Request support access",
+  "support.request_sent":
+    "Request sent. { $person } decides on their own page; nothing is open until they give access.",
+  "support.emergency": "Emergency access (break-glass)",
+  "support.ended": "Support access ended { $time }",
+  "approval.preview_title": "What you are about to sign",
+  "approval.preview_untyped": "This field has no declared type, so it can't be shown in a preview.",
+  "approval.batch_title": "Approve these { $count } requests",
+  "approval.batch_item": "{ $action } · { $resource }",
 };
 
 /** Looks `key` up in `catalogue`, then in English; an unknown key shows as itself. */
