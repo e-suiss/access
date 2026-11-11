@@ -20,13 +20,34 @@ use access_store::Pool;
 use access_store::identity::{RealmId, TenantId};
 use suiss_crypto::pkcs11::KeyStore;
 
-/// The nonce key generation in use; rotation adds the next one (OP-146 m.7 (b)).
+/// The nonce key generation a new realm is provisioned with (OP-146 m.7 (b)); later ones follow
+/// the clock ([`NONCE_ROTATION_MS`]).
 pub(crate) const NONCE_GENERATION: u32 = 1;
 
-type Rings = HashMap<([u8; 16], Role), Arc<NonceRing>>;
+/// How long one nonce key generation issues (TN-29, MD-18, OP-158 m.3 (y); PD): every process
+/// derives the generation from the clock, so all of them rotate together without talking.
+pub(crate) const NONCE_ROTATION_MS: u64 = 24 * 60 * 60 * 1000;
 
-/// The realms' DPoP nonce keys from the HSM, loaded on a realm's first request and kept. A
-/// realm without its keys answers `503` for DPoP-bound requests; the server still starts.
+type Rings = HashMap<([u8; 16], Role), (u32, Arc<NonceRing>)>;
+
+/// The generation in force at `now_ms`; never below [`NONCE_GENERATION`].
+pub(crate) fn nonce_generation(now_ms: u64) -> u32 {
+    let g = now_ms.checked_div(NONCE_ROTATION_MS).unwrap_or(0);
+    u32::try_from(g)
+        .unwrap_or(u32::MAX)
+        .max(NONCE_GENERATION.saturating_add(1))
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+}
+
+/// The realms' DPoP nonce keys from the HSM, loaded on a realm's first request and kept. The
+/// current generation issues and the previous one is still accepted, so a rotation never
+/// rejects a nonce issued just before it (TN-29); older generations are retired. A realm
+/// without its keys answers `503` for DPoP-bound requests; the server still starts.
 pub(crate) struct HsmNonces {
     keys: Arc<KeyStore>,
     policy: NoncePolicy,
@@ -43,29 +64,65 @@ impl HsmNonces {
     }
 
     pub(crate) fn ring(&self, realm: RealmId, role: Role) -> Option<Arc<NonceRing>> {
+        self.ring_at(realm, role, now_ms())
+    }
+
+    /// The ring of the generation in force at `now_ms`, rebuilt when the generation moved.
+    pub(crate) fn ring_at(
+        &self,
+        realm: RealmId,
+        role: Role,
+        now_ms: u64,
+    ) -> Option<Arc<NonceRing>> {
         let key = (*realm.as_bytes(), role);
-        if let Some(ring) = self.loaded.lock().ok()?.get(&key) {
+        let generation = nonce_generation(now_ms);
+        if let Some((g, ring)) = self.loaded.lock().ok()?.get(&key)
+            && *g == generation
+        {
             return Some(ring.clone());
         }
-        let mac = match self
-            .keys
-            .mac(&label(realm.as_bytes(), role, NONCE_GENERATION))
-        {
-            Ok(m) => m,
+        let ring = match self.rotated(realm.as_bytes(), role, generation) {
+            Ok(ring) => Arc::new(ring),
             Err(error) => {
                 tracing::error!(%error, "realm DPoP nonce key unavailable");
                 return None;
             }
         };
-        let ring = Arc::new(NonceRing::new(
-            *realm.as_bytes(),
+        self.loaded
+            .lock()
+            .ok()?
+            .insert(key, (generation, ring.clone()));
+        Some(ring)
+    }
+
+    /// TN-29, OP-158 m.3 (y): `generation` issues, the one before it is accepted, and older ones
+    /// are retired from the token once no process at a neighbouring generation needs them.
+    fn rotated(
+        &self,
+        realm: &[u8; 16],
+        role: Role,
+        generation: u32,
+    ) -> Result<NonceRing, suiss_crypto::pkcs11::HsmError> {
+        // OP-146 m.7 (b)
+        drop(self.keys.mac(&label(realm, role, NONCE_GENERATION))?);
+        let previous = generation.saturating_sub(1);
+        let mut ring = NonceRing::new(
+            *realm,
             role,
             self.policy,
-            NONCE_GENERATION,
-            NonceKey::token(mac),
-        ));
-        self.loaded.lock().ok()?.insert(key, ring.clone());
-        Some(ring)
+            previous,
+            NonceKey::token(self.keys.shared_mac(&label(realm, role, previous))?),
+        );
+        ring.rotate(
+            generation,
+            NonceKey::token(self.keys.shared_mac(&label(realm, role, generation))?),
+        );
+        if let Some(retired) = generation.checked_sub(3)
+            && retired > NONCE_GENERATION
+        {
+            let _ = self.keys.retire_secret(&label(realm, role, retired));
+        }
+        Ok(ring)
     }
 }
 
@@ -273,4 +330,81 @@ pub(crate) fn hooks(
         access_identity_oauth::adapters::hooks::OutboundHooks(outbound),
         access_identity_hooks::adapters::SystemClock,
     ))
+}
+
+#[cfg(test)]
+mod nonce_tests {
+    #![allow(clippy::unwrap_used, reason = "test code")]
+
+    use super::*;
+    use access_crypto::Secret;
+    use access_crypto::dpop::NonceError;
+
+    fn store(module: &std::path::Path, label: &str) -> Arc<KeyStore> {
+        Arc::new(
+            KeyStore::open(module, label, &Secret::new(String::from("1234-test-only"))).unwrap(),
+        )
+    }
+
+    // TN-29, MD-18, OP-158
+    #[test]
+    fn nonce_keys_rotate_with_the_clock_and_processes_agree() {
+        let (module, token) = crate::testing::hsm("dpop-rotation");
+        let keys = store(&module, &token);
+        let (a, b) = (
+            HsmNonces::new(keys.clone()),
+            HsmNonces::new(store(&module, &token)),
+        );
+        let realm = RealmId::from_bytes([7; 16]);
+        let role = Role::AuthorizationServer;
+        assert!(a.ring_at(realm, role, 0).is_none());
+        keys.generate_mac(&label(realm.as_bytes(), role, NONCE_GENERATION))
+            .unwrap();
+        let boundary = 20_000 * NONCE_ROTATION_MS;
+        let before = boundary - 1_000;
+        let after = boundary + 1_000;
+
+        let old = a.ring_at(realm, role, before).unwrap();
+        let issued = old.issue(before).unwrap();
+        b.ring_at(realm, role, before)
+            .unwrap()
+            .check(Some(&issued), before)
+            .unwrap();
+
+        let new = b.ring_at(realm, role, after).unwrap();
+        new.check(Some(&issued), after).unwrap();
+        let fresh = new.issue(after).unwrap();
+        assert_ne!(fresh, issued);
+        a.ring_at(realm, role, after)
+            .unwrap()
+            .check(Some(&fresh), after)
+            .unwrap();
+
+        let later = boundary + NONCE_ROTATION_MS + 1_000;
+        let ring = a.ring_at(realm, role, later).unwrap();
+        let stale = ring.check(Some(&issued), later);
+        assert!(matches!(
+            stale,
+            Err(NonceError::UnknownKey | NonceError::Expired)
+        ));
+        assert!(matches!(
+            ring.check(Some(&issued), after),
+            Err(NonceError::UnknownKey)
+        ));
+
+        let retired = label(realm.as_bytes(), role, nonce_generation(before) - 1);
+        let _ = a
+            .ring_at(realm, role, boundary + 2 * NONCE_ROTATION_MS + 1_000)
+            .unwrap();
+        assert_eq!(keys.retire_secret(&retired).unwrap(), 0);
+    }
+
+    // TN-29
+    #[test]
+    fn the_generation_follows_the_clock() {
+        assert_eq!(nonce_generation(0), NONCE_GENERATION + 1);
+        assert_eq!(nonce_generation(20_000 * NONCE_ROTATION_MS), 20_000);
+        assert_eq!(nonce_generation(20_001 * NONCE_ROTATION_MS - 1), 20_000);
+        assert_eq!(nonce_generation(u64::MAX), u32::MAX);
+    }
 }

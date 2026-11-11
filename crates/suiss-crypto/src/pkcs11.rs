@@ -503,6 +503,76 @@ impl KeyStore {
         session.destroy_object(*key).map_err(HsmError::Operation)
     }
 
+    /// The HMAC key labelled `label` that every process of the token agrees on, made when
+    /// missing (TN-29, OP-158 m.3 (y)): processes that make it at once each add one with a
+    /// random `CKA_ID`, and all of them use the one with the lowest id.
+    ///
+    /// # Errors
+    /// [`HsmError`].
+    pub fn shared_mac(&self, label: &str) -> Result<HsmMac, HsmError> {
+        let session = self.session()?;
+        let find = |session: &Session| -> Result<Option<ObjectHandle>, HsmError> {
+            let found = session
+                .find_objects(&[
+                    Attribute::Class(ObjectClass::SECRET_KEY),
+                    Attribute::Label(label.as_bytes().to_vec()),
+                ])
+                .map_err(HsmError::Operation)?;
+            let mut best: Option<(Vec<u8>, ObjectHandle)> = None;
+            for handle in found {
+                let id = match session
+                    .get_attributes(handle, &[AttributeType::Id])
+                    .map_err(HsmError::Operation)?
+                    .pop()
+                {
+                    Some(Attribute::Id(id)) => id,
+                    _ => Vec::new(),
+                };
+                if best.as_ref().is_none_or(|(b, _)| id < *b) {
+                    best = Some((id, handle));
+                }
+            }
+            Ok(best.map(|(_, h)| h))
+        };
+        let key = if let Some(key) = find(&session)? {
+            key
+        } else {
+            let id: [u8; 16] = aws_lc_rs::rand::generate(&aws_lc_rs::rand::SystemRandom::new())
+                .map_err(|_| HsmError::Encoding)?
+                .expose();
+            let mut template = mac_template(label, None);
+            template.push(Attribute::Id(id.to_vec()));
+            session
+                .generate_key(&Mechanism::GenericSecretKeyGen, &template)
+                .map_err(HsmError::Operation)?;
+            find(&session)?.ok_or_else(|| HsmError::Key(label.to_owned()))?
+        };
+        Ok(HsmMac {
+            session: Mutex::new(session),
+            key,
+            _lease: Arc::clone(&self.lease),
+        })
+    }
+
+    /// Destroys every secret key labelled `label`, for keys of an ephemeral protocol whose
+    /// generation has passed (TN-29); returns how many.
+    ///
+    /// # Errors
+    /// [`HsmError`].
+    pub fn retire_secret(&self, label: &str) -> Result<usize, HsmError> {
+        let session = self.session()?;
+        let found = session
+            .find_objects(&[
+                Attribute::Class(ObjectClass::SECRET_KEY),
+                Attribute::Label(label.as_bytes().to_vec()),
+            ])
+            .map_err(HsmError::Operation)?;
+        for key in &found {
+            session.destroy_object(*key).map_err(HsmError::Operation)?;
+        }
+        Ok(found.len())
+    }
+
     /// Generates a 32-byte HMAC-SHA-256 key inside the token; it never leaves it.
     ///
     /// # Errors
