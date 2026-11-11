@@ -68,7 +68,13 @@
         "relay.message.passkey_setup_invite.v1",
         "relay.message.critical_interrupt.v1",
         "relay.message.sms_otp.v1",
-        "relay.message.iys_consent.v1"
+        "relay.message.iys_consent.v1",
+        "relay.message.support_access_request.v1",
+        "relay.message.support_access_notice.v1",
+        "relay.message.breakglass_used.v1",
+        "relay.message.breakglass_alarm.v1",
+        "relay.message.approval_inline.v1",
+        "relay.message.review_campaign.v1"
       ]
     },
     "subject": {
@@ -699,6 +705,102 @@
         "properties": {
           "data": {
             "$ref": "#/$defs/relay.message.iys_consent.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.support_access_request.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.support_access_request.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.support_access_notice.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.support_access_notice.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.breakglass_used.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.breakglass_used.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.breakglass_alarm.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.breakglass_alarm.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.approval_inline.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.approval_inline.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.review_campaign.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.review_campaign.v1"
           }
         }
       }
@@ -1991,6 +2093,301 @@
           "description": "How the person gave or withdrew it."
         },
         "consent_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.support_access_request.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "organization",
+        "case",
+        "scope",
+        "minutes",
+        "link",
+        "expires_at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "organization": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the support organization's name, rendered as text."
+        },
+        "case": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the case as the case system shows it, rendered as text."
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "What the access would allow, rendered as text."
+        },
+        "minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1440
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the link to the person's own grant page; the operator cannot open it. Never logged. An invitation only (OP-157 m.3 (f))."
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.support_access_notice.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "event",
+        "operator",
+        "organization",
+        "case",
+        "at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "event": {
+          "enum": [
+            "granted",
+            "started",
+            "ended",
+            "revoked"
+          ]
+        },
+        "operator": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the operator's display name, rendered as text."
+        },
+        "organization": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the support organization's name, rendered as text."
+        },
+        "case": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the case, rendered as text."
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "until": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the access ends; absent once it has ended or was revoked."
+        }
+      }
+    },
+    "relay.message.breakglass_used.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "organization",
+        "incident",
+        "approvals",
+        "at",
+        "until"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "organization": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the acting organization's name, rendered as text."
+        },
+        "incident": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the incident reference, rendered as text."
+        },
+        "approvals": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "until": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.breakglass_alarm.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "alarm",
+        "account",
+        "link",
+        "at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "alarm": {
+          "enum": [
+            "signin",
+            "used",
+            "review_overdue",
+            "drill_overdue",
+            "rotation_required"
+          ],
+          "description": "Critical: delivered to every on-call Party (OP-157 m.3 (h))."
+        },
+        "account": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the account's or Grant holder's display name, rendered as text."
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the console link. Never logged."
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.approval_inline.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "intent",
+        "render",
+        "render_digest",
+        "expires_at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "intent": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The intent digest."
+        },
+        "render": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384,
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "description": "The whole canonical render, base64url of its dCBOR; the approver SDK rebuilds it with the Kernel and compares render_digest before it signs H(AAS). CT1 only, to a registered approver device only (OP-157 m.3 (m))."
+        },
+        "render_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The render digest the AAS binds."
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.review_campaign.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "campaign",
+        "items",
+        "link",
+        "due"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "campaign": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Attacker input: the campaign's name, rendered as text."
+        },
+        "items": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the link to the campaign's view; a view, never a queue. Never logged."
+        },
+        "due": {
           "type": "string",
           "format": "date-time"
         }

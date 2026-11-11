@@ -35,8 +35,9 @@ use access_identity_account::notify::envelope::{EventId, Header, parse, seal};
 use access_identity_account::notify::http::{HttpRelay, HttpRelayConfig, RelayEndpoint};
 use access_identity_account::notify::lease::{CourierLease, TTL, Term};
 use access_identity_account::notify::message::{
-    Address, AgentNotice, AppPasswordChange, Body, IysChannel, IysRecipient, KINDS, LinkPurpose,
-    Message, Notice, NoticeReason, OtpPurpose, Prompt, SecurityEvent, SignInMethod,
+    Address, AgentNotice, AppPasswordChange, Body, BreakglassAlarm, IysChannel, IysRecipient,
+    KINDS, LinkPurpose, Message, Notice, NoticeReason, OtpPurpose, Prompt, SecurityEvent,
+    SignInMethod, SupportEvent,
 };
 use access_identity_account::notify::notifier::OutboxNotifier;
 use access_identity_account::notify::pg::PgCourierStore;
@@ -1091,6 +1092,7 @@ fn every_kind_matches_the_json_schema() {
     ])
     .chain(stage11_messages(s))
     .chain(iys_messages(s))
+    .chain(stage12_messages(s))
     .collect::<Vec<_>>();
     assert_eq!(messages.len(), KINDS.len());
     for (m, kind) in messages.iter().zip(KINDS) {
@@ -1644,6 +1646,119 @@ async fn the_courier_delivers_to_the_twin() {
             .iter()
             .all(|p| p.schema_errors.is_empty() && p.status == 202)
     );
+}
+
+fn stage12_messages(s: [u8; 16]) -> Vec<Message> {
+    let email = || Address::Email(EMAIL.to_owned());
+    let since = Some(START_MS - 86_400_000);
+    let with = |to: Address, valid_since_ms: Option<u64>, body: Body| Message {
+        subject: s,
+        to,
+        locale: None,
+        valid_since_ms,
+        body,
+    };
+    vec![
+        with(
+            email(),
+            since,
+            Body::SupportAccessRequest {
+                organization: "Acme Support".to_owned(),
+                case: "#4411".to_owned(),
+                scope: "View your account settings".to_owned(),
+                minutes: 60,
+                link: Secret::new("https://id.example/s/abc".to_owned()),
+                expires_at_ms: START_MS + 900_000,
+            },
+        ),
+        with(
+            email(),
+            since,
+            Body::SupportAccessNotice {
+                event: SupportEvent::Granted,
+                operator: "Mehmet Y.".to_owned(),
+                organization: "Acme Support".to_owned(),
+                case: "#4411".to_owned(),
+                at_ms: START_MS,
+                until_ms: Some(START_MS + 3_600_000),
+            },
+        ),
+        with(
+            email(),
+            since,
+            Body::BreakglassUsed {
+                organization: "Acme Security".to_owned(),
+                incident: "INC-7".to_owned(),
+                approvals: 2,
+                at_ms: START_MS,
+                until_ms: START_MS + 4 * 3_600_000,
+            },
+        ),
+        with(
+            email(),
+            since,
+            Body::BreakglassAlarm {
+                alarm: BreakglassAlarm::Signin,
+                account: "Emergency 1".to_owned(),
+                link: Secret::new("https://console.example/bg".to_owned()),
+                at_ms: START_MS,
+            },
+        ),
+        with(
+            device(),
+            None,
+            Body::ApprovalInline {
+                intent: random_hex::<32>(),
+                render: "oWFhYWI".to_owned(),
+                render_digest: random_hex::<32>(),
+                expires_at_ms: START_MS + 300_000,
+            },
+        ),
+        with(
+            email(),
+            since,
+            Body::ReviewCampaign {
+                campaign: "quarterly".to_owned(),
+                items: 12,
+                link: Secret::new("https://console.example/r/q".to_owned()),
+                due_ms: START_MS + 14 * 86_400_000,
+            },
+        ),
+    ]
+}
+
+// OP-157 m.3 (z), (f), (h), (m)
+#[test]
+fn the_stage_12_bodies_keep_their_channels_and_hide_their_names() {
+    let mut m = stage12_messages([7; 16]);
+    for one in &m {
+        assert!(one.validate().is_ok(), "{one:?}");
+    }
+    m[4].to = Address::Email(EMAIL.to_owned());
+    m[4].valid_since_ms = Some(START_MS);
+    assert!(
+        m[4].validate().is_err(),
+        "an inline approval goes to a device only"
+    );
+    if let Body::BreakglassUsed { approvals, .. } = &mut m[2].body {
+        *approvals = 1;
+    }
+    assert!(m[2].validate().is_err(), "break-glass needs two approvals");
+    if let Body::SupportAccessNotice { event, .. } = &mut m[1].body {
+        *event = SupportEvent::Revoked;
+    }
+    assert!(m[1].validate().is_err(), "an ended access has no end time");
+    let printed = format!("{:?}", stage12_messages([7; 16]));
+    for hidden in [
+        "Acme",
+        "Mehmet",
+        "#4411",
+        "INC-7",
+        "id.example",
+        "quarterly",
+    ] {
+        assert!(!printed.contains(hidden), "{printed}");
+    }
 }
 
 fn iys_messages(s: [u8; 16]) -> [Message; 1] {

@@ -499,6 +499,84 @@ pub const SMS_CODE_DIGITS: usize = 6;
 /// Longest CIBA `binding_message`, in characters (OP-155 m.3 (l)).
 pub const BINDING_MESSAGE_MAX: usize = 32;
 
+/// What a support access notice says (OP-157 m.3 (f), SI-21).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SupportEvent {
+    /// The person gave support access.
+    Granted,
+    /// The operator started acting with it.
+    Started,
+    /// It ended at its time or with its case.
+    Ended,
+    /// The person revoked it.
+    Revoked,
+}
+
+impl SupportEvent {
+    /// Every event.
+    pub const ALL: [Self; 4] = [Self::Granted, Self::Started, Self::Ended, Self::Revoked];
+
+    /// Its name on the wire.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Granted => "granted",
+            Self::Started => "started",
+            Self::Ended => "ended",
+            Self::Revoked => "revoked",
+        }
+    }
+
+    fn parse(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|e| e.name() == s)
+    }
+}
+
+/// What a break-glass alarm reports to the on-call Parties (OP-157 m.3 (h)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BreakglassAlarm {
+    /// A break-glass account signed in.
+    Signin,
+    /// A break-glass Grant was used.
+    Used,
+    /// A use was not reviewed within the review window.
+    ReviewOverdue,
+    /// No drill ran within the drill window.
+    DrillOverdue,
+    /// A break-glass Grant holder left; the Grant must be rotated.
+    RotationRequired,
+}
+
+impl BreakglassAlarm {
+    /// Every alarm.
+    pub const ALL: [Self; 5] = [
+        Self::Signin,
+        Self::Used,
+        Self::ReviewOverdue,
+        Self::DrillOverdue,
+        Self::RotationRequired,
+    ];
+
+    /// Its name on the wire.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Signin => "signin",
+            Self::Used => "used",
+            Self::ReviewOverdue => "review_overdue",
+            Self::DrillOverdue => "drill_overdue",
+            Self::RotationRequired => "rotation_required",
+        }
+    }
+
+    fn parse(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|e| e.name() == s)
+    }
+}
+
+/// Longest canonical render an in-notification approval carries, base64url (OP-157 m.3 (m)).
+pub const INLINE_RENDER_MAX: usize = 16 * 1024;
+
 /// What the message says.
 pub enum Body {
     /// A one-time code (`relay.message.otp.v1`).
@@ -710,6 +788,92 @@ pub enum Body {
         source: String,
         /// When it was given, Unix ms.
         consent_at_ms: u64,
+    },
+    /// A support operator asks for support access (`relay.message.support_access_request.v1`,
+    /// OP-157 m.3 (f)). It is an invitation only: the link opens the person's own grant page,
+    /// which the operator cannot open. The names are attacker input rendered as text.
+    SupportAccessRequest {
+        /// The support organization's name, at most 200 characters.
+        organization: String,
+        /// The case as the case system shows it, at most 200 characters.
+        case: String,
+        /// What the access would allow, at most 200 characters.
+        scope: String,
+        /// For how many minutes, 1 to 1440.
+        minutes: u32,
+        /// The `https` link to the person's own grant page, at most 2048 bytes.
+        link: Secret<String>,
+        /// Unix ms after which it is worthless.
+        expires_at_ms: u64,
+    },
+    /// Support access was given, started, ended or revoked (`relay.message.support_access_notice.v1`,
+    /// OP-157 m.3 (f), SI-21). The names are attacker input rendered as text.
+    SupportAccessNotice {
+        /// What happened.
+        event: SupportEvent,
+        /// The operator's display name, at most 200 characters.
+        operator: String,
+        /// The support organization's name, at most 200 characters.
+        organization: String,
+        /// The case, at most 200 characters.
+        case: String,
+        /// When, Unix ms.
+        at_ms: u64,
+        /// Unix ms when it ends; absent once it has ended.
+        until_ms: Option<u64>,
+    },
+    /// Emergency access was used on the person's account (`relay.message.breakglass_used.v1`,
+    /// OP-157 m.3 (h)), written in the same outbox transaction as the Exercise. The names are
+    /// attacker input rendered as text.
+    BreakglassUsed {
+        /// The acting organization's name, at most 200 characters.
+        organization: String,
+        /// The incident reference, at most 200 characters.
+        incident: String,
+        /// How many approvals the use carried.
+        approvals: u32,
+        /// When, Unix ms.
+        at_ms: u64,
+        /// Unix ms when the emergency access ends.
+        until_ms: u64,
+    },
+    /// A critical break-glass alarm to an on-call Party (`relay.message.breakglass_alarm.v1`,
+    /// OP-157 m.3 (h)). The name is attacker input rendered as text.
+    BreakglassAlarm {
+        /// What happened.
+        alarm: BreakglassAlarm,
+        /// The account's or Grant holder's display name, at most 200 characters.
+        account: String,
+        /// The `https` console link, at most 2048 bytes.
+        link: Secret<String>,
+        /// When, Unix ms.
+        at_ms: u64,
+    },
+    /// A CT1 approval inside the approver notification (`relay.message.approval_inline.v1`,
+    /// OP-157 m.3 (m)), to a registered approver device only: the whole canonical render, which
+    /// the approver SDK rebuilds with the Kernel before it signs H(AAS).
+    ApprovalInline {
+        /// The intent digest, 64 lower-case hex digits.
+        intent: String,
+        /// The canonical render, base64url of its dCBOR, at most [`INLINE_RENDER_MAX`] bytes.
+        render: String,
+        /// The render digest, 64 lower-case hex digits.
+        render_digest: String,
+        /// Unix ms after which it is worthless.
+        expires_at_ms: u64,
+    },
+    /// An access review campaign is open for a manager (`relay.message.review_campaign.v1`,
+    /// OP-157 m.3 (w)): a link to the view, never a queue. The name is attacker input rendered
+    /// as text.
+    ReviewCampaign {
+        /// The campaign's name, at most 200 characters.
+        campaign: String,
+        /// How many Grants it shows.
+        items: u32,
+        /// The `https` link, at most 2048 bytes.
+        link: Secret<String>,
+        /// Unix ms when the campaign's period ends.
+        due_ms: u64,
     },
 }
 
@@ -937,12 +1101,73 @@ impl fmt::Debug for Body {
                 .field("source", source)
                 .field("consent_at_ms", consent_at_ms)
                 .finish(),
+            Self::SupportAccessRequest {
+                minutes,
+                expires_at_ms,
+                ..
+            } => f
+                .debug_struct("SupportAccessRequest")
+                .field("organization", &"[redacted]")
+                .field("case", &"[redacted]")
+                .field("scope", &"[redacted]")
+                .field("minutes", minutes)
+                .field("link", &"[redacted]")
+                .field("expires_at_ms", expires_at_ms)
+                .finish(),
+            Self::SupportAccessNotice {
+                event,
+                at_ms,
+                until_ms,
+                ..
+            } => f
+                .debug_struct("SupportAccessNotice")
+                .field("event", event)
+                .field("operator", &"[redacted]")
+                .field("organization", &"[redacted]")
+                .field("case", &"[redacted]")
+                .field("at_ms", at_ms)
+                .field("until_ms", until_ms)
+                .finish(),
+            Self::BreakglassUsed {
+                approvals,
+                at_ms,
+                until_ms,
+                ..
+            } => f
+                .debug_struct("BreakglassUsed")
+                .field("organization", &"[redacted]")
+                .field("incident", &"[redacted]")
+                .field("approvals", approvals)
+                .field("at_ms", at_ms)
+                .field("until_ms", until_ms)
+                .finish(),
+            Self::BreakglassAlarm { alarm, at_ms, .. } => f
+                .debug_struct("BreakglassAlarm")
+                .field("alarm", alarm)
+                .field("account", &"[redacted]")
+                .field("link", &"[redacted]")
+                .field("at_ms", at_ms)
+                .finish(),
+            Self::ApprovalInline { expires_at_ms, .. } => f
+                .debug_struct("ApprovalInline")
+                .field("intent", &"[redacted]")
+                .field("render", &"[redacted]")
+                .field("render_digest", &"[redacted]")
+                .field("expires_at_ms", expires_at_ms)
+                .finish(),
+            Self::ReviewCampaign { items, due_ms, .. } => f
+                .debug_struct("ReviewCampaign")
+                .field("campaign", &"[redacted]")
+                .field("items", items)
+                .field("link", &"[redacted]")
+                .field("due_ms", due_ms)
+                .finish(),
         }
     }
 }
 
 /// Every kind of the contract, as outbox kind and `CloudEvents` `type`.
-pub const KINDS: [&str; 38] = [
+pub const KINDS: [&str; 44] = [
     "relay.message.otp.v1",
     "relay.message.magic_link.v1",
     "relay.message.password_changed.v1",
@@ -981,6 +1206,12 @@ pub const KINDS: [&str; 38] = [
     "relay.message.critical_interrupt.v1",
     "relay.message.sms_otp.v1",
     "relay.message.iys_consent.v1",
+    "relay.message.support_access_request.v1",
+    "relay.message.support_access_notice.v1",
+    "relay.message.breakglass_used.v1",
+    "relay.message.breakglass_alarm.v1",
+    "relay.message.approval_inline.v1",
+    "relay.message.review_campaign.v1",
 ];
 
 impl Body {
@@ -1008,6 +1239,12 @@ impl Body {
             Self::CriticalInterrupt { .. } => KINDS[35],
             Self::SmsOtp { .. } => KINDS[36],
             Self::IysConsent { .. } => KINDS[37],
+            Self::SupportAccessRequest { .. } => KINDS[38],
+            Self::SupportAccessNotice { .. } => KINDS[39],
+            Self::BreakglassUsed { .. } => KINDS[40],
+            Self::BreakglassAlarm { .. } => KINDS[41],
+            Self::ApprovalInline { .. } => KINDS[42],
+            Self::ReviewCampaign { .. } => KINDS[43],
         }
     }
 
@@ -1023,7 +1260,9 @@ impl Body {
             | Self::CibaInvite { expires_at_ms, .. }
             | Self::PushApproval { expires_at_ms, .. }
             | Self::PasskeySetupInvite { expires_at_ms, .. }
-            | Self::SmsOtp { expires_at_ms, .. } => Some(*expires_at_ms),
+            | Self::SmsOtp { expires_at_ms, .. }
+            | Self::SupportAccessRequest { expires_at_ms, .. }
+            | Self::ApprovalInline { expires_at_ms, .. } => Some(*expires_at_ms),
             Self::SemanticNotice { until_ms, .. } => *until_ms,
             _ => None,
         }
@@ -1151,6 +1390,79 @@ impl Body {
                     Err(Invalid("source"))
                 }
             }
+            // OP-157 m.3 (z)
+            Self::SupportAccessRequest {
+                organization,
+                case,
+                scope,
+                minutes,
+                link,
+                ..
+            } => {
+                name(organization, "organization")?;
+                name(case, "case")?;
+                name(scope, "scope")?;
+                if !(1..=1440).contains(minutes) {
+                    return Err(Invalid("minutes"));
+                }
+                https_link(link.expose())
+            }
+            Self::SupportAccessNotice {
+                event,
+                operator,
+                organization,
+                case,
+                until_ms,
+                ..
+            } => {
+                name(operator, "operator")?;
+                name(organization, "organization")?;
+                name(case, "case")?;
+                let ended = matches!(event, SupportEvent::Ended | SupportEvent::Revoked);
+                if ended == until_ms.is_some() {
+                    return Err(Invalid("until"));
+                }
+                Ok(())
+            }
+            Self::BreakglassUsed {
+                organization,
+                incident,
+                approvals,
+                ..
+            } => {
+                name(organization, "organization")?;
+                name(incident, "incident")?;
+                if *approvals < 2 {
+                    return Err(Invalid("approvals"));
+                }
+                Ok(())
+            }
+            Self::BreakglassAlarm { account, link, .. } => {
+                name(account, "account")?;
+                https_link(link.expose())
+            }
+            Self::ApprovalInline {
+                intent,
+                render,
+                render_digest,
+                ..
+            } => {
+                hex_id(intent, 64, "intent")?;
+                hex_id(render_digest, 64, "render_digest")?;
+                if render.is_empty()
+                    || render.len() > INLINE_RENDER_MAX
+                    || !render
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+                {
+                    return Err(Invalid("render"));
+                }
+                Ok(())
+            }
+            Self::ReviewCampaign { campaign, link, .. } => {
+                name(campaign, "campaign")?;
+                https_link(link.expose())
+            }
             _ => Ok(()),
         }
     }
@@ -1232,9 +1544,11 @@ impl Message {
         }
         // OP-156 m.3 (d), (f)
         let channel = match (&self.body, &self.to) {
-            (Body::PushApproval { .. }, to) => matches!(to, Address::Device(_)),
+            (Body::PushApproval { .. } | Body::ApprovalInline { .. }, to) => {
+                matches!(to, Address::Device(_))
+            }
             (Body::SmsOtp { .. }, to) => matches!(to, Address::Phone(_)),
-            (Body::CriticalInterrupt { .. }, _) => true,
+            (Body::CriticalInterrupt { .. } | Body::SupportAccessRequest { .. }, _) => true,
             // IDP-37 (4)
             (Body::IysConsent { channel, .. }, to) => match channel {
                 IysChannel::Email => matches!(to, Address::Email(_)),
@@ -1353,7 +1667,13 @@ impl Message {
             | Body::PasskeySetupInvite { .. }
             | Body::CriticalInterrupt { .. }
             | Body::SmsOtp { .. }
-            | Body::IysConsent { .. } => match self
+            | Body::IysConsent { .. }
+            | Body::SupportAccessRequest { .. }
+            | Body::SupportAccessNotice { .. }
+            | Body::BreakglassUsed { .. }
+            | Body::BreakglassAlarm { .. }
+            | Body::ApprovalInline { .. }
+            | Body::ReviewCampaign { .. } => match self
                 .body
                 .stage11_members(&mut m, "_ms", |ms| Ok::<_, Infallible>(ms.into()))
             {
@@ -1425,6 +1745,47 @@ impl Message {
                 },
                 source: text("source")?.to_owned(),
                 consent_at_ms: int("consent_at_ms")?,
+            },
+            "relay.message.support_access_request.v1" => Body::SupportAccessRequest {
+                organization: text("organization")?.to_owned(),
+                case: text("case")?.to_owned(),
+                scope: text("scope")?.to_owned(),
+                minutes: u32::try_from(int("minutes")?).map_err(|_| Invalid("minutes"))?,
+                link: Secret::new(text("link")?.to_owned()),
+                expires_at_ms: int("expires_at_ms")?,
+            },
+            "relay.message.support_access_notice.v1" => Body::SupportAccessNotice {
+                event: SupportEvent::parse(text("event")?).ok_or(Invalid("event"))?,
+                operator: text("operator")?.to_owned(),
+                organization: text("organization")?.to_owned(),
+                case: text("case")?.to_owned(),
+                at_ms: int("at_ms")?,
+                until_ms: opt_int(v, "until_ms")?,
+            },
+            "relay.message.breakglass_used.v1" => Body::BreakglassUsed {
+                organization: text("organization")?.to_owned(),
+                incident: text("incident")?.to_owned(),
+                approvals: u32::try_from(int("approvals")?).map_err(|_| Invalid("approvals"))?,
+                at_ms: int("at_ms")?,
+                until_ms: int("until_ms")?,
+            },
+            "relay.message.breakglass_alarm.v1" => Body::BreakglassAlarm {
+                alarm: BreakglassAlarm::parse(text("alarm")?).ok_or(Invalid("alarm"))?,
+                account: text("account")?.to_owned(),
+                link: Secret::new(text("link")?.to_owned()),
+                at_ms: int("at_ms")?,
+            },
+            "relay.message.approval_inline.v1" => Body::ApprovalInline {
+                intent: text("intent")?.to_owned(),
+                render: text("render")?.to_owned(),
+                render_digest: text("render_digest")?.to_owned(),
+                expires_at_ms: int("expires_at_ms")?,
+            },
+            "relay.message.review_campaign.v1" => Body::ReviewCampaign {
+                campaign: text("campaign")?.to_owned(),
+                items: u32::try_from(int("items")?).map_err(|_| Invalid("items"))?,
+                link: Secret::new(text("link")?.to_owned()),
+                due_ms: int("due_ms")?,
             },
             "relay.message.otp.v1" => Body::Otp {
                 code: Secret::new(text("code")?.to_owned()),
@@ -1631,7 +1992,13 @@ impl Message {
             | Body::PasskeySetupInvite { .. }
             | Body::CriticalInterrupt { .. }
             | Body::SmsOtp { .. }
-            | Body::IysConsent { .. } => {
+            | Body::IysConsent { .. }
+            | Body::SupportAccessRequest { .. }
+            | Body::SupportAccessNotice { .. }
+            | Body::BreakglassUsed { .. }
+            | Body::BreakglassAlarm { .. }
+            | Body::ApprovalInline { .. }
+            | Body::ReviewCampaign { .. } => {
                 self.body
                     .stage11_members(&mut m, "", |ms| rfc3339(ms).map(Value::from))?;
             }
@@ -1662,6 +2029,10 @@ fn opt_int(v: &Value, k: &'static str) -> Result<Option<u64>, Invalid> {
 impl Body {
     /// The members of the Stage 11 bodies, with times as `time` encodes them under their name
     /// plus `suffix` (`_ms` sealed, none on the wire).
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm per Stage 11 and Stage 12 body, each its members"
+    )]
     fn stage11_members<E>(
         &self,
         m: &mut Map<String, Value>,
@@ -1761,6 +2132,85 @@ impl Body {
                 );
                 m.insert("source".into(), text(source));
                 put_time(m, "consent_at", *consent_at_ms)?;
+            }
+            // OP-157 m.3 (z)
+            Self::SupportAccessRequest {
+                organization,
+                case,
+                scope,
+                minutes,
+                link,
+                expires_at_ms,
+            } => {
+                m.insert("organization".into(), text(organization));
+                m.insert("case".into(), text(case));
+                m.insert("scope".into(), text(scope));
+                m.insert("minutes".into(), (*minutes).into());
+                m.insert("link".into(), text(link.expose()));
+                put_time(m, "expires_at", *expires_at_ms)?;
+            }
+            Self::SupportAccessNotice {
+                event,
+                operator,
+                organization,
+                case,
+                at_ms,
+                until_ms,
+            } => {
+                m.insert("event".into(), event.name().into());
+                m.insert("operator".into(), text(operator));
+                m.insert("organization".into(), text(organization));
+                m.insert("case".into(), text(case));
+                put_time(m, "at", *at_ms)?;
+                if let Some(u) = until_ms {
+                    put_time(m, "until", *u)?;
+                }
+            }
+            Self::BreakglassUsed {
+                organization,
+                incident,
+                approvals,
+                at_ms,
+                until_ms,
+            } => {
+                m.insert("organization".into(), text(organization));
+                m.insert("incident".into(), text(incident));
+                m.insert("approvals".into(), (*approvals).into());
+                put_time(m, "at", *at_ms)?;
+                put_time(m, "until", *until_ms)?;
+            }
+            Self::BreakglassAlarm {
+                alarm,
+                account,
+                link,
+                at_ms,
+            } => {
+                m.insert("alarm".into(), alarm.name().into());
+                m.insert("account".into(), text(account));
+                m.insert("link".into(), text(link.expose()));
+                put_time(m, "at", *at_ms)?;
+            }
+            Self::ApprovalInline {
+                intent,
+                render,
+                render_digest,
+                expires_at_ms,
+            } => {
+                m.insert("intent".into(), text(intent));
+                m.insert("render".into(), text(render));
+                m.insert("render_digest".into(), text(render_digest));
+                put_time(m, "expires_at", *expires_at_ms)?;
+            }
+            Self::ReviewCampaign {
+                campaign,
+                items,
+                link,
+                due_ms,
+            } => {
+                m.insert("campaign".into(), text(campaign));
+                m.insert("items".into(), (*items).into());
+                m.insert("link".into(), text(link.expose()));
+                put_time(m, "due", *due_ms)?;
             }
             _ => {}
         }
