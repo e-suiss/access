@@ -234,8 +234,8 @@ async fn a_domain_with_a_recovery_entry_declares_it_in_its_metadata() {
         std::collections::BTreeSet::from([root]),
     );
     let (_, created) = w.admin_realm_with("recoverable", None, Some(entry)).await;
-    let signed = w.domains.metadata(created.domain).await.unwrap();
-    let msg = access_kernel::verify::cose::parse_sign1(&signed).unwrap();
+    let published = w.domains.metadata(created.domain).await.unwrap();
+    let msg = access_kernel::verify::cose::parse_sign1(&published).unwrap();
     let m = access_kernel::verify::key_scope::DomainMetadata::from_bytes(
         msg.payload.as_deref().unwrap(),
     )
@@ -245,8 +245,8 @@ async fn a_domain_with_a_recovery_entry_declares_it_in_its_metadata() {
         Some(access_kernel::verify::key_scope::Recovery::Available)
     );
     let (_, plain) = w.admin_realm_with("plain", None, None).await;
-    let signed = w.domains.metadata(plain.domain).await;
-    let declared = signed.map(|s| {
+    let other = w.domains.metadata(plain.domain).await;
+    let declared = other.map(|s| {
         let msg = access_kernel::verify::cose::parse_sign1(&s).unwrap();
         access_kernel::verify::key_scope::DomainMetadata::from_bytes(
             msg.payload.as_deref().unwrap(),
