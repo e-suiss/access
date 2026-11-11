@@ -402,6 +402,16 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "putPreferenceTopics" => IdpAction::RealmPreferenceTopics,
         "putSecurityNotices" => IdpAction::RealmSecurityNotices,
         "resendRelayMessage" => IdpAction::RelayResend,
+        "registerCaseSystem" => IdpAction::SupportCaseSystemRegister,
+        "retireCaseSystem" => IdpAction::SupportCaseSystemRetire,
+        "putSupportArtifactPolicy" => IdpAction::SupportArtifactPolicy,
+        "markBreakglassAccount" => IdpAction::OrgMemberBreakglass,
+        "clearBreakglassAccount" => IdpAction::OrgMemberBreakglassClear,
+        "scheduleReview" => IdpAction::ReviewSchedule,
+        "closeReview" => IdpAction::ReviewScheduleClose,
+        "putDelegatedAdmin" => IdpAction::RealmDelegatedAdmin,
+        "putApprovalInline" => IdpAction::RealmApprovalInline,
+        "putApprovalBatch" => IdpAction::RealmApprovalBatch,
         _ => return None,
     })
 }

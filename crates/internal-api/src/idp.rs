@@ -15,12 +15,12 @@ use access_kernel::schema::{ActionSchema, EffectClass, Spp, action_digest};
 pub const RESOURCE_NAMESPACE: &str = "idp";
 
 /// Version of every `idp.*` catalog (OP-153 m.3 (a), m.25 (b), OP-154 m.3 (a), OP-155 m.3 (a),
-/// OP-156 m.3 (a)).
-pub const CATALOG_VERSION: u64 = 6;
+/// OP-156 m.3 (a), OP-157 m.3 (a)).
+pub const CATALOG_VERSION: u64 = 7;
 
 /// The `idp.*` action namespaces, one SPP each (OP-141 m.35, OP-153 m.3 (a), OP-154 m.3 (a),
-/// OP-155 m.3 (a), OP-156 m.3 (a)).
-pub const NAMESPACES: [&str; 25] = [
+/// OP-155 m.3 (a), OP-156 m.3 (a), OP-157 m.3 (a)).
+pub const NAMESPACES: [&str; 27] = [
     "idp.account",
     "idp.agent",
     "idp.client",
@@ -37,11 +37,13 @@ pub const NAMESPACES: [&str; 25] = [
     "idp.proxy",
     "idp.realm",
     "idp.relay",
+    "idp.review",
     "idp.saml",
     "idp.scim",
     "idp.signal",
     "idp.social",
     "idp.ssh",
+    "idp.support",
     "idp.upstream",
     "idp.vault",
     "idp.vc",
@@ -444,11 +446,64 @@ pub enum IdpAction {
     /// Resends an undelivered Relay message as a new outbox row citing the original; a message
     /// whose sealed content was crypto-shredded cannot be resent (OP-156 m.3 (c)): CT1.
     RelayResend,
+    /// Changes a sign-in credential of the account; on the support protected list (§8.16 #3, OP-157
+    /// m.3 (a)): reserved, CT3.
+    AccountCredentialChange,
+    /// Changes the account's second factors; on the support protected list: reserved, CT3.
+    AccountMfaChange,
+    /// Changes the account's phone number; on the support protected list: reserved, CT3.
+    AccountPhoneChange,
+    /// Makes or changes a payment for the account; on the support protected list: reserved, CT3.
+    AccountPayment,
+    /// Raises the account's role; on the support protected list: reserved, CT3.
+    AccountRoleElevate,
+    /// Invites another person in the account's name; on the support protected list: reserved, CT3.
+    AccountInvite,
+    /// Creates an API key for the account; on the support protected list: reserved, CT3.
+    AccountApiKeyCreate,
+    /// Issues a long-lived token for the account; on the support protected list: reserved, CT3.
+    AccountTokenLongLived,
+    /// Uploads a redacted support artifact (HAR, JSON or a text log) for a case (TN-74, OP-157 m.3
+    /// (g)): CT1.
+    AccountArtifactUpload,
+    /// Reads a sealed support artifact under its own Grant (TN-74, OP-157 m.3 (g)): CT2.
+    AccountArtifactRead,
+    /// Registers a support case system as a Claim issuer of `support_case` Claims (OP-157 m.3 (e)):
+    /// CT2.
+    SupportCaseSystemRegister,
+    /// Retires a support case system; narrowing, CT1.
+    SupportCaseSystemRetire,
+    /// Opens support artifact uploads with their size and retention limits (OP-157 m.3 (g)): CT2.
+    SupportArtifactPolicy,
+    /// Closes support artifact uploads; narrowing, CT1.
+    SupportArtifactPolicyClose,
+    /// Names an access review campaign's period and scope, a view and never a queue (IDP-39 (3),
+    /// OP-157 m.3 (w)): CT2.
+    ReviewSchedule,
+    /// Ends an access review campaign; narrowing, CT1.
+    ReviewScheduleClose,
+    /// Marks an organization member's account as a break-glass account; the mark carries no authority
+    /// (INV-28, OP-157 m.3 (h)): CT2.
+    OrgMemberBreakglass,
+    /// Clears the break-glass mark; narrowing, CT1.
+    OrgMemberBreakglassClear,
+    /// Opens delegated administration through meta-action role Grants (TN-114, OP-157 m.3 (t)): CT2.
+    RealmDelegatedAdmin,
+    /// Closes delegated administration for new admin Grants; narrowing, CT1.
+    RealmDelegatedAdminClose,
+    /// Opens CT1 approval inside the approver notification (OP-157 m.3 (m)): CT2.
+    RealmApprovalInline,
+    /// Closes in-notification approval; narrowing, CT1.
+    RealmApprovalInlineClose,
+    /// Opens CT1 batch approval of at most ten requests (OP-157 m.3 (m)): CT2.
+    RealmApprovalBatch,
+    /// Closes batch approval; narrowing, CT1.
+    RealmApprovalBatchClose,
 }
 
 impl IdpAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 176] = [
+    pub const ALL: [Self; 200] = [
         Self::ClientRegister,
         Self::ClientUpdate,
         Self::ClientRetire,
@@ -625,10 +680,34 @@ impl IdpAction {
         Self::RealmSecurityNotices,
         Self::RealmSecurityNoticesClose,
         Self::RelayResend,
+        Self::AccountCredentialChange,
+        Self::AccountMfaChange,
+        Self::AccountPhoneChange,
+        Self::AccountPayment,
+        Self::AccountRoleElevate,
+        Self::AccountInvite,
+        Self::AccountApiKeyCreate,
+        Self::AccountTokenLongLived,
+        Self::AccountArtifactUpload,
+        Self::AccountArtifactRead,
+        Self::SupportCaseSystemRegister,
+        Self::SupportCaseSystemRetire,
+        Self::SupportArtifactPolicy,
+        Self::SupportArtifactPolicyClose,
+        Self::ReviewSchedule,
+        Self::ReviewScheduleClose,
+        Self::OrgMemberBreakglass,
+        Self::OrgMemberBreakglassClear,
+        Self::RealmDelegatedAdmin,
+        Self::RealmDelegatedAdminClose,
+        Self::RealmApprovalInline,
+        Self::RealmApprovalInlineClose,
+        Self::RealmApprovalBatch,
+        Self::RealmApprovalBatchClose,
     ];
 
     /// The catalog version that first declared it (OP-153 m.3 (a), OP-154 m.3 (a), OP-155
-    /// m.3 (a), OP-156 m.3 (a)).
+    /// m.3 (a), OP-156 m.3 (a), OP-157 m.3 (a)).
     #[must_use]
     #[expect(
         clippy::too_many_lines,
@@ -636,6 +715,30 @@ impl IdpAction {
     )]
     pub const fn since(self) -> u64 {
         match self {
+            Self::AccountCredentialChange
+            | Self::AccountMfaChange
+            | Self::AccountPhoneChange
+            | Self::AccountPayment
+            | Self::AccountRoleElevate
+            | Self::AccountInvite
+            | Self::AccountApiKeyCreate
+            | Self::AccountTokenLongLived
+            | Self::AccountArtifactUpload
+            | Self::AccountArtifactRead
+            | Self::SupportCaseSystemRegister
+            | Self::SupportCaseSystemRetire
+            | Self::SupportArtifactPolicy
+            | Self::SupportArtifactPolicyClose
+            | Self::ReviewSchedule
+            | Self::ReviewScheduleClose
+            | Self::OrgMemberBreakglass
+            | Self::OrgMemberBreakglassClear
+            | Self::RealmDelegatedAdmin
+            | Self::RealmDelegatedAdminClose
+            | Self::RealmApprovalInline
+            | Self::RealmApprovalInlineClose
+            | Self::RealmApprovalBatch
+            | Self::RealmApprovalBatchClose => 7,
             Self::DomainRegister
             | Self::DomainRetire
             | Self::DomainIssuerBind
@@ -862,7 +965,13 @@ impl IdpAction {
             | Self::RealmIys
             | Self::RealmIysClose
             | Self::RealmSecurityNotices
-            | Self::RealmSecurityNoticesClose => "idp.realm",
+            | Self::RealmSecurityNoticesClose
+            | Self::RealmDelegatedAdmin
+            | Self::RealmDelegatedAdminClose
+            | Self::RealmApprovalInline
+            | Self::RealmApprovalInlineClose
+            | Self::RealmApprovalBatch
+            | Self::RealmApprovalBatchClose => "idp.realm",
             Self::OrgCreate
             | Self::OrgUpdate
             | Self::OrgDomainClaim
@@ -873,7 +982,9 @@ impl IdpAction {
             | Self::OrgMemberRemove
             | Self::OrgSsoDraft
             | Self::OrgSsoEnforce
-            | Self::OrgSsoEnforceLift => "idp.org",
+            | Self::OrgSsoEnforceLift
+            | Self::OrgMemberBreakglass
+            | Self::OrgMemberBreakglassClear => "idp.org",
             Self::SamlSpRegister
             | Self::SamlSpMapping
             | Self::SamlSpUpdate
@@ -953,7 +1064,22 @@ impl IdpAction {
             | Self::AccountEmailChange
             | Self::AccountBind
             | Self::AccountImport
-            | Self::AccountGuardianshipRecord => "idp.account",
+            | Self::AccountGuardianshipRecord
+            | Self::AccountCredentialChange
+            | Self::AccountMfaChange
+            | Self::AccountPhoneChange
+            | Self::AccountPayment
+            | Self::AccountRoleElevate
+            | Self::AccountInvite
+            | Self::AccountApiKeyCreate
+            | Self::AccountTokenLongLived
+            | Self::AccountArtifactUpload
+            | Self::AccountArtifactRead => "idp.account",
+            Self::SupportCaseSystemRegister
+            | Self::SupportCaseSystemRetire
+            | Self::SupportArtifactPolicy
+            | Self::SupportArtifactPolicyClose => "idp.support",
+            Self::ReviewSchedule | Self::ReviewScheduleClose => "idp.review",
         }
     }
 
@@ -1033,7 +1159,7 @@ impl IdpAction {
             Self::AccountExport => "export",
             Self::AccountMigrationExport => "migration_export",
             Self::OrgDomainClaim => "domain_claim",
-            Self::OrgInvite => "invite",
+            Self::OrgInvite | Self::AccountInvite => "invite",
             Self::OrgSetupLink => "setup_link",
             Self::OrgDomainRelease => "domain_release",
             Self::OrgInviteRevoke => "invite_revoke",
@@ -1131,6 +1257,29 @@ impl IdpAction {
             Self::RealmSecurityNotices => "security_notices",
             Self::RealmSecurityNoticesClose => "security_notices_close",
             Self::RelayResend => "resend",
+            Self::AccountCredentialChange => "credential_change",
+            Self::AccountMfaChange => "mfa_change",
+            Self::AccountPhoneChange => "phone_change",
+            Self::AccountPayment => "payment",
+            Self::AccountRoleElevate => "role_elevate",
+            Self::AccountApiKeyCreate => "api_key_create",
+            Self::AccountTokenLongLived => "token_long_lived",
+            Self::AccountArtifactUpload => "artifact_upload",
+            Self::AccountArtifactRead => "artifact_read",
+            Self::SupportCaseSystemRegister => "case_system_register",
+            Self::SupportCaseSystemRetire => "case_system_retire",
+            Self::SupportArtifactPolicy => "artifact_policy",
+            Self::SupportArtifactPolicyClose => "artifact_policy_close",
+            Self::ReviewSchedule => "schedule",
+            Self::ReviewScheduleClose => "schedule_close",
+            Self::OrgMemberBreakglass => "member_breakglass",
+            Self::OrgMemberBreakglassClear => "member_breakglass_clear",
+            Self::RealmDelegatedAdmin => "delegated_admin",
+            Self::RealmDelegatedAdminClose => "delegated_admin_close",
+            Self::RealmApprovalInline => "approval_inline",
+            Self::RealmApprovalInlineClose => "approval_inline_close",
+            Self::RealmApprovalBatch => "approval_batch",
+            Self::RealmApprovalBatchClose => "approval_batch_close",
         }
     }
 
@@ -1207,7 +1356,15 @@ impl IdpAction {
             | Self::RealmSmsOtpClose
             | Self::RealmIysClose
             | Self::RealmSecurityNoticesClose
-            | Self::RelayResend => EffectClass::Reversible,
+            | Self::RelayResend
+            | Self::AccountArtifactUpload
+            | Self::SupportCaseSystemRetire
+            | Self::SupportArtifactPolicyClose
+            | Self::ReviewScheduleClose
+            | Self::OrgMemberBreakglassClear
+            | Self::RealmDelegatedAdminClose
+            | Self::RealmApprovalInlineClose
+            | Self::RealmApprovalBatchClose => EffectClass::Reversible,
             _ => EffectClass::Irreversible,
         }
     }
@@ -1238,6 +1395,14 @@ impl IdpAction {
                 | Self::DomainIssuerBind
                 | Self::SshCaEmergency
                 | Self::LinuxBreakGlassPolicy
+                | Self::AccountCredentialChange
+                | Self::AccountMfaChange
+                | Self::AccountPhoneChange
+                | Self::AccountPayment
+                | Self::AccountRoleElevate
+                | Self::AccountInvite
+                | Self::AccountApiKeyCreate
+                | Self::AccountTokenLongLived
         )
     }
 
@@ -1246,6 +1411,10 @@ impl IdpAction {
     pub fn params(self) -> BTreeMap<String, String> {
         match self {
             Self::RelayResend => BTreeMap::from([(String::from("event_id"), String::from("text"))]),
+            // OP-157 m.3 (c), (g)
+            Self::AccountArtifactUpload | Self::AccountArtifactRead => {
+                BTreeMap::from([(String::from("case"), String::from("text"))])
+            }
             _ => BTreeMap::new(),
         }
     }

@@ -188,8 +188,9 @@ async fn the_upgrade_waits_out_the_time_lock_and_reuses_its_open_attempt() {
 /// Opens Genesis as `idp.*` catalog `version` declared it: catalog 1 has no `idp.org` and no
 /// `idp.social`, catalog 3 no `idp.agent` and no `idp.vault`, catalog 4 none of `idp.saml`,
 /// `idp.scim`, `idp.gateway`, `idp.federation` and `idp.vc`, catalog 5 none of `idp.domain`,
-/// `idp.proxy`, `idp.ssh`, `idp.linux`, `idp.hr`, `idp.export`, `idp.signal` and `idp.relay`, and none a later
-/// action in the other namespaces; the CT3 time-lock is zero.
+/// `idp.proxy`, `idp.ssh`, `idp.linux`, `idp.hr`, `idp.export`, `idp.signal` and `idp.relay`,
+/// catalog 6 neither `idp.support` nor `idp.review`, and none a later action in the other
+/// namespaces; the CT3 time-lock is zero.
 struct FirstCatalog<'a> {
     plane: &'a TestPlane,
     domains: &'a TestDomains,
@@ -635,6 +636,80 @@ async fn a_catalog_5_realm_refuses_the_version_6_actions_until_its_upgrade_commi
         assert!(
             matches!(
                 exercise(&w, domain, "fifth", action, kind).await,
+                Verdict::Committed(_)
+            ),
+            "{action:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_catalog_6_realm_refuses_the_version_7_actions_until_its_upgrade_commits() {
+    // OP-157 m.3 (a), OP-153 m.3 (a)
+    let w = World::new("catalog-v7").await;
+    let governance = FirstCatalog {
+        plane: &w.plane,
+        domains: &w.domains,
+        version: 6,
+    };
+    let (tenant, created) = realm_with(&w, &governance, "sixth").await;
+    let domain = created.domain;
+    assert!(accepts(&w, domain, IdpAction::RelayResend).await);
+    assert!(accepts(&w, domain, IdpAction::AccountEmailChange).await);
+    for action in IdpAction::ALL.into_iter().filter(|a| a.since() == 7) {
+        assert!(!accepts(&w, domain, action).await, "{action:?}");
+    }
+
+    let declared = DeclaredTargets::default();
+    let b = bootstrap(&w, &declared);
+    let root = root_key(&w.keys).unwrap();
+    let party = root_party(&root.public_key());
+    b.onboard(tenant, created.realm, domain, &root, party)
+        .await
+        .unwrap();
+    w.domains.release().await;
+    for (action, kind) in [
+        (IdpAction::RealmDelegatedAdmin, "realm"),
+        (IdpAction::SupportCaseSystemRegister, "support"),
+        (IdpAction::ReviewSchedule, "review"),
+        (IdpAction::OrgMemberBreakglass, "org"),
+        (IdpAction::AccountArtifactUpload, "account"),
+    ] {
+        let Verdict::NotAllowed { decision, .. } =
+            exercise(&w, domain, "sixth", action, kind).await
+        else {
+            panic!("{action:?} before the upgrade");
+        };
+        assert!(catalog_upgrade_required(&decision), "{action:?}");
+    }
+
+    let summary = w.run(&old_plan("sixth")).await;
+    let mut namespaces: Vec<_> = upgraded(&summary, "sixth")
+        .iter()
+        .map(|c| (c.namespace.as_str(), c.state))
+        .collect();
+    namespaces.sort_unstable();
+    assert_eq!(
+        namespaces,
+        vec![
+            ("idp.account", "accepted"),
+            ("idp.org", "accepted"),
+            ("idp.realm", "accepted"),
+            ("idp.review", "accepted"),
+            ("idp.support", "accepted"),
+        ]
+    );
+    for action in IdpAction::ALL {
+        assert!(accepts(&w, domain, action).await, "{action:?}");
+    }
+    for (action, kind) in [
+        (IdpAction::RealmDelegatedAdmin, "realm"),
+        (IdpAction::SupportCaseSystemRegister, "support"),
+        (IdpAction::ReviewSchedule, "review"),
+    ] {
+        assert!(
+            matches!(
+                exercise(&w, domain, "sixth", action, kind).await,
                 Verdict::Committed(_)
             ),
             "{action:?}"
