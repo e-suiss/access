@@ -122,3 +122,53 @@ impl LogState {
 pub fn equivocates(a: &Checkpoint, b: &Checkpoint) -> bool {
     a.origin == b.origin && a.size == b.size && a.root != b.root
 }
+
+/// Most proof lines an `add-checkpoint` request carries (RFC 9162 bound for 2^63 leaves).
+pub const MAX_PROOF: usize = 63;
+
+/// Why an `add-checkpoint` body is malformed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("malformed add-checkpoint request")]
+pub struct WireError;
+
+/// The C2SP `tlog-witness` `add-checkpoint` body: `old <size>`, one base64 proof hash per
+/// line, an empty line, then the signed checkpoint note.
+#[must_use]
+pub fn add_checkpoint(old: u64, proof: &[Hash], note: &str) -> alloc::string::String {
+    let mut out = alloc::format!("old {old}\n");
+    for h in proof {
+        out.push_str(&suiss_crypto::note::base64_encode(h));
+        out.push('\n');
+    }
+    out.push('\n');
+    out.push_str(note);
+    out
+}
+
+/// Splits an `add-checkpoint` body into the base size, the proof and the note.
+///
+/// # Errors
+/// [`WireError`].
+pub fn parse_add_checkpoint(body: &str) -> Result<(u64, alloc::vec::Vec<Hash>, &str), WireError> {
+    let (head, note) = body.split_once("\n\n").ok_or(WireError)?;
+    let mut lines = head.split('\n');
+    let old = lines
+        .next()
+        .and_then(|l| l.strip_prefix("old "))
+        .filter(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+        .filter(|n| *n == "0" || !n.starts_with('0'))
+        .and_then(|n| n.parse::<u64>().ok())
+        .ok_or(WireError)?;
+    let mut proof = alloc::vec::Vec::new();
+    for l in lines {
+        if proof.len() == MAX_PROOF {
+            return Err(WireError);
+        }
+        let h: Hash = suiss_crypto::note::base64_decode(l)
+            .ok()
+            .and_then(|b| b.try_into().ok())
+            .ok_or(WireError)?;
+        proof.push(h);
+    }
+    Ok((old, proof, note))
+}

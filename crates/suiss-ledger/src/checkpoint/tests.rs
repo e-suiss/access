@@ -179,3 +179,30 @@ fn same_size_other_root_is_equivocation() {
     assert!(!equivocates(&a, &body(6, [2; 32])));
     assert!(!equivocates(&a, &a.clone()));
 }
+
+// CMP-6, T17
+#[test]
+fn the_add_checkpoint_body_round_trips() {
+    use witness::{WireError, add_checkpoint, parse_add_checkpoint};
+    let note = "o\n2\nAAAA\n\n— o abcd\n";
+    let body = add_checkpoint(7, &[[1; 32], [2; 32]], note);
+    assert_eq!(
+        parse_add_checkpoint(&body).unwrap(),
+        (7, vec![[1; 32], [2; 32]], note)
+    );
+    assert_eq!(
+        parse_add_checkpoint(&add_checkpoint(0, &[], note))
+            .unwrap()
+            .0,
+        0
+    );
+    for bad in [
+        "old 07\n\nx",
+        "old x\n\nx",
+        "new 1\n\nx",
+        "old 1\nzz\n\nx",
+        "old 1",
+    ] {
+        assert_eq!(parse_add_checkpoint(bad), Err(WireError), "{bad}");
+    }
+}
