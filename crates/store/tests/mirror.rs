@@ -97,9 +97,9 @@ async fn replica_acks_are_kept_per_size_and_read_as_the_largest() {
     let row = |size: u64| ReplicaAckRow {
         replica: String::from("acme-replica"),
         size,
-        root: [size as u8; 32],
+        root: [u8::try_from(size).unwrap(); 32],
         acked_at: 10 * size,
-        signature: [size as u8; 64],
+        signature: [u8::try_from(size).unwrap(); 64],
     };
     assert!(ack(&db.sequencer, &d, &row(3)).await.unwrap());
     assert!(!ack(&db.sequencer, &d, &row(3)).await.unwrap());
