@@ -2242,6 +2242,7 @@ mod issuers;
 pub mod lab;
 pub mod linux;
 pub mod management;
+pub mod mirror;
 pub mod one;
 pub mod outcome;
 pub mod projection;

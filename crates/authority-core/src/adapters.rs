@@ -47,6 +47,7 @@ mod audit;
 mod binding;
 mod consent;
 mod linux;
+mod mirror;
 mod one;
 mod projection;
 mod proxy;

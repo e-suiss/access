@@ -673,7 +673,9 @@ impl Streamer {
             return Err(ExportError::Chain);
         }
         match &self.previous {
-            Some(prev) => check_link(prev, &core, &self.domain).map_err(|_| ExportError::Chain)?,
+            Some(prev) => {
+                check_link(prev, &core, &self.domain).map_err(|_| ExportError::Chain)?;
+            }
             None if pos > 0 && r.header.domain != Some(self.domain) => {
                 return Err(ExportError::Chain);
             }
@@ -845,7 +847,7 @@ pub fn read_stream(bytes: &[u8]) -> Result<Streamed, ExportError> {
                     .map_err(|_| ExportError::Malformed("record"))?;
                 match &previous {
                     Some(prev) => {
-                        check_link(prev, &core, &domain).map_err(|_| ExportError::Chain)?
+                        check_link(prev, &core, &domain).map_err(|_| ExportError::Chain)?;
                     }
                     None if d.header.pos > 0 && d.header.domain != Some(domain) => {
                         return Err(ExportError::Chain);

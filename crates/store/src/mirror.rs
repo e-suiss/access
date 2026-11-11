@@ -261,3 +261,41 @@ pub async fn checkpoint_exists(
     t.commit().await?;
     Ok(found)
 }
+
+/// The leaf hashes of `domain`'s records `from..to` (exclusive), in order: the Merkle frontier
+/// before an export's range.
+///
+/// # Errors
+/// [`StoreError`]; [`StoreError::Corrupt`] when a position is missing.
+pub async fn leaf_hashes(
+    pool: &PgPool,
+    domain: &DomainId,
+    from: u64,
+    to: u64,
+) -> Result<Vec<[u8; 32]>, StoreError> {
+    if to <= from {
+        return Ok(Vec::new());
+    }
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let rows = sqlx::query!(
+        "SELECT pos, leaf_hash FROM access.authority_log
+          WHERE domain_id = $1 AND pos >= $2 AND pos < $3 ORDER BY pos",
+        domain.as_bytes().as_slice(),
+        signed(from)?,
+        signed(to)?,
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    let mut out = Vec::with_capacity(rows.len());
+    for (expected, r) in (from..).zip(rows) {
+        if unsigned(r.pos)? != expected {
+            return Err(StoreError::Corrupt);
+        }
+        out.push(r.leaf_hash.try_into().map_err(|_| StoreError::Corrupt)?);
+    }
+    if u64::try_from(out.len()).ok() != to.checked_sub(from) {
+        return Err(StoreError::Corrupt);
+    }
+    Ok(out)
+}
