@@ -1689,10 +1689,10 @@ async fn with_the_identity_database_cut_off_only_local_verification_goes_on() {
     access_store::testing::refuse_connections(&w.db, true)
         .await
         .unwrap();
-    // EP-3, OPI-3: the answer a moment ago is no evidence now; active=false, never 503
+    // EP-3, OPI-3
     assert_eq!(w.introspect(&access).await["active"], false);
     assert_eq!(w.introspect(&refresh).await["active"], false);
-    // EP-2, G50: 503 + Retry-After, never invalid_grant
+    // EP-2, G50
     let r = w
         .token(
             &[("grant_type", "refresh_token"), ("refresh_token", &refresh)],
@@ -1710,7 +1710,7 @@ async fn with_the_identity_database_cut_off_only_local_verification_goes_on() {
         Reply::Unavailable,
         "no revocation is taken while it cannot be kept"
     );
-    // EP-6, U39, HL-22: the resource server's own check goes on within the lifetime, no window
+    // EP-6, U39, HL-22
     assert!(verify_local(jwks.as_bytes(), &access, &issuer, &aud, now()).is_some());
     assert!(verify_local(jwks.as_bytes(), &access, &issuer, &aud, exp_ms + SKEW_MS).is_some());
     assert!(

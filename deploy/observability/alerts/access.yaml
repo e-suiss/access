@@ -154,7 +154,7 @@ groups:
           summary: The live state of a domain differs from the fold of its records
           description: >-
             Commits to the domain stopped. The fold from Genesis decides; rebuild the live state
-            from the log once the commitments check.
+            out of the log once the commitments check.
       # U9, HL-7, OP-158 m.3 (d)
       - alert: AccessWitnessEquivocation
         expr: increase(access_integrity_alarms_total{kind="equivocation"}[5m]) > 0

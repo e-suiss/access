@@ -26,7 +26,7 @@ async fn fo_09_with_the_signer_gone_a_decision_carries_no_signed_artefact() {
     let a = p.post("/access/v1/evaluation", &body).await;
     let v = a.json();
     assert_eq!(a.status, StatusCode::OK, "{v}");
-    // TI-12: the outcome is recorded, the artefact waits; nothing unsigned is handed out
+    // TI-12
     assert!(v["context"].get("receipt").is_none(), "{v}");
     assert!(v["context"].get("pap").is_none(), "{v}");
     let row = p.recorded(&body).await;

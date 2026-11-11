@@ -34,7 +34,7 @@ async fn fo_06_without_a_witness_a_revocation_is_recorded_and_its_ack_waits() {
     assert!(head >= row.decision_pos, "the record is in the log");
     let through = position(&v["context"]["witnessed_through"]);
     assert!(through.is_none_or(|t| t < row.decision_pos), "{v}");
-    // §17.7.1: the client asks again with the same nonce; the outcome stays, the ack still waits
+    // §17.7.1, TI-8
     let again = p.post("/access/v1/evaluation", &body).await;
     let w = again.json();
     assert_eq!(again.status, StatusCode::OK, "{w}");

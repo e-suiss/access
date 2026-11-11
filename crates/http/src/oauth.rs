@@ -223,8 +223,7 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
     {
         Ok(Some(r)) => r,
         Ok(None) => return crate::not_found_problem().into_response(),
-        // OP-45 rule 3, EP-3: without the realm's rows no token is provably active, and an
-        // introspection answer is never 503
+        // OP-45, EP-3
         Err(_) if endpoint == Endpoint::Introspect => {
             return render(Reply::oauth_inactive());
         }

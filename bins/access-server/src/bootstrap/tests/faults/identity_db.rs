@@ -23,13 +23,13 @@ async fn fo_18_with_the_identity_database_cut_off_nothing_is_issued_and_introspe
     access_store::testing::refuse_connections(&w.db, true)
         .await
         .unwrap();
-    // G50, EP-2: 503 + Retry-After, never invalid_grant
+    // G50, EP-2
     let (r, body) = send(&oauth, form("/token", refresh, None)).await;
     let text = String::from_utf8_lossy(&body).into_owned();
     assert_eq!(r.status(), StatusCode::SERVICE_UNAVAILABLE, "{text}");
     assert!(r.headers().get("retry-after").is_some());
     assert!(!text.contains("invalid_grant"), "{text}");
-    // EP-3: active=false, never 503
+    // EP-3
     let (r, body) = send(
         &oauth,
         form(
@@ -42,7 +42,7 @@ async fn fo_18_with_the_identity_database_cut_off_nothing_is_issued_and_introspe
     assert_eq!(r.status(), StatusCode::OK);
     let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(v, serde_json::json!({ "active": false }));
-    // OP-45 rule 4: no revocation is taken while it cannot be kept
+    // OP-45
     let (r, _) = send(
         &oauth,
         form("/revoke", "token=rt-any", Some("Basic Y2xpOnNlY3JldA==")),

@@ -57,7 +57,7 @@ async fn fo_05_with_derived_down_commits_go_on_and_a_list_is_never_fresher_than_
     assert_eq!(a.status, StatusCode::OK, "commit goes on: {}", a.json());
     assert!(!p.w.domains.derive().await.is_empty(), "derived is down");
 
-    // G43: signed later, the list still names its position's own time
+    // G43
     let (head, recorded_at) = p.w.domains.head(p.domain).await.unwrap();
     assert!(
         access_store::projections::revoke_family(

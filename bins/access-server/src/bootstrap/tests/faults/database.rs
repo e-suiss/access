@@ -30,7 +30,7 @@ async fn fo_02_with_the_authority_database_gone_nothing_commits_and_nothing_is_a
     access_store::testing::refuse_connections(&p.w.db, false)
         .await
         .unwrap();
-    // TI-8: the same nonce commits once the primary answers again
+    // TI-8
     let mut answered = None;
     for _ in 0..40 {
         let a = p.post("/access/v1/evaluation", &body).await;
