@@ -196,5 +196,128 @@ pub fn fold(records: &[RecordEnvelope]) -> Result<State, FoldError> {
     Ok(state)
 }
 
+/// The freshest checkpoint a declared witness co-signed, as its ingested `checkpoint` Claim
+/// says (SEC22, §13.6).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct WitnessHead {
+    /// Tree size.
+    pub size: u64,
+    /// Root hash.
+    pub root: [u8; 32],
+    /// Trusted time of the Claim, Unix ms.
+    pub at: u64,
+}
+
+impl WitnessHead {
+    /// A head of `size` and `root` claimed at `at`.
+    #[must_use]
+    pub const fn new(size: u64, root: [u8; 32], at: u64) -> Self {
+        Self { size, root, at }
+    }
+}
+
+/// How old a witness's checkpoint Claim may be for the rollback guard (SEC22, PD): 1 hour.
+pub const WITNESS_FRESHNESS_MS: u64 = 3_600_000;
+
+/// What the rollback guard asks of a recovery that cites checkpoint `N` (SEC22, §13.6).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Guard {
+    /// Arm (i): the replica reproduces the witnesses' highest checkpoint and `N` is it.
+    Pass,
+    /// Arm (ii): no replica, or one behind the witnesses, or a witness without a fresh Claim.
+    /// The meta-anchor root's general threshold is required and `(from, until]` is the declared
+    /// lost suffix.
+    Lossy {
+        /// `N`.
+        from: u64,
+        /// The highest witnessed size.
+        until: u64,
+    },
+}
+
+/// Why the rollback guard refuses a recovery (SEC21, SEC22).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum GuardError {
+    /// `N` is below `R*`, the highest witnessed checkpoint the replica reproduces.
+    #[error("rollback-guard")]
+    Rollback,
+    /// `N` is above every witnessed checkpoint, or its root is not the one a witness co-signed at
+    /// that size.
+    #[error("rollback-guard-unwitnessed")]
+    Unwitnessed,
+    /// Two witnesses co-signed different roots at one size and the recovery does not declare the
+    /// fork, or declares one the Claims do not show.
+    #[error("rollback-guard-fork")]
+    Fork,
+}
+
+/// The rollback guard (SEC21, SEC22, §13.6): `heads` holds one entry per declared witness,
+/// `None` where no Claim was ingested; `replica` is `R*`, the highest witnessed size the
+/// provider-external replica reproduces, `None` without a reachable replica; `cited` is `N` with
+/// its root; `fork` says the recovery declares a fork. Only Claims at most
+/// [`WITNESS_FRESHNESS_MS`] old count. With a fork, `N` lies on the branch the replica
+/// reproduces (at most `R*`), or without a replica below the first forked size.
+///
+/// # Errors
+/// [`GuardError`].
+pub fn rollback_guard(
+    heads: &[Option<WitnessHead>],
+    replica: Option<u64>,
+    cited: (u64, [u8; 32]),
+    fork: bool,
+    now: u64,
+) -> Result<Guard, GuardError> {
+    let fresh: Vec<WitnessHead> = heads
+        .iter()
+        .flatten()
+        .filter(|h| h.at <= now && now.saturating_sub(h.at) <= WITNESS_FRESHNESS_MS)
+        .copied()
+        .collect();
+    let all_fresh = !heads.is_empty() && fresh.len() == heads.len();
+    let mut roots: BTreeMap<u64, BTreeSet<[u8; 32]>> = BTreeMap::new();
+    for h in &fresh {
+        roots.entry(h.size).or_default().insert(h.root);
+    }
+    let forked = roots.values().any(|r| r.len() > 1);
+    if forked != fork {
+        return Err(GuardError::Fork);
+    }
+    let (n, root) = cited;
+    let highest = fresh
+        .iter()
+        .map(|h| h.size)
+        .max()
+        .ok_or(GuardError::Unwitnessed)?;
+    if n > highest || roots.get(&n).is_some_and(|r| !r.contains(&root)) {
+        return Err(GuardError::Unwitnessed);
+    }
+    if let Some(r) = replica
+        && n < r
+    {
+        return Err(GuardError::Rollback);
+    }
+    let fork_at = roots
+        .iter()
+        .find_map(|(size, r)| (r.len() > 1).then_some(*size));
+    let on_branch = match (fork_at, replica) {
+        (None, _) => true,
+        (Some(_), Some(r)) => n <= r,
+        (Some(at), None) => n < at,
+    };
+    if !on_branch {
+        return Err(GuardError::Fork);
+    }
+    match replica {
+        Some(r) if all_fresh && !forked && r == highest && n == r => Ok(Guard::Pass),
+        _ => Ok(Guard::Lossy {
+            from: n,
+            until: highest,
+        }),
+    }
+}
+
 #[cfg(test)]
 mod tests;

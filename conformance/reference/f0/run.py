@@ -284,6 +284,18 @@ def record_expected(case):
     return {field: case[field] for field in fields if field in case}
 
 
+def run_recovery_guard(case, document):
+    if document.get("freshness_ms") != fold.WITNESS_FRESHNESS_MS:
+        return {"freshness_ms": document.get("freshness_ms")}, "freshness"
+    heads = [h or None for h in decode_canonical(bytes.fromhex(case["heads"]))]
+    try:
+        return fold.rollback_guard(
+            heads, case["replica"], case["cited"], bytes.fromhex(case["cited_root"]), case["fork"], case["now"]
+        ), None
+    except fold.GuardError as error:
+        return {"error": error.code}, None
+
+
 def run_version_downgrade(case, document):
     if document.get("delay_ms") != version_check.DOWNGRADE_DELAY_MS:
         return {"delay_ms": document.get("delay_ms")}, "delay"
@@ -564,6 +576,7 @@ OPERATIONS = {
     "record.fold": (run_record_fold, ("state", "rejection")),
     "version.check": (run_version_check, ("valid", "error", "track")),
     "version.downgrade": (run_version_downgrade, ("expansion",)),
+    "recovery.guard": (run_recovery_guard, ("guard", "from", "until", "error")),
     "version.transition": (run_version_transition, ("minimum",)),
     "algebra.meet": (run_algebra_meet, ("meet", "bottom", "rejection")),
     "digest.intent": (run_digest_intent, ("digest", "rejection")),

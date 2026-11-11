@@ -195,3 +195,5 @@ fn a_decision_without_an_outcome_member_is_rejected() {
     )]));
     assert_eq!(effects(&unnamed), Err(FoldError::Outcome));
 }
+
+mod guard;
