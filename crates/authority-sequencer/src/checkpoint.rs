@@ -244,5 +244,66 @@ pub fn verify(
     Ok((cp, ext))
 }
 
+/// What made a checkpoint (`checkpoint.cddl` `checkpoint-trigger`).
+#[must_use]
+pub const fn trigger(due: suiss_ledger::checkpoint::cadence::Due) -> &'static str {
+    use suiss_ledger::checkpoint::cadence::Due;
+    match due {
+        Due::Heartbeat => "heartbeat",
+        Due::Records => "records",
+        Due::OutOfCycle => "out-of-cycle",
+        _ => "interval",
+    }
+}
+
+/// The `checkpoint` Claim body (`checkpoint.cddl` `checkpoint-claim`): the signed note, the
+/// excerpt of its key and what made it; the Claim's value is this body's digest (OP-158 m.3
+/// (c), m.6).
+///
+/// # Errors
+/// [`CheckpointError::Extension`] when it cannot be encoded.
+pub fn claim_body(signed: &SignedCheckpoint, trigger: &str) -> Result<Vec<u8>, CheckpointError> {
+    use suiss_crypto::dcbor::Value;
+    dcbor::encode(
+        &Value::Map(vec![
+            (Value::text("note"), Value::text(&signed.note)),
+            (Value::text("excerpt"), Value::Bytes(signed.excerpt.clone())),
+            (Value::text("trigger"), Value::text(trigger)),
+        ]),
+        Limits::CEILING,
+    )
+    .map_err(|_| CheckpointError::Extension)
+}
+
+/// The State entry an accepted `checkpoint` Claim `claim` writes for the rollback guard R*:
+/// key `dCBOR(["witness_head", claim])`, value `dCBOR(checkpoint-ref)` `{size, root}`
+/// (`kernel.cddl`, SEC21, OP-158 m.6).
+///
+/// # Errors
+/// [`CheckpointError::Extension`] when it cannot be encoded.
+pub fn witness_head_entry(
+    claim: &access_kernel::model::Id,
+    cp: &Checkpoint,
+) -> Result<(Vec<u8>, Vec<u8>), CheckpointError> {
+    use suiss_crypto::dcbor::Value;
+    let key = dcbor::encode(
+        &Value::Array(vec![
+            Value::text("witness_head"),
+            Value::Bytes(claim.0.to_vec()),
+        ]),
+        Limits::CEILING,
+    )
+    .map_err(|_| CheckpointError::Extension)?;
+    let value = dcbor::encode(
+        &Value::Map(vec![
+            (Value::text("size"), Value::Unsigned(cp.size)),
+            (Value::text("root"), Digest(cp.root).to_value()),
+        ]),
+        Limits::CEILING,
+    )
+    .map_err(|_| CheckpointError::Extension)?;
+    Ok((key, value))
+}
+
 #[cfg(test)]
 mod tests;

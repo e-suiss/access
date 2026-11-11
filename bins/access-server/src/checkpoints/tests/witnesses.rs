@@ -593,9 +593,25 @@ async fn real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation() {
         "{printed}"
     );
 
+    // U11
+    let mut own = own;
+    own.kill();
+    let fenced = Command::new(witness_bin())
+        .args([
+            "fence",
+            own.config.to_str().unwrap(),
+            &access_kernel::json::b64url_encode(&d.0),
+            "7",
+        ])
+        .output()
+        .unwrap();
+    assert!(fenced.status.success(), "{fenced:?}");
+    let own = own.restart();
+    publisher.targets[1] = own.target("Suiss");
+
     // TI-RT2
     log.push(&db, 1, wall() + 120_000).await;
-    domain_step(
+    let (row, out) = domain_step(
         (&heads, &signer, &publisher),
         pools,
         (d, &mut Cadence::default().resume(7, 0)),
@@ -604,6 +620,21 @@ async fn real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation() {
     .await
     .unwrap()
     .unwrap();
+    assert_eq!(
+        (row.size, out.independent, out.cosigned),
+        (8, 1, 1),
+        "{out:?}"
+    );
+    assert!(
+        out.failed.iter().any(|(url, e)| *url == own.url
+            && *e
+                == access_authority_sequencer::witness::WitnessError::Said(
+                    suiss_ledger::checkpoint::witness::Refused::Fenced,
+                    403
+                )),
+        "{out:?}"
+    );
+    assert_eq!(own.cosigned(d), [2, 5, 7, 7]);
     assert_eq!(
         time_check(),
         Err(suiss_ledger::time::TimeError::AheadOfWitness)

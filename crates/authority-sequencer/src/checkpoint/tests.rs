@@ -290,3 +290,32 @@ fn extension_lines_are_strict() {
     ];
     assert_eq!(extensions(&cp).unwrap().versions, Digest([1; 32]));
 }
+
+// SEC21, OP-158 m.3 (c), m.6
+#[test]
+fn a_checkpoint_claim_writes_its_witness_head_for_the_rollback_guard() {
+    use suiss_crypto::dcbor::{Limits, Value, decode};
+    let cp = Checkpoint {
+        origin: String::from("sha-256:x"),
+        size: 9,
+        root: [4; 32],
+        extensions: vec![],
+    };
+    let claim = access_kernel::model::Id([1; 16]);
+    let (key, value) = super::witness_head_entry(&claim, &cp).unwrap();
+    assert_eq!(
+        decode(&key, Limits::CEILING).unwrap(),
+        Value::Array(vec![Value::text("witness_head"), Value::Bytes(vec![1; 16])])
+    );
+    let v = decode(&value, Limits::CEILING).unwrap();
+    assert_eq!(v.get("size"), Some(&Value::Unsigned(9)));
+    assert_eq!(
+        v.get("root")
+            .and_then(suiss_crypto::digest::Digest::from_value),
+        Some(Digest([4; 32]))
+    );
+    assert_eq!(
+        super::trigger(suiss_ledger::checkpoint::cadence::Due::OutOfCycle),
+        "out-of-cycle"
+    );
+}
