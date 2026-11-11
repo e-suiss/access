@@ -1,0 +1,10 @@
+# OP-51, T36, OP-158 m.3 (p): the first-class Helm chart of an Access cell. It renders the same
+# objects as deploy/k8s (kustomize), with the lifecycle, topology, cell and plane values
+# parameterised. An operator is optional and not part of this chart (PD).
+apiVersion: v2
+name: access
+description: An Access cell - the identity provider and authority server with its two signers.
+type: application
+version: 0.5.0
+appVersion: "0.5.0"
+kubeVersion: ">=1.29.0-0"

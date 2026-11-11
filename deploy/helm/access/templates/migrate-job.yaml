@@ -1,0 +1,99 @@
+# OP-55, OP-138, OP-50: the schema migration job. It runs `access-cli migrate` from the server's
+# own image, as the migration login, before a rollout and never inside the server. Migrations are
+# expand/contract, so the running version keeps serving while the job runs; a failed job stops the
+# rollout. Argo CD runs it as a PreSync hook; Flux recreates it on each change (the Job's pod
+# template is immutable) and the server's Kustomization should `dependsOn` the one holding it.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: access-migrate
+  labels:
+    app.kubernetes.io/name: access-migrate
+    app.kubernetes.io/part-of: access
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    kustomize.toolkit.fluxcd.io/force: enabled
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: access-migrate
+        app.kubernetes.io/part-of: access
+    spec:
+      serviceAccountName: access-server
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: access-migrate
+          # OP-49: the same image digest as the server it prepares
+          image: {{ include "access.image" . }}
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/access-cli"]
+          args: ["migrate", "--config", "/etc/access/migrate.toml"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/access
+              readOnly: true
+            # OP-130 m.10: the root the database certificate chains to
+            - name: tls
+              mountPath: /run/tls
+              readOnly: true
+            # OP-129 m.3: only the migration login's password
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:
+        - name: config
+          configMap:
+            name: access-server
+            items:
+              - key: migrate.toml
+                path: migrate.toml
+        - name: tls
+          csi:
+            driver: csi.cert-manager.io
+            readOnly: true
+            volumeAttributes:
+              csi.cert-manager.io/issuer-name: access-cell-ca
+              csi.cert-manager.io/issuer-kind: ClusterIssuer
+              csi.cert-manager.io/dns-names: access-migrate.access.svc
+              csi.cert-manager.io/key-algorithm: ECDSA
+              csi.cert-manager.io/fs-group: "65532"
+              csi.cert-manager.io/certificate-file: tls.crt
+              csi.cert-manager.io/privatekey-file: tls.key
+              csi.cert-manager.io/ca-file: ca.crt
+        - name: secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: access-migrate

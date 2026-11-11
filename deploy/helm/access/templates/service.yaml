@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: access-server
+  labels:
+    app.kubernetes.io/name: access-server
+    app.kubernetes.io/part-of: access
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: access-server
+  ports:
+    - name: https
+      port: 443
+      targetPort: https
+      protocol: TCP
+---
+# OP-151 m.3 (b), CMP-15.5, §17.9.6: the management API and console behind their own
+# hostname, never the public Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: access-server-management
+  labels:
+    app.kubernetes.io/name: access-server
+    app.kubernetes.io/part-of: access
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: access-server
+  ports:
+    - name: management
+      port: 443
+      targetPort: management
+      protocol: TCP
+---
+# OP-152 m.5 (k): the StatefulSet's governing Service; pods get stable names, nothing is routed
+apiVersion: v1
+kind: Service
+metadata:
+  name: access-server-pods
+  labels:
+    app.kubernetes.io/name: access-server
+    app.kubernetes.io/part-of: access
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: false
+  selector:
+    app.kubernetes.io/name: access-server
+  ports:
+    - name: https
+      port: 8443
+      targetPort: https
+      protocol: TCP

@@ -1,0 +1,63 @@
+# OP-51, OP-158 m.3 (p): one Access cell.
+
+# OP-49: the image by digest, never by tag
+image:
+  repository: ghcr.io/e-suiss/access
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+replicas: 3
+
+# OP-50 (PD): preStop 5 s, drain 2 s, shutdown 15 s, grace 45 s. The drain and the shutdown
+# bound are the server's own; the grace period covers preStop + drain + shutdown.
+lifecycle:
+  preStopSeconds: 5
+  drainSeconds: 2
+  shutdownSeconds: 15
+  terminationGracePeriodSeconds: 45
+
+# OP-50: hard spread across zones, soft across hosts
+topology:
+  zone:
+    whenUnsatisfiable: DoNotSchedule
+    minDomains: 3
+  host:
+    whenUnsatisfiable: ScheduleAnyway
+
+# OP-50
+podDisruptionBudget:
+  maxUnavailable: 1
+
+# HL-40, OP-24: `replicated` (synchronous standbys) or `single-node` (the small-provider
+# profile, published in every domain's metadata)
+durability: replicated
+
+# OP-158 m.3 (o): this cell and the deployment's cells; no data is replicated between cells
+cells:
+  this: pool-default
+  list: []
+  # - name: eu-central-1
+  #   region: eu-central
+  #   class: regional
+  #   url: https://eu1.access.example
+  #   dedicatedTo: ""
+
+# OP-144, §5.12, OP-158 m.3 (p): with `split`, the authority plane's and the identity plane's
+# signers read their keys from separate secret stores under separate operator roles
+planes:
+  split: false
+  authority:
+    role: access-authority-plane
+    hsmPin: access/data/hsm/signer
+    kek: access/signer/kek
+  identity:
+    role: access-identity-plane
+    hsmPin: access/data/hsm/identity-signer
+    kek: access/identity-signer/kek
+
+database:
+  host: access-db.access-db.svc
+  port: 5432
+  name: access
+
+issuer: https://access-server.access.svc
+realmBase: https://id.access.example

@@ -39,6 +39,9 @@ jobs:
         run: just rules
       - name: CI script tests (F-14)
         run: just ci-scripts-test
+      # OP-51, OP-158 m.3 (p)
+      - name: The Helm chart renders as committed
+        run: just helm-check
       # CR-39 m.5, SA-T13
       - name: Constant-time comparison assembly snapshot (difference = review)
         run: just ct-asm

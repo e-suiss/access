@@ -732,3 +732,22 @@ changelog:
 
 # OP-69
 gen: wasm
+
+# OP-51, OP-158 m.3 (p): render the Helm chart's committed outputs (default, plane split, small provider)
+helm-render:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    chart=deploy/helm/access
+    helm template access "$chart" --namespace access > "$chart/rendered/default.yaml"
+    helm template access "$chart" --namespace access -f "$chart/values-plane-split.yaml" > "$chart/rendered/plane-split.yaml"
+    helm template access "$chart" --namespace access -f "$chart/values-small-provider.yaml" > "$chart/rendered/small-provider.yaml"
+
+# OP-51, OP-158 m.3 (p): the committed renders are what the chart renders now
+helm-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    chart=deploy/helm/access
+    helm lint "$chart"
+    diff -u "$chart/rendered/default.yaml" <(helm template access "$chart" --namespace access)
+    diff -u "$chart/rendered/plane-split.yaml" <(helm template access "$chart" --namespace access -f "$chart/values-plane-split.yaml")
+    diff -u "$chart/rendered/small-provider.yaml" <(helm template access "$chart" --namespace access -f "$chart/values-small-provider.yaml")

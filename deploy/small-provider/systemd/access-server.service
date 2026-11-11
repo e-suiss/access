@@ -1,0 +1,33 @@
+# HL-40, OP-48, OP-50, OP-158 m.3 (p): access-server of a small provider. It starts after both
+# signers; on stop it is not ready for its drain, then finishes in-flight requests.
+[Unit]
+Description=Access server
+After=network-online.target postgresql.service access-signer.service access-identity-signer.service
+Wants=network-online.target
+Requires=access-signer.service access-identity-signer.service
+
+[Service]
+Type=simple
+User=access
+Group=access
+Environment=ACCESS_CONFIG=/etc/access/access.toml
+ExecStart=/usr/local/bin/access-server
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=45s
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+ReadOnlyPaths=/etc/access
+
+[Install]
+WantedBy=multi-user.target

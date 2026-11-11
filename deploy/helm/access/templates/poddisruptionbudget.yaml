@@ -1,0 +1,11 @@
+# OP-50
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: access-server
+spec:
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: access-server

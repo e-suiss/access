@@ -41,11 +41,12 @@ spec:
         fsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
-      # OP-50
+      # OP-50: hard spread across zones, soft across hosts
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: topology.kubernetes.io/zone
-          whenUnsatisfiable: ScheduleAnyway
+          whenUnsatisfiable: DoNotSchedule
+          minDomains: 3
           labelSelector:
             matchLabels:
               app.kubernetes.io/name: access-server

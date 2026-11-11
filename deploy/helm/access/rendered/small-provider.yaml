@@ -1,0 +1,751 @@
+---
+# Source: access/templates/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+
+---
+# Source: access/templates/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: access-server
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: access-server
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress
+      ports:
+        - port: https
+          protocol: TCP
+        # OP-151 m.3 (b), CMP-15.5: the management hostname has its own ingress route
+        - port: management
+          protocol: TCP
+    # OP-67 m.3: metrics scraping on the internal port only
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: internal
+          protocol: TCP
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # OP-141 m.18 (g)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: access-db
+      ports:
+        - port: 5432
+          protocol: TCP
+
+---
+# Source: access/templates/networkpolicy.yaml
+# OP-55, OP-138: the migration job talks to the database and nothing else
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: access-migrate
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: access-migrate
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: access-db
+      ports:
+        - port: 5432
+          protocol: TCP
+
+---
+# Source: access/templates/poddisruptionbudget.yaml
+# OP-50
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: access-server
+spec:
+  maxUnavailable: 1
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: access-server
+
+---
+# Source: access/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: access-server
+# §14.5
+automountServiceAccountToken: false
+
+---
+# Source: access/templates/configmap.yaml
+# OP-63 rule 4, CR-12, OP-129 m.3: process settings only; no secret lives here
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: access-server
+  labels:
+    app.kubernetes.io/name: access-server
+    app.kubernetes.io/part-of: access
+    app.kubernetes.io/instance: access
+    app.kubernetes.io/version: "0.5.0"
+data:
+  access.toml: |
+    listen = "0.0.0.0:8443"
+    # OP-151 m.3 (b): the management API and console, and the health endpoints, on their own ports
+    management_listen = "0.0.0.0:9443"
+    internal_listen = "0.0.0.0:9090"
+    issuer = "https://access-server.access.svc"
+    # OP-143 m.5, CMP-22a: the authority signer sidecar's socket
+    signer = "/run/access/signer.sock"
+
+    [tls]
+    cert_file = "/run/tls/tls.crt"
+    key_file = "/run/tls/tls.key"
+    client_ca_file = "/run/tls/ca.crt"
+
+    # OP-141 m.18 (g)
+    [database]
+    host = "access-db.access-db.svc"
+    port = 5432
+    name = "access"
+    root_cert_file = "/run/tls/ca.crt"
+    durability = "single-node"
+    sequencer = { user = "access_sequencer_login", password_file = "/run/secrets/db-sequencer", pool = 8 }
+    app = { user = "access_app_login", password_file = "/run/secrets/db-app", pool = 16 }
+    deriver = { user = "access_deriver_login", password_file = "/run/secrets/db-deriver", pool = 2 }
+    router = { user = "access_router_login", password_file = "/run/secrets/db-router", pool = 4 }
+    # OP-146 m.5 (f), OP-131
+    archive = { user = "access_archive_login", password_file = "/run/secrets/db-archive", pool = 1 }
+    outbox_reader = { user = "access_outbox_reader_login", password_file = "/run/secrets/db-outbox-reader", pool = 2 }
+    # OP-38, OP-44
+    checkpointer = { user = "access_checkpointer_login", password_file = "/run/secrets/db-checkpointer", pool = 1 }
+
+    # TN-10, CMP-22b, OP-138
+    [identity]
+    realm_base = "https://id.access.example"
+    signer = "/run/access/identity-signer.sock"
+
+    # OP-146 m.12 (f), TN-128: the built hosted login and console in the image
+    [login]
+    dist_dir = "/usr/share/access/login"
+
+    [console]
+    dist_dir = "/usr/share/access/console"
+
+    [account]
+    dist_dir = "/usr/share/access/account"
+
+    # OP-149 m.3, m.4
+    [suiss]
+    region = "eu-central"
+    relay = "https://relay.access.example"
+    management_api = "https://api.access.example"
+    products = { work = "https://work.access.example" }
+    # OP-151 m.2 M2: the platform tenant realm governs the platform-admin surface
+    platform_realm = "platform"
+    # OP-156 m.3 (c): the platform product name Relay's client is registered under
+    relay_product = "relay"
+    # E42, OP-156 m.3 (c): Access as Relay's platform tenant
+    [suiss.relay_platform]
+    tenant = "access"
+    credential_file = "/run/secrets/relay-credential"
+
+    # OP-94, OP-141 m.18 (h)
+    [hsm]
+    module = "/opt/pkcs11/module.so"
+    token = "access"
+    pin_file = "/run/secrets/hsm-pin"
+
+    # OP-158 m.3 (o)
+    [cells]
+    this = "small-provider"
+  # CMP-22a: the authority signer sidecar; its token and KEK are its own (T31)
+  signer.toml: |
+    socket = "/run/access/signer.sock"
+    vault = "/var/lib/access/signer"
+    callers = [65532]
+    # CR-34, OP-158 m.3 (y): paranoid, keys in memfd_secret; a node without it refuses the start
+    hardening = "paranoid"
+    secret_memory = "memfd_secret"
+
+    [hsm]
+    module = "/opt/pkcs11/module.so"
+    token = "access-signer"
+    pin_file = "/run/secrets/hsm-signer-pin"
+    kek = "access/signer/kek"
+
+    # CR-29, OP-157 m.3 (x): the ceremony transcript (ceremony init|approve|sign appends to it)
+    # and the digest of its first entry, pinned outside the pod's writable volume
+    [ceremony]
+    transcript = "/var/lib/access/signer/ceremony.transcript"
+    genesis_file = "/run/secrets/signer-ceremony-genesis"
+  # CMP-22b: the identity signer sidecar; the cell names the audit chains' origins (OP-150 m.3 (h))
+  identity-signer.toml: |
+    socket = "/run/access/identity-signer.sock"
+    vault = "/var/lib/access/identity-signer"
+    callers = [65532]
+    # CR-34, OP-158 m.3 (y): paranoid, keys in memfd_secret; a node without it refuses the start
+    hardening = "paranoid"
+    secret_memory = "memfd_secret"
+    cell = "access"
+
+    [hsm]
+    module = "/opt/pkcs11/module.so"
+    token = "access-identity-signer"
+    pin_file = "/run/secrets/hsm-identity-signer-pin"
+    kek = "access/identity-signer/kek"
+  # OP-55, OP-138: the migration job's configuration, the database and its migration login only
+  migrate.toml: |
+    [database]
+    host = "access-db.access-db.svc"
+    port = 5432
+    name = "access"
+    root_cert_file = "/run/tls/ca.crt"
+    durability = "single-node"
+    migrator = { user = "access_migrator_login", password_file = "/run/secrets/db-migrator", pool = 1 }
+
+---
+# Source: access/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: access-server
+  labels:
+    app.kubernetes.io/name: access-server
+    app.kubernetes.io/part-of: access
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: access-server
+  ports:
+    - name: https
+      port: 443
+      targetPort: https
+      protocol: TCP
+
+---
+# Source: access/templates/service.yaml
+# OP-151 m.3 (b), CMP-15.5, §17.9.6: the management API and console behind their own
+# hostname, never the public Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: access-server-management
+  labels:
+    app.kubernetes.io/name: access-server
+    app.kubernetes.io/part-of: access
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: access-server
+  ports:
+    - name: management
+      port: 443
+      targetPort: management
+      protocol: TCP
+
+---
+# Source: access/templates/service.yaml
+# OP-152 m.5 (k): the StatefulSet's governing Service; pods get stable names, nothing is routed
+apiVersion: v1
+kind: Service
+metadata:
+  name: access-server-pods
+  labels:
+    app.kubernetes.io/name: access-server
+    app.kubernetes.io/part-of: access
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: false
+  selector:
+    app.kubernetes.io/name: access-server
+  ports:
+    - name: https
+      port: 8443
+      targetPort: https
+      protocol: TCP
+
+---
+# Source: access/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: access-server
+  labels:
+    app.kubernetes.io/name: access-server
+    app.kubernetes.io/part-of: access
+    app.kubernetes.io/instance: access
+    app.kubernetes.io/version: "0.5.0"
+  annotations:
+    ignore-check.kube-linter.io/no-anti-affinity: "Host spreading uses topologySpreadConstraints (OP-50)"
+# OP-152 m.5 (k): a StatefulSet so that each pod's signers keep their sealed keys on a volume
+# of their own across restarts
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  serviceName: access-server-pods
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: access-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: access-server
+        app.kubernetes.io/part-of: access
+    spec:
+      serviceAccountName: access-server
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      restartPolicy: Always
+      # OP-50
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      # OP-50: hard spread across zones, soft across hosts
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: access-server
+          matchLabelKeys: [controller-revision-hash]
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: access-server
+          matchLabelKeys: [controller-revision-hash]
+# CMP-22, CR-21: the two signers, each in its own container with its own token and vault
+      initContainers:
+        # CMP-22a: the authority signer beside the server, reached only over the shared socket
+        # directory; no network port. A native sidecar (OP-94, OP-158 m.3 (y)): it starts before
+        # the server and gets SIGTERM only after the server has drained, so it stops accepting,
+        # finishes in flight, drops its keys and closes its HSM sessions last
+        - name: authority-signer
+          restartPolicy: Always
+          image: ghcr.io/e-suiss/access@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/access-signer"]
+          env:
+            - name: ACCESS_SIGNER_CONFIG
+              value: /etc/access/signer.toml
+          volumeMounts:
+            - name: config
+              mountPath: /etc/access
+              readOnly: true
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+            - name: sockets
+              mountPath: /run/access
+            - name: signer-vault
+              mountPath: /var/lib/access/signer
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+        # CMP-22b: the identity signer beside the server, reached only over the shared socket
+        # directory; no network port; a native sidecar like the authority signer
+        - name: identity-signer
+          restartPolicy: Always
+          image: ghcr.io/e-suiss/access@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/access-identity-signer"]
+          env:
+            - name: ACCESS_IDENTITY_SIGNER_CONFIG
+              value: /etc/access/identity-signer.toml
+          volumeMounts:
+            - name: config
+              mountPath: /etc/access
+              readOnly: true
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+            - name: sockets
+              mountPath: /run/access
+            - name: identity-signer-vault
+              mountPath: /var/lib/access/identity-signer
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+      containers:
+        - name: access-server
+          # OP-49
+          image: ghcr.io/e-suiss/access@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ACCESS_CONFIG
+              value: /etc/access/access.toml
+          ports:
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+            # OP-151 m.3 (b), CMP-15.5: the management API and console
+            - name: management
+              containerPort: 9443
+              protocol: TCP
+            # OP-67 m.3: health and metrics, internal only
+            - name: internal
+              containerPort: 9090
+              protocol: TCP
+          # OP-50, OP-67 m.3, OP-151 m.3 (b)
+          startupProbe:
+            httpGet: { path: /livez, port: internal, scheme: HTTPS }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /livez, port: internal, scheme: HTTPS }
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /readyz, port: internal, scheme: HTTPS }
+            periodSeconds: 5
+          volumeMounts:
+            - name: config
+              mountPath: /etc/access
+              readOnly: true
+            # CR-12, OP-129 m.3: issued into tmpfs by the cert-manager CSI driver, no Secret object
+            - name: tls
+              mountPath: /run/tls
+              readOnly: true
+            # OP-129 m.3, OP-141 m.18 (g), (h): database passwords and the token PIN
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+            # CMP-22: the signers' Unix sockets
+            - name: sockets
+              mountPath: /run/access
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:
+        # CMP-22: the signers' sockets, shared by the three containers of the pod only
+        - name: sockets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: config
+          configMap:
+            name: access-server
+        - name: tls
+          csi:
+            driver: csi.cert-manager.io
+            readOnly: true
+            volumeAttributes:
+              csi.cert-manager.io/issuer-name: access-cell-ca
+              csi.cert-manager.io/issuer-kind: ClusterIssuer
+              csi.cert-manager.io/dns-names: access-server.access.svc,access-server.access.svc.cluster.local,api.access.example
+              csi.cert-manager.io/key-algorithm: ECDSA
+              csi.cert-manager.io/fs-group: "65532"
+              csi.cert-manager.io/certificate-file: tls.crt
+              csi.cert-manager.io/privatekey-file: tls.key
+              csi.cert-manager.io/ca-file: ca.crt
+        - name: secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: access-server
+  # CR-21, CMP-22, OP-152 m.5 (k): each signer's sealed keys (sealed by its HSM KEK), one volume
+  # per pod
+  volumeClaimTemplates:
+    - metadata:
+        name: signer-vault
+        labels:
+          app.kubernetes.io/name: access-server
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 64Mi
+    - metadata:
+        name: identity-signer-vault
+        labels:
+          app.kubernetes.io/name: access-server
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 64Mi
+
+---
+# Source: access/templates/migrate-job.yaml
+# OP-55, OP-138, OP-50: the schema migration job. It runs `access-cli migrate` from the server's
+# own image, as the migration login, before a rollout and never inside the server. Migrations are
+# expand/contract, so the running version keeps serving while the job runs; a failed job stops the
+# rollout. Argo CD runs it as a PreSync hook; Flux recreates it on each change (the Job's pod
+# template is immutable) and the server's Kustomization should `dependsOn` the one holding it.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: access-migrate
+  labels:
+    app.kubernetes.io/name: access-migrate
+    app.kubernetes.io/part-of: access
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    kustomize.toolkit.fluxcd.io/force: enabled
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: access-migrate
+        app.kubernetes.io/part-of: access
+    spec:
+      serviceAccountName: access-server
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: access-migrate
+          # OP-49: the same image digest as the server it prepares
+          image: ghcr.io/e-suiss/access@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/access-cli"]
+          args: ["migrate", "--config", "/etc/access/migrate.toml"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/access
+              readOnly: true
+            # OP-130 m.10: the root the database certificate chains to
+            - name: tls
+              mountPath: /run/tls
+              readOnly: true
+            # OP-129 m.3: only the migration login's password
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:
+        - name: config
+          configMap:
+            name: access-server
+            items:
+              - key: migrate.toml
+                path: migrate.toml
+        - name: tls
+          csi:
+            driver: csi.cert-manager.io
+            readOnly: true
+            volumeAttributes:
+              csi.cert-manager.io/issuer-name: access-cell-ca
+              csi.cert-manager.io/issuer-kind: ClusterIssuer
+              csi.cert-manager.io/dns-names: access-migrate.access.svc
+              csi.cert-manager.io/key-algorithm: ECDSA
+              csi.cert-manager.io/fs-group: "65532"
+              csi.cert-manager.io/certificate-file: tls.crt
+              csi.cert-manager.io/privatekey-file: tls.key
+              csi.cert-manager.io/ca-file: ca.crt
+        - name: secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: access-migrate
+
+---
+# Source: access/templates/secretproviderclass.yaml
+# CR-35, OP-129 m.3, OP-158 m.3 (y): every secret a pod reads is a file the Secrets Store CSI
+# driver writes into tmpfs; no environment value and no Secret object holds one. The provider
+# reads OpenBao with the pod's own workload identity: OpenBao's jwt auth method at
+# `auth/spiffe` trusts SPIRE's OIDC discovery for the audience `openbao`, so the identity
+# SPIRE gives the pod's service account (spiffe://<trust domain>/ns/access/sa/<name>) is what
+# opens the role; the file interface the processes read is the same as on a local host.
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: access-server
+  labels:
+    app.kubernetes.io/name: access-server
+spec:
+  provider: vault
+  parameters:
+    vaultAddress: https://openbao.openbao.svc:8200
+    vaultCACertPath: /run/tls/ca.crt
+    vaultAuthMountPath: spiffe
+    roleName: access-server
+    audience: openbao
+    objects: |
+      - objectName: db-sequencer
+        secretPath: access/data/database/sequencer
+        secretKey: password
+      - objectName: db-app
+        secretPath: access/data/database/app
+        secretKey: password
+      - objectName: db-deriver
+        secretPath: access/data/database/deriver
+        secretKey: password
+      - objectName: db-router
+        secretPath: access/data/database/router
+        secretKey: password
+      - objectName: db-archive
+        secretPath: access/data/database/archive
+        secretKey: password
+      - objectName: db-outbox-reader
+        secretPath: access/data/database/outbox-reader
+        secretKey: password
+      - objectName: db-checkpointer
+        secretPath: access/data/database/checkpointer
+        secretKey: password
+      - objectName: hsm-pin
+        secretPath: access/data/hsm/server
+        secretKey: pin
+      - objectName: hsm-signer-pin
+        secretPath: access/data/hsm/signer
+        secretKey: pin
+      - objectName: hsm-identity-signer-pin
+        secretPath: access/data/hsm/identity-signer
+        secretKey: pin
+      - objectName: signer-ceremony-genesis
+        secretPath: access/data/signer/ceremony
+        secretKey: genesis
+      - objectName: relay-credential
+        secretPath: access/data/relay/platform
+        secretKey: credential
+
+---
+# Source: access/templates/secretproviderclass.yaml
+# OP-55: the migration job reads its migration login only
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: access-migrate
+  labels:
+    app.kubernetes.io/name: access-migrate
+spec:
+  provider: vault
+  parameters:
+    vaultAddress: https://openbao.openbao.svc:8200
+    vaultCACertPath: /run/tls/ca.crt
+    vaultAuthMountPath: spiffe
+    roleName: access-migrate
+    audience: openbao
+    objects: |
+      - objectName: db-migrator
+        secretPath: access/data/database/migrator
+        secretKey: password

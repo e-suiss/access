@@ -1,0 +1,193 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: access-server
+  labels:
+    {{- include "access.labels" . | nindent 4 }}
+  annotations:
+    ignore-check.kube-linter.io/no-anti-affinity: "Host spreading uses topologySpreadConstraints (OP-50)"
+# OP-152 m.5 (k): a StatefulSet so that each pod's signers keep their sealed keys on a volume
+# of their own across restarts
+spec:
+  replicas: {{ .Values.replicas }}
+  revisionHistoryLimit: 5
+  serviceName: access-server-pods
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: access-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: access-server
+        app.kubernetes.io/part-of: access
+    spec:
+      serviceAccountName: access-server
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      restartPolicy: Always
+      # OP-50
+      terminationGracePeriodSeconds: {{ .Values.lifecycle.terminationGracePeriodSeconds }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      # OP-50: hard spread across zones, soft across hosts
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: {{ .Values.topology.zone.whenUnsatisfiable }}
+          {{- if eq .Values.topology.zone.whenUnsatisfiable "DoNotSchedule" }}
+          minDomains: {{ .Values.topology.zone.minDomains }}
+          {{- end }}
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: access-server
+          matchLabelKeys: [controller-revision-hash]
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: {{ .Values.topology.host.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: access-server
+          matchLabelKeys: [controller-revision-hash]
+{{ include "access.signers" . }}
+      containers:
+        - name: access-server
+          # OP-49
+          image: {{ include "access.image" . }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ACCESS_CONFIG
+              value: /etc/access/access.toml
+          ports:
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+            # OP-151 m.3 (b), CMP-15.5: the management API and console
+            - name: management
+              containerPort: 9443
+              protocol: TCP
+            # OP-67 m.3: health and metrics, internal only
+            - name: internal
+              containerPort: 9090
+              protocol: TCP
+          # OP-50, OP-67 m.3, OP-151 m.3 (b)
+          startupProbe:
+            httpGet: { path: /livez, port: internal, scheme: HTTPS }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /livez, port: internal, scheme: HTTPS }
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /readyz, port: internal, scheme: HTTPS }
+            periodSeconds: 5
+          volumeMounts:
+            - name: config
+              mountPath: /etc/access
+              readOnly: true
+            # CR-12, OP-129 m.3: issued into tmpfs by the cert-manager CSI driver, no Secret object
+            - name: tls
+              mountPath: /run/tls
+              readOnly: true
+            # OP-129 m.3, OP-141 m.18 (g), (h): database passwords and the token PIN
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+            # CMP-22: the signers' Unix sockets
+            - name: sockets
+              mountPath: /run/access
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: {{ .Values.lifecycle.preStopSeconds }}
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              memory: 2Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:
+        # CMP-22: the signers' sockets, shared by the three containers of the pod only
+        - name: sockets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: config
+          configMap:
+            name: access-server
+        - name: tls
+          csi:
+            driver: csi.cert-manager.io
+            readOnly: true
+            volumeAttributes:
+              csi.cert-manager.io/issuer-name: access-cell-ca
+              csi.cert-manager.io/issuer-kind: ClusterIssuer
+              csi.cert-manager.io/dns-names: access-server.access.svc,access-server.access.svc.cluster.local,api.access.example
+              csi.cert-manager.io/key-algorithm: ECDSA
+              csi.cert-manager.io/fs-group: "65532"
+              csi.cert-manager.io/certificate-file: tls.crt
+              csi.cert-manager.io/privatekey-file: tls.key
+              csi.cert-manager.io/ca-file: ca.crt
+        - name: secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: access-server
+        {{- if .Values.planes.split }}
+        # OP-144, §5.12: each plane's signer reads its own key custody
+        - name: authority-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: access-authority-plane
+        - name: identity-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: access-identity-plane
+        {{- end }}
+  # CR-21, CMP-22, OP-152 m.5 (k): each signer's sealed keys (sealed by its HSM KEK), one volume
+  # per pod
+  volumeClaimTemplates:
+    - metadata:
+        name: signer-vault
+        labels:
+          app.kubernetes.io/name: access-server
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 64Mi
+    - metadata:
+        name: identity-signer-vault
+        labels:
+          app.kubernetes.io/name: access-server
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 64Mi

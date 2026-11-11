@@ -1,0 +1,17 @@
+# HL-40, CMP-22b: the identity signer in the small-provider profile; its token is its own.
+socket = "/run/access/identity-signer.sock"
+vault = "/var/lib/access/identity-signer"
+callers = [65532]
+# CR-34, OP-158 m.3 (y): a signer runs paranoid with its keys in memfd_secret; a kernel without
+# it refuses the start
+hardening = "paranoid"
+secret_memory = "memfd_secret"
+# OP-150: the identity audit log origin is "<cell>/identity-audit"
+cell = "small-provider"
+
+[hsm]
+module = "/usr/lib/softhsm/libsofthsm2.so"
+token = "access-identity-signer"
+pin_file = "/etc/access/secrets/hsm-access-identity-signer"
+kek = "access/identity-signer/kek"
+paths = ["/var/lib/softhsm/tokens"]

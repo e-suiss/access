@@ -1,0 +1,5 @@
+# OP-144, §5.12, OP-158 m.3 (p): the plane-split profile. Each plane's signer reads its HSM PIN
+# and KEK from its own secret store role, so the authority plane's and the identity plane's key
+# custody and operators are separate. Separate clusters per plane are the operator's.
+planes:
+  split: true

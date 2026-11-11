@@ -1,0 +1,13 @@
+# HL-40, OP-48, T8, OP-158 m.3 (p): the small-provider profile on Kubernetes: one server with its
+# two signers over one PostgreSQL. It publishes `durability: single-node`; SEC23 revocations are
+# acknowledged only with a declared replica and an independent witness.
+replicas: 1
+durability: single-node
+topology:
+  zone:
+    whenUnsatisfiable: ScheduleAnyway
+podDisruptionBudget:
+  maxUnavailable: 1
+cells:
+  this: small-provider
+  list: []

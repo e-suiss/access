@@ -1,0 +1,20 @@
+# HL-40, CMP-22a: the authority signer in the small-provider profile.
+socket = "/run/access/signer.sock"
+vault = "/var/lib/access/signer"
+callers = [65532]
+# CR-34, OP-158 m.3 (y): a signer runs paranoid with its keys in memfd_secret; a kernel without
+# it refuses the start
+hardening = "paranoid"
+secret_memory = "memfd_secret"
+
+[hsm]
+module = "/usr/lib/softhsm/libsofthsm2.so"
+token = "access-signer"
+pin_file = "/etc/access/secrets/hsm-access-signer"
+kek = "access/signer/kek"
+paths = ["/var/lib/softhsm/tokens"]
+
+# CR-29, OP-157 m.3 (x): the ceremony transcript and the digest of its first entry
+[ceremony]
+transcript = "/var/lib/access/signer/ceremony.transcript"
+genesis_file = "/etc/access/secrets/signer-ceremony-genesis"

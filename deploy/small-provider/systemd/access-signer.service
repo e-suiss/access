@@ -1,0 +1,38 @@
+# HL-40, CMP-22a, OP-158 m.3 (p): the authority signer of a small provider, its own process with its
+# own token; access-server reaches it only over its Unix socket.
+[Unit]
+Description=Access authority signer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=access
+Group=access
+Environment=ACCESS_SIGNER_CONFIG=/etc/access/access-signer.toml
+ExecStart=/usr/local/bin/access-signer
+Restart=on-failure
+RestartSec=2s
+RuntimeDirectory=access
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+StateDirectory=access/signer
+StateDirectoryMode=0700
+UMask=0077
+LimitMEMLOCK=infinity
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+ReadOnlyPaths=/etc/access
+
+[Install]
+WantedBy=multi-user.target
