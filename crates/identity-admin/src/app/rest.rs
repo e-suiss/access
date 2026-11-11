@@ -318,6 +318,26 @@ pub enum Op {
     PutKeytabPolicy,
     /// `replaceKeytab`: `idp.gateway.keytab_emergency`, reserved (OP-155 m.3 (o)).
     ReplaceKeytab,
+    /// `registerCaseSystem`: `idp.support.case_system_register` (OP-157 m.3 (e)).
+    RegisterCaseSystem,
+    /// `retireCaseSystem`: `idp.support.case_system_retire`.
+    RetireCaseSystem,
+    /// `putSupportArtifactPolicy`: `idp.support.artifact_policy`, or `artifact_policy_close` (OP-157 m.3 (g)).
+    PutSupportArtifactPolicy,
+    /// `markBreakglassAccount`: `idp.org.member_breakglass` (OP-157 m.3 (h)).
+    MarkBreakglassAccount,
+    /// `clearBreakglassAccount`: `idp.org.member_breakglass_clear`.
+    ClearBreakglassAccount,
+    /// `scheduleReview`: `idp.review.schedule` (OP-157 m.3 (w)).
+    ScheduleReview,
+    /// `closeReview`: `idp.review.schedule_close`.
+    CloseReview,
+    /// `putDelegatedAdmin`: `idp.realm.delegated_admin`, or `delegated_admin_close` (OP-157 m.3 (t)).
+    PutDelegatedAdmin,
+    /// `putApprovalInline`: `idp.realm.approval_inline`, or `approval_inline_close` (OP-157 m.3 (m)).
+    PutApprovalInline,
+    /// `putApprovalBatch`: `idp.realm.approval_batch`, or `approval_batch_close` (OP-157 m.3 (m)).
+    PutApprovalBatch,
 }
 
 impl Op {
@@ -465,6 +485,16 @@ impl Op {
             "registerRadiusClient" => Self::RegisterRadiusClient,
             "putKeytabPolicy" => Self::PutKeytabPolicy,
             "replaceKeytab" => Self::ReplaceKeytab,
+            "registerCaseSystem" => Self::RegisterCaseSystem,
+            "retireCaseSystem" => Self::RetireCaseSystem,
+            "putSupportArtifactPolicy" => Self::PutSupportArtifactPolicy,
+            "markBreakglassAccount" => Self::MarkBreakglassAccount,
+            "clearBreakglassAccount" => Self::ClearBreakglassAccount,
+            "scheduleReview" => Self::ScheduleReview,
+            "closeReview" => Self::CloseReview,
+            "putDelegatedAdmin" => Self::PutDelegatedAdmin,
+            "putApprovalInline" => Self::PutApprovalInline,
+            "putApprovalBatch" => Self::PutApprovalBatch,
             _ => return None,
         })
     }
@@ -901,6 +931,14 @@ fn profile_delta(op: Op, m: &Map<String, Json>) -> Result<crate::domain::Profile
         }
         _ => return Err(Invalid::Body),
     })
+}
+
+/// The body without the members every write carries: its validity and AIS.
+fn own_body(m: &Map<String, Json>) -> Json {
+    let mut own = m.clone();
+    own.remove(VALIDITY);
+    own.remove("ais");
+    Json::Object(own)
 }
 
 fn key_of(key: Option<&str>) -> Result<&str, Invalid> {
@@ -2140,6 +2178,45 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             only(m, &["enabled"])?;
             Change::SecurityNotices(flag(m, "enabled")?)
         }
+        // OP-157 m.4 (a)
+        Op::RegisterCaseSystem => Change::CaseSystem(
+            crate::domain::support::CaseSystemChange::register(&own_body(m))?,
+        ),
+        Op::RetireCaseSystem => Change::CaseSystem(
+            crate::domain::support::CaseSystemChange::retire(key_of(key)?, &own_body(m))?,
+        ),
+        Op::PutSupportArtifactPolicy => Change::SupportArtifactPolicy(
+            crate::domain::support::ArtifactPolicy::parse(&own_body(m))?,
+        ),
+        Op::MarkBreakglassAccount => Change::Breakglass(
+            crate::domain::breakglass::BreakglassMark::parse(None, &own_body(m), true)?,
+        ),
+        Op::ClearBreakglassAccount => {
+            Change::Breakglass(crate::domain::breakglass::BreakglassMark::parse(
+                Some(key_of(key)?),
+                &own_body(m),
+                false,
+            )?)
+        }
+        Op::ScheduleReview => {
+            Change::Review(crate::domain::review::ReviewChange::schedule(&own_body(m))?)
+        }
+        Op::CloseReview => Change::Review(crate::domain::review::ReviewChange::close(
+            key_of(key)?,
+            &own_body(m),
+        )?),
+        Op::PutDelegatedAdmin => {
+            only(m, &["enabled"])?;
+            Change::DelegatedAdmin(flag(m, "enabled")?)
+        }
+        Op::PutApprovalInline => {
+            only(m, &["enabled"])?;
+            Change::ApprovalInline(flag(m, "enabled")?)
+        }
+        Op::PutApprovalBatch => {
+            only(m, &["enabled"])?;
+            Change::ApprovalBatch(flag(m, "enabled")?)
+        }
         Op::ResendRelay => {
             only(m, &[])?;
             Change::RelayResend(super::relay::event_id(key_of(key)?)?)
@@ -2558,6 +2635,22 @@ pub enum Kind {
     CustomDomains,
     /// The undelivered Relay messages by event id, without their content (OP-156 m.3 (c)).
     RelayUndelivered,
+    /// The support case systems by name (OP-157 m.3 (e)).
+    CaseSystems,
+    /// The support Grants by the Grant's base64url (OP-157 m.3 (c)).
+    SupportGrants,
+    /// The break-glass marked accounts by `account_id` (OP-157 m.3 (h)).
+    BreakglassAccounts,
+    /// The break-glass drills by their Exercise's base64url (OP-157 m.3 (h)).
+    BreakglassDrills,
+    /// The break-glass uses and their reviews by the use's Exercise base64url (OP-157 m.3 (h)).
+    BreakglassReviews,
+    /// The access review campaigns by name (OP-157 m.3 (w)).
+    Reviews,
+    /// One campaign's items by the Grant's base64url (OP-157 m.3 (w)).
+    ReviewItems,
+    /// What offboarding one Party would do, by its Party's base64url (OP-157 m.3 (v)).
+    OffboardingPreviews,
 }
 
 /// How many days the analytics read covers, today included (PD).
@@ -3274,7 +3367,19 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     items: rows.iter().map(|d| (delivery_view(d), 0)).collect(),
                 }
             }
-            (Kind::Deliveries | Kind::SsoPreview, None) => Read::default(),
+            // OP-157 m.4 (a)
+            (Kind::Deliveries | Kind::SsoPreview, None)
+            | (
+                Kind::CaseSystems
+                | Kind::SupportGrants
+                | Kind::BreakglassAccounts
+                | Kind::BreakglassDrills
+                | Kind::BreakglassReviews
+                | Kind::Reviews
+                | Kind::ReviewItems
+                | Kind::OffboardingPreviews,
+                _,
+            ) => Read::default(),
             (Kind::Settings, _) => {
                 let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
                 let p = resources::policies(t).await?;

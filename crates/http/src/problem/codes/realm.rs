@@ -848,3 +848,150 @@ pub const MCP_TOOL_UNPINNED: Code = code(
     "Conflict",
     "The tool's definition changed or the tool is new: it is blocked until an administrator pins it with idp.proxy.mcp_pin; nothing was decided and the call is not forwarded (AG-42, OP-156 m.3 (n)).",
 );
+/// The `support-case-required` problem (OP-157 m.3 (y)).
+pub const SUPPORT_CASE_REQUIRED: Code = code(
+    "support-case-required",
+    422,
+    "Unprocessable Content",
+    "A support Grant names exactly one case: Requirement::Purpose with a PurposeRef::Case and params.case; a support grant.issue without a case is refused (OP-157 m.3 (c)).",
+);
+/// The `support-case-closed` problem (OP-157 m.3 (y)).
+pub const SUPPORT_CASE_CLOSED: Code = code(
+    "support-case-closed",
+    409,
+    "Conflict",
+    "The support case is closed or its support_case Claim is missing or stale, so no support access holds; nothing was granted or done (OP-157 m.3 (e)).",
+);
+/// The `support-request-unknown` problem (OP-157 m.3 (y)).
+pub const SUPPORT_REQUEST_UNKNOWN: Code = code(
+    "support-request-unknown",
+    404,
+    "Not Found",
+    "No open support access request with this id for the caller (OP-157 m.3 (f)).",
+);
+/// The `support-blocked` problem (OP-157 m.3 (y)).
+pub const SUPPORT_BLOCKED: Code = code(
+    "support-blocked",
+    409,
+    "Conflict",
+    "The person turned on Block support access; no support request reaches them until they turn it off (OP-157 m.3 (c)).",
+);
+/// The `artifact-format-refused` problem (OP-157 m.3 (y)).
+pub const ARTIFACT_FORMAT_REFUSED: Code = code(
+    "artifact-format-refused",
+    415,
+    "Unsupported Media Type",
+    "Only HAR, JSON and text logs can be redacted automatically; images and video are refused (TN-74, OP-157 m.3 (g)).",
+);
+/// The `artifact-too-large` problem (OP-157 m.3 (y)).
+pub const ARTIFACT_TOO_LARGE: Code = code(
+    "artifact-too-large",
+    413,
+    "Content Too Large",
+    "The support artifact is larger than the realm's artifact policy allows (OP-157 m.3 (g)).",
+);
+/// The `breakglass-minimum-two` problem (OP-157 m.3 (y)).
+pub const BREAKGLASS_MINIMUM_TWO: Code = code(
+    "breakglass-minimum-two",
+    422,
+    "Unprocessable Content",
+    "A break-glass setup needs at least two break-glass Grants held by two different Parties (OP-157 m.3 (h)).",
+);
+/// The `breakglass-review-required` problem (OP-157 m.3 (y)).
+pub const BREAKGLASS_REVIEW_REQUIRED: Code = code(
+    "breakglass-review-required",
+    409,
+    "Conflict",
+    "A break-glass use waits for its review by another Party; the review classifies it as drill, emergency or misuse and grants nothing (OP-157 m.3 (h)).",
+);
+/// The `breakglass-account-sso-refused` problem (OP-157 m.3 (y)).
+pub const BREAKGLASS_ACCOUNT_SSO_REFUSED: Code = code(
+    "breakglass-account-sso-refused",
+    403,
+    "Forbidden",
+    "A break-glass account signs in only with the realm's own phishing-resistant method, never through SSO or an upstream provider (OP-157 m.3 (h)).",
+);
+/// The `approval-not-eligible` problem (OP-157 m.3 (y)).
+pub const APPROVAL_NOT_ELIGIBLE: Code = code(
+    "approval-not-eligible",
+    403,
+    "Forbidden",
+    "The viewer is not in the request's eligible set, so it cannot approve it here (OP-157 m.3 (l), E26).",
+);
+/// The `approval-surface-not-accepted` problem (OP-157 m.3 (y)).
+pub const APPROVAL_SURFACE_NOT_ACCEPTED: Code = code(
+    "approval-surface-not-accepted",
+    403,
+    "Forbidden",
+    "The domain does not accept this approval surface's profile, so its approval counts for nothing (OP-157 m.3 (m)).",
+);
+/// The `approval-body-mismatch` problem (OP-157 m.3 (y)).
+pub const APPROVAL_BODY_MISMATCH: Code = code(
+    "approval-body-mismatch",
+    409,
+    "Conflict",
+    "The pushed request's body does not match the intent's opaque parameter digest, so it cannot be approved (PI-17, OP-157 m.3 (l)).",
+);
+/// The `approval-batch-invalid` problem (OP-157 m.3 (y)).
+pub const APPROVAL_BATCH_INVALID: Code = code(
+    "approval-batch-invalid",
+    422,
+    "Unprocessable Content",
+    "A batch approval holds at most 10 CT1 requests of one requester and one action class, each with its own AAS (OP-157 m.3 (m)).",
+);
+/// The `approval-inline-off` problem (OP-157 m.3 (y)).
+pub const APPROVAL_INLINE_OFF: Code = code(
+    "approval-inline-off",
+    409,
+    "Conflict",
+    "The realm has not opened in-notification approval, or the request is not CT1 (OP-157 m.3 (m)).",
+);
+/// The `approval-invite-limit` problem (OP-157 m.3 (y)).
+pub const APPROVAL_INVITE_LIMIT: Code = code(
+    "approval-invite-limit",
+    429,
+    "Too Many Requests",
+    "At most 5 approval invitations an hour from one requester to one approver, and one per intent; try again after Retry-After (OP-157 m.3 (m)).",
+);
+/// The `policy-default-unknown` problem (OP-157 m.3 (y)).
+pub const POLICY_DEFAULT_UNKNOWN: Code = code(
+    "policy-default-unknown",
+    422,
+    "Unprocessable Content",
+    "The policy.set defaults name a key the Kernel does not know: ct3_delay_s, mapping_probation_days, approval_surfaces, breakglass_review_h and support_max_min are the known ones (OP-157 m.3 (n)).",
+);
+/// The `mapping-not-pinned` problem (OP-157 m.3 (y)).
+pub const MAPPING_NOT_PINNED: Code = code(
+    "mapping-not-pinned",
+    409,
+    "Conflict",
+    "The compatibility mapping is not pinned by the domain's schema-definition Acceptance, so it changes no coverage (PI-19, OP-157 m.3 (r)).",
+);
+/// The `delegated-admin-off` problem (OP-157 m.3 (y)).
+pub const DELEGATED_ADMIN_OFF: Code = code(
+    "delegated-admin-off",
+    409,
+    "Conflict",
+    "The realm has not opened delegated administration, so no new admin Grant is issued; existing ones stay (OP-157 m.3 (t)).",
+);
+/// The `offboarding-disposition-missing` problem (OP-157 m.3 (y)).
+pub const OFFBOARDING_DISPOSITION_MISSING: Code = code(
+    "offboarding-disposition-missing",
+    422,
+    "Unprocessable Content",
+    "Offboarding needs one explicit choice for every channel: direct Grants, Instances, rule-shaped holdings, the self-anchor and re-entry; there are no defaults (OP-157 m.3 (v)).",
+);
+/// The `ceremony-quorum-missing` problem (OP-157 m.3 (y)).
+pub const CEREMONY_QUORUM_MISSING: Code = code(
+    "ceremony-quorum-missing",
+    403,
+    "Forbidden",
+    "The binding key operation needs a permit signed by k of the n ceremony keys, 2 of 3 by default, within 15 minutes and with a fresh nonce (CR-29, OP-157 m.3 (x)).",
+);
+/// The `case-system-unknown` problem (OP-157 m.3 (y)).
+pub const CASE_SYSTEM_UNKNOWN: Code = code(
+    "case-system-unknown",
+    404,
+    "Not Found",
+    "No live support case system by that name in the realm (OP-157 m.3 (e)).",
+);

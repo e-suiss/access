@@ -217,6 +217,22 @@ pub enum ResourceKind {
     CustomDomains,
     /// Undelivered Relay messages, by event id, without their content (OP-156 m.3 (c)).
     RelayUndelivered,
+    /// Support case systems, by name (OP-157 m.3 (e)).
+    CaseSystems,
+    /// Support Grants, by the Grant's base64url (OP-157 m.3 (c)).
+    SupportGrants,
+    /// Break-glass marked accounts, by `account_id` (OP-157 m.3 (h)).
+    BreakglassAccounts,
+    /// Break-glass drills, by the drill Exercise's base64url (OP-157 m.3 (h)).
+    BreakglassDrills,
+    /// Break-glass uses and their reviews, by the use's Exercise base64url (OP-157 m.3 (h)).
+    BreakglassReviews,
+    /// Access review campaigns, by name (OP-157 m.3 (w)).
+    Reviews,
+    /// One campaign's items, by the Grant's base64url (OP-157 m.3 (w)).
+    ReviewItems,
+    /// What offboarding a Party would do, by its Party's base64url (OP-157 m.3 (v)).
+    OffboardingPreviews,
 }
 
 impl ResourceKind {
@@ -252,6 +268,14 @@ impl ResourceKind {
             Self::SsoEnforcementPreviews => "sso-enforcement-previews",
             Self::CustomDomains => "domains",
             Self::RelayUndelivered => "relay-undelivered",
+            Self::CaseSystems => "case-systems",
+            Self::SupportGrants => "support-grants",
+            Self::BreakglassAccounts => "breakglass-accounts",
+            Self::BreakglassDrills => "breakglass-drills",
+            Self::BreakglassReviews => "breakglass-reviews",
+            Self::Reviews => "reviews",
+            Self::ReviewItems => "review-items",
+            Self::OffboardingPreviews => "offboarding-previews",
         }
     }
 }

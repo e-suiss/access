@@ -701,6 +701,15 @@ fn body_of(row: &Route) -> &'static str {
             ResourceKind::Organizations => "Organization",
             ResourceKind::Agents => "Agent",
             ResourceKind::SsoEnforcementPreviews => "SsoEnforcementPreview",
+            // OP-157 m.4 (a)
+            ResourceKind::CaseSystems => "CaseSystem",
+            ResourceKind::SupportGrants => "SupportGrant",
+            ResourceKind::BreakglassAccounts => "BreakglassAccount",
+            ResourceKind::BreakglassDrills => "BreakglassDrill",
+            ResourceKind::BreakglassReviews => "BreakglassReview",
+            ResourceKind::Reviews => "Review",
+            ResourceKind::ReviewItems => "ReviewItem",
+            ResourceKind::OffboardingPreviews => "OffboardingPreview",
         },
         _ => "ExerciseRef",
     }

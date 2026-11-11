@@ -1094,6 +1094,153 @@
       "status": 409,
       "title": "Conflict",
       "description": "The tool's definition changed or the tool is new: it is blocked until an administrator pins it with idp.proxy.mcp_pin; nothing was decided and the call is not forwarded (AG-42, OP-156 m.3 (n))."
+    },
+    {
+      "code": "support-case-required",
+      "type": "urn:suiss:access:problem:support-case-required",
+      "status": 422,
+      "title": "Unprocessable Content",
+      "description": "A support Grant names exactly one case: Requirement::Purpose with a PurposeRef::Case and params.case; a support grant.issue without a case is refused (OP-157 m.3 (c))."
+    },
+    {
+      "code": "support-case-closed",
+      "type": "urn:suiss:access:problem:support-case-closed",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The support case is closed or its support_case Claim is missing or stale, so no support access holds; nothing was granted or done (OP-157 m.3 (e))."
+    },
+    {
+      "code": "support-request-unknown",
+      "type": "urn:suiss:access:problem:support-request-unknown",
+      "status": 404,
+      "title": "Not Found",
+      "description": "No open support access request with this id for the caller (OP-157 m.3 (f))."
+    },
+    {
+      "code": "support-blocked",
+      "type": "urn:suiss:access:problem:support-blocked",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The person turned on Block support access; no support request reaches them until they turn it off (OP-157 m.3 (c))."
+    },
+    {
+      "code": "artifact-format-refused",
+      "type": "urn:suiss:access:problem:artifact-format-refused",
+      "status": 415,
+      "title": "Unsupported Media Type",
+      "description": "Only HAR, JSON and text logs can be redacted automatically; images and video are refused (TN-74, OP-157 m.3 (g))."
+    },
+    {
+      "code": "artifact-too-large",
+      "type": "urn:suiss:access:problem:artifact-too-large",
+      "status": 413,
+      "title": "Content Too Large",
+      "description": "The support artifact is larger than the realm's artifact policy allows (OP-157 m.3 (g))."
+    },
+    {
+      "code": "breakglass-minimum-two",
+      "type": "urn:suiss:access:problem:breakglass-minimum-two",
+      "status": 422,
+      "title": "Unprocessable Content",
+      "description": "A break-glass setup needs at least two break-glass Grants held by two different Parties (OP-157 m.3 (h))."
+    },
+    {
+      "code": "breakglass-review-required",
+      "type": "urn:suiss:access:problem:breakglass-review-required",
+      "status": 409,
+      "title": "Conflict",
+      "description": "A break-glass use waits for its review by another Party; the review classifies it as drill, emergency or misuse and grants nothing (OP-157 m.3 (h))."
+    },
+    {
+      "code": "breakglass-account-sso-refused",
+      "type": "urn:suiss:access:problem:breakglass-account-sso-refused",
+      "status": 403,
+      "title": "Forbidden",
+      "description": "A break-glass account signs in only with the realm's own phishing-resistant method, never through SSO or an upstream provider (OP-157 m.3 (h))."
+    },
+    {
+      "code": "approval-not-eligible",
+      "type": "urn:suiss:access:problem:approval-not-eligible",
+      "status": 403,
+      "title": "Forbidden",
+      "description": "The viewer is not in the request's eligible set, so it cannot approve it here (OP-157 m.3 (l), E26)."
+    },
+    {
+      "code": "approval-surface-not-accepted",
+      "type": "urn:suiss:access:problem:approval-surface-not-accepted",
+      "status": 403,
+      "title": "Forbidden",
+      "description": "The domain does not accept this approval surface's profile, so its approval counts for nothing (OP-157 m.3 (m))."
+    },
+    {
+      "code": "approval-body-mismatch",
+      "type": "urn:suiss:access:problem:approval-body-mismatch",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The pushed request's body does not match the intent's opaque parameter digest, so it cannot be approved (PI-17, OP-157 m.3 (l))."
+    },
+    {
+      "code": "approval-batch-invalid",
+      "type": "urn:suiss:access:problem:approval-batch-invalid",
+      "status": 422,
+      "title": "Unprocessable Content",
+      "description": "A batch approval holds at most 10 CT1 requests of one requester and one action class, each with its own AAS (OP-157 m.3 (m))."
+    },
+    {
+      "code": "approval-inline-off",
+      "type": "urn:suiss:access:problem:approval-inline-off",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The realm has not opened in-notification approval, or the request is not CT1 (OP-157 m.3 (m))."
+    },
+    {
+      "code": "approval-invite-limit",
+      "type": "urn:suiss:access:problem:approval-invite-limit",
+      "status": 429,
+      "title": "Too Many Requests",
+      "description": "At most 5 approval invitations an hour from one requester to one approver, and one per intent; try again after Retry-After (OP-157 m.3 (m))."
+    },
+    {
+      "code": "policy-default-unknown",
+      "type": "urn:suiss:access:problem:policy-default-unknown",
+      "status": 422,
+      "title": "Unprocessable Content",
+      "description": "The policy.set defaults name a key the Kernel does not know: ct3_delay_s, mapping_probation_days, approval_surfaces, breakglass_review_h and support_max_min are the known ones (OP-157 m.3 (n))."
+    },
+    {
+      "code": "mapping-not-pinned",
+      "type": "urn:suiss:access:problem:mapping-not-pinned",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The compatibility mapping is not pinned by the domain's schema-definition Acceptance, so it changes no coverage (PI-19, OP-157 m.3 (r))."
+    },
+    {
+      "code": "delegated-admin-off",
+      "type": "urn:suiss:access:problem:delegated-admin-off",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The realm has not opened delegated administration, so no new admin Grant is issued; existing ones stay (OP-157 m.3 (t))."
+    },
+    {
+      "code": "offboarding-disposition-missing",
+      "type": "urn:suiss:access:problem:offboarding-disposition-missing",
+      "status": 422,
+      "title": "Unprocessable Content",
+      "description": "Offboarding needs one explicit choice for every channel: direct Grants, Instances, rule-shaped holdings, the self-anchor and re-entry; there are no defaults (OP-157 m.3 (v))."
+    },
+    {
+      "code": "ceremony-quorum-missing",
+      "type": "urn:suiss:access:problem:ceremony-quorum-missing",
+      "status": 403,
+      "title": "Forbidden",
+      "description": "The binding key operation needs a permit signed by k of the n ceremony keys, 2 of 3 by default, within 15 minutes and with a fresh nonce (CR-29, OP-157 m.3 (x))."
+    },
+    {
+      "code": "case-system-unknown",
+      "type": "urn:suiss:access:problem:case-system-unknown",
+      "status": 404,
+      "title": "Not Found",
+      "description": "No live support case system by that name in the realm (OP-157 m.3 (e))."
     }
   ]
 }

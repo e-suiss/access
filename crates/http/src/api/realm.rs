@@ -709,6 +709,133 @@ const STAGE11: [Route; 38] = [
     ),
 ];
 
+/// The Stage 12 realm routes, declared before their lanes serve them (OP-157 m.4 (a)): each
+/// answers `501 not-yet-served` behind its permission until its lane fills the handler.
+const STAGE12: [Route; 21] = [
+    list(
+        "/admin/v1/realms/{slug}/support/case-systems",
+        "listCaseSystems",
+        "The realm's support case systems, each a registered issuer of support_case Claims (OP-157 m.3 (e)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/support/case-systems",
+        "registerCaseSystem",
+        "Registers a support case system {name, issuer, provider, format} as a Claim issuer: idp.support.case_system_register.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/support/case-systems/{case_system}/retire",
+        "retireCaseSystem",
+        "Retires a support case system; its open cases no longer hold any support Grant: idp.support.case_system_retire.",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/support/grants",
+        "listSupportGrants",
+        "The realm's support Grants with operator, subject, case, scope and end, a read of the Grants the caller may see (OP-157 m.3 (c)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/support-artifacts",
+        "putSupportArtifactPolicy",
+        "Opens support artifact uploads with their size and retention limits (idp.support.artifact_policy) or closes them (artifact_policy_close) (OP-157 m.3 (g)).",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/breakglass/accounts",
+        "listBreakglassAccounts",
+        "The realm's accounts marked as break-glass accounts, with their last sign-in; the mark carries no authority (INV-28, OP-157 m.3 (h)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/breakglass/accounts",
+        "markBreakglassAccount",
+        "Marks an organization member's account as a break-glass account {organization, member}: idp.org.member_breakglass.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/breakglass/accounts/{account}/clear",
+        "clearBreakglassAccount",
+        "Clears an account's break-glass mark: idp.org.member_breakglass_clear.",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/breakglass/drills",
+        "listBreakglassDrills",
+        "The realm's break-glass drills, each a real Exercise with PurposeRef drill, and when the next is due (OP-157 m.3 (h)).",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/breakglass/reviews",
+        "listBreakglassReviews",
+        "Each use of a break-glass Grant with its review {exercise, classification: drill, emergency or misuse}, or overdue (OP-157 m.3 (h)).",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/reviews",
+        "listReviews",
+        "The realm's access review campaigns: period, scope and next run; a campaign is a view, never a queue (IDP-39 (3), OP-157 m.3 (w)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/reviews",
+        "scheduleReview",
+        "Schedules an access review campaign {name, period_days, scope}: idp.review.schedule.",
+    ),
+    read(
+        "/admin/v1/realms/{slug}/reviews/{review}",
+        "getReview",
+        "One access review campaign.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/reviews/{review}/close",
+        "closeReview",
+        "Ends an access review campaign: idp.review.schedule_close.",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/reviews/{review}/items",
+        "listReviewItems",
+        "The campaign's items for the caller: the Grants of the caller's team, re-checked against what the caller may see; removing one is the caller's own grant.revoke Exercise.",
+    ),
+    Route {
+        verb: Verb::Post,
+        ..read(
+            "/admin/v1/realms/{slug}/reviews/{review}/items/{item}/keep",
+            "keepReviewItem",
+            "Records the reviewer's keep as a review.kept identity audit record; writes no authority (OP-157 m.3 (w)).",
+        )
+    },
+    Route {
+        verb: Verb::Post,
+        ..read(
+            "/admin/v1/realms/{slug}/offboarding/{party}/preview",
+            "previewOffboarding",
+            "What offboarding a Party would do with one explicit choice per channel: direct Grants keep or revoke, Instances terminate, rule-shaped holdings retain, exclude or restrict, the self-anchor retire or transfer, re-entry allowed or blocked; no defaults, changes nothing (OP-157 m.3 (v)).",
+        )
+    },
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/offboarding/{party}/commit",
+        "commitOffboarding",
+        "Commits a previewed offboarding as the caller's signed Exercises; a missing channel choice answers 422 offboarding-disposition-missing, and the Party reads as offboarded only after the departure commits.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/delegated-admin",
+        "putDelegatedAdmin",
+        "Opens delegated administration through meta-action role Grants (idp.realm.delegated_admin) or closes it for new admin Grants (delegated_admin_close); existing admin Grants stay (OP-157 m.3 (t)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/approval-inline",
+        "putApprovalInline",
+        "Opens CT1 approval inside the approver notification (idp.realm.approval_inline) or closes it (approval_inline_close) (OP-157 m.3 (m)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/approval-batch",
+        "putApprovalBatch",
+        "Opens CT1 batch approval of at most 10 requests (idp.realm.approval_batch) or closes it (approval_batch_close) (OP-157 m.3 (m)).",
+    ),
+];
+
 /// Every realm resource route, in contract order.
 pub const ROWS: &[Route] = &ALL_ROWS;
 
@@ -722,8 +849,9 @@ const BASE_LEN: usize = BASE.len();
     clippy::large_const_arrays,
     reason = "composed at compile time into the manifest, which a static cannot be"
 )]
-const ALL_ROWS: [Route; BASE_LEN + STAGE9.len() + STAGE10.len() + STAGE11.len()] = {
-    let mut out = [BASE[0]; BASE_LEN + STAGE9.len() + STAGE10.len() + STAGE11.len()];
+const ALL_ROWS: [Route; BASE_LEN + STAGE9.len() + STAGE10.len() + STAGE11.len() + STAGE12.len()] = {
+    let mut out =
+        [BASE[0]; BASE_LEN + STAGE9.len() + STAGE10.len() + STAGE11.len() + STAGE12.len()];
     let mut i = 0;
     while i < BASE_LEN {
         out[i] = BASE[i];
@@ -744,15 +872,22 @@ const ALL_ROWS: [Route; BASE_LEN + STAGE9.len() + STAGE10.len() + STAGE11.len()]
         out[BASE_LEN + STAGE9.len() + STAGE10.len() + l] = STAGE11[l];
         l += 1;
     }
+    let mut m = 0;
+    while m < STAGE12.len() {
+        out[BASE_LEN + STAGE9.len() + STAGE10.len() + STAGE11.len() + m] = STAGE12[m];
+        m += 1;
+    }
     out
 };
 
-/// Whether a realm row is a Stage 9, 10 or 11 declaration (OP-154 m.4, OP-155 m.4, OP-156 m.4).
+/// Whether a realm row is a Stage 9, 10, 11 or 12 declaration (OP-154 m.4, OP-155 m.4, OP-156
+/// m.4, OP-157 m.4).
 fn declared(operation_id: &str) -> bool {
     STAGE9
         .iter()
         .chain(STAGE10.iter())
         .chain(STAGE11.iter())
+        .chain(STAGE12.iter())
         .any(|r| r.operation_id == operation_id)
 }
 
@@ -1623,6 +1758,22 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
             Shape::List(&["event_id", "kind", "reason"]),
         ),
         "resendRelayMessage" => (RelayUndelivered, w(false)),
+        // OP-157 m.4 (a)
+        "listCaseSystems" => (ResourceKind::CaseSystems, Shape::Planned("Page")),
+        "registerCaseSystem" | "retireCaseSystem" => (ResourceKind::CaseSystems, Shape::Planned("WriteResult")),
+        "listSupportGrants" => (ResourceKind::SupportGrants, Shape::Planned("Page")),
+        "putSupportArtifactPolicy" | "putDelegatedAdmin" | "putApprovalInline" | "putApprovalBatch" => (Settings, Shape::Planned("WriteResult")),
+        "listBreakglassAccounts" => (ResourceKind::BreakglassAccounts, Shape::Planned("Page")),
+        "markBreakglassAccount" | "clearBreakglassAccount" => (ResourceKind::BreakglassAccounts, Shape::Planned("WriteResult")),
+        "listBreakglassDrills" => (ResourceKind::BreakglassDrills, Shape::Planned("Page")),
+        "listBreakglassReviews" => (ResourceKind::BreakglassReviews, Shape::Planned("Page")),
+        "listReviews" => (ResourceKind::Reviews, Shape::Planned("Page")),
+        "scheduleReview" | "closeReview" => (ResourceKind::Reviews, Shape::Planned("WriteResult")),
+        "getReview" => (ResourceKind::Reviews, Shape::Planned("Declared")),
+        "listReviewItems" => (ResourceKind::ReviewItems, Shape::Planned("Page")),
+        "keepReviewItem" => (ResourceKind::ReviewItems, Shape::Planned("Declared")),
+        "previewOffboarding" => (ResourceKind::OffboardingPreviews, Shape::Planned("Declared")),
+        "commitOffboarding" => (ResourceKind::OffboardingPreviews, Shape::Planned("WriteResult")),
         o if declared(o) => (Settings, Shape::Planned(planned_body(o))),
         "listClients" => (
             Clients,
@@ -1872,6 +2023,11 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             // OP-156 m.3 (c)
             Invalid::RelayShredded => &r::CONTENT_SHREDDED,
             Invalid::RelayExpired => &r::MESSAGE_EXPIRED,
+            // OP-157 m.4 (a)
+            Invalid::NotYetServed => &codes::NOT_YET_SERVED,
+            Invalid::CaseSystemUnknown => &r::CASE_SYSTEM_UNKNOWN,
+            Invalid::DelegatedAdminOff => &r::DELEGATED_ADMIN_OFF,
+            Invalid::OffboardingDispositionMissing => &r::OFFBOARDING_DISPOSITION_MISSING,
         },
         AdminError::Issuer(_) | AdminError::NoRealm => &codes::NOT_FOUND,
         // TN-91

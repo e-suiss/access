@@ -815,7 +815,14 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::KeyDrop { .. }
             | Change::SigninPolicy(_)
             | Change::SessionPolicy(_)
-            | Change::ExtensionPolicy(_) => {}
+            | Change::ExtensionPolicy(_)
+            | Change::CaseSystem(_)
+            | Change::SupportArtifactPolicy(_)
+            | Change::Breakglass(_)
+            | Change::Review(_)
+            | Change::DelegatedAdmin(_)
+            | Change::ApprovalInline(_)
+            | Change::ApprovalBatch(_) => {}
         }
         Ok(())
     }
@@ -1605,6 +1612,14 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     ) -> Result<Option<ClientSecret>, AdminError> {
         let mut secret = None;
         let done = match change {
+            // OP-157 m.4 (a)
+            Change::CaseSystem(_)
+            | Change::SupportArtifactPolicy(_)
+            | Change::Breakglass(_)
+            | Change::Review(_)
+            | Change::DelegatedAdmin(_)
+            | Change::ApprovalInline(_)
+            | Change::ApprovalBatch(_) => return Err(Invalid::NotYetServed.into()),
             Change::ClientRegister(c) | Change::ClientUpdate(c) => {
                 let (done, s) = self
                     .write_client(t, bound, c, matches!(change, Change::ClientRegister(_)))

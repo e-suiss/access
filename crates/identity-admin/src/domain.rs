@@ -26,6 +26,7 @@ use suiss_crypto::rotation::Policy;
 
 pub mod accounts;
 pub mod agent;
+pub mod breakglass;
 pub mod certificate;
 pub mod ciba;
 pub mod custom_domain;
@@ -39,9 +40,11 @@ pub mod provision;
 pub use access_identity_risk::domain::mode::ProtectionMode;
 
 pub mod realm;
+pub mod review;
 pub mod saml;
 pub mod scim;
 pub mod sso;
+pub mod support;
 
 pub use ciba::CibaSetting;
 pub use realm::{
@@ -622,6 +625,20 @@ pub enum Invalid {
     /// The message's code or link has expired (OP-156 m.3 (c)).
     #[error("relay message expired")]
     RelayExpired,
+    /// A Stage 12 change whose lane does not apply it yet (OP-157 m.4 (a)): nothing is decided
+    /// or written.
+    #[error("not yet served")]
+    NotYetServed,
+    /// No live support case system by that name (OP-157 m.3 (e)).
+    #[error("no such case system")]
+    CaseSystemUnknown,
+    /// The realm has not opened delegated administration, so no new admin Grant is issued
+    /// (OP-157 m.3 (t)).
+    #[error("delegated administration off")]
+    DelegatedAdminOff,
+    /// An offboarding without one explicit choice for every channel (OP-157 m.3 (v)).
+    #[error("offboarding disposition missing")]
+    OffboardingDispositionMissing,
 }
 
 impl Invalid {
@@ -765,6 +782,10 @@ impl Invalid {
             Self::NoRelayMessage => "no-such-relay-message",
             Self::RelayShredded => "content-shredded",
             Self::RelayExpired => "message-expired",
+            Self::NotYetServed => "not-yet-served",
+            Self::CaseSystemUnknown => "case-system-unknown",
+            Self::DelegatedAdminOff => "delegated-admin-off",
+            Self::OffboardingDispositionMissing => "offboarding-disposition-missing",
         }
     }
 }
@@ -2105,6 +2126,24 @@ pub enum Change {
     /// `idp.realm.security_notices` (`true`, CT2) or `security_notices_close` (`false`, CT1):
     /// the immediate security authority notices, on by default (OP-156 m.3 (c)).
     SecurityNotices(bool),
+    /// `idp.support.case_system_register` or `case_system_retire` (OP-157 m.3 (e)).
+    CaseSystem(support::CaseSystemChange),
+    /// `idp.support.artifact_policy` (`Some`, CT2) or `artifact_policy_close` (`None`, CT1)
+    /// (OP-157 m.3 (g)).
+    SupportArtifactPolicy(Option<support::ArtifactPolicy>),
+    /// `idp.org.member_breakglass` (CT2) or `member_breakglass_clear` (CT1) (OP-157 m.3 (h)).
+    Breakglass(breakglass::BreakglassMark),
+    /// `idp.review.schedule` (CT2) or `schedule_close` (CT1) (OP-157 m.3 (w)).
+    Review(review::ReviewChange),
+    /// `idp.realm.delegated_admin` (`true`, CT2) or `delegated_admin_close` (`false`, CT1)
+    /// (OP-157 m.3 (t)).
+    DelegatedAdmin(bool),
+    /// `idp.realm.approval_inline` (`true`, CT2) or `approval_inline_close` (`false`, CT1)
+    /// (OP-157 m.3 (m)).
+    ApprovalInline(bool),
+    /// `idp.realm.approval_batch` (`true`, CT2) or `approval_batch_close` (`false`, CT1)
+    /// (OP-157 m.3 (m)).
+    ApprovalBatch(bool),
 }
 
 /// A change to an organization's profile (TN-98): its name, and whether home realm discovery
@@ -2383,6 +2422,17 @@ impl Change {
             Self::RelayResend(_) => IdpAction::RelayResend,
             Self::SecurityNotices(true) => IdpAction::RealmSecurityNotices,
             Self::SecurityNotices(false) => IdpAction::RealmSecurityNoticesClose,
+            // OP-157 m.3 (a)
+            Self::CaseSystem(c) => c.action(),
+            Self::SupportArtifactPolicy(p) => support::artifact_policy_action(p.as_ref()),
+            Self::Breakglass(b) => b.action(),
+            Self::Review(r) => r.action(),
+            Self::DelegatedAdmin(true) => IdpAction::RealmDelegatedAdmin,
+            Self::DelegatedAdmin(false) => IdpAction::RealmDelegatedAdminClose,
+            Self::ApprovalInline(true) => IdpAction::RealmApprovalInline,
+            Self::ApprovalInline(false) => IdpAction::RealmApprovalInlineClose,
+            Self::ApprovalBatch(true) => IdpAction::RealmApprovalBatch,
+            Self::ApprovalBatch(false) => IdpAction::RealmApprovalBatchClose,
             Self::ClientRegister(_) => IdpAction::ClientRegister,
             Self::ClientUpdate(_) => IdpAction::ClientUpdate,
             Self::ClientRetire(_) => IdpAction::ClientRetire,
@@ -2581,6 +2631,23 @@ impl Change {
             Self::GatewayKeytabEmergency { gateway, kvno } => gateway::emergency(gateway, *kvno),
             Self::Iys { recipient_type, .. } => iys_recipient(recipient_type),
             Self::PreferenceTopics(topics) => preference_topics(topics),
+            // OP-157 m.4 (a)
+            Self::CaseSystem(c) => {
+                c.check()?;
+                Err(Invalid::NotYetServed)
+            }
+            Self::SupportArtifactPolicy(p) => {
+                p.as_ref().map_or(Ok(()), support::ArtifactPolicy::check)?;
+                Err(Invalid::NotYetServed)
+            }
+            Self::Review(r) => {
+                r.check()?;
+                Err(Invalid::NotYetServed)
+            }
+            Self::Breakglass(_)
+            | Self::DelegatedAdmin(_)
+            | Self::ApprovalInline(_)
+            | Self::ApprovalBatch(_) => Err(Invalid::NotYetServed),
             Self::AccountBind(_)
             | Self::RelayResend(_)
             | Self::SecurityNotices(_)
@@ -2818,6 +2885,14 @@ impl Change {
             Self::CspMode { mode, .. } => {
                 Value::Map(vec![(Value::text("csp_mode"), Value::text(mode.name()))])
             }
+            // OP-157 m.3 (a)
+            Self::CaseSystem(c) => c.body(),
+            Self::SupportArtifactPolicy(p) => support::artifact_policy_body(p.as_ref()),
+            Self::Breakglass(b) => b.body(),
+            Self::Review(r) => r.body(),
+            Self::DelegatedAdmin(on) | Self::ApprovalInline(on) | Self::ApprovalBatch(on) => {
+                Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))])
+            }
         }
     }
 
@@ -2953,7 +3028,18 @@ impl Change {
             | Self::Hrd(_)
             | Self::Iys { .. }
             | Self::PreferenceTopics(_)
-            | Self::FrontchannelLogout => path.push(String::from("realm")),
+            | Self::FrontchannelLogout
+            | Self::SupportArtifactPolicy(_)
+            | Self::DelegatedAdmin(_)
+            | Self::ApprovalInline(_)
+            | Self::ApprovalBatch(_) => path.push(String::from("realm")),
+            // OP-157 m.3 (a)
+            Self::CaseSystem(c) => path.extend(c.path()),
+            Self::Review(r) => path.extend(r.path()),
+            Self::Breakglass(b) => {
+                path.extend([String::from("org"), b64url_encode(&b.org)]);
+                path.extend([String::from("member"), b64url_encode(&b.member)]);
+            }
             Self::ClientProfile { client, .. } => {
                 path.extend([String::from("client"), String::from(client.as_str())]);
             }

@@ -237,7 +237,17 @@ fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
         ResourceKind::Agents => json!({ "agent": key, "display_name": "Helper",
                                         "agent_kind": "cloud", "status": "active",
                                         "sponsors": [], "instances": [] }),
-        ResourceKind::AgentSponsors => json!({ "account_id": key }),
+        ResourceKind::AgentSponsors | ResourceKind::BreakglassAccounts => {
+            json!({ "account_id": key })
+        }
+        ResourceKind::CaseSystems => json!({ "name": key, "provider": "zendesk",
+                                             "status": "live" }),
+        ResourceKind::SupportGrants | ResourceKind::ReviewItems => json!({ "grant": key }),
+        ResourceKind::BreakglassDrills | ResourceKind::BreakglassReviews => {
+            json!({ "exercise": key })
+        }
+        ResourceKind::Reviews => json!({ "name": key, "period_days": 90, "status": "live" }),
+        ResourceKind::OffboardingPreviews => json!({ "party": key, "channels": [] }),
         ResourceKind::SsoEnforcementPreviews => json!({ "organization": key, "enforced": false,
                                                         "members": [], "service_accounts": [],
                                                         "pending_invitations": 0 }),

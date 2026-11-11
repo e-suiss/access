@@ -59,7 +59,14 @@ pub const fn id_member(kind: ResourceKind) -> &'static str {
         | ResourceKind::LinuxHosts
         | ResourceKind::HrSources
         | ResourceKind::HrConnectors
-        | ResourceKind::SignalSources => "name",
+        | ResourceKind::SignalSources
+        | ResourceKind::CaseSystems
+        | ResourceKind::Reviews => "name",
+        // OP-157 m.4 (a)
+        ResourceKind::SupportGrants | ResourceKind::ReviewItems => "grant",
+        ResourceKind::BreakglassAccounts => "account_id",
+        ResourceKind::BreakglassDrills | ResourceKind::BreakglassReviews => "exercise",
+        ResourceKind::OffboardingPreviews => "party",
         ResourceKind::CustomDomains => "host",
         _ => "client_id",
     }

@@ -115,6 +115,14 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::SsoEnforcementPreviews => Kind::SsoPreview,
         ResourceKind::CustomDomains => Kind::CustomDomains,
         ResourceKind::RelayUndelivered => Kind::RelayUndelivered,
+        ResourceKind::CaseSystems => Kind::CaseSystems,
+        ResourceKind::SupportGrants => Kind::SupportGrants,
+        ResourceKind::BreakglassAccounts => Kind::BreakglassAccounts,
+        ResourceKind::BreakglassDrills => Kind::BreakglassDrills,
+        ResourceKind::BreakglassReviews => Kind::BreakglassReviews,
+        ResourceKind::Reviews => Kind::Reviews,
+        ResourceKind::ReviewItems => Kind::ReviewItems,
+        ResourceKind::OffboardingPreviews => Kind::OffboardingPreviews,
     }
 }
 
