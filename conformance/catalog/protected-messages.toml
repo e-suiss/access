@@ -74,4 +74,13 @@ keys = [
   "aftermath-recorded_at",
   "activity-support_by",
   "change-breakglass_used",
+  "login-degraded",
+  "outcome-revoked_confirming",
+  "outcome-time_check",
+  "recovery-recovered",
+  "recovery-changes_lost",
+  "degraded-unknown",
+  "domain_history-revoked_confirming",
+  "domain_history-recovered_from",
+  "domain_history-changes_lost",
 ]

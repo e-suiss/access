@@ -767,7 +767,8 @@
           "support.declined",
           "breakglass.sso_refused",
           "approval.more",
-          "approval.not_eligible_hidden"
+          "approval.not_eligible_hidden",
+          "login.degraded"
         ]
       },
       "Text": {

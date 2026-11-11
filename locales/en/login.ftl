@@ -206,3 +206,5 @@ support-declined = You didn't give access. Nothing changed.
 breakglass-sso_refused = This account signs in only with its own security key.
 approval-more = { $count } more
 approval-not_eligible_hidden = You can't approve this. Who can approve it isn't shown to you.
+# OP-158 m.4 (a)
+login-degraded = Sign-in isn't available right now. Things already allowed keep working within their limits.

@@ -206,3 +206,5 @@ support-declined = Erişim vermedin. Hiçbir şey değişmedi.
 breakglass-sso_refused = Bu hesap yalnız kendi güvenlik anahtarıyla giriş yapar.
 approval-more = { $count } onay daha
 approval-not_eligible_hidden = Bunu onaylayamazsın. Kimlerin onaylayabileceği sana gösterilmiyor.
+# OP-158 m.4 (a)
+login-degraded = Giriş şu anda kullanılamıyor. Zaten izin verilmiş işler sınırları içinde çalışmaya devam ediyor.

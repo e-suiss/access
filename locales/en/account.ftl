@@ -225,3 +225,10 @@ support-read_only = View only
 support-artifacts_title = Files for support
 support-artifact_redacted = Sign-in secrets were removed from this file before it was saved.
 support-artifact_refused = Only HAR, JSON and text log files can be shared; images and videos can't be cleaned of secrets.
+# OP-158 m.4 (a)
+domain_history-revoked_confirming = Revoked — confirming (witness pending)
+domain_history-recovered_from = Recovered from previous provider at record position { $position }
+domain_history-changes_lost = Changes after { $time } may be lost. If you revoked anything after { $time }, revoke it again
+domain_history-title = History
+domain_history-handover = Moved to { $provider } at record position { $position }
+domain_history-recovered = Recovered at record position { $position }

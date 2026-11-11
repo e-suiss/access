@@ -199,3 +199,18 @@ review-open = Access review: { $count } delegations of your team to look at →
 # OP-157 m.4 (b)
 activity-support_viewed = Viewed your account
 activity-support_acted = Acted on your account
+# OP-158 m.4 (a)
+outcome-revoked_confirming = Revoked — confirming (witness pending)
+outcome-time_check = Unavailable — time check
+outcome-busy = Busy — retry
+recovery-recovered = Recovered from previous provider at record position { $position }
+recovery-changes_lost = Changes after { $time } may be lost. If you revoked anything after { $time }, revoke it again
+history-handover = Moved to { $provider } at record position { $position }
+history-recovered = Recovered at record position { $position }
+decommission-window = This domain closes on { $date }. Export or move it before then.
+degraded-owner = Responsible: { $owner }
+degraded-unknown = UNKNOWN
+degraded-missing = Not known yet: { $what }
+degraded-safe_default = Until then: { $default }
+residency-declared = Data stays in { $region } ({ $class })
+dr-declared = Disaster recovery: { $class }; up to { $rpo } of changes can be lost

@@ -568,11 +568,15 @@ pub enum TextId {
     /// (E26).
     #[serde(rename = "approval.not_eligible_hidden")]
     ApprovalNotEligibleHidden,
+    /// W8: the identity database is unreachable; already issued tokens keep working within their
+    /// lifetime, nothing new is signed in (OP-45, OP-158 m.3 (s)).
+    #[serde(rename = "login.degraded")]
+    DegradedSignIn,
 }
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 187] = [
+    pub const ALL: [Self; 188] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -760,6 +764,7 @@ impl TextId {
         Self::BreakglassSsoRefused,
         Self::ApprovalMore,
         Self::ApprovalNotEligibleHidden,
+        Self::DegradedSignIn,
     ];
 
     /// The stable id on the wire.
@@ -954,6 +959,7 @@ impl TextId {
             Self::BreakglassSsoRefused => "breakglass.sso_refused",
             Self::ApprovalMore => "approval.more",
             Self::ApprovalNotEligibleHidden => "approval.not_eligible_hidden",
+            Self::DegradedSignIn => "login.degraded",
         }
     }
 
@@ -1233,6 +1239,10 @@ impl TextId {
             Self::ApprovalMore => "{ $count } more",
             Self::ApprovalNotEligibleHidden => {
                 "You can't approve this. Who can approve it isn't shown to you."
+            }
+            // OP-158 m.3 (s)
+            Self::DegradedSignIn => {
+                "Sign-in isn't available right now. Things already allowed keep working within their limits."
             }
         }
     }

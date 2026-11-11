@@ -4815,3 +4815,194 @@ surface = "hub"
 class = "status"
 owner = "access"
 protected = false
+
+# Stage 13 (OP-158 m.4 (a)): degraded sign-in, witness-pending and time-check states, recovery and handover history, decommission, failure ownership, residency and DR, and the new Relay subjects
+[[message]]
+key = "login-degraded"
+text_id = "login.degraded"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "outcome-revoked_confirming"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "outcome-time_check"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "outcome-busy"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "recovery-recovered"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "recovery-changes_lost"
+surface = "hub"
+class = "notice"
+owner = "access"
+protected = true
+
+[[message]]
+key = "history-handover"
+surface = "hub"
+class = "info"
+owner = "access"
+protected = false
+
+[[message]]
+key = "history-recovered"
+surface = "hub"
+class = "info"
+owner = "access"
+protected = false
+
+[[message]]
+key = "decommission-window"
+surface = "hub"
+class = "notice"
+owner = "access"
+protected = false
+
+[[message]]
+key = "degraded-owner"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "degraded-unknown"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "degraded-missing"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "degraded-safe_default"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "residency-declared"
+surface = "hub"
+class = "info"
+owner = "access"
+protected = false
+
+[[message]]
+key = "dr-declared"
+surface = "hub"
+class = "info"
+owner = "access"
+protected = false
+
+[[message]]
+key = "domain_history-revoked_confirming"
+surface = "account"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "domain_history-recovered_from"
+surface = "account"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "domain_history-changes_lost"
+surface = "account"
+class = "notice"
+owner = "access"
+protected = true
+
+[[message]]
+key = "domain_history-title"
+surface = "account"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "domain_history-handover"
+surface = "account"
+class = "info"
+owner = "access"
+protected = false
+
+[[message]]
+key = "domain_history-recovered"
+surface = "account"
+class = "info"
+owner = "access"
+protected = false
+
+[[message]]
+key = "mail-domain_recovered-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-domain_handover-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-divergence_notice-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-equivocation_alarm-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-degraded_alarm-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-decommission_notice-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false

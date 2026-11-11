@@ -40,3 +40,10 @@ mail-support_access_notice-subject = Hesabındaki destek erişimi değişti
 mail-breakglass_used-subject = Hesabında acil durum erişimi kullanıldı
 mail-breakglass_alarm-subject = Break-glass alarmı
 mail-review_campaign-subject = Ekibin için bir erişim gözden geçirmesi açıldı
+# OP-158 m.4 (a)
+mail-domain_recovered-subject = Alanın önceki sağlayıcısından kurtarıldı
+mail-domain_handover-subject = Alanın yeni bir sağlayıcıya taşındı
+mail-divergence_notice-subject = Kayıtlı bir karar yeniden değerlendirmede farklı çıktı
+mail-equivocation_alarm-subject = Çift tarih alarmı: bir kayıt için iki geçmiş
+mail-degraded_alarm-subject = Bozulmuş mod alarmı
+mail-decommission_notice-subject = Alanın kapanıyor: dışa aktar ya da taşı

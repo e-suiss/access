@@ -199,3 +199,18 @@ review-open = Erişim gözden geçirmesi: ekibinin bakılacak { $count } yetkisi
 # OP-157 m.4 (b)
 activity-support_viewed = Hesabını görüntüledi
 activity-support_acted = Hesabında işlem yaptı
+# OP-158 m.4 (a)
+outcome-revoked_confirming = Geri alındı — doğrulanıyor (tanık bekleniyor)
+outcome-time_check = Kullanılamıyor — saat denetimi
+outcome-busy = Meşgul — yeniden dene
+recovery-recovered = Önceki sağlayıcıdan { $position } kayıt konumunda kurtarıldı
+recovery-changes_lost = { $time } sonrasındaki değişiklikler kaybolmuş olabilir. { $time } sonrasında bir şeyi geri aldıysan yeniden geri al
+history-handover = { $position } kayıt konumunda { $provider } sağlayıcısına taşındı
+history-recovered = { $position } kayıt konumunda kurtarıldı
+decommission-window = Bu alan { $date } tarihinde kapanıyor. Ondan önce dışa aktar ya da taşı.
+degraded-owner = Sorumlu: { $owner }
+degraded-unknown = BİLİNMİYOR
+degraded-missing = Henüz bilinmiyor: { $what }
+degraded-safe_default = O zamana kadar: { $default }
+residency-declared = Veriler { $region } içinde kalır ({ $class })
+dr-declared = Felaket kurtarma: { $class }; en çok { $rpo } değişiklik kaybolabilir

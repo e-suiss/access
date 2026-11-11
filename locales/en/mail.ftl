@@ -40,3 +40,10 @@ mail-support_access_notice-subject = Support access to your account changed
 mail-breakglass_used-subject = Emergency access was used on your account
 mail-breakglass_alarm-subject = Break-glass alarm
 mail-review_campaign-subject = An access review is open for your team
+# OP-158 m.4 (a)
+mail-domain_recovered-subject = Your domain was recovered from its previous provider
+mail-domain_handover-subject = Your domain moved to a new provider
+mail-divergence_notice-subject = A recorded decision did not replay the same way
+mail-equivocation_alarm-subject = Equivocation alarm: two histories for one log
+mail-degraded_alarm-subject = Degraded mode alarm
+mail-decommission_notice-subject = Your domain is closing: export or move it

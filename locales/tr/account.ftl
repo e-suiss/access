@@ -225,3 +225,10 @@ support-read_only = Yalnız görüntüleme
 support-artifacts_title = Destek için dosyalar
 support-artifact_redacted = Bu dosya kaydedilmeden önce içindeki giriş sırları çıkarıldı.
 support-artifact_refused = Yalnız HAR, JSON ve metin günlük dosyaları paylaşılabilir; görüntü ve videolardaki sırlar temizlenemez.
+# OP-158 m.4 (a)
+domain_history-revoked_confirming = Geri alındı — doğrulanıyor (tanık bekleniyor)
+domain_history-recovered_from = Önceki sağlayıcıdan { $position } kayıt konumunda kurtarıldı
+domain_history-changes_lost = { $time } sonrasındaki değişiklikler kaybolmuş olabilir. { $time } sonrasında bir şeyi geri aldıysan yeniden geri al
+domain_history-title = Geçmiş
+domain_history-handover = { $position } kayıt konumunda { $provider } sağlayıcısına taşındı
+domain_history-recovered = { $position } kayıt konumunda kurtarıldı
