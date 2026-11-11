@@ -24,7 +24,7 @@ use access_authority_core::domain::{ProofRef, Request as CoreRequest};
 use access_authority_sequencer::adapters::{PgHeads, SocketSigner};
 use access_authority_sequencer::ports::NoteSigner as _;
 use access_authority_sequencer::witness::{
-    Target, WitnessError, add_checkpoint, board,
+    Target, WitnessError, add_checkpoint, board, latest,
 };
 use access_authority_signer::adapters::call as sign_call;
 use access_authority_signer::handover::{CONTINUATION, NO_WRITE};
@@ -549,9 +549,11 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
         "{fenced:?}"
     );
 
-    // HO-8: the incoming provider takes the batch and the witnessed C_{h+1} from the mirror
-    let (records, cosigned, ch1_excerpt) =
-        mirror(&p, &router, mirror_run, frozen.k, h).await;
+    // HO-8: the incoming provider takes the batch from the mirror and the witnessed C_{h+1}
+    // from the independent witness itself
+    let (records, _, ch1_excerpt) = mirror(&p, &router, mirror_run, frozen.k, h).await;
+    let (entry, cosigned) = latest(&target(&independent, INDEPENDENT), &d).await.unwrap();
+    assert_eq!((entry.size, entry.root), (h + 1, ch1.root));
     let verifiers: Vec<Verifier> = [&independent, &own]
         .iter()
         .map(|w| Verifier::parse(&w.vkey).unwrap())
