@@ -10,7 +10,10 @@ use access_kernel::verify::key_scope::thumbprint;
 use ed25519_dalek::Signer as _;
 use suiss_crypto::note::{Checkpoint, Verifier, base64_encode, cosigned_message};
 
-use super::{WitnessHead, WitnessHeadError, entry_contributors, witness_party};
+use super::{
+    Arm, PlanError, WitnessHead, WitnessHeadError, entry_contributors, plan, prefix_roots,
+    witness_party,
+};
 
 fn runtime_key() -> ed25519_dalek::SigningKey {
     let bytes: Vec<u8> = (0..4_u64)
@@ -123,4 +126,65 @@ fn only_contributions_from_the_entry_keys_count() {
         given(&b, 2, RECOVER, Digest([8; 32])),
     ];
     assert_eq!(entry_contributors(&entry, &target, &wrong), 0);
+}
+
+fn leaves(n: u8) -> Vec<[u8; 32]> {
+    (0..n).map(|i| suiss_crypto::digest::sha256(&[i])).collect()
+}
+
+fn head(d: &Digest, size: u64, root: [u8; 32], seconds: u64) -> WitnessHead {
+    let origin = access_authority_sequencer::checkpoint::origin(d);
+    let (note, vkey) = cosigned(&runtime_key(), "w.example", (&origin, size, root), seconds);
+    WitnessHead::verified(d, &note, &vkey).unwrap()
+}
+
+// SEC21, SEC22, FR-1…FR-3, U24, §13.6 arms and fork, Ek B 6022, 6023, 6024
+#[test]
+fn the_plan_takes_arm_one_two_or_the_reproduced_branch() {
+    let d = Digest(suiss_crypto::digest::sha256(b"domain"));
+    let roots = prefix_roots(&leaves(5)).unwrap();
+    let now = 2_000_000;
+    let at = 1_999;
+
+    let both = [
+        Some(head(&d, 5, roots[5], at)),
+        Some(head(&d, 5, roots[5], at)),
+    ];
+    let p = plan(&both, &roots, true, now).unwrap();
+    assert_eq!((p.n, p.arm, p.lost_suffix), (5, Arm::Replica, None));
+    assert_eq!(p.replica_head.map(|h| h.size), Some(5));
+
+    // U24
+    let p = plan(&both, &roots, false, now).unwrap();
+    assert_eq!((p.n, p.arm, p.replica_head), (5, Arm::Lossy, None));
+
+    let short = prefix_roots(&leaves(3)).unwrap();
+    let p = plan(&both, &short, true, now).unwrap();
+    assert_eq!((p.n, p.arm), (3, Arm::Lossy));
+    assert_eq!(p.lost_suffix.map(|l| (l.from, l.to)), Some((3, 5)));
+
+    let forged = suiss_crypto::digest::sha256(b"a branch no record reproduces");
+    let forked = [
+        Some(head(&d, 5, roots[5], at)),
+        Some(head(&d, 5, forged, at)),
+    ];
+    let p = plan(&forked, &roots, true, now).unwrap();
+    assert_eq!((p.n, p.fork.len()), (5, 2));
+    let p = plan(&forked, &roots, false, now).unwrap();
+    assert_eq!(p.n, 4);
+    assert_eq!(p.lost_suffix.map(|l| (l.from, l.to)), Some((4, 5)));
+
+    let stale = [Some(head(&d, 5, roots[5], 1))];
+    assert_eq!(
+        plan(&stale, &roots, true, now + 3_600_001_000),
+        Err(PlanError::NoWitness)
+    );
+    // FR-2: a witness that gave no head leaves the quorum incomplete
+    let missing = [Some(head(&d, 5, roots[5], at)), None];
+    assert_eq!(plan(&missing, &roots, true, now).unwrap().arm, Arm::Lossy);
+    let none = prefix_roots(&[]).unwrap();
+    assert_eq!(
+        plan(&both, &none, true, now),
+        Err(PlanError::NotReproducible)
+    );
 }

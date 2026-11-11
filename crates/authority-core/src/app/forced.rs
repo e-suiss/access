@@ -160,6 +160,177 @@ impl WitnessHead {
     }
 }
 
+/// The arm a recovery takes (§13.6, SEC22).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Arm {
+    /// Arm (i): the replica reproduces the witnesses' highest checkpoint and N is it.
+    Replica,
+    /// Arm (ii): no replica, one behind the witnesses or a witness without a fresh head; the
+    /// meta-anchor root's general threshold is needed and `(N, highest]` is the lost suffix.
+    Lossy,
+}
+
+/// What a recovery cites (FR-3): N and its checkpoint, the replica's head, the lost suffix, the
+/// fork's conflicting heads, and the arm.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Plan {
+    /// N.
+    pub n: u64,
+    /// The checkpoint N cites.
+    pub cited: CheckpointRef,
+    /// R*, the replica's head, when a replica answered.
+    pub replica_head: Option<CheckpointRef>,
+    /// `(N, highest]`.
+    pub lost_suffix: Option<access_kernel::recovery::LostSuffix>,
+    /// The conflicting heads of a fork.
+    pub fork: BTreeSet<CheckpointRef>,
+    /// The arm.
+    pub arm: Arm,
+}
+
+/// Why no recovery can be planned.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum PlanError {
+    /// No fresh witness head: the witness quorum is missing.
+    #[error("no-witness-head")]
+    NoWitness,
+    /// The recovery-side records reproduce no witnessed root.
+    #[error("not-reproducible")]
+    NotReproducible,
+    /// The rollback guard refuses the plan.
+    #[error("guard: {0}")]
+    Guard(access_kernel::fold::GuardError),
+}
+
+/// SEC21, SEC22, FR-1…FR-3: plans the recovery from the declared witnesses' heads (`None` for
+/// one that gave none, which leaves the quorum incomplete) and the roots the
+/// recovery-side records reproduce, `roots[s]` being the root of the first `s` records (index 0
+/// is the empty tree). `replica` says the records came from a provider-external replica, so N
+/// is also R*, the highest witnessed checkpoint the replica reproduces. N is the highest size the records reproduce, not above the highest
+/// witnessed one, whose root agrees with every head at that size; at a fork it stays on the
+/// branch the records reproduce, or without a replica below the first forked size.
+///
+/// # Errors
+/// [`PlanError`].
+pub fn plan(
+    heads: &[Option<WitnessHead>],
+    roots: &[[u8; 32]],
+    replica: bool,
+    now: u64,
+) -> Result<Plan, PlanError> {
+    use access_kernel::fold::{Guard, rollback_guard};
+    let fresh: Vec<&WitnessHead> = heads
+        .iter()
+        .flatten()
+        .filter(|h| h.at <= now && now.saturating_sub(h.at) <= HEAD_VALIDITY_MS)
+        .collect();
+    let highest = fresh
+        .iter()
+        .map(|h| h.head.size)
+        .max()
+        .ok_or(PlanError::NoWitness)?;
+    let mut by_size: std::collections::BTreeMap<u64, BTreeSet<[u8; 32]>> =
+        std::collections::BTreeMap::new();
+    for h in &fresh {
+        by_size
+            .entry(h.head.size)
+            .or_default()
+            .insert(h.head.root.0);
+    }
+    let fork_at = by_size
+        .iter()
+        .find_map(|(s, r)| (r.len() > 1).then_some(*s));
+    let available = u64::try_from(roots.len().saturating_sub(1)).unwrap_or(u64::MAX);
+    let root_at = |s: u64| usize::try_from(s).ok().and_then(|i| roots.get(i)).copied();
+    let mut n = available.min(highest);
+    if let (Some(f), false) = (fork_at, replica) {
+        n = n.min(f.saturating_sub(1));
+    }
+    let agrees =
+        |s: u64| root_at(s).is_some_and(|r| by_size.get(&s).is_none_or(|w| w.contains(&r)));
+    while n > 0 && !agrees(n) {
+        n = n.saturating_sub(1);
+    }
+    let root = root_at(n)
+        .filter(|_| n > 0)
+        .ok_or(PlanError::NotReproducible)?;
+    let replica_head = replica.then(|| CheckpointRef::new(n, Digest(root)));
+    let fork: BTreeSet<CheckpointRef> = match fork_at {
+        Some(f) => fresh
+            .iter()
+            .filter(|h| h.head.size == f)
+            .map(|h| h.head)
+            .collect(),
+        None => BTreeSet::new(),
+    };
+    let kernel: Vec<Option<access_kernel::fold::WitnessHead>> = heads
+        .iter()
+        .map(|h| {
+            h.as_ref()
+                .map(|h| access_kernel::fold::WitnessHead::new(h.head.size, h.head.root.0, h.at))
+        })
+        .collect();
+    let guard = rollback_guard(
+        &kernel,
+        replica_head.map(|r| r.size),
+        (n, root),
+        !fork.is_empty(),
+        now,
+    )
+    .map_err(PlanError::Guard)?;
+    let (arm, lost_suffix) = match guard {
+        Guard::Pass => (Arm::Replica, None),
+        Guard::Lossy { from, until } => (
+            Arm::Lossy,
+            (from < until).then(|| access_kernel::recovery::LostSuffix::new(from, until)),
+        ),
+        _ => return Err(PlanError::NotReproducible),
+    };
+    Ok(Plan {
+        n,
+        cited: CheckpointRef::new(n, Digest(root)),
+        replica_head,
+        lost_suffix,
+        fork,
+        arm,
+    })
+}
+
+/// FR-2: the recovering provider's own reading of each declared witness's latest cosigned
+/// head of `domain`; a witness that does not answer or whose answer does not verify gives
+/// none, which leaves the quorum incomplete (REQUIRE_ACTION, never a guess).
+pub async fn fetch_witness_heads(
+    targets: &[access_authority_sequencer::witness::Target],
+    domain: &Digest,
+) -> Vec<Option<WitnessHead>> {
+    let mut out = Vec::with_capacity(targets.len());
+    for t in targets {
+        let head = match access_authority_sequencer::witness::latest(t, domain).await {
+            Ok((_, note)) => WitnessHead::verified(domain, &note, &t.vkey).ok(),
+            Err(_) => None,
+        };
+        out.push(head);
+    }
+    out
+}
+
+/// The roots of every prefix of a log whose leaves are `leaves`: index `s` is the root of the
+/// first `s` records.
+///
+/// # Errors
+/// [`PlanError::NotReproducible`] when the frontier overflows.
+pub fn prefix_roots(leaves: &[[u8; 32]]) -> Result<Vec<[u8; 32]>, PlanError> {
+    let mut f = suiss_ledger::merkle::Frontier::default();
+    let mut out = Vec::with_capacity(leaves.len().saturating_add(1));
+    out.push(f.root());
+    for l in leaves {
+        f.push(*l).map_err(|_| PlanError::NotReproducible)?;
+        out.push(f.root());
+    }
+    Ok(out)
+}
+
 /// How many distinct Instances gave a live `recover` contribution to `target` with a key of
 /// `entry` (SEC20).
 #[must_use]
