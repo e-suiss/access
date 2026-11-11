@@ -94,6 +94,7 @@ pub fn metadata(
         caps: template.caps.clone(),
         hybrid: template.hybrid,
         discovery: template.discovery.clone(),
+        declared: access_kernel::verify::key_scope::Declarations::default(),
     }
 }
 

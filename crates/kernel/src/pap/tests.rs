@@ -98,6 +98,7 @@ fn metadata() -> DomainMetadata {
         caps: None,
         hybrid: None,
         discovery: None,
+        declared: crate::verify::key_scope::Declarations::default(),
     }
 }
 

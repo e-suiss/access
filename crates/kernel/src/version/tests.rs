@@ -17,6 +17,7 @@ fn domain(adopted: &SpecVersions, minimum: &SpecVersions) -> DomainMetadata {
         caps: None,
         hybrid: None,
         discovery: None,
+        declared: crate::verify::key_scope::Declarations::default(),
     }
 }
 

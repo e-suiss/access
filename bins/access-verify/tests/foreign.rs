@@ -112,6 +112,7 @@ fn metadata(issued_at: u64, signer: u8) -> Vec<u8> {
         caps: None,
         hybrid: None,
         discovery: None,
+        declared: access_kernel::verify::key_scope::Declarations::default(),
     };
     sign1(signer, METADATA_CONTENT_TYPE, &m.to_bytes().unwrap())
 }

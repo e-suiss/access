@@ -359,6 +359,22 @@ pub enum Payload {
         /// The offline slice drawn in advance from the lineage's budgets (OP-143 m.12).
         offline_slice: Option<SliceRequest>,
     },
+    /// `domain_handover` (§9.15, §16.6, OP-158 m.3 (b), (l)).
+    DomainHandover(crate::recovery::HandoverInput),
+    /// `domain_recover` (§13.6, SEC21, SEC22, OP-158 m.3 (b), (m)).
+    DomainRecover(crate::recovery::RecoverInput),
+    /// `version_activate`: the activation record that raises the domain's minimum versions
+    /// (OP-56, SI-18, OP-158 m.3 (b)).
+    VersionActivate {
+        /// The new minimum versions.
+        versions: crate::verify::key_scope::SpecVersions,
+    },
+    /// `algorithm_retire`: the domain declares an algorithm broken and narrows its allowlist
+    /// (§15.16, OP-158 m.3 (b)).
+    AlgorithmRetire {
+        /// The algorithm.
+        algorithm: crate::verify::cose::Algorithm,
+    },
 }
 
 /// What an offline slice asks of each lineage budget: a count, and an amount per unit
@@ -416,7 +432,7 @@ impl SliceRequest {
     }
 }
 
-const NAMES: [&str; 27] = [
+const NAMES: [&str; 31] = [
     "anchor_create",
     "anchor_transfer",
     "anchor_amend",
@@ -444,6 +460,11 @@ const NAMES: [&str; 27] = [
     "consumption_release",
     "authority_set_define",
     "projection_issue",
+    // OP-158 m.3 (b)
+    "domain_handover",
+    "domain_recover",
+    "version_activate",
+    "algorithm_retire",
 ];
 
 /// The Access-internal read actions: they change no authority state (§9.13.7, OP-141 m.39 (a)).
@@ -504,6 +525,10 @@ pub enum MetaError {
     /// A policy default this Kernel does not apply (OP-157 m.3 (n)).
     #[error("policy default unknown")]
     DefaultUnknown,
+    /// A meta-action this Kernel declares but does not decide yet; it is refused as restricted,
+    /// never allowed (OP-158 m.4 (a)).
+    #[error("restricted")]
+    Restricted,
 }
 
 impl MetaError {
@@ -524,6 +549,7 @@ impl MetaError {
             Self::Corrupt => "meta-corrupt",
             Self::ReleaseExceedsDraw => "meta-release-exceeds-draw",
             Self::DefaultUnknown => "policy-default-unknown",
+            Self::Restricted => "meta-restricted",
         }
     }
 }
@@ -1042,6 +1068,16 @@ impl Canonical for Payload {
                     ),
                 ]),
             ),
+            Self::DomainHandover(h) => ("domain_handover", h.to_value()),
+            Self::DomainRecover(r) => ("domain_recover", r.to_value()),
+            Self::VersionActivate { versions } => (
+                "version_activate",
+                map([("versions", Some(versions.to_value()))]),
+            ),
+            Self::AlgorithmRetire { algorithm } => (
+                "algorithm_retire",
+                map([("algorithm", Some(Value::int(algorithm.cose())))]),
+            ),
         };
         tagged(name, body)
     }
@@ -1057,6 +1093,17 @@ impl Canonical for Payload {
         }
         if name == "acceptance_establish" {
             return Ok(Self::AcceptanceEstablish(acceptance_content(body)?));
+        }
+        // OP-158 m.3 (b)
+        if name == "domain_handover" {
+            return Ok(Self::DomainHandover(
+                crate::recovery::HandoverInput::from_value(body)?,
+            ));
+        }
+        if name == "domain_recover" {
+            return Ok(Self::DomainRecover(
+                crate::recovery::RecoverInput::from_value(body)?,
+            ));
         }
         let mut f = Fields::of(body)?;
         let p = match name {
@@ -1194,6 +1241,15 @@ impl Canonical for Payload {
                         .transpose()?,
                 }
             }
+            "version_activate" => Self::VersionActivate {
+                versions: crate::verify::key_scope::SpecVersions::from_value(f.req("versions")?)?,
+            },
+            "algorithm_retire" => Self::AlgorithmRetire {
+                algorithm: crate::verify::cose::Algorithm::from_cose(crate::codec::int(
+                    f.req("algorithm")?,
+                )?)
+                .ok_or(ModelError::Unknown)?,
+            },
             _ => return Err(ModelError::Unknown),
         };
         f.done()?;
@@ -1950,6 +2006,9 @@ pub struct ContributionState {
     pub assurance: BTreeMap<String, u64>,
     /// `auth_time` of that Claim; the contribution's freshness when it is a proof.
     pub auth_time: Option<u64>,
+    /// The surface path the approval came through (`aas::surface_path`), which a `distinct
+    /// surface` term counts once (OP-157 m.25, OP-158 m.3 (b)); absent before 0.6.0.
+    pub surface_path: Option<Digest>,
 }
 
 impl Canonical for ContributionState {
@@ -1970,6 +2029,10 @@ impl Canonical for ContributionState {
                 crate::codec::map_value(&self.assurance, |v| Value::Unsigned(*v)),
             ),
             ("auth_time", self.auth_time.map(Value::Unsigned)),
+            (
+                "surface_path",
+                self.surface_path.as_ref().map(Canonical::to_value),
+            ),
         ])
     }
 
@@ -1990,6 +2053,10 @@ impl Canonical for ContributionState {
                 .transpose()?,
             assurance,
             auth_time: f.opt("auth_time").map(uint).transpose()?,
+            surface_path: f
+                .opt("surface_path")
+                .map(|d| Digest::from_value(d).ok_or(ModelError::Shape))
+                .transpose()?,
         };
         f.done()?;
         Ok(s)
@@ -3331,6 +3398,7 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                         statement: None,
                         assurance: BTreeMap::new(),
                         auth_time: None,
+                        surface_path: None,
                     }
                     .to_value(),
                 ),
@@ -3392,6 +3460,11 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                 ])),
             ));
         }
+        // OP-158 m.4 (a)
+        Payload::DomainHandover(_)
+        | Payload::DomainRecover(_)
+        | Payload::VersionActivate { .. }
+        | Payload::AlgorithmRetire { .. } => return Err(MetaError::Restricted),
     }
     quorum(ctx, payload, view, &mut out);
     out.effects = sorted(out.effects);

@@ -2832,6 +2832,7 @@ fn every_payload_round_trips() {
         },
         sliced(&["eu"], crate::validity::ProfileClass::Intermittent),
     ];
+    let payloads: Vec<Payload> = payloads.into_iter().chain(stage13_payloads()).collect();
     let mut names = BTreeSet::new();
     for p in &payloads {
         assert_eq!(Payload::from_value(&p.to_value()).as_ref(), Ok(p), "{p:?}");
@@ -2839,6 +2840,60 @@ fn every_payload_round_trips() {
         names.insert(p.action());
     }
     assert_eq!(names.len(), NAMES.len());
+}
+
+fn stage13_binding() -> BTreeMap<[u8; 32], crate::verify::key_scope::BindingKey> {
+    let key = PublicKey::Ed25519(
+        ed25519_dalek::SigningKey::from_bytes(&[5; 32])
+            .verifying_key()
+            .to_bytes(),
+    );
+    let b = crate::verify::key_scope::BindingKey {
+        kid: crate::verify::key_scope::thumbprint(&key),
+        alg: crate::verify::cose::Algorithm::Ed25519,
+        key,
+        scope: crate::verify::key_scope::BindingScope::Domain,
+        superseded: None,
+    };
+    BTreeMap::from([(b.kid, b)])
+}
+
+fn stage13_payloads() -> [Payload; 4] {
+    use crate::recovery::{CheckpointRef, HandoverInput, LostSuffix, RecoverInput};
+    let c = CheckpointRef::new(9, Digest([6; 32]));
+    let mut recover = RecoverInput::new(9, c, stage13_binding());
+    recover.lost_suffix = Some(LostSuffix::new(9, 12));
+    recover.witness_claims.insert(Id([7; 16]));
+    [
+        Payload::DomainHandover(HandoverInput::new(stage13_binding(), c, false)),
+        Payload::DomainRecover(recover),
+        Payload::VersionActivate {
+            versions: crate::verify::key_scope::SpecVersions {
+                core: 2,
+                meta_schema: 1,
+                ..crate::verify::key_scope::SpecVersions::default()
+            },
+        },
+        Payload::AlgorithmRetire {
+            algorithm: crate::verify::cose::Algorithm::MlDsa44,
+        },
+    ]
+}
+
+// OP-158 m.4 (a)
+#[test]
+fn stage13_meta_actions_are_refused_as_restricted_until_decided() {
+    let mut r = Run::new();
+    let meta = ExerciseBasis::Anchor(meta_anchor(&DOMAIN));
+    for p in stage13_payloads() {
+        assert_eq!(
+            r.act(ROOT, ROOT, meta, &p).map(|_| ()),
+            Err(MetaError::Restricted),
+            "{}",
+            p.action()
+        );
+    }
+    assert_eq!(MetaError::Restricted.code(), "meta-restricted");
 }
 
 // C10, E6

@@ -48,6 +48,12 @@ pub fn acceptance_digest(content: &Value) -> Digest {
 
 /// The class of a Party compromise Claim (SEC12, OP-141 m.31).
 pub const PARTY_COMPROMISE: &str = "party_compromise";
+/// The class of a signed checkpoint ingested into its log (§9.16, OP-158 m.3 (c)).
+pub const CHECKPOINT: &str = "checkpoint";
+/// The class of a witness cosignature ingested into the log (§9.16, OP-158 m.3 (c)).
+pub const WITNESS_COSIGN: &str = "witness_cosign";
+/// The class of a provider-signed divergence notice (TI-RT1, G33, OP-158 m.3 (i)).
+pub const DIVERGENCE_NOTICE: &str = "divergence_notice";
 /// How far before its declaration a compromise is taken to have begun when the Claim does not
 /// say (§13.7.7).
 pub const COMPROMISE_LOOKBACK_MS: u64 = 72 * 3_600 * 1_000;

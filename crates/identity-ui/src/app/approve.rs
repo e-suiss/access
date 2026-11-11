@@ -1173,6 +1173,7 @@ pub(super) fn statement_of(
     // E49 (1)
     ApprovalAct {
         evidence: Some(aas::EvidenceLevel::PhishingResistant),
+        surface_origin: None,
         surface_class: Some(aas::SurfaceClass::Desktop),
         act: Act::Contribution(env.class.clone()),
         instance: approver.instance,

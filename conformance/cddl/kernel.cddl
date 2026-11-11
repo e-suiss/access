@@ -496,6 +496,35 @@ domain-metadata = {
   ; Absent is "classic". While ML-DSA is disabled, "both" and "pq" fail closed (OP-118 m.5).
   ? hybrid: "classic" / "both" / "pq",
   ? discovery: bstr,
+  ; OP-158 m.3 (b): what the domain declares. An absent member declares nothing, and nothing
+  ; declared never grants a SEC23 acknowledgement.
+  ? witnesses: [+ witness-declaration],
+  ? replicas: [+ replica-declaration],
+  ? durability: "replicated" / "single-node",
+  ? residency: { region: tstr .size (1..255), class: "regional" / "multi-region-sync" },
+  ; The maximum merge delay of each log, in milliseconds (T16).
+  ? mmd: { authority_ms: uint, identity_ms: uint },
+  ? recovery: "available" / "not-available",
+  ; Digest of the binding ceremony transcript (CR-29, OP-157 m.7 (i)).
+  ? ceremony_transcript: digest,
+}
+
+; A witness: the note key name its cosignatures carry, its key and algorithm, its operator and
+; whether that operator is independent of the provider (§16.6, SI-12).
+witness-declaration = {
+  name: tstr .size (1..255),
+  key: public-key,
+  alg: cose-alg,
+  operator: tstr .size (1..255),
+  independent: bool,
+}
+
+; A replica whose signed `replica_ack` counts (§16.6.1, TI-13).
+replica-declaration = {
+  name: tstr .size (1..255),
+  key: public-key,
+  operator: tstr .size (1..255),
+  independent: bool,
 }
 
 ; Result of verifyCoseSign1 in the bindings (OP-116 m.9).
@@ -645,6 +674,8 @@ approval-act-fields = (
     version: uint,
     ? class: "voice" / "watch" / "phone" / "desktop",
     ? evidence: "presence" / "user_verified" / "phishing_resistant",
+    ; OP-158 m.3 (b): the surface's origin; a `distinct surface` term counts (profile, origin).
+    ? origin: tstr .size (1..255),
   },
   ; Digest of the render shown to the approver, produced from the action schema's render.
   render_digest: digest,
@@ -788,6 +819,52 @@ meta-payload =
   / { consumption_release: { exercise: digest, grounds: [+ id] } }
   / { authority_set_define: { name: ident, authority: authority-set } }
   / { projection_issue: { bounds: canonical-authority, audience: [+ tstr .size (1..255)], profile: projection-profile, ? max_staleness_ms: uint, ? offline_slice: slice-request } }
+  ; OP-158 m.3 (b): declared in 0.6.0; refused as restricted until their semantics land.
+  / { domain_handover: handover-input }
+  / { domain_recover: recover-input }
+  / { version_activate: { versions: spec-versions } }
+  / { algorithm_retire: { algorithm: cose-alg } }
+
+; ---------------------------------------------------------------- handover and recovery (§9.15, §13.6, OP-158 m.3 (b))
+
+; A checkpoint by its RFC 9162 tree size and root hash.
+checkpoint-ref = { size: uint, root: digest }
+
+; The new provider binding, the C_k the outgoing provider's no-write statement cites, and
+; `reanchor` for a binding change inside one provider (OP-60).
+handover-input = {
+  binding: [+ binding-key],
+  cited: checkpoint-ref,
+  ? reanchor: true,
+}
+
+; N, the checkpoint it cites (a hint: the evaluator computes R* from the `checkpoint` Claims it
+; ingested), the witness Claims, the replica head, the declared lost suffix (N, witness highest]
+; and the conflicting branches of a fork (SEC21, SEC22).
+recover-input = {
+  n: uint,
+  cited_checkpoint: checkpoint-ref,
+  ? witness_claims: [+ id],
+  ? replica_head: checkpoint-ref,
+  ? lost_suffix: { from: uint, to: uint },
+  ? fork: [+ checkpoint-ref],
+  binding: [+ binding-key],
+}
+
+; The rootTerms recovery entry: k-of-n keys by thumbprint, at least two hardware-bound, held by
+; the named Parties on their own devices or as offline ceremony keys, never by the provider or
+; its operator (SEC20, U16). Default 3-of-5 for an organization, 2-of-3 for a small domain (PD).
+recovery-entry = {
+  threshold: uint .ge 1,
+  keys: [+ key-id],
+  hardware_bound_min: uint .ge 2,
+  held_on: "device" / "offline",
+  holders: [+ party-ref],
+}
+
+; The two ready-made quarantine `policy.set` patterns (SEC22 R1, TI-RT1, RT3), and the blocker
+; subcode "nonce-closed/pre-recovery" (TI-RT3, U28).
+quarantine-pattern = "post-recovery" / "divergence"
 
 ; OP-149 m.8: what kind of actor a Party is. `party_register` sets it and no action changes it;
 ; an evaluation's `actor_is_agent` is true exactly when the actor's Party is an "agent".
@@ -889,6 +966,9 @@ contribution-state = {
   ? statement: digest,
   ? assurance: assurance,
   ? auth_time: trusted-time,
+  ; OP-158 m.3 (b): the surface path of the approval, SHA-256("access/surface-path/v1" ‖ 0x00 ‖
+  ; dCBOR([profile, origin])).
+  ? surface_path: digest,
 }
 
 ; ---------------------------------------------------------------- decision receipt (L2-RCP-1)

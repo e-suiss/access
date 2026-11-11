@@ -150,6 +150,7 @@ pub fn statement(request: &InlineRequest, render: &Render, facts: StatementFacts
         surface_version: SURFACE_VERSION,
         surface_class: Some(SurfaceClass::Phone),
         evidence: Some(EvidenceLevel::PhishingResistant),
+        surface_origin: None,
         render_digest: request.render_digest,
         material_fields: render::material_fields(render),
         issued_at: facts.issued_at,

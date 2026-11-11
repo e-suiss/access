@@ -73,7 +73,8 @@ fn there_is_no_principal_type_and_no_agent_only_meta_action() {
     let names = meta.split("const NAMES:").nth(1).unwrap();
     let names = &names[..names.find("];").unwrap()];
     let listed: Vec<&str> = names.split('"').skip(1).step_by(2).collect();
-    assert_eq!(listed.len(), 27);
+    // OP-158 m.3 (b)
+    assert_eq!(listed.len(), 31);
     assert!(listed.iter().all(|n| !n.contains("agent")), "{listed:?}");
     for name in listed {
         assert!(access_kernel::meta::is_meta(

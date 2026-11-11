@@ -294,6 +294,8 @@ fn meta_denial(e: MetaError) -> Decision {
     }
     let class = match e {
         MetaError::Ended => BlockerClass::Ended,
+        // OP-158 m.4 (a)
+        MetaError::Restricted => BlockerClass::Restricted,
         _ => BlockerClass::NoCoveringAuthority,
     };
     deny(class, e.code(), Resolver::Root)

@@ -185,6 +185,184 @@ pub struct DomainMetadata {
     pub hybrid: Option<Hybrid>,
     /// Discovery fields, opaque to the Kernel.
     pub discovery: Option<Vec<u8>>,
+    /// What the domain declares about its witnesses, replicas, durability, residency, MMD,
+    /// recovery and binding ceremony (OP-158 m.3 (b)); absent in 0.5.0 metadata.
+    pub declared: Declarations,
+}
+
+/// A witness the domain declares (§16.6, SI-12, OP-158 m.3 (d)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Witness {
+    /// The note key name its cosignatures carry.
+    pub name: String,
+    /// Its public key.
+    pub key: PublicKey,
+    /// Its signature algorithm.
+    pub algorithm: Algorithm,
+    /// Who runs it.
+    pub operator: String,
+    /// Whether its operator is independent of the provider and the provider's operator.
+    pub independent: bool,
+}
+
+impl Witness {
+    /// A witness named `name` run by `operator`.
+    #[must_use]
+    pub const fn new(
+        name: String,
+        key: PublicKey,
+        algorithm: Algorithm,
+        operator: String,
+        independent: bool,
+    ) -> Self {
+        Self {
+            name,
+            key,
+            algorithm,
+            operator,
+            independent,
+        }
+    }
+}
+
+/// A replica the domain declares (§16.6.1, TI-13, OP-158 m.3 (f)): whose signed `replica_ack`
+/// counts.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Replica {
+    /// Its name.
+    pub name: String,
+    /// The key its acks are signed with.
+    pub key: PublicKey,
+    /// Who runs it.
+    pub operator: String,
+    /// Whether its operator is outside the provider.
+    pub independent: bool,
+}
+
+impl Replica {
+    /// A replica named `name` run by `operator`.
+    #[must_use]
+    pub const fn new(name: String, key: PublicKey, operator: String, independent: bool) -> Self {
+        Self {
+            name,
+            key,
+            operator,
+            independent,
+        }
+    }
+}
+
+/// The durability profile the domain publishes (HL-40, OP-158 m.3 (p)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Durability {
+    /// Synchronous standbys: no acknowledged write is lost (FA-1).
+    Replicated,
+    /// The small-provider profile: an acknowledged write can be lost with the node.
+    SingleNode,
+}
+
+const DURABILITIES: [(&str, Durability); 2] = [
+    ("replicated", Durability::Replicated),
+    ("single-node", Durability::SingleNode),
+];
+
+/// Residency and DR class (CMP-26, OP-30, OP-158 m.3 (o)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DrClass {
+    /// One region.
+    Regional,
+    /// Synchronous across regions.
+    MultiRegionSync,
+}
+
+const DR_CLASSES: [(&str, DrClass); 2] = [
+    ("regional", DrClass::Regional),
+    ("multi-region-sync", DrClass::MultiRegionSync),
+];
+
+/// Where the domain's cell is (OP-158 m.3 (o)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Residency {
+    /// The region identifier.
+    pub region: String,
+    /// Its DR class.
+    pub class: DrClass,
+}
+
+impl Residency {
+    /// Residency in `region` with `class`.
+    #[must_use]
+    pub const fn new(region: String, class: DrClass) -> Self {
+        Self { region, class }
+    }
+}
+
+/// The maximum merge delay of each log, in milliseconds (T16, OP-158 m.3 (c)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Mmd {
+    /// The authority log.
+    pub authority_ms: u64,
+    /// The identity audit log.
+    pub identity_ms: u64,
+}
+
+impl Mmd {
+    /// The two delays.
+    #[must_use]
+    pub const fn new(authority_ms: u64, identity_ms: u64) -> Self {
+        Self {
+            authority_ms,
+            identity_ms,
+        }
+    }
+}
+
+/// Whether the domain has a recovery entry (§13.6, OP-158 m.3 (m)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Recovery {
+    /// A rootTerms recovery entry exists.
+    Available,
+    /// None could be set up; S7 says "Recovery not available".
+    NotAvailable,
+}
+
+const RECOVERIES: [(&str, Recovery); 2] = [
+    ("available", Recovery::Available),
+    ("not-available", Recovery::NotAvailable),
+];
+
+/// The Stage 13 declarations of Domain Metadata (OP-158 m.3 (b)). Every member is optional on
+/// the wire; an absent one reads as nothing declared, which never grants an acknowledgement.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Declarations {
+    /// The witnesses.
+    pub witnesses: Vec<Witness>,
+    /// The replicas.
+    pub replicas: Vec<Replica>,
+    /// The durability profile.
+    pub durability: Option<Durability>,
+    /// The residency.
+    pub residency: Option<Residency>,
+    /// The maximum merge delays.
+    pub mmd: Option<Mmd>,
+    /// Whether recovery is available; absent reads as not available.
+    pub recovery: Option<Recovery>,
+    /// Digest of the binding ceremony transcript (CR-29, OP-157 m.7 (i)).
+    pub ceremony_transcript: Option<Digest>,
+}
+
+impl Declarations {
+    /// Whether a SEC23 acknowledgement can ever be given: at least one declared replica and one
+    /// independent witness. Anything less gives none (SEC23, TI-13).
+    #[must_use]
+    pub fn acknowledges(&self) -> bool {
+        !self.replicas.is_empty() && self.witnesses.iter().any(|w| w.independent)
+    }
 }
 
 /// Why a key is not accepted for an artefact. Each is a local DENY (§9.10 step 1).
@@ -690,6 +868,49 @@ impl Canonical for DomainMetadata {
             ("caps", self.caps.as_ref().map(Canonical::to_value)),
             ("hybrid", self.hybrid.map(|h| word_of(h, &HYBRIDS))),
             ("discovery", self.discovery.clone().map(Value::Bytes)),
+            (
+                "witnesses",
+                (!self.declared.witnesses.is_empty())
+                    .then(|| set_value(self.declared.witnesses.iter().map(witness_value))),
+            ),
+            (
+                "replicas",
+                (!self.declared.replicas.is_empty())
+                    .then(|| set_value(self.declared.replicas.iter().map(replica_value))),
+            ),
+            (
+                "durability",
+                self.declared.durability.map(|d| word_of(d, &DURABILITIES)),
+            ),
+            (
+                "residency",
+                self.declared.residency.as_ref().map(|r| {
+                    map([
+                        ("region", Some(Value::text(&r.region))),
+                        ("class", Some(word_of(r.class, &DR_CLASSES))),
+                    ])
+                }),
+            ),
+            (
+                "mmd",
+                self.declared.mmd.map(|m| {
+                    map([
+                        ("authority_ms", Some(Value::Unsigned(m.authority_ms))),
+                        ("identity_ms", Some(Value::Unsigned(m.identity_ms))),
+                    ])
+                }),
+            ),
+            (
+                "recovery",
+                self.declared.recovery.map(|r| word_of(r, &RECOVERIES)),
+            ),
+            (
+                "ceremony_transcript",
+                self.declared
+                    .ceremony_transcript
+                    .as_ref()
+                    .map(Canonical::to_value),
+            ),
         ])
     }
 
@@ -718,6 +939,7 @@ impl Canonical for DomainMetadata {
             caps: f.opt("caps").map(VerifierCaps::from_value).transpose()?,
             hybrid: f.opt("hybrid").map(|h| word(h, &HYBRIDS)).transpose()?,
             discovery: f.opt("discovery").map(bytes).transpose()?,
+            declared: declarations(&mut f)?,
         };
         f.done()?;
         if out.operational_window_max_ms > MAX_WINDOW_MS {
@@ -725,6 +947,109 @@ impl Canonical for DomainMetadata {
         }
         Ok(out)
     }
+}
+
+fn name(v: &Value) -> Result<String, ModelError> {
+    let t = crate::codec::text(v)?;
+    if t.is_empty() || t.len() > 255 {
+        return Err(ModelError::Range);
+    }
+    Ok(String::from(t))
+}
+
+fn witness_value(w: &Witness) -> Value {
+    map([
+        ("name", Some(Value::text(&w.name))),
+        ("key", Some(w.key.to_value())),
+        ("alg", Some(alg_value(w.algorithm))),
+        ("operator", Some(Value::text(&w.operator))),
+        ("independent", Some(Value::Bool(w.independent))),
+    ])
+}
+
+fn witness(v: &Value) -> Result<Witness, ModelError> {
+    let mut f = Fields::of(v)?;
+    let out = Witness {
+        name: name(f.req("name")?)?,
+        key: PublicKey::from_value(f.req("key")?)?,
+        algorithm: alg_of(f.req("alg")?)?,
+        operator: name(f.req("operator")?)?,
+        independent: crate::codec::boolean(f.req("independent")?)?,
+    };
+    f.done()?;
+    Ok(out)
+}
+
+fn replica_value(r: &Replica) -> Value {
+    map([
+        ("name", Some(Value::text(&r.name))),
+        ("key", Some(r.key.to_value())),
+        ("operator", Some(Value::text(&r.operator))),
+        ("independent", Some(Value::Bool(r.independent))),
+    ])
+}
+
+fn replica(v: &Value) -> Result<Replica, ModelError> {
+    let mut f = Fields::of(v)?;
+    let out = Replica {
+        name: name(f.req("name")?)?,
+        key: PublicKey::from_value(f.req("key")?)?,
+        operator: name(f.req("operator")?)?,
+        independent: crate::codec::boolean(f.req("independent")?)?,
+    };
+    f.done()?;
+    Ok(out)
+}
+
+// OP-158 m.3 (b)
+fn declarations(f: &mut Fields<'_>) -> Result<Declarations, ModelError> {
+    let residency = f
+        .opt("residency")
+        .map(|r| {
+            let mut g = Fields::of(r)?;
+            let out = Residency {
+                region: name(g.req("region")?)?,
+                class: word(g.req("class")?, &DR_CLASSES)?,
+            };
+            g.done()?;
+            Ok::<_, ModelError>(out)
+        })
+        .transpose()?;
+    let mmd = f
+        .opt("mmd")
+        .map(|m| {
+            let mut g = Fields::of(m)?;
+            let out = Mmd {
+                authority_ms: uint(g.req("authority_ms")?)?,
+                identity_ms: uint(g.req("identity_ms")?)?,
+            };
+            g.done()?;
+            Ok::<_, ModelError>(out)
+        })
+        .transpose()?;
+    Ok(Declarations {
+        witnesses: f
+            .opt("witnesses")
+            .map(|w| set_of_vec(w, true, witness))
+            .transpose()?
+            .unwrap_or_default(),
+        replicas: f
+            .opt("replicas")
+            .map(|r| set_of_vec(r, true, replica))
+            .transpose()?
+            .unwrap_or_default(),
+        durability: f
+            .opt("durability")
+            .map(|d| word(d, &DURABILITIES))
+            .transpose()?,
+        residency,
+        mmd,
+        recovery: f
+            .opt("recovery")
+            .map(|r| word(r, &RECOVERIES))
+            .transpose()?,
+        ceremony_transcript: f.opt("ceremony_transcript").map(digest_model).transpose()?,
+    })
 }
 
 // OP-118 m.4

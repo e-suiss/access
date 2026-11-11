@@ -59,6 +59,7 @@ fn sign(payload: &[u8], seed: u8, ct: &str) -> Vec<u8> {
 fn statement() -> ApprovalAct {
     ApprovalAct {
         evidence: None,
+        surface_origin: None,
         surface_class: None,
         act: Act::Contribution("approve".to_string()),
         instance: INSTANCE,
@@ -288,6 +289,27 @@ fn statements_round_trip() {
         m.push((Value::text("contribution_class"), Value::text("approve")));
     }
     assert_eq!(ApprovalAct::from_value(&with_class), Err(ModelError::Range));
+}
+
+// OP-157 m.25, OP-158 m.3 (b)
+#[test]
+fn a_surface_origin_round_trips_and_a_0_5_statement_has_none() {
+    let old = statement();
+    assert_eq!(old.surface_origin, None);
+    let a = ApprovalAct {
+        surface_origin: Some("https://approve.example".to_string()),
+        ..statement()
+    };
+    assert_ne!(digest(&a).unwrap(), digest(&old).unwrap());
+    assert_eq!(ApprovalAct::from_bytes(&a.to_bytes().unwrap()), Ok(a));
+    let empty = ApprovalAct {
+        surface_origin: Some(String::new()),
+        ..statement()
+    };
+    assert_eq!(
+        ApprovalAct::from_value(&empty.to_value()),
+        Err(ModelError::Range)
+    );
 }
 
 // L2-AAS-1 to L2-AAS-4

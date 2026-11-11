@@ -237,6 +237,7 @@ mod tests {
             surface_version: 1,
             surface_class: surface,
             evidence,
+            surface_origin: None,
             render_digest: Digest([6; 32]),
             material_fields: BTreeSet::new(),
             issued_at: 0,

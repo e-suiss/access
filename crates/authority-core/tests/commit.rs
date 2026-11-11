@@ -1822,6 +1822,7 @@ fn approval_act(
 ) -> ApprovalAct {
     ApprovalAct {
         evidence: Some(access_kernel::aas::EvidenceLevel::PhishingResistant),
+        surface_origin: None,
         surface_class: Some(access_kernel::aas::SurfaceClass::Desktop),
         act: Act::Contribution("approve".to_owned()),
         instance: alice_instance(d),
@@ -8627,6 +8628,7 @@ fn root_instance(d: Digest) -> Id {
 fn authority_act(d: Digest, req: &Request, render: Digest, act: Act) -> ApprovalAct {
     ApprovalAct {
         evidence: None,
+        surface_origin: None,
         surface_class: None,
         act,
         instance: root_instance(d),
@@ -8839,6 +8841,7 @@ fn contribution_of(
 ) -> Request {
     let act = ApprovalAct {
         evidence: Some(access_kernel::aas::EvidenceLevel::PhishingResistant),
+        surface_origin: None,
         surface_class: Some(access_kernel::aas::SurfaceClass::Desktop),
         act: Act::Contribution(class.to_owned()),
         instance,

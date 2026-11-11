@@ -155,6 +155,9 @@ pub struct ApprovalAct {
     pub surface_class: Option<SurfaceClass>,
     /// The evidence the act reached, when the surface declares it (E49 (1)).
     pub evidence: Option<EvidenceLevel>,
+    /// The surface's origin, which a `distinct surface` term counts with the profile
+    /// (OP-157 m.25, OP-158 m.3 (b)); absent in 0.5.0 statements.
+    pub surface_origin: Option<String>,
     /// Digest of the render shown.
     pub render_digest: Digest,
     /// Material fields shown.
@@ -218,6 +221,7 @@ impl Canonical for ApprovalAct {
                         self.evidence
                             .map(|e| crate::validity::word_of(e, &EVIDENCE)),
                     ),
+                    ("origin", self.surface_origin.as_deref().map(Value::text)),
                 ])),
             ),
             ("render_digest", Some(self.render_digest.to_value())),
@@ -278,6 +282,13 @@ impl Canonical for ApprovalAct {
             .opt("evidence")
             .map(|e| crate::validity::word(e, &EVIDENCE))
             .transpose()?;
+        let surface_origin = surface
+            .opt("origin")
+            .map(|o| match text(o)? {
+                t if t.is_empty() || t.len() > 255 => Err(ModelError::Range),
+                t => Ok(String::from(t)),
+            })
+            .transpose()?;
         surface.done()?;
         let out = Self {
             act,
@@ -292,6 +303,7 @@ impl Canonical for ApprovalAct {
             surface_version,
             surface_class,
             evidence,
+            surface_origin,
             render_digest: digest_of(f.req("render_digest")?)?,
             material_fields: set_of(f.req("material_fields")?, false, ident)?,
             issued_at: uint(f.req("issued_at")?)?,

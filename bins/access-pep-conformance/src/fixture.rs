@@ -199,6 +199,7 @@ impl Fixture {
             caps: None,
             hybrid: None,
             discovery: None,
+            declared: access_kernel::verify::key_scope::Declarations::default(),
         };
         let excerpt = KeyExcerpt {
             domain,

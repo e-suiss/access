@@ -138,6 +138,7 @@ impl Case {
                 }),
                 hybrid: None,
                 discovery: Some(vec![1, 2, 3]),
+                declared: crate::verify::key_scope::Declarations::default(),
             },
             excerpt: KeyExcerpt {
                 domain: d(1),
@@ -458,6 +459,50 @@ fn metadata_round_trips_and_is_signed_by_a_trusted_binding() {
         verify_metadata(&PureBackend, &signed, &trusted),
         Err(KeyScopeError::Superseded)
     );
+}
+
+// OP-158 m.3 (b), SEC23, TI-13, SI-12
+#[test]
+fn stage13_declarations_round_trip_and_nothing_declared_acknowledges_nothing() {
+    let case = Case::new();
+    let plain = case.metadata.to_bytes().unwrap();
+    let old = DomainMetadata::from_bytes(&plain).unwrap();
+    assert_eq!(old.declared, Declarations::default());
+    assert!(!old.declared.acknowledges());
+    let mut m = case.metadata.clone();
+    let w = |name: &str, seed: u8, independent: bool| {
+        Witness::new(
+            name.into(),
+            ed_pub(seed),
+            Algorithm::Ed25519,
+            "op".into(),
+            independent,
+        )
+    };
+    m.declared.witnesses = vec![w("w1", 3, false)];
+    m.declared.durability = Some(Durability::SingleNode);
+    m.declared.residency = Some(Residency::new("eu-central".into(), DrClass::Regional));
+    m.declared.mmd = Some(Mmd::new(60_000, 1_000));
+    m.declared.recovery = Some(Recovery::NotAvailable);
+    m.declared.ceremony_transcript = Some(d(7));
+    let back = DomainMetadata::from_bytes(&m.to_bytes().unwrap()).unwrap();
+    assert_eq!(back, m);
+    assert!(
+        !m.declared.acknowledges(),
+        "no replica and no independent witness"
+    );
+    m.declared.replicas = vec![Replica::new("r1".into(), ed_pub(4), "acme".into(), true)];
+    assert!(!m.declared.acknowledges(), "no independent witness");
+    m.declared.witnesses = vec![w("w1", 3, false), w("w2", 5, true)];
+    let back = DomainMetadata::from_bytes(&m.to_bytes().unwrap()).unwrap();
+    assert_eq!(back.declared.witnesses.len(), 2);
+    assert!(back.declared.acknowledges());
+    let mut bad = m.to_value();
+    if let Value::Map(entries) = &mut bad {
+        entries.retain(|(k, _)| k != &Value::text("durability"));
+        entries.push((Value::text("durability"), Value::text("eventual")));
+    }
+    assert!(DomainMetadata::from_value(&bad).is_err());
 }
 
 // CR-58 m.1, m.3, T20, OP-108 m.4
