@@ -2434,6 +2434,7 @@ mod provision {
             )),
             geo: Arc::new(access_identity_risk::adapters::NoGeoSource),
             ips: Arc::new(access_identity_risk::adapters::NoPseudonyms),
+            authority_signer: None,
         }
     }
 
@@ -2657,3 +2658,5 @@ mod kek_rotation;
 mod realm_crypto;
 // OP-158 m.4 (b)
 mod read_path;
+// OP-158 m.4 (b) (W9)
+mod placement;

@@ -71,6 +71,10 @@ mod mds;
 mod divergence;
 // OP-158 m.3 (s)
 mod degraded;
+// OP-158 m.3 (o), (p)
+mod cells;
+// OP-50, OP-53, OP-158 m.3 (p)
+mod lifecycle;
 
 use std::ffi::OsString;
 use std::fmt::Write as _;
@@ -2093,6 +2097,8 @@ async fn serve(
                 root: c.dir.clone(),
             });
     reshred::gate(&all.app, cold.as_ref()).await?;
+    // OP-158 m.3 (o), (p)
+    cells::declare(&all.app, &cells::profile(config)).await?;
     // TN-46, OP-151 m.1 (b), m.3 (o)
     let (risk_services, mmdb) = risk::services(
         config,
@@ -2288,6 +2294,8 @@ async fn serve(
                 targets: config.transparency.targets().map_err(|e| e.to_string())?,
                 sinks: config.transparency.sinks.clone(),
             },
+            // HL-40, OP-158 m.3 (p)
+            cell: cells::profile(config),
         },
         move || led.led(),
     );
@@ -2366,6 +2374,11 @@ async fn serve(
         domains: domains.clone(),
         app: product_app.clone(),
     }));
+    // TI-17, OP-158 m.3 (o)
+    let adp = access_http::placement::route(
+        adp,
+        Arc::new(cells::PgDirectory::new(product_app.clone(), config)),
+    );
     // OP-156 m.3 (o)
     let ssh_ca = access_http::ssh::router(
         pep_tokens.clone(),
@@ -2435,6 +2448,8 @@ async fn serve(
             vault: access_identity_events::adapters::KekSealer(admin_keks),
             geo: admin_geo,
             ips: admin_pseudonyms,
+            // OP-158 m.3 (p)
+            authority_signer: config.signer.clone(),
         },
         admin::InProcessRoutes {
             oauth: authorize.clone(),
@@ -2675,6 +2690,14 @@ async fn listen(
         internal_listen = ?config.internal_listen,
         "access-server listening (TLS 1.3)"
     );
+    // OP-50
+    tracing::info!(
+        pre_stop_s = lifecycle::PRE_STOP.as_secs(),
+        drain_s = lifecycle::DRAIN.as_secs(),
+        shutdown_s = lifecycle::SHUTDOWN.as_secs(),
+        grace_s = lifecycle::GRACE.as_secs(),
+        "lifecycle bounds (OP-50)"
+    );
     // OP-155 m.3 (m)
     let mtls_served = match (listeners.mtls.map(nonblocking).transpose()?, mtls) {
         (Some(l), Some(c)) => {
@@ -2712,14 +2735,35 @@ async fn listen(
         signal(stopped.clone()),
     );
     let inside = access_http::tls::serve(internal_l, tls.clone(), inside, signal(stopped.clone()));
+    let deadline_rx = stopped.clone();
+    let stopping = std::sync::atomic::AtomicBool::new(false);
+    let stopping = &stopping;
     let shutdown = async {
         shutdown_signal().await;
+        stopping.store(true, std::sync::atomic::Ordering::SeqCst);
         ready.unready();
+        // OP-50
+        tokio::time::sleep(lifecycle::DRAIN).await;
         let _ = stop.send(true);
     };
-    ready.ready();
-    let ((), p, m, i, t) = tokio::join!(shutdown, public, management, inside, mtls_served);
-    p.and(m).and(i).and(t).map_err(|e| e.to_string())
+    let served = async {
+        let ((), (), p, m, i, t) = tokio::join!(
+            shutdown,
+            // OP-53
+            lifecycle::ready_after_jitter(|| {
+                if !stopping.load(std::sync::atomic::Ordering::SeqCst) {
+                    ready.ready();
+                }
+            }),
+            public,
+            management,
+            inside,
+            mtls_served
+        );
+        p.and(m).and(i).and(t).map_err(|e| e.to_string())
+    };
+    // OP-50
+    Box::pin(lifecycle::bounded(Box::pin(served), deadline_rx)).await
 }
 
 /// The port of the realms' public origin, from `identity.realm_base`; none for 443 (OP-155

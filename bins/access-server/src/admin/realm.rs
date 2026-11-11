@@ -70,6 +70,9 @@ pub(crate) struct Realms<P> {
     /// The cell's address pseudonyms: a console device registration's bootstrap rate context
     /// (OP-152 m.5 (b)).
     pub(crate) ips: Arc<dyn access_identity_risk::ports::IpPseudonyms>,
+    /// The authority signer, whose Domain Metadata names a domain's witnesses and replicas
+    /// (OP-158 m.3 (p)); without it the durability read names none.
+    pub(crate) authority_signer: Option<std::path::PathBuf>,
 }
 
 /// The `GeoIP` source's state as the signals read names it (§8.13): never `configured` unless
@@ -554,6 +557,14 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             Box::pin(admin.record_guardianship(&proposal, caller.ais))
                 .await
                 .map(|(a, _)| a)
+        } else if matches!(compiled.change, Change::Rehome(_)) {
+            // E14, OP-158 m.3 (o)
+            let target = compiled
+                .body
+                .get(rest::TARGET_AIS)
+                .and_then(Value::as_str)
+                .and_then(|s| access_kernel::json::b64url_decode(s).ok());
+            Box::pin(admin.rehome(&proposal, caller.ais, target)).await
         } else if matches!(compiled.change, Change::AccountBind(_)) {
             let offer = compiled.body.get("offer").and_then(Value::as_str);
             Box::pin(admin.bind_account(&proposal, caller.ais, offer)).await
@@ -658,6 +669,20 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             )
             .await;
         let geo = (q.kind == ResourceKind::Signals).then(|| geoip(&self.geo.status()));
+        // HL-40, OP-158 m.3 (p)
+        let declared = match (q.kind, &read, self.authority_signer.as_deref()) {
+            (ResourceKind::Durability, Ok(r), Some(signer)) => {
+                match r
+                    .items
+                    .first()
+                    .and_then(|(b, _)| b["governing_domain"].as_str())
+                {
+                    Some(d) => self.declarations(signer, d).await,
+                    None => None,
+                }
+            }
+            _ => None,
+        };
         // §12.5.4, TN-127, OP-158 m.3 (v)
         let usage = (q.kind == ResourceKind::RateLimits).then(|| {
             let now = std::time::SystemTime::now()
@@ -677,6 +702,9 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                         if let (Some(g), Some(o)) = (geo, body.as_object_mut()) {
                             o.insert(String::from("geoip"), Value::String(String::from(g)));
                         }
+                        if let (Some(d), Some(o)) = (&declared, body.as_object_mut()) {
+                            o.extend(d.clone());
+                        }
                         if let (Some(u), Some(o)) = (&usage, body.as_object_mut()) {
                             o.insert(String::from("realm"), Value::String(q.slug.clone()));
                             o.insert(String::from("usage"), u.clone());
@@ -689,6 +717,67 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             Err(AdminError::NoRealm | AdminError::Invalid(Invalid::NoWebhook)) => Ok(None),
             Err(e) => Err(unavailable(&e)),
         }
+    }
+}
+
+impl<P> Realms<P> {
+    /// What the governing domain `domain` (base64url) declares about its witnesses, replicas
+    /// and durability, as members of the durability read (OP-158 m.3 (b), (p)).
+    async fn declarations(
+        &self,
+        signer: &std::path::Path,
+        domain: &str,
+    ) -> Option<serde_json::Map<String, Value>> {
+        let d = access_kernel::json::b64url_decode(domain)
+            .ok()
+            .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())?;
+        let declared = access_authority_core::app::placement::declared(signer, Digest(d))
+            .await
+            .ok()?;
+        let mut out = serde_json::Map::new();
+        out.insert(
+            String::from("witnesses"),
+            declared
+                .witnesses
+                .iter()
+                .map(|w| {
+                    serde_json::json!({
+                        "name": w.name,
+                        "operator": w.operator,
+                        "independent": w.independent,
+                    })
+                })
+                .collect(),
+        );
+        out.insert(
+            String::from("replicas"),
+            declared
+                .replicas
+                .iter()
+                .map(|r| {
+                    serde_json::json!({
+                        "name": r.name,
+                        "operator": r.operator,
+                        "independent": r.independent,
+                    })
+                })
+                .collect(),
+        );
+        out.insert(
+            String::from("declared_durability"),
+            declared.durability.map_or(Value::Null, |d| {
+                Value::from(match d {
+                    access_kernel::verify::key_scope::Durability::SingleNode => "single-node",
+                    access_kernel::verify::key_scope::Durability::Replicated => "replicated",
+                })
+            }),
+        );
+        // SEC23, HL-40
+        out.insert(
+            String::from("acknowledges"),
+            Value::Bool(declared.acknowledges()),
+        );
+        Some(out)
     }
 }
 

@@ -114,7 +114,7 @@ const DEFAULT_RESOURCE_PATH_PREFIX: &str = "led_";
 const SAMPLE_PATH: &str = "sample";
 
 /// The placement new tenants and realms are created in (OP-40).
-const PLACEMENT: &str = "pool-default";
+pub(crate) const PLACEMENT: &str = "pool-default";
 
 /// How long the bootstrap's intents stay valid, ms.
 const VALIDITY_MS: u64 = 10 * 60 * 1000;

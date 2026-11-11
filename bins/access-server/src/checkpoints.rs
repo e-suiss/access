@@ -312,6 +312,8 @@ pub(crate) struct Inputs {
     pub(crate) publication: crate::publication::Targets,
     /// The witnesses and sinks of the led domains' checkpoints (OP-158 m.3 (d)).
     pub(crate) publisher: publish::Publisher,
+    /// This cell's profile, which every led domain's metadata declares (HL-40, OP-158 m.3 (p)).
+    pub(crate) cell: access_store::placement::CellProfile,
 }
 
 impl Checkpointers {
@@ -329,6 +331,7 @@ impl Checkpointers {
             holder,
             publication,
             publisher,
+            cell,
         } = inputs;
         let audit = tokio::spawn(async move {
             let signer = SignerNotes(identity_signer);
@@ -343,10 +346,11 @@ impl Checkpointers {
         let led = Arc::new(led);
         let domains = tokio::spawn(async move {
             let heads = PgHeads(app.clone());
-            let signer = SocketSigner::new(authority_signer);
+            let signer = SocketSigner::new(authority_signer.clone());
             let mut clock = SourcesClock::new(sequencer.clone());
             let mut cadences: std::collections::HashMap<Digest, Cadence> =
                 std::collections::HashMap::new();
+            let mut declared = std::collections::HashSet::new();
             let mut every = tokio::time::interval(DOMAIN_TICK);
             every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             loop {
@@ -360,6 +364,17 @@ impl Checkpointers {
                     continue;
                 };
                 for domain in led() {
+                    // HL-40, OP-158 m.3 (p)
+                    if !declared.contains(&domain) {
+                        match crate::cells::declare_domain(&authority_signer, domain, &cell).await {
+                            Ok(_) => {
+                                declared.insert(domain);
+                            }
+                            Err(error) => {
+                                tracing::warn!(%error, "cell durability not declared yet");
+                            }
+                        }
+                    }
                     let cadence = cadences.entry(domain).or_default();
                     if let Err(error) = domain_step(
                         (&heads, &signer, &publisher),

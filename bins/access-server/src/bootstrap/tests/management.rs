@@ -425,6 +425,7 @@ pub(super) async fn console_declaring(
             )),
             geo: std::sync::Arc::new(access_identity_risk::adapters::NoGeoSource),
             ips: std::sync::Arc::new(access_identity_risk::adapters::NoPseudonyms),
+            authority_signer: None,
         },
         crate::admin::InProcessRoutes {
             oauth: oauth.clone(),

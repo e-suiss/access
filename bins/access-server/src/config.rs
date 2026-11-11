@@ -121,6 +121,112 @@ pub(crate) struct Config {
     /// Rolling upgrades of this deployment (OP-56, OP-158 m.3 (q)).
     #[serde(default)]
     pub(crate) upgrade: Upgrade,
+    /// The deployment's cells and the one this process serves (OP-158 m.3 (o), (p)).
+    #[serde(default)]
+    pub(crate) cells: Cells,
+}
+
+/// The cell placement grammar (OP-40).
+fn cell_name(name: &str) -> bool {
+    let b = name.as_bytes();
+    (1..=63).contains(&b.len())
+        && b.first()
+            .is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        && b.iter()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'-')
+}
+
+/// One cell of the deployment (§17.4.9, CMP-26, OP-30, OP-158 m.3 (o)).
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Cell {
+    /// The cell's name, in the placement grammar.
+    pub(crate) name: String,
+    /// The region its data stays in; a realm declares residency only in it (OP-30).
+    #[serde(default)]
+    pub(crate) region: Option<String>,
+    /// `regional` (default) or `multi-region-sync` (§17.4.1, T28).
+    #[serde(default = "regional")]
+    pub(crate) class: String,
+    /// Where the cell's public API answers; a misdirected request names it (421).
+    #[serde(default)]
+    pub(crate) url: Option<String>,
+    /// The one tenant a dedicated cell serves (OP-12, OP-48).
+    #[serde(default)]
+    pub(crate) dedicated_to: Option<String>,
+}
+
+fn regional() -> String {
+    String::from("regional")
+}
+
+/// The deployment's cells (OP-158 m.3 (o)): each is its own database and set of signers; no
+/// data is replicated between cells (OP-30). Without a list, this process is the one cell
+/// `pool-default`.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Cells {
+    /// The cell this process serves.
+    #[serde(default)]
+    pub(crate) this: Option<String>,
+    /// Every cell of the deployment.
+    #[serde(default)]
+    pub(crate) cell: Vec<Cell>,
+}
+
+impl Cells {
+    /// This process's cell name.
+    pub(crate) fn name(&self) -> &str {
+        self.this.as_deref().unwrap_or(crate::bootstrap::PLACEMENT)
+    }
+
+    /// This process's cell entry, when the list names it.
+    pub(crate) fn own(&self) -> Option<&Cell> {
+        self.cell.iter().find(|c| c.name == self.name())
+    }
+
+    /// Whether the list is well formed: names in the grammar and unique, this cell listed when
+    /// a list is given, classes known, URLs https and dedicated tenants UUIDs.
+    pub(crate) fn valid(&self) -> bool {
+        let mut names = BTreeSet::new();
+        let each = self.cell.iter().all(|c| {
+            cell_name(&c.name)
+                && names.insert(c.name.as_str())
+                && c.region.as_deref().is_none_or(cell_name)
+                && ["regional", "multi-region-sync"].contains(&c.class.as_str())
+                && c.url.as_deref().is_none_or(|u| u.starts_with("https://"))
+                && c.dedicated_to
+                    .as_deref()
+                    .is_none_or(|t| uuid_bytes(t).is_some())
+        });
+        cell_name(self.name()) && each && (self.cell.is_empty() || self.own().is_some())
+    }
+}
+
+/// The 16 bytes of a hyphenated UUID text.
+pub(crate) fn uuid_bytes(text: &str) -> Option<[u8; 16]> {
+    let b = text.as_bytes();
+    if b.len() != 36 || [8, 13, 18, 23].iter().any(|i| b.get(*i) != Some(&b'-')) {
+        return None;
+    }
+    let hex: Vec<u8> = b.iter().copied().filter(|c| *c != b'-').collect();
+    let mut out = [0u8; 16];
+    for (o, pair) in out.iter_mut().zip(hex.chunks(2)) {
+        let text = std::str::from_utf8(pair).ok()?;
+        *o = u8::from_str_radix(text, 16).ok()?;
+    }
+    (hex.len() == 32).then_some(out)
+}
+
+/// Whether a database setting names `SQLite` (OP-158 m.3 (p)): Suiss binaries are PostgreSQL
+/// only, the small-provider profile included.
+fn names_sqlite(value: &str) -> bool {
+    let v = value.trim().to_ascii_lowercase();
+    v.starts_with("sqlite")
+        || v.starts_with("file:")
+        || [".db", ".sqlite", ".sqlite3", ".db3"]
+            .iter()
+            .any(|ext| v.ends_with(ext))
 }
 
 /// How this deployment upgrades (OP-56).
@@ -931,6 +1037,7 @@ impl Default for Config {
             audit_publication: AuditPublication::default(),
             transparency: Transparency::default(),
             upgrade: Upgrade::default(),
+            cells: Cells::default(),
         }
     }
 }
@@ -1014,6 +1121,14 @@ pub(crate) enum ConfigError {
         "transparency: operator is required with witnesses, each witness an http://host:port URL with a cosigner vkey and an operator, each roughtime server host:port with a 32-byte base64url key (OP-158 m.3 (d), (k))"
     )]
     Transparency,
+    #[error(
+        "cells: each cell name and region in ^[a-z0-9][a-z0-9-]{{0,62}}$ and unique, class regional or multi-region-sync, url https, dedicated_to a tenant UUID, and this cell listed (OP-158 m.3 (o))"
+    )]
+    Cells,
+    #[error(
+        "database: SQLite is not supported; Access runs on PostgreSQL only, the small-provider profile included (OP-48, OP-66, OP-158 m.3 (p))"
+    )]
+    Sqlite,
 }
 
 /// Whether two listen addresses would take the same socket: one port, and one address or the
@@ -1125,6 +1240,7 @@ impl Config {
             _ => return Err(ConfigError::Issuer),
         }
         let db = self.database.as_ref().ok_or(ConfigError::NoDatabase)?;
+        self.check_cells(db)?;
         // OP-53
         if [
             &db.sequencer,
@@ -1203,6 +1319,21 @@ impl Config {
                 || access_identity_risk::adapters::range_api::RangeApi::new(base, ()).is_err())
         {
             return Err(ConfigError::BreachRangeApi);
+        }
+        Ok(())
+    }
+
+    /// The database is PostgreSQL and the cells are well formed (OP-48, OP-66, OP-158 m.3 (o),
+    /// (p)).
+    fn check_cells(&self, db: &Database) -> Result<(), ConfigError> {
+        if names_sqlite(&db.host)
+            || names_sqlite(&db.name)
+            || db.hosts.iter().any(|h| names_sqlite(h))
+        {
+            return Err(ConfigError::Sqlite);
+        }
+        if !self.cells.valid() {
+            return Err(ConfigError::Cells);
         }
         Ok(())
     }
