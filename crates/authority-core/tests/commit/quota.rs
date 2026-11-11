@@ -261,6 +261,21 @@ async fn a_billing_hold_is_only_a_protocol_rejection_of_widening_commits() {
         .await
         .unwrap(),
     );
+    // AP-14, B10
+    let export = incoming(
+        export_request(d, 9, ExerciseBasis::Anchor(meta::meta_anchor(&d)), "full"),
+        ROOT_KEY,
+    );
+    allowed(&core.exercise(&export, NOW).await.unwrap());
+    assert!(
+        !core
+            .export(&export, NOW)
+            .await
+            .unwrap()
+            .package
+            .records
+            .is_empty()
+    );
     assert!(hold(false).await.unwrap());
     let after = send(
         &mut core,

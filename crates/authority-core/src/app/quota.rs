@@ -85,8 +85,11 @@ pub enum Free {
     /// It only narrows: revocation, termination, departure, retirement, renunciation or a
     /// restriction that only adds `forbid` statements (B3, B19, D7).
     Narrowing,
-    /// It leaves the provider: handover or forced recovery (B10, B18).
+    /// It leaves the provider: handover, forced recovery or a Record Export (B10, B18,
+    /// anti-hostage k.2).
     Exit,
+    /// It reads and changes no authority state (§9.13.7).
+    Read,
 }
 
 /// Whether `payload` is free of quota by its kind alone; a `policy_set` is decided on its
@@ -120,6 +123,15 @@ fn only_forbids(content: &Value) -> bool {
 impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     /// Why `req` draws no quota, if it does not.
     pub(crate) async fn free_of_quota(&self, req: &Request) -> Result<Option<Free>, CoreError> {
+        let action = &req.intent.action;
+        if action.namespace == meta::NAMESPACE
+            && action.name == crate::domain::export::EXPORT_ACTION
+        {
+            return Ok(Some(Free::Exit));
+        }
+        if meta::is_read(&action.namespace, &action.name) {
+            return Ok(Some(Free::Read));
+        }
         let Some(payload) = &req.payload else {
             return Ok(None);
         };
