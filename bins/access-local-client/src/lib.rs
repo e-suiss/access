@@ -16,6 +16,7 @@ pub mod intent;
 pub mod login;
 pub mod passkey;
 pub mod platform;
+pub mod support;
 pub mod token;
 
 /// Why a step did not complete.

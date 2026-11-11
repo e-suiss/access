@@ -17,6 +17,12 @@
 //!     --contribute-since <position> (--intent <envelope.json> | --intent-json <json>)
 //!     [--instance <b64url>] [--reason <text>] [--request <pushed-request.json>] [--connect <ip:port>]
 //! access-local-client push <the approve options but --request>
+//! access-local-client support-episode --issuer <realm issuer> --api <base> --ca <ca.crt>
+//!     --cert <pep.crt> --key <pep.key> --hsm-module <path> --hsm-token <label>
+//!     --hsm-pin-file <path> --domain <b64url> --operator <login> --operator-password-env <VAR>
+//!     --operator-device-key <label> --operator-party <b64url> --identifier <login>
+//!     --subject <usr_…> --party <b64url> --passkey <label> --device-key <label>
+//!     --case-system <name> --case <case> [--connect <ip:port>]
 //! access-local-client compromise --api <base> --ca <ca.crt> --cert <pep.crt> --key <pep.key>
 //!     --domain <b64url> --issuer-party <b64url> --party <b64url> [--occurred-at <ms>]
 //!     [--connect <ip:port>]
@@ -48,15 +54,19 @@ use access_local_client::intent::holding;
 use access_local_client::login::{Credential, Login, login};
 use access_local_client::passkey::{Passkey, relying_party};
 use access_local_client::platform::{PlatformClient, StatusChange};
+use access_local_client::support::{Episode, episode};
 use access_local_client::token::Token;
 use suiss_crypto::signer::Signer;
 
-const USAGE: &str = "usage: access-local-client <login | approve | push | compromise | stream-status | service-token> --<option> <value>...\n\
+const USAGE: &str = "usage: access-local-client <login | approve | push | support-episode | compromise | stream-status | service-token> --<option> <value>...\n\
   login:         --issuer --ca --client-id --redirect-uri --identifier (--password-env | --passkey --hsm-module --hsm-token --hsm-pin-file)\n\
                  [--device-key] [--resource] [--scope] [--connect]\n\
   approve:       --issuer --api --ca --cert --key --redirect-uri --identifier --hsm-module --hsm-token --hsm-pin-file --device-key --passkey\n\
                  --domain --party --grant --grant-since --contribute-grant --contribute-since (--intent | --intent-json) [--instance] [--reason] [--request] [--connect]\n\
   push:          the approve options but --request; pushes the request and prints what opens it\n\
+  support-episode: --issuer --api --ca --cert --key --hsm-module --hsm-token --hsm-pin-file --domain --operator\n\
+                 --operator-password-env --operator-device-key --operator-party --identifier --subject --party\n\
+                 --passkey --device-key --case-system --case [--connect]\n\
   compromise:    --api --ca --cert --key --domain --issuer-party --party [--occurred-at] [--connect]\n\
   stream-status: --api --issuer --ca --client-id --client-key --stream [--status [--reason]] [--connect]\n\
   service-token: --issuer --ca --client-id --client-key --resource [--connect]";
@@ -285,6 +295,58 @@ async fn approve_command(o: &Options, push_only: bool) -> Result<serde_json::Val
     .map_err(step)
 }
 
+/// `support-episode`: an operator asks, the person gives with the device, and the operator views
+/// the person's account under the given access (OP-157 m.6 (i)).
+async fn support_command(o: &Options) -> Result<serde_json::Value, String> {
+    let step = |e: ClientError| e.to_string();
+    let identity = Identity {
+        chain_pem: o.file("cert")?,
+        key_pem: o.file("key")?,
+    };
+    let leaf = leaf_der(&identity.chain_pem).map_err(step)?;
+    let http = http(o, Some(&identity))?;
+    let issuer = o.required("issuer")?;
+    let (rp_id, origin) = relying_party(issuer).map_err(step)?;
+    let token = o.token()?;
+    let operator_device = token
+        .signer(o.required("operator-device-key")?)
+        .map_err(step)?;
+    let device = token.signer(o.required("device-key")?).map_err(step)?;
+    let key = token.signer(o.required("passkey")?).map_err(step)?;
+    let passkey = Passkey {
+        key: &key,
+        rp_id: &rp_id,
+        origin: &origin,
+    };
+    let var = o.required("operator-password-env")?;
+    let password = std::env::var(var)
+        .ok()
+        .filter(|p| !p.is_empty())
+        .ok_or_else(|| format!("{var} is not set"))?;
+    episode(
+        &http,
+        &Episode {
+            issuer,
+            api_base: o.required("api")?,
+            pep_leaf_der: &leaf,
+            domain: o.digest("domain")?,
+            operator: o.required("operator")?,
+            operator_password: &password,
+            operator_device: &operator_device,
+            operator_party: o.id16("operator-party")?,
+            person: o.required("identifier")?,
+            person_subject: o.required("subject")?,
+            person_party: o.id16("party")?,
+            person_passkey: &passkey,
+            person_device: &device,
+            case_system: o.required("case-system")?,
+            case: o.required("case")?,
+        },
+    )
+    .await
+    .map_err(step)
+}
+
 async fn run(command: &str, o: &Options) -> Result<serde_json::Value, String> {
     let step = |e: ClientError| e.to_string();
     match command {
@@ -292,6 +354,7 @@ async fn run(command: &str, o: &Options) -> Result<serde_json::Value, String> {
         "approve" => approve_command(o, false).await,
         // OP-157 m.6 (i)
         "push" => approve_command(o, true).await,
+        "support-episode" => support_command(o).await,
         "compromise" => {
             let identity = Identity {
                 chain_pem: o.file("cert")?,

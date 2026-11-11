@@ -40,6 +40,8 @@ pub struct Exercise<'a> {
     pub intent_json: &'a Value,
     /// The actor's holding of the Grant.
     pub basis: HoldingRef,
+    /// Whose behalf the actor acts on: its own, or `For` the person a support Grant names.
+    pub capacity: Capacity,
     /// Proof objects (L1-ADP-12), such as `{"contribution": "<exercise>"}`.
     pub proofs: Vec<Value>,
     /// The PEP certificate's leaf, DER.
@@ -89,7 +91,7 @@ pub fn body(e: &Exercise<'_>) -> Result<Value, ClientError> {
         intent: digest,
         mode: Mode::Commit,
         pep: pep_name(e.pep_leaf_der),
-        capacity: Capacity::Own,
+        capacity: e.capacity,
         basis: ExerciseBasis::Holding(e.basis),
         iat: now_ms(),
         exercise: None,
@@ -100,7 +102,10 @@ pub fn body(e: &Exercise<'_>) -> Result<Value, ClientError> {
         "nonce": b64url_encode(e.nonce),
         "intent": e.intent_json,
         "basis": holding_json(&e.basis),
-        "capacity": "own",
+        "capacity": match e.capacity {
+            Capacity::Own => json!("own"),
+            Capacity::For(p) => json!({ "for": b64url_encode(&p.0) }),
+        },
         "ais": b64url_encode(&ais(e.device, &statement)?),
     });
     if let (false, Some(c)) = (e.proofs.is_empty(), context.as_object_mut()) {
@@ -200,6 +205,7 @@ mod tests {
                 holder: Id([3; 16]),
                 since: 7,
             },
+            capacity: Capacity::Own,
             proofs: vec![json!({ "contribution": b64url_encode(&[6; 32]) })],
             pep_leaf_der: &leaf,
             device: &device,

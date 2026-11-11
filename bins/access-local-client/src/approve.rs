@@ -647,6 +647,7 @@ fn exercise<'a>(
         intent,
         intent_json: a.intent,
         basis: a.basis,
+        capacity: Capacity::Own,
         proofs,
         pep_leaf_der: a.pep_leaf_der,
         device: a.device,

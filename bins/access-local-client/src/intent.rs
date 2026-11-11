@@ -108,6 +108,8 @@ fn purpose(v: &Value) -> Result<PurposeRef, ClientError> {
         ),
         "work" => PurposeRef::Work(digest(inner, "purpose")?),
         "aim" => PurposeRef::Aim(digest(inner, "purpose")?),
+        // OP-157 m.3 (b)
+        "case" => PurposeRef::Case(digest(inner, "purpose")?),
         _ => return Err(bad("purpose")),
     })
 }
