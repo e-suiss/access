@@ -11,7 +11,7 @@ own beside the server's StatefulSet template.
         # finishes in flight, drops its keys and closes its HSM sessions last
         - name: authority-signer
           restartPolicy: Always
-          image: {{ include "access.image" . }}
+          image: {{.Values.image.repository}}@sha256:{{.Values.image.sha256}}
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/access-signer"]
           env:
@@ -49,7 +49,7 @@ own beside the server's StatefulSet template.
         # directory; no network port; a native sidecar like the authority signer
         - name: identity-signer
           restartPolicy: Always
-          image: {{ include "access.image" . }}
+          image: {{.Values.image.repository}}@sha256:{{.Values.image.sha256}}
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/access-identity-signer"]
           env:

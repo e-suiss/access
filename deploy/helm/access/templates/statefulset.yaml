@@ -63,7 +63,7 @@ spec:
       containers:
         - name: access-server
           # OP-49
-          image: {{ include "access.image" . }}
+          image: {{.Values.image.repository}}@sha256:{{.Values.image.sha256}}
           imagePullPolicy: IfNotPresent
           env:
             - name: ACCESS_CONFIG

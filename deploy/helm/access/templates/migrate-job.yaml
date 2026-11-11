@@ -38,7 +38,7 @@ spec:
       containers:
         - name: access-migrate
           # OP-49: the same image digest as the server it prepares
-          image: {{ include "access.image" . }}
+          image: {{.Values.image.repository}}@sha256:{{.Values.image.sha256}}
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/access-cli"]
           args: ["migrate", "--config", "/etc/access/migrate.toml"]

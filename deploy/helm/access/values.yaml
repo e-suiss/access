@@ -1,9 +1,9 @@
 # OP-51, OP-158 m.3 (p): one Access cell.
 
-# OP-49: the image by digest, never by tag
+# OP-49: the image by its sha256 digest, never by tag
 image:
   repository: ghcr.io/e-suiss/access
-  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
 
 replicas: 3
 

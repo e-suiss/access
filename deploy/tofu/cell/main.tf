@@ -30,7 +30,7 @@ resource "helm_release" "access" {
   chart     = "${path.module}/../../helm/access"
   values = [
     yamlencode({
-      image = { digest = var.image_digest }
+      image = { sha256 = trimprefix(var.image_digest, "sha256:") }
       replicas   = var.replicas
       durability = var.durability
       cells = {

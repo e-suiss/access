@@ -128,7 +128,7 @@ through that Grant and only up to its ceiling. This is a deployment pattern, not
 |---|---|---|
 | Small (about 100 users) | One node, one PostgreSQL, daily dump and WAL archive | Small-provider profile, `durability: single-node` |
 | Phase 1 (about 100 000 users) | One region, three zones, three stateless nodes, PostgreSQL primary and two synchronous standbys | One cell |
-| Phase 2 | Two independent clusters in one region over one synchronously replicated database (RTT under 5 ms, 10 ms ceiling) | Two Kubernetes clusters in a cell; still one linearizable store |
+| Phase 2 | Two independent clusters in one region over one synchronously replicated database, the sites close enough for synchronous commits | Two Kubernetes clusters in a cell; still one linearizable store |
 | Phase 3 | One cell per region, no data replicated between cells, a small global control plane (tenant to cell) | Cells and the Placement Directory |
 | Large (about 10 million users) | A separate node pool for Argon2, load shedding, larger caches, read replicas for allowed queries only | Identity plane scale; authority domains spread over cells |
 
