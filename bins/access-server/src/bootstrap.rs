@@ -737,6 +737,10 @@ pub(crate) struct Plan {
     pub(crate) test_user: Option<TestUserPlan>,
     pub(crate) compromise: Option<CompromisePlan>,
     pub(crate) sample_agent: Option<agent::SampleAgentPlan>,
+    /// OP-157 m.6 (i)
+    pub(crate) support_operator: Option<governance::SupportOperatorPlan>,
+    pub(crate) breakglass_account: Option<governance::BreakglassPlan>,
+    pub(crate) review_schedule: Option<governance::ReviewPlan>,
 }
 
 /// One of the plan's sample tenants, or a plan error naming the section.
@@ -809,13 +813,17 @@ impl Plan {
                 redirect_uris,
             });
         }
-        // OP-157 m.4 (a)
-        governance::Fixtures {
-            support_operator: file.support_operator.as_ref(),
-            breakglass_account: file.breakglass_account.as_ref(),
-            review_schedule: file.review_schedule.as_ref(),
+        // OP-157 m.4 (a), m.6 (i)
+        let (support_operator, breakglass_account, review_schedule) = governance::Fixtures {
+            support_operator: file.support_operator,
+            breakglass_account: file.breakglass_account,
+            review_schedule: file.review_schedule,
         }
-        .check(&file.tenants)?;
+        .plans(
+            &file.tenants,
+            file.test_user.as_ref().map(|u| u.realm.as_str()),
+            file.sample_agent.as_ref().map(|a| a.realm.as_str()),
+        )?;
         // OP-154 m.15 (i)
         let sample_agent = match file.sample_agent {
             None => None,
@@ -872,6 +880,9 @@ impl Plan {
             test_user,
             compromise,
             sample_agent,
+            support_operator,
+            breakglass_account,
+            review_schedule,
         })
     }
 }
@@ -1086,6 +1097,15 @@ pub(crate) struct Summary {
     /// Present when the plan names a sample agent (OP-154 m.15 (i)).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) sample_agent: Option<agent::SampleAgentOut>,
+    /// Present when the plan names a support operator (OP-157 m.6 (i)).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) support_operator: Option<governance::SupportOperatorOut>,
+    /// Present when the plan names a break-glass account (OP-157 m.6 (i)).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) breakglass_account: Option<governance::BreakglassOut>,
+    /// Present when the plan names an access review (OP-157 m.6 (i)).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) review_schedule: Option<governance::ReviewOut>,
 }
 
 /// Meta-actions the bootstrap's keys sign, committed by the authority plane with the identity
@@ -1109,6 +1129,12 @@ pub(crate) trait MetaExercises: Send + Sync {
         domain: Digest,
         action: ActionRef,
     ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
+
+    /// Hands a Claim to Claim Ingest of a domain this process leads (CMP-8, OP-157 m.6 (i)).
+    fn claim(
+        &self,
+        submission: access_internal_api::claims::ClaimSubmission,
+    ) -> impl Future<Output = Result<access_internal_api::claims::ClaimVerdict, Unavailable>> + Send;
 }
 
 /// The ports and stores the bootstrap runs over.
@@ -1172,17 +1198,19 @@ const fn issuer_style(style: Style) -> IssuerStyle {
 }
 
 /// What a sample realm's Genesis accepts beyond the catalogs: the local declarant's
-/// `party_compromise` Claims (OP-149 m.26 (c)) and, with an allowed action, the realm issuer's
-/// `authentication` Claims as predicate input, which a hosted approval proves with (OP-149 m.29
-/// (b), SI-5).
+/// `party_compromise` Claims (OP-149 m.26 (c)), the local case system's `support_case` Claims
+/// (OP-157 m.6 (i)) and, with an allowed action, the realm issuer's `authentication` Claims as
+/// predicate input, which a hosted approval proves with (OP-149 m.29 (b), SI-5).
 fn genesis_acceptances(
     catalog: Option<&SamplePlan>,
-    declarant: Option<Id>,
+    (declarant, case_system): (Option<Id>, Option<Id>),
 ) -> (Vec<suiss_crypto::dcbor::Value>, Vec<String>) {
     (
         declarant
-            .map(|issuer| vec![local::acceptance(issuer)])
-            .unwrap_or_default(),
+            .map(local::acceptance)
+            .into_iter()
+            .chain(case_system.map(governance::case_acceptance))
+            .collect(),
         catalog
             .filter(|s| s.allowed.is_some())
             .map(|_| vec![Class::Authentication.name()])
@@ -1347,9 +1375,16 @@ where
         let mut test_user = None;
         let mut compromise = None;
         let mut sample_agent = None;
+        let (mut support_operator, mut breakglass_account, mut review_schedule) =
+            (None, None, None);
         // OP-149 m.26 (c)
         let declarant = match &plan.compromise {
             Some(_) => Some(self.declarant()?),
+            None => None,
+        };
+        // OP-157 m.6 (i)
+        let case_system = match &plan.support_operator {
+            Some(_) => Some(self.case_system()?.1),
             None => None,
         };
         for (slug, is_platform) in slugs {
@@ -1382,7 +1417,19 @@ where
                             ))
                             .collect()
                     },
-                    genesis_acceptances(catalog, accepted.map(|(_, (_, issuer))| *issuer)),
+                    genesis_acceptances(
+                        catalog,
+                        (
+                            accepted.map(|(_, (_, issuer))| *issuer),
+                            case_system.filter(|_| {
+                                !is_platform
+                                    && plan
+                                        .support_operator
+                                        .as_ref()
+                                        .is_some_and(|s| s.realm == *slug)
+                            }),
+                        ),
+                    ),
                 )
                 .await?;
             self.onboard(tenant, realm, domain, &root, party).await?;
@@ -1438,6 +1485,49 @@ where
                             .await?,
                     );
                 }
+                // OP-157 m.6 (i)
+                if let Some(s) = plan.support_operator.as_ref().filter(|s| s.realm == *slug) {
+                    support_operator = Some(
+                        self.support_operator(
+                            &admin,
+                            &ids,
+                            (tenant, realm),
+                            (domain, &root, slug),
+                            s,
+                            party,
+                        )
+                        .await?,
+                    );
+                }
+                if let Some(b) = plan
+                    .breakglass_account
+                    .as_ref()
+                    .filter(|b| b.realm == *slug)
+                {
+                    breakglass_account = Some(
+                        self.breakglass_account(
+                            &admin,
+                            &ids,
+                            (tenant, realm),
+                            (domain, &root, slug),
+                            b,
+                            party,
+                        )
+                        .await?,
+                    );
+                }
+                if let Some(r) = plan.review_schedule.as_ref().filter(|r| r.realm == *slug) {
+                    review_schedule = Some(
+                        self.review_schedule(
+                            &admin,
+                            (tenant, realm),
+                            (domain, &root, slug),
+                            r,
+                            party,
+                        )
+                        .await?,
+                    );
+                }
             }
             if let Some((c, (key, issuer))) = accepted {
                 compromise = Some(
@@ -1468,6 +1558,9 @@ where
             test_user,
             compromise,
             sample_agent,
+            support_operator,
+            breakglass_account,
+            review_schedule,
         })
     }
 
@@ -1598,6 +1691,20 @@ where
         content: GrantContent,
         party: Id,
     ) -> Result<HoldingRef, BootstrapError> {
+        let basis = ExerciseBasis::Anchor(meta::meta_anchor(&domain));
+        self.granted_on(domain, root, label, (content, basis), party)
+            .await
+    }
+
+    /// [`Self::granted`] on the Anchor `basis` names, which `root` is the root of.
+    async fn granted_on(
+        &self,
+        domain: Digest,
+        root: &HsmSigner,
+        label: &[u8],
+        (content, basis): (GrantContent, ExerciseBasis),
+        party: Id,
+    ) -> Result<HoldingRef, BootstrapError> {
         let signature = root
             .sign(label)
             .map_err(|e| BootstrapError::Unavailable(String::from(e.code())))?;
@@ -1608,8 +1715,14 @@ where
         let since = match found {
             Some(row) => row.decision_pos,
             None => {
-                self.commit_meta(domain, root, &nonce, Payload::GrantIssue(content), party)
-                    .await?
+                self.commit_meta_on(
+                    domain,
+                    root,
+                    &nonce,
+                    (Payload::GrantIssue(content), basis),
+                    party,
+                )
+                .await?
             }
         };
         let exercise = meta::exercise_id(&domain, &nonce).map_err(|_| BootstrapError::Encode)?;
@@ -1622,6 +1735,7 @@ where
 
     /// Commits the meta-action `payload` about `party` on the meta-anchor, signed by the root;
     /// returns its record's position.
+    #[cfg(test)]
     async fn commit_meta(
         &self,
         domain: Digest,
@@ -1630,10 +1744,25 @@ where
         payload: Payload,
         party: Id,
     ) -> Result<u64, BootstrapError> {
+        let basis = ExerciseBasis::Anchor(meta::meta_anchor(&domain));
+        self.commit_meta_on(domain, root, nonce, (payload, basis), party)
+            .await
+    }
+
+    /// Commits the meta-action `payload` about `party` on `basis`, an Anchor the root is the
+    /// root of, signed by the root; returns its record's position.
+    async fn commit_meta_on(
+        &self,
+        domain: Digest,
+        root: &HsmSigner,
+        nonce: &[u8],
+        (payload, basis): (Payload, ExerciseBasis),
+        party: Id,
+    ) -> Result<u64, BootstrapError> {
         self.lead(domain).await?;
         let w = Moment::at(server_time(self.app).await?);
         match self
-            .meta_verdict(domain, root, nonce, payload, party, &w)
+            .meta_verdict_on(domain, root, nonce, (payload, basis), party, &w)
             .await?
         {
             Verdict::Committed(c) => Ok(c.position),
@@ -1655,10 +1784,24 @@ where
         party: Id,
         w: &Moment,
     ) -> Result<Verdict, BootstrapError> {
+        let basis = ExerciseBasis::Anchor(meta::meta_anchor(&domain));
+        self.meta_verdict_on(domain, root, nonce, (payload, basis), party, w)
+            .await
+    }
+
+    /// [`Self::meta_verdict`] on `basis`.
+    async fn meta_verdict_on(
+        &self,
+        domain: Digest,
+        root: &HsmSigner,
+        nonce: &[u8],
+        (payload, basis): (Payload, ExerciseBasis),
+        party: Id,
+        w: &Moment,
+    ) -> Result<Verdict, BootstrapError> {
         let intent =
             self_signed_intent(&payload, party, w.validity).ok_or(BootstrapError::Encode)?;
         let digest = intent_digest(&intent).map_err(|_| BootstrapError::Encode)?;
-        let basis = ExerciseBasis::Anchor(meta::meta_anchor(&domain));
         let ais = sign(root, &w.statement(domain, nonce, digest, basis))?;
         let request = Request {
             domain,
@@ -1779,6 +1922,20 @@ where
         party: Id,
         subject: [u8; 16],
     ) -> Result<Onboarded, BootstrapError> {
+        self.register_in(tenant, realm, domain, (key, party), (subject, None))
+            .await
+    }
+
+    /// [`Self::register`], its bootstrap Exercises counted under `context` (§13.7.4, OP-152
+    /// m.5 (b)).
+    async fn register_in(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        domain: Digest,
+        (key, party): (&HsmSigner, Id),
+        (subject, context): ([u8; 16], Option<access_internal_api::context::RateContext>),
+    ) -> Result<Onboarded, BootstrapError> {
         let challenge = root_challenge(key, domain)?;
         let w = Moment::at(server_time(self.app).await?);
         let mut r = Registration {
@@ -1797,7 +1954,7 @@ where
                 ais: Vec::new(),
             },
             pep: String::from(IDENTITY_PEP),
-            context: None,
+            context,
         };
         let instance = r.instance().ok_or(BootstrapError::Encode)?;
         let signed = |nonce: &[u8], payload: &meta::Payload| -> Result<Vec<u8>, BootstrapError> {
@@ -1957,6 +2114,20 @@ where
         root: &HsmSigner,
         change: Change,
     ) -> Result<Applied, BootstrapError> {
+        let basis = ExerciseBasis::Anchor(meta::object_id(&domain, kind::ANCHOR, IDP_ANCHOR));
+        self.change_as(admin, (tenant, realm), (root, basis), (change, None))
+            .await
+    }
+
+    /// [`Self::change`] signed by `signer` on `basis`, for the account `subject` names, such as
+    /// an organization's founder (TN-5, OP-153 m.3 (b)).
+    async fn change_as(
+        &self,
+        admin: &Admin<'_, P, P, K>,
+        (tenant, realm): (TenantId, RealmId),
+        (root, basis): (&HsmSigner, ExerciseBasis),
+        (change, subject): (Change, Option<[u8; 16]>),
+    ) -> Result<Applied, BootstrapError> {
         let w = Moment::at(server_time(self.app).await?);
         let nonce = access_crypto::random::bytes::<16>()
             .map_err(|_| BootstrapError::Unavailable(String::from("rng")))?
@@ -1967,9 +2138,9 @@ where
             change,
             nonce,
             validity: w.validity,
-            basis: ExerciseBasis::Anchor(meta::object_id(&domain, kind::ANCHOR, IDP_ANCHOR)),
+            basis,
             capacity: Capacity::Own,
-            subject: None,
+            subject,
         };
         let prepared = admin.prepare(&proposal).await?;
         self.lead(prepared.domain).await?;

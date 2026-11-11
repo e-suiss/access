@@ -11,6 +11,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use access_crypto::Secret;
 use access_crypto::opaque_id::IdKey;
 use access_crypto::totp::{TotpParams, hotp, step_of};
 use access_identity_account::adapters::hibp::MirrorRanges;
@@ -146,13 +147,13 @@ pub(crate) struct ChangeOut {
     pub(crate) position: u64,
 }
 
-/// A `staged` account with `identifier`, the plan's password as its credential (§10.2.1), moved
-/// to `active` along TN-49.
-async fn create_account(
+/// A `staged` account with `identifier`, the plan's password as its credential when it names
+/// one (§10.2.1), moved to `active` along TN-49.
+pub(super) async fn create_account(
     accounts: &PgAccounts,
     scope: &Realm<'_>,
     identifier: &Identifier,
-    u: &TestUserPlan,
+    password: Option<(&Secret<String>, Option<PathBuf>)>,
 ) -> Result<[u8; 16], BootstrapError> {
     let subject = create(
         accounts,
@@ -161,12 +162,30 @@ async fn create_account(
         &BOOTSTRAP,
     )
     .await?;
+    if let Some((password, breach_ranges_dir)) = password {
+        set_account_password(accounts, scope, subject, password, breach_ranges_dir).await?;
+    }
+    for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
+        change_status(accounts, scope, subject, to, &BOOTSTRAP).await?;
+    }
+    Ok(subject)
+}
+
+/// Sets `password` as the account's credential, checked against the breach corpus when there
+/// is one (IDP-3).
+async fn set_account_password(
+    accounts: &PgAccounts,
+    scope: &Realm<'_>,
+    subject: [u8; 16],
+    password: &Secret<String>,
+    breach_ranges_dir: Option<PathBuf>,
+) -> Result<(), BootstrapError> {
     let hasher = Hasher::new(HasherConfig::sized(
         Argon2Params::CANONICAL,
         cores(),
         cgroup_memory_budget(),
     ));
-    let corpus = Corpus::of(u.breach_ranges_dir.clone());
+    let corpus = Corpus::of(breach_ranges_dir);
     let services = PasswordServices {
         hasher: &hasher,
         ranges: &corpus,
@@ -177,14 +196,11 @@ async fn create_account(
         scope,
         &services,
         subject,
-        u.password.expose(),
+        password.expose(),
         &BOOTSTRAP,
     )
     .await?;
-    for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
-        change_status(accounts, scope, subject, to, &BOOTSTRAP).await?;
-    }
-    Ok(subject)
+    Ok(())
 }
 
 /// The `acceptance-content` under which `issuer`'s `party_compromise` Claims are predicate
@@ -250,14 +266,22 @@ where
             (s, false)
         } else {
             (
-                create_account(&accounts, &scope, &identifier, u).await?,
+                create_account(
+                    &accounts,
+                    &scope,
+                    &identifier,
+                    Some((&u.password, u.breach_ranges_dir.clone())),
+                )
+                .await?,
                 true,
             )
         };
         let client_id = self
             .public_client(admin, (tenant, realm), domain, root, u)
             .await?;
-        let (party, instance) = self.device_party((tenant, realm), domain, subject).await?;
+        let (party, instance) = self
+            .device_party((tenant, realm), domain, subject, (TEST_DEVICE_LABEL, None))
+            .await?;
         let (passkey, totp) = self
             .authenticators(&u.realm, subject, identifier.value(), u.totp.as_ref())
             .await?;
@@ -458,18 +482,20 @@ where
         ))
     }
 
-    /// The test user's Party and device Instance in the realm's governing domain (OP-149 m.28
-    /// (b), m.16 (a), L0-META-7): a device key kept in the token signs its own `party_register`
-    /// and `instance_create`, and the identity plane binds the subject to that Party, queues the
-    /// `identity_binding_person` Claim and records the device key, as `POST /v1/me/instances`
-    /// does (OP-150 m.12 (d)). A subject with a Party and a device keeps them.
-    async fn device_party(
+    /// An account's Party and device Instance in the realm's governing domain (OP-149 m.28 (b),
+    /// m.16 (a), L0-META-7): the device key `label` kept in the token signs its own
+    /// `party_register` and `instance_create`, and the identity plane binds the subject to that
+    /// Party, queues the `identity_binding_person` Claim and records the device key, as
+    /// `POST /v1/me/instances` does (OP-150 m.12 (d)). A subject with a Party and a device keeps
+    /// them.
+    pub(super) async fn device_party(
         &self,
         (tenant, realm): (TenantId, RealmId),
         domain: Digest,
         subject: [u8; 16],
+        (label, context): (&str, Option<access_internal_api::context::RateContext>),
     ) -> Result<(Id, Id), BootstrapError> {
-        let key = token_key(self.hsm, TEST_DEVICE_LABEL)?;
+        let key = token_key(self.hsm, label)?;
         let party = root_party(&key.public_key());
         let mut t = TenantTx::begin(self.app, tenant, realm).await?;
         let bound = idp::subject_party(&mut t, &subject).await?;
@@ -479,12 +505,12 @@ where
             return Ok((Id(p), Id(i)));
         }
         if bound.is_some_and(|p| p != party.0) {
-            return Err(BootstrapError::Plan(String::from(
-                "test_user: the account is bound to a Party that is not the plan's device key's",
+            return Err(BootstrapError::Plan(format!(
+                "{label}: the account is bound to a Party that is not this device key's"
             )));
         }
         let onboarded = self
-            .register(tenant, realm, domain, &key, party, subject)
+            .register_in(tenant, realm, domain, (&key, party), (subject, context))
             .await?;
         let mut tx = PgTx::new(TenantTx::begin(self.app, tenant, realm).await?);
         devices::bind_party(&mut tx, &subject, &party.0, &onboarded.register_ais).await?;

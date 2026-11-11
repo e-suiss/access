@@ -375,7 +375,7 @@ impl Realm {
         let sample = sample_plan().sample.unwrap();
         let founder = root_party(&root_key(&w.keys).unwrap().public_key());
         let ids = cell_ids(&w.db.app, &w.keys).await.unwrap();
-        let (mut acceptances, predicate) = genesis_acceptances(Some(&sample), None);
+        let (mut acceptances, predicate) = genesis_acceptances(Some(&sample), (None, None));
         acceptances.push(accepted);
         b.realm(
             &b.admin(&ids, None),

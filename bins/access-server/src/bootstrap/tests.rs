@@ -309,6 +309,9 @@ fn plan() -> Plan {
         test_user: None,
         compromise: None,
         sample_agent: None,
+        support_operator: None,
+        breakglass_account: None,
+        review_schedule: None,
     }
 }
 
@@ -2534,3 +2537,5 @@ mod vc_verifier;
 mod walkthrough;
 // OP-157 m.4 (b)
 mod operator_breakglass;
+// OP-157 m.4 (b)
+mod fixtures;

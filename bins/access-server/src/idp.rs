@@ -715,7 +715,12 @@ where
             });
         };
         let verdict = self
-            .self_signed_in((r.domain, r.party), &r.register, r.payload(), (r.pep, None))
+            .self_signed_in(
+                (r.domain, r.party),
+                &r.register,
+                r.payload(),
+                (r.pep.clone(), r.context.clone()),
+            )
             .await?;
         Ok(match verdict {
             Verdict::Committed(c) => OrgRegistered::Registered {
@@ -878,6 +883,23 @@ where
             .await
             .map_err(|e| unavailable(&e))?;
         Ok(found.is_some_and(|a| a == action))
+    }
+
+    async fn claim(
+        &self,
+        submission: access_internal_api::claims::ClaimSubmission,
+    ) -> Result<access_internal_api::claims::ClaimVerdict, Unavailable> {
+        use access_internal_api::claims::ClaimIngest as _;
+        // CMP-8, OP-157 m.6 (i)
+        access_authority_ingest::app::Ingest::new(
+            Arc::clone(&self.domains),
+            crate::ingest::PgSubmissions(self.app.clone()),
+            crate::ingest::Trusted(tokio::sync::Mutex::new(
+                access_authority_sequencer::adapters::SourcesClock::new(self.app.clone()),
+            )),
+        )
+        .ingest(submission)
+        .await
     }
 }
 

@@ -350,6 +350,9 @@ pub struct OrgRegistration {
     pub register: SelfSigned,
     /// The identity plane as PEP.
     pub pep: String,
+    /// The pseudonymous context its bootstrap Exercise is counted under (§13.7.4, OP-152 m.5
+    /// (b)); `None` counts it under the PEP alone.
+    pub context: Option<access_internal_api::context::RateContext>,
 }
 
 impl OrgRegistration {

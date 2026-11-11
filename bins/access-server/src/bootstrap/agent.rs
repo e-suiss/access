@@ -67,7 +67,7 @@ const MAX_NAME: usize = 200;
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct SampleAgentFile {
-    realm: String,
+    pub(super) realm: String,
     display_name: Option<String>,
 }
 

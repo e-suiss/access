@@ -484,10 +484,14 @@ async fn seed(
         console: config.suiss.as_ref().map(|s| s.management_api.as_str()),
     };
     let result = match job {
-        Job::Bootstrap => Box::pin(bootstrap.run(plan))
-            .await
-            .map_err(|e| e.to_string())
-            .and_then(json),
+        Job::Bootstrap => {
+            // OP-146 m.5 (f), OP-157 m.6 (i): a fixture's Claim finds its day
+            jobs::open_now(&all.app, &all.archive, &holder()?).await;
+            Box::pin(bootstrap.run(plan))
+                .await
+                .map_err(|e| e.to_string())
+                .and_then(json)
+        }
         Job::ClientUpdate {
             product,
             display_name,

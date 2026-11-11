@@ -50,7 +50,7 @@ async fn register_org(
             founder,
             Id(party),
             public(seed),
-            org_register(d, party, ROOT, seed),
+            (org_register(d, party, ROOT, seed), None),
         )
         .await
 }

@@ -339,7 +339,7 @@ where
     }
 
     /// Whether `issuer` has a live Acceptance in `domain` for `use_` that covers `classes`.
-    async fn issuer_accepts(
+    pub(super) async fn issuer_accepts(
         &self,
         domain: Digest,
         issuer: Id,
@@ -373,7 +373,7 @@ where
 
     /// One root-signed meta-Exercise behind the CT3 time-lock, idempotent across runs: the
     /// nonce is the root's signature over `label` hashed, then the validity start.
-    async fn time_locked(
+    pub(super) async fn time_locked(
         &self,
         domain: Digest,
         root: &HsmSigner,

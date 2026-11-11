@@ -963,7 +963,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         founder: [u8; 16],
         party: Id,
         key: access_kernel::verify::cose::PublicKey,
-        register: access_internal_api::instances::SelfSigned,
+        (register, context): (
+            access_internal_api::instances::SelfSigned,
+            Option<access_internal_api::context::RateContext>,
+        ),
     ) -> Result<bool, AdminError> {
         let mut t = TenantTx::begin(self.app, tenant, realm).await?;
         let g = idp::governance(&mut t).await?.ok_or(AdminError::NoRealm)?;
@@ -986,6 +989,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 key,
                 register,
                 pep: String::from(self.pep),
+                context,
             })
             .await
             .map_err(|e| AdminError::Unavailable(e.0))?;
