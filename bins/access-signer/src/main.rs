@@ -543,7 +543,9 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
     let _ = std::fs::remove_file(&config.socket);
-    let listener = match std::os::unix::net::UnixListener::bind(&config.socket) {
+    let listener = match std::os::unix::net::UnixListener::bind(&config.socket)
+        .and_then(|listener| listener.set_nonblocking(true).map(|()| listener))
+    {
         Ok(listener) => listener,
         Err(error) => {
             tracing::error!(%error, socket = %config.socket.display(), "cannot bind the socket");
