@@ -58,6 +58,8 @@ mod tiers;
 mod upstream;
 // OP-158 m.3 (y)
 mod kek_rotation;
+// OP-158 m.3 (y)
+mod mds;
 
 use std::ffi::OsString;
 use std::fmt::Write as _;
@@ -1587,6 +1589,8 @@ struct Background {
     sampling: tokio::task::JoinHandle<()>,
     domains: tokio::task::JoinHandle<()>,
     exporting: tokio::task::JoinHandle<()>,
+    /// OP-148, OP-158 m.3 (y)
+    metadata: Option<tokio::task::JoinHandle<()>>,
     ready: Readiness,
     /// Every realm's JWKS loaded at start-up (OP-138, §17.9.7).
     jwks: ReadyFlag,
@@ -1599,6 +1603,10 @@ type DomainServing = (
 );
 
 impl Background {
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one place starts every background task"
+    )]
     fn start(
         config: &Config,
         pools: &Pools,
@@ -1626,6 +1634,8 @@ impl Background {
         ));
         let logout = courier(config, pools, outbound.clone())?;
         let vault_outbound = outbound.clone();
+        // OP-148, OP-158 m.3 (y)
+        let metadata = mds::spawn(identity.fido_mds.as_ref(), pools.app.clone(), &outbound)?;
         let keks_for_vault = keks.clone();
         // IDI-12, OP-155 m.3 (j)
         let chains = tokio::spawn(idp::federation::refresh_run(
@@ -1715,6 +1725,7 @@ impl Background {
             sampling: tokio::spawn(sample_pools(PoolGauges::of(pools))),
             domains,
             exporting,
+            metadata,
             jwks: ready.flag("jwks.realms"),
             ready,
         })
@@ -1736,6 +1747,9 @@ impl Background {
         self.sampling.abort();
         self.domains.abort();
         self.exporting.abort();
+        if let Some(m) = self.metadata {
+            m.abort();
+        }
     }
 }
 

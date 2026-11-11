@@ -1,5 +1,6 @@
 //! Domain types and rules, free of I/O (OP-63).
 
+pub mod aaguid_hints;
 pub mod assurance;
 pub mod attestation;
 pub mod authenticator_data;

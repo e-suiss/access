@@ -556,6 +556,20 @@ pub(crate) struct Identity {
     /// SAML upstream sign-in and SAML bearer grant is refused.
     #[serde(default)]
     pub(crate) upstream_parser: Option<UpstreamParser>,
+    /// Where the FIDO metadata blob comes from and the root its chain must end in (OP-148,
+    /// OP-158 m.3 (y)). Without it no blob is fetched, and a realm that needs one refuses.
+    #[serde(default)]
+    pub(crate) fido_mds: Option<FidoMds>,
+}
+
+/// The FIDO Metadata Service (§10.2.4, OP-146 m.4 (d)).
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct FidoMds {
+    /// The blob's `https` URL, as the outbound client writes it.
+    pub(crate) url: String,
+    /// The FIDO root certificate, DER in base64url; public, so it lives here.
+    pub(crate) root: String,
 }
 
 /// The parser worker supervisor access-server reaches for upstream SAML (OP-155 m.3 (h)).
@@ -1042,6 +1056,7 @@ mod tests {
                 saml_gateway: None,
                 geo_csv: None,
                 upstream_parser: None,
+                fido_mds: None,
             }),
             suiss: Some(Suiss {
                 region: "eu-central".to_owned(),
@@ -1267,6 +1282,7 @@ mod tests {
                     saml_gateway: None,
                     geo_csv: None,
                     upstream_parser: None,
+                    fido_mds: None,
                 }),
                 ..with_tls()
             };

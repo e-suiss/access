@@ -669,6 +669,34 @@ impl Outbound {
             .await
     }
 
+    /// [`Outbound::get`] for a URL the operator configured, such as the FIDO metadata service
+    /// (OP-148, OP-158 m.3 (y)): a declared target at or above it is reached over its own trust
+    /// anchors, any other URL under every rule of [`Outbound::get`].
+    ///
+    /// # Errors
+    /// [`OutboundError`].
+    pub async fn get_configured(
+        &self,
+        url: &str,
+        accept: &str,
+        max_body: usize,
+    ) -> Result<Answer, OutboundError> {
+        let target = Target::parse(url)?;
+        if !header_ok("accept", accept) {
+            return Err(OutboundError::Url);
+        }
+        let request = format!(
+            "GET {} HTTP/1.1\r\nHost: {}\r\nAccept: {accept}\r\nUser-Agent: access\r\n\
+             Accept-Encoding: identity\r\nConnection: close\r\n{}\r\n",
+            target.path,
+            target.host_header(),
+            traceparent(),
+        );
+        let declared = self.declared_under(url);
+        self.bounded(&target, request.into_bytes(), max_body, declared)
+            .await
+    }
+
     /// This client with the operator's declared delivery targets (OP-149 m.23).
     #[must_use]
     pub fn declaring(mut self, targets: Vec<DeclaredTarget>) -> Self {
