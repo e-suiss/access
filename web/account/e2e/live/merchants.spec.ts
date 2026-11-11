@@ -19,14 +19,11 @@ async function axe(page: Page): Promise<void> {
 
 async function device(page: Page, path: string): Promise<void> {
   await page.goto(`${REALM}/account/${path}`);
-  const setUp = page.getByRole("button", { name: "Set up this device" });
-  if (await setUp.isVisible()) {
-    await setUp.click();
-    await page
-      .getByRole("dialog", { name: "Check what you're signing" })
-      .getByRole("button", { name: "Sign" })
-      .click();
-  }
+  await page.getByRole("button", { name: "Set up this device" }).click();
+  await page
+    .getByRole("dialog", { name: "Check what you're signing" })
+    .getByRole("button", { name: "Sign" })
+    .click();
 }
 
 test.describe("@live merchants and the one-time payment", () => {
