@@ -134,14 +134,19 @@ fn parse_hash(name: &str, text: &str) -> Result<Hash, Usage> {
 }
 
 fn read_file(name: &str, path: &str) -> Result<Vec<u8>, Usage> {
+    read_limited(name, path, MAX_FILE)
+}
+
+/// The bytes of the file at `path`, given as `--name`, refused above `limit` bytes.
+pub(crate) fn read_limited(name: &str, path: &str, limit: u64) -> Result<Vec<u8>, Usage> {
     let file = File::open(path).map_err(|e| Usage::new(format!("--{name} {path}: {e}")))?;
     let mut out = Vec::new();
-    file.take(MAX_FILE.saturating_add(1))
+    file.take(limit.saturating_add(1))
         .read_to_end(&mut out)
         .map_err(|e| Usage::new(format!("--{name} {path}: {e}")))?;
-    if u64::try_from(out.len()).map_or(true, |n| n > MAX_FILE) {
+    if u64::try_from(out.len()).map_or(true, |n| n > limit) {
         return Err(Usage::new(format!(
-            "--{name} {path}: larger than {MAX_FILE} bytes"
+            "--{name} {path}: larger than {limit} bytes"
         )));
     }
     Ok(out)

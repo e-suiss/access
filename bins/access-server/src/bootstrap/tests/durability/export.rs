@@ -27,7 +27,7 @@ use super::super::authzen::{PEP, Pdp, pdp};
 use super::replica::{as_pep, call, checkpoint, commit_export, domain_path};
 
 /// The ADP and export routes reading a package `chunk` records at a time.
-fn routes(p: &Pdp, chunk: u64) -> axum::Router {
+pub(super) fn routes(p: &Pdp, chunk: u64) -> axum::Router {
     let limits = Limits::default();
     let routes = adp_router(
         Service::new(p.w.domains.clone(), limits.max_body_bytes),
@@ -43,7 +43,7 @@ fn routes(p: &Pdp, chunk: u64) -> axum::Router {
     as_pep(harden(routes, limits), PEP)
 }
 
-async fn start(
+pub(super) async fn start(
     p: &Pdp,
     router: &axum::Router,
     body: &serde_json::Value,

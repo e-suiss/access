@@ -17,6 +17,8 @@ pub(crate) enum Outcome {
     Accept(Vec<(&'static str, String)>),
     /// Rejected, with the reason name.
     Reject(String),
+    /// Verified, but records did not replay: the divergence and its outputs (OP-158 m.3 (h)).
+    Diverged(Vec<(&'static str, String)>),
 }
 
 fn reject(e: Error) -> Outcome {
@@ -201,6 +203,12 @@ pub(crate) const COMMANDS: &[Command] = &[
         options: &["note", "origin", "log", "cosigners"],
         summary: "signed checkpoint of a log and its witness cosignatures (L2-CKP-1 to L2-CKP-4)",
         run: crate::artefacts::checkpoint,
+    },
+    Command {
+        name: "export",
+        options: &["package", "log", "cosigners", "now", "sign", "out"],
+        summary: "streamed Record Export Package: chain, Merkle root, checkpoints, fold and q-1 re-evaluation (INV-27, PI-6)",
+        run: crate::export::export,
     },
     Command {
         name: "existed",

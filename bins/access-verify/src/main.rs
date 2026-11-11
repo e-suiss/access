@@ -4,6 +4,7 @@
 mod args;
 mod artefacts;
 mod commands;
+mod export;
 mod transparency;
 
 use std::fmt::Write as _;
@@ -17,7 +18,7 @@ const NAME: &str = "access-verify";
 
 fn usage() -> String {
     let mut out = format!(
-        "usage: {NAME} <command> [--option value]...\n\nPrints `accept` and its outputs, or `reject: <reason>`. Exit status: 0 accept, 1 reject, 2 usage or I/O error.\n\ncommands:\n"
+        "usage: {NAME} <command> [--option value]...\n\nPrints `accept` and its outputs, or `reject: <reason>`. Exit status: 0 accept, 1 reject, 2 usage or I/O error, 3 diverged.\n\ncommands:\n"
     );
     for c in COMMANDS {
         let _ = writeln!(out, "  {:<12} {}", c.name, c.summary);
@@ -37,6 +38,13 @@ fn render(outcome: &Outcome) -> String {
             out
         }
         Outcome::Reject(reason) => format!("reject: {reason}\n"),
+        Outcome::Diverged(outputs) => {
+            let mut out = String::from("diverged\n");
+            for (name, value) in outputs {
+                let _ = writeln!(out, "{name}: {value}");
+            }
+            out
+        }
     }
 }
 
@@ -74,6 +82,7 @@ fn main() -> ExitCode {
             let code = match outcome {
                 Outcome::Accept(_) => ExitCode::SUCCESS,
                 Outcome::Reject(_) => ExitCode::FAILURE,
+                Outcome::Diverged(_) => ExitCode::from(3),
             };
             if emit(std::io::stdout().lock(), &render(&outcome)) {
                 code

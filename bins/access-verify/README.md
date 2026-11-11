@@ -28,6 +28,7 @@ The first line is `accept` or `reject: <reason>`. An accepted result is followed
 | `0` | accepted |
 | `1` | rejected |
 | `2` | usage or I/O error; nothing was verified |
+| `3` | an export verified, but records did not replay (`diverged`) |
 
 ## Inputs
 
@@ -57,6 +58,7 @@ The first line is `accept` or `reject: <reason>`. An accepted result is followed
 | `status --metadata F [--trusted F] --token F --excerpt F --uri U --idx N [--now T --max-age-ms N]` | A signed Token Status List: key, signature, ZLIB, then the entry; with `--max-age-ms`, the list's `iat` is at most that old | `invalid`, `iat`, `as_of` |
 | `status --payload F --list F --uri U --idx N` | The entry in a list token payload whose list is already inflated | `invalid` |
 | `checkpoint --note F --origin O --log VKEY [--cosigners VKEY,...]` | A signed checkpoint of a log and the witness cosignatures that verify | `size`, `root`, `extensions`, `cosigned` |
+| `export --package F --log VKEY --now T [--cosigners VKEY,...] [--sign F --out F]` | A streamed Record Export Package: the records follow each other and chain, rebuild the root the package ends with, and every checkpoint note in it is signed by the domain's log key and names a root the records rebuild; with `--cosigners`, one is cosigned by a trusted witness. A package from Genesis is folded into state and every decision is re-evaluated against the state just before it, as far as the record carries its inputs (its state basis, single-use consumption and the lineage of its basis). Redacted records are reported as digest coverage. What does not replay prints `diverged` with its items; with `--sign` (a PKCS #8 Ed25519 key) the divergence set is signed and written to `--out` | `domain`, `range`, `size`, `root`, `checkpoints`, `witnessed`, `replay_coverage`, `decisions`, `reevaluated`, `digest_only`, `divergent`, and when diverged `items` (`position:kind:reason:exercise`), `signed_by`, `set` |
 
 `--iat` for `key` and `cose` is the signing time the artefact itself states. `--domain` and the receipt's `--intent` are the 32-byte SHA-256 values, without their digest tag. A PAP's `--intent` is the `intent-envelope` file, `--satisfied` a CBOR set of `requirement-term` and `--remaining` a CBOR array of `[digest, uint]` pairs.
 

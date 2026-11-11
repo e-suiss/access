@@ -14,7 +14,9 @@ path = "src/main.rs"
 [dependencies]
 access-kernel = { workspace = true }
 access-verifier = { workspace = true }
-suiss-crypto = { workspace = true, features = ["verify"] }
+# OP-158 m.3 (h): `export --sign` signs the divergence set
+suiss-crypto = { workspace = true, features = ["verify", "signer"] }
+suiss-ledger = { workspace = true }
 
 [dev-dependencies]
 miniz_oxide = { workspace = true }

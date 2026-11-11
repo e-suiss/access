@@ -622,7 +622,7 @@ async fn real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation() {
 }
 
 /// The log's `vkey` from a checkpoint's key excerpt.
-fn log_vkey(origin: &str, excerpt: &[u8]) -> String {
+pub(super) fn log_vkey(origin: &str, excerpt: &[u8]) -> String {
     let sign1 = suiss_crypto::cose::parse_sign1(excerpt).unwrap();
     let ex =
         access_kernel::verify::key_scope::KeyExcerpt::from_bytes(sign1.payload.as_deref().unwrap())

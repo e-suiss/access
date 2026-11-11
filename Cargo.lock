@@ -2509,6 +2509,7 @@ dependencies = [
  "esuiss-access-kernel",
  "esuiss-access-verifier",
  "esuiss-crypto",
+ "esuiss-ledger",
  "miniz_oxide",
  "serde_json",
 ]
