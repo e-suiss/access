@@ -107,3 +107,62 @@ groups:
             Reviewers marked more than 0.5 % of risk step-up requests of the last 30 days as
             false positives. Keep or move realms back to shadow mode and review the signal
             weights before asking users for more step-ups.
+
+  - name: access-degraded-and-integrity
+    rules:
+      # OP-45, §17.7.2, OP-158 m.3 (s): 0–60 s alarm (PD)
+      - alert: AccessIdentityDegraded
+        expr: max(access_identity_degraded_seconds) > 0
+        labels:
+          severity: page
+          runbook: identity-degraded
+        annotations:
+          summary: The identity database has not answered for {{ $value }} s
+          description: >-
+            Degraded mode: no new sign-in, refresh, registration, admin write or revocation is
+            taken (503 with Retry-After) and introspection answers active=false. Tokens already
+            signed are checked by resource servers only within their declared lifetime.
+      # OP-45, §17.7.2: > 300 s sev-1 (PD)
+      - alert: AccessIdentityDegradedLong
+        expr: max(access_identity_degraded_seconds) > 300
+        labels:
+          severity: sev-1
+          runbook: identity-degraded
+        annotations:
+          summary: The identity database has not answered for more than 5 minutes
+          description: >-
+            Degraded mode has lasted longer than five minutes. Sign-in and revocation are still
+            refused; find why the identity database does not answer.
+      # §17.4.4, §17.8.2, FA-13, OP-158 m.3 (n)
+      - alert: AccessUnfencedPromote
+        expr: increase(access_integrity_alarms_total{kind="unfenced_promote"}[5m]) > 0
+        labels:
+          severity: sev-1
+          runbook: unfenced-promote
+        annotations:
+          summary: A promote was attempted without fence proof
+          description: >-
+            Someone tried to promote a database or a cell without proof that the old writer is
+            fenced off. Nothing was promoted; two writers must never exist.
+      # §17.4.4, §17.8.2, TI-RT1, OP-158 m.3 (i)
+      - alert: AccessRebuildDiff
+        expr: increase(access_integrity_alarms_total{kind="rebuild_diff"}[5m]) > 0
+        labels:
+          severity: sev-1
+          runbook: rebuild-diff
+        annotations:
+          summary: The live state of a domain differs from the fold of its records
+          description: >-
+            Commits to the domain stopped. The fold from Genesis decides; rebuild the live state
+            from the log once the commitments check.
+      # U9, HL-7, OP-158 m.3 (d)
+      - alert: AccessWitnessEquivocation
+        expr: increase(access_integrity_alarms_total{kind="equivocation"}[5m]) > 0
+        labels:
+          severity: sev-1
+          runbook: witness-equivocation
+        annotations:
+          summary: Two cosigned checkpoints of one size have different roots
+          description: >-
+            The signed equivocation evidence is kept. A log showed two different histories;
+            treat the domain's provider as suspect.

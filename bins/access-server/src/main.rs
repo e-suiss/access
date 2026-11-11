@@ -69,6 +69,8 @@ mod upgrade;
 mod mds;
 // OP-158 m.3 (i)
 mod divergence;
+// OP-158 m.3 (s)
+mod degraded;
 
 use std::ffi::OsString;
 use std::fmt::Write as _;
@@ -2160,6 +2162,8 @@ async fn serve(
         prepared.identity_keys.clone(),
     ));
     let relay_reader = all.outbox_reader.clone();
+    // OP-45, OP-158 m.3 (s)
+    let _degraded = degraded::spawn(all.app.clone());
     let Pools {
         sequencer,
         app,

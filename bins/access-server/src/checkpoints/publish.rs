@@ -324,7 +324,8 @@ pub(crate) async fn gossip(
             source,
             detected_at: now,
         };
-        // U9, HL-7
+        // U9, HL-7, §17.8.2
+        access_telemetry::signals::INTEGRITY_ALARMS.incr(["equivocation"]);
         tracing::error!(
             event = "witness.equivocation.detected",
             witness = %evidence.source,

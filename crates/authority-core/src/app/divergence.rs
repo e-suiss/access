@@ -171,6 +171,8 @@ pub async fn declare_fold(
     )
     .await?;
     if declared.is_some() {
+        // §17.8.2, OP-158 m.3 (i)
+        access_telemetry::signals::INTEGRITY_ALARMS.incr(["rebuild_diff"]);
         found(app, domain, tenant, "fold", "provider", now).await;
     }
     Ok(declared)

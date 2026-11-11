@@ -300,3 +300,19 @@ pub static POOL_QUEUE_DEPTH: Gauge<1> = Gauge::new(
     "Requests waiting in the application for a pool (OP-53)",
     [Label::Pool],
 );
+
+/// §17.7.2, OP-45, OP-158 m.3 (s): seconds the identity database has not answered; 0 while it
+/// answers. The degraded-mode alarm reads it (0–60 s alarm, > 300 s sev-1; PD).
+pub static IDENTITY_DEGRADED: Gauge<0> = Gauge::new(
+    "access_identity_degraded_seconds",
+    "Seconds the identity database has not answered (OP-45)",
+    [],
+);
+
+/// §17.4.4, §17.8.2, OP-158 m.3 (d), (i), (n): integrity events that page as sev-1, by `kind`
+/// (`unfenced_promote`, `rebuild_diff`, `equivocation`).
+pub static INTEGRITY_ALARMS: Counter<1> = Counter::new(
+    "access_integrity_alarms_total",
+    "Sev-1 integrity events by kind (U9, TI-RT1, FA-13)",
+    [Label::Kind],
+);

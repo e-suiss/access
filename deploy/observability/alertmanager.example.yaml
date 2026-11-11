@@ -6,6 +6,11 @@ route:
   group_interval: 5m
   repeat_interval: 4h
   routes:
+    # OP-158 m.3 (s): sev-1 pages at once and repeats every 15 minutes
+    - matchers: ['severity = "sev-1"']
+      receiver: on-call
+      group_wait: 0s
+      repeat_interval: 15m
     - matchers: ['severity = "page"']
       receiver: on-call
       repeat_interval: 1h
@@ -25,4 +30,7 @@ receivers:
 inhibit_rules:
   - source_matchers: ['alertname = "AccessSequencerFenced"']
     target_matchers: ['alertname = "AccessSequencerCasFailures"']
+    equal: []
+  - source_matchers: ['alertname = "AccessIdentityDegradedLong"']
+    target_matchers: ['alertname = "AccessIdentityDegraded"']
     equal: []
