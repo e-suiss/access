@@ -885,6 +885,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 {
                     return Err(CoreError::Protocol("breakglass-grant"));
                 }
+                // CI-13, OP-157 m.3 (i)
+                if !templates::legal::admissible(p) {
+                    return Err(CoreError::Protocol("legal-process-grant"));
+                }
                 // L0-META-30
                 if let Payload::Contribute { class, .. } = p {
                     let target = ResourceRef {

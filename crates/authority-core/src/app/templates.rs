@@ -177,6 +177,9 @@ fn action_name(s: &str) -> bool {
     })
 }
 
+pub mod legal;
+pub mod transfer;
+
 #[cfg(test)]
 mod tests {
     use super::*;
