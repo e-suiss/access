@@ -3,6 +3,7 @@
 
 pub mod accounts;
 pub mod agents;
+mod breakglass;
 mod custom_domains;
 pub mod domains;
 mod export_sinks;
@@ -818,11 +819,13 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::ExtensionPolicy(_)
             | Change::CaseSystem(_)
             | Change::SupportArtifactPolicy(_)
-            | Change::Breakglass(_)
             | Change::Review(_)
             | Change::DelegatedAdmin(_)
             | Change::ApprovalInline(_)
             | Change::ApprovalBatch(_) => {}
+            // OP-157 m.3 (h)
+            Change::Breakglass(m) => breakglass::current_mark(t, m).await?,
+            Change::BreakglassReview(r) => breakglass::current_review(t, r).await?,
         }
         Ok(())
     }
@@ -1157,6 +1160,14 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         self.published(p).await?;
         let moved = account_move(&mut t.0, &p.change).await?;
         let secret = self.write(&mut t.0, bound, &p.change).await?;
+        // OP-157 m.3 (h)
+        if let Change::BreakglassReview(r) = &p.change {
+            let reviewer = match &p.subject {
+                Some(s) => idp::subject_party(&mut t.0, s).await?,
+                None => None,
+            };
+            breakglass::write_review(&mut t.0, bound, r, reviewer).await?;
+        }
         if let Some((subject, from, to)) = moved {
             // TN-49, TN-41, OP-150 L2
             let correlation = access_kernel::json::b64url_encode(&exercise.0);
@@ -1615,7 +1626,6 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-157 m.4 (a)
             Change::CaseSystem(_)
             | Change::SupportArtifactPolicy(_)
-            | Change::Breakglass(_)
             | Change::Review(_)
             | Change::DelegatedAdmin(_)
             | Change::ApprovalInline(_)
@@ -1628,6 +1638,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 done
             }
             Change::ClientRetire(id) => idp::retire_client(t, bound, id.as_str()).await?,
+            // OP-157 m.3 (h)
+            Change::Breakglass(m) => breakglass::write_mark(t, bound, m, self.ids).await?,
             Change::MapperSet { claim, source } => {
                 idp::set_mapper(
                     t,
@@ -1761,6 +1773,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .ok_or(Invalid::UpstreamSubjectLinked)?
             }
             Change::AccountDelete(_)
+            | Change::BreakglassReview(_)
             | Change::RelayResend(_)
             | Change::AccountImport(_)
             | Change::MigrationExport(_)

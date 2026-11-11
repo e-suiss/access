@@ -499,11 +499,14 @@ pub enum IdpAction {
     RealmApprovalBatch,
     /// Closes batch approval; narrowing, CT1.
     RealmApprovalBatchClose,
+    /// Another Party's review of one break-glass use as a drill, an emergency or a misuse; it
+    /// grants nothing (OP-157 m.3 (h), m.4 (b)): CT1.
+    OrgBreakglassReview,
 }
 
 impl IdpAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 200] = [
+    pub const ALL: [Self; 201] = [
         Self::ClientRegister,
         Self::ClientUpdate,
         Self::ClientRetire,
@@ -704,6 +707,7 @@ impl IdpAction {
         Self::RealmApprovalInlineClose,
         Self::RealmApprovalBatch,
         Self::RealmApprovalBatchClose,
+        Self::OrgBreakglassReview,
     ];
 
     /// The catalog version that first declared it (OP-153 m.3 (a), OP-154 m.3 (a), OP-155
@@ -738,7 +742,8 @@ impl IdpAction {
             | Self::RealmApprovalInline
             | Self::RealmApprovalInlineClose
             | Self::RealmApprovalBatch
-            | Self::RealmApprovalBatchClose => 7,
+            | Self::RealmApprovalBatchClose
+            | Self::OrgBreakglassReview => 7,
             Self::DomainRegister
             | Self::DomainRetire
             | Self::DomainIssuerBind
@@ -984,7 +989,8 @@ impl IdpAction {
             | Self::OrgSsoEnforce
             | Self::OrgSsoEnforceLift
             | Self::OrgMemberBreakglass
-            | Self::OrgMemberBreakglassClear => "idp.org",
+            | Self::OrgMemberBreakglassClear
+            | Self::OrgBreakglassReview => "idp.org",
             Self::SamlSpRegister
             | Self::SamlSpMapping
             | Self::SamlSpUpdate
@@ -1280,6 +1286,7 @@ impl IdpAction {
             Self::RealmApprovalInlineClose => "approval_inline_close",
             Self::RealmApprovalBatch => "approval_batch",
             Self::RealmApprovalBatchClose => "approval_batch_close",
+            Self::OrgBreakglassReview => "breakglass_review",
         }
     }
 
@@ -1364,7 +1371,8 @@ impl IdpAction {
             | Self::OrgMemberBreakglassClear
             | Self::RealmDelegatedAdminClose
             | Self::RealmApprovalInlineClose
-            | Self::RealmApprovalBatchClose => EffectClass::Reversible,
+            | Self::RealmApprovalBatchClose
+            | Self::OrgBreakglassReview => EffectClass::Reversible,
             _ => EffectClass::Irreversible,
         }
     }

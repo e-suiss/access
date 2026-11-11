@@ -1553,3 +1553,113 @@ fn password_steps_do_not_print_the_password() {
     }
     assert!(printed.contains("req-1"));
 }
+
+/// Makes `org_party`'s organization with `owner` as its owner and `member` as a break-glass
+/// member (OP-157 m.3 (h)).
+async fn breakglass_org(e: &Env, org_party: [u8; 16], owner: [u8; 16], member: [u8; 16]) {
+    use access_store::orgs::Source;
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let org = tx
+        .insert_org(org_party, "Acme Security", &[4; 32])
+        .await
+        .unwrap();
+    tx.insert_membership(org, owner, Source::Founder, true, None)
+        .await
+        .unwrap();
+    tx.insert_membership(org, member, Source::Invite, false, None)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    access_store::testing::mark_breakglass(&e.db, member)
+        .await
+        .unwrap();
+}
+
+// OP-157 m.3 (h), §10.2.5, §10.2.6, §12.3.8 (4), INV-28, Ek B 5442, 5536
+#[tokio::test]
+async fn a_breakglass_account_signs_in_only_with_its_hardware_key_and_alarms() {
+    use access_identity_session::app::BREAKGLASS_SSO_REFUSED;
+    let e = env(61, "is-bg").await;
+    let alice = e.account("alice@example.com").await;
+    let owner = e.account("owner@example.com").await;
+    let cookie = sign_in(&e, "alice@example.com").await;
+    let mut key = Authenticator::new(Key::es256());
+    let handle = register_passkey(&e, &cookie, &mut key).await;
+    breakglass_org(&e, [0x51; 16], owner, alice).await;
+
+    let started = e
+        .with(async |a| {
+            a.identify(&Identify {
+                identifier: Some("alice@example.com"),
+                ..Identify::default()
+            })
+            .await
+        })
+        .await
+        .unwrap();
+    let flow = (started.handle.clone(), started.device.clone());
+    let step = password(&e, &flow, "alice@example.com", PW).await;
+    assert!(matches!(step, Step::Continue { .. }), "{step:?}");
+    let step = assert_passkey(&e, &flow, &started.options.passkey, &mut key, &handle).await;
+    assert!(
+        matches!(step, Step::Rejected(Refusal { problem, .. }) if problem == BREAKGLASS_SSO_REFUSED),
+        "{step:?}"
+    );
+
+    let before = e.outbox.count();
+    let started = e
+        .with(async |a| {
+            a.identify(&Identify {
+                identifier: Some("alice@example.com"),
+                ..Identify::default()
+            })
+            .await
+        })
+        .await
+        .unwrap();
+    let flow = (started.handle.clone(), started.device.clone());
+    let challenge = b64url_decode(started.options.passkey["challenge"].as_str().unwrap()).unwrap();
+    let (cdj, ad, sig) = key.assert(RP_ID, ORIGIN, &challenge);
+    let id = key.credential_id.clone();
+    let response = AssertionResponse {
+        raw_id: &id,
+        client_data_json: &cdj,
+        authenticator_data: &ad,
+        signature: &sig,
+        user_handle: None,
+    };
+    let done = e
+        .with(async |a| {
+            let f = flow.clone();
+            a.passkey(&ref_of(&f), &response, "req").await
+        })
+        .await
+        .unwrap();
+    let (_, s) = signed_in(done);
+    assert!(s.result.assurance.hardware_bound);
+    let sent: Vec<[u8; 16]> = e.outbox.0.lock().unwrap()[before..]
+        .iter()
+        .map(|(to, _)| *to)
+        .collect();
+    assert!(sent.contains(&owner), "{sent:?}");
+
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let events: Vec<String> = tx
+        .audit_page(None, 100)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|r| r.event_type)
+        .collect();
+    tx.commit().await.unwrap();
+    assert!(
+        events.iter().any(|t| t == "breakglass.signin_refused"),
+        "{events:?}"
+    );
+    assert!(
+        events.iter().any(|t| t == "breakglass.account_signin"),
+        "{events:?}"
+    );
+    // INV-28
+    assert_eq!(s.result.ct, CtCeiling::Ct3);
+}

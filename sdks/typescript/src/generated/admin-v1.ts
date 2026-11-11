@@ -3107,6 +3107,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/realms/{slug}/breakglass/reviews/{exercise}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Another Party's review of one break-glass use {classification: drill, emergency or misuse}: idp.org.breakglass_review; the Party that used the Grant cannot review it, and a review grants nothing (OP-157 m.3 (h)). */
+        post: operations["reviewBreakglassUse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/platform/intents": {
         parameters: {
             query?: never;
@@ -3528,12 +3545,44 @@ export interface components {
         CaseSystem: Record<string, never>;
         /** @description A support Grant: operator, subject, case, scope and end (OP-157 m.3 (c)); its lane names its members when it serves it. */
         SupportGrant: Record<string, never>;
-        /** @description A break-glass marked account; the mark carries no authority (INV-28, OP-157 m.3 (h)); its lane names its members when it serves it. */
-        BreakglassAccount: Record<string, never>;
-        /** @description A break-glass drill, a real Exercise with PurposeRef drill (OP-157 m.3 (h)); its lane names its members when it serves it. */
-        BreakglassDrill: Record<string, never>;
-        /** @description One break-glass use and its review by another Party (OP-157 m.3 (h)); its lane names its members when it serves it. */
-        BreakglassReview: Record<string, never>;
+        /** @description A break-glass marked account; the mark carries no authority (INV-28, OP-157 m.3 (h)). */
+        BreakglassAccount: {
+            account_id?: string;
+            member?: string;
+            organization?: string;
+            organization_name?: string;
+            marked_at?: number;
+            position?: number;
+        };
+        /** @description A break-glass drill, a real Exercise with PurposeRef drill, and when the next is due (OP-157 m.3 (h)). */
+        BreakglassDrill: {
+            exercise?: string;
+            drill?: boolean;
+            grant?: string;
+            actor?: string;
+            used_at?: number;
+            due_at?: number;
+            /** @enum {string} */
+            state?: "pending" | "overdue" | "reviewed";
+            /** @enum {string|null} */
+            classification?: "drill" | "emergency" | "misuse" | null;
+            reviewer?: string | null;
+            next_due_at?: number | null;
+        };
+        /** @description One break-glass use and its review by another Party (OP-157 m.3 (h)). */
+        BreakglassReview: {
+            exercise?: string;
+            drill?: boolean;
+            grant?: string;
+            actor?: string;
+            used_at?: number;
+            due_at?: number;
+            /** @enum {string} */
+            state?: "pending" | "overdue" | "reviewed";
+            /** @enum {string|null} */
+            classification?: "drill" | "emergency" | "misuse" | null;
+            reviewer?: string | null;
+        };
         /** @description An access review campaign, a view and never a queue (IDP-39 (3), OP-157 m.3 (w)); its lane names its members when it serves it. */
         Review: Record<string, never>;
         /** @description One Grant of a campaign, as the reviewer may see it (OP-157 m.3 (w)); its lane names its members when it serves it. */
@@ -12923,7 +12972,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -12950,7 +12998,7 @@ export interface operations {
         };
         responses: {
             /** @description Committed: the Exercise record (TN-110). */
-            200: {
+            201: {
                 headers: {
                     "Request-Id": components["headers"]["Request-Id"];
                     "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
@@ -12968,7 +13016,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -13015,7 +13062,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -13056,7 +13102,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -13097,7 +13142,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -13577,6 +13621,52 @@ export interface operations {
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
             501: components["responses"]["NotYetServed"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    reviewBreakglassUse: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                exercise: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
             503: components["responses"]["Unavailable"];
         };
     };

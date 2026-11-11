@@ -27,7 +27,7 @@ const ADMIN: Actor<'static> = Actor {
 };
 
 /// A fresh account of the realm with the e-mail address `who`.
-async fn account(w: &World, at: (TenantId, RealmId), who: &str) -> [u8; 16] {
+pub(super) async fn account(w: &World, at: (TenantId, RealmId), who: &str) -> [u8; 16] {
     let kek = SoftKek::new("realm-kek", [9; 32]);
     let realm = Realm {
         tenant: at.0,
@@ -172,7 +172,7 @@ async fn an_undelivered_message_is_resent_through_commit() {
 }
 
 /// Commits one authority record with `event` in the governing domain's outbox.
-async fn authority_event(
+pub(super) async fn authority_event(
     w: &World,
     tenant: TenantId,
     d: Digest,

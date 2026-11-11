@@ -17,7 +17,9 @@ use access_identity_account::domain::signal::Signal;
 use access_identity_account::domain::throttle::{
     DAY_MS as THROTTLE_DAY_MS, Gate, HARD_LOCK_AT, KeyKind, KeyPolicy, KeyState, Penalty,
 };
-use access_identity_account::notify::message::{Address, Body, Message, OtpPurpose, SignInMethod};
+use access_identity_account::notify::message::{
+    Address, Body, BreakglassAlarm, Message, OtpPurpose, SignInMethod,
+};
 use access_identity_account::ports::Entropy;
 use access_identity_webauthn::app::{AuthenticationOutcome, Identified};
 use access_identity_webauthn::domain::assurance::Binding;
@@ -1330,8 +1332,25 @@ where
         let assurance =
             serde_json::to_vec(&vector(&l.state.factors)).map_err(|_| SessionError::Corrupt)?;
         let target = self.external(subject)?;
+        // OP-157 m.3 (h), §10.2.5, §10.2.6
+        let breakglass =
+            matches!(l.state.purpose, Purpose::Login) && tx.breakglass_account(subject).await?;
+        if breakglass && !breakglass_signed(&l.state.factors) {
+            save(&mut tx, &l, "abandoned", Resume::Clear).await?;
+            audit(
+                &mut tx,
+                "breakglass.signin_refused",
+                &target,
+                &target,
+                correlation,
+            )
+            .await?;
+            tx.commit().await?;
+            return Ok(refuse(super::BREAKGLASS_SSO_REFUSED));
+        }
         // TN-94, OP-155 m.3 (i)
         if matches!(l.state.purpose, Purpose::Login)
+            && !breakglass
             && let Some(allowed) = tx.sso_connections(subject).await?
             && !sso_signed(&l.state.factors, &allowed)
         {
@@ -1428,9 +1447,52 @@ where
             self.sl2_signed_in(&mut tx, &l.state, subject, now, marker)
                 .await?;
         }
+        // OP-157 m.3 (h), §12.3.8 (4)
+        if breakglass {
+            audit(
+                &mut tx,
+                "breakglass.account_signin",
+                &target,
+                &target,
+                correlation,
+            )
+            .await?;
+            self.breakglass_alarm(&mut tx, subject, &target, now)
+                .await?;
+        }
         save(&mut tx, &l, "done", Resume::Clear).await?;
         tx.commit().await?;
         Ok(Step::SignedIn(Box::new(signed)))
+    }
+
+    /// The critical alarm of a break-glass account's sign-in to the realm's on-call Parties, the
+    /// account itself excepted (OP-157 m.3 (h)); delivery is not guaranteed (N-2).
+    async fn breakglass_alarm(
+        &self,
+        tx: &mut D::Tx,
+        subject: [u8; 16],
+        account: &str,
+        now: u64,
+    ) -> Result<(), SessionError> {
+        let origin: String = self
+            .link_base
+            .splitn(4, '/')
+            .take(3)
+            .collect::<Vec<_>>()
+            .join("/");
+        for to in tx.breakglass_on_call().await? {
+            if to == subject {
+                continue;
+            }
+            let body = Body::BreakglassAlarm {
+                alarm: BreakglassAlarm::Signin,
+                account: account.to_owned(),
+                link: Secret::new(format!("{origin}{BREAKGLASS_CONSOLE}")),
+                at_ms: now,
+            };
+            self.account_message(tx, to, body).await?;
+        }
+        Ok(())
     }
 
     /// SL2 once per login, when its first step has passed (TN-46, IDP-39): notes the level and
@@ -1516,6 +1578,24 @@ where
 /// Whether the sign-in's first factor came through one of the `allowed` connections, the
 /// enforcing organizations' own: the only way an SSO-enforced organization's member signs in
 /// (TN-94, OP-155 m.17 (i)). A social sign-in is not one.
+/// The console page a break-glass alarm opens, under the realm's origin.
+const BREAKGLASS_CONSOLE: &str = "/console/breakglass";
+
+/// Whether a break-glass account's factors are the realm's own phishing-resistant hardware
+/// method: a device-bound passkey proven against the origin, or a hardware smart card, and no
+/// provider's assertion anywhere (OP-157 m.3 (h), §10.2.5, §10.2.6).
+fn breakglass_signed(factors: &[Factor]) -> bool {
+    !factors.iter().any(|f| f.method == MethodClass::Federated)
+        && factors.first().is_some_and(|f| match f.method {
+            MethodClass::Passkey => {
+                f.phishing.is_some()
+                    && f.binding == crate::domain::assurance::BindingStrength::DeviceBound
+            }
+            MethodClass::SmartCard => true,
+            _ => false,
+        })
+}
+
 fn sso_signed(factors: &[Factor], allowed: &[String]) -> bool {
     factors.first().is_some_and(|f| {
         f.method == MethodClass::Federated

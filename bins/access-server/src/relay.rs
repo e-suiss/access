@@ -343,6 +343,21 @@ pub(crate) async fn notices_step<K: access_identity_events::adapters::RealmKek>(
         let Some(kek) = keks.kek(r.tenant, r.realm) else {
             continue;
         };
+        // OP-157 m.3 (h), §12.3.8 (4)
+        let mut s = TenantTx::begin(&pools.app, r.tenant, r.realm)
+            .await
+            .map_err(e)?;
+        access_identity_account::app::breakglass::sweep(
+            &mut s,
+            (&*kek, ids),
+            &SystemEntropy,
+            &SystemClock,
+            &r.issuer,
+            access_identity_account::ports::Clock::now_ms(&SystemClock),
+        )
+        .await
+        .map_err(|x| x.to_string())?;
+        s.commit().await.map_err(e)?;
         let at = access_store::relay::notice_cursor(&pools.app, &domain)
             .await
             .map_err(e)?;
@@ -357,10 +372,22 @@ pub(crate) async fn notices_step<K: access_identity_events::adapters::RealmKek>(
             .map_err(e)?;
         // OP-156 m.3 (c)
         let open = t.security_notices_enabled().await.map_err(e)?;
-        for row in rows.iter().filter(|_| open) {
+        for row in &rows {
             let Ok(ev) = Event::from_bytes(&row.event) else {
                 continue;
             };
+            // OP-157 m.3 (h), TN-71
+            if ev.kind == access_internal_api::events::Kind::BreakglassUsed {
+                if breakglass_used(&mut t, (&*kek, ids), &ev, (&r.slug, &r.issuer)).await? {
+                    queued = queued.saturating_add(1);
+                }
+                continue;
+            }
+            // OP-157 m.3 (h), §12.3.8 (5)
+            breakglass_departed(&mut t, (&*kek, ids), &ev, &r.issuer).await?;
+            if !open {
+                continue;
+            }
             let Some((event, party)) = security_event(&ev) else {
                 continue;
             };
@@ -392,6 +419,161 @@ pub(crate) async fn notices_step<K: access_identity_events::adapters::RealmKek>(
             .map_err(e)?;
     }
     Ok(queued)
+}
+
+/// The acting organization of a break-glass use: the Party's own organization, or the first
+/// organization its account belongs to; `None` when it has neither.
+async fn acting_org(
+    t: &mut TenantTx,
+    actor: &[u8; 16],
+) -> Result<Option<access_store::orgs::OrgRow>, String> {
+    let e = |x: access_store::StoreError| x.to_string();
+    if let Some(org) = t.org_by_party(*actor).await.map_err(e)? {
+        return Ok(Some(org));
+    }
+    let Some(subject) = access_store::idp::party_subject(t, actor)
+        .await
+        .map_err(e)?
+    else {
+        return Ok(None);
+    };
+    Ok(t.orgs_of(subject)
+        .await
+        .map_err(e)?
+        .into_iter()
+        .next()
+        .map(|(o, _)| o))
+}
+
+/// Delivers one `breakglass.used` authority event in `t`: the record for its review, the
+/// critical audit row, the subject's notice whatever the realm's notice setting, the on-call
+/// alarm and the `breakglass.used` webhook (OP-157 m.3 (h), (aa), TN-71); whether it was new.
+async fn breakglass_used(
+    t: &mut TenantTx,
+    (kek, ids): (&(dyn suiss_crypto::envelope::Kek + Send + Sync), &IdKey),
+    ev: &access_internal_api::events::Event,
+    (slug, issuer): (&str, &str),
+) -> Result<bool, String> {
+    use access_identity_account::adapters::system::SystemEntropy;
+    use access_identity_account::app::breakglass::{Used, deliver};
+    use access_internal_api::events::{Detail, Source, Subject};
+    let e = |x: access_store::StoreError| x.to_string();
+    let (
+        Subject::Party(party),
+        Source::Exercise(exercise),
+        Detail::Breakglass {
+            grant,
+            actor,
+            approvals,
+            until,
+            drill,
+        },
+    ) = (ev.subject, ev.source, &ev.detail)
+    else {
+        return Ok(false);
+    };
+    let subject = access_store::idp::party_subject(t, &party.0)
+        .await
+        .map_err(e)?;
+    let org = acting_org(t, &actor.0).await?;
+    let used = Used {
+        exercise: exercise.0,
+        grant: grant.0,
+        actor: actor.0,
+        party: party.0,
+        subject,
+        approvals: *approvals,
+        at_ms: ev.at,
+        until_ms: *until,
+        drill: *drill,
+        organization: org.as_ref().map_or(slug, |o| o.display_name.as_str()),
+    };
+    let done = deliver(t, (kek, ids), &SystemEntropy, &SystemClock, &used, issuer)
+        .await
+        .map_err(|x| x.to_string())?;
+    if let (true, Some(s), Some(o), Some(realm)) = (done.recorded, subject, org, t.realm()) {
+        let id = access_crypto::random::bytes::<32>().map_err(|_| "random")?;
+        let account = ids
+            .encode(access_identity_account::app::SUBJECT_PREFIX, s)
+            .map_err(|x| x.to_string())?;
+        let event = access_identity_events::domain::catalog::IdentityEvent::breakglass_used(
+            id,
+            realm.as_bytes(),
+            (
+                &account,
+                &access_kernel::json::b64url_encode(&exercise.0),
+                &o.id,
+            ),
+            (u32::try_from(*approvals).unwrap_or(u32::MAX), *until),
+            ev.at,
+        );
+        access_identity_events::app::emit(t, &event)
+            .await
+            .map_err(|x| x.to_string())?;
+    }
+    Ok(done.noticed)
+}
+
+/// When a departing Party's account is a break-glass account, its Grants must be rotated: the
+/// critical audit row and the on-call alarm (OP-157 m.3 (h), §12.3.8 (5)).
+async fn breakglass_departed(
+    t: &mut TenantTx,
+    (kek, ids): (&(dyn suiss_crypto::envelope::Kek + Send + Sync), &IdKey),
+    ev: &access_internal_api::events::Event,
+    issuer: &str,
+) -> Result<(), String> {
+    use access_identity_account::adapters::system::SystemEntropy;
+    use access_identity_account::app::breakglass::CONSOLE_PATH;
+    use access_identity_account::notify::message::{Body, BreakglassAlarm};
+    use access_identity_account::notify::notices::queue_body;
+    use access_internal_api::events::{Detail, Kind, ReasonClass, Subject};
+    let e = |x: access_store::StoreError| x.to_string();
+    let (
+        Kind::PartyDisabled,
+        Subject::Party(party),
+        Detail::Disabled {
+            reason: ReasonClass::Departed,
+        },
+    ) = (ev.kind, ev.subject, &ev.detail)
+    else {
+        return Ok(());
+    };
+    let Some(subject) = access_store::idp::party_subject(t, &party.0)
+        .await
+        .map_err(e)?
+    else {
+        return Ok(());
+    };
+    if !t.is_breakglass_account(&subject).await.map_err(e)? {
+        return Ok(());
+    }
+    let account = ids
+        .encode(access_identity_account::app::SUBJECT_PREFIX, subject)
+        .map_err(|x| x.to_string())?;
+    t.audit(&access_store::audit::AuditEvent {
+        event_type: "breakglass.rotation_required",
+        actor: "authority",
+        target: &account,
+        correlation: "-",
+    })
+    .await
+    .map_err(e)?;
+    let link = format!("{}{CONSOLE_PATH}", issuer.trim_end_matches('/'));
+    for to in t.breakglass_on_call().await.map_err(e)? {
+        if to == subject {
+            continue;
+        }
+        let body = Body::BreakglassAlarm {
+            alarm: BreakglassAlarm::RotationRequired,
+            account: account.clone(),
+            link: Secret::new(link.clone()),
+            at_ms: ev.at,
+        };
+        queue_body(t, (kek, ids), &SystemEntropy, &SystemClock, to, body)
+            .await
+            .map_err(|x| x.to_string())?;
+    }
+    Ok(())
 }
 
 /// Runs [`notices_step`] as `holder` while it holds the notice lease, until `stop`.

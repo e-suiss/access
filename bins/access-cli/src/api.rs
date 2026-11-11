@@ -419,6 +419,7 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "putDelegatedAdmin" => IdpAction::RealmDelegatedAdmin,
         "putApprovalInline" => IdpAction::RealmApprovalInline,
         "putApprovalBatch" => IdpAction::RealmApprovalBatch,
+        "reviewBreakglassUse" => IdpAction::OrgBreakglassReview,
         _ => return None,
     })
 }

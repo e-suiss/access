@@ -14,7 +14,7 @@ use serde_json::json;
 
 use super::*;
 
-const ORG: [u8; 16] = [0x0a; 16];
+pub(super) const ORG: [u8; 16] = [0x0a; 16];
 const ORG_KEY: u8 = 0x3a;
 
 /// The `party_register` of organization `party` its founder's client signs with the one-time
@@ -90,7 +90,7 @@ async fn account(w: &World, (tenant, realm): (TenantId, RealmId), email: &str) -
     subject
 }
 
-async fn ready(slug: &str) -> (World, (TenantId, RealmId), Digest, [u8; 16]) {
+pub(super) async fn ready(slug: &str) -> (World, (TenantId, RealmId), Digest, [u8; 16]) {
     Box::pin(ready_with(slug, None)).await
 }
 
@@ -177,7 +177,7 @@ async fn an_organization_party_is_self_registered_and_never_gets_an_instance() {
     ));
 }
 
-fn as_founder(
+pub(super) fn as_founder(
     at: (TenantId, RealmId),
     d: Digest,
     change: Change,
@@ -302,7 +302,12 @@ fn invite(w: &World, body: &serde_json::Value) -> Change {
     .unwrap()
 }
 
-async fn create_org(w: &World, at: (TenantId, RealmId), d: Digest, founder: [u8; 16]) -> [u8; 16] {
+pub(super) async fn create_org(
+    w: &World,
+    at: (TenantId, RealmId),
+    d: Digest,
+    founder: [u8; 16],
+) -> [u8; 16] {
     let create = compile(
         Op::CreateOrganization,
         None,

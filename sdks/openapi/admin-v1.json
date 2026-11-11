@@ -18660,9 +18660,6 @@
           },
           "503": {
             "$ref": "#/components/responses/Unavailable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -18696,7 +18693,7 @@
           }
         ],
         "responses": {
-          "200": {
+          "201": {
             "description": "Committed: the Exercise record (TN-110).",
             "headers": {
               "Request-Id": {
@@ -18740,9 +18737,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -18842,9 +18836,6 @@
           },
           "422": {
             "$ref": "#/components/responses/Unprocessable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -18933,9 +18924,6 @@
           },
           "503": {
             "$ref": "#/components/responses/Unavailable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -19014,9 +19002,6 @@
           },
           "503": {
             "$ref": "#/components/responses/Unavailable"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
           }
         },
         "deprecated": false,
@@ -20019,6 +20004,105 @@
           },
           "501": {
             "$ref": "#/components/responses/NotYetServed"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": null,
+        "x-access-visibility": "hidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WriteBody"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/realms/{slug}/breakglass/reviews/{exercise}": {
+      "post": {
+        "operationId": "reviewBreakglassUse",
+        "summary": "Another Party's review of one break-glass use {classification: drill, emergency or misuse}: idp.org.breakglass_review; the Party that used the Grant cannot review it, and a review grants nothing (OP-157 m.3 (h)).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "name": "exercise",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
           }
         },
         "deprecated": false,
@@ -21821,15 +21905,140 @@
       },
       "BreakglassAccount": {
         "type": "object",
-        "description": "A break-glass marked account; the mark carries no authority (INV-28, OP-157 m.3 (h)); its lane names its members when it serves it."
+        "description": "A break-glass marked account; the mark carries no authority (INV-28, OP-157 m.3 (h)).",
+        "properties": {
+          "account_id": {
+            "type": "string"
+          },
+          "member": {
+            "type": "string"
+          },
+          "organization": {
+            "type": "string"
+          },
+          "organization_name": {
+            "type": "string"
+          },
+          "marked_at": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
       },
       "BreakglassDrill": {
         "type": "object",
-        "description": "A break-glass drill, a real Exercise with PurposeRef drill (OP-157 m.3 (h)); its lane names its members when it serves it."
+        "description": "A break-glass drill, a real Exercise with PurposeRef drill, and when the next is due (OP-157 m.3 (h)).",
+        "properties": {
+          "exercise": {
+            "type": "string"
+          },
+          "drill": {
+            "type": "boolean"
+          },
+          "grant": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "used_at": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "due_at": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "overdue",
+              "reviewed"
+            ]
+          },
+          "classification": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "drill",
+              "emergency",
+              "misuse",
+              null
+            ]
+          },
+          "reviewer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "next_due_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          }
+        }
       },
       "BreakglassReview": {
         "type": "object",
-        "description": "One break-glass use and its review by another Party (OP-157 m.3 (h)); its lane names its members when it serves it."
+        "description": "One break-glass use and its review by another Party (OP-157 m.3 (h)).",
+        "properties": {
+          "exercise": {
+            "type": "string"
+          },
+          "drill": {
+            "type": "boolean"
+          },
+          "grant": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "used_at": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "due_at": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "overdue",
+              "reviewed"
+            ]
+          },
+          "classification": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "drill",
+              "emergency",
+              "misuse",
+              null
+            ]
+          },
+          "reviewer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
       },
       "Review": {
         "type": "object",

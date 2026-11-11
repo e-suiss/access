@@ -75,3 +75,103 @@ impl BreakglassMark {
         ])
     }
 }
+
+/// Another Party's review of one break-glass use (`idp.org.breakglass_review`, CT1, OP-157
+/// m.3 (h)): it classifies the use and grants nothing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BreakglassReview {
+    /// The use's Exercise.
+    pub exercise: [u8; 32],
+    /// `drill`, `emergency` or `misuse`.
+    pub classification: Classification,
+}
+
+/// How a review classifies a use (§12.3.8 (4)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Classification {
+    /// A planned drill.
+    Drill,
+    /// A real emergency.
+    Emergency,
+    /// A use that should not have happened.
+    Misuse,
+}
+
+impl Classification {
+    /// Its stored name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Drill => "drill",
+            Self::Emergency => "emergency",
+            Self::Misuse => "misuse",
+        }
+    }
+
+    fn parse(s: &str) -> Option<Self> {
+        [Self::Drill, Self::Emergency, Self::Misuse]
+            .into_iter()
+            .find(|c| c.name() == s)
+    }
+}
+
+impl BreakglassReview {
+    /// `reviewBreakglassUse` of the use `exercise` (base64url) with `{"classification"}`.
+    ///
+    /// # Errors
+    /// [`Invalid::Body`].
+    pub fn parse(exercise: &str, body: &Json) -> Result<Self, Invalid> {
+        let m = body.as_object().ok_or(Invalid::Body)?;
+        if !m.keys().all(|k| k == "classification") {
+            return Err(Invalid::Body);
+        }
+        let exercise = b64url_decode(exercise)
+            .ok()
+            .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+            .ok_or(Invalid::Body)?;
+        let classification = m
+            .get("classification")
+            .and_then(Json::as_str)
+            .and_then(Classification::parse)
+            .ok_or(Invalid::Body)?;
+        Ok(Self {
+            exercise,
+            classification,
+        })
+    }
+
+    /// The change's body, which the intent binds (EI-25).
+    #[must_use]
+    pub fn body(&self) -> Value {
+        Value::Map(vec![
+            (
+                Value::text("exercise"),
+                Value::Bytes(self.exercise.to_vec()),
+            ),
+            (
+                Value::text("classification"),
+                Value::text(self.classification.name()),
+            ),
+        ])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // OP-157 m.3 (h), §12.3.8 (4)
+    #[test]
+    fn a_review_names_one_use_and_one_classification() {
+        let use_id = access_kernel::json::b64url_encode(&[7; 32]);
+        let r = BreakglassReview::parse(&use_id, &json!({"classification": "drill"})).unwrap();
+        assert_eq!(r.exercise, [7; 32]);
+        assert_eq!(r.classification, Classification::Drill);
+        assert!(BreakglassReview::parse(&use_id, &json!({"classification": "routine"})).is_err());
+        assert!(BreakglassReview::parse("AAAA", &json!({"classification": "drill"})).is_err());
+        assert!(
+            BreakglassReview::parse(&use_id, &json!({"classification": "drill", "x": 1})).is_err()
+        );
+    }
+}

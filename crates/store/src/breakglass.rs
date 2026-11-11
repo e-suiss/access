@@ -1,6 +1,6 @@
-//! Break-glass uses and their reviews (OP-157 m.3 (h), §12.3.8 (4), (5), TN-93): one row version
-//! per state of a use, pending, overdue or reviewed. A review grants nothing. Nothing is deleted
-//! (OP-73).
+//! Break-glass accounts, uses and reviews (OP-157 m.3 (h), §12.3.8, TN-93, INV-28): the mark on
+//! an organization membership, which carries no authority; one row version per state of a use,
+//! pending, overdue or reviewed. A review grants nothing. Nothing is deleted (OP-73).
 
 use sqlx::types::Uuid;
 
@@ -290,5 +290,134 @@ impl TenantTx {
         .fetch_one(&mut *self.tx)
         .await?;
         at.map(unsigned).transpose()
+    }
+}
+
+/// One account marked as a break-glass account in one organization.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BreakglassAccount {
+    /// The account.
+    pub subject: [u8; 16],
+    /// The organization's Party.
+    pub org: [u8; 16],
+    /// The organization's display name, attacker-controlled text.
+    pub org_name: String,
+    /// The position of the decision that marked it.
+    pub position: u64,
+    /// When it was marked, Unix ms.
+    pub marked_at_ms: u64,
+}
+
+impl TenantTx {
+    /// Marks or clears `subject`'s live membership of the organization whose Party is `org`
+    /// under `bound`; `false` without such a membership.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn set_breakglass_mark(
+        &mut self,
+        bound: &Bound,
+        org: &[u8; 16],
+        subject: &[u8; 16],
+        on: bool,
+    ) -> Result<bool, StoreError> {
+        let (tenant, realm) = scope(self)?;
+        let done = sqlx::query!(
+            "UPDATE access.org_memberships m
+                SET is_breakglass = $5,
+                    breakglass_position = $6,
+                    breakglass_marked_at = CASE WHEN $5 THEN clock_timestamp() END
+               FROM access.organizations o
+              WHERE m.tenant_id = $1 AND m.realm_id = $2 AND m.subject_id = $4
+                AND o.tenant_id = m.tenant_id AND o.realm_id = m.realm_id
+                AND o.org_id = m.org_id AND o.party = $3
+                AND m.ended_at IS NULL AND o.ended_at IS NULL",
+            tenant,
+            realm,
+            org.as_slice(),
+            Uuid::from_bytes(*subject),
+            on,
+            bound.raw_position(),
+        )
+        .execute(&mut *self.tx)
+        .await?;
+        Ok(done.rows_affected() == 1)
+    }
+
+    /// The realm's live break-glass accounts, oldest mark first.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn breakglass_accounts(&mut self) -> Result<Vec<BreakglassAccount>, StoreError> {
+        let (tenant, realm) = scope(self)?;
+        let rows = sqlx::query!(
+            r#"SELECT m.subject_id, o.party, o.display_name,
+                      m.breakglass_position AS "position!",
+                      (extract(epoch FROM m.breakglass_marked_at) * 1000)::bigint AS "marked_ms!"
+                 FROM access.org_memberships m
+                 JOIN access.organizations o
+                   ON o.tenant_id = m.tenant_id AND o.realm_id = m.realm_id AND o.org_id = m.org_id
+                WHERE m.tenant_id = $1 AND m.realm_id = $2 AND m.is_breakglass
+                  AND m.ended_at IS NULL AND o.ended_at IS NULL
+                ORDER BY m.breakglass_marked_at, m.membership_id"#,
+            tenant,
+            realm,
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        rows.into_iter()
+            .map(|r| {
+                Ok(BreakglassAccount {
+                    subject: *r.subject_id.as_bytes(),
+                    org: fixed(&r.party)?,
+                    org_name: r.display_name,
+                    position: unsigned(r.position)?,
+                    marked_at_ms: unsigned(r.marked_ms)?,
+                })
+            })
+            .collect()
+    }
+
+    /// Whether `subject` holds a live break-glass mark in any organization.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn is_breakglass_account(&mut self, subject: &[u8; 16]) -> Result<bool, StoreError> {
+        let (tenant, realm) = scope(self)?;
+        Ok(sqlx::query_scalar!(
+            r#"SELECT EXISTS (
+                 SELECT 1 FROM access.org_memberships m
+                   JOIN access.organizations o
+                     ON o.tenant_id = m.tenant_id AND o.realm_id = m.realm_id AND o.org_id = m.org_id
+                  WHERE m.tenant_id = $1 AND m.realm_id = $2 AND m.subject_id = $3
+                    AND m.is_breakglass AND m.ended_at IS NULL AND o.ended_at IS NULL) AS "marked!""#,
+            tenant,
+            realm,
+            Uuid::from_bytes(*subject),
+        )
+        .fetch_one(&mut *self.tx)
+        .await?)
+    }
+
+    /// The owners of the organizations with a live break-glass account: who the realm's
+    /// break-glass alarms go to (OP-157 m.3 (h)).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn breakglass_on_call(&mut self) -> Result<Vec<[u8; 16]>, StoreError> {
+        let (tenant, realm) = scope(self)?;
+        let rows = sqlx::query_scalar!(
+            "SELECT DISTINCT w.subject_id FROM access.org_memberships w
+               JOIN access.org_memberships m
+                 ON m.tenant_id = w.tenant_id AND m.realm_id = w.realm_id AND m.org_id = w.org_id
+              WHERE w.tenant_id = $1 AND w.realm_id = $2 AND w.owner AND w.ended_at IS NULL
+                AND m.is_breakglass AND m.ended_at IS NULL
+              ORDER BY w.subject_id",
+            tenant,
+            realm,
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        Ok(rows.into_iter().map(|u| *u.as_bytes()).collect())
     }
 }

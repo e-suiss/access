@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT w.subject_id FROM access.org_memberships w\n               JOIN access.org_memberships m\n                 ON m.tenant_id = w.tenant_id AND m.realm_id = w.realm_id AND m.org_id = w.org_id\n              WHERE w.tenant_id = $1 AND w.realm_id = $2 AND w.owner AND w.ended_at IS NULL\n                AND m.is_breakglass AND m.ended_at IS NULL\n              ORDER BY w.subject_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "subject_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "14d731049e1bd82623d320b4235839de39b9088ed9a5956292fbf14a7d61aff1"
+}

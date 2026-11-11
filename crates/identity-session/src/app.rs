@@ -173,6 +173,15 @@ pub const SSO_REQUIRED: Problem = Problem {
     retry_after_s: None,
 };
 
+/// A break-glass account signs in only with the realm's own phishing-resistant hardware method,
+/// never through a provider (OP-157 m.3 (h), §10.2.5, §10.2.6).
+pub const BREAKGLASS_SSO_REFUSED: Problem = Problem {
+    status: 403,
+    code: "breakglass-account-sso-refused",
+    title: "This emergency account signs in only with its hardware key",
+    retry_after_s: None,
+};
+
 /// A code was not accepted (after authentication, X34).
 pub const CODE_NOT_ACCEPTED: Problem = Problem {
     status: 401,

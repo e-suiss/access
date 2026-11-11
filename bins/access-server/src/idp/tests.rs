@@ -52,6 +52,7 @@ use crate::testing::hsm;
 
 mod accounts;
 mod agents;
+mod breakglass;
 mod certificate;
 mod claims;
 mod domains;

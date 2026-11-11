@@ -1,0 +1,72 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.subject_id, o.party, o.display_name,\n                      m.breakglass_position AS \"position!\",\n                      (extract(epoch FROM m.breakglass_marked_at) * 1000)::bigint AS \"marked_ms!\"\n                 FROM access.org_memberships m\n                 JOIN access.organizations o\n                   ON o.tenant_id = m.tenant_id AND o.realm_id = m.realm_id AND o.org_id = m.org_id\n                WHERE m.tenant_id = $1 AND m.realm_id = $2 AND m.is_breakglass\n                  AND m.ended_at IS NULL AND o.ended_at IS NULL\n                ORDER BY m.breakglass_marked_at, m.membership_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "party",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.organizations",
+            "name": "party"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "display_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.organizations",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "position!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "breakglass_position"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "marked_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "b4b6b461444a5f92f6b2489147571e9f74d108fc56473b20f1b4ddfbc7b69223"
+}

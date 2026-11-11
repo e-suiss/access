@@ -68,6 +68,23 @@ pub async fn queue(
     (name, issuer): (&str, &str),
     at_ms: u64,
 ) -> Result<Option<EventId>, NotifyError> {
+    let body = notice_body(event, name, issuer, at_ms);
+    queue_body(tx, (kek, ids), entropy, clock, subject, body).await
+}
+
+/// Queues `body` to `subject` in `tx`, at the subject's registered contact address; `None`
+/// when it has none.
+///
+/// # Errors
+/// [`NotifyError`]; the caller rolls back and the event is read again.
+pub async fn queue_body(
+    tx: &mut TenantTx,
+    (kek, ids): (&(dyn Kek + Send + Sync), &IdKey),
+    entropy: &(dyn Entropy + Sync),
+    clock: &(dyn Clock + Sync),
+    subject: [u8; 16],
+    body: Body,
+) -> Result<Option<EventId>, NotifyError> {
     let realm = Realm {
         tenant: tx.tenant(),
         realm: tx.realm().ok_or(NotifyError::NoSubject)?,
@@ -104,7 +121,7 @@ pub async fn queue(
         to,
         locale: None,
         valid_since_ms,
-        body: notice_body(event, name, issuer, at_ms),
+        body,
     };
     let id = OutboxNotifier::new(&realm, entropy, clock)
         .notify(tx, &message)

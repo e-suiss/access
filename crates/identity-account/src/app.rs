@@ -4,6 +4,7 @@ pub mod accounts;
 pub mod approver;
 pub mod binding;
 pub mod breach;
+pub mod breakglass;
 pub mod claims;
 pub mod events;
 pub mod export;

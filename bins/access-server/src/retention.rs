@@ -128,7 +128,29 @@ pub(crate) async fn sweep_realm(
         kek: &*vault.kek,
         ids,
     };
-    let s = inactivity_sweep(&db, &realm, InactivityPolicy::CONSUMER, &[], &JOB).await?;
+    // TN-51, OP-157 m.3 (h)
+    let mut t = access_store::identity::TenantTx::begin(app, route.tenant, route.realm).await?;
+    let exempt: Vec<[u8; 16]> = t
+        .breakglass_accounts()
+        .await?
+        .into_iter()
+        .map(|a| a.subject)
+        .collect();
+    // OP-157 m.3 (h), §12.3.8 (5)
+    access_identity_account::app::breakglass::drill_check(
+        &mut t,
+        (&*vault.kek, ids),
+        &access_identity_account::adapters::system::SystemEntropy,
+        &access_identity_account::adapters::system::SystemClock,
+        &route.issuer,
+        access_identity_account::ports::Clock::now_ms(
+            &access_identity_account::adapters::system::SystemClock,
+        ),
+    )
+    .await
+    .map_err(|_| access_identity_account::AccountError::Vault)?;
+    t.commit().await?;
+    let s = inactivity_sweep(&db, &realm, InactivityPolicy::CONSUMER, &exempt, &JOB).await?;
     out.deactivated = out.deactivated.saturating_add(s.deactivated);
     out.notified = out.notified.saturating_add(s.notified);
     Ok(())

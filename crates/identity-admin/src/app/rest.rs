@@ -343,6 +343,8 @@ pub enum Op {
     CommitOffboarding,
     /// `keepReviewItem`: the reviewer's keep, an identity audit record (OP-157 m.3 (w)).
     KeepReviewItem,
+    /// `reviewBreakglassUse`: `idp.org.breakglass_review` (OP-157 m.3 (h), m.4 (b)).
+    ReviewBreakglassUse,
 }
 
 impl Op {
@@ -502,6 +504,7 @@ impl Op {
             "putApprovalBatch" => Self::PutApprovalBatch,
             "commitOffboarding" => Self::CommitOffboarding,
             "keepReviewItem" => Self::KeepReviewItem,
+            "reviewBreakglassUse" => Self::ReviewBreakglassUse,
             _ => return None,
         })
     }
@@ -2205,6 +2208,9 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                 false,
             )?)
         }
+        Op::ReviewBreakglassUse => Change::BreakglassReview(
+            crate::domain::breakglass::BreakglassReview::parse(key_of(key)?, &own_body(m))?,
+        ),
         Op::ScheduleReview => {
             Change::Review(crate::domain::review::ReviewChange::schedule(&own_body(m))?)
         }
@@ -3117,6 +3123,19 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 items: super::export_sinks::list(t, key).await?,
                 last: None,
             },
+            // OP-157 m.3 (h)
+            (Kind::BreakglassAccounts, _) => Read {
+                items: super::breakglass::accounts(t, self.ids).await?,
+                last: None,
+            },
+            (Kind::BreakglassReviews, _) => Read {
+                items: super::breakglass::reviews(t).await?,
+                last: None,
+            },
+            (Kind::BreakglassDrills, _) => Read {
+                items: super::breakglass::drills(t).await?,
+                last: None,
+            },
             // OP-156 m.3 (p)
             (Kind::LinuxHosts, _) => Read {
                 items: super::linux::list(t, key).await?,
@@ -3380,9 +3399,6 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | (
                 Kind::CaseSystems
                 | Kind::SupportGrants
-                | Kind::BreakglassAccounts
-                | Kind::BreakglassDrills
-                | Kind::BreakglassReviews
                 | Kind::Reviews
                 | Kind::ReviewItems
                 | Kind::OffboardingPreviews,

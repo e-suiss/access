@@ -2144,6 +2144,9 @@ pub enum Change {
     /// `idp.realm.approval_batch` (`true`, CT2) or `approval_batch_close` (`false`, CT1)
     /// (OP-157 m.3 (m)).
     ApprovalBatch(bool),
+    /// `idp.org.breakglass_review` (CT1): another Party classifies one break-glass use
+    /// (OP-157 m.3 (h), m.4 (b)).
+    BreakglassReview(breakglass::BreakglassReview),
 }
 
 /// A change to an organization's profile (TN-98): its name, and whether home realm discovery
@@ -2426,6 +2429,7 @@ impl Change {
             Self::CaseSystem(c) => c.action(),
             Self::SupportArtifactPolicy(p) => support::artifact_policy_action(p.as_ref()),
             Self::Breakglass(b) => b.action(),
+            Self::BreakglassReview(_) => IdpAction::OrgBreakglassReview,
             Self::Review(r) => r.action(),
             Self::DelegatedAdmin(true) => IdpAction::RealmDelegatedAdmin,
             Self::DelegatedAdmin(false) => IdpAction::RealmDelegatedAdminClose,
@@ -2644,11 +2648,12 @@ impl Change {
                 r.check()?;
                 Err(Invalid::NotYetServed)
             }
-            Self::Breakglass(_)
-            | Self::DelegatedAdmin(_)
-            | Self::ApprovalInline(_)
-            | Self::ApprovalBatch(_) => Err(Invalid::NotYetServed),
+            Self::DelegatedAdmin(_) | Self::ApprovalInline(_) | Self::ApprovalBatch(_) => {
+                Err(Invalid::NotYetServed)
+            }
             Self::AccountBind(_)
+            | Self::Breakglass(_)
+            | Self::BreakglassReview(_)
             | Self::RelayResend(_)
             | Self::SecurityNotices(_)
             | Self::OrgSsoEnforce(_)
@@ -2889,6 +2894,7 @@ impl Change {
             Self::CaseSystem(c) => c.body(),
             Self::SupportArtifactPolicy(p) => support::artifact_policy_body(p.as_ref()),
             Self::Breakglass(b) => b.body(),
+            Self::BreakglassReview(r) => r.body(),
             Self::Review(r) => r.body(),
             Self::DelegatedAdmin(on) | Self::ApprovalInline(on) | Self::ApprovalBatch(on) => {
                 Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))])
@@ -3039,6 +3045,9 @@ impl Change {
             Self::Breakglass(b) => {
                 path.extend([String::from("org"), b64url_encode(&b.org)]);
                 path.extend([String::from("member"), b64url_encode(&b.member)]);
+            }
+            Self::BreakglassReview(r) => {
+                path.extend([String::from("breakglass"), b64url_encode(&r.exercise)]);
             }
             Self::ClientProfile { client, .. } => {
                 path.extend([String::from("client"), String::from(client.as_str())]);

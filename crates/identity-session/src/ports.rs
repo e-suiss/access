@@ -189,6 +189,16 @@ pub trait SessionTx: AccountTx + RiskTx + PushTx + PaymentTx {
         &mut self,
         subject: [u8; 16],
     ) -> impl Future<Output = Result<Option<Vec<String>>, SessionError>> + Send;
+    /// Whether the subject's account is a break-glass account in any live organization
+    /// (OP-157 m.3 (h)).
+    fn breakglass_account(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// Who the realm's break-glass alarms go to (OP-157 m.3 (h)).
+    fn breakglass_on_call(
+        &mut self,
+    ) -> impl Future<Output = Result<Vec<[u8; 16]>, SessionError>> + Send;
     /// N5: the subject's active sign-in methods (S11).
     fn sign_in_methods(
         &mut self,

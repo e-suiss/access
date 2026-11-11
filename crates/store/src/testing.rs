@@ -553,3 +553,21 @@ pub async fn rewrite_recovery_steps(db: &TestDb) -> Result<(), TestDbError> {
     )
     .await
 }
+
+/// Marks `subject`'s live memberships as break-glass, as a committed
+/// `idp.org.member_breakglass` at position 1 would (OP-157 m.3 (h)).
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn mark_breakglass(db: &TestDb, subject: [u8; 16]) -> Result<(), TestDbError> {
+    sqlx::query(
+        "UPDATE access.org_memberships SET is_breakglass = true, breakglass_position = 1,
+                breakglass_marked_at = clock_timestamp()
+          WHERE subject_id = $1 AND ended_at IS NULL",
+    )
+    .bind(sqlx::types::Uuid::from_bytes(subject))
+    .execute(&db.owner)
+    .await
+    .at("mark break-glass")?;
+    Ok(())
+}

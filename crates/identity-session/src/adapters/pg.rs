@@ -203,6 +203,14 @@ impl SessionTx for PgTx {
         Ok(Some(self.0.organization_connections(&parties).await?))
     }
 
+    async fn breakglass_account(&mut self, subject: [u8; 16]) -> Result<bool, SessionError> {
+        Ok(self.0.is_breakglass_account(&subject).await?)
+    }
+
+    async fn breakglass_on_call(&mut self) -> Result<Vec<[u8; 16]>, SessionError> {
+        Ok(self.0.breakglass_on_call().await?)
+    }
+
     async fn sign_in_methods(
         &mut self,
         subject: [u8; 16],

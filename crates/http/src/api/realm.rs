@@ -711,7 +711,7 @@ const STAGE11: [Route; 38] = [
 
 /// The Stage 12 realm routes, declared before their lanes serve them (OP-157 m.4 (a)): each
 /// answers `501 not-yet-served` behind its permission until its lane fills the handler.
-const STAGE12: [Route; 21] = [
+const STAGE12: [Route; 22] = [
     list(
         "/admin/v1/realms/{slug}/support/case-systems",
         "listCaseSystems",
@@ -828,6 +828,12 @@ const STAGE12: [Route; 21] = [
         "/admin/v1/realms/{slug}/settings/approval-batch",
         "putApprovalBatch",
         "Opens CT1 batch approval of at most 10 requests (idp.realm.approval_batch) or closes it (approval_batch_close) (OP-157 m.3 (m)).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/breakglass/reviews/{exercise}",
+        "reviewBreakglassUse",
+        "Another Party's review of one break-glass use {classification: drill, emergency or misuse}: idp.org.breakglass_review; the Party that used the Grant cannot review it, and a review grants nothing (OP-157 m.3 (h)).",
     ),
 ];
 
@@ -1758,10 +1764,12 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "registerCaseSystem" | "retireCaseSystem" => (ResourceKind::CaseSystems, Shape::Planned("WriteResult")),
         "listSupportGrants" => (ResourceKind::SupportGrants, Shape::Planned("Page")),
         "putSupportArtifactPolicy" | "putDelegatedAdmin" | "putApprovalInline" | "putApprovalBatch" => (Settings, Shape::Planned("WriteResult")),
-        "listBreakglassAccounts" => (ResourceKind::BreakglassAccounts, Shape::Planned("Page")),
-        "markBreakglassAccount" | "clearBreakglassAccount" => (ResourceKind::BreakglassAccounts, Shape::Planned("WriteResult")),
-        "listBreakglassDrills" => (ResourceKind::BreakglassDrills, Shape::Planned("Page")),
-        "listBreakglassReviews" => (ResourceKind::BreakglassReviews, Shape::Planned("Page")),
+        // OP-157 m.3 (h)
+        "listBreakglassAccounts" => (ResourceKind::BreakglassAccounts, Shape::List(&[])),
+        "markBreakglassAccount" => (ResourceKind::BreakglassAccounts, CREATE),
+        "clearBreakglassAccount" => (ResourceKind::BreakglassAccounts, w(false)),
+        "listBreakglassDrills" => (ResourceKind::BreakglassDrills, Shape::List(&[])),
+        "listBreakglassReviews" => (ResourceKind::BreakglassReviews, Shape::List(&[])),
         "listReviews" => (ResourceKind::Reviews, Shape::Planned("Page")),
         "scheduleReview" | "closeReview" => (ResourceKind::Reviews, Shape::Planned("WriteResult")),
         "getReview" => (ResourceKind::Reviews, Shape::Planned("Declared")),
@@ -1769,6 +1777,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "keepReviewItem" => (ResourceKind::ReviewItems, Shape::Planned("WriteResult")),
         "previewOffboarding" => (ResourceKind::OffboardingPreviews, Shape::Planned("Declared")),
         "commitOffboarding" => (ResourceKind::OffboardingPreviews, Shape::Planned("WriteResult")),
+        // OP-157 m.3 (h), m.4 (b)
+        "reviewBreakglassUse" => (ResourceKind::BreakglassReviews, w(false)),
         o if declared(o) => (Settings, Shape::Planned(planned_body(o))),
         "listClients" => (
             Clients,
