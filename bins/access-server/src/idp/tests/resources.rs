@@ -573,10 +573,16 @@ fn reserved_operations_compile_to_nothing() {
         compile(Op::DeleteAccount, Some(&account), &json!({}), &ids),
         Ok(Change::AccountDelete([1; 16]))
     );
+    // OP-158 m.3 (a), (o)
     assert_eq!(
         compile(Op::RehomeRealm, None, &json!({}), &ids),
-        Err(Invalid::Reserved)
+        Err(Invalid::Body)
     );
+    let domain = access_kernel::json::b64url_encode(&[7; 32]);
+    assert!(matches!(
+        compile(Op::RehomeRealm, None, &json!({ "domain": domain }), &ids),
+        Ok(Change::Rehome(_))
+    ));
 }
 
 mod inbound {

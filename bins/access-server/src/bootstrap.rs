@@ -14,6 +14,7 @@
 
 mod agent;
 mod catalog;
+mod durability;
 mod governance;
 pub(crate) mod local;
 
@@ -172,6 +173,9 @@ struct PlanFile {
     support_operator: Option<governance::SupportOperatorFile>,
     breakglass_account: Option<governance::BreakglassAccountFile>,
     review_schedule: Option<governance::ReviewScheduleFile>,
+    witnesses: Option<durability::WitnessesFile>,
+    replica: Option<durability::ReplicaFile>,
+    second_provider: Option<durability::SecondProviderFile>,
 }
 
 /// `[test_user]` as written: the password is never in the plan file itself unless the operator
@@ -813,6 +817,13 @@ impl Plan {
                 redirect_uris,
             });
         }
+        // OP-158 m.4 (a)
+        durability::Fixtures {
+            witnesses: file.witnesses.as_ref(),
+            replica: file.replica.as_ref(),
+            second_provider: file.second_provider.as_ref(),
+        }
+        .check(&file.tenants)?;
         // OP-157 m.4 (a), m.6 (i)
         let (support_operator, breakglass_account, review_schedule) = governance::Fixtures {
             support_operator: file.support_operator,
