@@ -34,6 +34,11 @@ pub(crate) struct Config {
     /// port of `mtls_listen` when unset.
     #[serde(default)]
     pub(crate) mtls_public_port: Option<u16>,
+    /// The proxies in front of the public listener whose `X-Forwarded-For` names the client
+    /// address, each an address or a CIDR block (§17.9.6, OP-158 m.3 (v)). Empty by default:
+    /// the header is never read, and the client address is the TCP peer's.
+    #[serde(default)]
+    pub(crate) trusted_proxies: Vec<String>,
     /// `tracing` filter directives.
     pub(crate) log: String,
     /// `security.txt` contact URIs (RFC 9116).
@@ -772,6 +777,10 @@ pub(crate) struct Database {
     /// served from it; without it those reads go to the primary.
     #[serde(default)]
     pub(crate) replica_host: Option<String>,
+    /// The management listener's own `access_app` pool (OP-53, OP-158 m.3 (v)): admin and
+    /// report requests never wait behind sign-in, nor sign-in behind them. Four when unset.
+    #[serde(default)]
+    pub(crate) admin_pool: Option<u32>,
 }
 
 /// The PKCS#11 token holding the domains' keys.
@@ -797,6 +806,7 @@ impl Default for Config {
             internal_listen: None,
             mtls_listen: None,
             mtls_public_port: None,
+            trusted_proxies: Vec::new(),
             log: "info".to_owned(),
             security_contacts: vec![
                 "https://github.com/e-suiss/access/security/advisories/new".to_owned(),
@@ -1142,6 +1152,7 @@ mod tests {
                 checkpointer: role("access_checkpointer_login"),
                 migrator: None,
                 replica_host: None,
+                admin_pool: None,
             }),
             signer: Some("/run/access/signer.sock".into()),
             hsm: Some(Hsm {

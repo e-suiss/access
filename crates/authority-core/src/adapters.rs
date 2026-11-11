@@ -510,6 +510,20 @@ struct PapFamily {
 }
 
 type Slot<B, S, C> = Arc<tokio::sync::Mutex<Option<Led<B, S, C>>>>;
+
+/// How long a request waits for its domain's leader before it is refused as busy (§16.7,
+/// OP-36, OP-158 m.3 (v), PD).
+pub const SLOT_WAIT: Duration = Duration::from_secs(5);
+
+/// Requests of this process waiting for a domain's leader: the `sequencer` queue (OP-53).
+static QUEUED: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+fn queued(by: i64) {
+    let n = QUEUED
+        .fetch_add(by, std::sync::atomic::Ordering::SeqCst)
+        .saturating_add(by);
+    access_telemetry::signals::POOL_QUEUE_DEPTH.set(n, ["sequencer"]);
+}
 type Guard<B, S, C> = tokio::sync::OwnedMutexGuard<Option<Led<B, S, C>>>;
 
 /// Hard deadline of one search page (§9.7.1, EA).
@@ -1318,7 +1332,15 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
     /// The slot of `domain` with its leader, taking the lease first if needed.
     async fn leading(&self, domain: Digest) -> Result<Guard<B, S, C>, CoreError> {
         let slot = self.slot(domain)?;
-        let mut guard = slot.clone().lock_owned().await;
+        // OP-36, OP-53, §16.7, OP-158 m.3 (v)
+        let mut guard = if let Ok(g) = slot.clone().try_lock_owned() {
+            g
+        } else {
+            queued(1);
+            let got = tokio::time::timeout(SLOT_WAIT, slot.clone().lock_owned()).await;
+            queued(-1);
+            got.map_err(|_| CoreError::Unavailable(crate::app::BUSY))?
+        };
         if guard.is_none() {
             match self.lead(domain).await {
                 Ok(led) => *guard = Some(led),

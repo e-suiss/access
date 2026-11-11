@@ -164,6 +164,8 @@ struct Prepared {
 struct Pools {
     sequencer: Pool,
     app: Pool,
+    /// The management listener's `access_app` pool (OP-53, OP-158 m.3 (v)).
+    admin: Pool,
     /// Admin search and listing (OP-27): the replica when one is configured, else `app`.
     reads: Pool,
     deriver: Pool,
@@ -955,6 +957,9 @@ fn holder() -> Result<String, String> {
     Ok(out)
 }
 
+/// The management listener's pool size when `admin_pool` is unset (OP-53, PD).
+const ADMIN_POOL: u32 = 4;
+
 async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
     let db = config.database.as_ref().ok_or("no database section")?;
     let open = async |role: &Role, password: &SecretFile| {
@@ -989,6 +994,17 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
         }
         None => app.clone(),
     };
+    // OP-53, OP-158 m.3 (v)
+    let admin_size = db.admin_pool.unwrap_or(ADMIN_POOL);
+    let admin = open(
+        &Role {
+            user: db.app.user.clone(),
+            password_file: db.app.password_file.clone(),
+            pool: admin_size,
+        },
+        &prepared.app_password,
+    )
+    .await?;
     let deriver = open(&db.deriver, &prepared.deriver_password).await?;
     let router = open(&db.router, &prepared.router_password).await?;
     let archive = open(&db.archive, &prepared.archive_password).await?;
@@ -999,6 +1015,7 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
         .sequencer
         .pool
         .saturating_add(db.app.pool)
+        .saturating_add(admin_size)
         .saturating_add(db.deriver.pool)
         .saturating_add(db.router.pool)
         .saturating_add(db.archive.pool)
@@ -1008,6 +1025,7 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
     for p in [
         &sequencer,
         &app,
+        &admin,
         &deriver,
         &router,
         &archive,
@@ -1021,6 +1039,7 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
     Ok(Pools {
         sequencer,
         app,
+        admin,
         reads,
         deriver,
         router,
@@ -1848,7 +1867,7 @@ async fn serve(
     // OP-156 m.3 (h)
     let _mirror_refresh = risk::mirror_refresh(config, all.app.clone(), prepared.outbound.clone());
     let cell_ids = Arc::new(ids::CellIds::new(prepared.identity_keys.clone()));
-    let (admin_app, admin_ids) = (all.app.clone(), cell_ids.clone());
+    let (admin_app, admin_ids) = (all.admin.clone(), cell_ids.clone());
     let admin_reads = all.reads.clone();
     let admin_targets = prepared.outbound.declared();
     let console_assets = prepared.console_assets;
@@ -2375,6 +2394,15 @@ async fn listen(
     [public, management]: [axum::Router; 2],
     (health, ready): (Health, Readiness),
 ) -> Result<(), String> {
+    // SA-27, OP-53, OP-158 m.3 (v)
+    let public = access_http::harden(
+        public,
+        Limits::default().admitting(access_http::layers::CRITICAL),
+    );
+    let management = access_http::harden(
+        management,
+        Limits::default().admitting(access_http::layers::ADMIN),
+    );
     // OP-67 m.3, OP-151 m.3 (b)
     let ready = &ready;
     let inside = internal_router(health, ready.clone(), Limits::default(), now_ms);
@@ -2411,7 +2439,16 @@ async fn listen(
             None => Ok(()),
         }
     };
-    let public = access_http::tls::serve(public_l, tls.clone(), public, signal(stopped.clone()));
+    // §17.9.6, OP-158 m.3 (v)
+    let proxies = access_http::forwarded::TrustedProxies::parse(&config.trusted_proxies)
+        .map_err(|e| e.to_string())?;
+    let public = access_http::tls::serve_behind(
+        public_l,
+        tls.clone(),
+        public,
+        proxies,
+        signal(stopped.clone()),
+    );
     let management = access_http::tls::serve(
         management_l,
         tls.clone(),
@@ -2499,6 +2536,7 @@ impl PoolGauges {
         Self(vec![
             ("sequencer", pools.sequencer.clone()),
             ("app", pools.app.clone()),
+            ("admin", pools.admin.clone()),
             ("deriver", pools.deriver.clone()),
             ("router", pools.router.clone()),
             ("archive", pools.archive.clone()),

@@ -96,6 +96,9 @@ pub(crate) struct Database {
     /// The server's read replica, unused here.
     #[serde(default, rename = "replica_host")]
     _replica_host: Option<String>,
+    /// The server's management pool size (OP-158 m.3 (v)), unused here.
+    #[serde(default, rename = "admin_pool")]
+    _admin_pool: Option<u32>,
 }
 
 /// Why the configuration cannot be used.
