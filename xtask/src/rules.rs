@@ -3,8 +3,14 @@
 
 #[path = "rules_adjacent.rs"]
 mod adjacent;
+#[path = "rules_attention.rs"]
+mod attention;
+#[path = "rules_breakglass.rs"]
+mod breakglass;
 #[path = "rules_comments.rs"]
 mod comments;
+#[path = "rules_conformance_profiles.rs"]
+mod conformance_profiles;
 #[path = "rules_crypto.rs"]
 mod crypto;
 #[path = "rules_custody.rs"]
@@ -21,6 +27,8 @@ mod fluent;
 pub(crate) mod interop;
 #[path = "rules_iys.rs"]
 mod iys;
+#[path = "rules_kill_switch.rs"]
+mod kill_switch;
 #[path = "rules_kyc.rs"]
 mod kyc;
 #[path = "rules_lex.rs"]
@@ -31,6 +39,8 @@ mod limits;
 mod manifest;
 #[path = "rules_money.rs"]
 mod money;
+#[path = "rules_pending.rs"]
+mod pending;
 #[path = "rules_personal.rs"]
 mod personal;
 #[path = "rules_privileged.rs"]
@@ -41,12 +51,18 @@ mod profile;
 mod progress;
 #[path = "rules_proxy.rs"]
 mod proxy;
+#[path = "rules_reputation.rs"]
+mod reputation;
 #[path = "rules_restriction.rs"]
 mod restriction;
 #[path = "rules_seam.rs"]
 mod seam;
 #[path = "rules_source.rs"]
 pub(crate) mod source;
+#[path = "rules_standing.rs"]
+mod standing;
+#[path = "rules_support.rs"]
+mod support;
 #[path = "rules_switches.rs"]
 pub(crate) mod switches;
 #[path = "rules_telemetry.rs"]
@@ -234,6 +250,46 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "no-money-state",
             run: money::check,
+        },
+        // MD-9, TN-71, OP-157 m.3 (c)
+        Check {
+            name: "support-template",
+            run: support::check,
+        },
+        // OP-46, G63, OP-157 m.3 (j)
+        Check {
+            name: "breakglass-isolation",
+            run: breakglass::check,
+        },
+        // OP-54-RL10, OP-157 m.3 (j)
+        Check {
+            name: "no-standing-admin",
+            run: standing::check,
+        },
+        // CI-13, OP-157 m.3 (i)
+        Check {
+            name: "no-kill-switch",
+            run: kill_switch::check,
+        },
+        // OP-157 m.3 (m)
+        Check {
+            name: "attention-model",
+            run: attention::check,
+        },
+        // MUST-NEVER-8, OP-157 m.3 (m)
+        Check {
+            name: "no-reputation-score",
+            run: reputation::check,
+        },
+        // X5, C26, OP-157 m.3 (u)
+        Check {
+            name: "no-pending-queue",
+            run: pending::check,
+        },
+        // P2, OP-157 m.3 (s)
+        Check {
+            name: "conformance-profiles",
+            run: conformance_profiles::check,
         },
     ]);
     all
