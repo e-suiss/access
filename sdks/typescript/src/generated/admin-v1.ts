@@ -3552,7 +3552,7 @@ export interface components {
             organization?: string;
             organization_name?: string;
             marked_at?: number;
-            position?: number;
+            position?: string;
         };
         /** @description A break-glass drill, a real Exercise with PurposeRef drill, and when the next is due (OP-157 m.3 (h)). */
         BreakglassDrill: {

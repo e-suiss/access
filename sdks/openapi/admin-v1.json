@@ -21924,8 +21924,7 @@
             "minimum": 0
           },
           "position": {
-            "type": "integer",
-            "minimum": 0
+            "type": "string"
           }
         }
       },

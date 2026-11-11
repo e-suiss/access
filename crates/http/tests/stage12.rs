@@ -16,7 +16,7 @@ use http_body_util::BodyExt as _;
 use tower::ServiceExt as _;
 
 /// The Stage 12 realm-admin operations (OP-157 m.4 (a)).
-const ADMIN: [&str; 21] = [
+const ADMIN: [&str; 22] = [
     "listCaseSystems",
     "registerCaseSystem",
     "retireCaseSystem",
@@ -38,6 +38,17 @@ const ADMIN: [&str; 21] = [
     "putDelegatedAdmin",
     "putApprovalInline",
     "putApprovalBatch",
+    "reviewBreakglassUse",
+];
+
+/// The Stage 12 admin rows their lanes serve.
+const SERVED: [&str; 6] = [
+    "listBreakglassAccounts",
+    "markBreakglassAccount",
+    "clearBreakglassAccount",
+    "listBreakglassDrills",
+    "listBreakglassReviews",
+    "reviewBreakglassUse",
 ];
 
 // OP-157 m.4 (a)
@@ -46,7 +57,8 @@ fn every_stage_12_admin_row_is_declared_with_its_kind_and_planned() {
     for op in ADMIN {
         assert!(ROWS.iter().any(|r| r.operation_id == op), "{op}");
         assert!(spec(op).is_some(), "{op}");
-        assert!(planned(op), "{op}");
+        // OP-157 m.3 (h)
+        assert_eq!(planned(op), !SERVED.contains(&op), "{op}");
     }
 }
 

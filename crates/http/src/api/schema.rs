@@ -402,7 +402,7 @@ fn schemas() -> Value {
                 "organization": { "type": "string" },
                 "organization_name": { "type": "string" },
                 "marked_at": { "type": "integer", "minimum": 0 },
-                "position": { "type": "integer", "minimum": 0 },
+                "position": { "type": "string" },
             },
         },
         "BreakglassDrill": {

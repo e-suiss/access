@@ -85,7 +85,7 @@ pub(crate) async fn write_mark(
         let target = ids.encode(SUBJECT_PREFIX, m.member)?;
         t.audit(&AuditEvent {
             event_type: "breakglass.account_marked",
-            actor: "idp.org",
+            actor: "breakglass",
             target: &target,
             correlation: "-",
         })
@@ -114,7 +114,7 @@ pub(crate) async fn write_review(
             let target = b64url_encode(&r.exercise);
             t.audit(&AuditEvent {
                 event_type: "breakglass.reviewed",
-                actor: "idp.org",
+                actor: "breakglass",
                 target: &target,
                 correlation: "-",
             })
@@ -143,7 +143,7 @@ pub(crate) async fn accounts(
                 "organization": b64url_encode(&a.org),
                 "organization_name": a.org_name,
                 "marked_at": a.marked_at_ms,
-                "position": a.position,
+                "position": a.position.to_string(),
             }),
             a.position,
         ));
