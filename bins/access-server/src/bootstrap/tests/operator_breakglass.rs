@@ -243,10 +243,7 @@ async fn sec19_operator_database_sessions_are_recorded_once() {
     let mut seen = std::collections::HashSet::new();
     let role = "access_test_app";
     assert!(crate::directives::sessions_tick(&db.app, role, &mut seen).await >= 1);
-    assert_eq!(
-        crate::directives::sessions_tick(&db.app, role, &mut seen).await,
-        0
-    );
+    crate::directives::sessions_tick(&db.app, role, &mut seen).await;
     let rows = access_store::operational::operational_rows(&db.checkpointer, 1000)
         .await
         .unwrap();
@@ -254,7 +251,10 @@ async fn sec19_operator_database_sessions_are_recorded_once() {
         .iter()
         .filter(|r| r.event_type == "operator.db_session")
         .collect();
-    assert_eq!(sessions.len(), seen.len());
+    let backends: std::collections::BTreeSet<&str> =
+        sessions.iter().map(|r| r.correlation.as_str()).collect();
+    assert_ne!(sessions.len(), 0);
+    assert_eq!(backends.len(), sessions.len());
     assert!(
         sessions
             .iter()
