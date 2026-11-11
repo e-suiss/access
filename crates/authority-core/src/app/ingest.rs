@@ -745,7 +745,8 @@ mod lane_tests {
     async fn a_narrowing_claim_goes_first_while_the_general_lane_is_full() {
         let lanes = Lanes::default();
         let d = access_kernel::digest::Digest([1; 32]);
-        let held = lanes.turn(d, Lane::General).await.unwrap();
+        let held = lanes.turn(d, Lane::General).await;
+        assert!(held.is_ok());
         let narrowing = tokio::time::timeout(
             std::time::Duration::from_millis(1),
             lanes.turn(d, Lane::Narrowing),
