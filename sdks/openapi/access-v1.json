@@ -4410,6 +4410,13 @@
             ],
             "description": "The publisher's declaration `{from, relation}` (§9.13.4); a Claim, not a mapping in force."
           },
+          "mappings": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "`{digest, action, from_major, to_major, relation, pinned}`: each mapping the declaration carries and whether a live `schema-definition` Acceptance here pins its digest; an unpinned or broadening mapping changes no coverage (PI-19, OP-157 m.3 (r))."
+          },
           "existing_grants_unchanged": {
             "const": true
           },
@@ -8306,6 +8313,16 @@
                 "description": "A set: any order, no repeats; the canonical form sorts it."
               }
             }
+          },
+          "mappings": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]*$",
+              "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+            },
+            "description": "A set: any order, no repeats; the canonical form sorts it."
           }
         }
       },

@@ -284,6 +284,8 @@ static ACCEPTANCE: T = T::Struct(&[
     ("quota", &QUOTA, false),
     ("spp", &SPP, false),
     ("pinned", &PINNED, false),
+    // OP-157 m.3 (r)
+    ("mappings", &DIGESTS, false),
 ]);
 static TARGET_TAGGED: T = T::Tagged(&[("anchor", &BYTES), ("party", &BYTES), ("instance", &BYTES)]);
 static TARGET: T = T::Or(&[&DOMAIN_SCOPE, &TARGET_TAGGED]);

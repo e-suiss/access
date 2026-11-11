@@ -459,6 +459,7 @@ fn reports() -> Value {
                 "reserved": list(&json!({ "type": "string" }), "Reserved actions."),
                 "parameters": list(&json!({ "type": "object" }), "`{action, parameter, class, affects?}`; `class` is `authority-relevant` or `authority-opaque`."),
                 "compatibility": { "type": ["object", "null"], "description": "The publisher's declaration `{from, relation}` (§9.13.4); a Claim, not a mapping in force." },
+                "mappings": list(&json!({ "type": "object" }), "`{digest, action, from_major, to_major, relation, pinned}`: each mapping the declaration carries and whether a live `schema-definition` Acceptance here pins its digest; an unpinned or broadening mapping changes no coverage (PI-19, OP-157 m.3 (r))."),
                 "existing_grants_unchanged": { "const": true },
                 "new_actions": list(&json!({ "type": "string" }), "Not included in delegations whose catalog is pinned (E11)."),
                 "text": list(&json!({ "type": "string" }), "Text keys, in order."),

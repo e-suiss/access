@@ -369,9 +369,18 @@ fn publication(o: &Offer) -> Out {
         },
         "reserved": o.reserved,
         "parameters": parameters,
-        "compatibility": o.compatibility.map(|c| json!({
+        "compatibility": o.compatibility.as_ref().map(|c| json!({
             "from": c.from, "relation": c.relation.word(),
         })),
+        // OP-157 m.3 (r)
+        "mappings": o.compatibility.iter().flat_map(|c| c.mappings.iter().map(move |m| (c.relation, m))).zip(&o.pinned).map(|((relation, m), (d, pinned))| json!({
+            "digest": digest(d),
+            "action": m.to.name,
+            "from_major": m.from.major,
+            "to_major": m.to.major,
+            "relation": relation.word(),
+            "pinned": pinned,
+        })).collect::<Vec<_>>(),
         "existing_grants_unchanged": o.notes.existing_grants_unchanged,
         "new_actions": o.notes.new_actions,
         "text": o.notes.text,

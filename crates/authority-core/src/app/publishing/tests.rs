@@ -131,6 +131,7 @@ fn versions_only_move_forward_and_existing_grants_stay() {
     wrong.compatibility = Some(Compatibility {
         from: 7,
         relation: Relation::Narrowing,
+        mappings: Vec::new(),
     });
     assert_eq!(
         publish(PUBLISHER, wrong, Some(&v1.publication), 2),
@@ -149,6 +150,7 @@ fn new_actions_are_noted_as_not_included() {
     d2.compatibility = Some(Compatibility {
         from: 1,
         relation: Relation::Broadening,
+        mappings: Vec::new(),
     });
     let v2 = publish(PUBLISHER, d2, Some(&v1.publication), 2).unwrap();
     assert_eq!(v2.notes.new_actions, ["void"]);
@@ -167,6 +169,7 @@ fn a_publication_round_trips_its_bytes() {
     d.compatibility = Some(Compatibility {
         from: 1,
         relation: Relation::RepresentationEquivalent,
+        mappings: Vec::new(),
     });
     let v1 = publish(PUBLISHER, refund_v1(), None, 1).unwrap();
     let p = publish(PUBLISHER, d, Some(&v1.publication), 5)
@@ -197,4 +200,88 @@ fn a_dropped_reserved_flag_is_shown() {
     let d = diff(Some(&v1.publication.spp), &v2.publication.spp);
     assert_eq!(d.reserved_removed, ["void"]);
     assert_eq!(d.changed, ["void"]);
+}
+
+fn mapping_v1_to_v2(
+    v1: &Publication,
+    v2: &Draft,
+    relation: access_kernel::compat::Relation,
+    ops: Vec<access_kernel::compat::MappingOp>,
+) -> access_kernel::compat::Mapping {
+    let to_spp = Spp {
+        publisher: PUBLISHER,
+        namespace: v2.namespace.clone(),
+        catalog_version: v2.catalog_version,
+        actions: v2.actions.clone(),
+        retirements: v2.retirements.clone(),
+        core_spec_min: v2.core_spec_min,
+    };
+    access_kernel::compat::Mapping {
+        from: v1.spp.refs()[0].0.clone(),
+        to: to_spp.refs()[0].0.clone(),
+        relation,
+        ops,
+    }
+}
+
+// E10, PI-19, OP-157 m.3 (r), Ek B 5665
+#[test]
+fn a_mapping_must_fit_its_declaration_and_round_trips() {
+    use access_kernel::compat::{MappingOp, Relation as K};
+    let v1 = publish(PUBLISHER, refund_v1(), None, 1)
+        .unwrap()
+        .publication;
+    let mut v2 = refund_v1();
+    v2.catalog_version = 2;
+    v2.actions[0].major = 2;
+    let ok = mapping_v1_to_v2(&v1, &v2, K::Narrowing, Vec::new());
+    let with = |relation: Relation, mappings| {
+        let mut d = v2.clone();
+        d.compatibility = Some(Compatibility {
+            from: 1,
+            relation,
+            mappings,
+        });
+        publish(PUBLISHER, d, Some(&v1), 2)
+    };
+    let p = with(Relation::Narrowing, vec![ok.clone()])
+        .unwrap()
+        .publication;
+    let back = Publication::from_bytes(&p.to_bytes().unwrap()).unwrap();
+    assert_eq!(back, p);
+    assert_eq!(
+        with(Relation::RepresentationEquivalent, vec![ok.clone()]),
+        Err(PublishError::Mapping)
+    );
+    let incompatible = mapping_v1_to_v2(&v1, &v2, K::Incompatible, Vec::new());
+    assert_eq!(
+        with(Relation::Incompatible, vec![incompatible]),
+        Err(PublishError::Mapping)
+    );
+    assert_eq!(
+        with(Relation::Narrowing, vec![ok.clone(), ok.clone()]),
+        Err(PublishError::Mapping)
+    );
+    let mut stray = ok.clone();
+    stray.to.major = 9;
+    assert_eq!(
+        with(Relation::Narrowing, vec![stray]),
+        Err(PublishError::Mapping)
+    );
+    let relevant = v2
+        .classes
+        .iter()
+        .find(|(_, c)| matches!(c, ParamClass::Relevant(_)))
+        .map(|((_, p), _)| p.clone())
+        .unwrap();
+    let dropped = mapping_v1_to_v2(
+        &v1,
+        &v2,
+        K::Narrowing,
+        vec![MappingOp::Drop { field: relevant }],
+    );
+    assert_eq!(
+        with(Relation::Narrowing, vec![dropped]),
+        Err(PublishError::Mapping)
+    );
 }

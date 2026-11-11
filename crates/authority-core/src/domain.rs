@@ -1433,6 +1433,27 @@ fn bridge(
     Err(foreign_deny(class, refusal, Resolver::Actor))
 }
 
+/// Whether one candidate basis covers `intent` without any mapping: every hop it holds, and the
+/// Mandate if there is one (§9.13.4, SEC16).
+fn covered_directly(
+    bases: &[Basis],
+    mandate: Option<&(Id, Mandate)>,
+    intent: &IntentEnvelope,
+    catalog: &Catalog,
+) -> bool {
+    let mandate_ok =
+        mandate.is_none_or(|(_, m)| access_kernel::intent::covers(&m.authority, intent, catalog));
+    mandate_ok
+        && bases.iter().any(|b| {
+            b.hops.iter().all(|h| match h {
+                Stored::Known(h) => {
+                    access_kernel::intent::covers(&h.authority.authority, intent, catalog)
+                }
+                Stored::NotUnderstood => false,
+            })
+        })
+}
+
 /// What one evaluation is made against besides the request and the state.
 #[derive(Clone, Copy, Debug)]
 pub struct Frame<'a> {
@@ -1463,6 +1484,9 @@ pub struct Frame<'a> {
     pub derived: &'a crate::restrict::derived::Derived,
     /// The control-plane analysis raised this `policy.set` to expansion (OP-157 m.3 (n)).
     pub widened: bool,
+    /// The mappings pinned for the intent's action when the request began; only those a live
+    /// Acceptance still pins in the snapshot apply (OP-157 m.3 (r)).
+    pub mappings: &'a [crate::app::compat::Pinned],
 }
 
 /// One pass of the evaluation over `snapshot` (§17.1.1 steps 7–8). Implicit powers of a
@@ -1488,6 +1512,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         signals,
         derived,
         widened,
+        mappings,
     } = *frame;
     snapshot.restart();
     // SEC12, OP-141 m.31 (c), (d)
@@ -1886,10 +1911,47 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         return Pass::Need(missing);
     }
     // OP-141 m.27 (c)
-    let applicable = applicable_policies(snapshot, &req.basis, actor.as_ref());
+    let mut applicable = applicable_policies(snapshot, &req.basis, actor.as_ref());
     let missing = snapshot.missing();
     if !missing.is_empty() {
         return Pass::Need(missing);
+    }
+    // PI-19, OP-157 m.3 (r)
+    let live_pins = if mappings.is_empty() {
+        BTreeMap::new()
+    } else {
+        crate::app::compat::pins(snapshot, &req.intent.action.namespace, now)
+    };
+    let missing = snapshot.missing();
+    if !missing.is_empty() {
+        return Pass::Need(missing);
+    }
+    let mappings: Vec<access_kernel::compat::Mapping> = mappings
+        .iter()
+        .filter(|p| live_pins.contains_key(&p.digest))
+        .map(|p| p.mapping.clone())
+        .collect();
+    let mut derived = derived.clone();
+    // SEC16, OP-157 m.3 (r)
+    if mappings.is_empty() || covered_directly(&bases, mandate.as_ref(), &req.intent, catalog) {
+        derived.mapping_pin_age_s = crate::restrict::derived::NONE;
+    }
+    if derived.mapping_pin_age_s >= 0
+        && let Some(probation) = crate::restrict::patterns::mapping_probation()
+    {
+        applicable.push((
+            meta::object_id(
+                &req.domain,
+                kind::POLICY,
+                crate::restrict::patterns::PROBATION_SEQ,
+            ),
+            ContentState {
+                content: probation,
+                since: 0,
+                widened: None,
+                ended: None,
+            },
+        ));
     }
     // OP-149 m.8
     let actor_is_agent = actor
@@ -1917,7 +1979,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         agent: actor_is_agent,
         tier: crate::app::approval::tier_code(tier),
         signals: signals.clone(),
-        derived: derived.clone(),
+        derived,
         breakglass,
         self_anchor,
     };
@@ -1991,7 +2053,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         proofs: &proofs,
         catalog,
         // OP-157 m.3 (r)
-        mappings: &[],
+        mappings: &mappings,
     };
     match evaluate(&input, &mut Fuel(FUEL)) {
         Ok(decision) => {

@@ -8,8 +8,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use access_authority_core::app::Incoming;
 use access_authority_core::app::publishing::{
-    Affects, Compatibility, Draft, PACKAGE_CONTEXT, ParamClass, PublishError, Relation,
+    Affects, Compatibility, Draft, MAX_MAPPINGS, PACKAGE_CONTEXT, ParamClass, PublishError,
+    Relation,
 };
+use access_kernel::codec::Canonical as _;
+use access_kernel::compat::Mapping;
 use access_kernel::digest::Digest;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use axum::http::{HeaderMap, StatusCode};
@@ -144,7 +147,12 @@ pub fn draft_of(package: &Value) -> Result<Draft, AdpError> {
     let compatibility = match o.get("compatibility") {
         None => None,
         Some(c) => {
-            let m = c.as_object().filter(|m| m.len() == 2).ok_or_else(bad)?;
+            let m = c.as_object().ok_or_else(bad)?;
+            if m.keys()
+                .any(|k| !matches!(k.as_str(), "from" | "relation" | "mappings"))
+            {
+                return Err(bad());
+            }
             Some(Compatibility {
                 from: m.get("from").and_then(Value::as_u64).ok_or_else(bad)?,
                 relation: m
@@ -152,6 +160,7 @@ pub fn draft_of(package: &Value) -> Result<Draft, AdpError> {
                     .and_then(Value::as_str)
                     .and_then(Relation::parse)
                     .ok_or_else(bad)?,
+                mappings: mappings_of(m.get("mappings"))?,
             })
         }
     };
@@ -164,6 +173,29 @@ pub fn draft_of(package: &Value) -> Result<Draft, AdpError> {
         core_spec_min,
         compatibility,
     })
+}
+
+/// The `mappings` of a compatibility declaration (OP-157 m.3 (r)): each the base64url
+/// deterministic CBOR of a `compat-mapping`, in the form it is pinned by.
+fn mappings_of(v: Option<&Value>) -> Result<Vec<Mapping>, AdpError> {
+    let bad = || AdpError("package");
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let items = v
+        .as_array()
+        .filter(|a| !a.is_empty() && a.len() <= MAX_MAPPINGS)
+        .ok_or_else(bad)?;
+    items
+        .iter()
+        .map(|m| {
+            let bytes = m
+                .as_str()
+                .and_then(|s| b64url_decode(s).ok())
+                .ok_or_else(bad)?;
+            Mapping::from_bytes(&bytes).map_err(|_| bad())
+        })
+        .collect()
 }
 
 fn incoming(decoded: crate::adp::domain::Decoded, pep: String) -> Incoming {

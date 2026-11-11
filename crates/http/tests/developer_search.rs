@@ -140,6 +140,7 @@ fn a_publication_report_has_no_accept() {
         reserved: Vec::new(),
         classes: Vec::new(),
         compatibility: None,
+        pinned: Vec::new(),
         notes: Notes {
             existing_grants_unchanged: true,
             new_actions: vec!["void".to_owned()],

@@ -1108,6 +1108,8 @@ export interface components {
             parameters?: Record<string, never>[];
             /** @description The publisher's declaration `{from, relation}` (§9.13.4); a Claim, not a mapping in force. */
             compatibility?: Record<string, never> | null;
+            /** @description `{digest, action, from_major, to_major, relation, pinned}`: each mapping the declaration carries and whether a live `schema-definition` Acceptance here pins its digest; an unpinned or broadening mapping changes no coverage (PI-19, OP-157 m.3 (r)). */
+            mappings?: Record<string, never>[];
             /** @constant */
             existing_grants_unchanged: true;
             /** @description Not included in delegations whose catalog is pinned (E11). */
@@ -2073,6 +2075,8 @@ export interface components {
                 /** @description A set: any order, no repeats; the canonical form sorts it. */
                 keys: components["schemas"]["KernelPublicKey"][];
             };
+            /** @description A set: any order, no repeats; the canonical form sorts it. */
+            mappings?: string[];
         };
         KernelPolicyContent: {
             schema: string;

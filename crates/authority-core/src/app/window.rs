@@ -86,6 +86,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         inc: &Incoming,
         actor: Option<Actor>,
         resolved: &Resolved,
+        pinned: &[super::compat::Pinned],
         now: u64,
     ) -> Result<Window, CoreError> {
         if let Some(cited) = self.cited() {
@@ -128,6 +129,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let mut window = derived::window(&req.intent, party.as_ref(), &counted, now);
         let v = &mut window.values;
         v.mapping_pin_age_s = NONE;
+        // SEC16, OP-157 m.3 (r)
+        if !pinned.is_empty() {
+            let key = meta::policy_default_key(super::compat::PROBATION_DAYS);
+            let mut snap = crate::domain::Snapshot::default();
+            snap.fill(self.fetch(std::slice::from_ref(&key)).await?);
+            let probation = super::compat::probation_s(&snap);
+            v.mapping_pin_age_s = super::compat::pin_age_s(pinned, &req.intent, probation, now);
+        }
         v.claim_age_s = NONE;
         if let Some(a) = actor {
             let (len, _) = crate::rate::REQUEST_RATE[0];

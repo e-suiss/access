@@ -327,6 +327,37 @@ pub fn containment(
     .ok()
 }
 
+/// V12: the object index the built-in `mapping-probation` policy takes its id from (SEC16,
+/// OP-157 m.3 (r)); no Genesis or Exercise reaches it.
+pub const PROBATION_SEQ: u64 = u64::MAX;
+
+/// V12: `mapping-probation` (SEC16, §13.7.6, OP-157 m.3 (r)): a CT2+ Exercise covered only through
+/// a compatibility mapping still in its probation needs an approval from another Party, bound to
+/// the exact intent. `derived.mapping_pin_age_s` is −1 outside probation, so the rule reads only
+/// that and the tier. Every domain has it: Kernel 0.4.1 Genesis has no policies, so the decision
+/// path lays it over the domain's own.
+#[must_use]
+pub fn mapping_probation() -> Option<Value> {
+    let source = "@id(\"mapping-probation\") @require(\"rs-mapping-probation\") forbid(principal, action, resource) when { context.derived.mapping_pin_age_s >= 0 && context.tier >= 2 };";
+    let content = Value::Map(vec![
+        (Value::text("schema"), Value::text(RESTRICTION_SCHEMA)),
+        (Value::text("source"), Value::text(source)),
+        (Value::text("target"), Value::text("domain")),
+        (
+            Value::text("requirements"),
+            Value::Map(vec![(
+                Value::text("rs-mapping-probation"),
+                Value::Array(vec![contribution(APPROVE, None).to_value()]),
+            )]),
+        ),
+    ]);
+    dcbor::decode(
+        &dcbor::encode(&content, Limits::CEILING).ok()?,
+        Limits::CEILING,
+    )
+    .ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -465,5 +496,21 @@ mod tests {
             )
             .is_none()
         );
+    }
+
+    // SEC16, OP-157 m.3 (r), Ek B 5666
+    #[test]
+    fn mapping_probation_compiles_and_reads_only_the_pin_age_and_tier() {
+        let c = mapping_probation().unwrap();
+        assert!(
+            super::super::compile(&c).is_ok(),
+            "{:?}",
+            super::super::compile(&c).err()
+        );
+        let Some(Value::Text(source)) = c.get("source") else {
+            panic!("source");
+        };
+        assert!(source.contains("context.derived.mapping_pin_age_s >= 0"));
+        assert!(source.contains("context.tier >= 2"));
     }
 }

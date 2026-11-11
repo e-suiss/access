@@ -7,6 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use access_kernel::codec::Canonical as _;
+use access_kernel::compat::{self, Mapping, MappingOp};
 use access_kernel::digest::Digest;
 use access_kernel::meta::{ContentState, View as _, kind};
 use access_kernel::model::{ActionRef, Id, Window};
@@ -140,16 +141,34 @@ impl Relation {
     pub fn parse(word: &str) -> Option<Self> {
         Self::ALL.iter().find(|(w, _)| *w == word).map(|(_, r)| *r)
     }
+
+    /// The Kernel's relation of the same word.
+    #[must_use]
+    pub const fn kernel(self) -> compat::Relation {
+        match self {
+            Self::RepresentationEquivalent => compat::Relation::RepresentationEquivalent,
+            Self::Narrowing => compat::Relation::Narrowing,
+            Self::Broadening => compat::Relation::Broadening,
+            Self::Incompatible => compat::Relation::Incompatible,
+        }
+    }
 }
 
+/// Most mappings one compatibility declaration carries.
+pub const MAX_MAPPINGS: usize = 64;
+
 /// The publisher's compatibility declaration (§9.13.4): a Claim, never a mapping in force until
-/// a domain pins it (E10).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// a domain pins it (E10). Its mappings turn a new-version intent into the old version; a domain
+/// uses one only after pinning its digest, and only when it does not broaden (PI-19, OP-157
+/// m.3 (r)).
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Compatibility {
     /// The catalog version it relates to.
     pub from: u64,
     /// The declared relation.
     pub relation: Relation,
+    /// The mappings, each from an action of `from` to the same action in this version.
+    pub mappings: Vec<Mapping>,
 }
 
 /// What a publisher submits.
@@ -219,6 +238,11 @@ pub enum PublishError {
     /// The compatibility declaration does not name an earlier published version.
     #[error("compatibility must name an earlier published version")]
     Compatibility,
+    /// A mapping that does not fit its declaration (OP-157 m.3 (r)): another relation than the
+    /// declared one, a mapping for an incompatible version, an action that is not in the two
+    /// versions, a dropped field that is not authority-opaque, or one mapping twice.
+    #[error("mapping does not fit the compatibility declaration")]
+    Mapping,
 }
 
 /// A published package with what its publisher declares around it.
@@ -347,6 +371,10 @@ pub fn publish(
         core_spec_min: draft.core_spec_min,
     };
     let spp = Spp::from_value(&spp.to_value()).map_err(|_| PublishError::Package)?;
+    // OP-157 m.3 (r)
+    if let (Some(c), Some(p)) = (&draft.compatibility, previous) {
+        mappings_fit(c, &p.spp, &spp, &draft.classes)?;
+    }
     let publication = Publication {
         spp,
         classes: draft.classes,
@@ -359,6 +387,42 @@ pub fn publish(
         publication,
         notes,
     })
+}
+
+/// Whether every mapping of `c` fits its declaration between `old` and `new` (OP-157 m.3 (r)).
+fn mappings_fit(
+    c: &Compatibility,
+    old: &Spp,
+    new: &Spp,
+    classes: &BTreeMap<(String, String), ParamClass>,
+) -> Result<(), PublishError> {
+    if c.mappings.is_empty() {
+        return Ok(());
+    }
+    if c.relation == Relation::Incompatible || c.mappings.len() > MAX_MAPPINGS {
+        return Err(PublishError::Mapping);
+    }
+    let old_refs: BTreeSet<ActionRef> = old.refs().into_iter().map(|(r, _)| r).collect();
+    let new_refs: BTreeSet<ActionRef> = new.refs().into_iter().map(|(r, _)| r).collect();
+    let mut seen = BTreeSet::new();
+    for m in &c.mappings {
+        let digest = compat::mapping_digest(m).map_err(|_| PublishError::Mapping)?;
+        let dropped_relevant = m.ops.iter().any(|op| match op {
+            MappingOp::Drop { field } => {
+                classes.get(&(m.to.name.clone(), field.clone())) != Some(&ParamClass::Opaque)
+            }
+            _ => false,
+        });
+        if m.relation != c.relation.kernel()
+            || !old_refs.contains(&m.from)
+            || !new_refs.contains(&m.to)
+            || dropped_relevant
+            || !seen.insert(digest)
+        {
+            return Err(PublishError::Mapping);
+        }
+    }
+    Ok(())
 }
 
 /// The notes of `publication` after `previous` (E10, E11).
@@ -414,13 +478,17 @@ impl Publication {
             ),
         ];
         if let Some(c) = &self.compatibility {
-            fields.push((
-                Value::text("compatibility"),
-                Value::Array(vec![
-                    Value::Unsigned(c.from),
-                    Value::text(c.relation.word()),
-                ]),
-            ));
+            let mut parts = vec![Value::Unsigned(c.from), Value::text(c.relation.word())];
+            // OP-157 m.3 (r)
+            if !c.mappings.is_empty() {
+                parts.push(Value::Array(
+                    c.mappings
+                        .iter()
+                        .map(access_kernel::codec::Canonical::to_value)
+                        .collect(),
+                ));
+            }
+            fields.push((Value::text("compatibility"), Value::Array(parts)));
         }
         Value::Map(fields)
     }
@@ -464,6 +532,16 @@ impl Publication {
                 [Value::Unsigned(from), Value::Text(r)] => Some(Compatibility {
                     from: *from,
                     relation: Relation::parse(r).ok_or_else(bad)?,
+                    mappings: Vec::new(),
+                }),
+                [Value::Unsigned(from), Value::Text(r), Value::Array(ms)] => Some(Compatibility {
+                    from: *from,
+                    relation: Relation::parse(r).ok_or_else(bad)?,
+                    mappings: ms
+                        .iter()
+                        .map(Mapping::from_value)
+                        .collect::<Result<_, _>>()
+                        .map_err(|_| bad())?,
                 }),
                 _ => return Err(bad()),
             },
@@ -695,6 +773,9 @@ pub struct Offer {
     pub classes: Vec<(String, String, ParamClass)>,
     /// The compatibility declaration.
     pub compatibility: Option<Compatibility>,
+    /// Each declared mapping's digest and whether a live Acceptance here pins it (OP-157
+    /// m.3 (r)): an unpinned mapping changes no coverage.
+    pub pinned: Vec<(Digest, bool)>,
     /// The notes.
     pub notes: Notes,
 }
@@ -703,6 +784,10 @@ pub struct Offer {
 #[must_use]
 pub fn offers(view: &Snapshot, publications: &[Publication], now: u64) -> Vec<Offer> {
     let namespace = publications.first().map(|p| p.spp.namespace.clone());
+    let pins = namespace
+        .as_deref()
+        .map(|ns| crate::app::compat::pins(view, ns, now))
+        .unwrap_or_default();
     let accepted = namespace
         .map(|ns| accepted_spps(view, &ns, now))
         .unwrap_or_default();
@@ -735,7 +820,14 @@ pub fn offers(view: &Snapshot, publications: &[Publication], now: u64) -> Vec<Of
                     .iter()
                     .map(|((a, q), c)| (a.clone(), q.clone(), *c))
                     .collect(),
-                compatibility: p.compatibility,
+                compatibility: p.compatibility.clone(),
+                pinned: p
+                    .compatibility
+                    .iter()
+                    .flat_map(|c| c.mappings.iter())
+                    .filter_map(|m| compat::mapping_digest(m).ok())
+                    .map(|d| (d, pins.contains_key(&d)))
+                    .collect(),
                 notes: notes(p, previous),
             }
         })

@@ -621,6 +621,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let derived = cited
             .derived
             .unwrap_or(crate::restrict::derived::Derived::empty());
+        // OP-157 m.3 (r)
+        let pinned = Box::pin(self.pinned_mappings(req, at)).await?;
         let frame = Frame {
             intent_digest: digest,
             exercise,
@@ -635,6 +637,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             signals: &signals,
             derived: &derived,
             widened: cited.raised.is_some(),
+            mappings: &pinned,
         };
         let (mut evaluation, _) = self.passes(req, &frame).await?;
         let tier = crate::requirements::tier_of(
@@ -957,6 +960,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             signals,
             derived: &window::EMPTY,
             widened: false,
+            mappings: &[],
         }
     }
 
@@ -1550,6 +1554,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             Ok(open) => open,
             Err(done) => return Ok(*done),
         };
+        // OP-157 m.3 (r), C18
+        let bodies = Box::pin(self.pinned_bodies(req)).await?;
         for _ in 0..MAX_RETRIES {
             let head = self.leader.head().pos;
             let mut resolved = self.resolve(req, actor.map(|a| a.party), now, head).await?;
@@ -1563,8 +1569,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 .map_err(|_| CoreError::Protocol("proofs"))?
                 .saturating_add(u64::from(!open))
                 .saturating_add(1);
+            // OP-157 m.3 (r)
+            let pinned = Box::pin(self.pinned_mappings(req, now)).await?;
             // §16.5, OP-157 m.3 (n), (o)
-            let window = Box::pin(self.window_of(inc, actor, &resolved, now)).await?;
+            let window = Box::pin(self.window_of(inc, actor, &resolved, &pinned, now)).await?;
             let raised = Box::pin(self.policy_raised(req.payload.as_ref())).await?;
             let mut frame = self.frame(
                 (digest, exercise, head.saturating_add(records)),
@@ -1575,6 +1583,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             );
             frame.derived = &window.values;
             frame.widened = raised.is_some();
+            frame.mappings = &pinned;
             let (mut evaluation, snapshot) = Box::pin(self.passes(req, &frame)).await?;
             let (tier, render, render_bytes) = rendered(req, &evaluation)?;
             self.tiered(req, &mut evaluation, open, now).await?;
@@ -1626,7 +1635,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         .push(e.to_bytes().map_err(|_| CoreError::Protocol("event"))?);
                 }
             }
-            let items = self.items(inc, &shape, &evaluation, &snapshot, &resolved, &derived)?;
+            let mut items = self.items(inc, &shape, &evaluation, &snapshot, &resolved, &derived)?;
+            // OP-157 m.3 (r), C18
+            if allowed && let Some(decision) = items.last_mut() {
+                decision.proofs.extend(bodies.iter().cloned());
+            }
             match self.leader.commit(now, &items).await {
                 Ok(Committed::Appended(positions)) => {
                     let mut response = answer(
@@ -2154,6 +2167,8 @@ mod window;
 mod workload;
 // OP-157 m.4 (d)
 pub mod offboarding;
+// OP-157 m.4 (d)
+pub mod compat;
 
 pub use ingest::{Ingested, Lane, Lanes, Turn, lane_of};
 pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};
