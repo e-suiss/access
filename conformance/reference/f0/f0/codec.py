@@ -602,6 +602,8 @@ def check_mandate(value):
         "validity": check_time_window,
         "conditions_fail": check_true,
         "budgets": check_list(check_budget_state, nonempty=True, is_set=True),
+        # L0-EVAL-16c
+        "pin_fail": check_true,
     })
 
 

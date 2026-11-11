@@ -299,6 +299,8 @@ mandate = {
   ? validity: time-window,
   ? conditions_fail: true,
   ? budgets: [+ budget-state],
+  ; L0-EVAL-16c: the declared basis is not the holding and episode of the mandate's pin.
+  ? pin_fail: true,
 }
 
 ; E54 (4): the origins one task may read and write; an intent naming another origin is

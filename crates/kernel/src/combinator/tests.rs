@@ -254,6 +254,7 @@ fn blocker_table() {
     w.mandate = Some(Mandate {
         validity: None,
         conditions_hold: true,
+        pin_holds: true,
         budgets: Vec::new(),
         origins: crate::combinator::Origins::default(),
         authority: m_auth,
@@ -584,6 +585,7 @@ fn scenarios() -> Vec<(&'static str, World)> {
     w.mandate = Some(Mandate {
         validity: None,
         conditions_hold: true,
+        pin_holds: true,
         budgets: Vec::new(),
         origins: crate::combinator::Origins::default(),
         authority: narrow,
@@ -737,6 +739,7 @@ fn ordering_scenarios() -> Vec<(&'static str, World)> {
     w.mandate = Some(Mandate {
         validity: None,
         conditions_hold: true,
+        pin_holds: true,
         budgets: Vec::new(),
         origins: crate::combinator::Origins::default(),
         authority: narrow,
@@ -989,6 +992,7 @@ fn assurance_scenarios() -> Vec<(&'static str, World)> {
     w.mandate = Some(Mandate {
         validity: None,
         conditions_hold: true,
+        pin_holds: true,
         budgets: Vec::new(),
         origins: crate::combinator::Origins::default(),
         authority: authority(),
@@ -1715,6 +1719,7 @@ fn random_world(r: &mut Rng) -> World {
         w.mandate = Some(Mandate {
             validity: None,
             conditions_hold: true,
+            pin_holds: true,
             budgets: Vec::new(),
             origins: crate::combinator::Origins::default(),
             authority: a,

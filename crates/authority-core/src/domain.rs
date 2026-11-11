@@ -1202,7 +1202,7 @@ type Found = ((Id, Mandate), Option<Vec<DrawSpec>>);
 fn mandate(
     view: &Snapshot,
     actor: Option<&Actor>,
-    intent: &IntentEnvelope,
+    (intent, basis): (&IntentEnvelope, ExerciseBasis),
     now: u64,
 ) -> Option<Found> {
     let actor = actor?;
@@ -1215,6 +1215,11 @@ fn mandate(
         let m: MandateState = read(view, kind::MANDATE, &id)?;
         m.ended.is_none().then_some((id, m))
     })?;
+    // C14, L0-EVAL-16c
+    let pin_holds = m
+        .envelope
+        .pin
+        .is_none_or(|pin| basis == ExerciseBasis::Holding(pin));
     let constraints = m.envelope.constraints;
     let conditions_hold = constraints.conditions.is_empty()
         || conditions_hold(view, &constraints.conditions, Some(actor), now);
@@ -1258,6 +1263,7 @@ fn mandate(
                 validity: Some(constraints.validity),
                 conditions_hold,
                 budgets,
+                pin_holds,
             },
         ),
         draws,
@@ -1964,7 +1970,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     })
                 };
                 // L0-EVAL-16, L0-EVAL-16b
-                let found = mandate(snapshot, Some(&actor), &req.intent, now);
+                let found = mandate(snapshot, Some(&actor), (&req.intent, req.basis), now);
                 let missing = snapshot.missing();
                 if !missing.is_empty() {
                     return Pass::Need(missing);
@@ -2032,7 +2038,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             return Pass::NeedCounters(missing_counters);
         }
         // L0-EVAL-16b
-        let found = mandate(snapshot, actor.as_ref(), &req.intent, now);
+        let found = mandate(snapshot, actor.as_ref(), (&req.intent, req.basis), now);
         let missing = snapshot.missing();
         if !missing.is_empty() {
             return Pass::Need(missing);

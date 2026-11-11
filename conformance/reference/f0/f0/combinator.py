@@ -68,6 +68,15 @@ def mandate_limit(subcode, resolver="actor-party", remediation="new-request-requ
 def mandate_blockers(mandate, now):
     # L0-EVAL-16b, L0-EVAL-40: a mandate's window, conditions and budgets, at `instance`
     blockers = []
+    if mandate.get("pin_fail") is True:
+        # L0-EVAL-16c
+        blockers.append({
+            "class": "outside-instance-limits",
+            "subcode": "outside-instance-limits/pin",
+            "position": "instance",
+            "resolver": "actor-party",
+            "remediation": "route-to-coordinator",
+        })
     if "validity" in mandate:
         start, until = mandate["validity"]
         if now < start:

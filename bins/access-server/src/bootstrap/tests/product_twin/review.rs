@@ -600,3 +600,37 @@ async fn an_activation_mandate_bounds_the_session_by_its_window_budget_and_condi
     assert!(refused(&lapsed, Refusal::Deny), "{lapsed:?}");
     s.only_public();
 }
+
+// C14, L0-EVAL-16c, OP-157 m.22, OP-153 m.3 (gg), Ek B 848
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_pinned_mandate_acts_only_on_its_pinned_holding() {
+    let s = Seam::open("s2-jit-pin", "pam").await;
+    let pam = Schema::parse(&std::fs::read_to_string(pam_dir().join("pam.toml")).unwrap()).unwrap();
+    s.twin.publish_schema(&s.domain, &pam).await.unwrap();
+    s.accept_schema(&pam).await;
+    let teleport = Teleport::load();
+    let request = teleport.request();
+    let session = Session {
+        open: pam.action("open").unwrap(),
+        namespace: teleport.resource_namespace.clone(),
+        host: teleport.host(&request),
+    };
+    let now = server_time(&s.w.db.app).await.unwrap();
+    let alice = s.actor().await;
+    let (pinned, pin) = session.standing(&s, &alice).await;
+    let (other, _) = session.standing(&s, &alice).await;
+    assert!(session.ask(&s, &alice, other).await.is_ok());
+    session
+        .bind(&s, &alice, pin, within(now - 60_000, now + 1_800_000))
+        .await;
+    assert!(
+        session.ask(&s, &alice, pinned).await.is_ok(),
+        "the pinned holding acts"
+    );
+    let elsewhere = session.ask(&s, &alice, other).await;
+    assert!(
+        refused(&elsewhere, Refusal::Deny),
+        "a pinned Mandate does not follow another holding: {elsewhere:?}"
+    );
+    s.only_public();
+}

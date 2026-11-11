@@ -11,12 +11,17 @@ use super::*;
 
 /// ALICE's holding of a `shop:read` Grant on the meta-anchor.
 async fn held(core: &mut Core, d: Digest) -> ExerciseBasis {
+    held_at(core, d, 10).await
+}
+
+/// [`held`] issued with `nonce`.
+async fn held_at(core: &mut Core, d: Digest, nonce: u8) -> ExerciseBasis {
     let meta_anchor = meta::meta_anchor(&d);
     let issued = send(
         core,
         meta_request(
             d,
-            10,
+            nonce,
             ExerciseBasis::Anchor(meta_anchor),
             Payload::GrantIssue(GrantContent {
                 basis: GrantBasis::Anchor(meta_anchor),
@@ -40,6 +45,16 @@ async fn held(core: &mut Core, d: Digest) -> ExerciseBasis {
 
 /// ALICE binds her Instance to `shop:read` within `constraints`.
 async fn bind(core: &mut Core, d: Digest, nonce: u8, constraints: ConstraintSet) {
+    bind_pinned(core, d, (nonce, None), constraints).await;
+}
+
+/// [`bind`] pinned to `pin`.
+async fn bind_pinned(
+    core: &mut Core,
+    d: Digest,
+    (nonce, pin): (u8, Option<HoldingRef>),
+    constraints: ConstraintSet,
+) {
     let bound = send(
         core,
         meta_request(
@@ -52,7 +67,7 @@ async fn bind(core: &mut Core, d: Digest, nonce: u8, constraints: ConstraintSet)
                     authority: authority(vec![action("shop", "read")], selector("shop")).authority,
                     constraints,
                     requirements: BTreeSet::new(),
-                    pin: None,
+                    pin,
                     origins: access_kernel::combinator::Origins::default(),
                 },
             },
@@ -161,5 +176,44 @@ async fn a_mandate_budget_draws_and_its_conditions_bound_the_instance() {
     assert!(
         at_instance(&lapsed, BlockerClass::Ended, Some("ended/lapsed")),
         "{lapsed:?}"
+    );
+}
+
+// C14, L0-EVAL-16c, OP-157 m.22
+#[tokio::test]
+async fn a_pinned_mandate_denies_every_other_basis() {
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(&db).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let pinned = held_at(&mut core, d, 10).await;
+    let other = held_at(&mut core, d, 12).await;
+    let ExerciseBasis::Holding(pin) = pinned else {
+        panic!("a holding");
+    };
+    bind_pinned(&mut core, d, (11, Some(pin)), within(0, NOW + 3_600_000)).await;
+    allowed(
+        &send(
+            &mut core,
+            shop_request(d, 20, Mode::Commit, pinned),
+            ALICE_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    let elsewhere = send(
+        &mut core,
+        shop_request(d, 21, Mode::Commit, other),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    assert!(
+        at_instance(
+            &elsewhere,
+            BlockerClass::OutsideInstanceLimits,
+            Some(access_kernel::combinator::PIN_SUBCODE)
+        ),
+        "{elsewhere:?}"
     );
 }

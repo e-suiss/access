@@ -365,6 +365,7 @@ fn world_with(check: bool) -> impl Strategy<Value = World> {
                     mandate: mandate.map(|cover| Mandate {
                         validity: None,
                         conditions_hold: true,
+                        pin_holds: true,
                         budgets: Vec::new(),
                         origins: crate::combinator::Origins::default(),
                         authority: authority(cover),

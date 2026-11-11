@@ -92,6 +92,10 @@ Vectors: `decision.json`: `allow-origin-inside-mandate`, `deny-origin-outside-ma
 
 Vectors: `decision.json`: `allow-mandate-within-window`, `deny-mandate-expired`, `deny-mandate-not-yet-valid`, `deny-mandate-conditions-fail`, `deny-mandate-budget-total`, `deny-mandate-budget-rolling`, `reject-mandate-rolling-budget-without-reset`.
 
+<a id="L0-EVAL-16c"></a>**L0-EVAL-16c. Mandate pin.** A mandate pinned to a holding ([L0-META-24](meta.md#L0-META-24)) allows Exercises only on that holding and that episode: the declared basis is `{holding: [G, P, s]}` with the pin's Grant `G`, holder `P` and `since` `s`. The layer that prepares the input writes `pin_fail: true` on the mandate for any other basis, an Anchor or Public basis included. The evaluation then produces one `outside-instance-limits` blocker with subcode `outside-instance-limits/pin` at position `instance`. A mandate without a pin follows every holding within its envelope (C14). A pin moves to a later episode only by an explicit `mandate_rebind`.
+
+Vector: `decision.json`: `deny-mandate-pin-elsewhere`.
+
 <a id="L0-EVAL-17"></a>**L0-EVAL-17. Capacity.** The declared `capacity` MUST be one of the basis's `capacities`. If it is not, the basis produces a `capacity-mismatch` blocker at hop 0.
 
 Vectors: `decision.json`: `deny-capacity-mismatch`; `cve-regressions.json`: `impersonate-admin`.
@@ -217,6 +221,7 @@ Vector: `decision.json`: `check-deny-merges-blockers-only`.
 | Hop does not cover the intent, or is not understood | `no-covering-authority` | `hop(k)` | `grantor_of_hop(k)` | `route-to-coordinator` |
 | Mandate does not cover the intent | `outside-instance-limits` | `instance` | `actor-party` | `route-to-coordinator` |
 | Intent names an origin outside the mandate's sets | `outside-instance-limits`, `outside-instance-limits/origin` | `instance` | `actor-party` | `route-to-coordinator` |
+| Exercise on another basis than the mandate's pin | `outside-instance-limits`, `outside-instance-limits/pin` | `instance` | `actor-party` | `route-to-coordinator` |
 | Mandate expired | `ended`, `ended/expired` | `instance` | `actor-party` | `new-request-required` |
 | Mandate not yet started | `ended`, `ended/expired` | `instance` | `time` | `wait_until(from)` |
 | Mandate while-condition failed | `ended`, `ended/lapsed` | `instance` | `actor-party` | `new-request-required` |

@@ -313,12 +313,18 @@ impl Canonical for Mandate {
                 (!self.budgets.is_empty())
                     .then(|| Value::Array(self.budgets.iter().map(Canonical::to_value).collect())),
             ),
+            ("pin_fail", (!self.pin_holds).then_some(Value::Bool(true))),
         ])
     }
 
     fn from_value(v: &Value) -> Result<Self, ModelError> {
         let mut f = Fields::of(v)?;
         let m = Mandate {
+            pin_holds: match f.opt("pin_fail") {
+                None => true,
+                Some(Value::Bool(true)) => false,
+                Some(_) => return Err(ModelError::Range),
+            },
             authority: AuthoritySet::from_value(f.req("authority")?)?,
             requirements: terms(f.opt("requirements"))?,
             origins: f

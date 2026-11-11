@@ -157,10 +157,16 @@ pub struct Mandate {
     pub conditions_hold: bool,
     /// Its budget terms for this intent (C27, L0-EVAL-16b).
     pub budgets: Vec<BudgetState>,
+    /// Whether the Exercise's basis is the holding and episode the Mandate is pinned to; an
+    /// unpinned Mandate holds for every basis (C14, L0-EVAL-16c).
+    pub pin_holds: bool,
 }
 
 /// Subcode of an intent naming an origin outside its Mandate's sets (E54 (4)).
 pub const ORIGIN_SUBCODE: &str = "outside-instance-limits/origin";
+
+/// Subcode of an Exercise on another basis than its Mandate's pin (C14, L0-EVAL-16c).
+pub const PIN_SUBCODE: &str = "outside-instance-limits/pin";
 
 /// One restriction policy's outcome.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -501,6 +507,16 @@ fn mandate_and_restrictions(
             blockers.push(blocker(
                 BlockerClass::OutsideInstanceLimits,
                 Some(ORIGIN_SUBCODE),
+                Position::Instance,
+                Resolver::ActorParty,
+                Remediation::RouteToCoordinator,
+            ));
+        }
+        // C14, L0-EVAL-16c
+        if !m.pin_holds {
+            blockers.push(blocker(
+                BlockerClass::OutsideInstanceLimits,
+                Some(PIN_SUBCODE),
                 Position::Instance,
                 Resolver::ActorParty,
                 Remediation::RouteToCoordinator,

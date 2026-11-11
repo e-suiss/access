@@ -356,6 +356,7 @@ fn hop_scenarios() -> Vec<(&'static str, World)> {
     w.mandate = Some(Mandate {
         validity: None,
         conditions_hold: true,
+        pin_holds: true,
         budgets: Vec::new(),
         origins: crate::combinator::Origins::default(),
         authority: authority(),
@@ -623,6 +624,7 @@ fn with_origins(read: &[&str], write: &[&str], named: (&str, bool)) -> World {
     w.mandate = Some(Mandate {
         validity: None,
         conditions_hold: true,
+        pin_holds: true,
         budgets: Vec::new(),
         authority: authority(),
         requirements: BTreeSet::new(),
@@ -661,6 +663,7 @@ fn limited(f: impl FnOnce(&mut Mandate)) -> World {
     let mut m = Mandate {
         validity: None,
         conditions_hold: true,
+        pin_holds: true,
         budgets: Vec::new(),
         origins: crate::combinator::Origins::default(),
         authority: authority(),
@@ -721,6 +724,10 @@ fn mandate_scenarios() -> Vec<(&'static str, World)> {
         (
             "deny-mandate-budget-rolling",
             limited(|m| m.budgets = vec![spent(BudgetWindow::RollingSeconds(60))]),
+        ),
+        (
+            "deny-mandate-pin-elsewhere",
+            limited(|m| m.pin_holds = false),
         ),
         (
             "reject-mandate-rolling-budget-without-reset",
@@ -1004,6 +1011,7 @@ pub(super) fn decision_rules(id: &str) -> &'static [&'static str] {
         | "deny-mandate-budget-total"
         | "deny-mandate-budget-rolling" => &["L0-EVAL-16b", "L0-EVAL-40"],
         "reject-mandate-rolling-budget-without-reset" => &["L0-EVAL-15a", "L0-EVAL-16b"],
+        "deny-mandate-pin-elsewhere" => &["L0-EVAL-16c", "L0-EVAL-40"],
         "deny-restricted" => &["L0-ENC-16", "L0-EVAL-18", "L0-EVAL-40"],
         "deny-budget-rolling" | "deny-budget-total" => &["L0-EVAL-4", "L0-EVAL-15", "L0-EVAL-40"],
         "deny-expired" | "deny-not-yet-valid" => &["L0-ALG-55", "L0-EVAL-13", "L0-EVAL-40"],

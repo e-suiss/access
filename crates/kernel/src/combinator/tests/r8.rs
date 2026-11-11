@@ -215,6 +215,7 @@ fn transfers() -> Vec<Scenario> {
     w.mandate = Some(Mandate {
         validity: None,
         conditions_hold: true,
+        pin_holds: true,
         budgets: Vec::new(),
         origins: crate::combinator::Origins::default(),
         authority: narrow,
@@ -350,6 +351,7 @@ fn confusions() -> Vec<Scenario> {
     w.mandate = Some(Mandate {
         validity: None,
         conditions_hold: true,
+        pin_holds: true,
         budgets: Vec::new(),
         origins: crate::combinator::Origins::default(),
         authority: authority(),
