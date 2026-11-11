@@ -39,6 +39,7 @@ fn proof(n: u8, position: u64, party: u8) -> Proof {
         },
         assurance: BTreeMap::new(),
         consumed: false,
+        surface: None,
     }
 }
 
@@ -114,6 +115,7 @@ fn matching_rules() {
         &single,
         &Proof {
             consumed: true,
+            surface: None,
             ..p.clone()
         },
         &ctx()

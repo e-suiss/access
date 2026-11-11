@@ -54,6 +54,8 @@ pub struct OwnedInput {
     pub proofs: Vec<Proof>,
     /// Catalog.
     pub catalog: Catalog,
+    /// Pinned compatibility mappings.
+    pub mappings: Vec<crate::compat::Mapping>,
 }
 
 impl OwnedInput {
@@ -74,6 +76,7 @@ impl OwnedInput {
             restrictions: &self.restrictions,
             proofs: &self.proofs,
             catalog: &self.catalog,
+            mappings: &self.mappings,
         }
     }
 }
@@ -413,6 +416,7 @@ impl Canonical for Proof {
                 map_value(&self.assurance, |n| Value::Unsigned(*n)),
             ),
             ("consumed", self.consumed.then_some(Value::Bool(true))),
+            ("surface", self.surface.as_ref().map(Digest::to_value)),
         ])
     }
 
@@ -444,6 +448,10 @@ impl Canonical for Proof {
                 Some(Value::Bool(true)) => true,
                 Some(_) => return Err(ModelError::Range),
             },
+            surface: f
+                .opt("surface")
+                .map(<Digest as Canonical>::from_value)
+                .transpose()?,
         };
         f.done()?;
         Ok(p)
@@ -568,6 +576,11 @@ impl Canonical for OwnedInput {
                     .then(|| set_value(self.proofs.iter().map(Canonical::to_value))),
             ),
             ("catalog", Some(self.catalog.to_value())),
+            (
+                "mappings",
+                (!self.mappings.is_empty())
+                    .then(|| set_value(self.mappings.iter().map(Canonical::to_value))),
+            ),
         ])
     }
 
@@ -603,6 +616,10 @@ impl Canonical for OwnedInput {
                 .map(Proof::from_value)
                 .collect::<Result<_, _>>()?,
             catalog: Catalog::from_value(f.req("catalog")?)?,
+            mappings: list(f.opt("mappings"))?
+                .iter()
+                .map(crate::compat::Mapping::from_value)
+                .collect::<Result<_, _>>()?,
         };
         f.done()?;
         Ok(i)

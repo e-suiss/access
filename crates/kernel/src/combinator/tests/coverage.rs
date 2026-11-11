@@ -541,6 +541,7 @@ fn count_scenarios(reusable: RequirementTerm) -> Vec<(&'static str, World)> {
     let mut w = proved(own, vec![contribution(2)]);
     w.actor_party = Some(party(9));
     out.push(("allow-independent-other-party-contribution", w));
+    out.extend(stage12_scenarios());
     out.push((
         "allow-chooses-earliest-position",
         proved(approval(false), vec![proof(3, 2, 1), proof(4, 1, 1)]),
@@ -1015,7 +1016,14 @@ fn coverage_rules(id: &str) -> &'static [&'static str] {
             &["L0-ALG-40", "L0-ALG-41"]
         }
         "deny-resource-structural-typed" | "deny-resource-other-namespace" => &["L0-ALG-41"],
-        "deny-param-missing-in-intent" | "deny-one-resource-outside" => &["L0-EVAL-10"],
+        "deny-param-missing-in-intent"
+        | "deny-one-resource-outside"
+        | "allow-case-purpose"
+        | "deny-other-case-purpose"
+        | "allow-pinned-narrowing-mapping"
+        | "deny-broadening-mapping"
+        | "deny-unpinned-mapping"
+        | "deny-mapped-intent-outside-bounds" => &["L0-EVAL-10"],
         "deny-prefix-reserved-action" | "allow-exact-reserved-action" => {
             &["L0-ALG-31", "L0-ALG-33", "L0-ALG-34"]
         }
@@ -1054,9 +1062,13 @@ fn coverage_rules(id: &str) -> &'static [&'static str] {
         }
         "allow-count-two-distinct-parties"
         | "require-independent-own-contribution"
-        | "allow-independent-other-contribution" => &["L0-EVAL-26"],
-        "require-independent-own-party-contribution"
-        | "allow-independent-other-party-contribution" => &["L0-EVAL-26"],
+        | "allow-independent-other-contribution"
+        | "require-independent-own-party-contribution"
+        | "allow-independent-other-party-contribution"
+        | "allow-distinct-surfaces"
+        | "require-distinct-surfaces-same-path"
+        | "require-distinct-surfaces-without-path" => &["L0-EVAL-26"],
+
         "allow-chooses-earliest-position" | "allow-chooses-smaller-id-on-tie" => &["L0-EVAL-27"],
         "allow-reusable-proof-serves-two-terms" => &["L0-EVAL-28"],
         "allow-fuel-exact"
@@ -1112,4 +1124,105 @@ pub(super) fn cve_rules(id: &str) -> &'static [&'static str] {
         "delegate-bottom-actions" => &["L0-ALG-1", "L0-ALG-33"],
         _ => &[],
     }
+}
+
+// OP-157 m.3 (b), §13.7.3, §9.13.4, TN-73
+fn stage12_scenarios() -> Vec<(&'static str, World)> {
+    use crate::compat::{Mapping, MappingOp, Relation};
+    use crate::model::PurposeRef;
+    let mut out = Vec::new();
+    let mut surfaces = approval(false);
+    surfaces.count = 2;
+    surfaces.independence = Independence::DistinctSurface;
+    let on = |id: u8, party_n: u8, surface: Option<u8>| Proof {
+        surface: surface.map(|s| Digest([s; 32])),
+        ..proof(id, u64::from(id), party_n)
+    };
+    out.push((
+        "allow-distinct-surfaces",
+        proved(surfaces.clone(), vec![on(3, 1, Some(1)), on(4, 1, Some(2))]),
+    ));
+    out.push((
+        "require-distinct-surfaces-same-path",
+        proved(surfaces.clone(), vec![on(3, 1, Some(1)), on(4, 2, Some(1))]),
+    ));
+    out.push((
+        "require-distinct-surfaces-without-path",
+        proved(surfaces, vec![on(3, 1, Some(1)), on(4, 2, None)]),
+    ));
+    let case = |n: u8| PurposeRef::Case(Digest([n; 32]));
+    let mut w = World::new();
+    for h in w.hops_mut() {
+        h.authority.authority.purpose = Some([case(5)].into_iter().collect());
+    }
+    w.intent.purpose = Some(case(5));
+    out.push(("allow-case-purpose", w));
+    let mut w = World::new();
+    for h in w.hops_mut() {
+        h.authority.authority.purpose = Some([case(5)].into_iter().collect());
+    }
+    w.intent.purpose = Some(case(6));
+    out.push(("deny-other-case-purpose", w));
+    let v2 = ActionRef {
+        major: 2,
+        schema: d(8),
+        ..action()
+    };
+    let mapping = |relation| Mapping {
+        from: action(),
+        to: v2.clone(),
+        relation,
+        ops: vec![
+            MappingOp::Rename {
+                from: "minor".to_string(),
+                to: "amount".to_string(),
+            },
+            MappingOp::Scale {
+                field: "amount".to_string(),
+                factor: 100,
+            },
+        ],
+    };
+    let mapped = |relation: Option<Relation>| {
+        let mut w = World::new();
+        for h in w.hops_mut() {
+            h.authority.authority.params.insert(
+                "amount".to_string(),
+                crate::model::Bound::Range {
+                    min: None,
+                    max: Some(1_000),
+                    unit: "eur".to_string(),
+                },
+            );
+        }
+        w.intent.action = v2.clone();
+        w.intent.params.insert(
+            "minor".to_string(),
+            crate::intent::ParamValue::Amount {
+                value: 9,
+                unit: "eur".to_string(),
+            },
+        );
+        w.mappings = relation.map(mapping).into_iter().collect();
+        w
+    };
+    out.push((
+        "allow-pinned-narrowing-mapping",
+        mapped(Some(Relation::Narrowing)),
+    ));
+    out.push((
+        "deny-broadening-mapping",
+        mapped(Some(Relation::Broadening)),
+    ));
+    out.push(("deny-unpinned-mapping", mapped(None)));
+    let mut w = mapped(Some(Relation::RepresentationEquivalent));
+    w.intent.params.insert(
+        "minor".to_string(),
+        crate::intent::ParamValue::Amount {
+            value: 11,
+            unit: "eur".to_string(),
+        },
+    );
+    out.push(("deny-mapped-intent-outside-bounds", w));
+    out
 }

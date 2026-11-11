@@ -289,6 +289,7 @@ mod tests {
             binding: ProofBinding::default(),
             assurance: BTreeMap::new(),
             consumed: false,
+            surface: None,
         }
     }
 

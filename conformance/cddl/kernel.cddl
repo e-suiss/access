@@ -322,6 +322,9 @@ proof = {
   ? bound_resource: resource-ref,
   ? assurance: assurance,
   ? consumed: true,
+  ; OP-157 m.3 (b): SHA-256("access/surface-path/v1" || 0x00 || dCBOR([surface_profile, origin]));
+  ; a `distinct: "surface"` term counts only proofs that carry one.
+  ? surface: digest,
 }
 
 catalog = {
@@ -336,6 +339,8 @@ evaluation-input = {
   intent_digest: digest,
   now: trusted-time,
   ? actor_instance: instance-ref,
+  ; OP-157 m.3 (b): its contributions never meet a term with independence (SEC10).
+  ? actor_party: party-ref,
   ; Derived from the actor Party's actor-kind (OP-149 m.8).
   ? actor_is_agent: true,
   ? mandate: mandate,
@@ -344,6 +349,9 @@ evaluation-input = {
   ? restrictions: [+ policy-result],
   ? proofs: [+ proof],
   catalog: catalog,
+  ; OP-157 m.3 (b), §9.13.4: the domain's pinned compatibility mappings, each a compat-mapping
+  ; (compat-mapping.cddl); only non-broadening ones are applied.
+  ? mappings: [+ { + tstr => any }],
 }
 
 ; ---------------------------------------------------------------- validity contract (§9.12)

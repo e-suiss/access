@@ -1,8 +1,9 @@
 //! Compatibility mappings between action schema versions (§9.13.4, OP-157 m.3 (b), (r)).
 //!
 //! A mapping turns a `to`-version intent into a `from`-version intent with closed-algebra
-//! operations only, so coverage stays decidable (INV-8). This version defines the form and its
-//! digest; the Kernel applies no mapping yet.
+//! operations only, so coverage stays decidable (INV-8). Coverage applies only the mappings the
+//! caller passes as pinned and only when they do not broaden: `mapping(intent_v2) ⊑
+//! AuthoritySet_v1` (§9.13.4, E10, PI-19).
 
 use alloc::collections::BTreeMap;
 use alloc::string::String;
@@ -11,11 +12,13 @@ use alloc::vec::Vec;
 use suiss_crypto::dcbor::{self, Value};
 use suiss_crypto::digest::context_digest;
 
+use crate::algebra::Catalog;
 use crate::codec::{
     Canonical, Fields, ModelError, ident, map, single, tagged, text, uint, word, word_of,
 };
 use crate::digest::Digest;
-use crate::model::{ActionRef, EqValue};
+use crate::intent::{IntentEnvelope, ParamValue, covers};
+use crate::model::{ActionRef, AuthoritySet, EqValue};
 
 /// Digest context of a mapping (OP-157 m.3 (b)).
 pub const CONTEXT: &str = "access/compat-mapping/v1";
@@ -261,6 +264,74 @@ impl Canonical for Mapping {
 /// The mapping is outside the structural limits.
 pub fn mapping_digest(m: &Mapping) -> Result<Digest, dcbor::EncodeError> {
     Ok(context_digest(CONTEXT, &m.to_bytes()?))
+}
+
+/// The `from`-version intent `m` maps `intent` to; `None` when `m` is not for its action, would
+/// broaden, or an operation does not apply: a renamed field whose new name is taken, an enum
+/// value it does not list, a scaled value of another type or out of range, a dropped field that
+/// is not authority-opaque (§9.13.4, OP-157 m.3 (b)).
+#[must_use]
+pub fn apply(m: &Mapping, intent: &IntentEnvelope) -> Option<IntentEnvelope> {
+    if m.to != intent.action || !m.relation.non_broadening() {
+        return None;
+    }
+    let mut out = intent.clone();
+    out.action = m.from.clone();
+    for op in &m.ops {
+        match op {
+            MappingOp::Rename { from, to } => {
+                if let Some(v) = out.params.remove(from) {
+                    if out.params.insert(to.clone(), v).is_some() {
+                        return None;
+                    }
+                    if let Some(p) = out.provenance.remove(from) {
+                        out.provenance.insert(to.clone(), p);
+                    }
+                }
+            }
+            MappingOp::Enum { field, values } => match out.params.get_mut(field) {
+                None => {}
+                Some(ParamValue::Enum(v)) => *v = values.get(v)?.clone(),
+                Some(_) => return None,
+            },
+            MappingOp::Constant { field, value } => {
+                out.params
+                    .insert(field.clone(), ParamValue::Eq(value.clone()));
+                out.provenance.remove(field);
+            }
+            MappingOp::Scale { field, factor } => match out.params.get_mut(field) {
+                None => {}
+                Some(ParamValue::Amount { value, .. }) => {
+                    *value = value.checked_mul(i64::try_from(*factor).ok()?)?;
+                }
+                Some(ParamValue::Count(n)) => *n = n.checked_mul(*factor)?,
+                Some(_) => return None,
+            },
+            MappingOp::Drop { field } => {
+                if out.params.contains_key(field) {
+                    return None;
+                }
+                out.opaque.remove(field);
+            }
+        }
+    }
+    Some(out)
+}
+
+/// Whether `set` covers `intent` directly or through one of the pinned `mappings`
+/// (§9.13.4, OP-157 m.3 (b)): an unpinned or broadening mapping changes no coverage.
+#[must_use]
+pub fn covers_mapped(
+    set: &AuthoritySet,
+    intent: &IntentEnvelope,
+    cat: &Catalog,
+    mappings: &[Mapping],
+) -> bool {
+    covers(set, intent, cat)
+        || mappings
+            .iter()
+            .filter_map(|m| apply(m, intent))
+            .any(|mapped| covers(set, &mapped, cat))
 }
 
 #[cfg(test)]

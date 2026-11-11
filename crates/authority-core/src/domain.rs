@@ -1940,6 +1940,8 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         restrictions: &restrictions,
         proofs: &proofs,
         catalog,
+        // OP-157 m.3 (r)
+        mappings: &[],
     };
     match evaluate(&input, &mut Fuel(FUEL)) {
         Ok(decision) => {

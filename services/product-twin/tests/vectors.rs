@@ -108,6 +108,7 @@ fn input(envelope: IntentEnvelope, hop: Hop, proofs: Vec<Proof>) -> OwnedInput {
         intent: envelope,
         now: NOW,
         actor_instance: Some(ACTOR),
+        actor_party: None,
         actor_is_agent: false,
         mandate: None,
         capacity: Capacity::Own,
@@ -118,6 +119,7 @@ fn input(envelope: IntentEnvelope, hop: Hop, proofs: Vec<Proof>) -> OwnedInput {
         restrictions: Vec::new(),
         proofs,
         catalog: Catalog::default(),
+        mappings: Vec::new(),
     }
 }
 
@@ -292,6 +294,7 @@ fn health() -> Vec<Case> {
         },
         assurance: BTreeMap::new(),
         consumed: false,
+        surface: None,
     };
     let sharing = authority(
         on_records(&health.action("share").unwrap()),
@@ -452,6 +455,7 @@ fn pay() -> Vec<Case> {
                     (String::from("phishing_resistant"), 1),
                 ]),
                 consumed: false,
+                surface: None,
             }];
         }
         input
@@ -575,6 +579,7 @@ fn commerce() -> Vec<Case> {
         },
         assurance: BTreeMap::new(),
         consumed: false,
+        surface: None,
     };
     let refund_o1 = || {
         intent(

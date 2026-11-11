@@ -120,6 +120,9 @@ pub struct Proof {
     pub assurance: BTreeMap<alloc::string::String, u64>,
     /// Already consumed by an earlier exercise.
     pub consumed: bool,
+    /// The Approval Surface path it came through: [`crate::aas::surface_path`] of its
+    /// statement's surface profile and origin (§13.7.3, OP-157 m.3 (b)).
+    pub surface: Option<Digest>,
 }
 
 /// Context the binding and freshness checks need.
@@ -185,7 +188,7 @@ pub fn matches(term: &RequirementTerm, proof: &Proof, ctx: &Context<'_>) -> bool
         && proof.kind == ProofKind::Contribution
         && (ctx.actor_instance == Some(proof.instance) || ctx.actor_party == Some(proof.party));
     // OP-157 m.3 (b), §13.7.3
-    let surface = term.independence != Independence::DistinctSurface;
+    let surface = term.independence != Independence::DistinctSurface || proof.surface.is_some();
     !own && surface
         && proof.kind == term.proof_kind
         && proof.class == term.class
@@ -209,12 +212,21 @@ pub fn source_rejected(term: &RequirementTerm, proofs: &[Proof]) -> bool {
     })
 }
 
-fn independence_key(proof: &Proof, independence: Independence) -> Option<Id> {
+fn independence_key(proof: &Proof, independence: Independence) -> Option<[u8; 32]> {
+    let id = |i: Id| {
+        let mut k = [0; 32];
+        for (d, b) in k.iter_mut().zip(i.0) {
+            *d = b;
+        }
+        k
+    };
     match independence {
         Independence::None => None,
-        Independence::DistinctParty => Some(proof.party),
-        Independence::DistinctInstance | Independence::DistinctSurface => Some(proof.instance),
-        Independence::DistinctIssuer => Some(proof.issuer),
+        Independence::DistinctParty => Some(id(proof.party)),
+        Independence::DistinctInstance => Some(id(proof.instance)),
+        Independence::DistinctIssuer => Some(id(proof.issuer)),
+        // OP-157 m.3 (b), §13.7.3
+        Independence::DistinctSurface => proof.surface.map(|d| d.0),
     }
 }
 
@@ -241,7 +253,7 @@ pub fn resolve(
     let mut out = Vec::new();
     for (_, term) in canonical {
         let mut chosen: Vec<Id> = Vec::new();
-        let mut keys: BTreeSet<Id> = BTreeSet::new();
+        let mut keys: BTreeSet<[u8; 32]> = BTreeSet::new();
         for proof in &ordered {
             fuel.spend(1)?;
             if u64::try_from(chosen.len()).is_ok_and(|n| n >= term.count) {

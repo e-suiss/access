@@ -87,6 +87,7 @@ fn claim_proof(id: Id, s: &Statement, instance: Option<Id>, position: u64) -> Pr
         },
         assurance: s.assurance.clone(),
         consumed: false,
+        surface: None,
     }
 }
 
@@ -322,6 +323,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         },
                         assurance: c.assurance.clone(),
                         consumed: false,
+                        surface: None,
                     });
                     out.contributions.insert(id, (k, c));
                 }

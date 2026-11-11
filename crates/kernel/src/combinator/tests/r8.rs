@@ -94,6 +94,7 @@ fn contribution(instance: u8) -> (RequirementTerm, Proof) {
         },
         assurance: BTreeMap::new(),
         consumed: false,
+        surface: None,
     };
     (term, proof)
 }

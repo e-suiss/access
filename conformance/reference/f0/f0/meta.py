@@ -3,6 +3,7 @@ import hashlib
 from .algebra import authority_within, child_within_parent, is_subset, resource_within, subject_within, window_within
 from .codec import (
     check_unit,
+    fail,
     HASH_ALG_SHA256,
     Rejection,
     check_bytes,
@@ -268,6 +269,30 @@ def check_projection_profile(value):
         refuse("meta-malformed")
 
 
+# OP-157 m.3 (n): the value a key compares with when the domain never set it
+DEFAULTS = {"ct3_delay_s": 86_400, "mapping_probation_days": 14, "breakglass_review_h": 72}
+APPROVAL_SURFACES_DEFAULT = ["suiss-approval-surface", "suiss-approver-sdk"]
+
+
+def check_policy_defaults(value):
+    # OP-157 m.3 (n), OP-108 m.4
+    if not isinstance(value, dict) or not value:
+        fail("policy defaults")
+    for key in value:
+        if key not in ("approval_surfaces", "breakglass_review_h", "ct3_delay_s", "mapping_probation_days", "support_max_min"):
+            fail("unknown policy default")
+    for key, item in value.items():
+        if key == "approval_surfaces":
+            check_list(check_nonempty_text, nonempty=True, is_set=True)(item)
+        else:
+            check_uint(item)
+
+
+def check_nonempty_text(value):
+    if not isinstance(value, str) or not value:
+        fail("expected non-empty text")
+
+
 PAYLOADS = {
     "anchor_create": ({"scope": check_scope, "root": check_root}, {"root_terms": check_requirement_set}),
     "anchor_transfer": ({"anchor": check_id, "root": check_root, "disposition": check_disposition}, {}),
@@ -290,7 +315,7 @@ PAYLOADS = {
     "acceptance_establish": None,
     "acceptance_amend": ({"acceptance": check_id, "content": check_acceptance_content}, {}),
     "acceptance_revoke": ({"acceptance": check_id}, {}),
-    "policy_set": ({"content": check_policy_content}, {"policy": check_id}),
+    "policy_set": ({"content": check_policy_content}, {"policy": check_id, "defaults": check_policy_defaults}),
     "policy_retire": ({"policy": check_id}, {}),
     "claim_issue": ({"subject": check_id, "class": check_ident, "value": check_equality_value},
                     {"validity": check_time_window, "bound_intent": check_digest, "supersedes": check_id}),
@@ -921,7 +946,29 @@ class Apply:
         self.write("policy", policy_id, {"content": body["content"], "since": self.pos})
         # L0-META-28: a new RestrictionPolicy only narrows; SI-18, OP-157 m.3 (b): a change
         # narrows only by structure
-        return "policy" in body and not policy_narrows(old["content"], body["content"])
+        expansion = "policy" in body and not policy_narrows(old["content"], body["content"])
+        # SI-18, SEC8, OP-157 m.3 (n)
+        if "defaults" in body:
+            expansion = self.set_defaults(body["defaults"]) or expansion
+        return expansion
+
+    def set_defaults(self, defaults):
+        loosens = False
+        for name, value in sorted(defaults.items()):
+            current = self.read("policy_default", name)
+            if name == "approval_surfaces":
+                base = current if isinstance(current, list) else APPROVAL_SURFACES_DEFAULT
+                loosens = loosens or not set(value) <= set(base)
+            elif name == "support_max_min":
+                loosens = loosens or (isinstance(current, int) and value > current)
+            else:
+                base = current if isinstance(current, int) and not isinstance(current, bool) else DEFAULTS[name]
+                if name == "breakglass_review_h":
+                    loosens = loosens or value > base
+                else:
+                    loosens = loosens or value < base
+            self.write("policy_default", name, value)
+        return loosens
 
     def policy_retire(self, body):
         # L0-META-27, L0-META-28

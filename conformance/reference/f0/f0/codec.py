@@ -251,7 +251,8 @@ def check_resource_ref(value):
 
 
 def check_purpose_ref(value):
-    check_choice(value, {"code": check_ident, "work": check_digest, "aim": check_digest})
+    # OP-157 m.3 (b): `case` is the access/case-ref/v1 digest, compared by equality
+    check_choice(value, {"code": check_ident, "work": check_digest, "aim": check_digest, "case": check_digest})
 
 
 def check_where(value):
@@ -432,7 +433,7 @@ PROOF_KINDS = ("claim", "contribution", "authentication", "foreign_authority")
 
 
 def check_independence(value):
-    check_map(value, {"distinct": check_text_in("party", "instance", "issuer")})
+    check_map(value, {"distinct": check_text_in("party", "instance", "issuer", "surface")})
 
 
 # OP-118 m.3
@@ -616,6 +617,8 @@ def check_proof(value):
         "bound_resource": check_resource_ref,
         "assurance": check_assurance,
         "consumed": check_true,
+        # OP-157 m.3 (b): the access/surface-path/v1 digest of the approval's surface
+        "surface": check_digest,
     })
 
 
@@ -683,6 +686,8 @@ def check_evaluation_input(value):
         "mandate": check_mandate,
         "restrictions": check_list(check_policy_result, nonempty=True, is_set=True),
         "proofs": check_list(check_proof, nonempty=True, is_set=True),
+        # OP-157 m.3 (b), §9.13.4
+        "mappings": check_list(check_mapping, nonempty=True, is_set=True),
     })
     proof_ids = [proof["id"] for proof in value.get("proofs", [])]
     if len(set(proof_ids)) != len(proof_ids):
@@ -705,3 +710,58 @@ def decode_subject_selector(data):
     value = decode_canonical(data)
     check_subject_selector(value)
     return value
+
+
+MAPPING_RELATIONS = ("representation-equivalent", "narrowing", "broadening", "incompatible")
+MAX_MAPPING_OPS = 64
+MAX_ENUM_VALUES = 256
+
+
+def check_enum_value(value):
+    if not isinstance(value, str) or not 1 <= len(value.encode()) <= 255:
+        fail("bad enum value")
+
+
+def check_rename(value):
+    check_map(value, {"from": check_ident, "to": check_ident})
+    if value["from"] == value["to"]:
+        fail("rename to itself")
+
+
+def check_enum_op(value):
+    check_map(value, {"field": check_ident, "values": lambda v: None})
+    values = value["values"]
+    if not isinstance(values, dict) or not 1 <= len(values) <= MAX_ENUM_VALUES:
+        fail("bad enum mapping")
+    for k, v in values.items():
+        check_enum_value(k)
+        check_enum_value(v)
+
+
+def check_scale(value):
+    check_map(value, {"field": check_ident, "factor": check_uint_at_least(2)})
+
+
+def check_mapping_op(value):
+    check_choice(value, {
+        "rename": check_rename,
+        "enum": check_enum_op,
+        "constant": lambda v: check_map(v, {"field": check_ident, "value": check_equality_value}),
+        "scale": check_scale,
+        "drop": lambda v: check_map(v, {"field": check_ident}),
+    })
+
+
+def check_mapping(value):
+    # OP-157 m.3 (b), §9.13.4
+    check_map(value, {
+        "from": check_action_ref,
+        "to": check_action_ref,
+        "relation": check_text_in(*MAPPING_RELATIONS),
+        "ops": check_list(check_mapping_op),
+    })
+    if len(value["ops"]) > MAX_MAPPING_OPS:
+        fail("too many mapping operations")
+    a, b = value["from"], value["to"]
+    if a["namespace"] != b["namespace"] or a["name"] != b["name"] or encode(a) == encode(b):
+        fail("mapping between other actions")

@@ -141,6 +141,7 @@ fn the_term_is_met_by_a_fresh_bound_claim_of_the_class() {
         },
         assurance,
         consumed: false,
+        surface: None,
     };
     let ctx = Context {
         now,

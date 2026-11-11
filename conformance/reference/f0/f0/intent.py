@@ -66,3 +66,75 @@ def intent_covered(authority, intent, catalog):
         if not any(purpose_below(intent["purpose"], p, catalog) for p in authority["purpose"]):
             return False
     return True
+
+
+I64_MIN, I64_MAX = -(2 ** 63), 2 ** 63 - 1
+U64_MAX = 2 ** 64 - 1
+
+
+def apply_mapping(mapping, intent):
+    # OP-157 m.3 (b), §9.13.4: a pinned, non-broadening mapping turns the new version's intent
+    # into the old version's; any operation that does not apply leaves it unmapped
+    if not same(mapping["to"], intent["action"]):
+        return None
+    if mapping["relation"] not in ("representation-equivalent", "narrowing"):
+        return None
+    params = dict(intent.get("params", {}))
+    provenance = dict(intent.get("provenance", {}))
+    opaque = dict(intent.get("opaque", {}))
+    for op in mapping["ops"]:
+        kind = kind_of(op)
+        body = op[kind]
+        if kind == "rename":
+            if body["from"] in params:
+                value = params.pop(body["from"])
+                if body["to"] in params:
+                    return None
+                params[body["to"]] = value
+                if body["from"] in provenance:
+                    provenance[body["to"]] = provenance.pop(body["from"])
+        elif kind == "enum":
+            if body["field"] in params:
+                value = params[body["field"]]
+                if kind_of(value) != "enum" or value["enum"] not in body["values"]:
+                    return None
+                params[body["field"]] = {"enum": body["values"][value["enum"]]}
+        elif kind == "constant":
+            params[body["field"]] = {"eq": body["value"]}
+            provenance.pop(body["field"], None)
+        elif kind == "scale":
+            if body["field"] in params:
+                value = params[body["field"]]
+                if kind_of(value) == "amount":
+                    scaled = value["amount"]["value"] * body["factor"]
+                    if not I64_MIN <= scaled <= I64_MAX:
+                        return None
+                    params[body["field"]] = {"amount": {"value": scaled, "unit": value["amount"]["unit"]}}
+                elif kind_of(value) == "count":
+                    scaled = value["count"] * body["factor"]
+                    if scaled > U64_MAX:
+                        return None
+                    params[body["field"]] = {"count": scaled}
+                else:
+                    return None
+        elif kind == "drop":
+            if body["field"] in params:
+                return None
+            opaque.pop(body["field"], None)
+    mapped = dict(intent)
+    mapped["action"] = mapping["from"]
+    mapped["params"] = params
+    mapped["provenance"] = provenance
+    mapped["opaque"] = opaque
+    return mapped
+
+
+def intent_covered_mapped(authority, intent, catalog, mappings):
+    # OP-157 m.3 (b): coverage directly or through a pinned, non-broadening mapping
+    if intent_covered(authority, intent, catalog):
+        return True
+    for mapping in mappings:
+        mapped = apply_mapping(mapping, intent)
+        if mapped is not None and intent_covered(authority, mapped, catalog):
+            return True
+    return False

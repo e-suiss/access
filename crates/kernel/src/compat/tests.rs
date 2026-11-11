@@ -104,3 +104,82 @@ fn a_case_reference_is_a_digest_of_system_and_case() {
     let p = crate::model::PurposeRef::Case(a);
     assert_eq!(crate::model::PurposeRef::from_value(&p.to_value()), Ok(p));
 }
+
+fn intent_v2(rail: &str) -> IntentEnvelope {
+    use crate::intent::ContextRefs;
+    use crate::model::{ResourceRef, Window};
+    IntentEnvelope {
+        provenance: BTreeMap::new(),
+        action: action(2, 2),
+        resources: vec![ResourceRef {
+            namespace: String::from("acme.pay"),
+            path: vec![String::from("a")],
+            incarnation: 0,
+        }],
+        params: BTreeMap::from([
+            (
+                String::from("payee"),
+                ParamValue::Eq(EqValue::Text(String::from("p"))),
+            ),
+            (String::from("rail"), ParamValue::Enum(String::from(rail))),
+            (
+                String::from("amount"),
+                ParamValue::Amount {
+                    value: 3,
+                    unit: String::from("eur"),
+                },
+            ),
+        ]),
+        opaque: BTreeMap::from([(String::from("note"), Digest([4; 32]))]),
+        recipient: None,
+        purpose: None,
+        context: ContextRefs::default(),
+        validity: Window { from: 0, until: 1 },
+    }
+}
+
+// OP-157 m.3 (b), §9.13.4, E10
+#[test]
+fn a_pinned_mapping_applies_its_operations_in_order() {
+    let m = mapping(Relation::Narrowing);
+    let mapped = apply(&m, &intent_v2("sepa_inst")).unwrap();
+    assert_eq!(mapped.action, action(1, 1));
+    assert!(mapped.params.contains_key("beneficiary") && !mapped.params.contains_key("payee"));
+    assert_eq!(
+        mapped.params.get("rail"),
+        Some(&ParamValue::Enum(String::from("sepa")))
+    );
+    assert_eq!(
+        mapped.params.get("channel"),
+        Some(&ParamValue::Eq(EqValue::Text(String::from("api"))))
+    );
+    assert_eq!(
+        mapped.params.get("amount"),
+        Some(&ParamValue::Amount {
+            value: 300,
+            unit: String::from("eur")
+        })
+    );
+    assert!(mapped.opaque.is_empty());
+    assert_eq!(apply(&m, &intent_v2("swift")), None, "unlisted enum value");
+    assert_eq!(
+        apply(&mapping(Relation::Broadening), &intent_v2("sepa_inst")),
+        None
+    );
+    assert_eq!(
+        apply(&mapping(Relation::Incompatible), &intent_v2("sepa_inst")),
+        None
+    );
+    let mut dropping = m.clone();
+    dropping.ops = vec![MappingOp::Drop {
+        field: String::from("amount"),
+    }];
+    assert_eq!(
+        apply(&dropping, &intent_v2("sepa_inst")),
+        None,
+        "authority field"
+    );
+    let mut wrong = intent_v2("sepa_inst");
+    wrong.action = action(3, 3);
+    assert_eq!(apply(&m, &wrong), None);
+}

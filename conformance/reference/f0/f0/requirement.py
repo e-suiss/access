@@ -69,6 +69,9 @@ def matches_without_source(term, proof, evaluation):
         return False
     if term.get("consumption") == "single_use" and proof.get("consumed") is True:
         return False
+    # OP-157 m.3 (b), §13.7.3: a distinct-surface term counts only proofs with a surface path
+    if independence_key(term) == "surface" and "surface" not in proof:
+        return False
     # L0-EVAL-26, SEC10, OP-157 m.3 (b)
     if "independence" in term and proof["kind"] == "contribution" and (
         evaluation.get("actor_instance") == proof["instance"] or evaluation.get("actor_party") == proof["party"]
@@ -86,7 +89,7 @@ def independent(term, chosen):
     key = independence_key(term)
     if key is None:
         return True
-    values = [proof[key] for proof in chosen]
+    values = [encode(proof[key]) for proof in chosen]
     return len(set(values)) == len(values)
 
 
@@ -101,7 +104,7 @@ def largest_independent_size(term, eligible):
     key = independence_key(term)
     if key is None:
         return len(eligible)
-    return len({proof[key] for proof in eligible})
+    return len({encode(proof[key]) for proof in eligible})
 
 
 def satisfiable_by_actor(term, evaluation):

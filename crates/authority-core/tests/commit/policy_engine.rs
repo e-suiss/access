@@ -421,3 +421,66 @@ async fn a_mass_selections_new_holders_need_an_approval_from_ct2() {
     }
     fold_check(&db.sequencer, d).await.unwrap();
 }
+
+fn with_defaults(d: Digest, nonce: u8, defaults: access_kernel::meta::PolicyDefaults) -> Request {
+    let mut r = policy_set(d, nonce, None, NARROW, None);
+    if let Some(Payload::PolicySet { defaults: slot, .. }) = r.payload.as_mut() {
+        *slot = Some(defaults);
+    }
+    let payload = r.payload.clone().unwrap();
+    meta_request(
+        d,
+        nonce,
+        ExerciseBasis::Anchor(meta::meta_anchor(&d)),
+        payload,
+    )
+}
+
+// SI-18, SEC8, OP-157 m.3 (n), Ek B 5662
+#[tokio::test]
+async fn tightening_a_policy_default_is_ct1_and_loosening_it_is_ct3() {
+    use access_kernel::meta::PolicyDefaults;
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup_with(&db, gated(&[])).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    let delay = |n| PolicyDefaults {
+        ct3_delay_s: Some(n),
+        ..PolicyDefaults::default()
+    };
+    allowed(
+        &send(&mut core, with_defaults(d, 10, delay(60)), ROOT_KEY)
+            .await
+            .unwrap(),
+    );
+    assert_eq!(tier_of(&db, d, 10).await, Some(1));
+    let lower = send(&mut core, with_defaults(d, 11, delay(30)), ROOT_KEY)
+        .await
+        .unwrap();
+    assert_eq!(tier_of(&db, d, 11).await, Some(3));
+    assert_eq!(lower.decision.outcome, Outcome::RequireAction, "{lower:?}");
+    assert!(
+        lower
+            .decision
+            .blockers
+            .iter()
+            .any(|b| b.subcode.as_deref() == Some("time-lock"))
+    );
+    let stored = state_of(&db, d, &meta::policy_default_key(meta::CT3_DELAY))
+        .await
+        .unwrap();
+    assert_eq!(
+        dcbor::decode(&stored, Limits::CEILING).unwrap(),
+        Value::Unsigned(60)
+    );
+    let surfaces = PolicyDefaults {
+        approval_surfaces: Some(BTreeSet::from(["suiss-approver-sdk".to_owned()])),
+        ..PolicyDefaults::default()
+    };
+    allowed(
+        &send(&mut core, with_defaults(d, 12, surfaces), ROOT_KEY)
+            .await
+            .unwrap(),
+    );
+    assert_eq!(tier_of(&db, d, 12).await, Some(1));
+    fold_check(&db.sequencer, d).await.unwrap();
+}

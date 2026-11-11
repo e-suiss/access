@@ -1366,6 +1366,72 @@ impl Canonical for PolicyDefaults {
     }
 }
 
+/// The mapping probation when no domain set one: 14 days (OP-157 m.3 (r), PD).
+pub const MAPPING_PROBATION_DEFAULT_DAYS: u64 = 14;
+
+/// The break-glass review deadline when no domain set one: 72 hours (OP-157 m.3 (h), PD).
+pub const BREAKGLASS_REVIEW_DEFAULT_H: u64 = 72;
+
+/// The approval surfaces a domain accepts when it set none (OP-157 m.3 (m)).
+pub const APPROVAL_SURFACES_DEFAULT: [&str; 2] = ["suiss-approval-surface", "suiss-approver-sdk"];
+
+fn current_uint(view: &dyn View, name: &str) -> Option<u64> {
+    match view.get(&policy_default_key(name)) {
+        Some(Value::Unsigned(n)) => Some(n),
+        _ => None,
+    }
+}
+
+/// The effects of `d` and whether any of its values loosens the one in force (SI-18, SEC8,
+/// OP-157 m.3 (n)): a larger `ct3_delay_s` or `mapping_probation_days`, a smaller
+/// `breakglass_review_h` or `support_max_min` and a subset of `approval_surfaces` tighten;
+/// anything else loosens. A value never set compares with its default; `support_max_min` has
+/// none, so its first value tightens.
+fn defaults_effects(view: &dyn View, d: &PolicyDefaults) -> (Vec<Effect>, bool) {
+    let mut out = Vec::new();
+    let mut loosens = false;
+    let mut set = |name: &str, v: Value| out.push((policy_default_key(name), Some(v)));
+    if let Some(n) = d.ct3_delay_s {
+        loosens |= n < current_uint(view, CT3_DELAY).unwrap_or(CT3_DELAY_DEFAULT_S);
+        set(CT3_DELAY, Value::Unsigned(n));
+    }
+    if let Some(n) = d.mapping_probation_days {
+        loosens |= n < current_uint(view, "mapping_probation_days")
+            .unwrap_or(MAPPING_PROBATION_DEFAULT_DAYS);
+        set("mapping_probation_days", Value::Unsigned(n));
+    }
+    if let Some(n) = d.breakglass_review_h {
+        loosens |=
+            n > current_uint(view, "breakglass_review_h").unwrap_or(BREAKGLASS_REVIEW_DEFAULT_H);
+        set("breakglass_review_h", Value::Unsigned(n));
+    }
+    if let Some(n) = d.support_max_min {
+        loosens |= current_uint(view, "support_max_min").is_some_and(|c| n > c);
+        set("support_max_min", Value::Unsigned(n));
+    }
+    if let Some(new) = &d.approval_surfaces {
+        let current: BTreeSet<String> = match view.get(&policy_default_key("approval_surfaces")) {
+            Some(Value::Array(items)) => items
+                .iter()
+                .filter_map(|v| match v {
+                    Value::Text(t) => Some(t.clone()),
+                    _ => None,
+                })
+                .collect(),
+            _ => APPROVAL_SURFACES_DEFAULT
+                .iter()
+                .map(|s| String::from(*s))
+                .collect(),
+        };
+        loosens |= !new.is_subset(&current);
+        set(
+            "approval_surfaces",
+            set_value(new.iter().map(|t| Value::text(t))),
+        );
+    }
+    (out, loosens)
+}
+
 /// The one restriction schema of this version (OP-141 m.27 (a)).
 pub const RESTRICTION_SCHEMA: &str = "access/restriction/v1";
 
@@ -3146,10 +3212,6 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             content,
             defaults,
         } => {
-            // OP-157 m.3 (b), (n)
-            if defaults.is_some() {
-                return Err(MetaError::DefaultUnknown);
-            }
             policy_content(content).map_err(MetaError::Malformed)?;
             out.requirements = domain_root(ctx, view)?;
             let id = match policy {
@@ -3178,6 +3240,12 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             let mut set_of = index_of(view, &k)?;
             set_of.insert(id);
             out.effects.push((k, Some(ids_value(&set_of))));
+            // SI-18, SEC8, OP-157 m.3 (b), (n)
+            if let Some(d) = defaults {
+                let (effects, loosens) = defaults_effects(view, d);
+                out.effects.extend(effects);
+                out.expansion |= loosens;
+            }
             set(
                 &mut out,
                 kind::POLICY,

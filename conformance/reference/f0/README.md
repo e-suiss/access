@@ -50,6 +50,10 @@ Supported operations: `combinator.evaluate`, `algebra.child_within_parent`, `alg
 Kernel 0.4.1 adds semantics without changing the core version: every 0.4.0 artefact and vector reads and decides as before. F0 implements each addition from the specification:
 
 - **Actor principal exclusion.** In a requirement term with any independence, a contribution from the actor's own Party never counts, as a contribution from the actor's own Instance never did. The evaluation input names the actor's Party in the optional `actor_party`.
+- **Distinct surface.** A `distinct: surface` term counts proofs by their `surface` (the `access/surface-path/v1` digest of the approval's surface profile and origin); a proof without one never meets it.
+- **Case purpose.** `case` is a purpose reference to a support case, the `access/case-ref/v1` digest; like `work` and `aim` it compares by equality.
+- **Compatibility mappings.** The evaluation input may carry the domain's pinned `mappings`. An intent the authority set does not cover is covered when a mapping whose `to` is its action, whose relation is `representation-equivalent` or `narrowing`, and whose operations all apply turns it into a covered intent of the `from` version.
+- **Policy defaults.** `policy_set` may carry `defaults`; each value is written to its `policy_default` key. A larger `ct3_delay_s` or `mapping_probation_days`, a smaller `breakglass_review_h` or `support_max_min`, or a subset of `approval_surfaces` tightens; anything else widens and makes the change an expansion (CT3). A key never set compares with its default (86,400 s, 14 days, 72 h, the two Suiss surfaces); `support_max_min` has none, so its first value tightens.
 - **Structural `policy_set` polarity.** Amending a restriction policy narrows (CT1) only when the schema, the target and every old requirement set stay, every old statement appears again byte for byte, and every added statement is a `forbid`. Statements are split at top-level `;`, outside string literals and `//` comments, and trimmed. Anything else widens (CT3). A control-plane analysis may raise a narrowing to expansion; it never lowers one.
 
 ## Differential testing

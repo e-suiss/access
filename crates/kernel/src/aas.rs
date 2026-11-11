@@ -112,6 +112,22 @@ pub fn assurance_of(
     out
 }
 
+/// Digest context of an Approval Surface path (OP-157 m.3 (b)).
+pub const SURFACE_PATH: &str = "access/surface-path/v1";
+
+/// `SHA-256("access/surface-path/v1" ‖ 0x00 ‖ dCBOR([profile, origin]))`: the path an approval
+/// came through, which a `distinct surface` term counts once (§13.7.3, OP-157 m.3 (b)).
+///
+/// # Errors
+/// The texts are outside the structural limits.
+pub fn surface_path(profile: &str, origin: &str) -> Result<Digest, dcbor::EncodeError> {
+    let bytes = dcbor::encode(
+        &Value::Array(alloc::vec![Value::text(profile), Value::text(origin)]),
+        Limits::CEILING,
+    )?;
+    Ok(Digest(context_digest(SURFACE_PATH, &bytes).0))
+}
+
 /// The statement (CDDL `approval-act-statement`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ApprovalAct {

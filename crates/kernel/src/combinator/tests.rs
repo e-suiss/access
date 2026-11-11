@@ -134,6 +134,7 @@ fn step_up_proof() -> Proof {
         },
         assurance: [(HUMAN_PRESENCE.to_string(), 1)].into_iter().collect(),
         consumed: false,
+        surface: None,
     }
 }
 
@@ -148,6 +149,7 @@ struct World {
     capacity: Capacity,
     agent: bool,
     actor_party: Option<Id>,
+    mappings: Vec<crate::compat::Mapping>,
     fuel: u64,
 }
 
@@ -164,6 +166,7 @@ impl World {
             capacity: Capacity::Own,
             agent: false,
             actor_party: None,
+            mappings: Vec::new(),
             fuel: 10_000,
         }
     }
@@ -183,6 +186,7 @@ impl World {
             restrictions: &self.restrictions,
             proofs: &self.proofs,
             catalog: &self.catalog,
+            mappings: &self.mappings,
         };
         evaluate(&input, &mut Fuel(self.fuel))
     }
@@ -527,6 +531,7 @@ fn fuel_exhaustion_is_a_rejection() {
         restrictions: &[],
         proofs: &[],
         catalog: &w.catalog,
+        mappings: &[],
     };
     assert_eq!(evaluate(&input, &mut Fuel(1)), Err(Rejection::Fuel));
     assert!(evaluate(&input, &mut Fuel(2)).is_ok());
@@ -548,6 +553,7 @@ impl World {
             restrictions: self.restrictions.clone(),
             proofs: self.proofs.clone(),
             catalog: self.catalog.clone(),
+            mappings: self.mappings.clone(),
         }
     }
 }

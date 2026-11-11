@@ -2,7 +2,7 @@ import base64
 
 from .codec import Rejection, decode_evaluation_input, encode, same
 from .fuel import Fuel
-from .intent import intent_covered
+from .intent import intent_covered_mapped
 from .requirement import resolve
 
 
@@ -121,7 +121,7 @@ def hop_blockers(k, hop, evaluation):
     blockers = []
     authority = hop["authority"]
     # OP-111 m.2
-    if not intent_covered(authority["authority"], evaluation["intent"], evaluation["catalog"]):
+    if not intent_covered_mapped(authority["authority"], evaluation["intent"], evaluation["catalog"], evaluation.get("mappings", [])):
         blockers.append(no_covering_authority(k))
     start, until = authority["constraints"]["validity"]
     now = evaluation["now"]
@@ -226,7 +226,7 @@ def evaluate_with_context(basis, evaluation, fuel):
     if "mandate" in evaluation:
         mandate = evaluation["mandate"]
         # OP-111 m.2, OP-117 m.9
-        if not intent_covered(mandate["authority"], evaluation["intent"], evaluation["catalog"]):
+        if not intent_covered_mapped(mandate["authority"], evaluation["intent"], evaluation["catalog"], evaluation.get("mappings", [])):
             global_blockers.append(outside_instance_limits())
         if not origins_within(mandate, evaluation["intent"]):
             global_blockers.append(origin_outside_mandate())

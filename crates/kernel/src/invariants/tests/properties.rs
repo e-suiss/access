@@ -231,6 +231,7 @@ fn proof(n: u8, consumed: bool, time: u8, assured: bool, position: u64) -> Proof
             BTreeMap::new()
         },
         consumed,
+        surface: None,
     }
 }
 
@@ -263,6 +264,7 @@ impl World {
             restrictions: &self.restrictions,
             proofs: &self.proofs,
             catalog: &self.catalog,
+            mappings: &[],
         }
     }
 
@@ -281,6 +283,7 @@ impl World {
             restrictions: self.restrictions.clone(),
             proofs: self.proofs.clone(),
             catalog: self.catalog.clone(),
+            mappings: Vec::new(),
         }
     }
 

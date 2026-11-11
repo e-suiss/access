@@ -2567,6 +2567,46 @@ fn meta_vectors_match() {
             defaults: None,
         },
     );
+    // SI-18, SEC8, OP-157 m.3 (n)
+    for (id, defaults) in [
+        (
+            "policy-defaults-raise-ct3-delay-narrows",
+            PolicyDefaults {
+                ct3_delay_s: Some(172_800),
+                support_max_min: Some(60),
+                ..PolicyDefaults::default()
+            },
+        ),
+        (
+            "policy-defaults-lower-ct3-delay-widens",
+            PolicyDefaults {
+                ct3_delay_s: Some(3_600),
+                ..PolicyDefaults::default()
+            },
+        ),
+        (
+            "policy-defaults-add-surface-widens",
+            PolicyDefaults {
+                approval_surfaces: Some(BTreeSet::from([
+                    String::from("suiss-approval-surface"),
+                    String::from("vendor-surface"),
+                ])),
+                ..PolicyDefaults::default()
+            },
+        ),
+    ] {
+        r.step(
+            id,
+            &["L0-META-27", "L0-META-28"],
+            (ROOT, ROOT),
+            meta,
+            &Payload::PolicySet {
+                policy: Some(amended),
+                content: source(""),
+                defaults: Some(defaults),
+            },
+        );
+    }
     let json = format!(
         "{{\n \"rule\": \"OP-141\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"meta.apply\",\n {},\n \"cases\": [\n{}\n ]\n}}\n",
         field(&["L0-META-1", "L0-META-2"]),
@@ -3405,13 +3445,13 @@ fn policies_of_a_target_are_indexed_together() {
     );
 }
 
-// OP-157 m.3 (b), (n)
+// SI-18, SEC8, OP-157 m.3 (b), (n)
 #[test]
-fn policy_defaults_are_refused_until_the_kernel_applies_them() {
+fn policy_defaults_tighten_at_ct1_and_loosen_as_expansion() {
     let mut r = Run::new();
     let meta = ExerciseBasis::Anchor(meta_anchor(&DOMAIN));
-    let set = |defaults: Option<PolicyDefaults>| Payload::PolicySet {
-        defaults,
+    let set = |defaults: PolicyDefaults| Payload::PolicySet {
+        defaults: Some(defaults),
         policy: None,
         content: map([
             ("schema", Some(Value::text(RESTRICTION_SCHEMA))),
@@ -3419,16 +3459,44 @@ fn policy_defaults_are_refused_until_the_kernel_applies_them() {
             ("target", Some(Value::text("domain"))),
         ]),
     };
-    let tighter = PolicyDefaults {
-        ct3_delay_s: Some(172_800),
+    let mut step = |d: PolicyDefaults| {
+        let (_, out) = r.act(ROOT, ROOT, meta, &set(d)).unwrap();
+        out.expansion
+    };
+    let ct3 = |n| PolicyDefaults {
+        ct3_delay_s: Some(n),
         ..PolicyDefaults::default()
     };
-    let refused = r.act(ROOT, ROOT, meta, &set(Some(tighter.clone())));
-    assert!(matches!(refused, Err(MetaError::DefaultUnknown)));
-    assert_eq!(MetaError::DefaultUnknown.code(), "policy-default-unknown");
-    assert!(r.act(ROOT, ROOT, meta, &set(None)).is_ok());
-    let payload = set(Some(tighter));
-    assert_eq!(Payload::from_value(&payload.to_value()), Ok(payload));
+    assert!(!step(ct3(172_800)));
+    assert!(step(ct3(3_600)), "a smaller ct3_delay_s loosens");
+    let surfaces = |names: &[&str]| PolicyDefaults {
+        approval_surfaces: Some(names.iter().map(|n| (*n).to_string()).collect()),
+        ..PolicyDefaults::default()
+    };
+    assert!(!step(surfaces(&["suiss-approver-sdk"])));
+    assert!(step(surfaces(&["suiss-approver-sdk", "vendor-surface"])));
+    let support = |n| PolicyDefaults {
+        support_max_min: Some(n),
+        ..PolicyDefaults::default()
+    };
+    assert!(!step(support(60)));
+    assert!(step(support(120)));
+    let review = |n| PolicyDefaults {
+        breakglass_review_h: Some(n),
+        ..PolicyDefaults::default()
+    };
+    assert!(!step(review(24)));
+    assert!(step(review(48)));
+    let probation = |n| PolicyDefaults {
+        mapping_probation_days: Some(n),
+        ..PolicyDefaults::default()
+    };
+    assert!(!step(probation(30)));
+    assert!(step(probation(7)));
+    assert_eq!(
+        crate::tier::meta_tier(&set(ct3(1)), true),
+        crate::tier::Tier::Ct3
+    );
 }
 
 // OP-157 m.3 (n), OP-108 m.4
@@ -3493,8 +3561,12 @@ fn kernel_0_4_0_meta_payloads_decode_unchanged() {
             .collect();
         if let Ok(p) = Payload::from_bytes(&bytes) {
             assert_eq!(p.to_bytes().unwrap(), bytes, "{}", case["id"]);
+            // OP-157 m.3 (n)
             if let Payload::PolicySet { defaults, .. } = &p {
-                assert!(defaults.is_none());
+                let added = case["id"]
+                    .as_str()
+                    .is_some_and(|id| id.starts_with("policy-defaults-"));
+                assert_eq!(defaults.is_some(), added, "{}", case["id"]);
             }
             decoded += 1;
         }

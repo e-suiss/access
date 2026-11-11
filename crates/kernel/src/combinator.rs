@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 use crate::algebra::Catalog;
 use crate::codec::Stored;
 use crate::digest::Digest;
-use crate::intent::{IntentEnvelope, covers};
+use crate::intent::IntentEnvelope;
 use crate::model::{
     AuthoritySet, BudgetWindow, CanonicalAuthority, Id, RequirementTerm, TrustedTime,
 };
@@ -196,6 +196,8 @@ pub struct EvaluationInput<'a> {
     pub proofs: &'a [Proof],
     /// Catalog view.
     pub catalog: &'a Catalog,
+    /// The compatibility mappings the domain pinned (§9.13.4, OP-157 m.3 (b)).
+    pub mappings: &'a [crate::compat::Mapping],
 }
 
 /// Decision outcome (§9.5).
@@ -354,7 +356,12 @@ fn hop_blockers(
 ) -> Result<(), Rejection> {
     let at = Position::Hop(k);
     let grantor = Resolver::GrantorOfHop(k);
-    if !covers(&hop.authority.authority, input.intent, input.catalog) {
+    if !crate::compat::covers_mapped(
+        &hop.authority.authority,
+        input.intent,
+        input.catalog,
+        input.mappings,
+    ) {
         out.push(blocker(
             BlockerClass::NoCoveringAuthority,
             None,
@@ -443,7 +450,8 @@ fn mandate_and_restrictions(
     terms: &mut Vec<(RequirementTerm, Position)>,
 ) -> Result<(), Rejection> {
     if let Some(m) = input.mandate {
-        if !covers(&m.authority, input.intent, input.catalog) {
+        if !crate::compat::covers_mapped(&m.authority, input.intent, input.catalog, input.mappings)
+        {
             blockers.push(blocker(
                 BlockerClass::OutsideInstanceLimits,
                 None,
