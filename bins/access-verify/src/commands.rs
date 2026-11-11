@@ -202,6 +202,26 @@ pub(crate) const COMMANDS: &[Command] = &[
         summary: "signed checkpoint of a log and its witness cosignatures (L2-CKP-1 to L2-CKP-4)",
         run: crate::artefacts::checkpoint,
     },
+    Command {
+        name: "existed",
+        options: &["bundle", "origin", "log", "cosigners", "before"],
+        summary: "inclusion proof bundle: the record existed by the earliest trusted cosignature (U21, T19)",
+        run: crate::transparency::existed,
+    },
+    Command {
+        name: "fresh",
+        options: &[
+            "metadata",
+            "note",
+            "origin",
+            "log",
+            "cosigners",
+            "now",
+            "delta-ms",
+        ],
+        summary: "Domain Metadata is fresh: a trusted cosignature within delta of a checkpoint naming it (TI-RT5)",
+        run: crate::transparency::fresh,
+    },
 ];
 
 fn metadata(o: &Options) -> Result<Outcome, Usage> {

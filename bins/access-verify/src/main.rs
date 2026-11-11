@@ -4,6 +4,7 @@
 mod args;
 mod artefacts;
 mod commands;
+mod transparency;
 
 use std::fmt::Write as _;
 use std::io::Write as _;
