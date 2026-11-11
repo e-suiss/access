@@ -2462,6 +2462,80 @@
         }
       }
     },
+    "/access/v1/domains/{domain}/divergence": {
+      "post": {
+        "operationId": "declareDivergence",
+        "summary": "Records a signed divergence set (recovery.cddl) as a divergence notice for the domain's root and Security Party, under the key the domain declares for the replica that replayed it; it never stops an exit and writes no restriction (G32, G33, OP-158 m.3 (i)).",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/cbor": {
+              "schema": {}
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "domain or divergence-set: malformed, not signed by the key it names, or a range past the head.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "replica-unknown: not under a key the domain declares for a replica.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Kept as a new notice for the root and the Security Party; nothing stops.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "200": {
+            "description": "The same set was declared before.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/proxy/v1/check/{engine}": {
       "get": {
         "operationId": "proxyCheck",
@@ -2946,57 +3020,6 @@
                       "const": true
                     }
                   }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/access/v1/domains/{domain}/divergence": {
-      "post": {
-        "operationId": "declareDivergence",
-        "summary": "Records a signed divergence set (recovery.cddl) as a divergence_notice Claim for the domain's root and Security Party; it never stops an exit and writes no restriction (G32, G33, OP-158 m.3 (i)).",
-        "x-suiss-status": "planned",
-        "parameters": [
-          {
-            "name": "domain",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
-          }
-        ],
-        "responses": {
-          "400": {
-            "description": "The request is refused; nothing is read.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Temporarily unavailable; retry.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
