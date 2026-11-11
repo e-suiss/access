@@ -24,3 +24,5 @@ export * as work from "./work/index.js";
 export * as payment from "./payment/index.js";
 export * as offline from "./offline/index.js";
 export * as delegationPage from "./delegation-page/index.js";
+// OP-157 m.3 (l)
+export * as approval from "./approval/index.js";
