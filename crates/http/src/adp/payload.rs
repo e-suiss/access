@@ -77,7 +77,12 @@ static RESOURCE_REF: T = T::Struct(&[
     ("path", &TEXTS, true),
     ("incarnation", &UINT, true),
 ]);
-static PURPOSE: T = T::Tagged(&[("code", &TEXT), ("work", &DIGEST), ("aim", &DIGEST)]);
+static PURPOSE: T = T::Tagged(&[
+    ("code", &TEXT),
+    ("work", &DIGEST),
+    ("aim", &DIGEST),
+    ("case", &DIGEST),
+]);
 static PURPOSES: T = T::Set(&PURPOSE);
 static WHERE: T = T::Dict(&EQ);
 static STRUCTURAL: T = T::Struct(&[

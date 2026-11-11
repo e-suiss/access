@@ -204,6 +204,8 @@ fn purpose(v: &Json) -> R<PurposeRef> {
         ("code", c) => Ok(PurposeRef::Code(text(c, "purpose")?)),
         ("work", d) => Ok(PurposeRef::Work(digest(d)?)),
         ("aim", d) => Ok(PurposeRef::Aim(digest(d)?)),
+        // V1: OP-157 m.3 (b), (c)
+        ("case", d) => Ok(PurposeRef::Case(digest(d)?)),
         _ => Err(AdpError("purpose")),
     }
 }
