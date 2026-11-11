@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use access_identity_oauth::app::oidf::OidfReply;
 use access_identity_oauth::app::{Discovery, Reply};
 use access_identity_oauth::domain::metadata::{Document, JWKS_CACHE_CONTROL, JWKS_CONTENT_TYPE};
 use access_identity_oauth::domain::suiss;
@@ -133,17 +134,51 @@ async fn authority_role<D: Directory, K: Keys>(
             .and_then(|q| access_identity_oauth::domain::request::Params::parse(q).ok())
             .and_then(|p| p.get("sub").map(String::from));
         let Some(sub) = sub else {
-            return Problem::new(StatusCode::BAD_REQUEST, "invalid-request", "Bad Request")
-                .into_response();
+            return federation_error(
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+                "sub is required",
+            );
         };
         s.federation_fetch(host, slug.as_deref(), &sub, now_ms())
             .await
     };
-    oidf_reply(reply)
+    // OP-155 m.3 (j)
+    match reply {
+        OidfReply::NotFound => federation_error(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "no subordinate statement is served for this sub",
+        ),
+        OidfReply::InvalidRequest => federation_error(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            "sub must not be the issuer",
+        ),
+        OidfReply::Unavailable => federation_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "temporarily_unavailable",
+            "the federation role cannot answer now",
+        ),
+        other => oidf_reply(other),
+    }
 }
 
-fn oidf_reply(reply: access_identity_oauth::app::oidf::OidfReply) -> Response {
-    use access_identity_oauth::app::oidf::OidfReply;
+/// An error of a federation endpoint (OIDF §8.9): `application/json` with `error` and
+/// `error_description`.
+fn federation_error(status: StatusCode, error: &str, description: &str) -> Response {
+    (
+        status,
+        [(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        )],
+        serde_json::json!({ "error": error, "error_description": description }).to_string(),
+    )
+        .into_response()
+}
+
+fn oidf_reply(reply: OidfReply) -> Response {
     match reply {
         OidfReply::Statement(jwt) => (
             [(
@@ -154,7 +189,7 @@ fn oidf_reply(reply: access_identity_oauth::app::oidf::OidfReply) -> Response {
         )
             .into_response(),
         OidfReply::List(doc) => respond(Reply::Metadata(doc)),
-        OidfReply::NotFound => respond(Reply::NotFound),
+        OidfReply::NotFound | OidfReply::InvalidRequest => respond(Reply::NotFound),
         OidfReply::Unavailable => respond(Reply::Unavailable),
     }
 }

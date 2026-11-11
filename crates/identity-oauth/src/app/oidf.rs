@@ -39,6 +39,8 @@ pub enum OidfReply {
     List(String),
     /// No realm here, or the realm is not a federation leaf.
     NotFound,
+    /// A fetch about the issuer itself (OIDF §8.1.1): `invalid_request`.
+    InvalidRequest,
     /// The directory or the signer did not answer (fail-closed).
     Unavailable,
 }
@@ -207,6 +209,9 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
         now_ms: u64,
     ) -> OidfReply {
         let found = match self.subordinates(authority, slug).await {
+            Ok(Some((realm, _))) if realm.issuer.as_str() == sub => {
+                return OidfReply::InvalidRequest;
+            }
             Ok(Some((realm, subs))) => subs
                 .into_iter()
                 .find(|(id, _, _)| id == sub)

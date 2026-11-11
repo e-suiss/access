@@ -453,8 +453,39 @@ mod admin {
             access_identity_oidf::statement::verify_configuration(&jwt, &issuer, real_now).unwrap();
         let entity = ec.metadata_of("federation_entity").unwrap();
         assert!(entity.get("federation_fetch_endpoint").is_some());
+        // OP-155 m.3 (j)
         let unknown = format!("{base}/federation/fetch?sub=https%3A%2F%2Fother.example");
-        assert_eq!(get(&router, &host, &unknown).await.0, 404);
+        let itself = format!(
+            "{base}/federation/fetch?sub={}",
+            urlencoding(issuer.as_str())
+        );
+        let without_sub = format!("{base}/federation/fetch");
+        for (url, status, error) in [
+            (&unknown, 404, "not_found"),
+            (&itself, 400, "invalid_request"),
+            (&without_sub, 400, "invalid_request"),
+        ] {
+            let (got, ct, body) = get(&router, &host, url).await;
+            assert_eq!(
+                (got, ct.as_str()),
+                (status, "application/json"),
+                "{url}: {body}"
+            );
+            let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+            assert_eq!(body["error"], error, "{url}");
+            assert!(body["error_description"].is_string());
+        }
+    }
+
+    fn urlencoding(s: &str) -> String {
+        s.bytes()
+            .map(|b| match b {
+                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                    char::from(b).to_string()
+                }
+                _ => format!("%{b:02X}"),
+            })
+            .collect()
     }
 
     /// Federation documents served in process, by URL.
