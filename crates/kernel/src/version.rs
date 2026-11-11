@@ -4,6 +4,9 @@
 //! profile by name. Action schemas are pinned by Acceptance, not ordered, and connectivity
 //! profiles are named by the `ValidityContract`.
 
+use alloc::collections::BTreeSet;
+
+use crate::verify::cose::Algorithm;
 use crate::verify::key_scope::{DomainMetadata, SpecVersions};
 
 /// Core Semantic Spec version this Kernel evaluates; its vectors are `core/1` (OP-106 m.23).
@@ -91,6 +94,65 @@ pub fn check_domain(
         return Err(VersionError::NotAdopted(t));
     }
     at_least(cited, &metadata.min_versions).map_or(Ok(()), |t| Err(VersionError::BelowMinimum(t)))
+}
+
+/// How long a raised domain minimum waits after its activation before it binds (§15.4, §13.7.8,
+/// PD): 90 days.
+pub const TRANSITION_MS: u64 = 90 * 24 * 3_600 * 1_000;
+
+/// The least time-lock of a downgrade, whatever the domain's CT3 delay (§15.4, CR-8, SI-18):
+/// 24 hours.
+pub const DOWNGRADE_DELAY_MS: u64 = 24 * 3_600 * 1_000;
+
+/// Whether `new` lowers any track of `old`: a lower core or meta-schema version, a lower or a
+/// dropped profile floor, or a dropped pinned schema (SI-18, §17.10).
+#[must_use]
+pub fn lowers(old: &SpecVersions, new: &SpecVersions) -> bool {
+    new.core < old.core
+        || new.meta_schema < old.meta_schema
+        || old
+            .profiles
+            .iter()
+            .any(|(name, v)| new.profiles.get(name).is_none_or(|n| n < v))
+        || !old.schemas.is_subset(&new.schemas)
+}
+
+/// Whether a change of the domain minimum from `old_min` to `new_min` and of the algorithm
+/// allowlist from `old_algs` to `new_algs` is a downgrade: lowering the minimum or adding any
+/// algorithm, strong or weak, is expansion (CT3 and at least [`DOWNGRADE_DELAY_MS`]); raising the
+/// minimum and removing algorithms narrow (CT1) (SI-18, CR-8, §15.4, §15.16 k.2).
+#[must_use]
+pub fn downgrades(
+    (old_min, new_min): (&SpecVersions, &SpecVersions),
+    (old_algs, new_algs): (&BTreeSet<Algorithm>, &BTreeSet<Algorithm>),
+) -> bool {
+    lowers(old_min, new_min) || !new_algs.is_subset(old_algs)
+}
+
+/// The domain minimum in force at `now`: `current`, raised track by track to `activated` once
+/// [`TRANSITION_MS`] have passed since `activated_at`, never lowered (§15.4, §13.7.8).
+#[must_use]
+pub fn minimum_at(
+    current: &SpecVersions,
+    activated: &SpecVersions,
+    activated_at: u64,
+    now: u64,
+) -> SpecVersions {
+    let due = activated_at
+        .checked_add(TRANSITION_MS)
+        .is_some_and(|t| now >= t);
+    if !due {
+        return current.clone();
+    }
+    let mut out = current.clone();
+    out.core = out.core.max(activated.core);
+    out.meta_schema = out.meta_schema.max(activated.meta_schema);
+    for (name, v) in &activated.profiles {
+        let floor = out.profiles.entry(name.clone()).or_insert(*v);
+        *floor = (*floor).max(*v);
+    }
+    out.schemas.extend(activated.schemas.iter().copied());
+    out
 }
 
 #[cfg(test)]

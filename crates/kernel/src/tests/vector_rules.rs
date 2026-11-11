@@ -25,10 +25,15 @@ pub(crate) fn hex(b: &[u8]) -> String {
 /// Writes `json` to `conformance/vectors/core/1/<file>` under `ACCESS_UPDATE_VECTORS`, else
 /// asserts it equals `committed`, the file's `include_str!` content.
 pub(crate) fn golden(file: &str, committed: &str, json: &str) {
+    golden_in("core/1", file, committed, json);
+}
+
+/// [`golden`] for `conformance/vectors/<dir>/<file>`.
+pub(crate) fn golden_in(dir: &str, file: &str, committed: &str, json: &str) {
     #[cfg(not(target_os = "wasi"))]
     if std::env::var_os("ACCESS_UPDATE_VECTORS").is_some() {
         let path = format!(
-            "{}/../../conformance/vectors/core/1/{file}",
+            "{}/../../conformance/vectors/{dir}/{file}",
             env!("CARGO_MANIFEST_DIR")
         );
         std::fs::write(path, json).unwrap();

@@ -284,6 +284,25 @@ def record_expected(case):
     return {field: case[field] for field in fields if field in case}
 
 
+def run_version_downgrade(case, document):
+    if document.get("delay_ms") != version_check.DOWNGRADE_DELAY_MS:
+        return {"delay_ms": document.get("delay_ms")}, "delay"
+    try:
+        old_min, new_min = (version_check.decode_spec_versions(bytes.fromhex(case[n])) for n in ("old_minimum", "new_minimum"))
+    except Rejection as rejection:
+        return {"rejection": rejection.kind}, rejection.reason
+    old_algs, new_algs = (decode_canonical(bytes.fromhex(case[n])) for n in ("old_algorithms", "new_algorithms"))
+    return {"expansion": version_check.downgrades(old_min, new_min, old_algs, new_algs)}, None
+
+
+def run_version_transition(case, document):
+    if document.get("window_ms") != version_check.TRANSITION_MS:
+        return {"window_ms": document.get("window_ms")}, "window"
+    current, activated = (version_check.decode_spec_versions(bytes.fromhex(case[n])) for n in ("current", "activated"))
+    got = version_check.minimum_at(current, activated, case["activated_at"], case["now"])
+    return {"minimum": encode(got).hex()}, None
+
+
 def run_version_check(case, document):
     try:
         cited, supported, adopted, minimum = (
@@ -544,6 +563,8 @@ OPERATIONS = {
     "record.envelope": (run_record, record_expected),
     "record.fold": (run_record_fold, ("state", "rejection")),
     "version.check": (run_version_check, ("valid", "error", "track")),
+    "version.downgrade": (run_version_downgrade, ("expansion",)),
+    "version.transition": (run_version_transition, ("minimum",)),
     "algebra.meet": (run_algebra_meet, ("meet", "bottom", "rejection")),
     "digest.intent": (run_digest_intent, ("digest", "rejection")),
     "digest.body_commit": (run_body_commit, ("commit", "rejection")),
