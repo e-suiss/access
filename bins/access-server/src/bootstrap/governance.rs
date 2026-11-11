@@ -466,7 +466,7 @@ fn context() -> Option<access_internal_api::context::RateContext> {
 
 /// The Unix ms day `now` falls in.
 const fn day_of(now: u64) -> u64 {
-    now - now % DAY_MS
+    now.saturating_sub(now % DAY_MS)
 }
 
 impl<P, K> Bootstrap<'_, P, K>

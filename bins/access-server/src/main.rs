@@ -486,7 +486,7 @@ async fn seed(
     };
     let result = match job {
         Job::Bootstrap => {
-            // OP-146 m.5 (f), OP-157 m.6 (i): a fixture's Claim finds its day
+            // OP-146 m.5 (f), OP-157 m.6 (i)
             jobs::open_now(&all.app, &all.archive, &holder()?).await;
             Box::pin(bootstrap.run(plan))
                 .await

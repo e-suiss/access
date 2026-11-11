@@ -2018,7 +2018,7 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
         access_local_client::adp::pep_name(&leaf)
     );
 
-    // OP-157 m.6 (i): the pushed request a browser opens
+    // OP-157 m.6 (i)
     let live = commit_intent(&allowed, "live", now);
     let pushed = access_local_client::approve::push_request(
         &http,
@@ -2059,7 +2059,7 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
         .await
         .unwrap();
     assert_eq!(page.status, 200, "{}", page.text());
-    // the page's relative script and flows resolve under the realm's own path
+    // OP-157 m.6 (i), OP-150 m.3 (r)
     assert!(page.text().contains("<script src=\"approve/app.js\">"));
     let script = http
         .request(

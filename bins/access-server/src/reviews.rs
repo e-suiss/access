@@ -156,7 +156,7 @@ async fn notify<T: Teams, K: access_identity_events::adapters::RealmKek>(
     teams: &T,
     inputs: &Inputs<'_, K>,
     route: &RealmRoute,
-    (k, name): (u64, &str),
+    (period_index, name): (u64, &str),
 ) -> Result<u32, String> {
     let e = |x: access_store::StoreError| x.to_string();
     let Some(kek) = inputs.keks.kek(route.tenant, route.realm) else {
@@ -173,17 +173,17 @@ async fn notify<T: Teams, K: access_identity_events::adapters::RealmKek>(
         .into_iter()
         .find(|r| r.name == name && r.live);
     t.commit().await.map_err(e)?;
-    let (Some(g), Some(c)) = (governing, campaign) else {
+    let (Some(governing), Some(c)) = (governing, campaign) else {
         return Ok(0);
     };
     let Some(due_ms) = u64::from(c.period_days)
         .checked_mul(DAY_MS)
-        .and_then(|len| len.checked_mul(k.checked_add(1)?))
+        .and_then(|len| len.checked_mul(period_index.checked_add(1)?))
         .and_then(|d| c.first_ms.checked_add(d))
     else {
         return Ok(0);
     };
-    let domain = Digest(*g.domain.as_bytes());
+    let domain = Digest(*governing.domain.as_bytes());
     let link = match inputs.console {
         Some(origin) => format!("{}{CONSOLE_PATH}", origin.trim_end_matches('/')),
         None => format!("{}{CONSOLE_PATH}", route.issuer.trim_end_matches('/')),
