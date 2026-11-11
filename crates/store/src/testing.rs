@@ -1100,3 +1100,23 @@ pub async fn hold_head(
         .at("lock head")?;
     Ok(tx)
 }
+
+/// Moves the recording time of every rehome end of `db` back by `hours`, as that much time
+/// passing would (OP-158 m.18 (e)).
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn age_rehome_ends(db: &TestDb, hours: u32) -> Result<(), TestDbError> {
+    let mut c = PgConnection::connect_with(&db.admin)
+        .await
+        .at("connect as administrator")?;
+    c.execute(AssertSqlSafe(format!(
+        "SET session_replication_role = replica;
+         UPDATE access.rehome_ends SET created_at = created_at - interval '{hours} hours';
+         RESET session_replication_role;"
+    )))
+    .await
+    .at("age the rehome ends")?;
+    c.close().await.at("close")?;
+    Ok(())
+}

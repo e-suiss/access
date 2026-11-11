@@ -310,7 +310,7 @@ async fn rehome_proposal(
     (proposal, at)
 }
 
-// E14, MD-5a, §5.16, §12.1.1 2a, OP-158 m.3 (o), Ek B 5725
+// E14, MD-5a, §5.16, §12.1.1 2a, OP-158 m.3 (o), m.18 (e), Ek B 5725
 #[tokio::test(flavor = "multi_thread")]
 async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_domains() {
     let w = World::new("w9-rehome").await;
@@ -416,6 +416,15 @@ async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_do
         "{one:?}"
     );
     assert_eq!(governing().await, (from, 1));
+    // OP-158 m.18 (e)
+    access_store::testing::age_rehome_ends(&w.db, 25)
+        .await
+        .unwrap();
+    assert_eq!(
+        governing().await,
+        (from, 0),
+        "an unused end expires 24 h after it was recorded"
+    );
 
     // E14
     let (p, at) = rehome_proposal(&w, (route.tenant, route.realm), from, to).await;
@@ -458,7 +467,10 @@ async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_do
     assert!(matches!(moved, Applied::Written { .. }), "{moved:?}");
     let (now, open) = governing().await;
     assert_eq!(now, to);
-    assert_eq!(open, 2, "the ends of the first two attempts stay unused");
+    assert_eq!(
+        open, 1,
+        "the expired end completes nothing; the second attempt's from end is used and the third's stays unused"
+    );
     let placed = placement::cell_of(&w.db.app, &Subject::Realm(*route.realm.as_bytes()))
         .await
         .unwrap()

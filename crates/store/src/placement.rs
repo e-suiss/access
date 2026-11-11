@@ -367,8 +367,9 @@ pub struct Rehomed {
     pub to_pos: u64,
 }
 
-/// Moves the transaction's realm from `from` to `to` when both ends of that move are recorded
-/// and unused; otherwise nothing changes and the realm stays (E14).
+/// Moves the transaction's realm from `from` to `to` when both ends of that move are recorded,
+/// unused and younger than 24 h; otherwise nothing changes and the realm stays (E14, OP-158
+/// m.18 (e)).
 ///
 /// # Errors
 /// [`StoreError`].
@@ -390,6 +391,7 @@ pub async fn complete_rehome(
                  AND NOT EXISTS (SELECT 1 FROM access.realm_rehomes h
                                   WHERE h.tenant_id = $1 AND h.from_domain = e.domain_id
                                     AND h.from_pos = e.decision_pos)
+                 AND e.created_at > now() - interval '24 hours'
                ORDER BY e.decision_pos LIMIT 1) AS from_pos,
              (SELECT e.decision_pos FROM access.rehome_ends e
                WHERE e.tenant_id = $1 AND e.realm_id = $2 AND e.side = 'to'
@@ -397,6 +399,7 @@ pub async fn complete_rehome(
                  AND NOT EXISTS (SELECT 1 FROM access.realm_rehomes h
                                   WHERE h.tenant_id = $1 AND h.to_domain = e.domain_id
                                     AND h.to_pos = e.decision_pos)
+                 AND e.created_at > now() - interval '24 hours'
                ORDER BY e.decision_pos LIMIT 1) AS to_pos"#,
         tenant,
         realm,
@@ -453,7 +456,8 @@ pub async fn complete_rehome(
     }))
 }
 
-/// The realm's rehome ends not yet used by a completed rehome: (side, from, to, position).
+/// The realm's rehome ends not yet used by a completed rehome and not expired, 24 h after they
+/// were recorded (OP-158 m.18 (e)): (side, from, to, position).
 ///
 /// # Errors
 /// [`StoreError`].
@@ -465,6 +469,7 @@ pub async fn open_ends(
     sqlx::query!(
         "SELECT e.side, e.from_domain, e.to_domain, e.decision_pos FROM access.rehome_ends e
           WHERE e.tenant_id = $1 AND e.realm_id = $2
+            AND e.created_at > now() - interval '24 hours'
             AND NOT EXISTS (SELECT 1 FROM access.realm_rehomes h
                              WHERE h.tenant_id = $1
                                AND ((h.from_domain = e.domain_id AND h.from_pos = e.decision_pos)
