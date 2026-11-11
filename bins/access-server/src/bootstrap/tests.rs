@@ -1499,6 +1499,12 @@ fn every_shipped_plan_is_valid() {
             "{name}"
         );
         assert_eq!(plan.compromise.as_ref().unwrap().realm, "acme", "{name}");
+        // OP-157 m.6 (i)
+        if name == "bootstrap.toml" {
+            assert_eq!(plan.support_operator.as_ref().unwrap().realm, "acme");
+            assert_eq!(plan.breakglass_account.as_ref().unwrap().realm, "acme");
+            assert_eq!(plan.review_schedule.as_ref().unwrap().realm, "acme");
+        }
         for p in &plan.products {
             let id = ClientId::parse("cli_0123456789abcdefghjkmnpqrs").unwrap();
             assert_eq!(

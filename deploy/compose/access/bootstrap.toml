@@ -63,3 +63,37 @@ realm = "acme"
 [sample_agent]
 realm = "acme"
 display_name = "Local sample agent"
+
+# OP-157 m.6 (i): a support operator in acme, a member of its support organization, with the
+# realm's registered case system and an open case of the test user, so a support request can be
+# made; the operator signs in with the test user's password (this deployment's own, not a
+# secret). Its device key (`access/bootstrap/support-operator-device`) is its Party's, and the
+# case system's key (`access/bootstrap/support-case-system`) signs the `support_case` Claim,
+# which holds for a week and is stated again by a later day's run. The summary says
+# `support_operator` (identifier, subject, party, organisation, case_system, case, acceptance).
+[support_operator]
+realm = "acme"
+display_name = "Mehmet Y."
+organisation = "Acme Support"
+identifier = "support@acme.example"
+password_env = "BOOTSTRAP_TEST_PASSWORD"
+case_system = "local-desk"
+case = "4411"
+
+# OP-157 m.6 (i), m.10: a break-glass account in acme, owner of its own organization and marked
+# by `idp.org.member_breakglass`; it has no password and signs in only with a hardware passkey.
+# It and the test user each hold a pre-issued break-glass Grant (`idp.account:mfa_change`, two
+# approvals from distinct Parties), and the test user may review break-glass uses. The summary
+# says `breakglass_account` (identifier, subject, party, organisation, grants).
+[breakglass_account]
+realm = "acme"
+identifier = "oncall@acme.example"
+organisation = "Acme Security"
+
+# OP-157 m.6 (i): an access review over the managers' teams; the test user manages the sample
+# agent's Grant, so its campaign shows one item, and the console offers it the screen. The
+# summary says `review_schedule` (name, period_days, manager, items).
+[review_schedule]
+realm = "acme"
+name = "local-review"
+period_days = 90

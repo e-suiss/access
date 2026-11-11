@@ -121,18 +121,31 @@ const MAX_PERIOD_DAYS: u16 = 366;
 /// How many approvals from distinct Parties a use of the local break-glass Grants needs.
 const BREAKGLASS_APPROVALS: u64 = 2;
 
-/// `[support_operator]` as written: a support operator in its team's organization. The password
-/// is read from the environment variable `password_env` names, never from the plan.
-#[derive(Debug, Deserialize)]
+/// `[support_operator]` as written: a support operator in its team's organization. Its password
+/// is the plan's literal or, as the shipped plans have it, read from the environment variable
+/// `password_env` names (OP-149 m.26 (b)).
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct SupportOperatorFile {
     realm: String,
     display_name: String,
     organisation: String,
     identifier: String,
-    password_env: String,
+    password: Option<String>,
+    password_env: Option<String>,
     case_system: Option<String>,
     case: Option<String>,
+}
+
+impl core::fmt::Debug for SupportOperatorFile {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SupportOperatorFile")
+            .field("realm", &self.realm)
+            .field("identifier", &self.identifier)
+            .field("password", &self.password.as_ref().map(|_| "<redacted>"))
+            .field("password_env", &self.password_env)
+            .finish_non_exhaustive()
+    }
 }
 
 /// `[breakglass_account]` as written: an organization member marked `is_breakglass`.
@@ -281,15 +294,18 @@ impl Fixtures {
                         "support_operator: case_system is a lower-case name and case a case label",
                     )));
                 }
-                let password = std::env::var(&s.password_env)
-                    .ok()
-                    .filter(|p| !p.is_empty())
-                    .ok_or_else(|| {
-                        BootstrapError::Plan(format!(
-                            "support_operator: password_env {} is not set",
-                            s.password_env
-                        ))
-                    })?;
+                let plan = |what: &str| BootstrapError::Plan(format!("support_operator: {what}"));
+                let password = match (s.password, &s.password_env) {
+                    (Some(p), None) => p,
+                    (None, Some(var)) => std::env::var(var)
+                        .map_err(|_| plan(&format!("password_env {var} is not set")))?,
+                    _ => {
+                        return Err(plan("exactly one of password and password_env is required"));
+                    }
+                };
+                if password.is_empty() {
+                    return Err(plan("the password is empty"));
+                }
                 Some(SupportOperatorPlan {
                     realm: s.realm,
                     display_name: s.display_name,
