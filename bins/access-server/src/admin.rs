@@ -3,6 +3,8 @@
 //! in PostgreSQL, the realm surfaces and resources over the identity plane ([`realm`]), and the
 //! read tokens the realms issue ([`tokens`], TN-130); the platform surface is [`platform`].
 
+// OP-157 m.3 (v)
+pub(crate) mod offboarding;
 pub(crate) mod platform;
 pub(crate) mod realm;
 pub(crate) mod tokens;

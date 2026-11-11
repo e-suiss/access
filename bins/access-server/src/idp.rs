@@ -780,6 +780,20 @@ where
             .await
             .map_err(|e| unavailable(&e))
     }
+
+    async fn offboarding(
+        &self,
+        domain: Digest,
+        party: Id,
+    ) -> Result<Option<access_identity_admin::ports::Departing>, Unavailable> {
+        // OP-157 m.3 (v)
+        let now = Instances::now(self).await?;
+        self.domains
+            .offboarding(domain, party, now)
+            .await
+            .map(|c| c.map(crate::admin::offboarding::departing))
+            .map_err(|e| unavailable(&e))
+    }
 }
 
 impl<K, B, S, C> crate::bootstrap::MetaExercises for Plane<K, B, S, C>

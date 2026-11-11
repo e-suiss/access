@@ -455,7 +455,29 @@ fn schemas() -> Value {
         },
         "OffboardingPreview": {
             "type": "object",
-            "description": "What offboarding a Party would do, channel by channel, with no defaults (OP-157 m.3 (v)); its lane names its members when it serves it.",
+            "description": "What offboarding a Party would do, channel by channel, with no defaults (OP-157 m.3 (v), §8.17.9.6): each channel lists its members and the choices it offers, and the commit must name one for every member. `status` is `offboarded` only once the departure Exercise committed and was recorded; `ended` lists the rule-shaped holdings whose episode already ended (\"Finance role ended (HR, 6 Oct)\"), and `survive` counts the Grants held by name that HR's change never touches.",
+            "required": ["party", "status", "channels", "survive", "derived", "ended"],
+            "properties": {
+                "party": { "type": "string" },
+                "account_id": { "type": ["string", "null"] },
+                "status": { "type": "string", "enum": ["active", "offboarded"] },
+                "departure": { "type": ["object", "null"] },
+                "departed_position": { "type": ["string", "null"] },
+                "channels": {
+                    "type": "object",
+                    "required": ["grants", "instances", "holdings", "self_anchor", "reentry"],
+                    "properties": {
+                        "grants": { "type": "array", "items": { "type": "object" } },
+                        "instances": { "type": "array", "items": { "type": "object" } },
+                        "holdings": { "type": "array", "items": { "type": "object" } },
+                        "self_anchor": { "type": "object" },
+                        "reentry": { "type": "object" },
+                    },
+                },
+                "survive": { "type": "integer", "minimum": 0 },
+                "derived": { "type": "array", "items": { "type": "object" } },
+                "ended": { "type": "array", "items": { "type": "object" } },
+            },
         },
         "Declared": {
             "type": "object",
@@ -743,7 +765,7 @@ fn body_of(row: &Route) -> &'static str {
         (_, Some((_, Shape::Planned(name)))) => name,
         (_, Some((_, Shape::List(_)))) => "Page",
         (_, Some((_, Shape::Draft))) => "IntentDraft",
-        (_, Some((_, Shape::Write { .. }))) => "WriteResult",
+        (_, Some((_, Shape::Write { .. } | Shape::Offboarding))) => "WriteResult",
         (_, Some((kind, Shape::Get))) => match kind {
             ResourceKind::Clients => "Client",
             ResourceKind::Groups => "Group",
@@ -877,7 +899,9 @@ fn operation(row: &Route) -> Value {
     ) {
         (Some((_, super::realm::Shape::Draft)), _)
         | (_, Some((_, super::platform::Shape::Draft))) => Some("DraftRequest"),
-        (Some((_, super::realm::Shape::Write { .. })), _) => Some("WriteBody"),
+        (Some((_, super::realm::Shape::Write { .. } | super::realm::Shape::Offboarding)), _) => {
+            Some("WriteBody")
+        }
         (Some((_, super::realm::Shape::Planned(_))), _) if write => Some("WriteBody"),
         (_, Some((super::ports::PlatformKind::Tenants, super::platform::Shape::Create))) => {
             Some("TenantCreate")

@@ -29,6 +29,8 @@ mod support;
 pub mod transfers;
 pub mod vault;
 pub mod workloads;
+// OP-157 m.3 (v)
+pub mod offboarding;
 
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::adapters::pg::PgTx;
@@ -694,7 +696,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 let leaves = if matches!(change, Change::AccountSuspend(_)) {
                     matches!(a.status.as_str(), "active" | "locked")
                 } else {
-                    a.status == "suspended"
+                    // OP-157 m.3 (v)
+                    a.status == "suspended" && !t.reentry_blocked(*s).await?
                 };
                 if !leaves {
                     return Err(Invalid::AccountState.into());

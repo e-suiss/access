@@ -16,6 +16,8 @@
 
 mod handlers;
 pub mod jobs;
+// OP-157 m.3 (v)
+pub mod offboarding;
 
 use access_identity_admin::AdminError;
 use access_identity_admin::domain::Invalid;
@@ -1504,6 +1506,9 @@ pub enum Shape {
     /// An agent's `revoke-all`: a bulk job of the caller's signed `instance_terminate` items,
     /// one per live Instance of the agent (OP-154 m.3 (f), P59).
     RevokeAll,
+    /// V9, OP-157 m.4 (b): an offboarding's commit, the caller's signed Exercises in order with
+    /// one explicit choice for every channel (OP-157 m.3 (v)).
+    Offboarding,
 }
 
 const CLIENT_PATCH: &[&str] = &[
@@ -1779,8 +1784,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "getReview" => (ResourceKind::Reviews, Shape::Planned("Declared")),
         "listReviewItems" => (ResourceKind::ReviewItems, Shape::Planned("Page")),
         "keepReviewItem" => (ResourceKind::ReviewItems, Shape::Planned("WriteResult")),
-        "previewOffboarding" => (ResourceKind::OffboardingPreviews, Shape::Planned("Declared")),
-        "commitOffboarding" => (ResourceKind::OffboardingPreviews, Shape::Planned("WriteResult")),
+        // OP-157 m.3 (v), m.6 (a)
+        "previewOffboarding" => (ResourceKind::OffboardingPreviews, Shape::Get),
+        "commitOffboarding" => (ResourceKind::OffboardingPreviews, Shape::Offboarding),
         // OP-157 m.3 (h), m.4 (b)
         "reviewBreakglassUse" => (ResourceKind::BreakglassReviews, w(false)),
         o if declared(o) => (Settings, Shape::Planned(planned_body(o))),

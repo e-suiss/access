@@ -495,6 +495,18 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                     .complete_transfer(place, *org, *handover, submission)
                     .await
             }
+            // OP-157 m.3 (v)
+            Some(MetaTarget::Offboarding(d)) => {
+                let departure = access_identity_admin::app::offboarding::Departure {
+                    party: d.party,
+                    choices: d.choices.clone(),
+                    reentry_blocked: d.reentry_blocked,
+                    actor: d.actor,
+                };
+                self.admin(&ids)
+                    .offboard(place, &departure, submission)
+                    .await
+            }
             None => self.admin(&ids).meta(place, submission).await,
         };
         match applied {

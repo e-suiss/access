@@ -200,6 +200,17 @@ pub trait Instances: Send + Sync {
         let _ = (domain, party);
         async { Err(Unavailable(String::from("instance-lookup"))) }
     }
+
+    /// What offboarding `party` in `domain` would touch now, channel by channel (OP-157 m.3
+    /// (v)); `None` for a Party the domain does not know.
+    fn offboarding(
+        &self,
+        domain: Digest,
+        party: Id,
+    ) -> impl Future<Output = Result<Option<Departing>, Unavailable>> + Send {
+        let _ = (domain, party);
+        async { Err(Unavailable(String::from("offboarding"))) }
+    }
 }
 
 /// A workload's first Instance (OP-154 m.3 (d)): the key the realm issuer's
@@ -350,4 +361,61 @@ pub trait DomainProbe: Send + Sync {
         &self,
         domain: &str,
     ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
+}
+
+/// One conjunct of a rule-shaped holder as offboarding shows it: the Claim class and the value
+/// it selects on, as text.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Selects {
+    /// The Claim class.
+    pub class: String,
+    /// The value, when the conjunct names one.
+    pub value: Option<String>,
+}
+
+/// A rule-shaped holding that still selects the departing Party (C13).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HeldByRule {
+    /// The Grant.
+    pub grant: Id,
+    /// What its holder selects on.
+    pub selects: Vec<Selects>,
+    /// The episode's first position.
+    pub since: u64,
+    /// Whether it is stale (never removed).
+    pub stale: bool,
+}
+
+/// A rule-shaped holding whose episode ended (INV-31).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EndedByRule {
+    /// The Grant.
+    pub grant: Id,
+    /// What its holder selects on.
+    pub selects: Vec<Selects>,
+    /// When it ended, Unix ms, when known.
+    pub at: Option<u64>,
+    /// The issuer of the last statement that selected the Party.
+    pub issuer: Option<Id>,
+}
+
+/// What offboarding a Party would touch, from the authority plane (OP-157 m.3 (v), §8.17.9.6).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Departing {
+    /// Its self-anchor.
+    pub anchor: Option<Id>,
+    /// The position of its departure, once it departed.
+    pub departed: Option<u64>,
+    /// Live Grants it holds by name.
+    pub direct: Vec<Id>,
+    /// Its live Instances.
+    pub instances: Vec<Id>,
+    /// Rule-shaped holdings that select it.
+    pub holdings: Vec<HeldByRule>,
+    /// Live Grants on its self-anchor.
+    pub given: Vec<Id>,
+    /// Live Grants derived from one of its holdings, with that holding's Grant.
+    pub derived: Vec<(Id, Id)>,
+    /// Rule-shaped holdings whose episode ended.
+    pub ended: Vec<EndedByRule>,
 }

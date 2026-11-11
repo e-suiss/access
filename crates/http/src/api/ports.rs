@@ -402,6 +402,22 @@ pub enum MetaTarget {
     /// An organization's autojoin role Grant, held by its `org_member` Claims: the
     /// organization's Party (TN-90, OP-153 m.25 (i) (3)).
     Autojoin([u8; 16]),
+    /// V9, OP-157 m.4 (b): an offboarding's departure, recorded once it commits with every
+    /// channel's choice (OP-157 m.3 (v)).
+    Offboarding(Departure),
+}
+
+/// What an offboarding's departure records (OP-157 m.3 (v)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Departure {
+    /// The departing Party.
+    pub party: [u8; 16],
+    /// Every channel's choice, as canonical JSON.
+    pub choices: String,
+    /// Whether the person may not come back on the account.
+    pub reentry_blocked: bool,
+    /// The key that signed the offboarding's envelope.
+    pub actor: [u8; 32],
 }
 
 /// What a draft found.

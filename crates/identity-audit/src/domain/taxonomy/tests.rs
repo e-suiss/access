@@ -87,7 +87,6 @@ const UNPRODUCED: &[&str] = &[
     "support.artifact_uploaded",
     "support.artifact_read",
     "review.kept",
-    "offboarding.committed",
     "approval.inline",
     "approval.batch",
     "mapping.pinned",

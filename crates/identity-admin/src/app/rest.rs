@@ -3399,6 +3399,16 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     items: rows.iter().map(|d| (delivery_view(d), 0)).collect(),
                 }
             }
+            // OP-157 m.3 (v)
+            (Kind::OffboardingPreviews, Some(k)) => Read {
+                items: self
+                    .offboarding_view(t, k)
+                    .await?
+                    .map(|v| (v, 0))
+                    .into_iter()
+                    .collect(),
+                last: None,
+            },
             // OP-157 m.4 (a)
             (Kind::Deliveries | Kind::SsoPreview, None)
             | (

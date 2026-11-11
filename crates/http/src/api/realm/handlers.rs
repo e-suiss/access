@@ -134,6 +134,11 @@ pub async fn serve<E: Env>(
         Shape::Audit => audit(&ctx, &uri).await,
         Shape::AuditProof => audit_proof(&ctx, key).await,
         Shape::Planned(_) => Err(&codes::NOT_YET_SERVED),
+        // OP-157 m.3 (v)
+        Shape::Offboarding => match key {
+            Some(k) => super::offboarding::commit(&ctx, k, &body).await,
+            None => Err(&codes::NOT_FOUND),
+        },
         // OP-154 m.3 (f)
         Shape::RevokeAll => match key {
             Some(k) => super::jobs::revoke_all(&ctx, k, &body).await,
@@ -336,6 +341,10 @@ async fn draft<E: Env>(ctx: &Ctx<E>, raw: &[u8]) -> Result<Response, &'static Co
         .filter(|r| r.access == crate::api::manifest::Access::Write)
         .ok_or(&codes::realm::UNKNOWN_OPERATION)?;
     let (kind, shape) = spec(operation.operation_id).ok_or(&codes::realm::UNKNOWN_OPERATION)?;
+    // OP-157 m.3 (v)
+    if matches!(shape, Shape::Offboarding) {
+        return super::offboarding::draft(ctx, operation.operation_id, request).await;
+    }
     // TN-125, OP-154 m.3 (f)
     if matches!(shape, Shape::JobCreate | Shape::RevokeAll) {
         let Some(Value::Object(body)) = request.remove("body") else {
