@@ -1416,14 +1416,14 @@ pub const ROUTES: &[Route] = &[
         "answerInlineApproval",
         "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key (surface_profile suiss-approver-sdk); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m)).",
     ),
-    planned(
+    live(
         Owner::V6,
         Verb::Get,
         "/consent",
         "getConsent",
         "The MCP authorization server's consent step: redirects to the Approval Surface (/v1/approve); consent is an AAS bound to its grant_ref (OP-157 m.3 (l), §11.6).",
     ),
-    planned(
+    live(
         Owner::V6,
         Verb::Post,
         "/consent",

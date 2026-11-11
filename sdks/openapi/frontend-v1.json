@@ -5014,21 +5014,34 @@
         "operationId": "getConsent",
         "summary": "The MCP authorization server's consent step: redirects to the Approval Surface (/v1/approve); consent is an AAS bound to its grant_ref (OP-157 m.3 (l), §11.6).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       },
       "post": {
         "operationId": "postConsent",
         "summary": "Answers 405: consent is never a form post outside the Approval Surface.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -5042,8 +5055,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     }
   },

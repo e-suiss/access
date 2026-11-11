@@ -14,8 +14,8 @@ use access_identity_oauth::domain::request::Params;
 use access_identity_oauth::ports::{Directory, Keys};
 use access_identity_ui::app::{Devices, Hosted, Reply};
 use access_identity_ui::domain::approval::{
-    APP_PATH, ApprovalFinish, ApprovalPush, ApprovalStart, FLOW_PATH, FLOWS_PATH, PAGE_JS,
-    REQUESTS_PATH,
+    APP_PATH, ApprovalFinish, ApprovalPush, ApprovalStart, CONSENT_PATH, FLOW_PATH, FLOWS_PATH,
+    PAGE_JS, REQUESTS_PATH,
 };
 use access_identity_ui::domain::frontend::{
     APPROVE_PATH, AUTH_CONTEXT_PATH, ApproveQuery, AuthContextRequest, BINDINGS_PATH,
@@ -123,6 +123,12 @@ where
             .route(
                 &format!("{prefix}{APP_PATH}"),
                 get(approval_app::<D, K, KI, C, M, A, I, P, Q>),
+            )
+            // §11.4.5, §11.6, OP-157 m.3 (l)
+            .route(
+                &format!("{prefix}{CONSENT_PATH}"),
+                get(consent::<D, K, KI, C, M, A, I, P, Q>)
+                    .post(consent_post::<D, K, KI, C, M, A, I, P, Q>),
             );
     }
     let cache = Arc::new(idempotency::Cache::default());
@@ -257,6 +263,49 @@ handler! {
             state: field("state")?,
         };
         Ok(s.login.hosted.approve(&entry, &query).await)
+    }
+}
+
+handler! {
+    /// `GET /consent` (§11.4.5, §11.6, OP-157 m.3 (l)): the MCP authorization server's consent
+    /// step is the Approval Surface; the browser is sent to `/v1/approve` with the same query,
+    /// where the call is checked.
+    consent(s, entry, jar, p, bytes, headers, uri) false {
+        let _ = (&s, &entry, &p, &bytes, &jar, &headers);
+        let path = uri.path();
+        let base = path.strip_suffix(CONSENT_PATH).unwrap_or_default();
+        let target = match uri.query() {
+            Some(q) => format!("{base}{APPROVE_PATH}?{q}"),
+            None => format!("{base}{APPROVE_PATH}"),
+        };
+        let mut r = Response::new(axum::body::Body::empty());
+        *r.status_mut() = StatusCode::SEE_OTHER;
+        let location = axum::http::HeaderValue::from_str(&target)
+            .map_err(|_| problem(StatusCode::BAD_REQUEST, "invalid-request", "Bad Request"))?;
+        r.headers_mut().insert(axum::http::header::LOCATION, location);
+        r.headers_mut().insert(
+            axum::http::header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("no-store"),
+        );
+        Err::<Reply, Response>(r)
+    }
+}
+
+handler! {
+    /// `POST /consent` answers 405: consent is never a form post outside the Approval Surface
+    /// (§11.6, EI-18, OP-157 m.3 (l)).
+    consent_post(s, entry, jar, p, bytes, headers, uri) false {
+        let _ = (&s, &entry, &p, &bytes, &jar, &headers, &uri);
+        let mut r = problem(
+            StatusCode::METHOD_NOT_ALLOWED,
+            "method-not-allowed",
+            "Consent is given on the Approval Surface",
+        );
+        r.headers_mut().insert(
+            axum::http::header::ALLOW,
+            axum::http::HeaderValue::from_static("GET"),
+        );
+        Err::<Reply, Response>(r)
     }
 }
 
