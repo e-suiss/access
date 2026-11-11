@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT issued_at, size, root, note, excerpt FROM access.authority_checkpoint\n          WHERE domain_id = $1 ORDER BY issued_at DESC LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "issued_at",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.authority_checkpoint",
+            "name": "issued_at"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.authority_checkpoint",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "root",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_checkpoint",
+            "name": "root"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.authority_checkpoint",
+            "name": "note"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "excerpt",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_checkpoint",
+            "name": "excerpt"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b2465c0b6d91f6a2f99be7272b660d150e49bceb0919f66c4bd5f8ae23b50fcb"
+}

@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT pos, leaf_hash FROM access.authority_log\n          WHERE domain_id = $1 AND pos >= $2 AND pos < $3 ORDER BY pos",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.authority_log",
+            "name": "pos"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "leaf_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_log",
+            "name": "leaf_hash"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "c79a30df91af9abb676dc039993c13daa1f53ca1f1bd2e586f9ab6b453a08271"
+}
