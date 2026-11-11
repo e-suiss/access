@@ -1,0 +1,61 @@
+# MD-7, MD-8, §13.11, OP-158 m.3 (t): every validity path and what it promises.
+#
+# id           EP-n row of §13.11
+# path         the validation path
+# rows         the guarantee rows it is bound to
+#
+# Lane W8 adds, per path: cache_miss, partition, restart and staleness (Δ or horizon). A path
+# never promises both validation while the database is down and revocation within 250 ms
+# (xtask `validity-paths`).
+
+version = 1
+
+[[path]]
+id = "EP-1"
+path = "identity login"
+rows = ["G48", "G50"]
+
+[[path]]
+id = "EP-2"
+path = "identity refresh"
+rows = ["G50"]
+
+[[path]]
+id = "EP-3"
+path = "identity introspection (strict profile)"
+rows = ["G49", "U35", "U37"]
+
+[[path]]
+id = "EP-4"
+path = "JWT-only resource server"
+rows = ["U36", "N-39", "HL-22"]
+
+[[path]]
+id = "EP-5"
+path = "signal-consuming resource server (SSF/CAEP)"
+rows = ["U38", "N-38"]
+
+[[path]]
+id = "EP-6"
+path = "identity token degraded window"
+rows = ["U39", "RR-25"]
+
+[[path]]
+id = "EP-7"
+path = "authority-bearing artefact (PAP, receipt, exact-intent token)"
+rows = ["G25", "U2", "U19", "U25"]
+
+[[path]]
+id = "EP-8"
+path = "key_epoch key window"
+rows = ["U12", "U41", "G47"]
+
+[[path]]
+id = "EP-9"
+path = "authority decision input (applied_pos)"
+rows = ["G51", "FM-1"]
+
+[[path]]
+id = "EP-10"
+path = "advisory cache and derived index"
+rows = ["G51", "U61"]

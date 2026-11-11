@@ -1,0 +1,120 @@
+# XI-20, §16.7, §16.7.1, OP-158 m.3 (t): who owns each failure and what the user is told.
+#
+# plane        "authority" or "identity"
+# failure      the failure, as the §16.7 / §16.7.1 tables name it
+#
+# Lane W8 adds, per failure: owner, unknown (what cannot be known yet), missing (the
+# information that is not available), safe_default and the fault-injection test that proves the
+# row (bins/access-server/src/bootstrap/tests/faults/).
+
+version = 1
+
+[[failure]]
+id = "FO-01"
+plane = "authority"
+failure = "leader crash before or after commit"
+
+[[failure]]
+id = "FO-02"
+plane = "authority"
+failure = "database primary failover"
+
+[[failure]]
+id = "FO-03"
+plane = "authority"
+failure = "region loss"
+
+[[failure]]
+id = "FO-04"
+plane = "authority"
+failure = "time sources disagree"
+
+[[failure]]
+id = "FO-05"
+plane = "authority"
+failure = "derived outage"
+
+[[failure]]
+id = "FO-06"
+plane = "authority"
+failure = "witness outage"
+
+[[failure]]
+id = "FO-07"
+plane = "authority"
+failure = "replica outage"
+
+[[failure]]
+id = "FO-08"
+plane = "authority"
+failure = "HSM outage"
+
+[[failure]]
+id = "FO-09"
+plane = "authority"
+failure = "signer crash"
+
+[[failure]]
+id = "FO-10"
+plane = "authority"
+failure = "hot domain or hot key"
+
+[[failure]]
+id = "FO-11"
+plane = "authority"
+failure = "rebuild-diff difference"
+
+[[failure]]
+id = "FO-12"
+plane = "authority"
+failure = "forced recovery"
+
+[[failure]]
+id = "FO-13"
+plane = "authority"
+failure = "cooperative handover"
+
+[[failure]]
+id = "FO-14"
+plane = "authority"
+failure = "client timeout"
+
+[[failure]]
+id = "FO-15"
+plane = "identity"
+failure = "PostgreSQL primary failover"
+
+[[failure]]
+id = "FO-16"
+plane = "identity"
+failure = "every sync standby gone"
+
+[[failure]]
+id = "FO-17"
+plane = "identity"
+failure = "stale node-local epoch cache"
+
+[[failure]]
+id = "FO-18"
+plane = "identity"
+failure = "identity database unreachable"
+
+[[failure]]
+id = "FO-19"
+plane = "identity"
+failure = "identity region loss"
+
+[[failure]]
+id = "FO-20"
+plane = "identity"
+failure = "identity plane outage seen by the authority plane"
+
+[[failure]]
+id = "FO-21"
+plane = "identity"
+failure = "Argon2 pool full"
+
+[[failure]]
+id = "FO-22"
+plane = "identity"
+failure = "identity signer unreachable"
