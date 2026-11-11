@@ -281,6 +281,30 @@ impl TenantTx {
         .await?)
     }
 
+    /// The wholesale `session_epoch` floor of an operator directive (OP-46, OP-157 m.3 (j)): every
+    /// subject of the realm whose epoch last moved before `floor_ms` moves one step, so every
+    /// session and refresh family issued before it ends. Repeating it moves nothing. Returns how
+    /// many moved.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn raise_epoch_floor(&mut self, floor_ms: i64) -> Result<u64, StoreError> {
+        let (tenant, realm) = self.scope()?;
+        Ok(sqlx::query!(
+            "UPDATE access.identity_subjects
+                SET session_epoch = session_epoch + 1,
+                    session_epoch_at = greatest(clock_timestamp(), to_timestamp($3::bigint / 1000.0))
+              WHERE tenant_id = $1 AND realm_id = $2
+                AND session_epoch_at < to_timestamp($3::bigint / 1000.0)",
+            tenant,
+            realm,
+            floor_ms,
+        )
+        .execute(&mut *self.tx)
+        .await?
+        .rows_affected())
+    }
+
     /// Ends the subject's identity sessions and refresh families in this transaction
     /// (TN-50, OP-146 m.10 (a)): they carry the epoch they were issued under, so raising it
     /// ends them all; the login sessions behind it are marked ended in the same transaction.

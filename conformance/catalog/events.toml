@@ -828,4 +828,27 @@ plane = "signer"
 severity = "info"
 since = "unreleased"
 fields = ["domain", "realm", "kid", "trigger"]
+# OP-46, OP-157 m.3 (j), (k): V5
+[[event]]
+name = "operator.epoch_floor.raised"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["subjects"]
+ocsf = "account_change"
+
+[[event]]
+name = "operator.directive.refused"
+plane = "ops"
+severity = "error"
+since = "unreleased"
+fields = ["files"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "operator.directive.state"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["seq", "leader_unhealthy", "flags"]
 ocsf = "entity_management"

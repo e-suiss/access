@@ -489,6 +489,7 @@ pub struct Domains<K, B: Binding, S: Salts, C> {
     bell: Option<Arc<dyn suiss_ledger::doorbell::Bell>>,
     /// The general ingest lane of each domain (OP-157 m.3 (p)).
     lanes: crate::app::Lanes,
+    standing_down: std::sync::atomic::AtomicBool,
 }
 
 impl<K: Keys, B: Binding, S: Salts, C> Domains<K, B, S, C> {
@@ -525,6 +526,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             led: Mutex::new(HashMap::new()),
             bell: None,
             lanes: crate::app::Lanes::default(),
+            standing_down: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -559,6 +561,10 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
     }
 
     async fn lead(&self, domain: Digest) -> Result<Led<B, S, C>, CoreError> {
+        // OP-46, OP-157 m.3 (j)
+        if self.standing_down() {
+            return Err(CoreError::Unavailable("leader-unhealthy"));
+        }
         let s = &self.setup;
         let id = DomainId::from_bytes(domain.0);
         let tenant = domain_tenant(&s.sequencer, &id)
@@ -1656,6 +1662,27 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                 }
             }
         }
+    }
+
+    /// An operator directive marked this process's leader unhealthy (OP-46, OP-157 m.3 (j)), or
+    /// cleared the mark: while marked it gives every lease up and takes none, so another process
+    /// leads under a new, fencing epoch. No record is written and nothing is decided.
+    pub async fn stand_down(&self, unhealthy: bool) {
+        let was = self
+            .standing_down
+            .swap(unhealthy, std::sync::atomic::Ordering::SeqCst);
+        if unhealthy {
+            if !was {
+                epoch_changed("stand_down");
+            }
+            self.release().await;
+        }
+    }
+
+    /// Whether an operator directive holds this process off leading.
+    #[must_use]
+    pub fn standing_down(&self) -> bool {
+        self.standing_down.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// Releases every held lease, for a planned shutdown (OP-31).

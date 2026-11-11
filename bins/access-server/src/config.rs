@@ -98,6 +98,10 @@ pub(crate) struct Config {
     /// The restriction policy analysis (OP-105, OP-157 m.3 (n)).
     #[serde(default)]
     pub(crate) policy: Policy,
+    /// The operator break-glass directives of this cell (OP-46, OP-157 m.3 (j)); none are read
+    /// when unset.
+    #[serde(default)]
+    pub(crate) breakglass: Option<Breakglass>,
 }
 
 /// The control-plane analysis of `policy.set` changes (OP-105, OP-157 m.3 (n)): with
@@ -109,6 +113,18 @@ pub(crate) struct Config {
 pub(crate) struct Policy {
     /// The cvc5 executable.
     pub(crate) analyzer: Option<PathBuf>,
+}
+
+/// Where `access-breakglass` leaves this cell's signed directives, and the key they verify under.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Breakglass {
+    /// The cell's name, as the directives carry it.
+    pub(crate) cell: String,
+    /// `ops/directives`.
+    pub(crate) directives: PathBuf,
+    /// The cell's directive public key, 64 hex digits (Ed25519).
+    pub(crate) directive_key: String,
 }
 
 /// The app-controlled factor (MD-11, OP-156 m.3 (e)): Android key attestation is checked against
@@ -667,6 +683,7 @@ impl Default for Config {
             doorbell: None,
             app_factor: AppFactor::default(),
             policy: Policy::default(),
+            breakglass: None,
         }
     }
 }

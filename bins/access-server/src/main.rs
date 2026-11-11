@@ -20,6 +20,7 @@ mod claims;
 mod config;
 mod console;
 mod custom_domains;
+mod directives;
 mod doorbell;
 mod edge;
 mod events;
@@ -803,6 +804,10 @@ fn lockdown(config: &Config) -> Lockdown {
         } else {
             lockdown.allow_read(dir)
         };
+    }
+    // OP-46, OP-157 m.3 (j)
+    if let Some(b) = &config.breakglass {
+        lockdown = lockdown.allow_read(&b.directives);
     }
     // OP-90
     let signup = &config.signup;
@@ -1801,6 +1806,7 @@ async fn serve(
         scim_keks,
         scim_ids,
     )?;
+    let directive_router = router_pool.clone();
     let realms = identity(config, router_pool, app.clone(), prepared.tls_names.clone()).await?;
     // OP-67 m.3, OP-138
     background.jwks.set(true);
@@ -1836,6 +1842,16 @@ async fn serve(
         renew,
     );
     let _publishing = status::spawn(&domains, &product_app, &sequencer, config.signer.as_ref());
+    // OP-46, G63, OP-157 m.3 (j)
+    let directing = match &config.breakglass {
+        Some(b) => Some(tokio::spawn(directives::run(
+            directives::Reader::new(b)?,
+            domains.clone(),
+            product_app.clone(),
+            directive_router,
+        ))),
+        None => None,
+    };
     // OP-38, OP-44, CMP-6, T16
     let led = domains.clone();
     let checkpointing = checkpoints::Checkpointers::start(
@@ -2092,6 +2108,9 @@ async fn serve(
         d.stop().await;
     }
     checkpointing.stop();
+    if let Some(d) = directing {
+        d.abort();
+    }
     renewing.stop().await;
     scim_outbound.stop().await;
     domains.release().await;

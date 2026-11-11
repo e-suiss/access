@@ -2532,3 +2532,5 @@ mod timing;
 mod vault;
 mod vc_verifier;
 mod walkthrough;
+// OP-157 m.4 (b)
+mod operator_breakglass;
