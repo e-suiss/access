@@ -2531,6 +2531,40 @@ fn meta_vectors_match() {
             envelope: with_origins(&[]),
         },
     );
+    // SI-18, INV-36, OP-157 m.3 (b)
+    let source = |extra: &str| {
+        map([
+            ("schema", Some(Value::text(RESTRICTION_SCHEMA))),
+            (
+                "source",
+                Some(Value::text(&format!(
+                    "forbid(principal, action, resource);{extra}"
+                ))),
+            ),
+            ("target", Some(tagged("party", ALICE.to_value()))),
+        ])
+    };
+    let amended = object_id(&set_policy, kind::POLICY, 0);
+    r.step(
+        "policy-amend-adds-forbid-narrows",
+        &["L0-META-28", "SI-18"],
+        (ROOT, ROOT),
+        meta,
+        &Payload::PolicySet {
+            policy: Some(amended),
+            content: source("\nforbid(principal, action, resource) when { context.tier > 1 };"),
+        },
+    );
+    r.step(
+        "policy-amend-drops-forbid-widens",
+        &["L0-META-28", "SI-18"],
+        (ROOT, ROOT),
+        meta,
+        &Payload::PolicySet {
+            policy: Some(amended),
+            content: source(""),
+        },
+    );
     let json = format!(
         "{{\n \"rule\": \"OP-141\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"meta.apply\",\n {},\n \"cases\": [\n{}\n ]\n}}\n",
         field(&["L0-META-1", "L0-META-2"]),

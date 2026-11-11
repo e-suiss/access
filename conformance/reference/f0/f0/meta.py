@@ -36,6 +36,7 @@ from .codec import (
 )
 from . import p256
 from .keyscope import check_binding_key, thumbprint
+from .polarity import policy_narrows
 from .validity import VARIANT_CLASS
 
 
@@ -918,8 +919,9 @@ class Apply:
             policy_id = self.new_id("policy")
         self.add_to_index("policies", target, policy_id)
         self.write("policy", policy_id, {"content": body["content"], "since": self.pos})
-        # L0-META-28: a new RestrictionPolicy only narrows; changing one is expansion
-        return "policy" in body
+        # L0-META-28: a new RestrictionPolicy only narrows; SI-18, OP-157 m.3 (b): a change
+        # narrows only by structure
+        return "policy" in body and not policy_narrows(old["content"], body["content"])
 
     def policy_retire(self, body):
         # L0-META-27, L0-META-28

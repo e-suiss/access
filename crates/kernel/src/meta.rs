@@ -25,6 +25,10 @@ use crate::validity::{CLASSES, ProfileClass, ProfileVariant, VARIANTS, word, wor
 use crate::verify::cose::PublicKey;
 use suiss_crypto::digest::context_digest as context_label;
 
+mod polarity;
+
+pub use polarity::{is_forbid, policy_narrows, statements};
+
 /// Namespace of the core meta-actions.
 pub const NAMESPACE: &str = "access";
 
@@ -3152,11 +3156,12 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                 Some(p) => {
                     let s: ContentState = read(view, kind::POLICY, p)?;
                     live(s.ended, ())?;
+                    // SI-18, INV-36, OP-157 m.3 (b)
+                    out.expansion = !policy_narrows(&s.content, content);
                     *p
                 }
                 None => new_id(ctx, kind::POLICY, 0),
             };
-            out.expansion = policy.is_some();
             // OP-141 m.27 (c)
             let target = content.get("target").cloned().ok_or(MetaError::Corrupt)?;
             if let Some(p) = policy {
