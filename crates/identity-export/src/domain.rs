@@ -2,6 +2,7 @@
 //! "copy — not the record" label, the OCSF field table and the renderings each adapter sends.
 //! Sans-I/O.
 
+pub mod cold;
 pub mod collector;
 pub mod copy;
 pub mod fields;

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT access.move_audit_partition($1, $2, $3, $4, $5, $6::bigint::text::xid8, $7)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "move_audit_partition",
+        "type_info": "Void",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Bytea",
+        "Text",
+        "Bytea",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "61cdee22536f225dcc8778118547479717cf4022f359d1252ebb971a2e010a39"
+}

@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT partition AS \"partition!\", tenant_id, to_char(month, 'YYYY-MM') AS \"month!\",\n                  rows AS \"rows!\"\n             FROM access.audit_partitions_due()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "partition!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "month!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "rows!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "85d410b0981e4c5f0d1067bfbb7718084b6aa949fcffd61a45ee488584eb08d9"
+}

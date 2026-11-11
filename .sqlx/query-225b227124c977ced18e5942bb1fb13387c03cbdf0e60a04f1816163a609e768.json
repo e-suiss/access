@@ -1,0 +1,105 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT partition, tenant_id, rows, root, object_key, object_sha256,\n                  last_xid::text::bigint AS last_xid, last_id\n             FROM access_ops.audit_tier_moves ORDER BY month, partition",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "partition",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_tier_moves",
+            "name": "partition"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_tier_moves",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "rows",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_tier_moves",
+            "name": "rows"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "root",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_tier_moves",
+            "name": "root"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "object_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_tier_moves",
+            "name": "object_key"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "object_sha256",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_tier_moves",
+            "name": "object_sha256"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "last_xid",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "last_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_tier_moves",
+            "name": "last_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      null,
+      true
+    ]
+  },
+  "hash": "225b227124c977ced18e5942bb1fb13387c03cbdf0e60a04f1816163a609e768"
+}

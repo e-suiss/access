@@ -102,6 +102,20 @@ pub(crate) struct Config {
     /// when unset.
     #[serde(default)]
     pub(crate) breakglass: Option<Breakglass>,
+    /// The identity audit log's cold tier (OP-40, OP-158 m.3 (w)); without it every partition
+    /// stays hot.
+    #[serde(default)]
+    pub(crate) audit_cold: Option<AuditCold>,
+}
+
+/// Where the identity audit log's cold tier keeps its objects: a directory, the local equivalent
+/// of an object-locked bucket (OP-69, OP-158 m.3 (ee)). Objects are written once and never
+/// overwritten.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AuditCold {
+    /// The directory.
+    pub(crate) dir: PathBuf,
 }
 
 /// The control-plane analysis of `policy.set` changes (OP-105, OP-157 m.3 (n)): with
@@ -684,6 +698,7 @@ impl Default for Config {
             app_factor: AppFactor::default(),
             policy: Policy::default(),
             breakglass: None,
+            audit_cold: None,
         }
     }
 }

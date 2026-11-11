@@ -2,6 +2,8 @@
 //! HTTPS to public addresses on port 443 or to declared targets, and syslog over TLS on port
 //! 6514 or to a declared target's host and port.
 
+pub mod cold_file;
+
 use std::time::Duration;
 
 use access_identity_oauth::adapters::outbound::{Outbound, OutboundError};

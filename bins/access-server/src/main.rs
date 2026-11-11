@@ -1566,6 +1566,7 @@ impl Background {
             pools.archive.clone(),
             pools.router.clone(),
             holder()?,
+            config.audit_cold.as_ref().map(|c| c.dir.clone()),
         ));
         // OP-153 m.3 (bb), (dd)
         let retaining = tokio::spawn(retention::run(

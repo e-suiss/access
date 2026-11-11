@@ -4,6 +4,7 @@ use std::future::Future;
 
 use access_store::audit::{AuditRow, CheckpointRow};
 use access_store::audit_realm::RealmCheckpointRow;
+use access_store::audit_tier::{Due, Moved};
 use access_store::identity::Cursor;
 
 use crate::AuditError;
@@ -62,4 +63,42 @@ pub trait NoteSigner {
     fn key(&self) -> impl Future<Output = Result<(String, String), AuditError>> + Send;
     /// The note signature line over a checkpoint body.
     fn sign(&self, body: String) -> impl Future<Output = Result<String, AuditError>> + Send;
+}
+
+/// The hot partitions of the identity audit log as the archive role sees them (OP-73 m.4).
+pub trait Tiers {
+    /// The partitions the cold tier may take now.
+    fn due(&self) -> impl Future<Output = Result<Vec<Due>, AuditError>> + Send;
+    /// Up to `limit` rows of `partition` after `after`, in integration order.
+    fn rows(
+        &self,
+        partition: &str,
+        after: Cursor,
+        limit: u32,
+    ) -> impl Future<Output = Result<Vec<AuditRow>, AuditError>> + Send;
+    /// Records the verified copy and detaches the partition; refused if it changed.
+    fn detach(&self, moved: &Moved) -> impl Future<Output = Result<(), AuditError>> + Send;
+}
+
+/// The cold tier's object store: write once, never overwritten (OP-40, OP-73 m.4).
+pub trait ColdStore {
+    /// Stores `bytes` under `key`; an object already there is kept and the call fails unless it
+    /// holds the same bytes.
+    fn put(&self, key: &str, bytes: &[u8]) -> impl Future<Output = Result<(), AuditError>> + Send;
+    /// The object under `key`, `None` when there is none.
+    fn get(&self, key: &str) -> impl Future<Output = Result<Option<Vec<u8>>, AuditError>> + Send;
+}
+
+/// The cold tier's file format: OCSF Parquet with the rows' own fields (OP-41, OP-158 m.3 (w)).
+pub trait ColdCodec {
+    /// The file of `rows`.
+    ///
+    /// # Errors
+    /// [`AuditError::Cold`].
+    fn encode(&self, rows: &[AuditRow]) -> Result<Vec<u8>, AuditError>;
+    /// The rows of a file, in its order.
+    ///
+    /// # Errors
+    /// [`AuditError::Cold`].
+    fn decode(&self, file: &[u8]) -> Result<Vec<AuditRow>, AuditError>;
 }

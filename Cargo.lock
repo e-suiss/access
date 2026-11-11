@@ -509,6 +509,7 @@ dependencies = [
  "access-identity-events",
  "access-identity-export",
  "access-identity-oauth",
+ "access-identity-signer",
  "access-internal-api",
  "access-store",
  "bytes",

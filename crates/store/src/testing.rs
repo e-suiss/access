@@ -571,3 +571,129 @@ pub async fn mark_breakglass(db: &TestDb, subject: [u8; 16]) -> Result<(), TestD
     .at("mark break-glass")?;
     Ok(())
 }
+
+fn audit_partition_name(name: &str) -> Result<&str, TestDbError> {
+    if name.starts_with("identity_audit_")
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+    {
+        Ok(name)
+    } else {
+        Err(TestDbError::Db(
+            "audit partition name",
+            sqlx::Error::Protocol(String::from("not an audit partition")),
+        ))
+    }
+}
+
+async fn admin_connection(db: &TestDb) -> Result<PgConnection, TestDbError> {
+    PgConnection::connect_with(&db.admin)
+        .await
+        .at("connect admin")
+}
+
+/// Writes identity audit row `n` of `tenant` (its realm the same id) at `at` (RFC 3339), as a
+/// row of a past month would be (OP-158 m.3 (w)).
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn past_audit_row(
+    db: &TestDb,
+    tenant: [u8; 16],
+    at: &str,
+    n: u32,
+) -> Result<(), TestDbError> {
+    let mut c = admin_connection(db).await?;
+    sqlx::query(
+        "INSERT INTO access.identity_audit (tenant_id, realm_id, at, event_type, actor, target, correlation)
+         VALUES ($1, $1, $2::timestamptz, 'session.created', 'usr_1', $3, $4)",
+    )
+    .bind(sqlx::types::Uuid::from_bytes(tenant))
+    .bind(at)
+    .bind(format!("ses_{n}"))
+    .bind(format!("req_{n}"))
+    .execute(&mut c)
+    .await
+    .at("past audit row")?;
+    Ok(())
+}
+
+/// Sets `tenant`'s audit hot window directly; the database refuses one under 30 days.
+///
+/// # Errors
+/// [`TestDbError`] carrying the refusal.
+pub async fn set_audit_hot_days(
+    db: &TestDb,
+    tenant: [u8; 16],
+    days: i32,
+) -> Result<(), TestDbError> {
+    let mut c = admin_connection(db).await?;
+    sqlx::query("UPDATE access.tenants SET audit_hot_days = $2 WHERE tenant_id = $1")
+        .bind(sqlx::types::Uuid::from_bytes(tenant))
+        .bind(days)
+        .execute(&mut c)
+        .await
+        .at("set hot days")?;
+    Ok(())
+}
+
+/// Rows of `access.identity_audit` in month `YYYY-MM`.
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn hot_audit_rows(db: &TestDb, month: &str) -> Result<i64, TestDbError> {
+    let mut c = admin_connection(db).await?;
+    sqlx::query_scalar(
+        "SELECT count(*) FROM access.identity_audit WHERE to_char(at, 'YYYY-MM') = $1",
+    )
+    .bind(month)
+    .fetch_one(&mut c)
+    .await
+    .at("hot rows")
+}
+
+/// Rows of the detached partition `name` in `access_audit_cold`.
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn cold_audit_rows(db: &TestDb, name: &str) -> Result<i64, TestDbError> {
+    let name = audit_partition_name(name)?;
+    let mut c = admin_connection(db).await?;
+    sqlx::query_scalar(AssertSqlSafe(format!(
+        "SELECT count(*) FROM access_audit_cold.{name}"
+    )))
+    .fetch_one(&mut c)
+    .await
+    .at("cold rows")
+}
+
+/// Tries to rewrite every row of the detached partition `name`, as the database administrator.
+///
+/// # Errors
+/// [`TestDbError`] carrying the refusal.
+pub async fn rewrite_cold_audit(db: &TestDb, name: &str) -> Result<(), TestDbError> {
+    let name = audit_partition_name(name)?;
+    let mut c = admin_connection(db).await?;
+    exec(
+        &mut c,
+        format!("UPDATE access_audit_cold.{name} SET actor = 'rewritten'"),
+        "rewrite cold rows",
+    )
+    .await
+}
+
+/// Tries to read the detached partition `name` as the application role.
+///
+/// # Errors
+/// [`TestDbError`] carrying the refusal.
+pub async fn app_reads_cold_audit(db: &TestDb, name: &str) -> Result<(), TestDbError> {
+    let name = audit_partition_name(name)?;
+    sqlx::query(AssertSqlSafe(format!(
+        "SELECT count(*) FROM access_audit_cold.{name}"
+    )))
+    .execute(&db.app)
+    .await
+    .at("app reads cold")?;
+    Ok(())
+}

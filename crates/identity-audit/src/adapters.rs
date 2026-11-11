@@ -193,3 +193,25 @@ impl NoteSigner for SignerNotes {
         }
     }
 }
+
+/// The archive role's view of the audit partitions (OP-73 m.4).
+pub struct PgTiers(pub Pool);
+
+impl crate::ports::Tiers for PgTiers {
+    async fn due(&self) -> Result<Vec<access_store::audit_tier::Due>, AuditError> {
+        Ok(access_store::audit_tier::due(&self.0).await?)
+    }
+
+    async fn rows(
+        &self,
+        partition: &str,
+        after: Cursor,
+        limit: u32,
+    ) -> Result<Vec<AuditRow>, AuditError> {
+        Ok(access_store::audit_tier::rows(&self.0, partition, after, limit).await?)
+    }
+
+    async fn detach(&self, moved: &access_store::audit_tier::Moved) -> Result<(), AuditError> {
+        Ok(access_store::audit_tier::detach(&self.0, moved).await?)
+    }
+}

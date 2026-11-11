@@ -3,6 +3,7 @@
 pub mod realm;
 pub mod record;
 pub mod taxonomy;
+pub mod tier;
 
 use access_kernel::digest;
 use access_store::audit::{AuditRow, CheckpointRow};

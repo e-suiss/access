@@ -204,7 +204,16 @@ pub fn file(records: &[AuditRecord]) -> Result<Vec<u8>, ParquetError> {
         .iter()
         .map(copy::ocsf)
         .collect::<Result<Vec<_>, _>>()?;
-    let schema = Arc::new(schema()?);
+    write(MESSAGE, &rows)
+}
+
+/// The Parquet file of `rows` under the schema `message`, one row group; each row is a JSON
+/// object shaped like the schema.
+///
+/// # Errors
+/// [`ParquetError`]; nothing is written.
+pub fn write(message: &str, rows: &[Value]) -> Result<Vec<u8>, ParquetError> {
+    let schema = Arc::new(parse_message_type(message)?);
     let props = Arc::new(
         WriterProperties::builder()
             .set_compression(Compression::SNAPPY)
@@ -219,7 +228,7 @@ pub fn file(records: &[AuditRecord]) -> Result<Vec<u8>, ParquetError> {
         let reps = repetitions(&schema, &path)?;
         let nodes: Vec<(&str, Repetition)> = path.iter().map(String::as_str).zip(reps).collect();
         let mut entries = Vec::with_capacity(rows.len());
-        for row in &rows {
+        for row in rows {
             walk(Some(row), &nodes, (0, 0, 0), &mut entries)?;
         }
         let defs = levels(&entries, cd.max_def_level(), |e| e.def);

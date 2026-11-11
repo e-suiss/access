@@ -27,7 +27,7 @@ rustls = { workspace = true, features = ["aws_lc_rs", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }
 time = { workspace = true, features = ["std", "formatting", "macros"] }
-tokio = { workspace = true, features = ["io-util", "net", "time", "rt", "macros", "sync"] }
+tokio = { workspace = true, features = ["fs", "io-util", "net", "time", "rt", "macros", "sync"] }
 tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }
 tracing = { workspace = true, features = ["std"] }
 zeroize = { workspace = true, features = ["alloc", "std"] }
@@ -36,6 +36,7 @@ httparse = { workspace = true, features = ["std"], optional = true }
 
 [dev-dependencies]
 access-identity-export = { path = ".", features = ["testing"] }
+access-identity-signer = { path = "../identity-signer" }
 access-store = { workspace = true, features = ["testing"] }
 suiss-crypto = { workspace = true, features = ["aead", "testing"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }

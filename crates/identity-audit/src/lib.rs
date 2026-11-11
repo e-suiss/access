@@ -31,4 +31,10 @@ pub enum AuditError {
     /// An inclusion path does not show its leaf under the checkpoint's root.
     #[error("inclusion proof")]
     Proof,
+    /// The cold tier refused or is unreachable; the partition stays hot (OP-73 m.4).
+    #[error("cold tier: {0}")]
+    Cold(String),
+    /// The cold copy does not match the hot partition; nothing is detached (OP-73 m.4).
+    #[error("cold copy does not match its partition")]
+    ColdMismatch,
 }

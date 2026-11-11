@@ -280,7 +280,13 @@ pub(crate) async fn release_answers(app: &Pool, now_ms: u64) -> Result<u64, Stor
 }
 
 /// Ticks every [`INTERVAL`] until the task is aborted.
-pub(crate) async fn run(app: Pool, archive: Pool, router: Pool, worker: String) {
+pub(crate) async fn run(
+    app: Pool,
+    archive: Pool,
+    router: Pool,
+    worker: String,
+    cold: Option<std::path::PathBuf>,
+) {
     let mut every = tokio::time::interval(INTERVAL);
     loop {
         every.tick().await;
@@ -296,7 +302,9 @@ pub(crate) async fn run(app: Pool, archive: Pool, router: Pool, worker: String) 
             tracing::warn!(%error, "idempotency answers not released");
         }
         // OP-73 m.4, m.7; OP-158 m.3 (w)
-        if let Err(error) = crate::tiers::tick(&app, &archive, &worker, now).await {
+        if let Err(error) =
+            crate::tiers::tick(&app, &archive, &worker, (now, cold.as_deref())).await
+        {
             tracing::warn!(%error, "archive jobs failed");
         }
     }
