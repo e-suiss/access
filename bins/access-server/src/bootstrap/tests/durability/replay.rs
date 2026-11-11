@@ -477,6 +477,38 @@ async fn a_fold_difference_stops_commits_until_the_log_rebuilds_the_live_state()
     p.w.domains.release().await;
 }
 
+/// The stored state of the root's audit Grant, and a fresh Grant id.
+async fn audit_state(p: &Pdp) -> (Id, Vec<u8>) {
+    let id = DomainId::from_bytes(p.domain.0);
+    let audit = meta::key(meta::kind::GRANT, &p.audit.grant);
+    let stored = access_store::authority::state_of(&p.w.db.app, &id, std::slice::from_ref(&audit))
+        .await
+        .unwrap()
+        .remove(0)
+        .value
+        .unwrap();
+    (Id(access_crypto::random::bytes::<16>().unwrap()), stored)
+}
+
+/// The effect that issues `copy` with the audit Grant's content `stored` at position `at`: a
+/// widening a faulty evaluator records.
+fn grant_effect(copy: &Id, stored: &[u8], at: u64) -> Vec<Value> {
+    let Value::Map(mut m) =
+        suiss_crypto::dcbor::decode(stored, suiss_crypto::dcbor::Limits::CEILING).unwrap()
+    else {
+        panic!("a grant state is a map");
+    };
+    for (k, v) in &mut m {
+        if *k == Value::text("since") {
+            *v = Value::Unsigned(at);
+        }
+    }
+    vec![Value::Array(vec![
+        Value::Bytes(meta::key(meta::kind::GRANT, copy)),
+        Value::Map(m),
+    ])]
+}
+
 async fn commit_meta(p: &Pdp, nonce: &[u8], payload: meta::Payload) -> Result<u64, String> {
     let declared = access_identity_oauth::adapters::outbound::DeclaredTargets::default();
     let b = crate::bootstrap::Bootstrap {
@@ -524,32 +556,11 @@ async fn a_declared_divergence_stops_nothing_and_the_roots_quarantine_denies_wha
     let label = "w4-quarantine";
     let p = pdp(label).await;
     let id = DomainId::from_bytes(p.domain.0);
-    let audit = meta::key(meta::kind::GRANT, &p.audit.grant);
-    let stored = access_store::authority::state_of(&p.w.db.app, &id, std::slice::from_ref(&audit))
-        .await
-        .unwrap()
-        .remove(0)
-        .value
-        .unwrap();
-    let copy = Id(access_crypto::random::bytes::<16>().unwrap());
-    let widened_key = meta::key(meta::kind::GRANT, &copy);
+    let (copy, stored) = audit_state(&p).await;
     let mut since = 0;
     let pos = faulty(&p, |at| {
         since = at;
-        let Value::Map(mut m) =
-            suiss_crypto::dcbor::decode(&stored, suiss_crypto::dcbor::Limits::CEILING).unwrap()
-        else {
-            panic!("a grant state is a map");
-        };
-        for (k, v) in &mut m {
-            if *k == Value::text("since") {
-                *v = Value::Unsigned(at);
-            }
-        }
-        vec![Value::Array(vec![
-            Value::Bytes(widened_key.clone()),
-            Value::Map(m),
-        ])]
+        grant_effect(&copy, &stored, at)
     })
     .await;
     assert_eq!(pos, since);
@@ -732,4 +743,98 @@ async fn a_cold_start_uses_only_a_verified_snapshot_and_otherwise_folds_from_gen
         .unwrap();
     assert_eq!(from, snapshot::Start::Genesis);
     assert_eq!(state_bytes(&state).unwrap(), state_bytes(&full).unwrap());
+}
+
+// U13, G32, FM-16, F-9, SA-40, §13.3, §17.6.13, OP-158 m.3 (h), Ek B 5876, 5877, 6068
+#[tokio::test(flavor = "multi_thread")]
+async fn the_replica_operators_own_build_replays_its_copy_and_declares_what_does_not_replay() {
+    use access_product_twin::replica::{Follows, Replica};
+    let label = "w4-agent";
+    let p = pdp(label).await;
+    let router = super::replica::public(&p).merge(access_http::divergence::router(
+        crate::divergence::Declarations {
+            domains: p.w.domains.clone(),
+            app: p.w.db.app.clone(),
+        },
+    ));
+    let pep = super::replica::as_pep(router, super::super::authzen::PEP);
+    let server = super::replica::serve(pep.clone()).await;
+    let export = super::replica::start_mirror(&p, &pep).await;
+    let root = std::env::temp_dir().join(format!("w4-agent-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let follows = Follows {
+        server,
+        domain: p.domain.0,
+        export,
+        bindings: super::replica::bindings(&p).await,
+    };
+    let exe = bin("access-replica", "access-replica");
+    let mut replica = Replica::start(&exe, &root, "acme-replica", &follows).unwrap();
+    super::replica::declare(&p, label, &replica.name, replica.key).await;
+    for _ in 0..2 {
+        let a = p
+            .post("/access/v1/evaluation", &p.allowed(Mode::Commit).await)
+            .await;
+        assert_eq!(a.status, StatusCode::OK);
+    }
+    let (copy, stored) = audit_state(&p).await;
+    let faulty = faulty(&p, |at| grant_effect(&copy, &stored, at)).await;
+    let size = checkpoint(&p, label).await;
+    assert_eq!(replica.acked(size, Duration::from_secs(60)), Some(size));
+    replica.kill().unwrap();
+    let out = Command::new(&exe)
+        .args(["--replay", replica.config.to_str().unwrap()])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    assert!(
+        out.status.success(),
+        "{text}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(text.contains("divergent 1"), "{text}");
+    assert!(text.contains("declared "), "{text}");
+    let id = DomainId::from_bytes(p.domain.0);
+    let notices = access_store::divergence::notices(&p.w.db.app, &id)
+        .await
+        .unwrap();
+    assert_eq!(notices.len(), 1);
+    let n = &notices[0];
+    assert_eq!(
+        (n.kind.as_str(), n.source.as_str(), n.declared_by.as_deref()),
+        ("re-evaluation", "replica", Some("acme-replica"))
+    );
+    assert_eq!(n.first_position, faulty);
+    let signed = SignedSet::verify(&PureBackend, &n.set).unwrap();
+    assert_eq!(signed.key, replica.key);
+    assert!(signed.set.evaluator.starts_with("access-replica/"));
+    let kept = std::fs::read_dir(
+        replica
+            .state
+            .join(access_kernel::json::b64url_encode(&p.domain.0))
+            .join("divergence"),
+    )
+    .unwrap()
+    .count();
+    assert_eq!(kept, 1);
+    // G32
+    let a = p
+        .post("/access/v1/evaluation", &p.allowed(Mode::Commit).await)
+        .await;
+    assert_eq!(a.status, StatusCode::OK);
+    // the same set is not a second notice
+    let again = Command::new(&exe)
+        .args(["--replay", replica.config.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(again.status.success());
+    assert_eq!(
+        access_store::divergence::notices(&p.w.db.app, &id)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    let _ = std::fs::remove_dir_all(&root);
+    p.w.domains.release().await;
 }

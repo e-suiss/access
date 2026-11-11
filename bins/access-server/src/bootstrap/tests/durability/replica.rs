@@ -160,7 +160,7 @@ pub(super) fn domain_path(d: &Digest) -> String {
 }
 
 /// Starts the mirror run of the root's committed export Exercise; its id.
-async fn start_mirror(p: &Pdp, router: &axum::Router) -> [u8; 32] {
+pub(super) async fn start_mirror(p: &Pdp, router: &axum::Router) -> [u8; 32] {
     let body = commit_export(
         p,
         router,
@@ -191,7 +191,7 @@ async fn start_mirror(p: &Pdp, router: &axum::Router) -> [u8; 32] {
 }
 
 /// The domain's Ed25519 binding keys, from its binding-signed Domain Metadata.
-async fn bindings(p: &Pdp) -> Vec<[u8; 32]> {
+pub(super) async fn bindings(p: &Pdp) -> Vec<[u8; 32]> {
     let signed = p.w.domains.metadata(p.domain).await.unwrap();
     let msg = access_kernel::verify::cose::parse_sign1(&signed).unwrap();
     let m = DomainMetadata::from_bytes(msg.payload.as_deref().unwrap()).unwrap();

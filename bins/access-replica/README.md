@@ -11,6 +11,7 @@ access-replica keygen <key file>                         new Ed25519 ack key (mo
 access-replica key <key file>                            the public key the domain declares
 access-replica follow <config>                           follow the mirror and serve reads
 access-replica apply-redactions <config> [<position>…]   apply redactions to the local copy
+access-replica --replay <config>                         replay the copy and declare what differs
 ```
 
 ## Running a replica
@@ -55,6 +56,19 @@ was stopped resumes from its files.
 A redaction at the provider does not change a copy by itself. The mirror delivers redaction
 notices; `apply-redactions` overwrites the key of each record named, after which the record can
 no longer be read from the copy while its leaf, commitments and the tree stay intact.
+
+## Replay
+
+`--replay` runs the open evaluator over the copy, from this build and not the provider's: the
+records fold into state from Genesis and each decision is re-evaluated against the state just
+before it, as far as the record carries its inputs. Every decision that changes authority is
+re-evaluated; every other one at 1 in 100. Which ones is the replica's own deterministic choice:
+its signature over the decision's id, which the provider cannot predict.
+
+What does not replay is signed with the ack key, kept under `state/<domain>/divergence/` and
+sent to the domain, where the root and its Security Party decide whether to quarantine it.
+Nothing stops. The run prints `replayed <records> reevaluated <decisions> divergent <n>`, then
+`declared …` for a new finding or `known` for one already sent.
 
 ## Reads are advisory
 

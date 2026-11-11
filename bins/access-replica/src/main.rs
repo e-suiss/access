@@ -12,17 +12,21 @@
 //! access-replica follow <config>                follows; prints `listening <addr>`, `acked <size>`
 //! access-replica apply-redactions <config> [<position>…]
 //!                                               applies received redactions and the named ones
-//! access-replica --replay <config>              the sampling replay agent (not built yet)
+//! access-replica --replay <config>              the sampling replay agent: replays the copy,
+//!                                               prints `replayed <n> reevaluated <n> divergent <n>`
+//!                                               and declares what did not replay
 //! ```
 //!
 //! Exit status: 0 ok, 1 failure, 2 usage.
 
 mod client;
 mod config;
+mod replay;
 mod serve;
 mod state;
 mod verify;
 
+use std::fmt::Write as _;
 use std::io::Write as _;
 use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::Path;
@@ -57,7 +61,7 @@ fn err(text: &str) {
         .write_all(format!("access-replica: {}\n", text.trim_end()).as_bytes());
 }
 
-fn public(signer: &SoftSigner) -> Result<[u8; 32], String> {
+pub(crate) fn public(signer: &SoftSigner) -> Result<[u8; 32], String> {
     match signer.public_key() {
         PublicKey::Ed25519(k) => Ok(k),
         _ => Err("not an Ed25519 key".into()),
@@ -268,6 +272,40 @@ fn apply_redactions(path: &Path, named: &[String]) -> Result<String, String> {
     Ok(report.concat())
 }
 
+/// `--replay`: replays the copy, keeps and declares what did not replay (OP-158 m.3 (h)).
+async fn replay_copy(path: &Path) -> Result<String, String> {
+    let config = read_config(path)?;
+    let signer = load(&config.key)?;
+    let store = Store::open(&config.state, config.domain)?;
+    let found = replay::replay(&store, config.domain, &signer, now_ms())?;
+    let mut report = format!(
+        "replayed {} reevaluated {} divergent {}\n",
+        found.records, found.reevaluated, found.divergent
+    );
+    let Some((findings, set)) = found.signed else {
+        return Ok(report);
+    };
+    if !replay::keep(&config.state, &config.domain, &findings, &set)? {
+        report.push_str("known\n");
+        return Ok(report);
+    }
+    let route = format!(
+        "/access/v1/domains/{}/divergence",
+        b64url_encode(&config.domain.0)
+    );
+    match client::exchange(&config.server, "POST", &route, &set).await {
+        Ok((200 | 202, body)) => {
+            let _ = writeln!(report, "declared {}", String::from_utf8_lossy(&body));
+            Ok(report)
+        }
+        Ok((status, body)) => Err(format!(
+            "{report}divergence refused with {status}: {}",
+            String::from_utf8_lossy(&body)
+        )),
+        Err(e) => Err(format!("{report}divergence not sent: {e}")),
+    }
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let arg = |i: usize| args.get(i).map(String::as_str);
@@ -298,9 +336,18 @@ fn main() -> ExitCode {
                 .block_on(follow(Path::new(config)))
                 .map(|()| String::new())
         }
-        (Some("--replay"), Some(_)) => {
-            err("the sampling replay agent is not built yet");
-            return ExitCode::from(2);
+        (Some("--replay"), Some(config)) if args.len() == 2 => {
+            let runtime = match tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    err(&e.to_string());
+                    return ExitCode::FAILURE;
+                }
+            };
+            runtime.block_on(replay_copy(Path::new(config)))
         }
         _ => {
             let _ = std::io::stderr().write_all(USAGE.as_bytes());
