@@ -6,6 +6,7 @@ pub mod app;
 pub mod checkpoint;
 pub mod domain;
 pub mod ports;
+pub mod witness;
 
 use std::time::Duration;
 

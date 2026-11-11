@@ -18,7 +18,7 @@ use access_store::authority::{
     create_domain, find_nonce, read_head, read_log, release_lease, renew_lease, server_time,
 };
 use access_store::scope::DomainId;
-use suiss_ledger::time::{TimeError, TrustedClock};
+use suiss_ledger::time::{Sample, TimeError, TrustedClock};
 
 use crate::SequencerError;
 use crate::ports::{Clock, DomainLog, Heads, NoteSigner};
@@ -258,8 +258,9 @@ pub async fn verify_chain(
     Ok(())
 }
 
-/// Trusted time from the process clock and the canonical server's clock (OP-129 m.1 (a), (b)),
-/// bounded by a monotonic clock. A clone keeps its own last reading.
+/// Trusted time from the process clock, the canonical server's clock (OP-129 m.1 (a), (b))
+/// and the latest Roughtime reading when one is fresh (OP-158 m.3 (k)), bounded by a
+/// monotonic clock; refused while a witness cross-check failed. A clone keeps its own last reading.
 #[derive(Clone)]
 pub struct SourcesClock {
     pool: Pool,
@@ -281,6 +282,8 @@ impl SourcesClock {
 
 impl Clock for SourcesClock {
     async fn now(&mut self) -> Result<u64, SequencerError> {
+        // TI-RT2, OP-158 m.3 (k)
+        crate::witness::time_check()?;
         let server = server_time(&self.pool).await?;
         let system = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -289,6 +292,8 @@ impl Clock for SourcesClock {
             .ok_or(TimeError::TooFewSources)?;
         let mono =
             u64::try_from(self.started.elapsed().as_millis()).map_err(|_| TimeError::Monotonic)?;
-        Ok(self.combiner.read(&[system, server], mono)?)
+        let mut samples = vec![Sample::exact(system), Sample::exact(server)];
+        samples.extend(crate::witness::roughtime().current());
+        Ok(self.combiner.read_samples(&samples, mono)?)
     }
 }

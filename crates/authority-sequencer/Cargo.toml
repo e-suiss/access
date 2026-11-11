@@ -17,6 +17,9 @@ access-telemetry = { workspace = true }
 suiss-ledger = { workspace = true, features = ["doorbell"] }
 suiss-crypto = { workspace = true, features = ["pkcs11"] }
 thiserror = { workspace = true }
+# OP-158 m.3 (d), (k): witness exchanges and Roughtime samples
+tokio = { workspace = true, features = ["io-util", "net", "sync", "time"] }
+aws-lc-rs = { workspace = true }
 tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]

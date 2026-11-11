@@ -54,6 +54,7 @@ dependencies = [
  "access-crypto",
  "access-store",
  "access-telemetry",
+ "aws-lc-rs",
  "esuiss-access-kernel",
  "esuiss-crypto",
  "esuiss-ledger",
