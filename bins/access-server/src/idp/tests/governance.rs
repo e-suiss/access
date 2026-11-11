@@ -562,7 +562,7 @@ async fn a_scheduled_rotation_writes_no_exercise_and_its_policy_is_a_reserved_ex
     assert!(rotated.contains(&current[0]));
     assert_eq!(records(&w, d).await, before, "no Exercise, no record");
     let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
-    assert!(key_changes(&mut t).await.unwrap().is_empty());
+    assert_eq!(key_changes(&mut t).await.unwrap().len(), 0);
     t.commit().await.unwrap();
 
     // MD-14, §13.7.1
@@ -579,7 +579,7 @@ async fn a_scheduled_rotation_writes_no_exercise_and_its_policy_is_a_reserved_ex
         Ok(Applied::Written { .. } | Applied::AlreadyWritten { .. })
     ));
     let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
-    assert!(key_changes(&mut t).await.unwrap().is_empty());
+    assert_eq!(key_changes(&mut t).await.unwrap().len(), 0);
     t.commit().await.unwrap();
     let by_root = proposal((tenant, realm), change, 2, idp_anchor(d), 48);
     let at = records(&w, d).await;
