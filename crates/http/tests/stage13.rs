@@ -28,7 +28,8 @@ const ADMIN: [&str; 8] = [
 ];
 
 /// The Stage 13 admin rows their lanes serve.
-const SERVED: [&str; 0] = [];
+// OP-158 m.3 (w)
+const SERVED: [&str; 1] = ["putAuditTier"];
 
 // OP-158 m.4 (a)
 #[test]
