@@ -9,3 +9,8 @@ token = "access-signer"
 pin_file = "/var/lib/access/secrets/hsm-access-signer"
 kek = "access/signer/kek"
 paths = ["/var/lib/softhsm/tokens"]
+
+# CR-29, OP-157 m.3 (x): the local software quorum the init container runs
+[ceremony]
+transcript = "/var/lib/access/signer/ceremony.transcript"
+genesis_file = "/var/lib/access/secrets/signer-ceremony-genesis"

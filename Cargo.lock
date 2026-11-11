@@ -1110,6 +1110,7 @@ dependencies = [
  "access-authority-signer",
  "access-crypto",
  "access-telemetry",
+ "esuiss-access-kernel",
  "esuiss-crypto",
  "esuiss-sandbox",
  "figment",

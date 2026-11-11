@@ -83,6 +83,12 @@ data:
     token = "access-signer"
     pin_file = "/run/secrets/hsm-signer-pin"
     kek = "access/signer/kek"
+
+    # CR-29, OP-157 m.3 (x): the ceremony transcript (ceremony init|approve|sign appends to it)
+    # and the digest of its first entry, pinned outside the pod's writable volume
+    [ceremony]
+    transcript = "/var/lib/access/signer/ceremony.transcript"
+    genesis_file = "/run/secrets/signer-ceremony-genesis"
   # CMP-22b: the identity signer sidecar; the cell names the audit chains' origins (OP-150 m.3 (h))
   identity-signer.toml: |
     socket = "/run/access/identity-signer.sock"

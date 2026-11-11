@@ -178,4 +178,40 @@ done
 ACCESS_SIGNER_CONFIG=/etc/access/local/access-signer.toml access-signer init
 ACCESS_IDENTITY_SIGNER_CONFIG=/etc/access/local/access-identity-signer.toml access-identity-signer init
 
+# CR-29, OP-157 m.3 (x), OP-69: the binding keys' software quorum, three local ceremony keys of
+# which two approve each activation; every member approves the roster once. Each run activates
+# the binding keys for another 30 days.
+transcript=/var/lib/access/signer/ceremony.transcript
+permit="$(mktemp -d)/permit.cbor"
+for i in 0 1 2; do
+    if [ ! -s "$secrets/signer-ceremony-$i.pem" ]; then
+        (umask 077 && openssl genpkey -algorithm ed25519 -out "$secrets/signer-ceremony-$i.pem")
+    fi
+    if [ ! -s "$secrets/signer-ceremony-$i" ]; then
+        (umask 077 && openssl pkey -in "$secrets/signer-ceremony-$i.pem" -outform DER \
+            | od -An -v -tx1 | tr -d ' \n' > "$secrets/signer-ceremony-$i")
+    fi
+done
+if [ ! -s "$transcript" ]; then
+    roster="$(mktemp)"
+    echo "threshold = 2" > "$roster"
+    for i in 0 1 2; do
+        public="$(openssl pkey -in "$secrets/signer-ceremony-$i.pem" -pubout -outform DER \
+            | tail -c 32 | od -An -v -tx1 | tr -d ' \n')"
+        printf '[[members]]\ned25519 = "%s"\n' "$public" >> "$roster"
+    done
+    access-signer ceremony init "$transcript" "$permit" roster "$roster" >/dev/null
+    for i in 0 1 2; do
+        access-signer ceremony approve "$transcript" "$permit" "$i" ed25519 "$secrets/signer-ceremony-$i" >/dev/null
+    done
+    (umask 077 && access-signer ceremony sign "$transcript" "$permit" > "$secrets/signer-ceremony-genesis")
+    rm -f "$roster"
+fi
+access-signer ceremony init "$transcript" "$permit" activate 720 >/dev/null
+for i in 0 1; do
+    access-signer ceremony approve "$transcript" "$permit" "$i" ed25519 "$secrets/signer-ceremony-$i" >/dev/null
+done
+access-signer ceremony sign "$transcript" "$permit" >/dev/null
+rm -f "$permit"
+
 echo "access-local-init: provisioned"
