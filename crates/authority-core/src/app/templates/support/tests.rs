@@ -24,7 +24,7 @@ fn give(template: Template, actions: &[IdpAction], minutes: u64) -> Give {
     }
 }
 
-// U57, MD-9, TN-70, TN-71, §8.16 #1, #2, #9, OP-157 m.3 (c), Ek B 5505, 5507, 5508, 5516
+// U57, MD-9, TN-70, TN-71, §8.16, OP-157 m.3 (c), Ek B 5505, 5507, 5508, 5516
 #[test]
 fn a_session_acts_for_the_person_on_their_own_account_and_passes_on_to_no_one() {
     let g = give(
@@ -57,7 +57,7 @@ fn a_session_acts_for_the_person_on_their_own_account_and_passes_on_to_no_one() 
     assert_eq!(shape(&deeper, NOW, None), Err(PASSES_ON));
 }
 
-// U57, TN-73, §5.3, §8.16 #4, OP-157 m.3 (c), (e), Ek B 5511
+// U57, TN-73, §5.3, §8.16, OP-157 m.3 (c), (e), Ek B 5511
 #[test]
 fn a_support_grant_names_one_case_and_holds_while_it_is_open() {
     let g = give(Template::Session, &[IdpAction::AccountRead], 30)
@@ -105,7 +105,7 @@ fn a_support_grant_names_one_case_and_holds_while_it_is_open() {
     );
 }
 
-// U57, §8.16 #5, TN-137 (2), OP-157 m.3 (c), (n), Ek B 5512
+// U57, §8.16, TN-137 (2), OP-157 m.3 (c), (n), Ek B 5512
 #[test]
 fn writing_support_lasts_an_hour_and_read_only_a_day() {
     assert!(
@@ -144,7 +144,7 @@ fn writing_support_lasts_an_hour_and_read_only_a_day() {
     assert_eq!(shape(&later, NOW, None), Err(TOO_LONG));
 }
 
-// §8.16 #3, E34, MD-9, OP-157 m.3 (a), (c), Ek B 5508, 5510
+// §8.16, E34, MD-9, OP-157 m.3 (a), (c), Ek B 5508, 5510
 #[test]
 fn no_protected_or_reserved_action_is_ever_in_support_access() {
     for p in PROTECTED {

@@ -322,7 +322,7 @@ pub fn shape(
     max_minutes: Option<u64>,
 ) -> Result<(), &'static str> {
     let a = &content.authority;
-    // TN-73, §8.16 #4
+    // TN-73, §8.16
     let (party, _, _) = parts(a).ok_or(CASE_REQUIRED)?;
     // INV-4, TN-72
     if content.agency != BTreeSet::from([Capacity::For(party)]) {
@@ -332,7 +332,7 @@ pub fn shape(
     {
         return Err(OUT_OF_SCOPE);
     }
-    // §8.16 #3
+    // §8.16
     let named = &a.authority.actions;
     if named
         .exact
@@ -341,7 +341,7 @@ pub fn shape(
     {
         return Err(PROTECTED_ACTION);
     }
-    // §8.16 #2, E34
+    // §8.16, E34
     if named.exact.is_empty()
         || !named.prefix.is_empty()
         || !named
@@ -354,14 +354,14 @@ pub fn shape(
     {
         return Err(OUT_OF_SCOPE);
     }
-    // §8.16 #9
+    // §8.16
     if a.delegation.depth != 0 || a.delegation.downstream_holder_class.is_some() {
         return Err(PASSES_ON);
     }
     if !matches!(content.basis, GrantBasis::Anchor(_)) {
         return Err(NOT_OWN);
     }
-    // §8.16 #5, TN-137 (2)
+    // §8.16, TN-137 (2)
     let read_only = named
         .exact
         .iter()

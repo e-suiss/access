@@ -395,15 +395,14 @@ fn subcode(v: &Verdict) -> String {
     }
 }
 
-// MD-9, TN-70, TN-73, U57, MUST-NEVER-19, §8.16 #1, #4, #10, OP-157 m.3 (c), (e), Ek B 5410,
-// 5505, 5511, 5517
+// MD-9, TN-70, TN-73, U57, MUST-NEVER-19, §8.16, OP-157 m.3 (c), (e), Ek B 5410, 5505, 5511, 5517
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn support_access_is_the_persons_own_grant_held_by_an_open_case() {
     let d = Desk::open("support-held").await;
     let person = d.s.actor().await;
     let operator = d.s.actor().await;
 
-    // §8.16 #10
+    // §8.16
     let none = d
         .read(
             &operator,
@@ -456,7 +455,7 @@ async fn support_access_is_the_persons_own_grant_held_by_an_open_case() {
     let not_holder = d.read(&stranger, &person, "4411", basis).await;
     assert!(not_holder.is_err(), "{not_holder:?}");
 
-    // §8.16 #3
+    // §8.16
     let (protected, _) = d
         .act(
             &operator,
@@ -481,8 +480,7 @@ async fn support_access_is_the_persons_own_grant_held_by_an_open_case() {
     d.s.only_public();
 }
 
-// U57, §8.16 #2, #3, #5, #9, TN-72, INV-4, OP-157 m.3 (c), Ek B 5507, 5508, 5509, 5510, 5512,
-// 5516, 5520
+// U57, §8.16, TN-72, INV-4, OP-157 m.3 (c), Ek B 5507, 5508, 5509, 5510, 5512, 5516, 5520
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn only_the_template_shape_of_support_access_is_ever_written() {
     let d = Desk::open("support-shape").await;
@@ -494,7 +492,7 @@ async fn only_the_template_shape_of_support_access_is_ever_written() {
         assert_eq!(subcode(&v), reason, "{v:?}");
     };
 
-    // §8.16 #3, Ek B 5510
+    // §8.16, Ek B 5510
     let mut protected = d.give(&person, operator.party, read, "4411").await;
     protected.actions.insert(IdpAction::AccountEmailChange);
     assert_eq!(protected.grant(), Err(PROTECTED_ACTION));
@@ -511,7 +509,7 @@ async fn only_the_template_shape_of_support_access_is_ever_written() {
         .insert(IdpAction::AccountSigninMethodChange.action_ref());
     refused(d.issue(&person, content).await, PROTECTED_ACTION);
 
-    // §8.16 #5, U57
+    // §8.16, U57
     let long = d
         .give(
             &person,
@@ -538,13 +536,13 @@ async fn only_the_template_shape_of_support_access_is_ever_written() {
         .await;
     assert!(d.issue(&person, standing.grant().unwrap()).await.is_ok());
 
-    // §8.16 #9, Ek B 5516
+    // §8.16, Ek B 5516
     content.authority.constraints.validity.until =
         content.authority.constraints.validity.from + 60_000;
     content.authority.delegation.depth = 1;
     refused(d.issue(&person, content.clone()).await, PASSES_ON);
 
-    // TN-73, §8.16 #4, Ek B 5511
+    // TN-73, §8.16, Ek B 5511
     content.authority.delegation.depth = 0;
     content.authority.authority.purpose = None;
     refused(d.issue(&person, content.clone()).await, CASE_REQUIRED);
@@ -596,7 +594,7 @@ async fn only_the_template_shape_of_support_access_is_ever_written() {
         "the root never gives support access for the person: {refusal:?}"
     );
 
-    // §8.16 #5
+    // §8.16
     let basis = d.issue(&person, root_given.clone()).await.unwrap();
     let ExerciseBasis::Holding(h) = basis else {
         panic!("holding");
@@ -617,7 +615,7 @@ async fn only_the_template_shape_of_support_access_is_ever_written() {
         .await;
     assert_eq!(subcode(&amended.unwrap_err()), AMENDED);
 
-    // INV-4, §8.16 #2, Ek B 5509
+    // INV-4, §8.16, Ek B 5509
     let own = canonical(
         &[IdpAction::AccountRead.action_ref()],
         structural(templates::RESOURCES, &[]),
@@ -635,7 +633,7 @@ async fn only_the_template_shape_of_support_access_is_ever_written() {
     );
     assert!(d.read(&operator, &person, "4411", basis).await.is_ok());
 
-    // §8.16 #3, OP-157 m.3 (c), (n)
+    // §8.16, OP-157 m.3 (c), (n)
     d.s.root(Payload::PolicySet {
         policy: None,
         content: access_authority_core::restrict::patterns::support_protected().unwrap(),
@@ -676,7 +674,7 @@ async fn only_the_template_shape_of_support_access_is_ever_written() {
     );
 }
 
-// §8.16 #6, #11, U57, TN-71 #6, X37, OP-157 m.3 (c), Ek B 5507, 5513, 5518, 5609
+// §8.16, U57, TN-71, X37, OP-157 m.3 (c), Ek B 5507, 5513, 5518, 5609
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn revoking_support_ends_only_the_operators_access_and_every_use_names_the_operator() {
     use access_authority_core::app::hub::Group;
@@ -707,7 +705,7 @@ async fn revoking_support_ends_only_the_operators_access_and_every_use_names_the
         .await;
     let allowed = allowed.unwrap();
 
-    // §8.16 #6, TN-71 #6
+    // §8.16, TN-71
     let exercise = b64url_encode(&allowed.exercise().0);
     let uses = d.hub("activity", &person).await;
     let used = uses
@@ -734,7 +732,7 @@ async fn revoking_support_ends_only_the_operators_access_and_every_use_names_the
         .unwrap_or_else(|| panic!("{rows:?}"));
     assert_eq!(row["groups"], json!([Group::ActingForYou.word()]));
 
-    // §8.16 #11
+    // §8.16
     d.commit(
         &person,
         ExerciseBasis::Anchor(person.anchor),
@@ -834,8 +832,7 @@ async fn token(
     issued
 }
 
-// §8.16 #1, §9.9.4, §11.21.3, MD-9, P53, TN-70, TNI-13, L22, OP-157 m.3 (d), Ek B 5430, 5436,
-// 5506
+// §8.16, §9.9.4, §11.21.3, MD-9, P53, TN-70, TNI-13, L22, OP-157 m.3 (d), Ek B 5430, 5436, 5506
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_support_token_names_the_person_as_subject_and_the_operator_as_act() {
     use access_internal_api::projections::TokenProjection;
@@ -894,7 +891,7 @@ async fn the_support_token_names_the_person_as_subject_and_the_operator_as_act()
         "{claims}"
     );
 
-    // MD-9, §8.16 #10
+    // MD-9, §8.16
     let own = token(&d, &operator, &content.authority, (Capacity::Own, basis)).await;
     assert!(!matches!(own, TokenProjection::Issued(_)), "{own:?}");
     d.state(person.party, "4411", false).await;

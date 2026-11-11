@@ -308,7 +308,7 @@ mod tests {
         );
     }
 
-    // §8.16 #3, MD-9, OP-157 m.3 (c), Ek B 5510
+    // §8.16, MD-9, OP-157 m.3 (c), Ek B 5510
     #[test]
     fn support_protected_compiles_and_names_every_protected_action() {
         let c = support_protected().unwrap();
