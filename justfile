@@ -413,7 +413,7 @@ test-parser-worker:
         "$bin" --ignored --test-threads=1
     fi
 
-# OP-94, OP-158 m.3 (y): the identity signer's orderly shutdown, as root so its lockdown applies
+# OP-94, OP-158 m.3 (y): the identity signer's orderly shutdown with its lockdown applied
 test-signer-shutdown:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -423,11 +423,9 @@ test-signer-shutdown:
     fi
     bin="$(cargo test --locked -p access-identity-signer-bin --test shutdown --no-run --message-format=json | jq -r 'select(.executable != null and .target.name == "shutdown") | .executable')"
     conf="$(scripts/softhsm-local.sh)"
-    if [[ "$(id -u)" != 0 ]]; then
-        sudo SOFTHSM2_CONF="$conf" "$bin" --ignored --test-threads=1
-    else
-        SOFTHSM2_CONF="$conf" "$bin" --ignored --test-threads=1
-    fi
+    # the signer refuses root; it runs as this user with an empty capability bounding set
+    sudo setpriv --bounding-set=-all --reuid="$(id -u)" --regid="$(id -g)" --clear-groups \
+        env SOFTHSM2_CONF="$conf" "$bin" --ignored --test-threads=1
 
 # OP-105, F-2
 smt-fetch:

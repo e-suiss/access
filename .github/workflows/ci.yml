@@ -78,6 +78,11 @@ jobs:
           cache-key: test
           tools: nextest
       # OP-69, OP-140 m.4: the PKCS#11 key store is tested against SoftHSM
+      # OP-158 m.3 (r): the dump test reads the server with a matching pg_dump
+      - name: PostgreSQL 18 client
+        run: |
+          scripts/ci/apt-install.sh postgresql-client-18
+          echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
       - name: SoftHSM
         run: scripts/ci/apt-install.sh softhsm2
       - name: Tests (SA-59 phase 0 layers)
