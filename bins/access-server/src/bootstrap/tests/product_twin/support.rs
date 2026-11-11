@@ -346,7 +346,11 @@ impl Desk {
         })
         .unwrap();
         let mut context = serde_json::from_str::<Json>(&body).unwrap()["context"].clone();
-        context["query"] = json!({ "party": b64url_encode(&who.party.0) });
+        context["query"] = if kind == "changes" {
+            json!({})
+        } else {
+            json!({ "party": b64url_encode(&who.party.0) })
+        };
         let answer = self
             .s
             .listener
@@ -1480,6 +1484,13 @@ async fn support_access_is_asked_given_used_seen_and_revoked_on_the_persons_own_
         used["basis"]["grant"],
         given_row["basis"]["holding"]["grant"]
     );
+    let changes = d.hub("changes", &person.actor).await;
+    assert!(
+        changes
+            .iter()
+            .any(|c| c["id"] == given_row["basis"]["holding"]["grant"]),
+        "SI-21: {changes:?}"
+    );
     let (status, theirs) = f
         .send(Method::GET, "/v1/me/support-access", &operator, None, &[])
         .await;
@@ -1561,7 +1572,16 @@ async fn support_access_is_asked_given_used_seen_and_revoked_on_the_persons_own_
     .await
     .unwrap();
     tx.commit().await.unwrap();
-    assert!(!again, "an end is announced once");
+    assert!(again.is_none(), "an end is announced once");
+    // OP-157 m.3 (aa)
+    let webhooks = identity_events_until(
+        &d.s.w.db,
+        "event.support.access_changed",
+        |q| q.len() >= 2,
+        "granted and revoked",
+    )
+    .await;
+    assert_eq!(webhooks.len(), 2);
 }
 
 // §8.16, XI-7, OP-157 m.3 (c), (f), Ek B 5524, 5525
@@ -1900,6 +1920,63 @@ async fn a_support_artifact_is_redacted_on_upload_and_read_only_under_its_own_gr
     );
 }
 
+// TN-137 (2), (4), §8.16, OP-157 m.3 (c), Ek B 5527, 5529
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_view_request_may_stand_for_a_day_and_can_only_read() {
+    use axum::http::Method;
+    let d = Desk::open("support-standing").await;
+    let f = front::front(&d).await;
+    f.register(&d).await;
+    let person = f.person(&d, "ayse@access.test", None).await;
+    let operator = f.person(&d, "mehmet@access.test", None).await;
+    f.org(&d, &operator, "Acme Support").await;
+    let (status, _) = ask(&f, &operator, &person, ("4411", "read", 30)).await;
+    assert_eq!(status, 201);
+    let rows = incoming(&f, &person).await;
+    assert_eq!(rows[0]["give"]["standing"]["template"], "support.standing");
+    let standing = json!({ "give": rows[0]["give"]["standing"] });
+    let (status, given) = f
+        .send(
+            Method::POST,
+            &path_of(&rows[0]["id"], "/give"),
+            &person,
+            Some(give_body(&d, &person, &standing, |_| {})),
+            &[],
+        )
+        .await;
+    assert_eq!(
+        (status, given["template"].as_str()),
+        (201, Some("support.standing")),
+        "{given}"
+    );
+    assert_eq!(given["read_only"], true);
+    let basis = holding_of(&given);
+    d.state(person.actor.party, "4411", true).await;
+    assert!(
+        d.read(&operator.actor, &person.actor, "4411", basis)
+            .await
+            .is_ok()
+    );
+    let (write, _) = d
+        .act(
+            &operator.actor,
+            &person.actor,
+            IdpAction::AccountProfileUpdate,
+            d.case("4411"),
+            basis,
+        )
+        .await;
+    assert!(write.is_err(), "{write:?}");
+    let (status, asked) = ask(&f, &operator, &person, ("4412", "profile", 30)).await;
+    assert_eq!(status, 201, "{asked}");
+    let rows = incoming(&f, &person).await;
+    let row = rows.iter().find(|r| r["id"] == asked["id"]).unwrap();
+    assert!(
+        row["give"].get("standing").is_none(),
+        "only reading stands: {row}"
+    );
+}
+
 // TN-72, TN-137 (3), §8.16, OP-157 m.3 (c), Ek B 5528
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_organization_gives_support_access_to_its_own_resources_only() {
@@ -1959,7 +2036,7 @@ async fn support_access_that_reaches_its_end_ends_and_the_person_is_told() {
         let (tenant, realm) = (f.tenant, f.realm);
         async move {
             let mut t = TenantTx::begin(&db, tenant, realm).await.unwrap();
-            let n = access_identity_account::app::support::sweep(
+            let ended = access_identity_account::app::support::sweep(
                 &mut t,
                 (&*kek, &ids),
                 (
@@ -1972,7 +2049,7 @@ async fn support_access_that_reaches_its_end_ends_and_the_person_is_told() {
             .await
             .unwrap();
             t.commit().await.unwrap();
-            n
+            ended.len()
         }
     };
     assert_eq!(sweep(now_ms()).await, 0);
