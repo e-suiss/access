@@ -414,7 +414,7 @@ impl KeyFactory for Flaky {
 
 const HOUR: u64 = 60 * MINUTE;
 
-// CR-23, CR-27, OP-150, TN-12, TN-118
+// CR-23, CR-27, OP-150, TN-12, TN-118, OP-157 m.3 (x)
 #[test]
 fn rounds_report_transitions_and_delays() {
     let down = std::rc::Rc::new(std::cell::Cell::new(false));
@@ -432,10 +432,13 @@ fn rounds_report_transitions_and_delays() {
         Response::Opened
     );
     let mut names = BTreeSet::new();
+    let mut rotated = BTreeSet::new();
     let mut now = 0;
     while now <= 6 * HOUR {
         let report = s.round(now, now);
         assert_eq!(report.delayed, Vec::new(), "{now}");
+        // §10.1.7, OP-157 m.3 (x)
+        rotated.extend(report.rotated().map(|(d, kid)| (*d, *kid)));
         names.extend(report.transitions.iter().map(|(d, step)| {
             assert_eq!(*d, Digest([7; 32]));
             step.name()
@@ -443,6 +446,8 @@ fn rounds_report_transitions_and_delays() {
         now += MINUTE;
     }
     assert!(names.is_superset(&BTreeSet::from(["publish", "activate", "retire"])));
+    assert!(rotated.len() >= 5, "{rotated:?}");
+    assert_eq!(AUDIT_EVENT_ROTATED, "signer.rotated");
     down.set(true);
     let mut late = None;
     while now <= 12 * HOUR {

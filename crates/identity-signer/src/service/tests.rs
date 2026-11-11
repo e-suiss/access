@@ -370,7 +370,7 @@ impl KeyFactory for Flaky {
     }
 }
 
-// CR-23, CR-27, OP-150, TN-12, TN-118
+// CR-23, CR-27, OP-150, TN-12, TN-118, OP-157 m.3 (x)
 #[test]
 fn rounds_report_transitions_and_delays() {
     let down = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -387,9 +387,12 @@ fn rounds_report_transitions_and_delays() {
     assert_eq!(s.handle(open, 0, 7), Response::Opened);
     let day = 86_400_000;
     let mut names = std::collections::BTreeSet::new();
+    let mut rotated = std::collections::BTreeSet::new();
     for d in 1..=400_u64 {
         let report = s.round(d * day, 7);
         assert_eq!(report.delayed, Vec::new(), "day {d}");
+        // §10.1.7, OP-157 m.3 (x)
+        rotated.extend(report.rotated().map(|(r, kid)| (*r, *kid)));
         names.extend(report.transitions.iter().map(|(r, step)| {
             assert_eq!(*r, A);
             step.name()
@@ -398,6 +401,11 @@ fn rounds_report_transitions_and_delays() {
     assert!(names.is_superset(&std::collections::BTreeSet::from([
         "publish", "activate", "retire", "drop"
     ])));
+    assert!(
+        rotated.len() >= 3 && rotated.iter().all(|(r, _)| *r == A),
+        "{rotated:?}"
+    );
+    assert_eq!(AUDIT_EVENT_ROTATED, "signer.rotated");
     down.store(true, std::sync::atomic::Ordering::Relaxed);
     let late = (401..=800_u64).find_map(|d| s.round(d * day, 7).delayed.first().copied());
     assert!(late.is_some_and(|(r, ms)| r == A && ms > 0));

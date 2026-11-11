@@ -18,6 +18,10 @@ use crate::protocol::{Realm, Request, Response, alg_of, policy_of, policy_value}
 /// How far a requested signing time may be from the signer's clock (PD).
 pub const MAX_SKEW_MS: u64 = 60_000;
 
+/// The audit event of a key the schedule made the signing key: rotation inside the policy is
+/// operational and writes no Exercise (§10.1.7, OP-157 m.3 (x)).
+pub const AUDIT_EVENT_ROTATED: &str = "signer.rotated";
+
 /// What one schedule round did across the realms (CR-23, CR-27).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Report {
@@ -28,6 +32,16 @@ pub struct Report {
     /// Realms whose active key is past its rotation time after the round, and by how many
     /// milliseconds: the rotation delay alarm (CR-23).
     pub delayed: Vec<(Realm, u64)>,
+}
+
+impl Report {
+    /// Each key the round made a realm's signing key: one [`AUDIT_EVENT_ROTATED`] event each.
+    pub fn rotated(&self) -> impl Iterator<Item = (&Realm, &[u8; 32])> {
+        self.transitions.iter().filter_map(|(d, step)| match step {
+            Step::Activate(kid) => Some((d, kid)),
+            _ => None,
+        })
+    }
 }
 
 /// The identity signer of one process.

@@ -149,6 +149,16 @@ fn audit(report: &access_authority_signer::service::Report) {
             kid = step.kid().map(|k| hex(k)).unwrap_or_default(),
         );
     }
+    // §10.1.7, OP-157 m.3 (x)
+    for (domain, kid) in report.rotated() {
+        tracing::info!(
+            event = "signer.rotated",
+            domain = hex(&domain.0),
+            kid = hex(kid),
+            trigger = "schedule",
+            "a scheduled rotation made a new signing key; no Exercise"
+        );
+    }
     for (domain, late_ms) in &report.delayed {
         tracing::error!(
             event = "key.rotation.delayed",
