@@ -105,8 +105,9 @@ fn key_components() -> Value {
                 "keys": { "type": "array", "items": r("KeyEntry") },
                 "unknown": { "type": "array", "items": r("Kid") },
                 "consistency_token": text("Opaque; the head the answer was read at."),
+                "witnessed_through": r("Position"),
             }),
-            &["domain", "position", "iat", "keys", "unknown", "consistency_token"],
+            &["domain", "position", "iat", "keys", "unknown", "consistency_token", "witnessed_through"],
         ),
         "KeyBatchRequest": object(
             &json!({
@@ -145,8 +146,9 @@ fn party_components() -> Value {
                 "parties": { "type": "array", "items": r("PartyEntry") },
                 "unknown": { "type": "array", "items": r("PartyId") },
                 "consistency_token": text("Opaque; the head the answer was read at."),
+                "witnessed_through": r("Position"),
             }),
-            &["domain", "position", "iat", "parties", "unknown", "consistency_token"],
+            &["domain", "position", "iat", "parties", "unknown", "consistency_token", "witnessed_through"],
         ),
         "PartyBatchRequest": object(
             &json!({

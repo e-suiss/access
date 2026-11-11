@@ -3251,7 +3251,8 @@
           "iat",
           "keys",
           "unknown",
-          "consistency_token"
+          "consistency_token",
+          "witnessed_through"
         ],
         "properties": {
           "domain": {
@@ -3278,6 +3279,9 @@
           "consistency_token": {
             "type": "string",
             "description": "Opaque; the head the answer was read at."
+          },
+          "witnessed_through": {
+            "$ref": "#/components/schemas/Position"
           }
         }
       },
@@ -3355,7 +3359,8 @@
           "iat",
           "parties",
           "unknown",
-          "consistency_token"
+          "consistency_token",
+          "witnessed_through"
         ],
         "properties": {
           "domain": {
@@ -3382,6 +3387,9 @@
           "consistency_token": {
             "type": "string",
             "description": "Opaque; the head the answer was read at."
+          },
+          "witnessed_through": {
+            "$ref": "#/components/schemas/Position"
           }
         }
       },

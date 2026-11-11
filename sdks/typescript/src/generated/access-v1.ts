@@ -747,6 +747,7 @@ export interface components {
             unknown: components["schemas"]["Kid"][];
             /** @description Opaque; the head the answer was read at. */
             consistency_token: string;
+            witnessed_through: components["schemas"]["Position"];
         };
         KeyBatchRequest: {
             domain: components["schemas"]["DomainId"];
@@ -775,6 +776,7 @@ export interface components {
             unknown: components["schemas"]["PartyId"][];
             /** @description Opaque; the head the answer was read at. */
             consistency_token: string;
+            witnessed_through: components["schemas"]["Position"];
         };
         PartyBatchRequest: {
             domain: components["schemas"]["DomainId"];

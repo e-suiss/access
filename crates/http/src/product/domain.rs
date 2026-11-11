@@ -159,6 +159,7 @@ pub fn lookup_json(a: &KeyAnswer) -> Value {
         "keys": l.keys.iter().map(key_json).collect::<Vec<_>>(),
         "unknown": l.unknown.iter().map(|k| b64url_encode(k)).collect::<Vec<_>>(),
         "consistency_token": a.consistency,
+        "witnessed_through": a.witnessed_through.to_string(),
     })
 }
 
@@ -244,6 +245,7 @@ pub fn party_lookup_json(a: &PartyAnswer) -> Value {
         "parties": l.parties.iter().map(party_json).collect::<Vec<_>>(),
         "unknown": l.unknown.iter().map(|p| b64url_encode(&p.0)).collect::<Vec<_>>(),
         "consistency_token": a.consistency,
+        "witnessed_through": a.witnessed_through.to_string(),
     })
 }
 

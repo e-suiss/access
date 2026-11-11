@@ -150,6 +150,7 @@ impl KeyDirectory for Ledger {
             },
             consistency: "ct-9".to_owned(),
             signed: sign.then(|| (SIGN1.to_vec(), EXCERPT.to_vec())),
+            witnessed_through: 0,
         })
     }
 
@@ -180,6 +181,7 @@ impl KeyDirectory for Ledger {
             },
             consistency: "ct-9".to_owned(),
             signed: sign.then(|| (SIGN1.to_vec(), EXCERPT.to_vec())),
+            witnessed_through: 0,
         })
     }
 }
@@ -1154,6 +1156,7 @@ impl Pdp for Eligible {
             signed_pap: None,
             ended: Vec::new(),
             explained: None,
+            witnessed_through: None,
             causal: None,
         })
     }

@@ -70,6 +70,9 @@ pub struct Response {
     /// What an explanation of a recorded decision shows a viewer or an auditor beyond the
     /// requester's view (§9.6.1, §13.7.5); `None` for every other answer.
     pub explained: Option<Box<audit::Explained>>,
+    /// The largest log size an independent witness cosigned, as the leader saw it (§9.5,
+    /// §9.11, SEC23, OP-158 m.3 (e)); set by the decision point.
+    pub witnessed_through: Option<u64>,
     /// For a request naming an upstream Exercise, whether its causal-bound allowance was
     /// enforced (§9.9.2, OP-152 m.7 (d) E11): `Some(true)` only when the domain declares it;
     /// `None` when the request names none or the answer was not evaluated now.
@@ -822,6 +825,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             signed_pap: None,
             ended: Vec::new(),
             explained: None,
+            witnessed_through: None,
             causal: None,
         })))
     }
@@ -2168,6 +2172,7 @@ const fn answer(
         signed_pap: None,
         ended: Vec::new(),
         explained: None,
+        witnessed_through: None,
         causal: None,
     }
 }

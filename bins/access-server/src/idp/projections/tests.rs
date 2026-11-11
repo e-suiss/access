@@ -77,6 +77,7 @@ fn response(outcome: Outcome) -> Response {
         signed_pap: None,
         ended: Vec::new(),
         explained: None,
+        witnessed_through: None,
         causal: None,
     }
 }

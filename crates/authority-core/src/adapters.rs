@@ -1156,6 +1156,9 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         };
         // OP-141 m.22 (e), (f)
         if let Ok(r) = &mut result {
+            // §9.5, §9.11, OP-158 m.3 (e)
+            r.witnessed_through =
+                Some(access_authority_sequencer::witness::board().witnessed(&domain));
             r.consistency = Some(
                 led.tokens
                     .seal(&domain.0, CONSISTENCY, &led.core.head().to_be_bytes())
@@ -1491,6 +1494,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             lookup,
             consistency,
             signed,
+            witnessed_through: access_authority_sequencer::witness::board().witnessed(&domain),
         })
     }
 
@@ -1586,6 +1590,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             lookup,
             consistency,
             signed,
+            witnessed_through: access_authority_sequencer::witness::board().witnessed(&domain),
         })
     }
 
@@ -1773,6 +1778,8 @@ pub struct KeyAnswer {
     pub consistency: String,
     /// The signed `key-lookup` payload and its key excerpt, when asked for.
     pub signed: Option<(Vec<u8>, Vec<u8>)>,
+    /// The largest log size an independent witness cosigned (§9.5, §9.11).
+    pub witnessed_through: u64,
 }
 
 /// A Party status lookup answer (OP-149 m.28 (c)).
@@ -1784,6 +1791,8 @@ pub struct PartyAnswer {
     pub consistency: String,
     /// The signed `party-lookup` payload and its key excerpt, when asked for.
     pub signed: Option<(Vec<u8>, Vec<u8>)>,
+    /// The largest log size an independent witness cosigned (§9.5, §9.11).
+    pub witnessed_through: u64,
 }
 
 /// The trusted time the record at `pos` of `domain` was committed at.

@@ -1032,6 +1032,13 @@ pub fn encode_for(response: &Response, mode: Mode, scope: Scope) -> Out {
     if let Some(t) = &response.consistency {
         context.insert(String::from("consistency_token"), Out::from(t.as_str()));
     }
+    // §9.5, §9.11, OP-158 m.3 (e)
+    if let Some(w) = response.witnessed_through {
+        context.insert(
+            String::from("witnessed_through"),
+            Out::from(w.to_string().as_str()),
+        );
+    }
     // OP-141 m.22 (e)
     if let Some(r) = &response.basis_ref {
         context.insert(String::from("basis_ref"), Out::from(r.as_str()));

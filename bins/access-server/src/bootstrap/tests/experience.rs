@@ -485,6 +485,8 @@ async fn a_revoke_is_shown_done_only_once_recorded_and_its_retry_is_idempotent()
         serde_json::from_slice(&again).unwrap(),
     );
     assert_eq!(a["decision"], true, "{a}");
+    // §9.5, §9.11, Ek B 5893: no witness is declared here, so nothing is witnessed
+    assert_eq!(a["context"]["witnessed_through"], "0", "{a}");
     assert_eq!(a["context"]["exercise"], b["context"]["exercise"]);
     assert_eq!(b["context"]["replayed"], true);
     assert_eq!(
