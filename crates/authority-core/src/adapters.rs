@@ -337,6 +337,10 @@ impl Reader for PgReader {
         Ok(access_store::authority::realm_key_cutoff(&self.pool, iss, kid).await?)
     }
 
+    async fn delegated_admin_open(&self) -> Result<bool, CoreError> {
+        Ok(access_store::authority::realm_delegated_admin_open(&self.pool, &self.domain).await?)
+    }
+
     async fn opening(&self, intent: &Digest) -> Result<Option<crate::ports::Opening>, CoreError> {
         let Some(row) =
             access_store::authority::find_opening(&self.pool, &self.domain, &intent.0).await?

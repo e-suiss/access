@@ -1129,6 +1129,24 @@ pub async fn realm_key_cutoff(
     cutoff.map(unsigned).transpose()
 }
 
+/// Whether `domain`'s realm has opened delegated administration (TN-114, OP-157 m.3 (t)): the
+/// last decided change of the flag; closed when none. Read across tenants through the one
+/// database function that exposes only this.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn realm_delegated_admin_open(
+    pool: &PgPool,
+    domain: &DomainId,
+) -> Result<bool, StoreError> {
+    Ok(sqlx::query_scalar!(
+        r#"SELECT access.realm_delegated_admin_open($1) AS "open!""#,
+        domain.as_bytes().as_slice(),
+    )
+    .fetch_one(pool)
+    .await?)
+}
+
 /// The canonical server's clock in Unix milliseconds, one of the trusted time sources
 /// (OP-129 m.1 (b)).
 ///

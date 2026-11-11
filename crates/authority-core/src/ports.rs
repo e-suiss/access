@@ -186,6 +186,8 @@ pub trait Reader {
         let _ = namespace;
         std::future::ready(Err(CoreError::Unavailable("publications")))
     }
+    /// Whether this domain's realm has opened delegated administration (TN-114, OP-157 m.3 (t)).
+    fn delegated_admin_open(&self) -> impl Future<Output = Result<bool, CoreError>> + Send;
     /// The issuer cutoff a decided drop of the realm key `kid` recorded for the realm whose
     /// issuer is `iss` (§13.7.7, SEC9); `None` when no such key was dropped. Unavailable by
     /// default.

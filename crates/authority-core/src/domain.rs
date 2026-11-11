@@ -265,7 +265,7 @@ pub enum Pass {
     Rejected(Rejection),
 }
 
-fn deny(class: BlockerClass, subcode: &str, resolver: Resolver) -> Decision {
+pub(crate) fn deny(class: BlockerClass, subcode: &str, resolver: Resolver) -> Decision {
     Decision {
         outcome: KernelOutcome::Deny,
         blockers: vec![Blocker {

@@ -1047,6 +1047,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 }
             }),
             Verdict::Committed(_) => Err(AdminError::Unbound),
+            // TN-114, OP-157 m.3 (t)
+            Verdict::NotAllowed { decision, .. } if delegated_admin_off(&decision) => {
+                Err(Invalid::DelegatedAdminOff.into())
+            }
             Verdict::NotAllowed { decision, position } => {
                 Ok(Applied::NotAllowed { decision, position })
             }
@@ -1648,9 +1652,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-157 m.3 (w)
             Change::Review(r) => review::write(t, bound, r).await?,
             // OP-157 m.4 (a)
-            Change::DelegatedAdmin(_) | Change::ApprovalInline(_) | Change::ApprovalBatch(_) => {
+            Change::ApprovalInline(_) | Change::ApprovalBatch(_) => {
                 return Err(Invalid::NotYetServed.into());
             }
+            // TN-114, OP-157 m.3 (t): the flag is the bound decision itself
+            Change::DelegatedAdmin(_) => true,
             Change::ClientRegister(c) | Change::ClientUpdate(c) => {
                 let (done, s) = self
                     .write_client(t, bound, c, matches!(change, Change::ClientRegister(_)))
@@ -2609,6 +2615,14 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
 }
 
 /// Stores one of the realm's policies under `bound`.
+/// Whether a decision denies a new admin Grant for the realm's closed flag (OP-157 m.3 (t)).
+fn delegated_admin_off(decision: &Decision) -> bool {
+    decision
+        .blockers
+        .iter()
+        .any(|b| b.subcode.as_deref() == Some("delegated-admin-off"))
+}
+
 async fn set_policy(
     t: &mut TenantTx,
     bound: &idp::Bound,

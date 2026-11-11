@@ -1001,6 +1001,43 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Ok((evaluation, snapshot))
     }
 
+    /// TN-114, OP-157 m.3 (t): a new admin Grant while the realm has not opened delegated
+    /// administration is denied; everything else passes.
+    async fn delegation_gate(
+        &self,
+        req: &Request,
+        evaluation: &mut Evaluation,
+    ) -> Result<(), CoreError> {
+        let Some(payload) = &req.payload else {
+            return Ok(());
+        };
+        if evaluation.decision.outcome == Outcome::Deny {
+            return Ok(());
+        }
+        let current: Option<meta::GrantState> = match payload {
+            Payload::GrantAmend { grant, .. } => {
+                let rows = self.fetch(&[meta::key(kind::GRANT, grant)]).await?;
+                rows.into_iter()
+                    .find_map(|(_, v, _)| v.and_then(|v| Canonical::from_value(&v).ok()))
+            }
+            _ => None,
+        };
+        if !delegated::needs_open(payload, current.as_ref())
+            || self.reader.delegated_admin_open().await?
+        {
+            return Ok(());
+        }
+        evaluation.decision = crate::domain::deny(
+            access_kernel::combinator::BlockerClass::Restricted,
+            delegated::OFF,
+            access_kernel::combinator::Resolver::Root,
+        );
+        evaluation.effects.clear();
+        evaluation.draws.clear();
+        evaluation.releases.clear();
+        Ok(())
+    }
+
     /// The consequence tier's ceilings: the intent validity, and the time-lock of a CT3
     /// meta-action that widens authority, counted from the nonce's first decision
     /// (§13.7.3, SEC26, OP-141 m.34 (b), (c)).
@@ -1586,6 +1623,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             frame.mappings = &pinned;
             let (mut evaluation, snapshot) = Box::pin(self.passes(req, &frame)).await?;
             let (tier, render, render_bytes) = rendered(req, &evaluation)?;
+            self.delegation_gate(req, &mut evaluation).await?;
             self.tiered(req, &mut evaluation, open, now).await?;
             self.recovery_rules(req, actor, &mut evaluation, tier, now)
                 .await?;
@@ -2135,6 +2173,7 @@ mod binding;
 pub mod breakglass;
 pub mod commitment;
 pub mod consent;
+pub mod delegated;
 pub mod discovery;
 mod events;
 pub mod export;
