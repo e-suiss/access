@@ -1,5 +1,6 @@
 //! Streams (SSF 1.0 §8), their channel, the transmitter metadata (SSF 1.0 §7), RFC 8936 poll
-//! bodies, and how a receiver's answer to a push is read.
+//! bodies, and how a receiver's answer to a push is read. A receiver that loses a signal falls
+//! back to its token lifetime (§13.11 EP-5, U38).
 
 use serde_json::{Map, Value, json};
 

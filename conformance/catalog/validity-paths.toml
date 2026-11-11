@@ -1,12 +1,18 @@
 # MD-7, MD-8, §13.11, OP-158 m.3 (t): every validity path and what it promises.
 #
-# id           EP-n row of §13.11
-# path         the validation path
-# rows         the guarantee rows it is bound to
+# id                  EP-n row of §13.11
+# path                the validation path
+# rows                the guarantee rows it is bound to
+# cache_miss          what a revocation-cache miss does
+# partition           what happens when the database or the freshness source cannot be reached
+# restart             what a restarted node does
+# staleness           the most a revocation can lag on this path (Δ) or the horizon it is bounded by
+# db_down_validation  whether validation goes on while the database is down
+# revocation_ms       the revocation propagation this path promises, if any (EA)
+# code                the files that implement the path; each cites the EP id or one of its rows
 #
-# Lane W8 adds, per path: cache_miss, partition, restart and staleness (Δ or horizon). A path
-# never promises both validation while the database is down and revocation within 250 ms
-# (xtask `validity-paths`).
+# A path never promises both validation while the database is down and revocation within
+# 250 ms (xtask `validity-paths`); a path cited in code is declared here (SI-7).
 
 version = 1
 
@@ -14,48 +20,109 @@ version = 1
 id = "EP-1"
 path = "identity login"
 rows = ["G48", "G50"]
+cache_miss = "asks the canonical source"
+partition = "503 with Retry-After; nobody is authenticated and no session opens"
+restart = "the cache starts empty; every request asks the canonical source"
+staleness = "Δ = 0: decided from the canonical state"
+db_down_validation = false
+code = ["crates/identity-session/src/app/signin.rs"]
 
 [[path]]
 id = "EP-2"
 path = "identity refresh"
 rows = ["G50"]
+cache_miss = "asks the canonical source"
+partition = "503 with Retry-After; never invalid_grant, never a new token"
+restart = "as on a miss"
+staleness = "Δ = 0; the access token already issued is bounded by its own lifetime (EP-4)"
+db_down_validation = false
+code = ["crates/identity-oauth/src/app/oauth/token.rs", "crates/identity-oauth/src/ports/oauth.rs"]
 
 [[path]]
 id = "EP-3"
 path = "identity introspection (strict profile)"
 rows = ["G49", "U35", "U37"]
+cache_miss = "a never-seen token asks the canonical source; unreachable is active=false"
+partition = "active=false for every token, cache hits included; never 503; a resource server takes a 5xx as DENY"
+restart = "active=false until the canonical source answers"
+staleness = "Δ same node 0; Δ cluster p99 < 250 ms; Δ cross-cluster < 500 ms (EA); while the database is down active=false, not this budget"
+db_down_validation = false
+revocation_ms = 250
+code = ["crates/identity-oauth/src/app/oauth/resource.rs"]
 
 [[path]]
 id = "EP-4"
 path = "JWT-only resource server"
 rows = ["U36", "N-39", "HL-22"]
+cache_miss = "not applicable: the resource server keeps no revocation cache, only realm JWKS keys"
+partition = "accepted within the token lifetime; without a JWKS refresh only with the keys it already has, within key_epoch"
+restart = "as above"
+staleness = "horizon = access token lifetime + clock skew (PD: at most 60 min admin, 5 min fast profile)"
+db_down_validation = true
+code = ["crates/identity-oauth/src/domain/jwt.rs", "sdks/rust/access/src/resource/keys.rs"]
 
 [[path]]
 id = "EP-5"
 path = "signal-consuming resource server (SSF/CAEP)"
 rows = ["U38", "N-38"]
+cache_miss = "without a signal, EP-4"
+partition = "a lost signal falls back to EP-4"
+restart = "as above"
+staleness = "the receiver's declared processing time when a signal is delivered; the ceiling is the EP-4 horizon"
+db_down_validation = true
+code = ["crates/identity-events/src/domain/stream.rs"]
 
 [[path]]
 id = "EP-6"
 path = "identity token degraded window"
 rows = ["U39", "RR-25"]
+cache_miss = "not applicable"
+partition = "tokens signed before the outage are accepted within their lifetime by local verification only; no new token; introspection, login and refresh follow EP-1 to EP-3"
+restart = "not applicable"
+staleness = "horizon = the declared token lifetime (the EP-4 bound); no 60-300 s window anywhere (MD-8)"
+db_down_validation = true
+code = ["crates/identity-oauth/src/app/oauth.rs", "crates/identity-oauth/src/domain/jwt.rs"]
 
 [[path]]
 id = "EP-7"
 path = "authority-bearing artefact (PAP, receipt, exact-intent token)"
 rows = ["G25", "U2", "U19", "U25"]
+cache_miss = "the verifier's Domain Metadata and status freshness is at most the contract Δ, else at most 1 hour"
+partition = "by the contract's connectivity class (§13.7.2); DENY under online-strict"
+restart = "by the verifier's counter and secure clock profile"
+staleness = "Δ, horizon and slice from the ValidityContract (CT2 exact-intent horizon at most 5 min, CT3 no projection); no degraded window (SEC27)"
+db_down_validation = true
+code = ["sdks/rust/verifier/src/offline.rs", "crates/kernel/src/validity/ceiling.rs"]
 
 [[path]]
 id = "EP-8"
 path = "key_epoch key window"
 rows = ["U12", "U41", "G47"]
+cache_miss = "an old key is accepted only within the verifier's own pinned window"
+partition = "without new metadata the window closes and the verifier fails closed"
+restart = "the pinned set is kept"
+staleness = "operational key 1 hour (PD), 24 hour ceiling; after a recovery Domain Metadata freshness at most Δ"
+db_down_validation = true
+code = ["crates/kernel/src/verify/key_scope.rs", "sdks/rust/access/src/resource/keys.rs"]
 
 [[path]]
 id = "EP-9"
 path = "authority decision input (applied_pos)"
 rows = ["G51", "FM-1"]
+cache_miss = "when applied_pos is below the requested basis, ask the canonical state or REQUIRE/DENY"
+partition = "DENY (fail-closed)"
+restart = "the basis is rebuilt"
+staleness = "Δ = 0 in commit mode (the decision is at the commit head)"
+db_down_validation = false
+code = ["crates/authority-core/src/query.rs", "crates/internal-api/src/epochs.rs"]
 
 [[path]]
 id = "EP-10"
 path = "advisory cache and derived index"
 rows = ["G51", "U61"]
+cache_miss = "keyed by applied_pos; never seen is fail-closed"
+partition = "never a commit-mode input (G51); an advisory answer produces no ALLOW"
+restart = "the cache starts empty; applied_pos is rebuilt"
+staleness = "negative TTL at most 1 s; advisory freshness declared"
+db_down_validation = false
+code = ["crates/authority-core/src/app/cache.rs"]

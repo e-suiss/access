@@ -41,6 +41,11 @@ const ALLOWLIST: &[(&str, &str, &str)] = &[
         "dangerously",
         "React's dangerouslySetInnerHTML, named only so `ui-text-nodes` can forbid it (TN-131)",
     ),
+    (
+        "xtask/src/rules_degraded_paths.rs",
+        "fail_open",
+        "`degraded-paths` reuses this vocabulary to forbid it (OP-158 m.3 (s))",
+    ),
 ];
 
 /// This file spells out the vocabulary it forbids.

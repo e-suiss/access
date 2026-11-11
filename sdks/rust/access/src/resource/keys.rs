@@ -1,5 +1,5 @@
 //! The keys that verify authority tokens at the resource server (§10.4.5, §9.10 step 1, §9.11.2,
-//! §13.11 EP-4, MD-6, MD-7, TI-RT6): the domain's operational keys declared for usage `token`
+//! §13.11 EP-4, EP-8, MD-6, MD-7, TI-RT6): the domain's operational keys declared for usage `token`
 //! in its binding-signed Domain Metadata, verified against the binding keys the resource server
 //! pins, read within the `key_epoch` window when it was fetched earlier. A realm JWKS key, or
 //! any key the metadata does not declare for `token` at the token's `iat`, verifies nothing.
