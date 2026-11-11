@@ -30,19 +30,42 @@ async function post(
   return (await r.json()) as Record<string, unknown>;
 }
 
-/** Signs the bootstrap test user in on `request`, whose cookie jar then holds the session. */
-export async function signIn(request: APIRequestContext, origin: string): Promise<void> {
-  const step = SEED === "" ? 0 : await nextStep();
+/**
+ * Signs `identifier` in on `request` with its password alone, whose cookie jar then holds the
+ * session; an account the realm asks a second factor of fails here.
+ */
+export async function signInWithPassword(
+  request: APIRequestContext,
+  origin: string,
+  identifier: string,
+  password: string,
+): Promise<void> {
+  const done = await passwordStep(request, origin, identifier, password);
+  expect(done["step"]).toBe("complete");
+}
+
+async function passwordStep(
+  request: APIRequestContext,
+  origin: string,
+  identifier: string,
+  password: string,
+): Promise<Record<string, unknown>> {
   const started = await post(request, origin, `${REALM}/v1/login/flows`);
   const identified = await post(request, origin, `${REALM}${String(started["action"])}`, {
     method: "identifier",
-    fields: { identifier: IDENTIFIER },
+    fields: { identifier },
   });
   expect(identified["step"]).toBe("authenticate");
-  let done = await post(request, origin, `${REALM}${String(identified["action"])}`, {
+  return post(request, origin, `${REALM}${String(identified["action"])}`, {
     method: "password",
-    fields: { password: PASSWORD },
+    fields: { password },
   });
+}
+
+/** Signs the bootstrap test user in on `request`, whose cookie jar then holds the session. */
+export async function signIn(request: APIRequestContext, origin: string): Promise<void> {
+  const step = SEED === "" ? 0 : await nextStep();
+  let done = await passwordStep(request, origin, IDENTIFIER, PASSWORD);
   if (done["step"] === "second_factor") {
     expect(
       SEED,

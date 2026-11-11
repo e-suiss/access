@@ -1,9 +1,13 @@
 // §8.17.6, §9.14.5, §11.4.5, §11.6, U7, E32, OP-157 m.3 (l), OP-153 m.3 (gg): the Approval
 // Surface against the running local deployment through its real router; nothing is mocked.
 // ACCESS_LIVE_APPROVAL names a pushed request (request, redirect_uri and state query) that the
-// signed-in test user may open; without it only the routes and the page script are checked.
+// image workflow pushed for the bootstrap test user's allowed Exercise with the test user's
+// device contribution (access-local-client push, OP-157 m.6 (i)); the test user signs in and
+// opens it. Without it only the routes and the page script are checked.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+
+import { PASSWORD, signIn } from "./signin.js";
 
 const REALM = process.env["ACCESS_LIVE_REALM"] ?? "/realms/acme";
 const PUSHED = process.env["ACCESS_LIVE_APPROVAL"];
@@ -60,8 +64,16 @@ test.describe("@live approval surface", () => {
   // U7, §8.17.6.4, Ek B 5467, 5555, 5629, 5630
   test("@live a pushed request shows its render, what is still needed and one act", async ({
     page,
+    baseURL,
   }) => {
     test.skip(PUSHED === undefined, "ACCESS_LIVE_APPROVAL names no pushed request");
+    test.skip(
+      PASSWORD === "",
+      "ACCESS_LOCAL_TEST_PASSWORD names the bootstrap test user's password",
+    );
+    // TN-59: up to one TOTP step of waiting
+    test.setTimeout(120_000);
+    await signIn(page.request, baseURL ?? "", REALM);
     const r = await page.goto(`${REALM}/v1/approve?${PUSHED ?? ""}`);
     expect(r?.status()).toBe(200);
     await expect(page.locator("dl.render dd.material").first()).toBeVisible();
