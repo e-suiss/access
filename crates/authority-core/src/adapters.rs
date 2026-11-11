@@ -61,6 +61,7 @@ mod offboarding;
 // OP-157 m.4 (d)
 mod review;
 // OP-158 m.4 (f)
+mod forced;
 mod handover;
 pub use audit::{
     AUDIT_EVENT_EXPORT, AUDIT_EVENT_READ, AUDIT_EVENT_REJECTED, audit_text, is_rejection, txn,

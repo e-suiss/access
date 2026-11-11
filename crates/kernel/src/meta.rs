@@ -3438,11 +3438,18 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
         Payload::Contribute { target, class } => {
             // L0-EVAL-26a, SEC20, OP-158 m.19 (c)
             if class == crate::recovery::RECOVER {
-                let entry = recovery_entry(view)?;
-                let key = read::<InstanceState>(view, kind::INSTANCE, &actor.instance)?.key;
+                let entry = view.get(&crate::recovery::entry_key());
+                let instance = view.get(&key(kind::INSTANCE, &actor.instance));
+                let (Some(entry), Some(instance)) = (entry, instance) else {
+                    return Err(MetaError::NotAuthorized);
+                };
+                let entry = crate::recovery::RecoveryEntry::from_value(&entry)
+                    .map_err(|_| MetaError::Corrupt)?;
+                let instance =
+                    InstanceState::from_value(&instance).map_err(|_| MetaError::Corrupt)?;
                 if !entry
                     .keys
-                    .contains(&crate::verify::key_scope::thumbprint(&key))
+                    .contains(&crate::verify::key_scope::thumbprint(&instance.key))
                 {
                     return Err(MetaError::NotAuthorized);
                 }

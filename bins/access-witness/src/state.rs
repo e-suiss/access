@@ -52,6 +52,8 @@ pub(crate) struct Chain {
     pub(crate) learned: Vec<[u8; 32]>,
     /// Old bindings by kid and the size above which they are not cosigned (U11).
     pub(crate) fenced: std::collections::BTreeMap<[u8; 32], u64>,
+    /// Every size this witness cosigned and its root (FR-5).
+    history: std::collections::BTreeMap<u64, [u8; 32]>,
 }
 
 /// The chain file of `domain` in `dir`.
@@ -84,6 +86,7 @@ impl Chain {
         let (mut base, mut fence, mut latest) = (None, None, None);
         let mut learned = Vec::new();
         let mut fenced = std::collections::BTreeMap::new();
+        let mut history = std::collections::BTreeMap::new();
         let mut next_seq = 0_u64;
         for (n, line) in text.lines().enumerate() {
             let broken = || {
@@ -113,6 +116,7 @@ impl Chain {
                 (None, None) => {}
             }
             if entry.note.is_some() {
+                history.insert(entry.size, entry.root);
                 base = Some((entry.size, entry.root));
                 latest = Some(entry);
             }
@@ -130,7 +134,19 @@ impl Chain {
             evidence,
             learned,
             fenced,
+            history,
         })
+    }
+
+    /// The root this witness cosigned at `size`, if any (FR-5).
+    pub(crate) fn witnessed(&self, size: u64) -> Option<[u8; 32]> {
+        self.history.get(&size).copied()
+    }
+
+    /// FR-5: the base moves back to the cited `C_N`, which this witness cosigned; the next
+    /// cosignature extends it.
+    pub(crate) fn reanchor(&mut self, n: u64, root: [u8; 32]) {
+        self.log = LogState::resume(Some((n, root)), None);
     }
 
     /// U11, §16.6 HO-7: the binding `old` signs nothing larger than `max` from now on and
@@ -204,6 +220,7 @@ impl Chain {
             keys: None,
         })?;
         self.log = probe;
+        self.history.insert(cp.size, cp.root);
         self.latest = Some(entry);
         Ok(())
     }

@@ -67,15 +67,64 @@ pub(crate) fn checkpoint(
     Ok((cp, verified.kid))
 }
 
-/// The binding a handover record moves the domain to (§16.6 HO-7, U11): the record sits at
-/// its position in `cp`, which ends right after it, is a decision of `domain` whose effects
-/// write the provider binding by `domain_handover`, and every new binding key is Ed25519. The
-/// new keys.
+/// How a binding change moved the binding.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Moved {
+    /// `domain_handover` (§16.6 HO-7).
+    Handover,
+    /// `domain_recover` citing the checkpoint `(size, root)` (§16.6 FR-5).
+    Recover(u64, [u8; 32]),
+}
+
+/// The new binding keys and how a decision record writes the provider binding, read from the
+/// record alone (its place in a checkpoint is [`binding_change`]'s).
+pub(crate) fn moved(
+    record: &access_kernel::record::RecordEnvelope,
+) -> Result<(Vec<[u8; 32]>, Moved), Refused> {
+    let effects = access_kernel::fold::effects(record).map_err(|_| Refused::Key)?;
+    let key = access_kernel::recovery::binding_key();
+    let Some((_, Some(value))) = effects.iter().find(|(k, _)| *k == key) else {
+        return Err(Refused::Key);
+    };
+    let how = match value.get("how") {
+        Some(suiss_crypto::dcbor::Value::Text(t)) if t == "handover" => Moved::Handover,
+        // FR-5, OP-158 m.3 (m)
+        Some(suiss_crypto::dcbor::Value::Text(t)) if t == "recover" => {
+            let cited = value
+                .get("cited")
+                .and_then(|c| access_kernel::recovery::CheckpointRef::from_value(c).ok())
+                .ok_or(Refused::Key)?;
+            Moved::Recover(cited.size, cited.root.0)
+        }
+        _ => return Err(Refused::Key),
+    };
+    let Some(suiss_crypto::dcbor::Value::Array(keys)) = value.get("binding") else {
+        return Err(Refused::Key);
+    };
+    let mut out = Vec::new();
+    for k in keys {
+        let b = access_kernel::verify::key_scope::BindingKey::from_value(k)
+            .map_err(|_| Refused::Key)?;
+        match b.key {
+            PublicKey::Ed25519(pk) if b.superseded.is_none() => out.push(pk),
+            _ => return Err(Refused::Key),
+        }
+    }
+    if out.is_empty() {
+        return Err(Refused::Key);
+    }
+    Ok((out, how))
+}
+
+/// The binding a handover or recovery record moves the domain to (§16.6 HO-7, FR-5, U11): the
+/// record sits at its position in `cp`, which ends right after it, is a decision of `domain`
+/// whose effects write the provider binding by `domain_handover` or `domain_recover`, and every
+/// new binding key is Ed25519. The new keys and how they were bound.
 pub(crate) fn binding_change(
     domain: &access_kernel::digest::Digest,
     cp: &Checkpoint,
     change: &suiss_ledger::checkpoint::witness::BindingChange,
-) -> Result<Vec<[u8; 32]>, Refused> {
+) -> Result<(Vec<[u8; 32]>, Moved), Refused> {
     use access_kernel::record::{RecordEnvelope, RecordKind};
     let record = RecordEnvelope::from_bytes(&change.record).map_err(|_| Refused::Malformed)?;
     let ends_here = change.position.checked_add(1) == Some(cp.size);
@@ -96,30 +145,7 @@ pub(crate) fn binding_change(
     {
         return Err(Refused::Key);
     }
-    let effects = access_kernel::fold::effects(&record).map_err(|_| Refused::Key)?;
-    let key = access_kernel::recovery::binding_key();
-    let Some((_, Some(value))) = effects.iter().find(|(k, _)| *k == key) else {
-        return Err(Refused::Key);
-    };
-    if !matches!(value.get("how"), Some(suiss_crypto::dcbor::Value::Text(t)) if t == "handover") {
-        return Err(Refused::Key);
-    }
-    let Some(suiss_crypto::dcbor::Value::Array(keys)) = value.get("binding") else {
-        return Err(Refused::Key);
-    };
-    let mut out = Vec::new();
-    for k in keys {
-        let b = access_kernel::verify::key_scope::BindingKey::from_value(k)
-            .map_err(|_| Refused::Key)?;
-        match b.key {
-            PublicKey::Ed25519(pk) if b.superseded.is_none() => out.push(pk),
-            _ => return Err(Refused::Key),
-        }
-    }
-    if out.is_empty() {
-        return Err(Refused::Key);
-    }
-    Ok(out)
+    moved(&record)
 }
 
 #[cfg(test)]

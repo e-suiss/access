@@ -279,7 +279,7 @@ pub struct TakeOver {
     pub superseded: Vec<access_kernel::verify::key_scope::BindingKey>,
 }
 
-fn kind_word(k: RecordKind) -> &'static str {
+pub(crate) fn kind_word(k: RecordKind) -> &'static str {
     match k {
         RecordKind::Genesis => "genesis",
         RecordKind::Opening => "opening",
@@ -302,7 +302,7 @@ fn statement_of(r: &RecordEnvelope) -> Option<&[u8]> {
     }
 }
 
-fn adopted_nonces(
+pub(crate) fn adopted_nonces(
     records: &[RecordEnvelope],
 ) -> Result<Vec<access_store::handover::AdoptedNonce>, HandoverError> {
     let field = |r: &RecordEnvelope, k: &str| r.fields.get(k).map(|f| f.value.clone());
@@ -347,9 +347,9 @@ fn adopted_nonces(
 }
 
 /// Keys with an amount or a position.
-type Keyed = Vec<(Vec<u8>, u64)>;
+pub(crate) type Keyed = Vec<(Vec<u8>, u64)>;
 
-fn consumed(records: &[RecordEnvelope]) -> (Keyed, Keyed) {
+pub(crate) fn consumed(records: &[RecordEnvelope]) -> (Keyed, Keyed) {
     let mut counters: std::collections::BTreeMap<Vec<u8>, u64> = std::collections::BTreeMap::new();
     let mut single = Vec::new();
     for r in records {

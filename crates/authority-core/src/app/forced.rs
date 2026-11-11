@@ -331,6 +331,103 @@ pub fn prefix_roots(leaves: &[[u8; 32]]) -> Result<Vec<[u8; 32]>, PlanError> {
     Ok(out)
 }
 
+/// FR-1, FR-4: what the recovering provider adopts from the records `0..N − 1` an export or
+/// the replica carried, once `note` is `C_N` over exactly those records with a cosignature of a
+/// `witnesses` key. The outgoing binding keys are superseded at `C_N`, citing it (PR-0); the
+/// recovery batch then starts at N. The adoption for the store, as run `run`.
+///
+/// # Errors
+/// [`crate::app::handover::HandoverError::Batch`].
+pub fn take_over(
+    received: &crate::app::handover::Received,
+    (note, witnesses): (&str, &[Verifier]),
+    outgoing: &[access_kernel::verify::key_scope::BindingKey],
+    run: [u8; 16],
+) -> Result<crate::app::handover::TakeOver, crate::app::handover::HandoverError> {
+    use crate::app::handover::{HandoverError, TakeOver, adopted_nonces, consumed, kind_word};
+    let bad = HandoverError::Batch;
+    let mut frontier = suiss_ledger::merkle::Frontier::default();
+    let mut rows = Vec::with_capacity(received.records.len());
+    for r in &received.records {
+        let leaf = r.leaf_hash().map_err(|_| bad("leaf"))?;
+        frontier.push(leaf).map_err(|_| bad("leaf"))?;
+        rows.push(access_store::authority::LogRecord {
+            pos: r.header.pos,
+            kind: kind_word(r.header.kind),
+            recorded_at: r.header.recorded_at,
+            leaf_hash: leaf,
+            envelope: r.to_bytes().map_err(|_| bad("encode"))?,
+        });
+    }
+    let (_, accepted) = verify_note(&PureBackend, note, witnesses).map_err(|_| bad("witness"))?;
+    let cp = Checkpoint::parse(
+        &suiss_crypto::note::parse_note(note)
+            .map_err(|_| bad("checkpoint"))?
+            .body,
+    )
+    .map_err(|_| bad("checkpoint"))?;
+    let n = received.cited.0;
+    let last = received.records.last().ok_or(bad("records"))?;
+    if accepted.iter().all(|a| a.timestamp.is_none())
+        || cp.size != n
+        || cp.root != frontier.root()
+        || last.header.pos.checked_add(1) != Some(n)
+    {
+        return Err(bad("checkpoint"));
+    }
+    let superseded = outgoing
+        .iter()
+        .map(|b| {
+            let mut b = b.clone();
+            b.superseded = Some(access_kernel::verify::key_scope::Superseded {
+                at: Digest(cp.root),
+                cited: Digest(cp.root),
+            });
+            b
+        })
+        .collect();
+    let (counters, single_use) = consumed(&received.records);
+    let nonces = adopted_nonces(&received.records)?;
+    let state = received
+        .state
+        .iter()
+        .map(|(key, e)| {
+            let value = e
+                .value
+                .as_ref()
+                .map(|v| dcbor::encode(v, Limits::CEILING))
+                .transpose()
+                .map_err(|_| bad("state"))?;
+            Ok((key.clone(), value, e.version))
+        })
+        .collect::<Result<Vec<_>, HandoverError>>()?;
+    let h = last.header.pos;
+    Ok(TakeOver {
+        domain: received.domain,
+        cited: received.cited,
+        h,
+        at: cp.root,
+        adoption: access_store::handover::Adoption {
+            run,
+            k: n,
+            cited_root: cp.root,
+            records: rows.clone(),
+            head: access_store::authority::HeadRow {
+                pos: h,
+                epoch: 0,
+                leaf_hash: rows.last().map(|r| r.leaf_hash).unwrap_or_default(),
+                recorded_at: last.header.recorded_at,
+                frontier: frontier.nodes().to_vec(),
+            },
+            state,
+            nonces,
+            counters,
+            single_use,
+        },
+        superseded,
+    })
+}
+
 /// How many distinct Instances gave a live `recover` contribution to `target` with a key of
 /// `entry` (SEC20).
 #[must_use]

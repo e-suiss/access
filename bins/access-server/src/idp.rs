@@ -1122,6 +1122,12 @@ where
             .create(order.tenant, fields, now)
             .await
             .map_err(|e| Unavailable(e.to_string()))?;
+        // §13.6, OP-158 m.3 (m)
+        if order.recovery.is_some()
+            && let Err(e) = self.domains.declare_recovery(domain, true).await
+        {
+            tracing::warn!(event = "authority.recovery.undeclared", outcome = "error", error = %e, "recovery entry not declared in the metadata");
+        }
         Ok(GenesisOpened { domain })
     }
 }

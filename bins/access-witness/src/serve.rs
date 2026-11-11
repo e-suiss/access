@@ -95,7 +95,20 @@ async fn cosign_request(State(w): State<Arc<Witness>>, body: Bytes) -> Response 
         return refuse(Refused::UnknownKey);
     };
     let mut chain = chain.lock().await;
-    let trusted = with_learned(log, &chain.learned);
+    // FR-5: a recovery's checkpoint is signed by the binding its record names
+    let recovering = req.binding_change.as_ref().and_then(|c| {
+        <access_kernel::record::RecordEnvelope as access_kernel::codec::Canonical>::from_bytes(
+            &c.record,
+        )
+        .ok()
+        .and_then(|r| crate::verify::moved(&r).ok())
+        .filter(|(_, how)| matches!(how, crate::verify::Moved::Recover(..)))
+    });
+    let mut known = chain.learned.clone();
+    if let Some((keys, _)) = &recovering {
+        known.extend(keys.iter().copied());
+    }
+    let trusted = with_learned(log, &known);
     let (cp, binding) = match checkpoint(&trusted, &req.note, &req.excerpt) {
         Ok(v) => v,
         Err(crate::verify::Refused::Malformed) => return refuse(Refused::Malformed),
@@ -108,10 +121,14 @@ async fn cosign_request(State(w): State<Arc<Witness>>, body: Bytes) -> Response 
     let learned = match &req.binding_change {
         None => None,
         Some(change) => match crate::verify::binding_change(&log.domain, &cp, change) {
-            Ok(keys) if !chain.fenced.contains_key(&binding) => Some(keys),
+            Ok(moved) if !chain.fenced.contains_key(&binding) => Some(moved),
             _ => return refuse(Refused::UnknownKey),
         },
     };
+    // FR-5, U11, OP-158 m.3 (m)
+    if let Some((keys, crate::verify::Moved::Recover(n, root))) = &learned {
+        return recover(&w, &mut chain, log, (&req, &cp, binding), (keys, *n, *root));
+    }
     if req.base != chain.log.base() {
         return refuse(Refused::Inconsistent);
     }
@@ -142,9 +159,55 @@ async fn cosign_request(State(w): State<Arc<Witness>>, body: Bytes) -> Response 
         return (StatusCode::SERVICE_UNAVAILABLE, e).into_response();
     }
     // U11, §16.6 HO-7
-    if let Some(keys) = learned
+    if let Some((keys, _)) = learned
         && let Err(e) = chain.rebind(binding, cp.size, keys, at)
     {
+        return (StatusCode::SERVICE_UNAVAILABLE, e).into_response();
+    }
+    cbor(StatusCode::OK, &CosignResponse::Cosigned(cosignature))
+}
+
+/// FR-5 recovery re-anchor: the recovery record cites `C_N` = (`n`, `root`), which this witness
+/// cosigned itself; the request's base is `C_N` and its consistency proof leads from it to `cp`,
+/// which ends with the record. Every binding the witness knew is fenced at `N`, the record's
+/// keys become the binding and the base moves to `cp`; what the old chain holds past `N` stays
+/// in the chain file as superseded history.
+fn recover(
+    w: &Witness,
+    chain: &mut crate::state::Chain,
+    log: &crate::config::Log,
+    (req, cp, new): (&CosignRequest, &suiss_crypto::note::Checkpoint, [u8; 32]),
+    (keys, n, root): (&[[u8; 32]], u64, [u8; 32]),
+) -> Response {
+    if req.base != Some((n, root)) || chain.witnessed(n) != Some(root) {
+        return refuse(Refused::Inconsistent);
+    }
+    if suiss_crypto::digest::verify_consistency(n, cp.size, &root, &cp.root, &req.consistency)
+        .is_err()
+    {
+        return refuse(Refused::Inconsistent);
+    }
+    let Ok(parsed) = parse_note(&req.note) else {
+        return refuse(Refused::Malformed);
+    };
+    let at = now_ms();
+    let mut old: Vec<[u8; 32]> = log.bindings.keys.keys().copied().collect();
+    old.extend(chain.learned.iter().map(|k| {
+        access_kernel::verify::key_scope::thumbprint(&suiss_crypto::cose::PublicKey::Ed25519(*k))
+    }));
+    for kid in old {
+        if let Err(e) = chain.rebind(kid, n, keys.to_vec(), at) {
+            return (StatusCode::SERVICE_UNAVAILABLE, e).into_response();
+        }
+    }
+    chain.reanchor(n, root);
+    let Ok((_, line)) = cosign(&w.signer, &w.config.name, at / 1000, &parsed.body) else {
+        return (StatusCode::SERVICE_UNAVAILABLE, "cosigner unavailable").into_response();
+    };
+    let Ok((cosignature, _)) = Cosignature::from_line(&line) else {
+        return (StatusCode::INTERNAL_SERVER_ERROR, "cosignature").into_response();
+    };
+    if let Err(e) = chain.cosigned(cp, new, at, format!("{}{line}", req.note)) {
         return (StatusCode::SERVICE_UNAVAILABLE, e).into_response();
     }
     cbor(StatusCode::OK, &CosignResponse::Cosigned(cosignature))

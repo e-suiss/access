@@ -4,7 +4,7 @@
 
 use std::hash::BuildHasher as _;
 
-use access_authority_core::app::forced::{RECOVERY_KEY, WitnessHead};
+use access_authority_core::app::forced::WitnessHead;
 use access_authority_core::ports::Reader as _;
 use access_internal_api::events::{Detail, Event, Kind};
 use access_kernel::recovery::{
@@ -253,8 +253,8 @@ fn recover_contribution(
     d: Digest,
     (party, grant, instance): (Id, u64, Id),
     (nonce, class): (u8, &str),
-    target: Digest,
-    render: Digest,
+    (target, render): (Digest, Digest),
+    at: u64,
 ) -> Request {
     let payload = Payload::Contribute {
         target,
@@ -277,7 +277,7 @@ fn recover_contribution(
     }];
     let p = r.payload.clone().unwrap();
     r.intent.opaque = BTreeMap::from([("payload".to_owned(), p.digest().unwrap())]);
-    let mut act = approval_act(d, nonce, target, render, NOW - 1_000, NOW + 60_000);
+    let mut act = approval_act(d, nonce, target, render, at - 1_000, at + 60_000);
     act.act = Act::Contribution(class.to_owned());
     act.party = party;
     act.instance = instance;
@@ -289,10 +289,10 @@ fn recover_contribution(
             subject: party,
             class: "authentication".to_owned(),
             value: Some(EqValue::Bytes(vec![0xaa; 32])),
-            issued_at: NOW - 5_000,
+            issued_at: at - 5_000,
             validity: Window {
-                from: NOW - 5_000,
-                until: NOW + 12 * 3_600_000,
+                from: at - 5_000,
+                until: at + 12 * 3_600_000,
             },
             assurance: [
                 ("aal", 3),
@@ -356,7 +356,20 @@ async fn with_recover_contributions(
     (target, retry): (Request, u8),
     from: &[From<'_>],
 ) -> Response {
-    let asked = send(core, target.clone(), ROOT_KEY).await.unwrap();
+    with_recover_contributions_at(core, db, d, (target, retry), from, NOW).await
+}
+
+/// [`with_recover_contributions`] at trusted time `at`.
+async fn with_recover_contributions_at(
+    core: &mut Core,
+    db: &TestDb,
+    d: Digest,
+    (target, retry): (Request, u8),
+    from: &[From<'_>],
+    at: u64,
+) -> Response {
+    let root = signing(ROOT_KEY);
+    let asked = send_by(core, target.clone(), &root, (at, at)).await;
     assert_eq!(asked.decision.outcome, Outcome::RequireAction, "{asked:?}");
     let digest = access_kernel::intent::intent_digest(&target.intent).unwrap();
     let reader = PgReader::new(db.app.clone(), DomainId::from_bytes(d.0));
@@ -365,17 +378,21 @@ async fn with_recover_contributions(
     for (party, grant, instance, key, nonce) in from {
         let given = send_by(
             core,
-            recover_contribution(d, (*party, *grant, *instance), *nonce, digest, shown),
+            recover_contribution(d, (*party, *grant, *instance), *nonce, (digest, shown), at),
             key,
-            (NOW, NOW),
+            (at, at),
         )
         .await;
-        allowed(&given);
+        assert_eq!(
+            given.decision.outcome,
+            Outcome::Allow,
+            "{party:?} {instance:?} {given:?}"
+        );
         proofs.push(ProofRef::Contribution(given.exercise.unwrap()));
     }
     let mut again = with_proofs(target, proofs);
     again.nonce = vec![retry; 16];
-    send(core, again, ROOT_KEY).await.unwrap()
+    send_by(core, again, &root, (at, at)).await
 }
 
 // SEC20, SEC21, SEC22, U16, L0-META-36, OP-158 m.7 (c), Ek B 5764, 5908, 6022, 6023, 6121, 6140
@@ -393,29 +410,27 @@ async fn a_recovery_counts_only_entry_keys_and_rebinds_on_its_witness_heads() {
     input.replica_head = Some(CheckpointRef::new(5, Digest(root)));
     let before = state_of(&db, d, &binding_key()).await.unwrap();
 
-    // SEC20, U16, OP-158 m.7 (c)
+    // SEC20, U16, L0-EVAL-26a, OP-158 m.7 (c), m.19 (c)
     let bob_daily = meta::object_id(&meta::exercise_id(&d, &[6; 16]).unwrap(), kind::INSTANCE, 0);
-    let outsider = with_recover_contributions(
+    let target = recover_request(d, 60, input.clone());
+    let digest = access_kernel::intent::intent_digest(&target.intent).unwrap();
+    let outsider = send_by(
         &mut core,
-        &db,
-        d,
-        (recover_request(d, 60, input.clone()), 61),
-        &[
-            (
-                ALICE,
-                grant[0],
-                instance_of(d, 1),
-                &keys.entry[1],
-                (62, RECOVER),
-            ),
-            (BOB, grant[1], bob_daily, &signing(BOB_KEY), (63, RECOVER)),
-        ],
+        recover_contribution(
+            d,
+            (BOB, grant[1], bob_daily),
+            (63, RECOVER),
+            (digest, Digest([0; 32])),
+            NOW,
+        ),
+        &signing(BOB_KEY),
+        (NOW, NOW),
     )
     .await;
     assert_eq!(outsider.decision.outcome, Outcome::Deny, "{outsider:?}");
     assert_eq!(
         outsider.decision.blockers[0].subcode.as_deref(),
-        Some(RECOVERY_KEY)
+        Some("meta-not-authorized")
     );
     assert_eq!(state_of(&db, d, &binding_key()).await.unwrap(), before);
 

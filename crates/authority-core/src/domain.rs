@@ -1775,7 +1775,13 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             capacity: req.capacity,
             catalog,
         };
-        match meta::apply(&ctx, payload, snapshot) {
+        let applied = meta::apply(&ctx, payload, snapshot);
+        // L0-EVAL-26a: a `recover` contribution reads the entry and the actor Instance
+        let missing = snapshot.missing();
+        if !missing.is_empty() {
+            return Pass::Need(missing);
+        }
+        match applied {
             Ok(out) => effects = out.effects,
             Err(e) => {
                 return Pass::Done(Evaluation {
