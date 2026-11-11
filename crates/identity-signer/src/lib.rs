@@ -13,6 +13,7 @@ pub mod app;
 pub mod cell;
 pub mod domain;
 pub mod issuer;
+pub mod kat;
 pub mod ports;
 pub mod protocol;
 pub mod purpose;

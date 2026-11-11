@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use access_crypto::secret_file::SecretFile;
 use access_identity_signer::adapters::{DirVault, SealedFactory, draw, now_ms, serve};
+use access_identity_signer::kat::SelfTestError;
 use access_identity_signer::service::Service;
 use config::Config;
 use suiss_crypto::pkcs11::{HsmError, KeyStore};
@@ -61,7 +62,26 @@ fn configured() -> Option<Config> {
         }
         return None;
     }
+    // CMP-22b, OP-143 m.14 (a), SAI-45
+    if !self_tested(access_identity_signer::kat::run) {
+        return None;
+    }
     Some(config)
+}
+
+/// Whether the start-up self-tests passed; a failure is logged with its code and the signer
+/// does not start.
+fn self_tested(test: impl FnOnce() -> Result<(), SelfTestError>) -> bool {
+    match test() {
+        Ok(()) => true,
+        Err(error) => {
+            tracing::error!(
+                code = error.code(),
+                "known-answer test failed; refusing to start"
+            );
+            false
+        }
+    }
 }
 
 /// Makes the KEK labelled `label` in the token when it is missing; a KEK that exists is kept.
@@ -329,6 +349,17 @@ mod tests {
             )
             .unwrap(),
         ))
+    }
+
+    // CMP-22b, SAI-45, OP-143
+    #[test]
+    fn a_failed_self_test_refuses_to_start() {
+        assert!(self_tested(|| Ok(())));
+        assert!(!self_tested(|| Err(SelfTestError::Rsa)));
+        assert!(!self_tested(|| Err(SelfTestError::Known(
+            access_identity_signer::kat::KatError::Ed25519
+        ))));
+        assert!(self_tested(access_identity_signer::kat::run));
     }
 
     // CR-21, OP-69
