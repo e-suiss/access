@@ -97,7 +97,7 @@ fn a_signed_set_verifies_under_its_key_and_a_changed_one_does_not() {
     );
 }
 
-// OP-158 m.3 (h): CT2 at 1 % (POLICY DEFAULT)
+// OP-158 m.3 (h)
 #[test]
 fn the_ct2_sample_is_one_in_a_hundred() {
     let mut hits = 0u32;
@@ -122,7 +122,7 @@ fn bare(pos: u64) -> Disclosure {
     }
 }
 
-// TI-RT4, T19: without Genesis nothing folds and everything is digest coverage
+// TI-RT4, T19
 #[test]
 fn a_range_not_from_genesis_is_digest_coverage_and_must_follow_in_order() {
     let mut r = Replay::new();

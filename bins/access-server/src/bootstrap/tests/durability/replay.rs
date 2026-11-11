@@ -604,7 +604,7 @@ async fn a_declared_divergence_stops_nothing_and_the_roots_quarantine_denies_wha
         .post("/access/v1/evaluation", &p.allowed(Mode::Commit).await)
         .await;
     assert_eq!(a.status, StatusCode::OK, "commits go on");
-    // RT3, 5801: the provider wrote no restriction
+    // RT3, Ek B 5801
     let policies = access_store::authority::state(&p.w.db.app, &id)
         .await
         .unwrap()
@@ -650,7 +650,7 @@ async fn a_declared_divergence_stops_nothing_and_the_roots_quarantine_denies_wha
         reads(&p, ExerciseBasis::Holding(p.audit)).await,
         "what the record did not widen is untouched"
     );
-    // RT9: lifting it widens, CT3
+    // RT9
     let policy = meta::object_id(
         &meta::exercise_id(&p.domain, &nonce).unwrap(),
         meta::kind::POLICY,
@@ -732,7 +732,7 @@ async fn a_cold_start_uses_only_a_verified_snapshot_and_otherwise_folds_from_gen
         .await
         .unwrap();
     assert_eq!(state_bytes(&state).unwrap(), state_bytes(&full).unwrap());
-    // TI-RT4: a snapshot whose root no checkpoint names is not used
+    // TI-RT4
     let tenant = access_store::authority::domain_tenant(&p.w.db.app, &id)
         .await
         .unwrap()
@@ -831,7 +831,6 @@ async fn the_replica_operators_own_build_replays_its_copy_and_declares_what_does
         .post("/access/v1/evaluation", &p.allowed(Mode::Commit).await)
         .await;
     assert_eq!(a.status, StatusCode::OK);
-    // the same set is not a second notice
     let again = Command::new(&exe)
         .args(["--replay", replica.config.to_str().unwrap()])
         .output()
@@ -883,7 +882,6 @@ async fn the_decision_lab_replays_a_recorded_decision_and_a_mismatch_is_an_evalu
             .await
             .unwrap();
     assert!(replay.matches && replay.finding.is_none(), "{replay:?}");
-    // a request the audit Grant does not cover, recorded as an ALLOW by a faulty evaluator
     let body = p.denied(Mode::Commit).await;
     let d = decoded(&body);
     let intent = access_kernel::intent::intent_digest(&d.request.intent).unwrap();

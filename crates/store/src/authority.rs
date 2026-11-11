@@ -1210,3 +1210,72 @@ pub async fn server_time(pool: &PgPool) -> Result<u64, StoreError> {
     .await?;
     unsigned(ms)
 }
+
+// OP-158 m.3 (i)
+/// One state row as the fold of the log has it: `None` for a key an effect removed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FoldedRow {
+    /// The key.
+    pub key: Vec<u8>,
+    /// Its value's deterministic CBOR.
+    pub value: Option<Vec<u8>>,
+    /// The position that last changed it.
+    pub version: u64,
+}
+
+/// Rebuilds `domain`'s live state from the fold of its log, which wins (TI-1, TI-RT1): every
+/// folded row is written as the fold has it, and a stored key the fold never wrote is removed
+/// the way an effect removes one (no value, version 0, the Genesis position). Then every open
+/// fold notice is resolved. Runs as the sequencer, in one transaction, while no leader holds
+/// the domain; how many rows changed.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn rebuild_state(
+    sequencer: &PgPool,
+    domain: &DomainId,
+    tenant: [u8; 16],
+    folded: &[FoldedRow],
+) -> Result<u64, StoreError> {
+    let mut t = DomainTx::begin(sequencer, domain).await?;
+    let mut changed = 0u64;
+    for r in folded {
+        let n = sqlx::query!(
+            "INSERT INTO access.authority_state (domain_id, tenant_id, key, value, version)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (domain_id, key) DO UPDATE SET value = EXCLUDED.value,
+               version = EXCLUDED.version
+             WHERE access.authority_state.value IS DISTINCT FROM EXCLUDED.value
+                OR access.authority_state.version <> EXCLUDED.version",
+            domain.as_bytes().as_slice(),
+            sqlx::types::Uuid::from_bytes(tenant),
+            r.key,
+            r.value,
+            signed(r.version)?,
+        )
+        .execute(&mut *t.tx)
+        .await?
+        .rows_affected();
+        changed = changed.saturating_add(n);
+    }
+    let keys: Vec<Vec<u8>> = folded.iter().map(|r| r.key.clone()).collect();
+    let spurious = sqlx::query!(
+        "UPDATE access.authority_state SET value = NULL, version = 0
+          WHERE domain_id = $1 AND NOT (key = ANY($2))
+            AND (value IS NOT NULL OR version <> 0)",
+        domain.as_bytes().as_slice(),
+        &keys,
+    )
+    .execute(&mut *t.tx)
+    .await?
+    .rows_affected();
+    sqlx::query!(
+        "UPDATE access.divergence_notices SET resolved_at = now()
+          WHERE domain_id = $1 AND kind = 'fold' AND resolved_at IS NULL",
+        domain.as_bytes().as_slice(),
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    Ok(changed.saturating_add(spurious))
+}
