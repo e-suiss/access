@@ -122,7 +122,9 @@ async fn a_stream_reads_the_checkpoints_of_a_size_range() {
     }
     let got = checkpoints(&db.app, &d, 1, 6).await.unwrap();
     assert_eq!(
-        got.iter().map(|c| (c.size, c.issued_at)).collect::<Vec<_>>(),
+        got.iter()
+            .map(|c| (c.size, c.issued_at))
+            .collect::<Vec<_>>(),
         [(3, 300), (6, 400)]
     );
     assert!(checkpoint_exists(&db.app, &d, 3, &[3; 32]).await.unwrap());

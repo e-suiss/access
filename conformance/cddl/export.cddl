@@ -3,6 +3,8 @@
 ; CBOR sequence (RFC 8742) of frames in one stream: one header, then records in chunks of at
 ; most 10 000, the checkpoints, versions, schemas and Claims they need, and one end frame.
 ; A full export is always possible; billing, quota or plan state never closes it.
+; A digest-coverage record opens only its version vectors; `redacted` is its field root, so a
+; field revealed later verifies against the package.
 
 export-frame = { header: export-header }
              / { record: export-record }
@@ -11,6 +13,7 @@ export-frame = { header: export-header }
              / { schema: bstr .size (1..1048576) }
              / { claim: bstr .size (1..1048576) }
              / { end: { records: uint, size: uint, root: bstr .size 32 } }
+             / { prefix: [* bstr .size 32] }   ; the Merkle frontier before `range.from`, right after the header
 
 export-header = {
   domain: bstr .size 32,

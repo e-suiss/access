@@ -534,5 +534,358 @@ fn digest(x: &Value) -> Result<Digest, ExportError> {
     <Digest as Canonical>::from_value(x).map_err(|_| ExportError::Malformed("digest"))
 }
 
+/// Records one chunk of a streamed package holds (OP-158 m.3 (g), PD): the stream itself has
+/// no size limit; it reads and sends the range a chunk at a time.
+pub const CHUNK: u64 = 10_000;
+
+fn frame(name: &str, v: Value) -> Result<Vec<u8>, ExportError> {
+    dcbor::encode(&Value::Map(vec![(Value::text(name), v)]), Limits::CEILING)
+        .map_err(|_| ExportError::Malformed("frame"))
+}
+
+fn entries(e: Vec<(&str, Option<Value>)>) -> Value {
+    Value::Map(
+        e.into_iter()
+            .filter_map(|(k, v)| v.map(|v| (Value::text(k), v)))
+            .collect(),
+    )
+}
+
+/// The disclosure of `r` a package of `coverage` carries: every field opened, or only the
+/// version vectors with every other field as its commitment.
+///
+/// # Errors
+/// [`ExportError::Malformed`].
+pub fn disclosure(r: &RecordEnvelope, coverage: Coverage) -> Result<Disclosure, ExportError> {
+    match coverage {
+        Coverage::Full => r.disclose(|_| true),
+        Coverage::Digest => r.disclose(|name| name == "versions"),
+    }
+    .map_err(|_| ExportError::Malformed("record"))
+}
+
+/// A Record Export Package written as it is read (`export.cddl`, OP-158 m.3 (g)): one header
+/// frame, the Merkle frontier before the range, each record, then the checkpoints, version
+/// vectors, schemas and Claims the records name, and an end frame with the re-folded root.
+/// Every record is checked against the log as it goes (INV-27): its leaf is the stored one and
+/// it chains to the one before; a stream that fails a check ends without its end frame.
+pub struct Streamer {
+    domain: Digest,
+    to: u64,
+    coverage: Coverage,
+    tree: Frontier,
+    previous: Option<access_kernel::record::LeafCore>,
+    versions: Vec<Value>,
+    schemas: BTreeSet<Digest>,
+    claims: Vec<Digest>,
+    records: u64,
+}
+
+impl Streamer {
+    /// A stream of `domain`'s records `from..=to` opened per `coverage`, made by
+    /// `export_exercise`, over the leaf hashes `prefix` of the records before `from`; the
+    /// streamer and its header and frontier frames.
+    ///
+    /// # Errors
+    /// [`ExportError::Range`] for a reversed range or a prefix of another length.
+    pub fn start(
+        domain: Digest,
+        (from, to): (u64, u64),
+        coverage: Coverage,
+        export_exercise: Digest,
+        prefix: &[Hash],
+    ) -> Result<(Self, Vec<u8>), ExportError> {
+        if to < from || u64::try_from(prefix.len()).ok() != Some(from) {
+            return Err(ExportError::Range);
+        }
+        let mut tree = Frontier::default();
+        for h in prefix {
+            tree.push(*h).map_err(|_| ExportError::Range)?;
+        }
+        let header = entries(vec![
+            ("domain", Some(domain.to_value())),
+            (
+                "range",
+                Some(entries(vec![
+                    ("from", Some(Value::Unsigned(from))),
+                    ("to", Some(Value::Unsigned(to))),
+                ])),
+            ),
+            (
+                "export_exercise",
+                Some(Value::Bytes(export_exercise.0.to_vec())),
+            ),
+            ("replay_coverage", Some(Value::text(coverage.word()))),
+            ("chunk", Some(Value::Unsigned(CHUNK))),
+        ]);
+        let mut out = frame("header", header)?;
+        out.extend(frame(
+            "prefix",
+            Value::Array(
+                tree.nodes()
+                    .iter()
+                    .map(|h| Value::Bytes(h.to_vec()))
+                    .collect(),
+            ),
+        )?);
+        Ok((
+            Self {
+                domain,
+                to,
+                coverage,
+                tree,
+                previous: None,
+                versions: Vec::new(),
+                schemas: BTreeSet::new(),
+                claims: Vec::new(),
+                records: 0,
+            },
+            out,
+        ))
+    }
+
+    /// The next position the stream expects.
+    #[must_use]
+    pub const fn next(&self) -> u64 {
+        self.tree.size()
+    }
+
+    /// The frame of the stored record `envelope` whose stored leaf hash is `leaf`.
+    ///
+    /// # Errors
+    /// [`ExportError::Chain`] when it is not the next record of the domain or its leaf is not
+    /// the stored one; [`ExportError::Malformed`].
+    pub fn push(&mut self, envelope: &[u8], leaf: &Hash) -> Result<Vec<u8>, ExportError> {
+        let r =
+            RecordEnvelope::from_bytes(envelope).map_err(|_| ExportError::Malformed("record"))?;
+        let pos = r.header.pos;
+        if pos != self.next() || pos > self.to {
+            return Err(ExportError::Chain);
+        }
+        let d = disclosure(&r, self.coverage)?;
+        let core = d
+            .leaf_core()
+            .map_err(|_| ExportError::Malformed("record"))?;
+        let hash = core
+            .leaf_hash()
+            .map_err(|_| ExportError::Malformed("record"))?;
+        if &hash != leaf {
+            return Err(ExportError::Chain);
+        }
+        match &self.previous {
+            Some(prev) => check_link(prev, &core, &self.domain).map_err(|_| ExportError::Chain)?,
+            None if pos > 0 && r.header.domain != Some(self.domain) => {
+                return Err(ExportError::Chain);
+            }
+            None => {}
+        }
+        if let Some(v) = d.opened.get("versions")
+            && !self.versions.contains(&v.value)
+        {
+            self.versions.push(v.value.clone());
+        }
+        for f in d.opened.values() {
+            spps(&f.value, &mut self.schemas);
+        }
+        if r.header.kind == RecordKind::Claim {
+            let id = d
+                .opened
+                .get("claim")
+                .and_then(|c| <Digest as Canonical>::from_value(&c.value).ok());
+            self.claims.push(id.unwrap_or(Digest(hash)));
+        }
+        let redacted =
+            (self.coverage == Coverage::Digest).then(|| Value::Bytes(core.field_root.to_vec()));
+        let record = entries(vec![
+            ("position", Some(Value::Unsigned(pos))),
+            (
+                "envelope",
+                Some(Value::Bytes(
+                    d.to_bytes().map_err(|_| ExportError::Malformed("record"))?,
+                )),
+            ),
+            ("redacted", redacted),
+        ]);
+        self.tree.push(hash).map_err(|_| ExportError::Range)?;
+        self.previous = Some(core);
+        self.records = self.records.saturating_add(1);
+        frame("record", record)
+    }
+
+    /// The closing frames: the signed checkpoint notes of sizes inside the range, the version
+    /// vectors, schema and Claim digests the records named, and the end frame.
+    ///
+    /// # Errors
+    /// [`ExportError::Range`] when records are missing; [`ExportError::Root`] when a checkpoint
+    /// of the range's end size names another root (INV-27).
+    pub fn finish(self, checkpoints: &[(u64, Hash, String)]) -> Result<Vec<u8>, ExportError> {
+        if self.next() != self.to.saturating_add(1) {
+            return Err(ExportError::Range);
+        }
+        let (size, root) = (self.tree.size(), self.tree.root());
+        if checkpoints.iter().any(|(s, r, _)| *s == size && *r != root) {
+            return Err(ExportError::Root);
+        }
+        let mut out = Vec::new();
+        for (_, _, note) in checkpoints {
+            out.extend(frame("checkpoint", Value::text(note))?);
+        }
+        for v in &self.versions {
+            out.extend(frame(
+                "versions",
+                Value::Bytes(
+                    dcbor::encode(v, Limits::CEILING)
+                        .map_err(|_| ExportError::Malformed("versions"))?,
+                ),
+            )?);
+        }
+        for s in &self.schemas {
+            out.extend(frame("schema", Value::Bytes(s.0.to_vec()))?);
+        }
+        for c in &self.claims {
+            out.extend(frame("claim", Value::Bytes(c.0.to_vec()))?);
+        }
+        out.extend(frame(
+            "end",
+            entries(vec![
+                ("records", Some(Value::Unsigned(self.records))),
+                ("size", Some(Value::Unsigned(size))),
+                ("root", Some(Value::Bytes(root.to_vec()))),
+            ]),
+        )?);
+        Ok(out)
+    }
+}
+
+/// What a streamed package says once read to its end.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Streamed {
+    /// First and last position.
+    pub range: (u64, u64),
+    /// `replay_coverage`.
+    pub coverage: Coverage,
+    /// The export Exercise.
+    pub export_exercise: Digest,
+    /// The records, in order.
+    pub records: Vec<Disclosure>,
+    /// The re-folded size and root, which the end frame names.
+    pub size: u64,
+    /// Its root.
+    pub root: Hash,
+    /// The checkpoint notes carried.
+    pub checkpoints: Vec<String>,
+}
+
+fn member<'a>(v: &'a Value, k: &'static str) -> Result<&'a Value, ExportError> {
+    v.get(k).ok_or(ExportError::Malformed(k))
+}
+
+/// Reads a streamed package and checks it with the open Kernel alone (INV-27, PI-6): the
+/// records are the range in order, chain to each other in the domain, and re-fold with the
+/// frontier to the root the end frame names; a stream cut before its end frame is refused.
+///
+/// # Errors
+/// [`ExportError`].
+pub fn read_stream(bytes: &[u8]) -> Result<Streamed, ExportError> {
+    let mut seq = Sequence { rest: bytes };
+    let mut frame = || -> Result<(String, Value), ExportError> {
+        match seq.next()? {
+            Value::Map(mut e) if e.len() == 1 => match e.pop() {
+                Some((Value::Text(k), v)) => Ok((k, v)),
+                _ => Err(ExportError::Malformed("frame")),
+            },
+            _ => Err(ExportError::Malformed("frame")),
+        }
+    };
+    let (kind, header) = frame()?;
+    if kind != "header" {
+        return Err(ExportError::Malformed("header"));
+    }
+    let domain = digest(member(&header, "domain")?)?;
+    let range = member(&header, "range")?;
+    let (from, to) = (uint(member(range, "from")?)?, uint(member(range, "to")?)?);
+    let coverage = match member(&header, "replay_coverage")? {
+        Value::Text(t) if t == "full" => Coverage::Full,
+        Value::Text(t) if t == "digest" => Coverage::Digest,
+        _ => return Err(ExportError::Malformed("replay_coverage")),
+    };
+    let export_exercise = Digest(hash(member(&header, "export_exercise")?)?);
+    let (kind, prefix) = frame()?;
+    let Value::Array(nodes) = prefix else {
+        return Err(ExportError::Malformed("prefix"));
+    };
+    if kind != "prefix" {
+        return Err(ExportError::Malformed("prefix"));
+    }
+    let nodes = nodes.iter().map(hash).collect::<Result<Vec<_>, _>>()?;
+    let mut tree = Frontier::from_parts(from, nodes).map_err(|_| ExportError::Root)?;
+    let mut previous: Option<access_kernel::record::LeafCore> = None;
+    let mut out = Streamed {
+        range: (from, to),
+        coverage,
+        export_exercise,
+        records: Vec::new(),
+        size: 0,
+        root: [0; 32],
+        checkpoints: Vec::new(),
+    };
+    loop {
+        let (kind, v) = frame()?;
+        match kind.as_str() {
+            "record" => {
+                let Value::Bytes(b) = member(&v, "envelope")? else {
+                    return Err(ExportError::Malformed("envelope"));
+                };
+                let d = Disclosure::from_bytes(b).map_err(|_| ExportError::Malformed("record"))?;
+                if d.header.pos != tree.size() || uint(member(&v, "position")?)? != d.header.pos {
+                    return Err(ExportError::Chain);
+                }
+                let core = d
+                    .leaf_core()
+                    .map_err(|_| ExportError::Malformed("record"))?;
+                match &previous {
+                    Some(prev) => {
+                        check_link(prev, &core, &domain).map_err(|_| ExportError::Chain)?
+                    }
+                    None if d.header.pos > 0 && d.header.domain != Some(domain) => {
+                        return Err(ExportError::Chain);
+                    }
+                    None => {}
+                }
+                tree.push(
+                    core.leaf_hash()
+                        .map_err(|_| ExportError::Malformed("record"))?,
+                )
+                .map_err(|_| ExportError::Root)?;
+                previous = Some(core);
+                out.records.push(d);
+            }
+            "checkpoint" => match v {
+                Value::Text(t) => out.checkpoints.push(t),
+                _ => return Err(ExportError::Malformed("checkpoint")),
+            },
+            "versions" | "schema" | "claim" => {}
+            "end" => {
+                let records = uint(member(&v, "records")?)?;
+                out.size = uint(member(&v, "size")?)?;
+                out.root = hash(member(&v, "root")?)?;
+                let count = to.checked_sub(from).and_then(|n| n.checked_add(1));
+                if Some(records) != count || u64::try_from(out.records.len()).ok() != count {
+                    return Err(ExportError::Range);
+                }
+                if tree.size() != out.size || tree.root() != out.root {
+                    return Err(ExportError::Root);
+                }
+                break;
+            }
+            _ => return Err(ExportError::Malformed("frame")),
+        }
+    }
+    if !seq.rest.is_empty() {
+        return Err(ExportError::Malformed("trailing"));
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests;

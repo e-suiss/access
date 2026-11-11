@@ -16,6 +16,12 @@
       "edn": "{\"header\": {\"domain\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"range\": {\"from\": 0, \"to\": 9}, \"export_exercise\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b', \"replay_coverage\": \"full\", \"chunk\": 10001}}",
       "id": "chunk-too-big",
       "valid": false
+    },
+    {
+      "cbor": "a1667072656669788158200c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+      "edn": "{\"prefix\": [h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c']}",
+      "id": "prefix",
+      "valid": true
     }
   ],
   "cddl": [

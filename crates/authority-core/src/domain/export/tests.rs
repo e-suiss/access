@@ -3,6 +3,7 @@
     clippy::panic,
     clippy::arithmetic_side_effects,
     clippy::indexing_slicing,
+    clippy::cast_possible_truncation,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
@@ -165,4 +166,77 @@ fn ap_14_ranges_and_bytes_are_checked() {
         .unwrap();
     bytes.push(0);
     assert!(Package::from_bytes(&bytes).is_err());
+}
+
+fn leaves(log: &[Vec<u8>]) -> Vec<Hash> {
+    log.iter()
+        .map(|b| RecordEnvelope::from_bytes(b).unwrap().leaf_hash().unwrap())
+        .collect()
+}
+
+fn stream(log: &[Vec<u8>], (from, to): (u64, u64), coverage: Coverage) -> Vec<u8> {
+    let hashes = leaves(log);
+    let (mut s, mut out) =
+        Streamer::start(D, (from, to), coverage, EXPORT, &hashes[..from as usize]).unwrap();
+    for pos in from..=to {
+        out.extend(s.push(&log[pos as usize], &hashes[pos as usize]).unwrap());
+    }
+    let root = root_of(log, to as usize + 1);
+    out.extend(s.finish(&[(to + 1, root, String::from("note"))]).unwrap());
+    out
+}
+
+// AP-14, INV-27, OP-158 m.3 (g)
+#[test]
+fn a_streamed_package_re_folds_to_its_root_from_any_start() {
+    let log = log(12);
+    for (from, to) in [(0, 11), (5, 9), (11, 11)] {
+        let read = read_stream(&stream(&log, (from, to), Coverage::Full)).unwrap();
+        assert_eq!(read.range, (from, to));
+        assert_eq!(read.size, to + 1);
+        assert_eq!(read.root, root_of(&log, to as usize + 1));
+        assert_eq!(read.records.len() as u64, to - from + 1);
+        assert_eq!(read.checkpoints, ["note"]);
+        assert_eq!(read.export_exercise, EXPORT);
+    }
+}
+
+// AP-14, N-11, §7.9.12.5
+#[test]
+fn a_digest_package_keeps_the_leaf_and_withholds_the_body() {
+    let log = log(6);
+    let bytes = stream(&log, (0, 5), Coverage::Digest);
+    let read = read_stream(&bytes).unwrap();
+    assert_eq!(read.coverage, Coverage::Digest);
+    assert!(
+        read.records
+            .iter()
+            .all(|d| d.withheld.contains_key("body") && !d.opened.contains_key("body"))
+    );
+    assert!(!bytes.windows(8).any(|w| w == b"secret-1"));
+    assert_eq!(read.root, root_of(&log, 6));
+}
+
+// INV-27, TI-19
+#[test]
+fn a_record_that_is_not_the_stored_one_or_a_cut_stream_is_refused() {
+    let log = log(4);
+    let hashes = leaves(&log);
+    let (mut s, _) = Streamer::start(D, (0, 3), Coverage::Full, EXPORT, &[]).unwrap();
+    assert_eq!(s.push(&log[0], &hashes[1]), Err(ExportError::Chain));
+    assert_eq!(s.push(&log[1], &hashes[1]), Err(ExportError::Chain));
+    s.push(&log[0], &hashes[0]).unwrap();
+    assert!(matches!(s.finish(&[]), Err(ExportError::Range)));
+    let (mut s, _) = Streamer::start(D, (0, 0), Coverage::Full, EXPORT, &[]).unwrap();
+    s.push(&log[0], &hashes[0]).unwrap();
+    assert_eq!(
+        s.finish(&[(1, [9; 32], String::from("x"))]),
+        Err(ExportError::Root)
+    );
+    let whole = stream(&log, (0, 3), Coverage::Full);
+    assert!(read_stream(&whole[..whole.len() - 3]).is_err());
+    assert_eq!(
+        Streamer::start(D, (2, 3), Coverage::Full, EXPORT, &hashes[..1]).err(),
+        Some(ExportError::Range)
+    );
 }
