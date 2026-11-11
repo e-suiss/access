@@ -175,15 +175,14 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         let at = access_store::authority::server_time(&self.setup.app)
             .await
             .map_err(store)?;
-        let run = access_crypto::random::bytes::<16>()
-            .map_err(|_| CoreError::Unavailable("random"))?;
-        let k = match access_store::handover::freeze(&self.setup.sequencer, &id, run, role, at)
-            .await
-        {
-            Ok(k) => k,
-            Err(access_store::StoreError::HeadMoved) => return Err(CoreError::Refused(FROZEN)),
-            Err(e) => return Err(store(e)),
-        };
+        let run =
+            access_crypto::random::bytes::<16>().map_err(|_| CoreError::Unavailable("random"))?;
+        let k =
+            match access_store::handover::freeze(&self.setup.sequencer, &id, run, role, at).await {
+                Ok(k) => k,
+                Err(access_store::StoreError::HeadMoved) => return Err(CoreError::Refused(FROZEN)),
+                Err(e) => return Err(store(e)),
+            };
         let role_word = match role {
             Role::Reanchor => "reanchor",
             _ => "outgoing",
@@ -374,8 +373,12 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             .await
             .map_err(store)?;
         self.release().await;
-        self.audit_handover(domain, AUDIT_EVENT_HANDOVER, (&format!("h:{h}"), "reanchor"))
-            .await?;
+        self.audit_handover(
+            domain,
+            AUDIT_EVENT_HANDOVER,
+            (&format!("h:{h}"), "reanchor"),
+        )
+        .await?;
         Ok(after)
     }
 

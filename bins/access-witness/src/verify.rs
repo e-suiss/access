@@ -101,8 +101,7 @@ pub(crate) fn binding_change(
     let Some((_, Some(value))) = effects.iter().find(|(k, _)| *k == key) else {
         return Err(Refused::Key);
     };
-    if !matches!(value.get("how"), Some(suiss_crypto::dcbor::Value::Text(t)) if t == "handover")
-    {
+    if !matches!(value.get("how"), Some(suiss_crypto::dcbor::Value::Text(t)) if t == "handover") {
         return Err(Refused::Key);
     }
     let Some(suiss_crypto::dcbor::Value::Array(keys)) = value.get("binding") else {

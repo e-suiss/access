@@ -13,7 +13,9 @@ use access_store::StoreError;
 use access_store::authority::{
     CommitBatch, HeadRow, LogRecord, commit_batch, create_domain, read_head, read_log,
 };
-use access_store::handover::{Adoption, AdoptedNonce, Role, adopt, freeze, frozen_at, refused_frozen, steps, thaw};
+use access_store::handover::{
+    AdoptedNonce, Adoption, Role, adopt, freeze, frozen_at, refused_frozen, steps, thaw,
+};
 use access_store::scope::DomainId;
 use access_store::testing::{TestDb, fresh};
 
@@ -51,10 +53,7 @@ async fn push(
     let leaf = [u8::try_from(pos % 251).unwrap(); 32];
     let mut frontier = head.frontier.clone();
     frontier.push(leaf);
-    let effects = effects
-        .into_iter()
-        .map(|(k, _, v)| (k, pos, v))
-        .collect();
+    let effects = effects.into_iter().map(|(k, _, v)| (k, pos, v)).collect();
     commit_batch(
         &db.sequencer,
         d,
@@ -111,7 +110,10 @@ async fn an_outgoing_handover_moves_the_head_once_for_its_batch_and_never_again(
         .await
         .unwrap();
     let s = steps(&db.app, &d).await.unwrap();
-    assert!(s.iter().any(|x| x.step == "committed" && x.h == Some(h) && x.k == k));
+    assert!(
+        s.iter()
+            .any(|x| x.step == "committed" && x.h == Some(h) && x.k == k)
+    );
     let after = push(&db, &d, vec![]).await.unwrap_err();
     assert!(refused_frozen(&after), "{after:?}");
     assert_eq!(read_head(&db.app, &d).await.unwrap().pos, h);
@@ -189,7 +191,10 @@ async fn the_incoming_provider_adopts_the_log_state_nonces_and_head() {
             recorded_at: 1_002,
             frontier: vec![[8; 32], [3; 32]],
         },
-        state: vec![(binding_key(), Some(vec![0xa0]), 2), (vec![0x81, 0x61, 0x78], None, 1)],
+        state: vec![
+            (binding_key(), Some(vec![0xa0]), 2),
+            (vec![0x81, 0x61, 0x78], None, 1),
+        ],
         nonces: vec![AdoptedNonce {
             nonce: vec![1; 16],
             actor: vec![2; 16],
@@ -212,16 +217,24 @@ async fn the_incoming_provider_adopts_the_log_state_nonces_and_head() {
             .unwrap()
             .is_some()
     );
-    assert!(steps(&db.app, &d)
-        .await
-        .unwrap()
-        .iter()
-        .any(|s| s.step == "adopted" && s.role == Role::Incoming && s.h == Some(2)));
+    assert!(
+        steps(&db.app, &d)
+            .await
+            .unwrap()
+            .iter()
+            .any(|s| s.step == "adopted" && s.role == Role::Incoming && s.h == Some(2))
+    );
     assert!(adopt(&db.sequencer, &d, TENANT, &a).await.is_err());
     let mut short = a.clone();
     short.records.truncate(2);
     assert!(matches!(
-        adopt(&db.sequencer, &DomainId::from_bytes([0x45; 32]), TENANT, &short).await,
+        adopt(
+            &db.sequencer,
+            &DomainId::from_bytes([0x45; 32]),
+            TENANT,
+            &short
+        )
+        .await,
         Err(StoreError::Range)
     ));
 }

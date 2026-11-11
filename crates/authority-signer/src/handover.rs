@@ -231,7 +231,7 @@ pub fn verify(
         set.insert(k.kid, k.key.clone())
             .map_err(|_| StatementError::Signature)?;
     }
-    let v = verify_sign1(backend, sign1, &set, content_type)
-        .map_err(|_| StatementError::Signature)?;
+    let v =
+        verify_sign1(backend, sign1, &set, content_type).map_err(|_| StatementError::Signature)?;
     Ok((v.payload, v.kid))
 }

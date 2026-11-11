@@ -150,8 +150,8 @@ impl Keyring {
         old.superseded = Some(at);
         let mut superseded = self.superseded.clone();
         superseded.push(old);
-        let mut ring = Self::new(template, binding_signer, self.policy)
-            .with_bindings(next, superseded);
+        let mut ring =
+            Self::new(template, binding_signer, self.policy).with_bindings(next, superseded);
         if ring.declared_binding.kid == self.declared_binding.kid {
             return Err(SignerError::Usage);
         }

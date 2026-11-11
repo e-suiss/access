@@ -69,7 +69,9 @@ impl Bindings for Generations {
     }
 }
 
-fn metadata_of(s: &mut Service<Soft, Generations, Mem>) -> access_kernel::verify::key_scope::DomainMetadata {
+fn metadata_of(
+    s: &mut Service<Soft, Generations, Mem>,
+) -> access_kernel::verify::key_scope::DomainMetadata {
     let Response::Metadata(m) = s.handle(Request::Metadata(Digest([7; 32])), 0) else {
         panic!("metadata");
     };
@@ -88,11 +90,22 @@ fn a_re_anchor_moves_to_the_next_generation_and_keeps_the_old_binding_superseded
         Response::Opened
     );
     let d = Digest([7; 32]);
-    let Response::Binding(current) = s.handle(Request::Binding { domain: d, next: false }, 0)
-    else {
+    let Response::Binding(current) = s.handle(
+        Request::Binding {
+            domain: d,
+            next: false,
+        },
+        0,
+    ) else {
         panic!("binding");
     };
-    let Response::Binding(next) = s.handle(Request::Binding { domain: d, next: true }, 0) else {
+    let Response::Binding(next) = s.handle(
+        Request::Binding {
+            domain: d,
+            next: true,
+        },
+        0,
+    ) else {
         panic!("next binding");
     };
     assert_ne!(current.kid, next.kid);
@@ -219,7 +232,13 @@ fn an_incoming_install_publishes_the_outgoing_bindings_only_as_superseded() {
     );
     let m = metadata_of(&mut s);
     assert_eq!(m.binding[&old.kid].superseded, old.superseded);
-    assert_eq!(m.binding.values().filter(|b| b.superseded.is_none()).count(), 1);
+    assert_eq!(
+        m.binding
+            .values()
+            .filter(|b| b.superseded.is_none())
+            .count(),
+        1
+    );
 }
 
 #[derive(Clone, Default)]

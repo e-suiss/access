@@ -152,9 +152,8 @@ fn stored(template: &Template, ring: &Keyring) -> Option<Vec<u8>> {
         ),
         (
             "superseded",
-            (!ring.superseded().is_empty()).then(|| {
-                Value::Array(ring.superseded().iter().map(Canonical::to_value).collect())
-            }),
+            (!ring.superseded().is_empty())
+                .then(|| Value::Array(ring.superseded().iter().map(Canonical::to_value).collect())),
         ),
     ]);
     dcbor::encode(&v, Limits::CEILING).ok()

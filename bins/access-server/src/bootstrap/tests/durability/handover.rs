@@ -23,9 +23,7 @@ use access_authority_core::app::handover::{self, CONTINUATION_CLASS, NO_WRITE_CL
 use access_authority_core::domain::{ProofRef, Request as CoreRequest};
 use access_authority_sequencer::adapters::{PgHeads, SocketSigner};
 use access_authority_sequencer::ports::NoteSigner as _;
-use access_authority_sequencer::witness::{
-    Target, WitnessError, add_checkpoint, board, latest,
-};
+use access_authority_sequencer::witness::{Target, WitnessError, add_checkpoint, board, latest};
 use access_authority_signer::adapters::call as sign_call;
 use access_authority_signer::handover::{CONTINUATION, NO_WRITE};
 use access_authority_signer::protocol::{Request as SignRequest, Response as SignResponse};
@@ -38,8 +36,8 @@ use access_kernel::digest::Digest;
 use access_kernel::intent::ParamValue;
 use access_kernel::json::b64url_encode;
 use access_kernel::meta::{self, ExerciseBasis, Payload};
-use access_kernel::recovery::{CheckpointRef, HandoverInput};
 use access_kernel::record::{RecordEnvelope, RecordKind};
+use access_kernel::recovery::{CheckpointRef, HandoverInput};
 use access_kernel::verify::key_scope::{
     BindingKey, Declarations, DomainMetadata, KeyScopeError, KeyUsage, operational_key,
 };
@@ -196,10 +194,7 @@ async fn hand_over(
             payload: Some(payload),
             basis,
             capacity: Capacity::Own,
-            proofs: vec![
-                ProofRef::Claim(statements.0),
-                ProofRef::Claim(statements.1),
-            ],
+            proofs: vec![ProofRef::Claim(statements.0), ProofRef::Claim(statements.1)],
             exercise: None,
             consistency: None,
         },
@@ -255,7 +250,11 @@ async fn mirror(
                 _ => {}
             }
         }
-        if at > until && last.as_ref().is_some_and(|(n, _)| n.contains(&format!("\n{}\n", until + 1))) {
+        if at > until
+            && last
+                .as_ref()
+                .is_some_and(|(n, _)| n.contains(&format!("\n{}\n", until + 1)))
+        {
             break;
         }
     }
@@ -352,9 +351,14 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
     };
     let root = std::env::temp_dir().join(format!("w5-ho-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
-    let mut independent =
-        Witness::start(&witness_bin(), &root, ("w5-independent", INDEPENDENT), d.0, a_key)
-            .unwrap();
+    let mut independent = Witness::start(
+        &witness_bin(),
+        &root,
+        ("w5-independent", INDEPENDENT),
+        d.0,
+        a_key,
+    )
+    .unwrap();
     let own = Witness::start(&witness_bin(), &root, ("w5-own", OUTGOING), d.0, a_key).unwrap();
     let decl = declared(&[(&independent, INDEPENDENT, true), (&own, OUTGOING, false)]);
     declare(&a_socket, d, decl.clone()).await;
@@ -390,7 +394,12 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
     let (ck, out) = step(&p.w.db, &a_socket, &publisher, d).await;
     assert_eq!((ck.size, out.independent), (frozen.k, 1), "{out:?}");
     let (status, package, _) = start(&p, &router, &package_body).await;
-    assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&package));
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&package)
+    );
 
     // The second install: its own database, HSM token, signer and binding
     let (wb, signer_b) = super::super::World::open_install("w5-ho-b", b_token).await;
@@ -414,12 +423,11 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
         .await
         .unwrap();
     let nw = handover::no_write(d, OUTGOING, (ck.size, ck.root), frozen.at, now());
-    let no_write = p
-        .w
-        .domains
-        .sign_statement(d, false, NO_WRITE, nw.to_bytes().unwrap())
-        .await
-        .unwrap();
+    let no_write =
+        p.w.domains
+            .sign_statement(d, false, NO_WRITE, nw.to_bytes().unwrap())
+            .await
+            .unwrap();
 
     // OP-158 m.3 (l): a continuation that names no passing provider profile writes no batch
     let mut failing = cont.clone();
@@ -438,7 +446,12 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
     )
     .await;
     assert!(
-        matches!(refused, Err(access_authority_core::CoreError::Refused("provider-not-conformant"))),
+        matches!(
+            refused,
+            Err(access_authority_core::CoreError::Refused(
+                "provider-not-conformant"
+            ))
+        ),
         "{refused:?}"
     );
     assert_eq!(read_head(&p.w.db.app, &id).await.unwrap().pos, head);
@@ -469,15 +482,29 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
         .collect();
     let class = |r: &RecordEnvelope| r.fields["class"].value.clone();
     assert_eq!(batch[0].header.kind, RecordKind::Claim);
-    assert_eq!(class(&batch[0]), suiss_crypto::dcbor::Value::text(NO_WRITE_CLASS));
-    assert_eq!(class(&batch[1]), suiss_crypto::dcbor::Value::text(CONTINUATION_CLASS));
+    assert_eq!(
+        class(&batch[0]),
+        suiss_crypto::dcbor::Value::text(NO_WRITE_CLASS)
+    );
+    assert_eq!(
+        class(&batch[1]),
+        suiss_crypto::dcbor::Value::text(CONTINUATION_CLASS)
+    );
     assert!(handover::moves_binding(&batch[3].to_bytes().unwrap()));
     let steps = p.w.domains.handover_steps(d).await.unwrap();
-    assert!(steps.iter().any(|s| s.step == "committed" && s.h == Some(h)));
+    assert!(
+        steps
+            .iter()
+            .any(|s| s.step == "committed" && s.h == Some(h))
+    );
 
     // HO-7: C_{h+1} under the old key; the witnesses learn the new binding from record h
     let (ch1, out) = step(&p.w.db, &a_socket, &publisher, d).await;
-    assert_eq!((ch1.size, out.independent, out.cosigned), (h + 1, 1, 2), "{out:?}");
+    assert_eq!(
+        (ch1.size, out.independent, out.cosigned),
+        (h + 1, 1, 2),
+        "{out:?}"
+    );
     assert!(independent.cosigned(d.0).unwrap().contains(&(h + 1)));
 
     // U11: the old provider writes nothing more, through the decision point or the database
@@ -530,7 +557,8 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
     .await
     .unwrap_err();
     assert!(
-        access_store::handover::refused_frozen(&raw) || matches!(raw, access_store::StoreError::HeadMoved),
+        access_store::handover::refused_frozen(&raw)
+            || matches!(raw, access_store::StoreError::HeadMoved),
         "{raw:?}"
     );
     assert_eq!(read_head(&p.w.db.app, &id).await.unwrap().pos, h);
@@ -552,7 +580,9 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
     // HO-8: the incoming provider takes the batch from the mirror and the witnessed C_{h+1}
     // from the independent witness itself
     let (records, _, ch1_excerpt) = mirror(&p, &router, mirror_run, frozen.k, h).await;
-    let (entry, cosigned) = latest(&target(&independent, INDEPENDENT), &d).await.unwrap();
+    let (entry, cosigned) = latest(&target(&independent, INDEPENDENT), &d)
+        .await
+        .unwrap();
     assert_eq!((entry.size, entry.root), (h + 1, ch1.root));
     let verifiers: Vec<Verifier> = [&independent, &own]
         .iter()
@@ -634,8 +664,15 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
     );
     assert_eq!(refused, Err(KeyScopeError::Superseded));
     assert!(
-        operational_key(&PureBackend, &before, &d, &old_excerpt, KeyUsage::Receipt, old_iat)
-            .is_ok()
+        operational_key(
+            &PureBackend,
+            &before,
+            &d,
+            &old_excerpt,
+            KeyUsage::Receipt,
+            old_iat
+        )
+        .is_ok()
     );
 
     // The witnesses' own state on disk names the fence and the learned binding
@@ -688,7 +725,12 @@ async fn a_binding_re_anchor_double_signs_rotates_the_binding_and_re_signs_no_re
     // RB-0: without a declared independent witness of the incoming algorithm, no re-anchor
     let refused = p.w.domains.freeze(d, Role::Reanchor).await;
     assert!(
-        matches!(refused, Err(access_authority_core::CoreError::Refused("provider-not-conformant"))),
+        matches!(
+            refused,
+            Err(access_authority_core::CoreError::Refused(
+                "provider-not-conformant"
+            ))
+        ),
         "{refused:?}"
     );
     declare(&socket, d, declared(&[(&independent, INDEPENDENT, true)])).await;
@@ -716,12 +758,11 @@ async fn a_binding_re_anchor_double_signs_rotates_the_binding_and_re_signs_no_re
     // RB-4: the old binding's no-write statement and the new binding's continuation
     let cited = (ck.size, ck.root);
     let nw = handover::no_write(d, OUTGOING, cited, frozen.at, now());
-    let no_write = p
-        .w
-        .domains
-        .sign_statement(d, false, NO_WRITE, nw.to_bytes().unwrap())
-        .await
-        .unwrap();
+    let no_write =
+        p.w.domains
+            .sign_statement(d, false, NO_WRITE, nw.to_bytes().unwrap())
+            .await
+            .unwrap();
     let cont = access_authority_signer::handover::Continuation {
         domain: d,
         provider: String::from(OUTGOING),
@@ -729,12 +770,11 @@ async fn a_binding_re_anchor_double_signs_rotates_the_binding_and_re_signs_no_re
         conformance: handover::conformance_digest(),
         at: now(),
     };
-    let continuation = p
-        .w
-        .domains
-        .sign_statement(d, true, CONTINUATION, cont.to_bytes().unwrap())
-        .await
-        .unwrap();
+    let continuation =
+        p.w.domains
+            .sign_statement(d, true, CONTINUATION, cont.to_bytes().unwrap())
+            .await
+            .unwrap();
     let h = hand_over(&p, &next, cited, true, (no_write, continuation))
         .await
         .unwrap()
@@ -784,16 +824,38 @@ async fn a_binding_re_anchor_double_signs_rotates_the_binding_and_re_signs_no_re
         "{fenced:?}"
     );
     assert!(
-        operational_key(&PureBackend, &before, &d, &old_excerpt, KeyUsage::Receipt, old_iat)
-            .is_ok()
+        operational_key(
+            &PureBackend,
+            &before,
+            &d,
+            &old_excerpt,
+            KeyUsage::Receipt,
+            old_iat
+        )
+        .is_ok()
     );
     assert_eq!(
-        operational_key(&PureBackend, &m, &d, &old_excerpt, KeyUsage::Receipt, old_iat),
+        operational_key(
+            &PureBackend,
+            &m,
+            &d,
+            &old_excerpt,
+            KeyUsage::Receipt,
+            old_iat
+        ),
         Err(KeyScopeError::Superseded)
     );
     let (new_excerpt, new_iat) = artefact(&socket, d).await;
     assert!(
-        operational_key(&PureBackend, &m, &d, &new_excerpt, KeyUsage::Receipt, new_iat).is_ok()
+        operational_key(
+            &PureBackend,
+            &m,
+            &d,
+            &new_excerpt,
+            KeyUsage::Receipt,
+            new_iat
+        )
+        .is_ok()
     );
     let _ = std::fs::remove_dir_all(&root);
 }

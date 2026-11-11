@@ -343,9 +343,7 @@ fn adopted_nonces(
     Ok(out)
 }
 
-fn consumed(
-    records: &[RecordEnvelope],
-) -> (Vec<(Vec<u8>, u64)>, Vec<(Vec<u8>, u64)>) {
+fn consumed(records: &[RecordEnvelope]) -> (Vec<(Vec<u8>, u64)>, Vec<(Vec<u8>, u64)>) {
     let mut counters: std::collections::BTreeMap<Vec<u8>, u64> = Default::default();
     let mut single = Vec::new();
     for r in records {

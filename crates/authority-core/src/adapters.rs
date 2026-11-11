@@ -62,11 +62,11 @@ mod offboarding;
 mod review;
 // OP-158 m.4 (f)
 mod handover;
-pub use handover::{Frozen, transcript};
 pub use audit::{
     AUDIT_EVENT_EXPORT, AUDIT_EVENT_READ, AUDIT_EVENT_REJECTED, audit_text, is_rejection, txn,
 };
 pub use consent::IssuedGrant;
+pub use handover::{Frozen, transcript};
 pub use projection::{
     BOUNDS_HORIZON_MS, CONTRACT_LABEL, FAMILY_CLAIM, INTENT_HORIZON_MS, Projected, STATUS_CLAIM,
     Token, TokenAuthority, TokenOrder,
