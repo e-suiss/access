@@ -1,3 +1,4 @@
+#![cfg(not(target_family = "wasm"))]
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;

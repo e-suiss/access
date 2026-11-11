@@ -39,6 +39,7 @@ fn tokens_dir() -> PathBuf {
 fn config(dir: &Path, token: &str) -> PathBuf {
     let pin = dir.join("pin");
     std::fs::write(&pin, PIN).unwrap();
+    std::fs::set_permissions(&pin, std::os::unix::fs::PermissionsExt::from_mode(0o600)).unwrap();
     let vault = dir.join("vault");
     std::fs::create_dir_all(&vault).unwrap();
     let uid = std::os::unix::fs::MetadataExt::uid(&std::fs::metadata(dir).unwrap());
