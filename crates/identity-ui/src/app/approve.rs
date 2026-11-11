@@ -1290,7 +1290,12 @@ where
         ))
     }
 
-    async fn spc_audit(&self, kit: &RealmKit, subject: &[u8; 16], event_type: &'static str) {
+    pub(super) async fn spc_audit(
+        &self,
+        kit: &RealmKit,
+        subject: &[u8; 16],
+        event_type: &'static str,
+    ) {
         let actor = kit.ids.encode("usr", *subject).unwrap_or_default();
         let wrote = async {
             let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;

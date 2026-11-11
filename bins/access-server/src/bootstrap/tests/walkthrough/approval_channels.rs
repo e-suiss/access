@@ -75,6 +75,19 @@ impl Desk {
         Phone { key, print }
     }
 
+    async fn audited(&self, event: &str) -> usize {
+        let route = route_by_slug(&self.w.db.router, "acme")
+            .await
+            .unwrap()
+            .unwrap();
+        let mut t = TenantTx::begin(&self.w.db.app, route.tenant, route.realm)
+            .await
+            .unwrap();
+        let rows = t.audit_page(None, 10_000).await.unwrap();
+        t.commit().await.unwrap();
+        rows.iter().filter(|r| r.event_type == event).count()
+    }
+
     async fn log_head(&self) -> u64 {
         read_head(&self.w.db.sequencer, &DomainId::from_bytes(self.domain.0))
             .await
@@ -525,6 +538,8 @@ async fn a_ct1_approval_from_the_notification_counts_only_with_the_approvers_pas
         "{body}"
     );
     assert!(d.log_head().await > before, "the contribution is recorded");
+    // OP-41
+    assert_eq!(d.audited("approval.inline").await, 1);
     ex.prove(Proof::Contribution(exercise_of(&body["exercise"])))
         .unwrap();
     assert!(matches!(d.ask(&mut ex), Step::Proceed(_)));

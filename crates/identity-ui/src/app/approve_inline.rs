@@ -584,15 +584,19 @@ where
             })
             .await;
         match committed(verdict) {
-            Ok(exercise) => Reply::json(
-                200,
-                json!({
+            Ok(exercise) => {
+                // OP-41, OP-157 m.23
+                self.spc_audit(&kit, &key.subject, "approval.inline").await;
+                Reply::json(
+                    200,
+                    json!({
                     "decision": "approved",
                     "exercise": b64url_encode(&exercise.0),
                     "render_digest": b64url_encode(&act.render_digest.0),
                     "claim": b64url_encode(&claim.0),
-                }),
-            ),
+                    }),
+                )
+            }
             Err(r) => r,
         }
     }
