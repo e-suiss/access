@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT serial, blob FROM access.mds_cache WHERE source = $1 ORDER BY serial DESC LIMIT 1",
+  "query": "SELECT serial, blob FROM access.mds_cache WHERE tenant_id = $1 AND source = $2\n          ORDER BY serial DESC LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -28,6 +28,7 @@
     ],
     "parameters": {
       "Left": [
+        "Uuid",
         "Bytea"
       ]
     },
@@ -36,5 +37,5 @@
       false
     ]
   },
-  "hash": "70be02ad256e007289e0c73557f4a2475a70e44ac7a641166c781b7d6882b558"
+  "hash": "b64e726a467693270ce033172135ff639300fb6e98b7edb5a229b88df863a78d"
 }
