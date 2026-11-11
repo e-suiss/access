@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT extract(year FROM created_at AT TIME ZONE 'UTC')::int AS \"year!\"\n             FROM access_ops.audit_checkpoint ORDER BY size LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "year!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "b2267656fdbfcfd30194a461ec6855ade49c376885f7d23adeeb9ea98e1adeb5"
+}

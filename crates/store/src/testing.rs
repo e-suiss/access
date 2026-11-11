@@ -708,3 +708,50 @@ pub async fn server_version(db: &TestDb) -> Result<String, TestDbError> {
         .await
         .at("server version")
 }
+
+/// Writes `n` identity audit rows of `tenant` (its realm the same id) in one transaction, as a
+/// busy cell would (OP-158 m.3 (w)).
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn bulk_audit_rows(db: &TestDb, tenant: [u8; 16], n: i32) -> Result<(), TestDbError> {
+    let mut c = admin_connection(db).await?;
+    sqlx::query(
+        "INSERT INTO access.identity_audit (tenant_id, realm_id, event_type, actor, target, correlation)
+         SELECT $1, $1, 'session.created', 'usr_1', 'ses_' || g, 'req_' || g FROM generate_series(1, $2) g",
+    )
+    .bind(sqlx::types::Uuid::from_bytes(tenant))
+    .bind(n)
+    .execute(&mut c)
+    .await
+    .at("bulk audit rows")?;
+    Ok(())
+}
+
+/// Moves every identity audit checkpoint `years` years into the past, as time would: the table
+/// only grows, so the administrator lifts its trigger for the change.
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn age_audit_checkpoints(db: &TestDb, years: i32) -> Result<(), TestDbError> {
+    let mut c = admin_connection(db).await?;
+    exec(
+        &mut c,
+        String::from("ALTER TABLE access_ops.audit_checkpoint DISABLE TRIGGER append_only_row"),
+        "lift trigger",
+    )
+    .await?;
+    sqlx::query(
+        "UPDATE access_ops.audit_checkpoint SET created_at = created_at - make_interval(years => $1)",
+    )
+    .bind(years)
+    .execute(&mut c)
+    .await
+    .at("age checkpoints")?;
+    exec(
+        &mut c,
+        String::from("ALTER TABLE access_ops.audit_checkpoint ENABLE TRIGGER append_only_row"),
+        "restore trigger",
+    )
+    .await
+}

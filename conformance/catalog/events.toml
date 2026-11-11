@@ -1063,3 +1063,11 @@ severity = "info"
 since = "unreleased"
 fields = ["scenario", "total"]
 ocsf = "application_lifecycle"
+
+[[event]]
+name = "audit.tiles.frozen"
+plane = "ops"
+severity = "info"
+since = "unreleased"
+fields = ["year", "size", "tiles"]
+ocsf = "application_lifecycle"

@@ -1,0 +1,83 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT size, root, frontier, xid::text::bigint AS \"xid!\", id, note\n             FROM access_ops.audit_checkpoint\n            WHERE created_at < make_timestamptz($1 + 1, 1, 1, 0, 0, 0, 'UTC') AND note IS NOT NULL\n            ORDER BY size DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_checkpoint",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "root",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_checkpoint",
+            "name": "root"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "frontier",
+        "type_info": "ByteaArray",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_checkpoint",
+            "name": "frontier"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "xid!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_checkpoint",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_checkpoint",
+            "name": "note"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      false,
+      true
+    ]
+  },
+  "hash": "c8919101a9f532e35488110e3177f19781b3b17dbaee46477f2fc699a83e2a22"
+}

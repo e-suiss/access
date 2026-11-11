@@ -1,9 +1,11 @@
-//! The publication targets of the identity audit log's checkpoints (OP-37, OP-38, U52,
-//! OP-158 m.3 (w)): the cold tier's write-once store and the declared HTTPS hooks. Each tick of
-//! the audit checkpointer hands every target the latest checkpoint it does not have.
+//! The publication of the identity audit log (OP-37, OP-38, U52, OP-158 m.3 (w)): each tick of
+//! the audit checkpointer hands every target, the cold tier's write-once store and the declared
+//! HTTPS hooks, the latest checkpoint it does not have; then the tree's full tiles are written
+//! and every ended year is frozen as static tiles in the cold tier.
 
-use access_identity_audit::adapters::PgPublications;
+use access_identity_audit::adapters::{PgAudit, PgPublications};
 use access_identity_audit::app::publish::{Published, publish_latest};
+use access_identity_audit::app::tiles::{extend, freeze_due};
 use access_identity_export::adapters::OutboundWire;
 use access_identity_export::adapters::cold_file::FileCold;
 use access_identity_export::adapters::publish::{HookNotes, StoreNotes};
@@ -81,7 +83,39 @@ pub(crate) async fn tick(checkpointer: &Pool, targets: &Targets) -> usize {
     }
     let p = publish_latest(&store, &targets.hooks).await;
     report(&p);
+    tiles(checkpointer, targets).await;
     n.saturating_add(p.done.len())
+}
+
+/// Writes the full tiles behind the latest checkpoint and, with a cold tier, freezes every ended
+/// year (OP-37).
+async fn tiles(checkpointer: &Pool, targets: &Targets) {
+    let log = PgAudit(checkpointer.clone());
+    match access_store::audit::last_checkpoint(checkpointer).await {
+        Ok(Some(cp)) => {
+            if let Err(error) = extend(&log, &cp).await {
+                tracing::warn!(%error, "audit tiles not written; they catch up later");
+            }
+        }
+        Ok(None) => {}
+        Err(error) => tracing::warn!(%error, "audit checkpoint not read"),
+    }
+    if let Some(s) = &targets.store {
+        match freeze_due(&log, &s.store).await {
+            Ok(frozen) => {
+                for shard in frozen {
+                    tracing::info!(
+                        event = "audit.tiles.frozen",
+                        year = shard.year,
+                        size = shard.size,
+                        tiles = shard.tiles,
+                        "identity audit year frozen as static tiles (OP-37)"
+                    );
+                }
+            }
+            Err(error) => tracing::warn!(%error, "audit shard not frozen; tried again"),
+        }
+    }
 }
 
 #[cfg(test)]

@@ -1,0 +1,73 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT level, n, hashes, end_xid::text::bigint AS \"end_xid!\", end_id\n             FROM access_ops.audit_tiles WHERE level = $1 AND n >= $2 ORDER BY n LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "level",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_tiles",
+            "name": "level"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "n",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_tiles",
+            "name": "n"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "hashes",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_tiles",
+            "name": "hashes"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "end_xid!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "end_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_tiles",
+            "name": "end_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int2",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      false
+    ]
+  },
+  "hash": "4fd4811182007d57b258201b0c4daf65b48702a66993173a016d9b1b89fff1d6"
+}

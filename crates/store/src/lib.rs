@@ -12,6 +12,7 @@ pub mod audit_lease;
 pub mod audit_publication;
 pub mod audit_realm;
 pub mod audit_tier;
+pub mod audit_tiles;
 pub mod authority;
 pub mod authority_checkpoint;
 pub mod backchannel;

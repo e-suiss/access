@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access_ops.audit_tiles (level, n, hashes, end_xid, end_id)\n         VALUES ($1, $2, $3, $4::bigint::text::xid8, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int2",
+        "Int8",
+        "Bytea",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "34afd861873257bd9e7caa58022bf76eafab4a277228c21e957b47c88cad17f5"
+}

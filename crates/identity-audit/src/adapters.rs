@@ -232,3 +232,54 @@ impl crate::ports::Publications for PgPublications {
         Ok(access_store::audit_publication::latest_after(&self.0, after).await?)
     }
 }
+
+impl crate::ports::TileStore for PgAudit {
+    async fn last_tile(
+        &self,
+        level: u8,
+    ) -> Result<Option<access_store::audit_tiles::TileRow>, AuditError> {
+        Ok(access_store::audit_tiles::last_tile(&self.0, level).await?)
+    }
+
+    async fn tiles(
+        &self,
+        level: u8,
+        from: u64,
+        limit: u32,
+    ) -> Result<Vec<access_store::audit_tiles::TileRow>, AuditError> {
+        Ok(access_store::audit_tiles::tiles(&self.0, level, from, limit).await?)
+    }
+
+    async fn append_tile(
+        &self,
+        tile: &access_store::audit_tiles::TileRow,
+    ) -> Result<(), AuditError> {
+        Ok(access_store::audit_tiles::append_tile(&self.0, tile).await?)
+    }
+
+    async fn rows_after(&self, after: Cursor, limit: u32) -> Result<Vec<AuditRow>, AuditError> {
+        Ok(pending(&self.0, after, limit).await?)
+    }
+
+    async fn shards(&self) -> Result<Vec<access_store::audit_tiles::ShardRow>, AuditError> {
+        Ok(access_store::audit_tiles::shards(&self.0).await?)
+    }
+
+    async fn append_shard(
+        &self,
+        shard: &access_store::audit_tiles::ShardRow,
+    ) -> Result<(), AuditError> {
+        Ok(access_store::audit_tiles::append_shard(&self.0, shard).await?)
+    }
+
+    async fn years(&self) -> Result<(Option<i32>, i32), AuditError> {
+        Ok((
+            access_store::audit_tiles::first_checkpoint_year(&self.0).await?,
+            access_store::audit_tiles::current_year(&self.0).await?,
+        ))
+    }
+
+    async fn year_end(&self, year: i32) -> Result<Option<CheckpointRow>, AuditError> {
+        Ok(access_store::audit_tiles::year_end_checkpoint(&self.0, year).await?)
+    }
+}

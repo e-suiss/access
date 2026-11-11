@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT extract(year FROM now() AT TIME ZONE 'UTC')::int AS \"year!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "year!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a340749927313ccab08706c993630567f3223bd98038082d44bf5363fd43d24c"
+}

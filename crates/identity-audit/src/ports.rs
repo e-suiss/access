@@ -5,6 +5,7 @@ use std::future::Future;
 use access_store::audit::{AuditRow, CheckpointRow};
 use access_store::audit_realm::RealmCheckpointRow;
 use access_store::audit_tier::{Due, Moved};
+use access_store::audit_tiles::{ShardRow, TileRow};
 use access_store::identity::Cursor;
 
 use crate::AuditError;
@@ -124,5 +125,41 @@ pub trait Publications {
     fn latest_after(
         &self,
         after: u64,
+    ) -> impl Future<Output = Result<Option<CheckpointRow>, AuditError>> + Send;
+}
+
+/// The identity audit tree's tiles and shards, as the checkpointer sees them (OP-37).
+pub trait TileStore {
+    /// The highest full tile of `level`.
+    fn last_tile(
+        &self,
+        level: u8,
+    ) -> impl Future<Output = Result<Option<TileRow>, AuditError>> + Send;
+    /// Up to `limit` full tiles of `level` from index `from` on.
+    fn tiles(
+        &self,
+        level: u8,
+        from: u64,
+        limit: u32,
+    ) -> impl Future<Output = Result<Vec<TileRow>, AuditError>> + Send;
+    /// Appends a full tile.
+    fn append_tile(&self, tile: &TileRow) -> impl Future<Output = Result<(), AuditError>> + Send;
+    /// Integrated rows after `after`, in integration order.
+    fn rows_after(
+        &self,
+        after: Cursor,
+        limit: u32,
+    ) -> impl Future<Output = Result<Vec<AuditRow>, AuditError>> + Send;
+    /// The years frozen so far.
+    fn shards(&self) -> impl Future<Output = Result<Vec<ShardRow>, AuditError>> + Send;
+    /// Records a frozen year.
+    fn append_shard(&self, shard: &ShardRow)
+    -> impl Future<Output = Result<(), AuditError>> + Send;
+    /// The year of the first checkpoint and the current year (UTC).
+    fn years(&self) -> impl Future<Output = Result<(Option<i32>, i32), AuditError>> + Send;
+    /// The last signed checkpoint before the end of `year`.
+    fn year_end(
+        &self,
+        year: i32,
     ) -> impl Future<Output = Result<Option<CheckpointRow>, AuditError>> + Send;
 }

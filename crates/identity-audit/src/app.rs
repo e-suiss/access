@@ -4,6 +4,7 @@
 
 pub mod publish;
 pub mod tier;
+pub mod tiles;
 
 use access_crypto::AwsLcBackend;
 use access_identity_signer::cell::{OPERATIONAL_CHAIN, operational_origin, realm_origin};

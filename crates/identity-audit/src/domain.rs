@@ -4,6 +4,7 @@ pub mod realm;
 pub mod record;
 pub mod taxonomy;
 pub mod tier;
+pub mod tiles;
 
 use access_kernel::digest;
 use access_store::audit::{AuditRow, CheckpointRow};
