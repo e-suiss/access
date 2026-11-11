@@ -170,6 +170,7 @@ mod ssf;
 mod stage11;
 mod stage13;
 mod stage6;
+mod transparency;
 
 fn components() -> Value {
     let mut all = key_components();
@@ -539,6 +540,7 @@ pub fn openapi() -> Value {
     developer::paths(&mut paths);
     stage11::paths(&mut paths);
     stage13::paths(&mut paths);
+    transparency::paths(&mut paths);
     eligibility::paths(&mut paths, &common);
     iys::paths(&mut paths);
     json!({

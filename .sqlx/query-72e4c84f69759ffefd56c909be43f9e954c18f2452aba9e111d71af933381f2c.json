@@ -1,27 +1,27 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT issued_at, size, witness, independent, cosigned_at, line\n           FROM access.witness_cosign WHERE domain_id = $1 AND issued_at = $2 ORDER BY witness",
+  "query": "SELECT size, root, witness, vkey, independent, cosigned_at, signature\n           FROM access.witness_cosign WHERE domain_id = $1 AND size = $2 AND root = $3\n          ORDER BY witness",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "issued_at",
-        "type_info": "Int8",
-        "origin": {
-          "Table": {
-            "table": "access.witness_cosign",
-            "name": "issued_at"
-          }
-        }
-      },
-      {
-        "ordinal": 1,
         "name": "size",
         "type_info": "Int8",
         "origin": {
           "Table": {
             "table": "access.witness_cosign",
             "name": "size"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "root",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.witness_cosign",
+            "name": "root"
           }
         }
       },
@@ -38,6 +38,17 @@
       },
       {
         "ordinal": 3,
+        "name": "vkey",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.witness_cosign",
+            "name": "vkey"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
         "name": "independent",
         "type_info": "Bool",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "cosigned_at",
         "type_info": "Int8",
         "origin": {
@@ -59,13 +70,13 @@
         }
       },
       {
-        "ordinal": 5,
-        "name": "line",
-        "type_info": "Text",
+        "ordinal": 6,
+        "name": "signature",
+        "type_info": "Bytea",
         "origin": {
           "Table": {
             "table": "access.witness_cosign",
-            "name": "line"
+            "name": "signature"
           }
         }
       }
@@ -73,7 +84,8 @@
     "parameters": {
       "Left": [
         "Bytea",
-        "Int8"
+        "Int8",
+        "Bytea"
       ]
     },
     "nullable": [
@@ -82,8 +94,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "7983767f7848bbd787ff19eed1a175b8bb07fd13c0ee1807710ff4d9e75fcdbf"
+  "hash": "72e4c84f69759ffefd56c909be43f9e954c18f2452aba9e111d71af933381f2c"
 }

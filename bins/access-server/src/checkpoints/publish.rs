@@ -13,6 +13,7 @@ use access_authority_sequencer::witness::{
 use access_kernel::digest::Digest;
 use access_store::Pool;
 use access_store::authority_checkpoint::AuthorityCheckpoint;
+use access_store::operational::{OperationalEvent, record_operational};
 use access_store::scope::DomainId;
 use access_store::witness::{
     Cosign, Equivocation, checkpoint_of_size, leaf_hashes, record_cosign, record_equivocation,
@@ -20,7 +21,7 @@ use access_store::witness::{
 };
 use suiss_crypto::note::{Checkpoint, parse_note};
 use suiss_ledger::checkpoint::proof::consistency;
-use suiss_ledger::checkpoint::witness::{Refused, equivocates};
+use suiss_ledger::checkpoint::witness::{Cosignature, Refused, equivocates};
 
 /// The declared witnesses and sinks.
 #[derive(Clone, Debug, Default)]
@@ -137,20 +138,31 @@ pub(crate) async fn publish(
         let (line, time) = match got {
             Ok(v) => v,
             Err(e) => {
-                tracing::warn!(witness = %target.url, error = %e, "checkpoint not cosigned");
+                tracing::warn!(
+                    event = "witness.unreachable",
+                    witness = %target.url,
+                    error = %e,
+                    "checkpoint not cosigned"
+                );
                 out.failed.push((target.url.clone(), e));
                 continue;
             }
         };
         // TI-RT2, OP-158 m.3 (k)
         let _ = cross_check(recorded_at, time);
+        let Ok((parsed, _)) = Cosignature::from_line(&line) else {
+            out.failed
+                .push((target.url.clone(), WitnessError::Cosignature));
+            continue;
+        };
         let cosign = Cosign {
-            issued_at: row.issued_at,
             size: row.size,
-            witness: target.vkey.clone(),
+            root: row.root,
+            witness: parsed.name,
+            vkey: target.vkey.clone(),
             independent: target.independent,
             cosigned_at: time,
-            line: line.clone(),
+            signature: parsed.signature,
         };
         if let Err(error) = record_cosign(sequencer, &id, &cosign).await {
             tracing::warn!(%error, "cosignature not kept");
@@ -159,6 +171,24 @@ pub(crate) async fn publish(
             continue;
         }
         out.cosigned = out.cosigned.saturating_add(1);
+        let target_text = row.size.to_string();
+        let kept = record_operational(
+            app,
+            &OperationalEvent {
+                event_type: "checkpoint.cosigned",
+                occurred_at_ms: row.issued_at,
+                tenant: None,
+                domain: Some(domain.0),
+                actor: &target.vkey,
+                target: &target_text,
+                reason: "",
+                correlation: "",
+            },
+        )
+        .await;
+        if let Err(error) = kept {
+            tracing::warn!(%error, "cosignature audit row not kept");
+        }
         if target.independent {
             out.independent = out.independent.saturating_add(1);
         }
@@ -254,10 +284,29 @@ pub(crate) async fn gossip(
         };
         // U9, HL-7
         tracing::error!(
+            event = "witness.equivocation.detected",
+            witness = %evidence.source,
             size = evidence.size,
-            source = %evidence.source,
             "equivocation: two cosigned checkpoints of one size with different roots"
         );
+        let target_text = evidence.size.to_string();
+        let raised = record_operational(
+            app,
+            &OperationalEvent {
+                event_type: "witness.equivocation",
+                occurred_at_ms: now,
+                tenant: None,
+                domain: Some(domain.0),
+                actor: &evidence.source,
+                target: &target_text,
+                reason: "equivocation",
+                correlation: "",
+            },
+        )
+        .await;
+        if let Err(error) = raised {
+            tracing::error!(%error, "equivocation audit row not kept");
+        }
         match record_equivocation(sequencer, &id, &evidence).await {
             Ok(_) => found = found.saturating_add(1),
             Err(error) => tracing::error!(%error, "equivocation evidence not kept"),

@@ -2728,128 +2728,6 @@
         }
       }
     },
-    "/access/v1/domains/{domain}/checkpoints": {
-      "get": {
-        "operationId": "listCheckpoints",
-        "summary": "The domain's published checkpoints (C2SP signed notes) with their witness cosignatures, newest first (§16.6, OP-158 m.3 (c), (d)).",
-        "x-suiss-status": "planned",
-        "parameters": [
-          {
-            "name": "domain",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
-          }
-        ],
-        "responses": {
-          "400": {
-            "description": "The request is refused; nothing is read.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Temporarily unavailable; retry.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/access/v1/domains/{domain}/checkpoints/{size}/inclusion/{position}": {
-      "get": {
-        "operationId": "getInclusionBundle",
-        "summary": "The inclusion bundle of the record at `position` in the checkpoint of `size`: the exact record, the inclusion proof, the cosigned checkpoint and, after a handover, the consistency path (inclusion-bundle.cddl, P18, SEC25).",
-        "x-suiss-status": "planned",
-        "parameters": [
-          {
-            "name": "domain",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
-          },
-          {
-            "name": "size",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
-          },
-          {
-            "name": "position",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
-          }
-        ],
-        "responses": {
-          "400": {
-            "description": "The request is refused; nothing is read.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Temporarily unavailable; retry.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/access/v1/domains/{domain}/divergence": {
       "post": {
         "operationId": "declareDivergence",
@@ -2895,6 +2773,220 @@
                 "schema": {
                   "$ref": "#/components/schemas/Problem"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/domains/{domain}/checkpoints": {
+      "get": {
+        "operationId": "listCheckpoints",
+        "summary": "witnessed_through, the newest checkpoint an independent witness cosigned with its cosignatures and key excerpt, the declared witnesses and whether equivocation may be called detectable (§16.6, U9, OP-158 m.3 (c), (d)). Anyone may copy it.",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "checkpoint-unknown: no such domain.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "checkpoints-unavailable: retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The domain's witnessed checkpoint.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/domains/{domain}/checkpoints/{size}/inclusion/{position}": {
+      "get": {
+        "operationId": "getInclusionBundle",
+        "summary": "The inclusion bundle of the record at `position` in the witnessed checkpoint of `size` (inclusion-bundle.cddl): the record disclosure with only `artifacts` opened, the inclusion proof and the checkpoint with its cosignatures (T19, §17.6.1 rule 5). For an authenticated PEP.",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "size",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "position",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "pep-required: no authenticated PEP.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "checkpoint-unknown: no such domain, size or position.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "checkpoint-not-witnessed: no independent witness cosigned a checkpoint of that size.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "checkpoints-unavailable: retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The bundle.",
+            "content": {
+              "application/cbor": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/domains/{domain}/tile/{level}/{index}": {
+      "get": {
+        "operationId": "getTile",
+        "summary": "A C2SP tlog-tiles hash tile of the witnessed tree: `index` in three-digit groups, `.p/<width>` for a partial tile (K15). Entries are not published.",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "level",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "checkpoint-unknown: no such tile in the witnessed tree.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "checkpoint-not-witnessed: nothing is witnessed yet.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "checkpoints-unavailable: retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The tile's hashes, concatenated.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {}
               }
             }
           }

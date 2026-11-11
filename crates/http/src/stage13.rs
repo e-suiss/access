@@ -37,18 +37,6 @@ pub const PLANNED: &[Planned] = &[
         summary: "Changes from `from` (a record position) by long polling, each with witnessed_through; advisory, never a source of ALLOW (OP-158 m.3 (u)).",
     },
     Planned {
-        method: Method::Get,
-        path: "/access/v1/domains/{domain}/checkpoints",
-        operation: "listCheckpoints",
-        summary: "The domain's published checkpoints (C2SP signed notes) with their witness cosignatures, newest first (§16.6, OP-158 m.3 (c), (d)).",
-    },
-    Planned {
-        method: Method::Get,
-        path: "/access/v1/domains/{domain}/checkpoints/{size}/inclusion/{position}",
-        operation: "getInclusionBundle",
-        summary: "The inclusion bundle of the record at `position` in the checkpoint of `size`: the exact record, the inclusion proof, the cosigned checkpoint and, after a handover, the consistency path (inclusion-bundle.cddl, P18, SEC25).",
-    },
-    Planned {
         method: Method::Post,
         path: "/access/v1/domains/{domain}/divergence",
         operation: "declareDivergence",

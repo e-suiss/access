@@ -3,7 +3,7 @@
 //!   an independent witness cosigned with every cosignature it got, the declared witnesses
 //!   and what may be claimed of them. Anyone may copy it (the domain's own storage, a third
 //!   party log); Suiss is not a required witness or trust anchor (PI-13, Ek B 6074).
-//! - `GET /access/v1/domains/{domain}/checkpoints/{size}/inclusion/{pos}`: the inclusion proof
+//! - `GET /access/v1/domains/{domain}/checkpoints/{size}/inclusion/{position}`: the inclusion proof
 //!   bundle of one record for an authenticated PEP: the leaf core with only `artifacts`
 //!   opened, the Merkle path and the witnessed checkpoint of `size` (T19, §17.6.1 rule 5).
 //! - `GET /access/v1/domains/{domain}/tile/{level}/{index}[.p/{width}]`: C2SP `tlog-tiles`
@@ -28,7 +28,8 @@ use crate::adp::adapters::Pep;
 pub const CHECKPOINTS_PATH: &str = "/access/v1/domains/{domain}/checkpoints";
 
 /// The inclusion bundle route.
-pub const INCLUSION_PATH: &str = "/access/v1/domains/{domain}/checkpoints/{size}/inclusion/{pos}";
+pub const INCLUSION_PATH: &str =
+    "/access/v1/domains/{domain}/checkpoints/{size}/inclusion/{position}";
 
 /// The hash tile route (C2SP `tlog-tiles`).
 pub const TILE_PATH: &str = "/access/v1/domains/{domain}/tile/{level}/{*index}";

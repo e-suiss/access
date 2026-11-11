@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT c.issued_at, c.size, c.root, c.note, c.excerpt FROM access.authority_checkpoint c\n          WHERE c.domain_id = $1 AND ($2::bigint IS NULL OR c.size = $2)\n            AND EXISTS (SELECT 1 FROM access.witness_cosign w\n                         WHERE w.domain_id = c.domain_id AND w.issued_at = c.issued_at\n                           AND w.independent)\n          ORDER BY c.size DESC, c.issued_at DESC LIMIT 1",
+  "query": "SELECT c.issued_at, c.size, c.root, c.note, c.excerpt FROM access.authority_checkpoint c\n          WHERE c.domain_id = $1 AND ($2::bigint IS NULL OR c.size = $2)\n            AND EXISTS (SELECT 1 FROM access.witness_cosign w\n                         WHERE w.domain_id = c.domain_id AND w.size = c.size\n                           AND w.root = c.root AND w.independent)\n          ORDER BY c.size DESC, c.issued_at DESC LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -73,5 +73,5 @@
       false
     ]
   },
-  "hash": "d546a73b232db7b30085025168bd141d477e736b05e7283cfe87fefa89eb09e5"
+  "hash": "44d84574e233673aeefb052381ba47a8316f632aeb8cf7e4f6d49471103efd84"
 }

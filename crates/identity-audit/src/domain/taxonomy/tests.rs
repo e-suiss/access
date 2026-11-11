@@ -84,8 +84,6 @@ const UNPRODUCED: &[&str] = &[
     "mapping.pinned",
     "policy.default_changed",
     // OP-158 m.4 (a)
-    "checkpoint.cosigned",
-    "witness.equivocation",
     "replica.acked",
     "replica.lagging",
     "export.streamed",

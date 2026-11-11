@@ -214,11 +214,36 @@ pub(crate) async fn domain_step<H: Heads + Sync, S: DomainSigner + Sync>(
     }
     let head = heads.committed(&domain).await?;
     let size = head.pos.saturating_add(1);
-    if cadence.due(size, now).is_none() {
+    let Some(due) = cadence.due(size, now) else {
         return Ok(None);
+    };
+    if due == suiss_ledger::checkpoint::cadence::Due::OutOfCycle {
+        tracing::debug!(
+            event = "checkpoint.coalesced",
+            waiters = 1_u32,
+            "an out-of-cycle checkpoint serves every waiting commit"
+        );
     }
     let (row, noted) = signed_checkpoint((heads, keys), (app, sequencer), domain, now).await?;
     cadence.issued(row.size, now);
+    let target_text = row.size.to_string();
+    let published = access_store::operational::record_operational(
+        app,
+        &access_store::operational::OperationalEvent {
+            event_type: "checkpoint.published",
+            occurred_at_ms: now,
+            tenant: None,
+            domain: Some(domain.0),
+            actor: "provider",
+            target: &target_text,
+            reason: "",
+            correlation: "",
+        },
+    )
+    .await;
+    if let Err(error) = published {
+        tracing::warn!(%error, "checkpoint audit row not kept");
+    }
     let recorded_at =
         access_authority_sequencer::checkpoint::extensions(&noted.checkpoint)?.recorded_at;
     let outcome = publish::publish(

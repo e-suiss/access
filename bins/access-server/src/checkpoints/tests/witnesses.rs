@@ -432,7 +432,9 @@ async fn real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation() {
     assert_eq!(row.size, 2);
     assert_eq!((out.cosigned, out.independent), (2, 1), "{out:?}");
     // SI-12, B13
-    let kept = cosigns(&db.app, &log.id, row.issued_at).await.unwrap();
+    let kept = cosigns(&db.app, &log.id, row.size, &row.root)
+        .await
+        .unwrap();
     assert_eq!(kept.iter().filter(|c| c.independent).count(), 1);
     assert_eq!(witnessed_through(&db.app, &log.id).await.unwrap(), 2);
     assert_eq!(board().witnessed(&d), 2);

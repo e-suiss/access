@@ -10,6 +10,7 @@ use access_kernel::digest::Digest;
 use access_kernel::record::RecordEnvelope;
 use access_store::Pool;
 use access_store::authority::{read_head, read_log};
+use access_store::authority_checkpoint::AuthorityCheckpoint;
 use access_store::scope::DomainId;
 use access_store::witness::{cosigns, latest_witnessed, leaf_hashes, witnessed_through};
 use suiss_crypto::dcbor::{self, Limits, Value};
@@ -31,16 +32,25 @@ fn down<E>(_: E) -> InclusionError {
     InclusionError::Unavailable
 }
 
-/// The checkpoint note with its independent witnesses' cosignature lines.
+/// The checkpoint note with its witnesses' cosignature lines.
 async fn cosigned(
     app: &Pool,
     id: &DomainId,
-    issued_at: u64,
-    note: &str,
+    row: &AuthorityCheckpoint,
 ) -> Result<String, InclusionError> {
-    let mut out = note.to_owned();
-    for c in cosigns(app, id, issued_at).await.map_err(down)? {
-        out.push_str(&c.line);
+    let mut out = row.note.clone();
+    for c in cosigns(app, id, row.size, &row.root).await.map_err(down)? {
+        let key = suiss_crypto::note::Verifier::parse(&c.vkey)
+            .map_err(|_| InclusionError::Unavailable)?
+            .id();
+        out.push_str(
+            &Cosignature {
+                name: c.witness,
+                timestamp: c.cosigned_at,
+                signature: c.signature,
+            }
+            .line(key),
+        );
     }
     Ok(out)
 }
@@ -53,10 +63,7 @@ impl Checkpoints for PgCheckpoints {
         }
         let through = witnessed_through(&self.app, &id).await.map_err(down)?;
         let latest = match latest_witnessed(&self.app, &id, None).await.map_err(down)? {
-            Some(row) => Some((
-                cosigned(&self.app, &id, row.issued_at, &row.note).await?,
-                row.excerpt,
-            )),
+            Some(row) => Some((cosigned(&self.app, &id, &row).await?, row.excerpt)),
             None => None,
         };
         Ok(Some(Listing {
@@ -97,13 +104,13 @@ impl Checkpoints for PgCheckpoints {
         let leaves = leaf_hashes(&self.app, &id, 0, size).await.map_err(down)?;
         let path = inclusion(leaves.as_slice(), pos, size).map_err(|_| InclusionError::Unknown)?;
         let mut cosignatures = Vec::new();
-        for c in cosigns(&self.app, &id, row.issued_at).await.map_err(down)? {
-            let Ok((c, _)) = Cosignature::from_line(&c.line) else {
-                return Err(InclusionError::Unavailable);
-            };
+        for c in cosigns(&self.app, &id, row.size, &row.root)
+            .await
+            .map_err(down)?
+        {
             cosignatures.push(Value::Map(vec![
-                (Value::text("name"), Value::text(&c.name)),
-                (Value::text("timestamp"), Value::Unsigned(c.timestamp)),
+                (Value::text("name"), Value::text(&c.witness)),
+                (Value::text("timestamp"), Value::Unsigned(c.cosigned_at)),
                 (Value::text("signature"), Value::Bytes(c.signature.to_vec())),
             ]));
         }

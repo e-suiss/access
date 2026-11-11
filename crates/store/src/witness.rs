@@ -8,21 +8,23 @@ use crate::StoreError;
 use crate::authority_checkpoint::AuthorityCheckpoint;
 use crate::scope::{DomainId, DomainTx};
 
-/// One witness cosignature of one checkpoint.
+/// One witness cosignature of a checkpoint (`tlog-cosignature/v1`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Cosign {
-    /// The checkpoint's `issued_at`.
-    pub issued_at: u64,
-    /// Its tree size.
+    /// Tree size.
     pub size: u64,
-    /// The witness's verifier key (`vkey`).
+    /// Root at that size.
+    pub root: [u8; 32],
+    /// The witness's key name.
     pub witness: String,
+    /// The witness's verifier key (`vkey`).
+    pub vkey: String,
     /// Whether its operator is not the provider's (SI-12, B13).
     pub independent: bool,
     /// The cosignature's time, seconds.
     pub cosigned_at: u64,
-    /// The cosignature line.
-    pub line: String,
+    /// The Ed25519 signature.
+    pub signature: [u8; 64],
 }
 
 /// Two cosigned notes of one size with different roots (U9).
@@ -48,7 +50,7 @@ fn unsigned(n: i64) -> Result<u64, StoreError> {
     u64::try_from(n).map_err(|_| StoreError::Corrupt)
 }
 
-/// Appends a cosignature (sequencer role): `true` the first time.
+/// Appends a cosignature (sequencer role): `true` the first time for its size and witness.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -60,15 +62,16 @@ pub async fn record_cosign(
     let mut t = DomainTx::begin(sequencer, domain).await?;
     let done = sqlx::query!(
         "INSERT INTO access.witness_cosign
-           (domain_id, issued_at, size, witness, independent, cosigned_at, line)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING",
+           (domain_id, size, root, witness, cosigned_at, signature, vkey, independent)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT DO NOTHING",
         domain.as_bytes().as_slice(),
-        signed(c.issued_at)?,
         signed(c.size)?,
+        c.root.as_slice(),
         c.witness,
-        c.independent,
         signed(c.cosigned_at)?,
-        c.line,
+        c.signature.as_slice(),
+        c.vkey,
+        c.independent,
     )
     .execute(&mut *t.tx)
     .await?;
@@ -76,21 +79,24 @@ pub async fn record_cosign(
     Ok(done.rows_affected() == 1)
 }
 
-/// The cosignatures of the checkpoint of `domain` issued at `issued_at`.
+/// The cosignatures of the checkpoint of `domain` with `size` and `root`.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn cosigns(
     pool: &PgPool,
     domain: &DomainId,
-    issued_at: u64,
+    size: u64,
+    root: &[u8; 32],
 ) -> Result<Vec<Cosign>, StoreError> {
     let mut t = DomainTx::begin(pool, domain).await?;
     let rows = sqlx::query!(
-        "SELECT issued_at, size, witness, independent, cosigned_at, line
-           FROM access.witness_cosign WHERE domain_id = $1 AND issued_at = $2 ORDER BY witness",
+        "SELECT size, root, witness, vkey, independent, cosigned_at, signature
+           FROM access.witness_cosign WHERE domain_id = $1 AND size = $2 AND root = $3
+          ORDER BY witness",
         domain.as_bytes().as_slice(),
-        signed(issued_at)?,
+        signed(size)?,
+        root.as_slice(),
     )
     .fetch_all(&mut *t.tx)
     .await?;
@@ -98,12 +104,13 @@ pub async fn cosigns(
     rows.into_iter()
         .map(|r| {
             Ok(Cosign {
-                issued_at: unsigned(r.issued_at)?,
                 size: unsigned(r.size)?,
+                root: r.root.try_into().map_err(|_| StoreError::Corrupt)?,
                 witness: r.witness,
+                vkey: r.vkey,
                 independent: r.independent,
                 cosigned_at: unsigned(r.cosigned_at)?,
-                line: r.line,
+                signature: r.signature.try_into().map_err(|_| StoreError::Corrupt)?,
             })
         })
         .collect()
@@ -136,7 +143,7 @@ pub async fn witness_base(
 ) -> Result<u64, StoreError> {
     let mut t = DomainTx::begin(pool, domain).await?;
     let size = sqlx::query_scalar!(
-        "SELECT max(size) FROM access.witness_cosign WHERE domain_id = $1 AND witness = $2",
+        "SELECT max(size) FROM access.witness_cosign WHERE domain_id = $1 AND vkey = $2",
         domain.as_bytes().as_slice(),
         witness,
     )
@@ -309,8 +316,8 @@ pub async fn latest_witnessed(
         "SELECT c.issued_at, c.size, c.root, c.note, c.excerpt FROM access.authority_checkpoint c
           WHERE c.domain_id = $1 AND ($2::bigint IS NULL OR c.size = $2)
             AND EXISTS (SELECT 1 FROM access.witness_cosign w
-                         WHERE w.domain_id = c.domain_id AND w.issued_at = c.issued_at
-                           AND w.independent)
+                         WHERE w.domain_id = c.domain_id AND w.size = c.size
+                           AND w.root = c.root AND w.independent)
           ORDER BY c.size DESC, c.issued_at DESC LIMIT 1",
         domain.as_bytes().as_slice(),
         wanted,
