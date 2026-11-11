@@ -52,6 +52,18 @@ These suites run side by side, and none stands in for another: the Access vector
 
 An implementation conforms to a track version when it produces the expected result for every case of every operation it implements in that version ([L0-GEN-5](../protocol/l0/README.md)). A claim names the track, the version and the operations covered. Vectors are only added to a published version, never changed; a fix to an expected result is a new version.
 
+## Conformance profiles
+
+[`profiles/`](profiles) holds one profile per role: Provider, Decision PEP, Offline Verifier, Approval Surface (shared with Work), Claim Issuer, Schema Publisher, Coordinator and Event Receiver. A profile is data in the shape of [`conformance-profile.cddl`](cddl/conformance-profile.cddl): the vector traces, PEP fault cases and CDDL files an implementation of that role must pass, and whether it must verify Domain Metadata against the domain root. `cargo xtask check` (`conformance-profiles`) fails when a profile names anything that does not exist here.
+
+Run one with the PEP runner:
+
+```sh
+access-pep-conformance --profile decision-pep --sut ./my-pep-adapter
+```
+
+It prints what the profile requires, then runs the profile's PEP cases against your adapter. The vector traces and CDDL files are proved with your own vector runner, as in [Running the vectors](#running-the-vectors). Passing a profile is a published test result for named vectors; conformance is not endorsement, and there is no certification program here.
+
 ## Event names
 
 [`catalog/events.toml`](catalog/events.toml) lists the permanent names of the events Access logs (`grant.issued`, `login.failed`, `api.throttled`, …). Alerts, dashboards and the OCSF and CAEP mappings rely on them, so a published name is never renamed or removed: a changed meaning gets a new name, and the old entry stays with `deprecated = true`. Each entry has:

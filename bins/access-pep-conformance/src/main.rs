@@ -1,6 +1,7 @@
 //! `access-pep-conformance --sut <command>`: runs the PEP fault cases against an adapter
-//! (OP-150 m.1 (a), CMP-17, X21). Exit status 0 when every case passes, 1 otherwise, 2 when
-//! the run itself fails.
+//! (OP-150 m.1 (a), CMP-17, X21). `--profile <name>` runs one conformance profile: its PEP
+//! cases, after listing the vector traces and CDDL files it requires (OP-157 m.3 (s)). Exit
+//! status 0 when every case passes, 1 otherwise, 2 when the run itself fails.
 
 #![allow(
     clippy::print_stdout,
@@ -15,6 +16,7 @@ use std::time::Duration;
 
 use access_pep_conformance::case::load;
 use access_pep_conformance::fixture::Fixture;
+use access_pep_conformance::profile;
 use access_pep_conformance::run::{render, run};
 use access_pep_conformance::sut::Subprocess;
 use access_pep_conformance::upstream::Upstream;
@@ -22,17 +24,21 @@ use access_pep_conformance::upstream::Upstream;
 struct Args {
     sut: String,
     cases: PathBuf,
+    profile: Option<String>,
+    root: PathBuf,
     deadline_ms: u64,
     grace_ms: u64,
     json: Option<PathBuf>,
 }
 
-const USAGE: &str = "usage: access-pep-conformance --sut <command> [--cases <dir>] [--deadline-ms <n>] [--grace-ms <n>] [--json <file>]";
+const USAGE: &str = "usage: access-pep-conformance [--profile <name> [--root <conformance dir>]] --sut <command> [--cases <dir>] [--deadline-ms <n>] [--grace-ms <n>] [--json <file>]";
 
 fn args() -> Result<Args, String> {
     let mut out = Args {
         sut: String::new(),
         cases: PathBuf::from("conformance/pep/cases"),
+        profile: None,
+        root: PathBuf::from("conformance"),
         deadline_ms: 500,
         grace_ms: 2_000,
         json: None,
@@ -43,20 +49,42 @@ fn args() -> Result<Args, String> {
         match flag.as_str() {
             "--sut" => out.sut = value()?,
             "--cases" => out.cases = PathBuf::from(value()?),
+            "--profile" => out.profile = Some(value()?),
+            "--root" => out.root = PathBuf::from(value()?),
             "--deadline-ms" => out.deadline_ms = value()?.parse().map_err(|e| format!("{e}"))?,
             "--grace-ms" => out.grace_ms = value()?.parse().map_err(|e| format!("{e}"))?,
             "--json" => out.json = Some(PathBuf::from(value()?)),
             _ => return Err(format!("unknown argument {flag}")),
         }
     }
-    if out.sut.is_empty() {
+    if out.sut.is_empty() && out.profile.is_none() {
         return Err(String::from("--sut is required"));
     }
     Ok(out)
 }
 
 async fn conformance(args: Args) -> Result<bool, String> {
-    let cases = load(&args.cases).map_err(|e| e.to_string())?;
+    let mut cases = load(&args.cases).map_err(|e| e.to_string())?;
+    // OP-157 m.3 (s)
+    if let Some(name) = &args.profile {
+        let p = profile::load(&args.root, name).map_err(|e| e.to_string())?;
+        print!("{}", profile::requirements(&p));
+        cases = profile::select(&p, cases);
+        if cases.len() != p.pep_cases.len() {
+            return Err(format!(
+                "{}: a profile case is not in the cases folder",
+                p.profile
+            ));
+        }
+        if cases.is_empty() {
+            return Ok(true);
+        }
+        if args.sut.is_empty() {
+            return Err(String::from(
+                "--sut is required for a profile with PEP cases",
+            ));
+        }
+    }
     let fixture = Fixture::generate().map_err(|e| e.to_string())?;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await

@@ -1,0 +1,38 @@
+# Access conformance profile (OP-157 m.3 (s), §9.1 L3, P2): data in the shape of
+# conformance/cddl/conformance-profile.cddl. Run it with `access-pep-conformance --profile <name>`.
+# Passing a profile is conformance, not endorsement.
+
+v = 1
+profile = "decision-pep"
+title = "Decision PEP"
+vectors = ["core/1"]
+pep_cases = [
+  "adp-500",
+  "adp-503",
+  "adp-allow-without-receipt",
+  "adp-malformed-body",
+  "adp-receipt-other-audience",
+  "adp-receipt-other-intent",
+  "adp-timeout",
+  "decision-deny",
+  "decision-healthy",
+  "introspection-500",
+  "introspection-503",
+  "introspection-healthy",
+  "introspection-inactive",
+  "jwks-500",
+  "jwks-timeout",
+  "jwt-bounds-healthy",
+  "jwt-dpop-missing",
+  "jwt-dpop-other-key",
+  "jwt-dpop-replay",
+  "jwt-exact-intent-reuse",
+  "jwt-healthy",
+  "jwt-other-audience",
+  "jwt-oversized",
+  "status-list-503",
+  "status-list-revoked",
+  "status-list-stale",
+]
+cddl = ["kernel.cddl", "authority-request.cddl", "explanation.cddl"]
+metadata_signature = true

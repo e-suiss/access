@@ -1,0 +1,25 @@
+# Access conformance profile (OP-157 m.3 (s), §9.1 L3, P2): data in the shape of
+# conformance/cddl/conformance-profile.cddl. Run it with `access-pep-conformance --profile <name>`.
+# Passing a profile is conformance, not endorsement.
+
+v = 1
+profile = "offline-verifier"
+title = "Offline Verifier"
+vectors = ["core/1", "exchange/1"]
+pep_cases = [
+  "jwks-500",
+  "jwks-timeout",
+  "jwt-bounds-healthy",
+  "jwt-dpop-missing",
+  "jwt-dpop-other-key",
+  "jwt-dpop-replay",
+  "jwt-exact-intent-reuse",
+  "jwt-healthy",
+  "jwt-other-audience",
+  "jwt-oversized",
+  "status-list-503",
+  "status-list-revoked",
+  "status-list-stale",
+]
+cddl = ["kernel.cddl"]
+metadata_signature = true

@@ -1,0 +1,10 @@
+# Access conformance profile (OP-157 m.3 (s), §9.1 L3, P2): data in the shape of
+# conformance/cddl/conformance-profile.cddl. Run it with `access-pep-conformance --profile <name>`.
+# Passing a profile is conformance, not endorsement.
+
+v = 1
+profile = "event-receiver"
+title = "Event Receiver"
+vectors = ["webhook/1"]
+pep_cases = []
+cddl = ["doorbell.cddl", "scim-set.cddl"]

@@ -1,0 +1,17 @@
+# Access conformance profile (OP-157 m.3 (s), §9.1 L3, P2): data in the shape of
+# conformance/cddl/conformance-profile.cddl. Run it with `access-pep-conformance --profile <name>`.
+# Passing a profile is conformance, not endorsement.
+
+v = 1
+profile = "provider"
+title = "Provider"
+vectors = ["core/1", "management/1", "exchange/1", "agent/1"]
+pep_cases = []
+cddl = [
+  "kernel.cddl",
+  "authority-request.cddl",
+  "explanation.cddl",
+  "suiss-discovery.cddl",
+  "key-lookup.cddl",
+  "party-lookup.cddl",
+]

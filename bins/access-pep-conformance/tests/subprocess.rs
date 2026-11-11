@@ -60,3 +60,47 @@ fn an_adapter_that_breaks_the_protocol_stops_the_run() {
     let out = runner("true");
     assert_eq!(out.status.code(), Some(2));
 }
+
+fn profile_run(profile: &str, sut: Option<&str>) -> Output {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../conformance");
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_access-pep-conformance"));
+    cmd.args(["--profile", profile, "--root"])
+        .arg(&root)
+        .arg("--cases")
+        .arg(root.join("pep/cases"))
+        .args(["--deadline-ms", "2000", "--grace-ms", "5000"]);
+    if let Some(sut) = sut {
+        cmd.args(["--sut", sut]);
+    }
+    cmd.output().unwrap()
+}
+
+// P2, §9.1, OP-157 m.3 (s), Ek B 5671
+#[test]
+fn a_profile_runs_its_cases_and_names_what_else_it_requires() {
+    let ok = profile_run("offline-verifier", Some(env!("CARGO_BIN_EXE_pep-sdk")));
+    let text = String::from_utf8_lossy(&ok.stdout);
+    assert_eq!(ok.status.code(), Some(0), "{text}");
+    assert!(
+        text.contains("Conformance profile: Offline Verifier"),
+        "{text}"
+    );
+    assert!(text.contains("requires vectors  core/1"), "{text}");
+    assert!(text.contains("verified against the domain root"), "{text}");
+    assert!(text.contains("13/13 passed, 0 leaked"), "{text}");
+
+    let leaky = profile_run(
+        "decision-pep",
+        Some(env!("CARGO_BIN_EXE_pep-reference-leaky")),
+    );
+    assert_eq!(leaky.status.code(), Some(1));
+
+    let listed = profile_run("coordinator", None);
+    let text = String::from_utf8_lossy(&listed.stdout);
+    assert_eq!(listed.status.code(), Some(0), "{text}");
+    assert!(text.contains("requires cddl     doorbell.cddl"), "{text}");
+
+    let needs = profile_run("decision-pep", None);
+    assert_eq!(needs.status.code(), Some(2));
+    assert_eq!(profile_run("certified", None).status.code(), Some(2));
+}
