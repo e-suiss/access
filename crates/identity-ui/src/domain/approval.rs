@@ -805,6 +805,63 @@ pub fn effect(shown: Option<&Render>, tier: Tier) -> (Section, Section) {
     )
 }
 
+/// Why an Approval Surface collects no approval (§9.14.5 k.1, PI-17, OP-157 m.3 (l)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum Unfaithful {
+    /// The render shown is not the decision point's: another digest, or not canonical.
+    #[error("render")]
+    Render,
+    /// The statement's material fields are not the render's.
+    #[error("material")]
+    Material,
+    /// A body does not match the intent's authority-opaque digest.
+    #[error("body")]
+    Body,
+}
+
+/// The Approval Surface conformance check (§9.14.5 k.1, U7, PI-17, XI-8, OP-157 m.3 (l)): the
+/// render shown is canonical and has the decision point's `render_digest`, the statement names
+/// exactly its material fields, and every authority-opaque body matches the digest the intent
+/// (whose digest is the render's) carries for it.
+///
+/// # Errors
+/// [`Unfaithful`].
+pub fn wysiwys(
+    shown: &[u8],
+    render_digest: &Digest,
+    material: &BTreeSet<String>,
+    intent: Option<&[u8]>,
+    bodies: &BTreeMap<String, Vec<u8>>,
+) -> Result<(), Unfaithful> {
+    let r = access_kernel::render::decode(shown).map_err(|_| Unfaithful::Render)?;
+    if access_kernel::render::encode(&r).ok().as_deref() != Some(shown)
+        || Digest(context_digest(access_kernel::render::CONTEXT, shown).0) != *render_digest
+    {
+        return Err(Unfaithful::Render);
+    }
+    if access_kernel::render::material_fields(&r) != *material {
+        return Err(Unfaithful::Material);
+    }
+    if bodies.is_empty() {
+        return Ok(());
+    }
+    let envelope = intent
+        .and_then(|b| suiss_crypto::dcbor::decode(b, suiss_crypto::dcbor::Limits::CEILING).ok())
+        .and_then(|v| IntentEnvelope::from_value(&v).ok())
+        .ok_or(Unfaithful::Body)?;
+    if intent_digest(&envelope).ok() != Some(r.intent) {
+        return Err(Unfaithful::Body);
+    }
+    if bodies
+        .iter()
+        .all(|(name, body)| envelope.opaque.get(name) == Some(&body_digest(body)))
+    {
+        Ok(())
+    } else {
+        Err(Unfaithful::Body)
+    }
+}
+
 /// The page (OP-150 m.3 (r)): one element the script fills. Its script is [`PAGE_JS`] at
 /// [`APP_PATH`], so the hosted login's CSP (`script-src 'self'`) holds.
 pub const PAGE_HTML: &str = "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Approve</title>\n</head>\n<body>\n<main id=\"approve\"><p>Loading the request…</p></main>\n<script src=\"/v1/approve/app.js\"></script>\n</body>\n</html>\n";

@@ -56,6 +56,10 @@ Kernel 0.4.1 adds semantics without changing the core version: every 0.4.0 artef
 - **Policy defaults.** `policy_set` may carry `defaults`; each value is written to its `policy_default` key. A larger `ct3_delay_s` or `mapping_probation_days`, a smaller `breakglass_review_h` or `support_max_min`, or a subset of `approval_surfaces` tightens; anything else widens and makes the change an expansion (CT3). A key never set compares with its default (86,400 s, 14 days, 72 h, the two Suiss surfaces); `support_max_min` has none, so its first value tightens.
 - **Structural `policy_set` polarity.** Amending a restriction policy narrows (CT1) only when the schema, the target and every old requirement set stay, every old statement appears again byte for byte, and every added statement is a `forbid`. Statements are split at top-level `;`, outside string literals and `//` comments, and trimmed. Anything else widens (CT3). A control-plane analysis may raise a narrowing to expansion; it never lowers one.
 
+## Approval Surface render
+
+The render an Approval Surface shows is Kernel semantics, so F0 recomputes it from the intent and its accepted Action Schema (`approval.render`): the action, the primary resource, every parameter by name, the recipient and the validity, each with its canonical text and whether it is material, its `access/render/v1` digest and the sorted material fields. `approval.wysiwys` is the surface's conformance check: the render shown must be canonical and carry the decision point's `render_digest`, the statement must name exactly its material fields, and every authority-opaque body must hash under `access/opaque-body/v1` to the digest the intent carries for it. The vectors are in `conformance/vectors/approval/1/`.
+
 ## Differential testing
 
 `just f0-random <count> <seed>` has the Kernel generate random evaluation inputs together with its own decisions, then checks that F0 gives the same bytes for every one. The nightly workflow runs 20 shards of 500,000 inputs each, 10⁷ inputs a night, and publishes a `f0-drt-summary` artifact with the input and mismatch counts.

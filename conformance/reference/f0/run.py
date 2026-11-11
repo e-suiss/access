@@ -7,7 +7,7 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from f0 import aas, ais, algebra, claim, claimbody, codec, dcbor, digest, ed25519, fold, jose, merkle, meta, note, pap, projection, receipt, record, report, sdjwt, status, validity, version_check
+from f0 import aas, ais, algebra, claim, claimbody, codec, dcbor, digest, ed25519, fold, jose, merkle, meta, note, pap, projection, receipt, record, render, report, sdjwt, status, validity, version_check
 from f0.algebra import child_within_parent
 from f0.version import CORE_VERSION, VERSION
 from f0.codec import Rejection, decode_canonical, decode_canonical_authority, decode_subject_selector, encode
@@ -462,6 +462,28 @@ def run_aas(case, document):
     return {"digest": digest.hex()}, None
 
 
+def run_approval_render(case, document):
+    # U7, XI-8, P58
+    schema = bytes.fromhex(case["schema"]) if "schema" in case else None
+    try:
+        rendered, digest, material = render.render_bytes(schema, bytes.fromhex(case["intent"]), case["locale"])
+    except Rejection as rejection:
+        return {"rejection": rejection.kind}, rejection.reason
+    return {"render": rendered.hex(), "render_digest": encode(digest).hex(), "material_fields": material}, None
+
+
+def run_approval_wysiwys(case, document):
+    # §9.14.5 k.1, U7, PI-17
+    expect = render.wysiwys(
+        bytes.fromhex(case["shown"]),
+        decode_canonical(bytes.fromhex(case["render_digest"])),
+        case["material_fields"],
+        bytes.fromhex(case["intent"]) if "intent" in case else None,
+        {name: bytes.fromhex(body) for name, body in case.get("bodies", {}).items()},
+    )
+    return {"expect": expect}, None
+
+
 def run_checkpoint(case, document):
     # L2-CKP-1 to L2-CKP-4
     log = note.parse_vkey(document["log"])
@@ -538,6 +560,8 @@ OPERATIONS = {
     "report.verify": (run_report, ("head", "next_seq", "drawn", "error")),
     "status.lookup": (run_status, ("invalid", "error")),
     "aas.verify": (run_aas, ("digest", "error")),
+    "approval.render": (run_approval_render, ("render", "render_digest", "material_fields", "rejection")),
+    "approval.wysiwys": (run_approval_wysiwys, ("expect",)),
     "projection.access_token": (run_access_token, ("kind", "error")),
     "projection.pap_sd_jwt": (run_pap_sd_jwt, ("valid", "error")),
 }
