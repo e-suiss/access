@@ -953,12 +953,12 @@ pub const APPROVAL_INVITE_LIMIT: Code = code(
     "Too Many Requests",
     "At most 5 approval invitations an hour from one requester to one approver, and one per intent; try again after Retry-After (OP-157 m.3 (m)).",
 );
-/// The `approval-inline-assertion-required` problem (§10.2, §10.3.1, MD-11).
+/// The `approval-inline-assertion-required` problem (§10.2, §10.3.1, MD-11, OP-157 m.17).
 pub const APPROVAL_INLINE_ASSERTION_REQUIRED: Code = code(
     "approval-inline-assertion-required",
     409,
     "Conflict",
-    "A device key's signature over H(AAS) is not a phishing-resistant assertion, so the approval was not recorded; approve on the Approval Surface (§10.2, §10.3.1, OP-157 m.3 (m)).",
+    "The approval carries no passkey assertion over H(AAS); a device key's signature alone is not phishing resistant, so nothing was recorded; send the approver's passkey assertion with it, or approve on the Approval Surface (§10.2, §10.3.1, OP-157 m.17).",
 );
 /// The `policy-default-unknown` problem (OP-157 m.3 (y)).
 pub const POLICY_DEFAULT_UNKNOWN: Code = code(

@@ -818,7 +818,7 @@ where
             .payment(kit, subject, &assertion, shown.as_ref())
             .await?;
         let mut verified = self
-            .assert(kit, subject, &statement, tier, &assertion, now)
+            .assert(kit, subject, &statement, tier >= Tier::Ct2, &assertion, now)
             .await?;
         // MD-11, SA-54, OP-156 m.3 (e)
         self.app_factor(kit, subject, &statement, tier, body, &mut verified, now)
@@ -919,13 +919,13 @@ where
     }
 
     /// Verifies the assertion over `challenge` for one of the subject's passkeys and records
-    /// its use.
-    async fn assert(
+    /// its use; `uv` asks for user verification.
+    pub(super) async fn assert(
         &self,
         kit: &RealmKit,
         subject: &[u8; 16],
         challenge: &[u8; 32],
-        tier: Tier,
+        uv: bool,
         assertion: &credential::Assertion,
         now: u64,
     ) -> Result<Verified, Reply> {
@@ -977,7 +977,7 @@ where
             challenge: *challenge,
             user: Some(UserHandle::from_bytes(handle)),
             allowed: Vec::new(),
-            require_user_verification: tier >= Tier::Ct2,
+            require_user_verification: uv,
             expires_at: now_s.saturating_add(1),
         };
         let payment = spc::ceremony(response.client_data_json).as_deref() == Some("payment.get");
@@ -1114,7 +1114,7 @@ pub(super) fn finished_reply(
 /// SI-5, §10.1.5, OP-149 m.33 (c): the `authentication` Claim bound to the statement and to the
 /// approver's Instance, issued now through the realm's courier; only an admitted Claim is a
 /// proof.
-async fn issue_claim<A, I, P, Q: ApprovalClaims>(
+pub(super) async fn issue_claim<A, I, P, Q: ApprovalClaims>(
     devices: &Devices<A, I, P, Q>,
     kit: &RealmKit,
     subject: [u8; 16],
@@ -1195,7 +1195,7 @@ pub(super) fn statement_of(
 /// The Exercise a contribution verdict names, or the reply that says why there is none: a
 /// statement over another render is "the request changed" (§9.14.2); a DENY or `REQUIRE_ACTION`
 /// is reported with its outcome, a refusal with its reason.
-fn committed(
+pub(super) fn committed(
     verdict: Result<Verdict, access_internal_api::idp::Unavailable>,
 ) -> Result<Digest, Reply> {
     match verdict {
@@ -1246,12 +1246,12 @@ pub(super) struct Finished {
 }
 
 /// What a verified approval assertion established.
-struct Verified {
+pub(super) struct Verified {
     factors: Vec<Factor>,
     levels: std::collections::BTreeMap<String, u64>,
     detail: WebauthnDetail,
     evidence: Digest,
-    created_ms: u64,
+    pub(super) created_ms: u64,
 }
 
 impl<K, C, M> Hosted<K, C, M>

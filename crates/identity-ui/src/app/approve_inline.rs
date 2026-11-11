@@ -1,8 +1,10 @@
-//! The approval channels outside the page (OP-157 m.3 (m), §13.7.3, SEC26, TN-100): the
+//! The approval channels outside the page (OP-157 m.3 (m), m.17, §13.7.3, SEC26, TN-100): the
 //! invitation a pushed request sends, one per approver and intent and at most five an hour from a
-//! requester, and the approver device's in-notification CT1 answer. A refusal is recorded; an
-//! approval is checked in full and then refused, because a device key's signature over H(AAS)
-//! is not the phishing-resistant assertion §10.2 and §10.3.1 ask for: no Claim, no contribution.
+//! requester, and the approver device's in-notification CT1 answer. A refusal is recorded. An
+//! approval is checked in full and counts only with the approver's passkey assertion over H(AAS)
+//! for the realm's RP ID, verified as the Approval Surface verifies it (verifier name binding,
+//! §10.3.1); it then becomes the `authentication` Claim bound to the statement and the
+//! contribution, and uses the invitation up. A device key's signature alone is never one.
 
 use access_crypto::Secret;
 use access_identity_account::app::vault::reveal_with_kek;
@@ -10,8 +12,10 @@ use access_identity_account::domain::login::Problem;
 use access_identity_account::notify::message::{Address, Body, Message, Prompt};
 use access_identity_account::notify::ports::Notifier;
 use access_identity_oauth::ports::RealmEntry;
-use access_kernel::aas::Act;
+use access_internal_api::approvals::Contribution;
+use access_kernel::aas::{self, Act};
 use access_kernel::assurance;
+use access_kernel::codec::Canonical as _;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_kernel::meta::ExerciseBasis;
 use access_kernel::render;
@@ -21,17 +25,17 @@ use access_store::identity::TenantTx;
 use access_store::idp;
 use serde_json::{Value, json};
 
-use super::approve::{problem, tier_of, unknown_reply};
+use super::approve::{committed, cooled, issue_claim, problem, tier_of, unknown_reply};
 use super::me::{Devices, unavailable};
 use super::{Hosted, Reply};
 use crate::domain::approval::{
     ApprovalPush, Envelope, INVITE_WINDOW_MS, INVITES_PER_HOUR, InlineAnswer, InlineDecision, Kept,
     Pushed, SDK_SURFACE_PROFILE, envelope, inline_answer, requester_party,
 };
-use crate::ports::{Approvals, Kits, Messages, RealmKit};
+use crate::ports::{ApprovalClaims, Approvals, Kits, Messages, RealmKit};
 
 /// `approval-inline-assertion-required`: every check passed, but the answer carries no
-/// phishing-resistant assertion bound to H(AAS) (§10.2, §10.3.1, MD-11).
+/// passkey assertion bound to H(AAS) (§10.2, §10.3.1, MD-11, OP-157 m.17).
 const ASSERTION_REQUIRED: Problem = Problem {
     status: 409,
     code: "approval-inline-assertion-required",
@@ -63,6 +67,20 @@ pub(super) struct Invitation {
 /// §13.7.3, SEC26, TN-100: a notification can carry an approval only up to CT1.
 const fn inline_tier(code: u8) -> bool {
     code <= 1
+}
+
+/// OP-157 m.17: user verification is asked for only when an open term asks for it.
+fn uv_asked(unmet: &[access_kernel::combinator::Unmet]) -> bool {
+    unmet.iter().any(|u| {
+        u.term
+            .assurance
+            .get(access_kernel::assurance::UV)
+            .is_some_and(|level| *level >= 1)
+    })
+}
+
+fn assertion_rejected() -> Reply {
+    problem(401, "assertion-rejected", "The passkey was not accepted")
 }
 
 /// What Access gives the coordinator for ranking (§8.17.11.1, OP-157 m.3 (m)): facts only, never
@@ -297,12 +315,12 @@ where
         Ok(())
     }
 
-    /// `POST /v1/approve/inline` (`approval-inline.cddl`, §13.7.3, SEC26, TN-100).
+    /// `POST /v1/approve/inline` (`approval-inline.cddl`, §13.7.3, SEC26, TN-100, OP-157 m.17).
     #[expect(
         clippy::too_many_lines,
-        reason = "one answer: key, invitation, render, statement, eligibility"
+        reason = "one answer: key, invitation, render, statement, eligibility, assertion"
     )]
-    pub async fn answer_inline<A, I, P: Approvals, Q>(
+    pub async fn answer_inline<A, I, P: Approvals, Q: ApprovalClaims>(
         &self,
         devices: &Devices<A, I, P, Q>,
         entry: &RealmEntry,
@@ -320,6 +338,21 @@ where
         };
         let Ok(answer) = inline_answer(&bytes) else {
             return problem(400, "invalid-request", "The answer does not decode");
+        };
+        let assertion = match &body.assertion {
+            None => None,
+            Some(a) => match super::credential::assertion_parts(
+                &a.credential_id,
+                &a.authenticator_data,
+                &a.client_data_json,
+                &a.signature,
+                a.user_handle.as_deref(),
+            ) {
+                Some(parsed) => Some(parsed),
+                None => {
+                    return problem(400, "invalid-request", "The assertion does not decode");
+                }
+            },
         };
         let found = async {
             let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
@@ -475,8 +508,93 @@ where
             Ok(_) => return problem(403, "approval-not-eligible", "You can't approve this"),
             Err(_) => return unavailable(),
         }
-        // §10.2, §10.3.1, MD-11
-        Reply::problem(ASSERTION_REQUIRED)
+        // §10.2, §10.3.1, MD-11, OP-157 m.17
+        let Some(assertion) = assertion else {
+            return Reply::problem(ASSERTION_REQUIRED);
+        };
+        let (Ok(aas_bytes), Ok(statement)) = (act.to_bytes(), aas::digest(&act)) else {
+            return unavailable();
+        };
+        // OP-156 m.3 (g)
+        if crate::domain::spc::ceremony(assertion.response().client_data_json).as_deref()
+            == Some("payment.get")
+        {
+            return assertion_rejected();
+        }
+        // §10.3.1, OP-157 m.17
+        let verified = match self
+            .assert(
+                &kit,
+                &key.subject,
+                &statement.0,
+                uv_asked(&opening.unmet),
+                &assertion,
+                now,
+            )
+            .await
+        {
+            Ok(v) => v,
+            Err(r) => return r,
+        };
+        // SEC18, §8.13
+        if let Err(r) = cooled(tier, verified.created_ms, now) {
+            return r;
+        }
+        // C30, OP-157 m.17
+        let used = async {
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let used = store::answer_invite(&mut t, &invite.id, "approved", now).await?;
+            t.commit().await?;
+            Ok::<_, access_store::StoreError>(used)
+        };
+        match used.await {
+            Ok(true) => {}
+            Ok(false) => return unknown_reply(),
+            Err(_) => return unavailable(),
+        }
+        let claim = match issue_claim(
+            devices,
+            &kit,
+            key.subject,
+            statement.0,
+            act.instance,
+            &verified,
+            now,
+        )
+        .await
+        {
+            Ok(c) => c,
+            Err(r) => return r,
+        };
+        // §9.14.1 step 4
+        let verdict = devices
+            .approvals
+            .contribute(Contribution {
+                domain: act.domain,
+                nonce: env.nonce.clone(),
+                target: act.target,
+                class: env.class.clone(),
+                basis: env.basis,
+                capacity: env.capacity,
+                validity: env.validity,
+                ais: env.ais.clone(),
+                aas: aas_bytes,
+                claim,
+                pep: devices.pep.clone(),
+            })
+            .await;
+        match committed(verdict) {
+            Ok(exercise) => Reply::json(
+                200,
+                json!({
+                    "decision": "approved",
+                    "exercise": b64url_encode(&exercise.0),
+                    "render_digest": b64url_encode(&act.render_digest.0),
+                    "claim": b64url_encode(&claim.0),
+                }),
+            ),
+            Err(r) => r,
+        }
     }
 }
 
@@ -514,6 +632,37 @@ mod tests {
         assert!(inline_tier(tier_code(Tier::Ct1)));
         assert!(!inline_tier(tier_code(Tier::Ct2)));
         assert!(!inline_tier(tier_code(Tier::Ct3)));
+    }
+
+    // OP-157 m.17
+    #[test]
+    fn user_verification_is_asked_only_by_an_open_term() {
+        use access_kernel::combinator::{Position, Unmet};
+        use access_kernel::model::{
+            Binding, Consumption, Independence, ProofKind, RequirementTerm,
+        };
+        let unmet = |uv: Option<u64>| Unmet {
+            term: RequirementTerm {
+                proof_kind: ProofKind::Contribution,
+                class: String::from("approve"),
+                count: 1,
+                binding: Binding::IntentDigest,
+                freshness_ms: None,
+                independence: Independence::None,
+                consumption: Consumption::Reusable,
+                source: None,
+                assurance: uv
+                    .map(|l| (String::from(access_kernel::assurance::UV), l))
+                    .into_iter()
+                    .collect(),
+            },
+            missing: 1,
+            position: Position::Anchor,
+            satisfiable_by_actor: false,
+        };
+        assert!(!uv_asked(&[]));
+        assert!(!uv_asked(&[unmet(None), unmet(Some(0))]));
+        assert!(uv_asked(&[unmet(None), unmet(Some(1))]));
     }
 
     // A-3, OP-157 m.3 (m)

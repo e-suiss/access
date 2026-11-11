@@ -382,8 +382,9 @@ pub struct BatchItem {
     pub credential: Value,
 }
 
-/// `POST /v1/approve/inline`: the deterministic CBOR the device key signed and its signature
-/// (`approval-inline.cddl`).
+/// `POST /v1/approve/inline`: the deterministic CBOR the device key signed, its signature and,
+/// to approve, the approver's passkey assertion over H(AAS) (`approval-inline.cddl`, OP-157
+/// m.17).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct InlineAnswer {
@@ -391,6 +392,28 @@ pub struct InlineAnswer {
     pub answer: String,
     /// ES256 `r ‖ s` by the device key, base64url.
     pub signature: String,
+    /// The WebAuthn assertion from the app's platform passkey API; an approval without one is
+    /// refused (§10.2, §10.3.1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assertion: Option<InlineAssertion>,
+}
+
+/// A WebAuthn assertion field by field, base64url (`approval-inline-assertion`): its challenge
+/// is H(AAS) and its RP ID the realm's (verifier name binding, §10.3.1).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InlineAssertion {
+    /// `rawId`.
+    pub credential_id: String,
+    /// `response.authenticatorData`.
+    pub authenticator_data: String,
+    /// `response.clientDataJSON`.
+    pub client_data_json: String,
+    /// `response.signature`.
+    pub signature: String,
+    /// `response.userHandle`, when the platform returned one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_handle: Option<String>,
 }
 
 /// An inline answer's decision.
@@ -1225,8 +1248,19 @@ pub fn components() -> Value {
             &json!({
                 "answer": b64_schema("The signed deterministic CBOR approval-inline-answer."),
                 "signature": b64_schema("ES256 raw r‖s by the approver device key."),
+                "assertion": { "$ref": "#/components/schemas/InlineAssertion" },
             }),
             &["answer", "signature"],
+        ),
+        "InlineAssertion": object(
+            &json!({
+                "credential_id": b64_schema("rawId of the approver's registered passkey in the realm."),
+                "authenticator_data": b64_schema("response.authenticatorData; its RP ID hash is the realm's RP ID and UP is set."),
+                "client_data_json": b64_schema("response.clientDataJSON; type webauthn.get, challenge H(AAS)."),
+                "signature": b64_schema("response.signature."),
+                "user_handle": b64_schema("response.userHandle, when the platform returned one."),
+            }),
+            &["credential_id", "authenticator_data", "client_data_json", "signature"],
         ),
         "ApprovalStart": object(
             &json!({
@@ -1377,14 +1411,14 @@ pub fn paths(paths: &mut Map<String, Value>) {
         INLINE_PATH.to_owned(),
         json!({ "post": {
             "operationId": "answerInlineApproval",
-            "summary": "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded, and an approval is refused with approval-inline-assertion-required because a device key is no phishing-resistant assertion (§10.2, §10.3.1); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m), §13.7.3, SEC26).",
+            "summary": "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded; an approval carries the approver's passkey assertion over H(AAS) for the realm's RP ID, verified like a sign-in, and is recorded as a contribution; without one it is refused with approval-inline-assertion-required (§10.2, §10.3.1); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m), m.17, §13.7.3, SEC26).",
             "parameters": [idempotency()],
             "requestBody": body("InlineAnswer"),
             "responses": {
-                "200": { "description": "The refusal was recorded." },
-                "401": problem("approver-unknown: not an activated approver key, or a signature that does not verify."),
+                "200": { "description": "The refusal was recorded, or the approval was recorded as a contribution: decision, and for an approval exercise, render_digest and claim." },
+                "401": problem("approver-unknown: not an activated approver key, or a signature that does not verify; assertion-rejected: the passkey assertion is not the approver's, or its RP ID, challenge, user presence or required user verification does not verify."),
                 "404": problem("approval-request-unknown: no invitation for this device, or it was answered already."),
-                "409": problem("approval-inline-off: the channel is closed or the request is above CT1; approval-inline-assertion-required: the answer is valid but carries no phishing-resistant assertion; or the render or the request changed."),
+                "409": problem("approval-inline-off: the channel is closed or the request is above CT1; approval-inline-assertion-required: the answer is valid but carries no passkey assertion; or the render or the request changed."),
                 "503": problem("Temporarily unavailable."),
             },
         }}),

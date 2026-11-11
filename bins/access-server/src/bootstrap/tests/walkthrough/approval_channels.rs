@@ -1,11 +1,12 @@
-//! The approval channels on the real server (OP-157 m.3 (m), §13.7.3, SEC26, TN-100,
+//! The approval channels on the real server (OP-157 m.3 (m), m.17, §13.7.3, SEC26, TN-100,
 //! §8.17.6.3, §8.17.11.4, X-L7): a CT1 request goes to the registered approver device with its
-//! whole render and is approved there with the device key over H(AAS); other tiers get only an
-//! invitation; one invitation per approver and intent, five an hour from a requester, then 429; a
+//! whole render and is approved there with the approver's passkey assertion over H(AAS), the
+//! device key's statement alone never counting; other tiers get only an invitation; one invitation per approver and intent, five an hour from a requester, then 429; a
 //! batch is at most ten requests of one requester and one action, each with its own statement and
 //! contribution, and a domain's `approval_surfaces` decide which statements count.
 
 use access_identity_admin::domain::Change;
+use access_identity_webauthn::domain::software::{SoftwareAuthenticator, client_data};
 use access_kernel::aas::ApprovalAct;
 use access_kernel::combinator::Capacity;
 use access_kernel::model::{Binding, Consumption, Independence, ProofKind, RequirementTerm};
@@ -15,16 +16,21 @@ use access_local_client::login::{Jar, post_json};
 use access_local_client::passkey::{Passkey, relying_party};
 use access_sdk::agent::contract::{Proof, Step};
 use access_sdk::approver::inline::{
-    InlineRequest, StatementFacts, answer_body, approve_to_be_signed, deny_to_be_signed, statement,
+    InlineRequest, PasskeyAssertion, StatementFacts, answer_body, approve_body,
+    approve_to_be_signed, deny_to_be_signed, passkey_challenge, statement,
 };
 use access_sdk::approver::{registration_body, registration_message, thumbprint, to_raw_signature};
 use access_store::authority::read_head;
 use access_store::scope::DomainId;
 use serde_json::Value;
 use suiss_crypto::cose::PublicKey as CosePublicKey;
-use suiss_crypto::signer::SoftSigner;
+use suiss_crypto::signer::{Signer, SoftSigner};
 
 use super::*;
+
+/// WebAuthn authenticator data flags (WebAuthn L3 §6.1): user present, user verified.
+const UP: u8 = 0x01;
+const UV: u8 = 0x04;
 
 /// A device signing `approval-inline` answers: the approver key, activated in the store.
 struct Phone {
@@ -189,6 +195,96 @@ impl Desk {
         .len()
     }
 
+    /// Another active account of the realm with a registered passkey of its own, as the
+    /// registration ceremony stores one: the key that answers for it.
+    async fn someone_elses_passkey(&self) -> SoftSigner {
+        use access_identity_account::adapters::pg::PgAccounts;
+        use access_identity_account::app::Actor;
+        use access_identity_account::app::accounts::{change_status, create};
+        use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
+        use access_identity_account::domain::status::AccountStatus;
+        use access_identity_oauth::adapters::PgDirectory;
+        use access_identity_oauth::ports::Directory as _;
+        use access_identity_session::adapters::passkeys::PgPasskeys;
+        use access_identity_session::domain::session::SessionPolicy;
+        use access_identity_ui::ports::Kits as _;
+        use access_identity_webauthn::domain::cose::CoseAlgorithm;
+        use access_identity_webauthn::domain::credential::{AttestationKind, CredentialRecord};
+        use access_identity_webauthn::domain::ids::{CredentialId, UserHandle};
+        use access_identity_webauthn::domain::software::SOFTWARE_AAGUID;
+        use access_identity_webauthn::ports::CredentialRegistry as _;
+
+        use crate::login::{HsmKits, RealmKeks};
+
+        const WHO: Actor<'static> = Actor {
+            actor: "test",
+            correlation: "test",
+        };
+        let entry = PgDirectory::new(self.w.db.router.clone())
+            .by_slug("acme")
+            .await
+            .unwrap()
+            .unwrap();
+        let kits = HsmKits::new(
+            RealmKeks::new(Arc::clone(&self.w.keys)),
+            self.w.db.router.clone(),
+            self.w.db.app.clone(),
+            SessionPolicy::DEFAULT,
+        );
+        let kit = kits.kit(&entry).await.unwrap();
+        let pg = PgAccounts::sealed(self.w.db.app.clone(), kit.vault());
+        let realm = kit.realm();
+        let id = Identifier::new(IdentifierKind::Email, "q@acme.test").unwrap();
+        let q = create(&pg, &realm, &[id], &WHO).await.unwrap();
+        for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
+            change_status(&pg, &realm, q, to, &WHO).await.unwrap();
+        }
+        let mut handle = [0_u8; 64];
+        for half in handle.chunks_mut(32) {
+            half.copy_from_slice(&access_crypto::random::bytes::<32>().unwrap());
+        }
+        let mut t = TenantTx::begin(&self.w.db.app, kit.tenant, kit.realm)
+            .await
+            .unwrap();
+        assert!(t.insert_user_handle(q, &handle).await.unwrap());
+        t.commit().await.unwrap();
+        let (key, _) = SoftSigner::generate_ed25519().unwrap();
+        let CosePublicKey::Ed25519(public) = key.public_key() else {
+            panic!("ed25519")
+        };
+        let authenticator = SoftwareAuthenticator::ed25519(public);
+        let now_s = server_time(&self.w.db.app).await.unwrap() / 1_000;
+        PgPasskeys {
+            pool: &self.w.db.app,
+            tenant: kit.tenant,
+            kek: &*kit.kek,
+            ids: &kit.ids,
+        }
+        .insert(&CredentialRecord {
+            realm: kit.rp.realm,
+            id: CredentialId::new(&authenticator.credential_id).unwrap(),
+            user: UserHandle::from_bytes(handle),
+            public_key: authenticator.cose_key(),
+            alg: CoseAlgorithm::EdDsa,
+            sign_count: 0,
+            backup_eligible: false,
+            backup_state: false,
+            user_verified: true,
+            aaguid: SOFTWARE_AAGUID,
+            transports: vec![String::from("internal")],
+            attestation: AttestationKind::None,
+            cred_protect: None,
+            discoverable: None,
+            prf: None,
+            created_at: now_s,
+            last_used_at: None,
+            deleted_at: None,
+        })
+        .await
+        .unwrap();
+        key
+    }
+
     /// The statement the approver device signs for `request`.
     async fn inline_statement(
         &self,
@@ -229,6 +325,61 @@ fn inline_request(intent: &Value) -> (InlineRequest, render::Render) {
             expires_at_ms: u64::MAX,
         },
         shown,
+    )
+}
+
+/// The assertion an app's platform passkey API returns for `key` over `challenge`, at the
+/// realm's origin with `rp_id` and the authenticator data `flags`.
+fn platform_assertion(
+    d: &Desk,
+    key: &dyn Signer,
+    rp_id: &str,
+    challenge: &[u8],
+    flags: u8,
+) -> PasskeyAssertion {
+    let CosePublicKey::Ed25519(public) = key.public_key() else {
+        panic!("ed25519")
+    };
+    let authenticator = SoftwareAuthenticator::ed25519(public);
+    let (_, origin) = relying_party(&d.user.issuer).unwrap();
+    let mut authenticator_data = authenticator.authenticator_data(rp_id, false);
+    authenticator_data[32] = flags;
+    let client_data_json = client_data("webauthn.get", challenge, &origin);
+    let mut message = authenticator_data.clone();
+    message.extend_from_slice(&access_crypto::webauthn::sha256(&client_data_json));
+    PasskeyAssertion {
+        credential_id: authenticator.credential_id.to_vec(),
+        authenticator_data,
+        client_data_json,
+        signature: key.sign(&message).unwrap(),
+        user_handle: None,
+    }
+}
+
+/// Posts the device's signed approval with the passkey `assertion`.
+async fn approve_with(
+    d: &Desk,
+    phone: &Phone,
+    signed: &[u8],
+    assertion: &PasskeyAssertion,
+) -> (u16, Value) {
+    let signature = to_raw_signature(&phone.key.sign(signed).unwrap()).unwrap();
+    let mut browser = Jar::default();
+    let answered = post_json(
+        &d.http,
+        &format!("{}/v1/approve/inline", d.user.issuer),
+        &mut browser,
+        Some(serde_json::from_str::<Value>(&approve_body(signed, &signature, assertion)).unwrap()),
+    )
+    .await
+    .unwrap();
+    (answered.status, answered.json())
+}
+
+fn exercise_of(v: &Value) -> Digest {
+    Digest(
+        <[u8; 32]>::try_from(access_kernel::json::b64url_decode(v.as_str().unwrap()).unwrap())
+            .unwrap(),
     )
 }
 
@@ -295,7 +446,146 @@ async fn a_valid_device_statement_is_refused_and_records_nothing() {
     d.close().await;
 }
 
-// §13.7.3, SEC26, TN-100, OP-157 m.3 (m), Ek B 5477, 5499, 5631
+// §10.2, §10.3.1, MD-11, SEC26, TN-100, §13.7.3, §8.17.6.3, OP-157 m.3 (m), m.17, C30, Ek B 5477, 5499, 5631
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_ct1_approval_from_the_notification_counts_only_with_the_approvers_passkey_over_h_aas() {
+    let d = Desk::open("v7b-inline", false).await;
+    let phone = d.phone().await;
+    let (_, held) = d.agent_grant().await;
+    let intent = d.intent_json("main").await;
+    let mut ex = d.exercise(&intent, held);
+    assert!(matches!(d.ask(&mut ex), Step::Wait(_)));
+    d.root_change(Change::ApprovalInline(true)).await;
+    let (status, pushed, env) = d.push_waiting(&ex, &intent, |_| {}).await;
+    assert_eq!(status, 201, "{pushed}");
+    assert_eq!(d.inline_sent().await, 1);
+    let (request, shown) = inline_request(&intent);
+    let act = d.inline_statement(&request, &env, &shown).await;
+    let signed = approve_to_be_signed(&request, &act, &phone.print);
+    let challenge = passkey_challenge(&act).unwrap();
+    let mut later = act.clone();
+    later.expires_at -= 1;
+    let elsewhere = passkey_challenge(&later).unwrap();
+    let passkey = d.token.signer(local::TEST_PASSKEY_LABEL).unwrap();
+    let (rp_id, _) = relying_party(&d.user.issuer).unwrap();
+    let (stranger, _) = SoftSigner::generate_ed25519().unwrap();
+    let other = d.someone_elses_passkey().await;
+    let before = d.log_head().await;
+
+    // §10.2, MD-11
+    let (status, body) = answer(&d, &phone, &signed).await;
+    assert_eq!(
+        (status, body["code"].as_str()),
+        (409, Some("approval-inline-assertion-required")),
+        "{body}"
+    );
+    // §10.3.1, OP-157 m.17
+    for (why, assertion) in [
+        (
+            "another RP ID",
+            platform_assertion(&d, &passkey, "elsewhere.test", &challenge, UP | UV),
+        ),
+        (
+            "a challenge that is not H(AAS)",
+            platform_assertion(&d, &passkey, &rp_id, &elsewhere, UP | UV),
+        ),
+        (
+            "no user presence",
+            platform_assertion(&d, &passkey, &rp_id, &challenge, UV),
+        ),
+        (
+            "an unregistered passkey",
+            platform_assertion(&d, &stranger, &rp_id, &challenge, UP | UV),
+        ),
+        (
+            "another person's passkey",
+            platform_assertion(&d, &other, &rp_id, &challenge, UP | UV),
+        ),
+    ] {
+        let (status, body) = approve_with(&d, &phone, &signed, &assertion).await;
+        assert_eq!(
+            (status, body["code"].as_str()),
+            (401, Some("assertion-rejected")),
+            "{why}: {body}"
+        );
+    }
+    assert_eq!(
+        d.log_head().await,
+        before,
+        "a refused answer records nothing"
+    );
+    assert!(matches!(d.ask(&mut ex), Step::Wait(_)));
+
+    // OP-157 m.17
+    let good = platform_assertion(&d, &passkey, &rp_id, &challenge, UP);
+    let (status, body) = approve_with(&d, &phone, &signed, &good).await;
+    assert_eq!(
+        (status, body["decision"].as_str()),
+        (200, Some("approved")),
+        "{body}"
+    );
+    assert!(d.log_head().await > before, "the contribution is recorded");
+    ex.prove(Proof::Contribution(exercise_of(&body["exercise"])))
+        .unwrap();
+    assert!(matches!(d.ask(&mut ex), Step::Proceed(_)));
+
+    // C30
+    let at = d.log_head().await;
+    let (status, body) = approve_with(&d, &phone, &signed, &good).await;
+    assert_eq!(
+        (status, body["code"].as_str()),
+        (404, Some("approval-request-unknown")),
+        "{body}"
+    );
+    assert_eq!(d.log_head().await, at);
+    d.close().await;
+}
+
+// §10.3.1, §13.7.3, OP-157 m.17, Ek B 5477, 5631
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_open_term_that_asks_for_user_verification_refuses_a_presence_only_assertion() {
+    let d = Desk::open("v7b-inline-uv", false).await;
+    let phone = d.phone().await;
+    let mut term = surface_term();
+    term.independence = Independence::None;
+    term.assurance
+        .insert(String::from(access_kernel::assurance::UV), 1);
+    let held = d.agent_grant_needing(term).await;
+    let intent = d.intent_json("main").await;
+    let mut ex = d.exercise(&intent, held);
+    assert!(matches!(d.ask(&mut ex), Step::Wait(_)));
+    d.root_change(Change::ApprovalInline(true)).await;
+    let (status, pushed, env) = d.push_waiting(&ex, &intent, |_| {}).await;
+    assert_eq!(status, 201, "{pushed}");
+    let (request, shown) = inline_request(&intent);
+    let act = d.inline_statement(&request, &env, &shown).await;
+    let signed = approve_to_be_signed(&request, &act, &phone.print);
+    let challenge = passkey_challenge(&act).unwrap();
+    let passkey = d.token.signer(local::TEST_PASSKEY_LABEL).unwrap();
+    let (rp_id, _) = relying_party(&d.user.issuer).unwrap();
+    let before = d.log_head().await;
+    let presence = platform_assertion(&d, &passkey, &rp_id, &challenge, UP);
+    let (status, body) = approve_with(&d, &phone, &signed, &presence).await;
+    assert_eq!(
+        (status, body["code"].as_str()),
+        (401, Some("assertion-rejected")),
+        "{body}"
+    );
+    assert_eq!(d.log_head().await, before);
+    let verified = platform_assertion(&d, &passkey, &rp_id, &challenge, UP | UV);
+    let (status, body) = approve_with(&d, &phone, &signed, &verified).await;
+    assert_eq!(
+        (status, body["decision"].as_str()),
+        (200, Some("approved")),
+        "{body}"
+    );
+    ex.prove(Proof::Contribution(exercise_of(&body["exercise"])))
+        .unwrap();
+    assert!(matches!(d.ask(&mut ex), Step::Proceed(_)));
+    d.close().await;
+}
+
+// §13.7.3, SEC26, TN-100, OP-157 m.3 (m), m.17, Ek B 5477, 5499, 5631
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_ct2_request_is_only_invited_and_cannot_be_answered_from_a_notification() {
     let d = Desk::open("v7-inline-ct2", false).await;
@@ -327,6 +617,22 @@ async fn a_ct2_request_is_only_invited_and_cannot_be_answered_from_a_notificatio
     let signed = approve_to_be_signed(&request, &act, &phone.print);
     let before = d.log_head().await;
     let (status, body) = answer(&d, &phone, &signed).await;
+    assert_eq!(
+        (status, body["code"].as_str()),
+        (409, Some("approval-inline-off")),
+        "{body}"
+    );
+    // OP-157 m.17
+    let passkey = d.token.signer(local::TEST_PASSKEY_LABEL).unwrap();
+    let (rp_id, _) = relying_party(&d.user.issuer).unwrap();
+    let assertion = platform_assertion(
+        &d,
+        &passkey,
+        &rp_id,
+        &passkey_challenge(&act).unwrap(),
+        UP | UV,
+    );
+    let (status, body) = approve_with(&d, &phone, &signed, &assertion).await;
     assert_eq!(
         (status, body["code"].as_str()),
         (409, Some("approval-inline-off")),

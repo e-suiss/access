@@ -114,6 +114,40 @@ pub(crate) fn assertion(text: &str) -> Option<Assertion> {
     })
 }
 
+/// An assertion an app's platform passkey API returned, field by field (base64url), as the
+/// approver SDK carries it (OP-157 m.17).
+pub(crate) fn assertion_parts(
+    credential_id: &str,
+    authenticator_data: &str,
+    client_data_json: &str,
+    signature: &str,
+    user_handle: Option<&str>,
+) -> Option<Assertion> {
+    let total = [
+        credential_id,
+        authenticator_data,
+        client_data_json,
+        signature,
+    ]
+    .iter()
+    .map(|f| f.len())
+    .sum::<usize>()
+    .checked_add(user_handle.map_or(0, str::len))?;
+    if total > MAX_LEN {
+        return None;
+    }
+    Some(Assertion {
+        raw_id: bytes(credential_id)?,
+        client_data_json: bytes(client_data_json)?,
+        authenticator_data: bytes(authenticator_data)?,
+        signature: bytes(signature)?,
+        user_handle: match user_handle {
+            Some(h) => Some(bytes(h)?),
+            None => None,
+        },
+    })
+}
+
 /// A registration from `navigator.credentials.create()`.
 pub(crate) fn registration(text: &str) -> Option<Registration> {
     let raw = parse(text)?;
@@ -149,5 +183,24 @@ mod tests {
         assert!(assertion(&ok.replace(r#""signature":"Aw""#, r#""x":"y""#)).is_none());
         assert!(assertion(&format!("{ok}{}", " ".repeat(MAX_LEN))).is_none());
         assert!(registration(ok).is_none());
+    }
+
+    // CR-10, OP-157 m.17
+    #[test]
+    fn an_assertion_in_fields_is_bounded_and_decoded() {
+        let a = assertion_parts("AQ", "Ag", "Aw", "BA", Some("BQ")).unwrap();
+        let r = a.response();
+        assert_eq!(
+            (
+                r.raw_id,
+                r.authenticator_data,
+                r.client_data_json,
+                r.signature
+            ),
+            (&[1][..], &[2][..], &[3][..], &[4][..])
+        );
+        assert_eq!(r.user_handle, Some(&[5][..]));
+        assert!(assertion_parts("AQ", "Ag", "Aw", "B!", None).is_none());
+        assert!(assertion_parts(&"A".repeat(MAX_LEN), "Ag", "Aw", "BA", None).is_none());
     }
 }
