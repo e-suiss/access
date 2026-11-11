@@ -359,6 +359,10 @@ where
     /// `POST /v1/approve/flows` (§9.14.1 A step 2): the signed-in approver opens the pushed
     /// request; the statement is built from the render the decision point kept and the
     /// approver's device Instance whose key signed the contribution.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one opening: faithful render, bodies, eligibility, approver, statement, options"
+    )]
     pub async fn start_approval<A, I, P: Approvals, Q>(
         &self,
         devices: &Devices<A, I, P, Q>,

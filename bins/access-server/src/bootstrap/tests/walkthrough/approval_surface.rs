@@ -218,7 +218,7 @@ async fn the_page_shows_the_bound_render_with_capacity_needs_and_effect() {
     d.close().await;
 }
 
-// SA-54, §14.9, §9.4 G, OP-157 m.3 (l), Ek B 5602
+// SA-54, §14.9, OP-157 m.3 (l), Ek B 5602
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_approval_is_bound_to_the_recipient_and_the_values_it_showed() {
     let d = Desk::open("v6-linking", false).await;
@@ -327,7 +327,7 @@ async fn a_viewer_outside_the_eligible_set_gets_no_button() {
         s["render"]["blocked"],
         "You can't approve this. Who can approve it isn't shown to you."
     );
-    assert!(!s["render"]["fields"].as_array().unwrap().is_empty());
+    assert_ne!(s["render"]["fields"], json!([]));
     d.close().await;
 }
 
@@ -351,7 +351,7 @@ async fn an_unaccepted_schema_or_a_body_that_does_not_match_closes_the_approval(
         s["render"]["blocked"],
         "This request can't be displayed faithfully here; it can't be approved from this surface"
     );
-    assert!(s["render"]["fields"].as_array().unwrap().is_empty());
+    assert_eq!(s["render"]["fields"], json!([]));
 
     let envelope = access_local_client::intent::parse(&intent).unwrap();
     let encoded = b64url_encode(&envelope.to_bytes().unwrap());

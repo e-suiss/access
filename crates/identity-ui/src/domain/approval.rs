@@ -1384,7 +1384,7 @@ mod tests {
             "approve",
             &viewer,
         );
-        assert!(other.lines.is_empty());
+        assert_eq!(other.lines, Vec::<String>::new());
         for id in TextId::ALL {
             assert!(
                 !id.default_text().to_lowercase().contains("independent"),

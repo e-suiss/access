@@ -4,6 +4,16 @@
 //! surface's check of what it shows against the statement. `ACCESS_UPDATE_VECTORS=1` rewrites
 //! the file; F0 recomputes every case (`just f0`).
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::too_many_lines,
+    clippy::needless_pass_by_value,
+    clippy::similar_names,
+    reason = "test code; the request-path lints (OP-3) do not apply"
+)]
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
@@ -165,7 +175,6 @@ fn reencoded(mut r: render::Render, change: impl FnOnce(&mut render::Render)) ->
     render::encode(&r).unwrap()
 }
 
-#[expect(clippy::too_many_lines, reason = "one vector file, case by case")]
 fn document() -> Value {
     let s = schema();
     let paid = intent(48_500, 0x41);
