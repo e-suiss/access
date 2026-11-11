@@ -809,6 +809,7 @@ impl Env {
             writes: vec![],
             draws: vec![],
             single_use: vec![],
+            beside: vec![],
             effects: vec![],
         };
         commit_batch(&self.db.sequencer, &domain, *tenant.as_bytes(), &batch)
@@ -4810,6 +4811,7 @@ impl Env {
             writes: vec![],
             draws: vec![],
             single_use: vec![],
+            beside: vec![],
             effects: vec![],
         };
         commit_batch(

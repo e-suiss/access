@@ -156,7 +156,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             );
             v.open_offline_paps = long(self.reader.open_offline(&a.instance, now).await?);
         }
-        v.unreported_contracts = i64::from(self.reader.unreported_overdue(&inc.pep, now).await?);
+        // SEC14
+        v.unreported_contracts = long(self.reader.unreported_overdue(&inc.pep, now).await?);
         let cited: Vec<Vec<u8>> = resolved
             .proofs
             .iter()

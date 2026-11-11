@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"n!\" FROM access.projection_contract c\n          WHERE c.domain_id = $1 AND $2 = ANY(c.audiences) AND c.variant = 'checkpointed-offline'\n            AND c.horizon_ms + $4 < $3\n            AND NOT EXISTS (SELECT 1 FROM access.offline_report r\n                             WHERE r.domain_id = c.domain_id AND r.exercise_id = c.exercise_id)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7735641e148a524169ccf25ae0ffc0e626a5dfd203c30c1a32e1fc3e67859de0"
+}

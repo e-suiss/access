@@ -255,6 +255,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 writes: Vec::new(),
                 draws: Vec::new(),
                 single_use: Vec::new(),
+                beside: Vec::new(),
             });
         }
         Ok(out)

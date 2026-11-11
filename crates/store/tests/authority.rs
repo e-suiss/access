@@ -84,6 +84,7 @@ fn batch(epoch: u64, after: &HeadRow, seed: u8) -> CommitBatch {
         writes: vec![],
         draws: vec![],
         single_use: vec![],
+        beside: vec![],
         effects: vec![],
     }
 }

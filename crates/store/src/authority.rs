@@ -102,6 +102,22 @@ pub struct Draw {
     pub draw: u64,
 }
 
+/// A SYNC-DERIVED row a record writes with it, in its commit (§16.5.1).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Beside {
+    /// The record ends this holder Instance: its live projection families are revoked at the
+    /// record (§9.9.3 k.6, G43).
+    HolderEnded([u8; 16]),
+    /// The contract of an allowed `projection.issue`, at the record (SI-7, §9.12.2).
+    Contract(Box<crate::offline::ContractRow>),
+    /// An admitted Offline Exercise Report at the record: the report when its chain verifies,
+    /// and what it came to (L2-RPT-2, §7.9.4.1).
+    Report(
+        Option<Box<crate::offline::ReportRow>>,
+        Box<crate::offline::ReconciliationRow>,
+    ),
+}
+
 /// Everything one batch writes, in one transaction.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommitBatch {
@@ -130,6 +146,8 @@ pub struct CommitBatch {
     /// State effects (L2-REC-3): key, the position that sets it and its canonical value,
     /// `None` to remove it. Each also bumps the key's version.
     pub effects: Vec<(Vec<u8>, u64, Option<Vec<u8>>)>,
+    /// SYNC-DERIVED rows, with the position of the record that writes each.
+    pub beside: Vec<(u64, Beside)>,
 }
 
 /// A key of the current state (L2-REC-3).
@@ -506,7 +524,61 @@ pub async fn commit_batch(
     let tenant = sqlx::types::Uuid::from_bytes(tenant);
     side_rows(&mut t, tenant, batch).await?;
     sync_derived(&mut t, tenant, batch).await?;
+    beside_rows(&mut t, batch).await?;
     t.commit().await
+}
+
+/// The SYNC-DERIVED rows of a batch (§16.5.1): a holder's end with the revocation of its
+/// families, contracts and reports, each at the position of its record (G43, SI-7).
+async fn beside_rows(t: &mut DomainTx, batch: &CommitBatch) -> Result<(), StoreError> {
+    let id = t.domain.as_bytes().to_vec();
+    for (pos, row) in &batch.beside {
+        match row {
+            Beside::HolderEnded(holder) => {
+                // G43, §9.9.3 k.6
+                sqlx::query!(
+                    "INSERT INTO access.holder_end (domain_id, pos, holder_id) VALUES ($1, $2, $3)
+                     ON CONFLICT DO NOTHING",
+                    id.as_slice(),
+                    signed(*pos)?,
+                    holder.as_slice(),
+                )
+                .execute(&mut *t.tx)
+                .await?;
+                sqlx::query!(
+                    "UPDATE access.projection_family SET revoked_at = now(), revoked_pos = $3
+                      WHERE domain_id = $1 AND holder_id = $2 AND revoked_at IS NULL",
+                    id.as_slice(),
+                    holder.as_slice(),
+                    signed(*pos)?,
+                )
+                .execute(&mut *t.tx)
+                .await?;
+            }
+            Beside::Contract(c) => {
+                let c = crate::offline::ContractRow {
+                    pos: *pos,
+                    ..(**c).clone()
+                };
+                crate::offline::insert_contract_in(t, &c).await?;
+            }
+            Beside::Report(report, reconciliation) => {
+                if let Some(r) = report {
+                    let r = crate::offline::ReportRow {
+                        pos: *pos,
+                        ..(**r).clone()
+                    };
+                    crate::offline::insert_report_in(t, &r).await?;
+                }
+                let r = crate::offline::ReconciliationRow {
+                    pos: *pos,
+                    ..(**reconciliation).clone()
+                };
+                crate::offline::insert_reconciliation_in(t, &r).await?;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Nonces, outbox events and proof bytes of a batch.

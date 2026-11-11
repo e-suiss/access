@@ -148,27 +148,18 @@ where
             .now()
             .await
             .map_err(|_| CoreError::Unavailable("time"))?;
-        let mut result = led.core.ingest(sub, now).await;
-        // §9.9.3 k.6, P50
-        if let Ok(done) = &result
-            && let (ClaimVerdict::Admitted { position, .. }, false) =
-                (&done.verdict, done.ended.is_empty())
-        {
-            let pos = *position;
-            for holder in &done.ended {
-                if let Err(e) = crate::status::adapters::revoke_holder(
-                    &self.setup.sequencer,
-                    sub.domain,
-                    &holder.0,
-                    pos,
+        // SI-7, §16.5.1, OP-158 m.17 (g)
+        let reported = match sub.body.as_deref() {
+            Some(body) if super::reconcile::is_report(body) => {
+                let claim = access_kernel::claim::claim_id(&sub.claim);
+                Some(
+                    super::reconcile::prepare(&self.setup.app, sub.domain, claim, body, now)
+                        .await?,
                 )
-                .await
-                {
-                    result = Err(e);
-                    break;
-                }
             }
-        }
+            _ => None,
+        };
+        let mut result = led.core.ingest_with(sub, now, reported).await;
         // §9.12.1, §7.9.4.1
         if let Ok(done) = &result
             && let ClaimVerdict::Admitted {
@@ -183,15 +174,6 @@ where
                     self.keep_profile(sub.domain, (*position, *claim), body, done.until)
                         .await
                 }
-                "offline_exercise_report" => super::reconcile::reconcile(
-                    (&self.setup.sequencer, &self.setup.app),
-                    sub.domain,
-                    (*position, *claim),
-                    body,
-                    now,
-                )
-                .await
-                .map(|_| ()),
                 // EI-5, OP-156 m.3 (t)
                 crate::app::commitment::CLASS => {
                     self.keep_termination(sub.domain, done, (*position, *claim), body)

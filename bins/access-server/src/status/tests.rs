@@ -58,6 +58,7 @@ async fn append(db: &TestDb, d: &DomainId, pos: u64) {
         writes: vec![],
         draws: vec![],
         single_use: vec![],
+        beside: vec![],
         effects: vec![],
     };
     commit_batch(&db.sequencer, d, TENANT, &batch)

@@ -67,6 +67,7 @@ fn item(kind: RecordKind, fields: Vec<(&str, Value)>, nonce: Option<NonceUse>) -
         writes: Vec::new(),
         draws: Vec::new(),
         single_use: Vec::new(),
+        beside: Vec::new(),
     }
 }
 

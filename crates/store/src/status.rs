@@ -265,7 +265,8 @@ pub async fn list(
 /// entries agree. `None` for a domain without a head.
 ///
 /// # Errors
-/// [`StoreError`].
+/// [`StoreError`]; [`StoreError::Stale`] while an end of a holder at or before the head leaves
+/// one of its families on the list live: no list is built that would leave its bit out (G43).
 pub async fn snapshot(
     pool: &PgPool,
     domain: &DomainId,
@@ -277,7 +278,13 @@ pub async fn snapshot(
                 array(SELECT f.status_idx FROM access.projection_family f
                        WHERE f.domain_id = $1 AND f.status_uri = $2
                          AND f.revoked_pos IS NOT NULL AND f.revoked_pos <= h.pos
-                       ORDER BY f.status_idx) AS \"revoked!: Vec<Option<i64>>\"
+                       ORDER BY f.status_idx) AS \"revoked!: Vec<Option<i64>>\",
+                EXISTS (SELECT 1 FROM access.holder_end e
+                          JOIN access.projection_family f
+                            ON f.domain_id = e.domain_id AND f.holder_id = e.holder_id
+                         WHERE e.domain_id = $1 AND e.pos <= h.pos AND f.status_uri = $2
+                           AND f.revoked_at IS NULL AND f.created_at <= e.created_at)
+                  AS \"pending!\"
            FROM access.domain_head h WHERE h.domain_id = $1",
         domain.as_bytes().as_slice(),
         uri,
@@ -285,6 +292,10 @@ pub async fn snapshot(
     .fetch_optional(&mut *t.tx)
     .await?;
     t.commit().await?;
+    // G43, OP-158 m.17 (g)
+    if row.as_ref().is_some_and(|r| r.pending) {
+        return Err(StoreError::Stale);
+    }
     row.map(|r| {
         Ok(Snapshot {
             pos: unsigned(r.pos)?,

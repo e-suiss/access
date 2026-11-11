@@ -1,0 +1,55 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT h.pos, h.recorded_at,\n                array(SELECT f.status_idx FROM access.projection_family f\n                       WHERE f.domain_id = $1 AND f.status_uri = $2\n                         AND f.revoked_pos IS NOT NULL AND f.revoked_pos <= h.pos\n                       ORDER BY f.status_idx) AS \"revoked!: Vec<Option<i64>>\",\n                EXISTS (SELECT 1 FROM access.holder_end e\n                          JOIN access.projection_family f\n                            ON f.domain_id = e.domain_id AND f.holder_id = e.holder_id\n                         WHERE e.domain_id = $1 AND e.pos <= h.pos AND f.status_uri = $2\n                           AND f.revoked_at IS NULL AND f.created_at <= e.created_at)\n                  AS \"pending!\"\n           FROM access.domain_head h WHERE h.domain_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.domain_head",
+            "name": "pos"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "recorded_at",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.domain_head",
+            "name": "recorded_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "revoked!: Vec<Option<i64>>",
+        "type_info": "Int8Array",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "pending!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "d37b2229e1f3d83cc3fa9a8d3d7b82c3f682410dd75540c2da9d9c1c0fa99154"
+}

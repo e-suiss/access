@@ -22,7 +22,7 @@ use access_kernel::meta::{self, Actor, ExerciseState, InstanceState, Payload, ki
 use access_kernel::model::{AuthoritySet, Id, RequirementTerm, ResourceRef, SubjectSelector};
 use access_kernel::record::{Opened, RecordEnvelope, RecordKind};
 use access_kernel::verify::cose;
-use access_store::authority::{Draw, Renewal};
+use access_store::authority::{Beside, Draw, Renewal};
 use suiss_crypto::dcbor::{self, Limits, Value};
 
 use crate::CoreError;
@@ -1665,6 +1665,13 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         for _ in 0..MAX_RETRIES {
             let head = self.leader.head().pos;
             let mut resolved = self.resolve(req, actor.map(|a| a.party), now, head).await?;
+            // TI-4, §16.5.2, OP-158 m.17 (g)
+            if self.past.is_none() {
+                for key in projection::verifier_keys(&inc.pep, req) {
+                    let version = self.reader.version(&key).await?;
+                    resolved.reads.push((key, version));
+                }
+            }
             self.rebind(req, actor, &digest, &mut resolved, now).await?;
             let compromised = match self.compromised(actor, now).await? {
                 Some(c) => Some(c),
@@ -1756,6 +1763,21 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             // OP-157 m.3 (r), C18
             if allowed && let Some(decision) = items.last_mut() {
                 decision.proofs.extend(bodies.iter().cloned());
+            }
+            // G43, SI-7, §9.9.3 k.6, §16.5.1, OP-158 m.17 (g)
+            if let Some(decision) = items.last_mut() {
+                let ended = derived
+                    .ended_by_claims
+                    .iter()
+                    .chain(derived.ended.iter().filter(|_| allowed));
+                decision
+                    .beside
+                    .extend(ended.map(|h| Beside::HolderEnded(h.0)));
+                if allowed && let Some((_, payload)) = &pap {
+                    let (row, keys) = projection::contract_row(&inc.pep, payload)?;
+                    decision.beside.push(Beside::Contract(Box::new(row)));
+                    decision.writes.extend(keys);
+                }
             }
             match self.leader.commit(now, &items).await {
                 Ok(Committed::Appended(positions)) => {
@@ -1870,6 +1892,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     })
                     .collect(),
                 single_use: Vec::new(),
+                beside: Vec::new(),
             });
         }
         Ok(out)
@@ -1911,6 +1934,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             writes: Vec::new(),
             draws: Vec::new(),
             single_use: Vec::new(),
+            beside: Vec::new(),
         })
     }
 
@@ -2025,6 +2049,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             writes: effects.iter().map(|(k, _)| k.clone()).collect(),
             draws,
             single_use,
+            beside: Vec::new(),
         });
         Ok(items)
     }
@@ -2313,6 +2338,6 @@ pub mod handover;
 // OP-158 m.4 (f)
 pub mod placement;
 
-pub use ingest::{Ingested, Lane, Lanes, Turn, lane_of};
+pub use ingest::{Ingested, Lane, Lanes, REPORT_CLASS, Reported, Turn, lane_of};
 pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};
 pub use roles::ROLES_CLAIM;

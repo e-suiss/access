@@ -142,6 +142,7 @@ async fn domain(db: &TestDb, t: TenantId, seed: u8) -> DomainId {
             writes: vec![],
             draws: vec![],
             single_use: vec![],
+            beside: vec![],
             effects: vec![],
         };
         commit_batch(&db.sequencer, &d, *t.as_bytes(), &batch)

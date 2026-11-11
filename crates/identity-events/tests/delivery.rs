@@ -398,6 +398,7 @@ impl World {
             writes: vec![],
             draws: vec![],
             single_use: vec![],
+            beside: vec![],
             effects: vec![],
         };
         commit_batch(

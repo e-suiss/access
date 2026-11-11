@@ -180,6 +180,7 @@ async fn authority_event(
         writes: vec![],
         draws: vec![],
         single_use: vec![],
+        beside: vec![],
         effects: vec![],
     };
     commit_batch(&db.sequencer, domain, *tenant.as_bytes(), &batch)
@@ -567,6 +568,7 @@ async fn relay_consumes_authority_events_as_an_ordinary_receiver() {
         writes: vec![],
         draws: vec![],
         single_use: vec![],
+        beside: vec![],
         effects: vec![],
     };
     commit_batch(&db.sequencer, &domain, *tenant.as_bytes(), &batch)

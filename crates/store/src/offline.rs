@@ -60,6 +60,13 @@ pub async fn insert_report(
     r: &ReportRow,
 ) -> Result<(), StoreError> {
     let mut t = DomainTx::begin(sequencer, domain).await?;
+    insert_report_in(&mut t, r).await?;
+    t.commit().await
+}
+
+/// [`insert_report`] inside `t`, the commit of its Claim record (§16.5.1).
+pub(crate) async fn insert_report_in(t: &mut DomainTx, r: &ReportRow) -> Result<(), StoreError> {
+    let domain = t.domain;
     sqlx::query!(
         "INSERT INTO access.offline_report
            (domain_id, pos, claim_id, exercise_id, previous, first_seq, next_seq, head,
@@ -79,7 +86,6 @@ pub async fn insert_report(
     )
     .execute(&mut *t.tx)
     .await?;
-    t.commit().await?;
     Ok(())
 }
 
@@ -297,6 +303,16 @@ pub async fn insert_contract(
     c: &ContractRow,
 ) -> Result<(), StoreError> {
     let mut t = DomainTx::begin(sequencer, domain).await?;
+    insert_contract_in(&mut t, c).await?;
+    t.commit().await
+}
+
+/// [`insert_contract`] inside `t`, the commit of its decision record (§16.5.1).
+pub(crate) async fn insert_contract_in(
+    t: &mut DomainTx,
+    c: &ContractRow,
+) -> Result<(), StoreError> {
+    let domain = t.domain;
     sqlx::query!(
         "INSERT INTO access.projection_contract
            (domain_id, exercise_id, pos, holder_id, pep, class, variant, iat_ms, horizon_ms,
@@ -320,7 +336,6 @@ pub async fn insert_contract(
     )
     .execute(&mut *t.tx)
     .await?;
-    t.commit().await?;
     Ok(())
 }
 
@@ -479,9 +494,9 @@ pub async fn issued_since(
     unsigned(n)
 }
 
-/// Whether `audience` holds a `checkpointed-offline` projection whose report deadline,
-/// `horizon + grace`, passed before `now` without any report of it (§13.7.2, SEC14): such a
-/// verifier gets no new contract.
+/// How many `checkpointed-offline` projections `audience` holds whose report deadline,
+/// `horizon + grace`, passed before `now` without any report of them (§13.7.2, SEC14,
+/// `derived.unreported_contracts`): such a verifier gets no new contract.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -491,24 +506,23 @@ pub async fn unreported_overdue(
     audience: &str,
     now: u64,
     grace_ms: u64,
-) -> Result<bool, StoreError> {
+) -> Result<u64, StoreError> {
     let mut t = DomainTx::begin(pool, domain).await?;
-    let found = sqlx::query_scalar!(
-        "SELECT 1 AS \"one!\" FROM access.projection_contract c
+    let n = sqlx::query_scalar!(
+        "SELECT count(*) AS \"n!\" FROM access.projection_contract c
           WHERE c.domain_id = $1 AND $2 = ANY(c.audiences) AND c.variant = 'checkpointed-offline'
             AND c.horizon_ms + $4 < $3
             AND NOT EXISTS (SELECT 1 FROM access.offline_report r
-                             WHERE r.domain_id = c.domain_id AND r.exercise_id = c.exercise_id)
-          LIMIT 1",
+                             WHERE r.domain_id = c.domain_id AND r.exercise_id = c.exercise_id)",
         domain.as_bytes().as_slice(),
         audience,
         signed(now)?,
         signed(grace_ms)?,
     )
-    .fetch_optional(&mut *t.tx)
+    .fetch_one(&mut *t.tx)
     .await?;
     t.commit().await?;
-    Ok(found.is_some())
+    unsigned(n)
 }
 
 /// What one report came to against its projection (§7.9.4.1, §9.12.2).
@@ -546,6 +560,16 @@ pub async fn insert_reconciliation(
     r: &ReconciliationRow,
 ) -> Result<(), StoreError> {
     let mut t = DomainTx::begin(sequencer, domain).await?;
+    insert_reconciliation_in(&mut t, r).await?;
+    t.commit().await
+}
+
+/// [`insert_reconciliation`] inside `t`, the commit of the report's Claim record (§16.5.1).
+pub(crate) async fn insert_reconciliation_in(
+    t: &mut DomainTx,
+    r: &ReconciliationRow,
+) -> Result<(), StoreError> {
+    let domain = t.domain;
     sqlx::query!(
         "INSERT INTO access.offline_reconciliation
            (domain_id, pos, claim_id, exercise_id, bound, continuous, late, in_contract,
@@ -564,7 +588,6 @@ pub async fn insert_reconciliation(
     )
     .execute(&mut *t.tx)
     .await?;
-    t.commit().await?;
     Ok(())
 }
 

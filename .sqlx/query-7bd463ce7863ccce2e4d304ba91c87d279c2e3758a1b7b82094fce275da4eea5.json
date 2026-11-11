@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.holder_end (domain_id, pos, holder_id) VALUES ($1, $2, $3)\n                     ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7bd463ce7863ccce2e4d304ba91c87d279c2e3758a1b7b82094fce275da4eea5"
+}

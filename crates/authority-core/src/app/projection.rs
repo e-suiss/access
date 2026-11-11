@@ -119,6 +119,70 @@ pub fn variant_word(variant: ProfileVariant) -> &'static str {
     }
 }
 
+/// Label of the digest of a token's `ValidityContract` (`access_contract`): the same digest an
+/// Offline Exercise Report names its contract by (L2-RPT-1).
+pub const CONTRACT_LABEL: &str = "access/validity/v1";
+
+/// The contract an allowed `projection.issue` records in the commit of its decision, at the
+/// decision's position (§9.12, §9.12.2, §13.7.4, SI-7, §16.5.1), and the version keys the
+/// decision moves: `contracts@verifier(V)` of each audience of a contract that is not online
+/// (§16.5.2).
+///
+/// # Errors
+/// [`CoreError::Protocol`] for a PAP or contract that does not encode.
+pub(crate) fn contract_row(
+    pep: &str,
+    pap: &[u8],
+) -> Result<(access_store::offline::ContractRow, Vec<Vec<u8>>), CoreError> {
+    use access_kernel::codec::Canonical as _;
+    let pap = access_kernel::pap::Pap::from_bytes(pap).map_err(|_| CoreError::Protocol("pap"))?;
+    let contract = pap
+        .validity
+        .to_bytes()
+        .map_err(|_| CoreError::Protocol("validity"))?;
+    let row = access_store::offline::ContractRow {
+        exercise: pap.projection_exercise.0,
+        pos: 0,
+        holder: pap.holder.instance.0,
+        pep: pep.to_owned(),
+        class: String::from(class_word(pap.validity.class)),
+        variant: String::from(variant_word(pap.validity.variant)),
+        iat_ms: pap.iat,
+        horizon_ms: pap.validity.horizon,
+        audiences: pap.validity.audience.iter().cloned().collect(),
+        namespaces: namespaces(&pap.bounds),
+        slice: !pap.validity.offline_slice.is_empty(),
+        contract_digest: suiss_crypto::digest::context_digest(CONTRACT_LABEL, &contract).0,
+        contract,
+    };
+    // §16.5.2
+    let keys = if pap.validity.class == ProfileClass::Online {
+        Vec::new()
+    } else {
+        row.audiences
+            .iter()
+            .map(|a| crate::restrict::derived::verifier_contracts_key(a))
+            .collect()
+    };
+    Ok((row, keys))
+}
+
+/// The version keys of the verifiers whose unreported contracts a decision on `req` from `pep`
+/// reads: the PEP's and each audience of a `projection.issue` (§16.5.2, TI-4).
+pub(crate) fn verifier_keys(pep: &str, req: &Request) -> Vec<Vec<u8>> {
+    let mut out = vec![crate::restrict::derived::verifier_contracts_key(pep)];
+    if let Some(Payload::ProjectionIssue { audience, .. }) = &req.payload {
+        out.extend(
+            audience
+                .iter()
+                .map(|a| crate::restrict::derived::verifier_contracts_key(a)),
+        );
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
 /// The action namespaces of `bounds`, named and by prefix, sorted.
 #[must_use]
 pub fn namespaces(bounds: &AuthoritySet) -> Vec<String> {
@@ -378,7 +442,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         }
         // §13.7.2, SEC14
         for a in audience {
-            if self.reader.unreported_overdue(a, now).await? {
+            if self.reader.unreported_overdue(a, now).await? > 0 {
                 return Ok(Err((
                     policy::UNREPORTED,
                     Remediation::NotSatisfiableByActor,

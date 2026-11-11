@@ -203,6 +203,7 @@ impl World {
                 writes: vec![],
                 draws: vec![],
                 single_use: vec![],
+                beside: vec![],
                 effects: vec![],
             };
             commit_batch(&db.sequencer, &domain, *tenant.as_bytes(), &batch)

@@ -73,6 +73,7 @@ async fn domain(db: &TestDb, seed: u8) -> Digest {
         writes: vec![],
         draws: vec![],
         single_use: vec![],
+        beside: vec![],
         effects: vec![],
     };
     commit_batch(&db.sequencer, &d, TENANT, &batch)

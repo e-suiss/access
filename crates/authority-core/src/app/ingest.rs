@@ -15,6 +15,8 @@ use access_kernel::meta::{self, ContentState, kind};
 use access_kernel::model::{EqValue, Id};
 use suiss_crypto::dcbor::Value;
 
+use access_store::authority::Beside;
+
 use crate::CoreError;
 use crate::app::events::Derived;
 use crate::app::{Authority, MAX_RETRIES, NewClaim, Resolved};
@@ -66,6 +68,19 @@ impl Ingested {
     }
 }
 
+/// What an admitted Offline Exercise Report records in the commit of its Claim record
+/// (§7.9.4.1, L2-RPT-2, SI-7, §16.5.1): the report when its chain verifies, what it came to, and
+/// the verifiers whose `contracts@verifier(V)` it moves (§16.5.2).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Reported {
+    /// The report row; `None` for a report whose own chain does not verify.
+    pub report: Option<access_store::offline::ReportRow>,
+    /// What it came to against its projection.
+    pub reconciliation: access_store::offline::ReconciliationRow,
+    /// The audiences of the contract it names.
+    pub verifiers: Vec<String>,
+}
+
 /// A verified submission: what it says, who signed it and its body.
 struct Verified {
     statement: Statement,
@@ -83,6 +98,9 @@ type Checked = Result<Verified, Refusal>;
 fn code(e: claim::ClaimError) -> Refusal {
     Refusal(e.code())
 }
+
+/// The class of an Offline Exercise Report Claim (§7.9.4.1).
+pub const REPORT_CLASS: &str = "offline_exercise_report";
 
 /// The classes whose use in actor-binding needs the subject's designation of their issuer
 /// (§9.13.1, P21).
@@ -102,6 +120,20 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     /// [`CoreError`] when the submission gets no answer; a Claim that does not verify is an
     /// answer ([`ClaimVerdict::Rejected`]).
     pub async fn ingest(&mut self, sub: &ClaimSubmission, now: u64) -> Result<Ingested, CoreError> {
+        self.ingest_with(sub, now, None).await
+    }
+
+    /// [`Self::ingest`], recording `reported` in the commit of an admitted
+    /// `offline_exercise_report` Claim (SI-7, §16.5.1).
+    ///
+    /// # Errors
+    /// As [`Self::ingest`].
+    pub async fn ingest_with(
+        &mut self,
+        sub: &ClaimSubmission,
+        now: u64,
+        reported: Option<Reported>,
+    ) -> Result<Ingested, CoreError> {
         if sub.domain != self.domain {
             return Err(CoreError::Protocol("domain"));
         }
@@ -150,7 +182,9 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 }],
                 ..Resolved::default()
             };
-            let (items, ended) = self.ingest_items(&resolved, &v, now).await?;
+            let (items, ended) = self
+                .ingest_items(&resolved, &v, reported.as_ref(), now)
+                .await?;
             match self.leader.commit(now, &items).await {
                 Ok(done) => {
                     let (position, ended) = match done {
@@ -242,6 +276,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         &mut self,
         resolved: &Resolved,
         v: &Verified,
+        reported: Option<&Reported>,
         now: u64,
     ) -> Result<(Vec<access_authority_sequencer::domain::Item>, Vec<Id>), CoreError> {
         let (claims, ended) = self.claim_events(self.domain, resolved, now).await?;
@@ -260,6 +295,25 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 && let Ok(d) = <[u8; 32]>::try_from(d.as_slice())
             {
                 item.proofs.push((d, bytes.clone()));
+            }
+            // G43, §9.9.3 k.6, OP-158 m.17 (g)
+            item.beside
+                .extend(ended.iter().map(|h| Beside::HolderEnded(h.0)));
+            // SI-7, §16.5.1, §16.5.2
+            let admitted = resolved
+                .claims
+                .first()
+                .is_some_and(|c| c.disposition == Disposition::Admit);
+            if let Some(r) = reported.filter(|_| admitted && v.statement.class == REPORT_CLASS) {
+                item.beside.push(Beside::Report(
+                    r.report.clone().map(Box::new),
+                    Box::new(r.reconciliation.clone()),
+                ));
+                item.writes.extend(
+                    r.verifiers
+                        .iter()
+                        .map(|a| crate::restrict::derived::verifier_contracts_key(a)),
+                );
             }
         }
         Ok((items, ended))

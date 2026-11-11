@@ -78,6 +78,7 @@ fn item(tag: &str, nonce: Option<(u8, u8)>) -> Item {
         writes: vec![],
         draws: vec![],
         single_use: vec![],
+        beside: vec![],
     }
 }
 

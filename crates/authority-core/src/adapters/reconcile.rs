@@ -15,13 +15,13 @@ use access_kernel::validity::ValidityContract;
 use access_kernel::validity::ceiling::report_deadline;
 use access_store::Pool;
 use access_store::offline::{
-    ContractRow, ReconciliationRow, ReportRow, contract_of, insert_reconciliation, insert_report,
-    last_report, reports,
+    ContractRow, ReconciliationRow, ReportRow, contract_of, last_report, reports,
 };
 use access_store::scope::DomainId;
 use suiss_crypto::dcbor::{self, Limits, Value};
 
 use crate::CoreError;
+use crate::app::Reported;
 
 /// What a report came to.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -93,20 +93,26 @@ fn unused_bytes(report: &Report) -> Vec<u8> {
     .unwrap_or_default()
 }
 
-/// Reconciles the admitted report `body` recorded at `pos` as Claim `claim` (§7.9.4.1): binds
-/// it to its projection, checks the chain and derives the in-contract and out-of-contract
-/// entries. The report row is kept only for a report whose chain verifies; the reconciliation
-/// row is kept for every admitted one.
+/// Whether `body` reads as an Offline Exercise Report.
+pub(super) fn is_report(body: &[u8]) -> bool {
+    Report::from_bytes(body).is_ok()
+}
+
+/// Reconciles the report `body` of Claim `claim` before its record commits (§7.9.4.1, SI-7,
+/// §16.5.1): binds it to its projection, checks the chain and derives the in-contract and
+/// out-of-contract entries. The rows are written in the commit of the Claim record, at its
+/// position, once it is admitted: the report row only for a report whose chain verifies, the
+/// reconciliation row for every one.
 ///
 /// # Errors
 /// [`CoreError::Store`]; a body that is not a report is [`CoreError::Protocol`].
-pub(super) async fn reconcile(
-    (sequencer, app): (&Pool, &Pool),
+pub(super) async fn prepare(
+    app: &Pool,
     domain: Digest,
-    (pos, claim): (u64, Id),
+    claim: Id,
     body: &[u8],
     now: u64,
-) -> Result<Reconciled, CoreError> {
+) -> Result<Reported, CoreError> {
     let id = DomainId::from_bytes(domain.0);
     let (report, summary) = match report::verify_bytes(body) {
         Ok(v) => v,
@@ -120,8 +126,11 @@ pub(super) async fn reconcile(
                 in_contract: 0,
                 out_of_contract: u32::try_from(r.entries.len()).unwrap_or(u32::MAX),
             };
-            record(sequencer, &id, (pos, claim), &r, &out).await?;
-            return Ok(out);
+            return Ok(Reported {
+                report: None,
+                reconciliation: reconciliation(claim, &r, &out),
+                verifiers: Vec::new(),
+            });
         }
     };
     let contract = contract_of(app, &id, &report.exercise.0).await?;
@@ -174,48 +183,38 @@ pub(super) async fn reconcile(
         in_contract: inside,
         out_of_contract: outside,
     };
-    insert_report(
-        sequencer,
-        &id,
-        &ReportRow {
-            pos,
-            claim: claim.0,
-            exercise: report.exercise.0,
-            previous: report.previous.map(|p| p.0),
-            first_seq: report.first_seq,
-            next_seq: summary.next_seq,
-            head: summary.head.0,
-            period_from_ms: report.period.from,
-            period_until_ms: report.period.until,
-            body: body.to_vec(),
-        },
-    )
-    .await?;
-    record(sequencer, &id, (pos, claim), &report, &out).await?;
-    Ok(out)
+    let chained = report.previous.is_none() == (report.first_seq == 0)
+        && summary.next_seq >= report.first_seq
+        && report.period.until >= report.period.from;
+    let row = chained.then(|| ReportRow {
+        pos: 0,
+        claim: claim.0,
+        exercise: report.exercise.0,
+        previous: report.previous.map(|p| p.0),
+        first_seq: report.first_seq,
+        next_seq: summary.next_seq,
+        head: summary.head.0,
+        period_from_ms: report.period.from,
+        period_until_ms: report.period.until,
+        body: body.to_vec(),
+    });
+    Ok(Reported {
+        report: row,
+        reconciliation: reconciliation(claim, &report, &out),
+        verifiers: contract.map(|c| c.audiences).unwrap_or_default(),
+    })
 }
 
-async fn record(
-    sequencer: &Pool,
-    id: &DomainId,
-    (pos, claim): (u64, Id),
-    report: &Report,
-    out: &Reconciled,
-) -> Result<(), CoreError> {
-    Ok(insert_reconciliation(
-        sequencer,
-        id,
-        &ReconciliationRow {
-            pos,
-            claim: claim.0,
-            exercise: report.exercise.0,
-            bound: out.bound,
-            continuous: out.continuous,
-            late: out.late,
-            in_contract: out.in_contract,
-            out_of_contract: out.out_of_contract,
-            slice_unused: unused_bytes(report),
-        },
-    )
-    .await?)
+fn reconciliation(claim: Id, report: &Report, out: &Reconciled) -> ReconciliationRow {
+    ReconciliationRow {
+        pos: 0,
+        claim: claim.0,
+        exercise: report.exercise.0,
+        bound: out.bound,
+        continuous: out.continuous,
+        late: out.late,
+        in_contract: out.in_contract,
+        out_of_contract: out.out_of_contract,
+        slice_unused: unused_bytes(report),
+    }
 }

@@ -1101,6 +1101,79 @@ pub async fn hold_head(
     Ok(tx)
 }
 
+/// Makes every SYNC-DERIVED row written after its record's commit fail, as a crash or an error
+/// between the commit and a later write would (OP-158 m.17 (g), G43, SI-7): the revocation of a
+/// family a projection was issued through, a contract, a report or a reconciliation whose
+/// position is not a record of the writing transaction is refused.
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn fail_derived_after_commit(db: &TestDb) -> Result<(), TestDbError> {
+    let mut c = PgConnection::connect_with(&db.admin)
+        .await
+        .at("connect as administrator")?;
+    c.execute(
+        "CREATE FUNCTION access.test_derived_after_commit() RETURNS trigger
+           LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
+         DECLARE
+           p bigint := (to_jsonb(NEW) ->> TG_ARGV[0])::bigint;
+         BEGIN
+           IF TG_TABLE_NAME = 'projection_family' THEN
+             IF NOT EXISTS (SELECT 1 FROM access.projection_contract c
+                             WHERE c.domain_id = NEW.domain_id
+                               AND substring(c.exercise_id from 1 for 16) = NEW.family_id) THEN
+               RETURN NEW;
+             END IF;
+           END IF;
+           IF p IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM access.authority_log l
+                 WHERE l.domain_id = NEW.domain_id AND l.pos = p
+                   AND l.xmin::text = (pg_current_xact_id()::text::bigint % 4294967296)::text) THEN
+             RAISE EXCEPTION 'injected: % written after its record committed', TG_TABLE_NAME;
+           END IF;
+           RETURN NEW;
+         END
+         $$;
+         CREATE TRIGGER test_after_commit BEFORE UPDATE OF revoked_pos ON access.projection_family
+           FOR EACH ROW EXECUTE FUNCTION access.test_derived_after_commit('revoked_pos');
+         CREATE TRIGGER test_after_commit BEFORE INSERT ON access.projection_contract
+           FOR EACH ROW EXECUTE FUNCTION access.test_derived_after_commit('pos');
+         CREATE TRIGGER test_after_commit BEFORE INSERT ON access.offline_report
+           FOR EACH ROW EXECUTE FUNCTION access.test_derived_after_commit('pos');
+         CREATE TRIGGER test_after_commit BEFORE INSERT ON access.offline_reconciliation
+           FOR EACH ROW EXECUTE FUNCTION access.test_derived_after_commit('pos');",
+    )
+    .await
+    .at("install the injected failure")?;
+    c.close().await.at("close")?;
+    Ok(())
+}
+
+/// Records the end of `holder` at `pos` without revoking its families, as a path that wrote the
+/// ending record but not its revocation would (G43).
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn unapplied_end(
+    db: &TestDb,
+    domain: [u8; 32],
+    pos: u64,
+    holder: [u8; 16],
+) -> Result<(), TestDbError> {
+    let mut c = PgConnection::connect_with(&db.admin)
+        .await
+        .at("connect as administrator")?;
+    sqlx::query("INSERT INTO access.holder_end (domain_id, pos, holder_id) VALUES ($1, $2, $3)")
+        .bind(domain.as_slice())
+        .bind(i64::try_from(pos).unwrap_or(i64::MAX))
+        .bind(holder.as_slice())
+        .execute(&mut c)
+        .await
+        .at("record the end")?;
+    c.close().await.at("close")?;
+    Ok(())
+}
+
 /// Moves the recording time of every rehome end of `db` back by `hours`, as that much time
 /// passing would (OP-158 m.18 (e)).
 ///

@@ -16,7 +16,6 @@ use access_kernel::digest::Digest;
 use access_kernel::fold;
 use access_kernel::meta::{self, ActorKind, GrantState, Payload};
 use access_kernel::model::{Id, ResourceSelector, SubjectSelector, TrustedTime};
-use access_kernel::pap::Pap;
 use access_kernel::record::{Opened, RecordEnvelope};
 use access_kernel::status::StatusRef;
 use access_kernel::verify::cose::PublicKey;
@@ -27,7 +26,6 @@ use access_store::authority::{
     receipt, request_lease_handoff, state_of, state_prefix,
 };
 use access_store::derived::{GrantRow, cursor, keys_of};
-use access_store::offline::{ContractRow, insert_contract};
 use access_store::projections::{Family, family as read_family};
 use access_store::scope::DomainId;
 use access_store::{Pool, StoreError};
@@ -35,7 +33,6 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::pkcs11::KeyStore;
 
 use crate::CoreError;
-use crate::app::projection::{class_word, namespaces, variant_word};
 use crate::app::{Authority, Compromise, Incoming, Response};
 use crate::ports::{Binding, Keys, Reader, Row, Salts};
 use crate::query::{Hit, Query, page_after, page_body};
@@ -266,7 +263,7 @@ impl Reader for PgReader {
         .await?)
     }
 
-    async fn unreported_overdue(&self, audience: &str, now: u64) -> Result<bool, CoreError> {
+    async fn unreported_overdue(&self, audience: &str, now: u64) -> Result<u64, CoreError> {
         Ok(access_store::offline::unreported_overdue(
             &self.pool,
             &self.domain,
@@ -275,6 +272,16 @@ impl Reader for PgReader {
             access_kernel::validity::ceiling::REPORT_GRACE_MS,
         )
         .await?)
+    }
+
+    async fn version(&self, key: &[u8]) -> Result<u64, CoreError> {
+        Ok(
+            access_store::authority::versions(&self.pool, &self.domain, &[key.to_vec()])
+                .await?
+                .first()
+                .copied()
+                .unwrap_or(0),
+        )
     }
 
     async fn recorded_at(&self, pos: u64) -> Result<Option<u64>, CoreError> {
@@ -1242,39 +1249,6 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         }))
     }
 
-    /// Keeps the contract of an allowed projection beside its record (§9.12, §9.12.2,
-    /// §13.7.4): what the issuance limits, the report deadline and the reconciliation read.
-    async fn keep_contract(&self, inc: &Incoming, r: &Response) -> Result<(), CoreError> {
-        let (Some(pos), Some(payload), false) = (r.record, &r.pap, r.replayed) else {
-            return Ok(());
-        };
-        if r.decision.outcome != Outcome::Allow {
-            return Ok(());
-        }
-        let pap = Pap::from_bytes(payload).map_err(|_| CoreError::Protocol("pap"))?;
-        let contract = pap
-            .validity
-            .to_bytes()
-            .map_err(|_| CoreError::Protocol("validity"))?;
-        let row = ContractRow {
-            exercise: pap.projection_exercise.0,
-            pos,
-            holder: pap.holder.instance.0,
-            pep: inc.pep.clone(),
-            class: String::from(class_word(pap.validity.class)),
-            variant: String::from(variant_word(pap.validity.variant)),
-            iat_ms: pap.iat,
-            horizon_ms: pap.validity.horizon,
-            audiences: pap.validity.audience.iter().cloned().collect(),
-            namespaces: namespaces(&pap.bounds),
-            slice: !pap.validity.offline_slice.is_empty(),
-            contract_digest: suiss_crypto::digest::context_digest(CONTRACT_LABEL, &contract).0,
-            contract,
-        };
-        let id = DomainId::from_bytes(inc.request.domain.0);
-        Ok(insert_contract(&self.setup.sequencer, &id, &row).await?)
-    }
-
     /// [`Domains::decide`] on the leader in `guard`, which the caller holds across whatever
     /// must not interleave with another commit of the domain.
     async fn decide_led(
@@ -1353,25 +1327,6 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                     .map_err(|_| CoreError::Unavailable("token-key"))?,
             );
         }
-        // §9.9.3 k.6, P50
-        if let Ok(r) = &result
-            && let Some(pos) = r.record
-            && !r.replayed
-        {
-            for holder in &r.ended {
-                if let Err(e) = crate::status::adapters::revoke_holder(
-                    &self.setup.sequencer,
-                    domain,
-                    &holder.0,
-                    pos,
-                )
-                .await
-                {
-                    result = Err(e);
-                    break;
-                }
-            }
-        }
         self.settle_projection(led, inc, family.as_ref(), &mut result)
             .await;
         if let (Some(k), Ok(r)) = (advisory, &result)
@@ -1422,10 +1377,10 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         }
     }
 
-    /// After a `projection.issue` decision: the contract of an allowed one is kept with its
-    /// record (§9.12, §13.7.4); a family opened for a decision that did not allow holds no
-    /// projection, so its entry is set at once and nothing can ever be presented against it
-    /// (OP-73: the row stays). A store failure replaces the result.
+    /// After a `projection.issue` decision: the contract of an allowed one was kept in the
+    /// commit of its record (§9.12, §13.7.4, SI-7); a family opened for a decision that did not
+    /// allow holds no projection, so its entry is set at once and nothing can ever be presented
+    /// against it (OP-73: the row stays). A store failure replaces the result.
     async fn settle_projection(
         &self,
         led: &Led<B, S, C>,
@@ -1433,11 +1388,6 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         family: Option<&PapFamily>,
         result: &mut Result<Response, CoreError>,
     ) {
-        if let Ok(r) = &*result
-            && let Err(e) = self.keep_contract(inc, r).await
-        {
-            *result = Err(e);
-        }
         let Some(f) = family.filter(|f| f.opened) else {
             return;
         };

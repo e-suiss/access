@@ -168,6 +168,7 @@ impl Log {
             writes: vec![],
             draws: vec![],
             single_use: vec![],
+            beside: vec![],
             effects: vec![],
         };
         commit_batch(pool, &self.id, TENANT, &batch).await?;

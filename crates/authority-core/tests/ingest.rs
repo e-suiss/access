@@ -1338,6 +1338,7 @@ async fn dropped_realm_key(db: &TestDb, kid: [u8; 32], cutoff_at: u64) {
         writes: vec![],
         draws: vec![],
         single_use: vec![],
+        beside: vec![],
         effects: vec![],
     };
     commit_batch(&db.sequencer, &domain, *tenant.as_bytes(), &batch)

@@ -31,6 +31,9 @@ mod sod;
 // OP-158 m.3 (v)
 #[path = "commit/quota.rs"]
 mod quota;
+// OP-158 m.17 (g)
+#[path = "commit/sync_derived.rs"]
+mod sync_derived;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;

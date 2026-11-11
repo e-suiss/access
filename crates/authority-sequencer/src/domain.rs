@@ -9,7 +9,7 @@ use access_kernel::digest::Digest;
 use access_kernel::fold;
 use access_kernel::record::{Header, Opened, RecordEnvelope, RecordError, RecordKind};
 use access_store::authority::{
-    CommitBatch, Draw, HeadRow, LogRecord, NonceRow, OutboxRow, ProofRow,
+    Beside, CommitBatch, Draw, HeadRow, LogRecord, NonceRow, OutboxRow, ProofRow,
 };
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_ledger::Hash;
@@ -63,6 +63,8 @@ pub struct Item {
     pub draws: Vec<Draw>,
     /// Single-use flags it sets.
     pub single_use: Vec<Vec<u8>>,
+    /// SYNC-DERIVED rows it writes in its commit (§16.5.1, G43, SI-7).
+    pub beside: Vec<Beside>,
 }
 
 /// What a commit produced.
@@ -266,6 +268,7 @@ pub fn rows(
         draws: Vec::new(),
         single_use: Vec::new(),
         effects: Vec::new(),
+        beside: Vec::new(),
     };
     for (item, sealed) in items.iter().zip(&batch.records) {
         let pos = sealed.slot.pos;
@@ -309,6 +312,8 @@ pub fn rows(
         out.draws.extend(item.draws.iter().cloned());
         out.single_use
             .extend(item.single_use.iter().map(|k| (k.clone(), pos)));
+        out.beside
+            .extend(item.beside.iter().map(|b| (pos, b.clone())));
         // L2-REC-3
         let sealed_envelope = RecordEnvelope::from_bytes(&sealed.record.envelope)
             .map_err(|_| SequencerError::Diverged)?;

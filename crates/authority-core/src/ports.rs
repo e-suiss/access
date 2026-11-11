@@ -147,15 +147,21 @@ pub trait Reader {
         let _ = (holder, since_ms, namespaces);
         std::future::ready(Ok(0))
     }
-    /// Whether `audience` left a `checkpointed-offline` projection unreported past its deadline
-    /// at `now` (§13.7.2, SEC14); `false` by default.
+    /// How many `checkpointed-offline` projections `audience` left unreported past their
+    /// deadline at `now` (§13.7.2, SEC14, whitelist 7); 0 by default.
     fn unreported_overdue(
         &self,
         audience: &str,
         now: u64,
-    ) -> impl Future<Output = Result<bool, CoreError>> + Send {
+    ) -> impl Future<Output = Result<u64, CoreError>> + Send {
         let _ = (audience, now);
-        std::future::ready(Ok(false))
+        std::future::ready(Ok(0))
+    }
+    /// The version of a key with no state of its own, such as `contracts@verifier(V)`
+    /// (§16.5.2, TI-4); 0 by default.
+    fn version(&self, key: &[u8]) -> impl Future<Output = Result<u64, CoreError>> + Send {
+        let _ = key;
+        std::future::ready(Ok(0))
     }
     /// What the latest `require_action` on `intent` left for its approval (§9.14.1 step 1,
     /// OP-150 L6): the render digest the decision point computed and the tier.

@@ -47,9 +47,7 @@ pub const FAMILY_CLAIM: &str = "family";
 /// as the IETF Token Status List defines it for a JWT (OP-150 m.3 (a), (s), §11.20).
 pub const STATUS_CLAIM: &str = "status";
 
-/// Label of the digest of a token's `ValidityContract` (`access_contract`): the same digest an
-/// Offline Exercise Report names its contract by (L2-RPT-1).
-pub const CONTRACT_LABEL: &str = "access/validity/v1";
+pub use crate::app::projection::CONTRACT_LABEL;
 
 /// The claim that names the digest of a token's `ValidityContract` (OP-150 m.7 (f)); a JWT
 /// authority token without it is refused by every resource server (OP-150 m.9 (c)).

@@ -156,6 +156,7 @@ fn item(tag: &str) -> Item {
         writes: Vec::new(),
         draws: Vec::new(),
         single_use: Vec::new(),
+        beside: Vec::new(),
     }
 }
 

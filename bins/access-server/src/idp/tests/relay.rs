@@ -217,6 +217,7 @@ pub(super) async fn authority_event(
         writes: vec![],
         draws: vec![],
         single_use: vec![],
+        beside: vec![],
         effects: vec![],
     };
     commit_batch(&w.db.sequencer, &domain, *tenant.as_bytes(), &batch)

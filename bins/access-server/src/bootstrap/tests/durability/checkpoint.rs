@@ -191,6 +191,7 @@ impl Log {
             writes: vec![],
             draws: vec![],
             single_use: vec![],
+            beside: vec![],
             effects: vec![],
         };
         commit_batch(&db.sequencer, &self.id, [0x31; 16], &batch)
@@ -265,6 +266,7 @@ impl Log {
             writes: vec![],
             draws: vec![],
             single_use: vec![],
+            beside: vec![],
             effects: vec![],
         };
         commit_batch(&db.sequencer, &self.id, [0x31; 16], &batch)

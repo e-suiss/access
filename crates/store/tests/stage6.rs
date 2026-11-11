@@ -77,6 +77,7 @@ async fn domain(db: &TestDb, tenant: [u8; 16], seed: u8) -> DomainId {
         writes: vec![],
         draws: vec![],
         single_use: vec![],
+        beside: vec![],
         effects: vec![],
     };
     commit_batch(&db.sequencer, &d, tenant, &batch)
@@ -336,16 +337,13 @@ async fn contracts_and_reconciliations_are_appended() {
             .unwrap(),
         0
     );
-    assert!(
-        !unreported_overdue(&db.app, &d, "robot.example", 4_500, 1_000)
+    let overdue = async |now| {
+        unreported_overdue(&db.app, &d, "robot.example", now, 1_000)
             .await
             .unwrap()
-    );
-    assert!(
-        unreported_overdue(&db.app, &d, "robot.example", 5_001, 1_000)
-            .await
-            .unwrap()
-    );
+    };
+    assert_eq!(overdue(4_500).await, 0);
+    assert_eq!(overdue(5_001).await, 1);
     insert_report(
         &db.sequencer,
         &d,
@@ -364,11 +362,7 @@ async fn contracts_and_reconciliations_are_appended() {
     )
     .await
     .unwrap();
-    assert!(
-        !unreported_overdue(&db.app, &d, "robot.example", 5_001, 1_000)
-            .await
-            .unwrap()
-    );
+    assert_eq!(overdue(5_001).await, 0);
     let r = ReconciliationRow {
         pos: 2,
         claim: [1; 16],

@@ -555,6 +555,7 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
             writes: vec![],
             draws: vec![],
             single_use: vec![],
+            beside: vec![],
             effects: vec![],
         },
     )

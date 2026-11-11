@@ -82,6 +82,7 @@ async fn allow(e: &Env, tx: &mut TenantTx, n: u8, action: &str) -> Bound {
         writes: vec![],
         draws: vec![],
         single_use: vec![],
+        beside: vec![],
         effects: vec![],
     };
     commit_batch(&e.db.sequencer, &e.domain, *e.tenant.as_bytes(), &batch)

@@ -228,6 +228,17 @@ pub fn transition_seen_key(grant: &Id, party: &Id, since: u64) -> Vec<u8> {
     ])
 }
 
+/// The version key of verifier `audience`'s contracts and reports, `contracts@verifier(V)`: an
+/// offline or intermittent `projection.issue` to it and each report of one move it, and a
+/// decision that reads `unreported_contracts` reads it (§16.5.2, whitelist 7, TI-4).
+#[must_use]
+pub fn verifier_contracts_key(audience: &str) -> Vec<u8> {
+    key(vec![
+        Value::text("contracts@verifier"),
+        Value::text(audience),
+    ])
+}
+
 /// Counter of threshold-adjacent Exercises of `party` to `target` in the bucket (whitelist 11).
 #[must_use]
 pub fn adjacent_key(party: &Id, target: &Digest, bucket: u64) -> Vec<u8> {
