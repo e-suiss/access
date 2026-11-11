@@ -143,6 +143,52 @@ certificate expires, or with `--out` to a `0600` file and `<file>-cert.pub`. Ser
 realm's CA with `TrustedUserCAKeys` (from `/ssh/ca.pub`) and refuse revoked certificates with
 `RevokedKeys` (from `/ssh/krl`).
 
+## `incident contain`
+
+```text
+access-cli --config incident.toml incident contain --party <PartyID> [--occurred-at <unix ms>]
+```
+
+Declares a Party compromised and contains it in order. Each step is its own attributable record:
+
+1. a `party_compromise` Claim from the realm's accepted declarant; once admitted, the Party's
+   Instances set up inside the window end;
+2. on the identity plane, the device keys of those Instances, a `session_epoch` raise and the end
+   of refresh families, audited as `incident.contained`;
+3. the CAEP `session-revoked` and `device-compliance-change` events to every stream.
+
+Without `--occurred-at` the window starts 72 hours before the declaration. There is no switch
+that stops everything at once: containing more is another narrowing change, such as a ready
+suspension policy (`suspend-party`, `suspend-instance`, `contain-action`) set by a Party allowed
+to restrict, which needs no quorum; lifting one widens and does.
+
+The command reads the `[incident]` section. The Claim goes over the PEP certificate the realm
+accepted the declarant on; the key is a file, never an argument:
+
+```toml
+[incident]
+api = "https://access.example:8443"
+ca_file = "/etc/access/ca.pem"
+pep_cert_file = "/run/secrets/soc-pep.crt"
+pep_key_file = "/run/secrets/soc-pep.key"
+domain = "<governing domain, base64url>"
+declarant = "<declarant Party, base64url>"
+```
+
+It prints the steps, the window and the window still open. Projections issued before the
+declaration stay acceptable until their validity horizon, at most the connectivity ceiling of
+their variant (72 hours for `checkpointed-offline`); Access cannot recall them sooner, and the
+output says until when for each variant:
+
+```text
+{"party":"AwMD…","declared_at":1767225600000,
+ "window":{"from":1766966400000,"until":1767225600000,"occurred_at":null,"assumed":true},
+ "steps":[{"step":1,"by":"authority","claim":"…","position":"17", "…":"…"},{"step":2,"by":"identity"},{"step":3,"by":"identity"}],
+ "open_window":{"from":1767225600000,"until":1767484800000,"by_variant":[{"variant":"online-strict","until":…}]}}
+```
+
+A refused or quarantined declaration contains nothing and exits with 6.
+
 ## The reconciler's rules
 
 - It acts as its own agent Instance under its own Grant. That Grant holds no reserved action, so reserved changes (an upstream identity provider, the RP ID) are never applied: they are written as proposals for a quorum to sign.

@@ -6,6 +6,7 @@ pub(crate) mod admin;
 pub(crate) mod apply;
 pub(crate) mod diff;
 pub(crate) mod export;
+pub(crate) mod incident;
 pub(crate) mod migrate;
 pub(crate) mod realm;
 pub(crate) mod relay;

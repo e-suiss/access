@@ -154,6 +154,42 @@ impl Https {
     }
 }
 
+impl Https {
+    /// A client trusting only the certificates in `ca` (PEM) that presents the certificate in
+    /// `cert` with the key in `key` (PEM files), for a PEP channel (L1-ADP-2).
+    pub(crate) fn with_client(ca: &Path, cert: &Path, key: &Path) -> Result<Self, HttpError> {
+        let pem = std::fs::read(ca).map_err(|e| HttpError::Ca(e.to_string()))?;
+        let mut roots = RootCertStore::empty();
+        for c in CertificateDer::pem_slice_iter(&pem) {
+            let c = c.map_err(|e| HttpError::Ca(e.to_string()))?;
+            roots.add(c).map_err(|e| HttpError::Ca(e.to_string()))?;
+        }
+        if roots.is_empty() {
+            return Err(HttpError::Ca(String::from("no certificate")));
+        }
+        let chain_pem = std::fs::read(cert).map_err(|e| HttpError::Ca(e.to_string()))?;
+        let chain = CertificateDer::pem_slice_iter(&chain_pem)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| HttpError::Ca(e.to_string()))?;
+        if chain.is_empty() {
+            return Err(HttpError::Ca(String::from("no client certificate")));
+        }
+        let key_pem = std::fs::read(key).map_err(|e| HttpError::Ca(e.to_string()))?;
+        let key = rustls::pki_types::PrivateKeyDer::from_pem_slice(&key_pem)
+            .map_err(|_| HttpError::Ca(String::from("client key")))?;
+        let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+        let config = ClientConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .map_err(|e| HttpError::Ca(e.to_string()))?
+            .with_root_certificates(roots)
+            .with_client_auth_cert(chain, key)
+            .map_err(|e| HttpError::Ca(e.to_string()))?;
+        Ok(Self {
+            connector: TlsConnector::from(Arc::new(config)),
+        })
+    }
+}
+
 fn head(request: &Request, url: &Url) -> String {
     let mut out = format!("{} {} HTTP/1.1\r\nHost: ", request.method, url.path);
     if url.port == 443 {

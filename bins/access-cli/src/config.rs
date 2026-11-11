@@ -13,6 +13,28 @@ use serde::Deserialize;
 pub(crate) struct File {
     /// The database (OP-141 m.18 (g)).
     pub(crate) database: Option<Database>,
+    /// `incident contain` (OP-157 m.3 (i)).
+    pub(crate) incident: Option<Incident>,
+}
+
+/// Where `incident contain` declares a compromise and as whom (OP-157 m.3 (i)): the public
+/// listener, reached with the PEP certificate the realm accepted its declarant over. Credentials
+/// are files (OP-129 m.3).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Incident {
+    /// The public listener, `https://host[:port]`.
+    pub(crate) api: String,
+    /// PEM root the listener's certificate chains to.
+    pub(crate) ca_file: PathBuf,
+    /// PEM certificate of the PEP the declarant's Claims arrive over.
+    pub(crate) pep_cert_file: PathBuf,
+    /// PEM private key of that certificate.
+    pub(crate) pep_key_file: PathBuf,
+    /// The realm's governing domain, base64url.
+    pub(crate) domain: String,
+    /// The accepted declarant Party, base64url.
+    pub(crate) declarant: String,
 }
 
 /// How the deployment declares its durability (OP-24, HL-40).

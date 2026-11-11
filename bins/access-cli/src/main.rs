@@ -63,6 +63,9 @@ enum Command {
     Relay(commands::relay::RelayArgs),
     /// Gets a short-lived SSH certificate after a browser sign-in (IDP-32, OP-156 m.3 (o)).
     Ssh(commands::ssh::SshArgs),
+    /// Declares a Party compromised and writes the containment steps and the window still open
+    /// (§12.2.4, OP-157 m.3 (i)).
+    Incident(commands::incident::IncidentArgs),
 }
 
 fn main() -> ExitCode {
@@ -100,6 +103,7 @@ fn main() -> ExitCode {
                     Command::Realm(a) => Box::pin(commands::realm::run(a)).await,
                     Command::Relay(a) => Box::pin(commands::relay::run(a)).await,
                     Command::Ssh(a) => Box::pin(commands::ssh::run(a)).await,
+                    Command::Incident(a) => Box::pin(commands::incident::run(&cli.config, a)).await,
                     Command::Migrate(a) => commands::migrate::run(&cli.config, &a),
                     Command::Replay(a) => commands::replay::run(&a),
                 }
