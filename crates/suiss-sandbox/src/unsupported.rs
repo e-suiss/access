@@ -41,6 +41,10 @@ impl SecretMemory {
         Err(Error::Unsupported)
     }
 
+    pub(crate) fn locked(_len: NonZeroUsize) -> Result<Self, Error> {
+        Err(Error::Unsupported)
+    }
+
     pub(crate) fn as_slice(&self) -> &[u8] {
         match self.0 {}
     }
@@ -48,4 +52,8 @@ impl SecretMemory {
     pub(crate) fn as_mut_slice(&mut self) -> &mut [u8] {
         match self.0 {}
     }
+}
+
+pub(crate) fn memlock_limit() -> Option<u64> {
+    None
 }

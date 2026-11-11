@@ -93,3 +93,69 @@ fn oversized_payload_is_not_signed() {
         Err(SignError::Encode)
     ));
 }
+
+struct HeapPages(std::sync::Mutex<Vec<u8>>);
+
+impl KeyPages for HeapPages {
+    fn expose(&self, f: &mut dyn FnMut(&[u8])) {
+        f(&self.0.lock().unwrap());
+    }
+}
+
+#[allow(clippy::unnecessary_wraps, reason = "a pager")]
+fn heap(doc: &[u8]) -> Option<Box<dyn KeyPages>> {
+    Some(Box::new(HeapPages(std::sync::Mutex::new(doc.to_vec()))))
+}
+
+struct Shared(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+impl KeyPages for Shared {
+    fn expose(&self, f: &mut dyn FnMut(&[u8])) {
+        f(&self.0.lock().unwrap());
+    }
+}
+
+// SAI-45, CR-34, OP-158
+#[test]
+fn a_paged_signer_signs_from_its_pages_only() {
+    for ed25519 in [true, false] {
+        let (soft, doc) = if ed25519 {
+            SoftSigner::generate_ed25519().unwrap()
+        } else {
+            SoftSigner::generate_p256().unwrap()
+        };
+        let paged = PagedSigner::new(ed25519, &doc, &heap).unwrap();
+        assert_eq!(paged.public_key(), soft.public_key());
+        assert_eq!(paged.algorithm(), soft.algorithm());
+        let sig = paged.sign(b"artefact").unwrap();
+        let ok = match soft.public_key() {
+            PublicKey::Ed25519(p) => crate::sig::ed25519(&PureBackend, &p, b"artefact", &sig),
+            PublicKey::P256(p) => crate::sig::p256(&PureBackend, &p, b"artefact", &sig, true),
+            other @ PublicKey::MlDsa(..) => panic!("{other:?}"),
+        };
+        assert!(ok.is_ok());
+        let full = |_: &[u8]| -> Option<Box<dyn KeyPages>> { None };
+        assert!(matches!(
+            PagedSigner::new(ed25519, &doc, &full),
+            Err(SignError::Key)
+        ));
+    }
+}
+
+// SAI-45
+#[test]
+fn a_paged_signer_refuses_pages_that_changed() {
+    let (_, doc) = SoftSigner::generate_ed25519().unwrap();
+    let (_, other) = SoftSigner::generate_ed25519().unwrap();
+    let swapped = std::sync::Arc::new(std::sync::Mutex::new(doc.expose().clone()));
+    let handle = std::sync::Arc::clone(&swapped);
+    let place = move |_: &[u8]| -> Option<Box<dyn KeyPages>> {
+        Some(Box::new(Shared(std::sync::Arc::clone(&handle))))
+    };
+    let paged = PagedSigner::new(true, &doc, &place).unwrap();
+    assert!(paged.sign(b"m").is_ok());
+    *swapped.lock().unwrap() = other.expose().clone();
+    assert!(matches!(paged.sign(b"m"), Err(SignError::Key)));
+    swapped.lock().unwrap().clear();
+    assert!(matches!(paged.sign(b"m"), Err(SignError::Key)));
+}

@@ -276,3 +276,11 @@ pub static LEGACY_HASH_ACCOUNTS: Gauge<0> = Gauge::new(
     "Accounts whose password is still an imported legacy hash (TN-85, CR-37)",
     [],
 );
+
+/// CR-34, RR-38: the signer's secret memory backend, by `kind` (`memfd_secret`, `mlock`); a
+/// signer without one does not start.
+pub static SECRET_MEMORY_BACKEND: Gauge<1> = Gauge::new(
+    "access_secret_memory_backend",
+    "Secret memory backend of a signer process (CR-34)",
+    [Label::Kind],
+);

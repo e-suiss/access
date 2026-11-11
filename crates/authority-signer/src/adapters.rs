@@ -11,7 +11,7 @@ use suiss_crypto::cose::Algorithm;
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::envelope::{Dek, Kek, Sealed, open_body, seal_body};
 use suiss_crypto::secret::Secret;
-use suiss_crypto::signer::{SignError, Signer, SoftSigner};
+use suiss_crypto::signer::{PagedSigner, Pager, SignError, Signer, SoftSigner};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::net::{UnixListener, UnixStream};
 
@@ -26,28 +26,49 @@ const SEAL_CONTEXT: &[u8] = b"access/signer/operational-key";
 /// DEK, wrapped by the KEK; the plaintext never leaves memory (CR-21 m.3).
 pub struct SealedFactory<K> {
     kek: K,
+    pager: Option<Arc<Pager>>,
 }
 
 impl<K: Kek> SealedFactory<K> {
     /// A factory sealing under `kek`.
     pub const fn new(kek: K) -> Self {
-        Self { kek }
+        Self { kek, pager: None }
+    }
+
+    /// This factory keeping each opened operational key's document only in `pager`'s
+    /// protected memory (CR-34, SAI-45, OP-158 m.3 (y)).
+    #[must_use]
+    pub fn with_pager(mut self, pager: Arc<Pager>) -> Self {
+        self.pager = Some(pager);
+        self
+    }
+
+    fn signer(
+        &self,
+        alg: Algorithm,
+        doc: &Secret<Vec<u8>>,
+    ) -> Result<Box<dyn Signer + Send>, SignError> {
+        let ed25519 = match alg {
+            Algorithm::Ed25519 => true,
+            Algorithm::Esp256 | Algorithm::Es256 => false,
+            _ => return Err(SignError::Algorithm),
+        };
+        Ok(match &self.pager {
+            Some(pager) => Box::new(PagedSigner::new(ed25519, doc, pager.as_ref())?),
+            None if ed25519 => Box::new(SoftSigner::ed25519_from_pkcs8(doc)?),
+            None => Box::new(SoftSigner::p256_from_pkcs8(doc)?),
+        })
     }
 }
 
 impl<K: Kek> KeyFactory for SealedFactory<K> {
     fn generate(&mut self, alg: Algorithm) -> Result<Generated, SignError> {
-        let (signer, doc): (Box<dyn Signer + Send>, _) = match alg {
-            Algorithm::Ed25519 => {
-                let (s, d) = SoftSigner::generate_ed25519()?;
-                (Box::new(s), d)
-            }
-            Algorithm::Esp256 | Algorithm::Es256 => {
-                let (s, d) = SoftSigner::generate_p256()?;
-                (Box::new(s), d)
-            }
+        let (_, doc) = match alg {
+            Algorithm::Ed25519 => SoftSigner::generate_ed25519()?,
+            Algorithm::Esp256 | Algorithm::Es256 => SoftSigner::generate_p256()?,
             _ => return Err(SignError::Algorithm),
         };
+        let signer = self.signer(alg, &doc)?;
         let dek = Dek::generate().map_err(|_| SignError::Random)?;
         let wrapped = self.kek.wrap(&dek).map_err(|_| SignError::Key)?;
         let sealed = seal_body(dek, SEAL_CONTEXT, doc.expose()).map_err(|_| SignError::Key)?;
@@ -78,12 +99,7 @@ impl<K: Kek> KeyFactory for SealedFactory<K> {
             ciphertext: bytes("ciphertext")?,
         };
         let doc = open_body(&dek, SEAL_CONTEXT, &body).map_err(|_| SignError::Key)?;
-        let doc = Secret::new(doc.to_vec());
-        Ok(match alg {
-            Algorithm::Ed25519 => Box::new(SoftSigner::ed25519_from_pkcs8(&doc)?),
-            Algorithm::Esp256 | Algorithm::Es256 => Box::new(SoftSigner::p256_from_pkcs8(&doc)?),
-            _ => return Err(SignError::Algorithm),
-        })
+        self.signer(alg, &Secret::new(doc.to_vec()))
     }
 }
 

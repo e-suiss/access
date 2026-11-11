@@ -26,6 +26,45 @@ pub(crate) struct Config {
     pub(crate) cell: String,
     /// The PKCS#11 token holding the KEK that seals realm keys (CR-21, T31).
     pub(crate) hsm: Option<Hsm>,
+    /// CR-34: the hardening mode.
+    pub(crate) hardening: Hardening,
+    /// CR-34: the backend of the key memory arena.
+    pub(crate) secret_memory: SecretMemoryKind,
+    /// Key documents the arena holds at once (256 bytes each, counted against
+    /// `RLIMIT_MEMLOCK`).
+    pub(crate) secret_slots: usize,
+}
+
+/// CR-34: the hardening mode; a signer runs only `paranoid` (`PR_SET_DUMPABLE=0`,
+/// `RLIMIT_CORE=0`, locked or secret key memory). There is no other mode to choose.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Hardening {
+    /// The only mode of a signer process.
+    #[default]
+    Paranoid,
+}
+
+/// CR-34, OP-158 m.3 (y): where key documents live, named explicitly; a backend the host
+/// lacks refuses the start, it never falls back to the other.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum SecretMemoryKind {
+    /// `memfd_secret(2)`.
+    #[default]
+    MemfdSecret,
+    /// `mlock` + `MADV_DONTDUMP`.
+    Mlock,
+}
+
+impl SecretMemoryKind {
+    /// The sandbox backend.
+    pub(crate) const fn backend(self) -> suiss_sandbox::SecretBackend {
+        match self {
+            Self::MemfdSecret => suiss_sandbox::SecretBackend::MemfdSecret,
+            Self::Mlock => suiss_sandbox::SecretBackend::Mlock,
+        }
+    }
 }
 
 /// The PKCS#11 token.
@@ -55,6 +94,9 @@ impl Default for Config {
             tick_seconds: 30,
             cell: String::new(),
             hsm: None,
+            hardening: Hardening::Paranoid,
+            secret_memory: SecretMemoryKind::MemfdSecret,
+            secret_slots: 1024,
         }
     }
 }
@@ -77,6 +119,9 @@ pub(crate) enum ConfigError {
     /// The schedule interval is outside 1 to 300 seconds.
     #[error("tick_seconds out of range")]
     Tick,
+    /// The key memory arena is outside 16 to 65 536 slots (CR-34).
+    #[error("secret_slots out of range")]
+    SecretSlots,
     /// The cell name is missing or cannot name a note key.
     #[error("cell is not a valid name")]
     Cell,
@@ -113,6 +158,9 @@ impl Config {
         }
         if !(1..=300).contains(&self.tick_seconds) {
             return Err(ConfigError::Tick);
+        }
+        if !(16..=65_536).contains(&self.secret_slots) {
+            return Err(ConfigError::SecretSlots);
         }
         let origin = access_identity_signer::cell::origin(&self.cell);
         if self.cell.is_empty() || suiss_crypto::note::check_name(&origin).is_err() {
@@ -180,6 +228,34 @@ mod tests {
                 ..valid()
             };
             assert!(matches!(bad.validate(), Err(ConfigError::Cell)), "{cell}");
+        }
+    }
+
+    // CR-34, OP-158
+    #[test]
+    fn a_signer_runs_paranoid_with_a_named_secret_memory_backend() {
+        let parse = |extra: &str| {
+            Figment::from(Serialized::defaults(Config::default()))
+                .merge(Toml::string(extra))
+                .extract::<Config>()
+        };
+        let default = parse("").unwrap();
+        assert_eq!(default.hardening, Hardening::Paranoid);
+        assert_eq!(default.secret_memory, SecretMemoryKind::MemfdSecret);
+        for mode in ["balanced", "dev", "none"] {
+            assert!(parse(&format!("hardening = {mode:?}")).is_err(), "{mode}");
+        }
+        assert_eq!(
+            parse("secret_memory = \"mlock\"").unwrap().secret_memory,
+            SecretMemoryKind::Mlock
+        );
+        assert!(parse("secret_memory = \"heap\"").is_err());
+        for slots in [0, 15, 65_537] {
+            let bad = Config {
+                secret_slots: slots,
+                ..valid()
+            };
+            assert!(matches!(bad.validate(), Err(ConfigError::SecretSlots)));
         }
     }
 

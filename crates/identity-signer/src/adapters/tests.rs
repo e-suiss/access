@@ -200,3 +200,33 @@ async fn a_stopped_signer_closes_its_token_in_order() {
     assert_eq!(store.open_handles(), 0);
     store.finalize().unwrap();
 }
+
+struct HeapPages(Vec<u8>);
+
+impl suiss_crypto::signer::KeyPages for HeapPages {
+    fn expose(&self, f: &mut dyn FnMut(&[u8])) {
+        f(&self.0);
+    }
+}
+
+// SAI-45, CR-34, OP-158
+#[test]
+fn a_paged_factory_signs_from_protected_pages_and_fails_closed_when_full() {
+    let room = Arc::new(std::sync::atomic::AtomicUsize::new(2));
+    let left = Arc::clone(&room);
+    let pager: Arc<Pager> = Arc::new(move |doc: &[u8]| {
+        let had = left.load(std::sync::atomic::Ordering::SeqCst);
+        (had > 0).then(|| {
+            left.store(had - 1, std::sync::atomic::Ordering::SeqCst);
+            Box::new(HeapPages(doc.to_vec())) as Box<dyn suiss_crypto::signer::KeyPages>
+        })
+    });
+    let mut factory = SealedFactory::new(SoftKek::new("realm-kek-1", [1; 32])).with_pager(pager);
+    let g = factory.generate(JwsAlg::Es256).unwrap();
+    let loaded = factory.load(JwsAlg::Es256, &g.sealed).unwrap();
+    assert_eq!(loaded.public_key(), g.signer.public_key());
+    assert_eq!(loaded.sign(b"m").unwrap().len(), 64);
+    assert_eq!(room.load(std::sync::atomic::Ordering::SeqCst), 0);
+    assert!(factory.generate(JwsAlg::Ed25519).is_err());
+    assert!(factory.load(JwsAlg::Es256, &g.sealed).is_err());
+}

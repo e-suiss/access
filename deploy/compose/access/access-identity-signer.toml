@@ -2,6 +2,10 @@
 socket = "/run/access/identity-signer.sock"
 vault = "/var/lib/access/identity-signer"
 callers = [65532]
+# CR-34, OP-158 m.3 (y): a signer runs paranoid; the local VM kernel may lack memfd_secret, so
+# the local deployment names mlock (the container grants the memlock limit)
+hardening = "paranoid"
+secret_memory = "mlock"
 # OP-150: the identity audit log origin is "<cell>/identity-audit"
 cell = "local"
 

@@ -24,6 +24,45 @@ pub(crate) struct Config {
     pub(crate) hsm: Option<Hsm>,
     /// The binding key ceremony transcript and its pin (CR-29, OP-157 m.3 (x)).
     pub(crate) ceremony: Option<Ceremony>,
+    /// CR-34: the hardening mode.
+    pub(crate) hardening: Hardening,
+    /// CR-34: the backend of the key memory arena.
+    pub(crate) secret_memory: SecretMemoryKind,
+    /// Key documents the arena holds at once (256 bytes each, counted against
+    /// `RLIMIT_MEMLOCK`).
+    pub(crate) secret_slots: usize,
+}
+
+/// CR-34: the hardening mode; a signer runs only `paranoid` (`PR_SET_DUMPABLE=0`,
+/// `RLIMIT_CORE=0`, locked or secret key memory). There is no other mode to choose.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Hardening {
+    /// The only mode of a signer process.
+    #[default]
+    Paranoid,
+}
+
+/// CR-34, OP-158 m.3 (y): where key documents live, named explicitly; a backend the host
+/// lacks refuses the start, it never falls back to the other.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum SecretMemoryKind {
+    /// `memfd_secret(2)`.
+    #[default]
+    MemfdSecret,
+    /// `mlock` + `MADV_DONTDUMP`.
+    Mlock,
+}
+
+impl SecretMemoryKind {
+    /// The sandbox backend.
+    pub(crate) const fn backend(self) -> suiss_sandbox::SecretBackend {
+        match self {
+            Self::MemfdSecret => suiss_sandbox::SecretBackend::MemfdSecret,
+            Self::Mlock => suiss_sandbox::SecretBackend::Mlock,
+        }
+    }
 }
 
 /// The binding key ceremony.
@@ -63,6 +102,9 @@ impl Default for Config {
             tick_seconds: 30,
             hsm: None,
             ceremony: None,
+            hardening: Hardening::Paranoid,
+            secret_memory: SecretMemoryKind::MemfdSecret,
+            secret_slots: 1024,
         }
     }
 }
@@ -88,6 +130,9 @@ pub(crate) enum ConfigError {
     /// The schedule interval is outside 1 to 300 seconds.
     #[error("tick_seconds out of range")]
     Tick,
+    /// The key memory arena is outside 16 to 65 536 slots (CR-34).
+    #[error("secret_slots out of range")]
+    SecretSlots,
 }
 
 impl Config {
@@ -118,6 +163,9 @@ impl Config {
         }
         if !(1..=300).contains(&config.tick_seconds) {
             return Err(ConfigError::Tick);
+        }
+        if !(16..=65_536).contains(&config.secret_slots) {
+            return Err(ConfigError::SecretSlots);
         }
         Ok(config)
     }

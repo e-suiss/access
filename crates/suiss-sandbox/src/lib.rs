@@ -403,6 +403,182 @@ impl SecretMemory {
     }
 }
 
+/// Where secret pages come from (CR-34 m.1–2, OP-158 m.3 (y)). The configuration names one;
+/// there is no fallback between them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum SecretBackend {
+    /// `memfd_secret(2)`: out of the kernel's direct map.
+    MemfdSecret,
+    /// An anonymous mapping locked in RAM (`mlock`) and excluded from core dumps
+    /// (`MADV_DONTDUMP`).
+    Mlock,
+}
+
+impl SecretBackend {
+    /// The `access_secret_memory_backend` value.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::MemfdSecret => "memfd_secret",
+            Self::Mlock => "mlock",
+        }
+    }
+}
+
+impl SecretMemory {
+    /// Allocates `len` zeroed bytes from `backend`.
+    ///
+    /// # Errors
+    /// As [`SecretMemory::new`] for [`SecretBackend::MemfdSecret`]; [`Error::SecretMemory`]
+    /// when mapping, locking or advising fails for [`SecretBackend::Mlock`] (for example
+    /// `RLIMIT_MEMLOCK` without `CAP_IPC_LOCK`); [`Error::Unsupported`] off Linux.
+    pub fn with_backend(
+        len: core::num::NonZeroUsize,
+        backend: SecretBackend,
+    ) -> Result<Self, Error> {
+        let inner = match backend {
+            SecretBackend::MemfdSecret => imp::SecretMemory::new(len)?,
+            SecretBackend::Mlock => imp::SecretMemory::locked(len)?,
+        };
+        Ok(Self { inner })
+    }
+}
+
+/// The soft `RLIMIT_MEMLOCK` of this process in bytes (CR-34 m.2), `None` when unlimited or
+/// off Linux.
+#[must_use]
+pub fn memlock_limit() -> Option<u64> {
+    imp::memlock_limit()
+}
+
+/// A region of secret memory allocated once at start-up, before seccomp phase 2 forbids new
+/// `memfd_secret` mappings, and cut into equal slots (SAI-45, CR-34). A slot is zeroed when
+/// it is freed; when no slot is left, nothing is placed (fail closed).
+pub struct SecretArena {
+    memory: std::sync::Mutex<SecretMemory>,
+    slot: usize,
+    free: std::sync::Mutex<Vec<usize>>,
+    backend: SecretBackend,
+}
+
+/// One slot of a [`SecretArena`] holding `len` bytes; dropping it zeroes and frees the slot.
+pub struct SecretSlot {
+    arena: std::sync::Arc<SecretArena>,
+    index: usize,
+    len: usize,
+}
+
+impl SecretArena {
+    /// An arena of `slots` slots of `slot` bytes each from `backend`.
+    ///
+    /// # Errors
+    /// As [`SecretMemory::with_backend`]; [`Error::SecretMemory`] for a zero or overflowing
+    /// size.
+    pub fn new(
+        slots: usize,
+        slot: usize,
+        backend: SecretBackend,
+    ) -> Result<std::sync::Arc<Self>, Error> {
+        let size = slots
+            .checked_mul(slot)
+            .and_then(core::num::NonZeroUsize::new)
+            .ok_or_else(|| Error::SecretMemory(std::io::Error::other("arena size")))?;
+        let memory = SecretMemory::with_backend(size, backend)?;
+        Ok(std::sync::Arc::new(Self {
+            memory: std::sync::Mutex::new(memory),
+            slot,
+            free: std::sync::Mutex::new((0..slots).rev().collect()),
+            backend,
+        }))
+    }
+
+    /// The backend the arena came from.
+    #[must_use]
+    pub const fn backend(&self) -> SecretBackend {
+        self.backend
+    }
+
+    /// Free slots.
+    #[must_use]
+    pub fn available(&self) -> usize {
+        self.free.lock().map_or(0, |f| f.len())
+    }
+
+    /// Copies `bytes` into a free slot; `None` when they do not fit a slot or none is free.
+    #[must_use]
+    pub fn place(self: &std::sync::Arc<Self>, bytes: &[u8]) -> Option<SecretSlot> {
+        if bytes.is_empty() || bytes.len() > self.slot {
+            return None;
+        }
+        let index = self.free.lock().ok()?.pop()?;
+        let slot = SecretSlot {
+            arena: std::sync::Arc::clone(self),
+            index,
+            len: bytes.len(),
+        };
+        let mut memory = self.memory.lock().ok()?;
+        let start = index.checked_mul(self.slot)?;
+        let end = start.checked_add(bytes.len())?;
+        memory
+            .as_mut_slice()
+            .get_mut(start..end)?
+            .copy_from_slice(bytes);
+        drop(memory);
+        Some(slot)
+    }
+}
+
+impl SecretSlot {
+    /// Runs `f` over the slot's bytes; nothing runs when the arena's lock is poisoned.
+    pub fn expose(&self, f: &mut dyn FnMut(&[u8])) {
+        let Ok(memory) = self.arena.memory.lock() else {
+            return;
+        };
+        let Some(start) = self.index.checked_mul(self.arena.slot) else {
+            return;
+        };
+        if let Some(bytes) = start
+            .checked_add(self.len)
+            .and_then(|end| memory.as_slice().get(start..end))
+        {
+            f(bytes);
+        }
+    }
+}
+
+impl Drop for SecretSlot {
+    fn drop(&mut self) {
+        if let Ok(mut memory) = self.arena.memory.lock()
+            && let Some(start) = self.index.checked_mul(self.arena.slot)
+            && let Some(end) = start.checked_add(self.arena.slot)
+            && let Some(bytes) = memory.as_mut_slice().get_mut(start..end)
+        {
+            zeroize::Zeroize::zeroize(bytes);
+            if let Ok(mut free) = self.arena.free.lock() {
+                free.push(self.index);
+            }
+        }
+    }
+}
+
+impl core::fmt::Debug for SecretArena {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SecretArena")
+            .field("slot", &self.slot)
+            .field("backend", &self.backend)
+            .finish_non_exhaustive()
+    }
+}
+
+impl core::fmt::Debug for SecretSlot {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SecretSlot")
+            .field("len", &self.len)
+            .finish_non_exhaustive()
+    }
+}
+
 impl core::fmt::Debug for SecretMemory {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("SecretMemory")

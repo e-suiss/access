@@ -166,11 +166,69 @@ fn init(config: &Config, hsm: &config::Hsm) -> ExitCode {
 
 type Signer = Service<SealedFactory<suiss_crypto::pkcs11::HsmKek>, DirVault>;
 
+/// Bytes of one key memory slot: an Ed25519 or P-256 PKCS#8 document fits.
+const SLOT: usize = 256;
+
+/// A key document slot of the arena, as the signer crates see it.
+struct Slot(suiss_sandbox::SecretSlot);
+
+impl suiss_crypto::signer::KeyPages for Slot {
+    fn expose(&self, f: &mut dyn FnMut(&[u8])) {
+        self.0.expose(f);
+    }
+}
+
+/// CR-34, SAI-45, OP-158 m.3 (y): the key memory arena from the configured backend, made
+/// before the lockdown; a backend the host lacks refuses the start.
+fn secret_arena(config: &Config) -> Option<Arc<suiss_sandbox::SecretArena>> {
+    let backend = config.secret_memory.backend();
+    let needed = config.secret_slots.saturating_mul(SLOT);
+    // CR-34 m.2
+    let limit = suiss_sandbox::memlock_limit();
+    tracing::info!(
+        backend = backend.as_str(),
+        hardening = ?config.hardening,
+        memlock_limit = ?limit,
+        bytes = needed,
+        "secret key memory (CR-34)"
+    );
+    if limit.is_some_and(|l| u64::try_from(needed).map_or(true, |n| l < n)) {
+        tracing::warn!("RLIMIT_MEMLOCK is below the key memory; grant IPC_LOCK (CR-34)");
+    }
+    match suiss_sandbox::SecretArena::new(config.secret_slots, SLOT, backend) {
+        Ok(arena) => {
+            access_telemetry::signals::SECRET_MEMORY_BACKEND.set_u64(1, [backend.as_str()]);
+            Some(arena)
+        }
+        Err(error) => {
+            tracing::error!(
+                %error,
+                backend = backend.as_str(),
+                "secret key memory unavailable; refusing to start (CR-34)"
+            );
+            None
+        }
+    }
+}
+
+/// Places each opened key's document in the arena; a full arena refuses the key.
+fn pager(arena: Arc<suiss_sandbox::SecretArena>) -> Arc<suiss_crypto::signer::Pager> {
+    Arc::new(move |doc: &[u8]| {
+        arena
+            .place(doc)
+            .map(|s| Box::new(Slot(s)) as Box<dyn suiss_crypto::signer::KeyPages>)
+    })
+}
+
 /// The service with every realm restored and the cell's `audit-checkpoint` key open (CR-23,
 /// OP-150 m.3 (h)).
-fn start(config: &Config, kek: suiss_crypto::pkcs11::HsmKek) -> Option<Signer> {
+fn start(
+    config: &Config,
+    kek: suiss_crypto::pkcs11::HsmKek,
+    arena: Arc<suiss_sandbox::SecretArena>,
+) -> Option<Signer> {
     let mut service = match Service::start(
-        SealedFactory::new(kek),
+        SealedFactory::new(kek).with_pager(pager(arena)),
         DirVault::new(&config.vault),
         Policy::REALM,
     ) {
@@ -272,6 +330,9 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    let Some(arena) = secret_arena(&config) else {
+        return ExitCode::FAILURE;
+    };
     let _ = std::fs::remove_file(&config.socket);
     let listener = match std::os::unix::net::UnixListener::bind(&config.socket) {
         Ok(listener) => listener,
@@ -311,7 +372,7 @@ fn main() -> ExitCode {
         tracing::error!(%error, "seccomp phase 2 failed; refusing to continue");
         return ExitCode::FAILURE;
     }
-    let Some(service) = start(&config, kek) else {
+    let Some(service) = start(&config, kek, arena) else {
         return ExitCode::FAILURE;
     };
     let service = Arc::new(Mutex::new(service));

@@ -16,7 +16,7 @@ use crate::service::Service;
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::envelope::{Dek, Kek, Sealed, open_body, seal_body};
 use suiss_crypto::secret::Secret;
-use suiss_crypto::signer::{SignError, Signer, SoftSigner};
+use suiss_crypto::signer::{PagedSigner, Pager, SignError, Signer, SoftSigner};
 
 use crate::ports::{Generated, KeyFactory};
 
@@ -33,20 +33,35 @@ const SAML_CONTEXT: &[u8] = b"access/identity-signer/saml";
 /// by the realm's KEK; the plaintext never leaves memory (CR-21 m.3).
 pub struct SealedFactory<K> {
     kek: K,
+    pager: Option<Arc<Pager>>,
 }
 
 impl<K: Kek> SealedFactory<K> {
     /// A factory sealing under `kek`.
     pub const fn new(kek: K) -> Self {
-        Self { kek }
+        Self { kek, pager: None }
     }
-}
 
-fn from_pkcs8(alg: JwsAlg, doc: &Secret<Vec<u8>>) -> Result<Box<dyn Signer + Send>, SignError> {
-    Ok(match alg {
-        JwsAlg::Es256 => Box::new(SoftSigner::p256_from_pkcs8(doc)?),
-        JwsAlg::Ed25519 => Box::new(SoftSigner::ed25519_from_pkcs8(doc)?),
-    })
+    /// This factory keeping each opened realm key's document only in `pager`'s protected
+    /// memory (CR-34, SAI-45, OP-158 m.3 (y)).
+    #[must_use]
+    pub fn with_pager(mut self, pager: Arc<Pager>) -> Self {
+        self.pager = Some(pager);
+        self
+    }
+
+    fn signer(
+        &self,
+        alg: JwsAlg,
+        doc: &Secret<Vec<u8>>,
+    ) -> Result<Box<dyn Signer + Send>, SignError> {
+        let ed25519 = alg == JwsAlg::Ed25519;
+        Ok(match (&self.pager, alg) {
+            (Some(pager), _) => Box::new(PagedSigner::new(ed25519, doc, pager.as_ref())?),
+            (None, JwsAlg::Es256) => Box::new(SoftSigner::p256_from_pkcs8(doc)?),
+            (None, JwsAlg::Ed25519) => Box::new(SoftSigner::ed25519_from_pkcs8(doc)?),
+        })
+    }
 }
 
 impl<K: Kek> SealedFactory<K> {
@@ -103,16 +118,11 @@ impl<K: Kek> KeyFactory for SealedFactory<K> {
     }
 
     fn generate(&mut self, alg: JwsAlg) -> Result<Generated, SignError> {
-        let (signer, doc): (Box<dyn Signer + Send>, _) = match alg {
-            JwsAlg::Es256 => {
-                let (s, d) = SoftSigner::generate_p256()?;
-                (Box::new(s), d)
-            }
-            JwsAlg::Ed25519 => {
-                let (s, d) = SoftSigner::generate_ed25519()?;
-                (Box::new(s), d)
-            }
+        let (_, doc) = match alg {
+            JwsAlg::Es256 => SoftSigner::generate_p256()?,
+            JwsAlg::Ed25519 => SoftSigner::generate_ed25519()?,
         };
+        let signer = self.signer(alg, &doc)?;
         let dek = Dek::generate().map_err(|_| SignError::Random)?;
         let wrapped = self.kek.wrap(&dek).map_err(|_| SignError::Key)?;
         let sealed = seal_body(dek, SEAL_CONTEXT, doc.expose()).map_err(|_| SignError::Key)?;
@@ -143,7 +153,7 @@ impl<K: Kek> KeyFactory for SealedFactory<K> {
             ciphertext: bytes("ciphertext")?,
         };
         let doc = open_body(&dek, SEAL_CONTEXT, &body).map_err(|_| SignError::Key)?;
-        from_pkcs8(alg, &Secret::new(doc.to_vec()))
+        self.signer(alg, &Secret::new(doc.to_vec()))
     }
 }
 

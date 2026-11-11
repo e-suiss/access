@@ -197,3 +197,33 @@ async fn a_silent_caller_times_out() {
         Err(std::io::ErrorKind::TimedOut)
     );
 }
+
+struct HeapPages(Vec<u8>);
+
+impl suiss_crypto::signer::KeyPages for HeapPages {
+    fn expose(&self, f: &mut dyn FnMut(&[u8])) {
+        f(&self.0);
+    }
+}
+
+// SAI-45, CR-34, OP-158
+#[test]
+fn a_paged_factory_signs_from_protected_pages_and_fails_closed_when_full() {
+    let room = Arc::new(std::sync::atomic::AtomicUsize::new(2));
+    let left = Arc::clone(&room);
+    let pager: Arc<Pager> = Arc::new(move |doc: &[u8]| {
+        let had = left.load(Ordering::SeqCst);
+        (had > 0).then(|| {
+            left.store(had - 1, Ordering::SeqCst);
+            Box::new(HeapPages(doc.to_vec())) as Box<dyn suiss_crypto::signer::KeyPages>
+        })
+    });
+    let mut factory = SealedFactory::new(SoftKek::new("kek-1", [1; 32])).with_pager(pager);
+    let g = factory.generate(Algorithm::Ed25519).unwrap();
+    let loaded = factory.load(Algorithm::Ed25519, &g.sealed).unwrap();
+    assert_eq!(loaded.public_key(), g.signer.public_key());
+    assert_eq!(loaded.sign(b"m").unwrap(), g.signer.sign(b"m").unwrap());
+    assert_eq!(room.load(Ordering::SeqCst), 0);
+    assert!(factory.generate(Algorithm::Esp256).is_err());
+    assert!(factory.generate(Algorithm::MlDsa65).is_err());
+}

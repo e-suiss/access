@@ -56,6 +56,7 @@ Every metric name starts with `access_`. The section column is the row of the op
 | `access_risk_assessments_total` | counter | `outcome`, `mode` | SL2 sign-in assessments by level and stage |
 | `access_risk_signals_total` | counter | `kind` | SL2 risk signals that fired |
 | `access_risk_fp_ratio_ppm` | gauge | | SL2 false-positive ratio over 30 days, parts per million (budget 5000) |
+| `access_secret_memory_backend` | gauge | `kind` | A signer's key memory backend (`memfd_secret` or `mlock`); a signer without one does not start |
 
 Tenant, realm and domain breakdowns come from the analytics summary tables, not from metric labels.
 

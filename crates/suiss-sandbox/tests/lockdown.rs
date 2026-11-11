@@ -115,7 +115,19 @@ mod linux {
     use std::process::{Command, ExitCode};
 
     use rustix::process::DumpableBehavior;
-    use suiss_sandbox::{Error, LandlockAbi, Lockdown, Locked, Profile, RunAs, SecretMemory};
+    use suiss_sandbox::{
+        Error, LandlockAbi, Lockdown, Locked, Profile, RunAs, SecretArena, SecretBackend,
+        SecretMemory,
+    };
+
+    fn locked_kib() -> Result<u64, String> {
+        let status = fs::read_to_string("/proc/self/status").map_err(|e| e.to_string())?;
+        status
+            .lines()
+            .find_map(|l| l.strip_prefix("VmLck:"))
+            .and_then(|v| v.trim().trim_end_matches("kB").trim().parse().ok())
+            .ok_or_else(|| String::from("no VmLck"))
+    }
 
     pub(super) const SCENARIO_ENV: &str = "ACCESS_SANDBOX_SCENARIO";
     pub(super) const PROBE_ENV: &str = "ACCESS_SANDBOX_PROBE";
@@ -212,6 +224,13 @@ mod linux {
             "signer_memfd_secret_memory_is_usable_after_lockdown",
             Expect::PassOrSkip,
         ),
+        // SAI-45, CR-34, OP-158
+        (
+            "signer_secret_arena_serves_slots_after_narrow",
+            Expect::PassOrSkip,
+        ),
+        // CR-34
+        ("mlock_arena_is_locked_in_ram", Expect::Pass),
         // OP-115 m.6
         (
             "solver_child_runs_without_privileges_or_core_dumps",
@@ -683,6 +702,57 @@ mod linux {
                     ))),
                     Err(e) => Err(format!("memfd_secret failed: {e} ({e:?})")),
                 }
+            }
+            "signer_secret_arena_serves_slots_after_narrow" => {
+                let arena = match SecretArena::new(4, 256, SecretBackend::MemfdSecret) {
+                    Ok(arena) => arena,
+                    Err(Error::SecretMemoryUnavailable(e)) => {
+                        return Ok(Outcome::Skip(format!(
+                            "SKIPPED: memfd_secret unavailable on this kernel ({e})"
+                        )));
+                    }
+                    Err(e) => return Err(format!("arena: {e} ({e:?})")),
+                };
+                let locked = apply(lockdown(Profile::Signer))?;
+                narrow(locked)?;
+                let first = arena.place(&[7; 48]).ok_or("no slot")?;
+                let mut seen = Vec::new();
+                first.expose(&mut |b| seen.extend_from_slice(b));
+                ensure(seen == [7; 48], "slot contents lost")?;
+                ensure(
+                    arena.place(&[1; 257]).is_none(),
+                    "an oversized document was placed",
+                )?;
+                let held: Vec<_> = (0..3).filter_map(|_| arena.place(&[9; 32])).collect();
+                ensure(
+                    held.len() == 3 && arena.place(&[9; 32]).is_none(),
+                    "arena overfilled",
+                )?;
+                drop(first);
+                ensure(arena.available() == 1, "a freed slot was not returned")?;
+                let again = arena.place(&[5; 16]).ok_or("freed slot not reusable")?;
+                let mut reused = Vec::new();
+                again.expose(&mut |b| reused.extend_from_slice(b));
+                ensure(reused == [5; 16], "reused slot shows old contents")?;
+                ensure(arena.backend() == SecretBackend::MemfdSecret, "backend")?;
+                pass()
+            }
+            "mlock_arena_is_locked_in_ram" => {
+                let before = locked_kib()?;
+                let arena = SecretArena::new(64, 1024, SecretBackend::Mlock).map_err(|e| {
+                    format!(
+                        "mlock arena: {e} ({e:?}); memlock limit {:?}",
+                        suiss_sandbox::memlock_limit()
+                    )
+                })?;
+                let after = locked_kib()?;
+                ensure(
+                    after >= before.saturating_add(64),
+                    format!("VmLck {before} -> {after} kB"),
+                )?;
+                let slot = arena.place(b"key").ok_or("no slot")?;
+                drop(slot);
+                pass()
             }
             "solver_child_runs_without_privileges_or_core_dumps" => {
                 let o = confined_probe("report")?;

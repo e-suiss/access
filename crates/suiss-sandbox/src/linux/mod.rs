@@ -10,6 +10,10 @@ mod secretmem;
 pub(crate) use confine::confine;
 pub(crate) use secretmem::SecretMemory;
 
+pub(crate) fn memlock_limit() -> Option<u64> {
+    rustix::process::getrlimit(rustix::process::Resource::Memlock).current
+}
+
 use rustix::process::DumpableBehavior;
 
 use crate::{Error, Lockdown, LockdownReport, Locked, Step};

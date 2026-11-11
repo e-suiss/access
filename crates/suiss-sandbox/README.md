@@ -10,6 +10,10 @@ What it applies, in order:
 - seccomp in two phases: a start-up allowlist, then a narrower one installed on every thread once the runtime is up; `io_uring` is never allowed, and no profile can create processes;
 - `memfd_secret` memory for key material, where the kernel supports it.
 
+## Secret memory
+
+`SecretMemory::with_backend` gives zeroed pages from a backend you name: `MemfdSecret` (out of the kernel's direct map) or `Mlock` (locked in RAM and left out of core dumps). There is no fallback from one to the other; a backend the host lacks is an error. `SecretArena` allocates one region at start-up, before seccomp forbids new mappings, and hands out fixed-size slots that are zeroed when dropped. `memlock_limit` reports `RLIMIT_MEMLOCK`, which both backends count against.
+
 ## Profiles
 
 | Profile | For | Unlisted syscalls |

@@ -204,6 +204,82 @@ impl Signer for SoftSigner {
     }
 }
 
+/// Protected memory holding one key's PKCS#8 document (CR-34, SAI-45): `memfd_secret` or
+/// locked pages in the signer process.
+pub trait KeyPages: Send + Sync {
+    /// Runs `f` over the document.
+    fn expose(&self, f: &mut dyn FnMut(&[u8]));
+}
+
+/// Places a PKCS#8 document in protected memory; `None` when none is left (fail closed).
+pub type Pager = dyn Fn(&[u8]) -> Option<Box<dyn KeyPages>> + Send + Sync;
+
+/// A signer whose only long-lived copy of the key is its document in [`KeyPages`]
+/// (OP-158 m.3 (y), SAI-45): each signature parses the key, signs and drops it, and aws-lc
+/// cleanses the transient copy when it frees it.
+pub struct PagedSigner {
+    pages: Box<dyn KeyPages>,
+    algorithm: Algorithm,
+    public: PublicKey,
+}
+
+impl PagedSigner {
+    /// The signer of the Ed25519 or P-256 document `doc`, placed by `pager`.
+    ///
+    /// # Errors
+    /// [`SignError::Key`] for a document that is not such a key, or when `pager` has no room.
+    pub fn new(ed25519: bool, doc: &Secret<Vec<u8>>, pager: &Pager) -> Result<Self, SignError> {
+        let soft = if ed25519 {
+            SoftSigner::ed25519_from_pkcs8(doc)?
+        } else {
+            SoftSigner::p256_from_pkcs8(doc)?
+        };
+        let placed = pager(doc.expose()).ok_or(SignError::Key)?;
+        Ok(Self {
+            pages: placed,
+            algorithm: soft.algorithm(),
+            public: soft.public_key(),
+        })
+    }
+
+    fn parsed(&self, doc: &[u8]) -> Result<SoftSigner, SignError> {
+        let pair = match self.algorithm {
+            Algorithm::Ed25519 => {
+                Pair::Ed25519(Ed25519KeyPair::from_pkcs8(doc).map_err(|_| SignError::Key)?)
+            }
+            _ => Pair::P256(
+                EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, doc)
+                    .map_err(|_| SignError::Key)?,
+            ),
+        };
+        Ok(SoftSigner { pair })
+    }
+}
+
+impl Signer for PagedSigner {
+    fn algorithm(&self) -> Algorithm {
+        self.algorithm
+    }
+
+    fn public_key(&self) -> PublicKey {
+        self.public.clone()
+    }
+
+    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, SignError> {
+        let mut out = Err(SignError::Key);
+        self.pages.expose(&mut |doc| {
+            out = self.parsed(doc).and_then(|s| {
+                if s.public_key() == self.public {
+                    s.sign(message)
+                } else {
+                    Err(SignError::Key)
+                }
+            });
+        });
+        out
+    }
+}
+
 /// A tagged `COSE_Sign1` over `payload` whose protected header carries exactly `alg`, the
 /// content type and `kid` (L2-SIG-1).
 ///

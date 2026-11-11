@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- `pkcs11::KeyStore::finalize`, `finalizer` and `open_handles`: an orderly shutdown that closes every session before `C_Finalize`; modules stay loaded until exit.
+- `pkcs11::HsmKek::rewrap`: move a wrapped DEK to another KEK inside the token.
+- `pkcs11::KeyStore::{install_clone_key, generate_cloneable, export_clone, import_clone}`: a signing key cloned to a DR token, wrapped only under a trusted clone key.
+- `signer::{KeyPages, Pager, PagedSigner}`: a signer whose key document lives only in protected memory.
+
 ## 0.5.0
 
 Released with `esuiss-access-kernel` 0.5.0 (Kernel 0.4.1 semantics: catalog 7 types, `policy.set` structural polarity, the closed `derived.*` values, policy defaults, compatibility mappings, `DistinctSurface` and the actor Party exclusion, and a Mandate decided by its window, while-conditions, budget and pin). The Kernel's public structs gained fields, so the minor version moves.

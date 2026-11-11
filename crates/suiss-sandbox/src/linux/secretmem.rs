@@ -12,8 +12,8 @@ pub(crate) struct SecretMemory {
     /// The mapping. `'static` only inside this type: every accessor reborrows it for `&self`
     /// / `&mut self`, and `Drop` unmaps it.
     bytes: &'static mut [u8],
-    /// Kept open for the lifetime of the mapping.
-    _fd: OwnedFd,
+    /// Kept open for the lifetime of the mapping; `None` for a locked anonymous mapping.
+    _fd: Option<OwnedFd>,
 }
 
 impl SecretMemory {
@@ -41,7 +41,41 @@ impl SecretMemory {
             .map_err(|e| Error::SecretMemory(e.into()))?;
             core::slice::from_raw_parts_mut(ptr.cast::<u8>(), len.get())
         };
-        Ok(Self { bytes, _fd: fd })
+        Ok(Self {
+            bytes,
+            _fd: Some(fd),
+        })
+    }
+
+    /// CR-34 `mlock` backend: an anonymous private mapping, locked in RAM and excluded from
+    /// core dumps (`MADV_DONTDUMP`).
+    pub(crate) fn locked(len: NonZeroUsize) -> Result<Self, Error> {
+        #[allow(unsafe_code)]
+        // SAFETY: a fresh private anonymous mapping of `len` bytes at an address the kernel
+        // chooses, so it aliases no existing Rust object; on success it is `len` zero-filled
+        // readable and writable bytes valid until `munmap` in `Drop`, owned only by `Self`.
+        let bytes = unsafe {
+            let ptr = rustix::mm::mmap_anonymous(
+                core::ptr::null_mut(),
+                len.get(),
+                ProtFlags::READ | ProtFlags::WRITE,
+                MapFlags::PRIVATE,
+            )
+            .map_err(|e| Error::SecretMemory(e.into()))?;
+            core::slice::from_raw_parts_mut(ptr.cast::<u8>(), len.get())
+        };
+        let memory = Self { bytes, _fd: None };
+        let ptr = memory.bytes.as_ptr().cast::<core::ffi::c_void>().cast_mut();
+        #[allow(unsafe_code)]
+        // SAFETY: `ptr`/`len` are exactly the mapping made above, still mapped; locking and
+        // advising it changes no Rust-visible memory.
+        let advised = unsafe {
+            rustix::mm::mlock(ptr, len.get()).and_then(|()| {
+                rustix::mm::madvise(ptr, len.get(), rustix::mm::Advice::LinuxDontDump)
+            })
+        };
+        advised.map_err(|e| Error::SecretMemory(e.into()))?;
+        Ok(memory)
     }
 
     pub(crate) fn as_slice(&self) -> &[u8] {
