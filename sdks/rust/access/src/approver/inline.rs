@@ -2,6 +2,8 @@
 //! `approval-inline.cddl`). The app parses the `approval_inline` body, rebuilds the canonical
 //! render with the Kernel, compares its digest and shows the render; only then does its key sign
 //! H(AAS). A body whose render digest is not the Kernel's own is refused here, on the device.
+//! Refusing from the notification works. Approving is refused by Access for now, with
+//! `approval-inline-assertion-required`: send the person to the Approval Surface.
 //!
 //! ```
 //! use access_sdk::approver::inline::{InlineRequest, NotInline};
@@ -120,9 +122,10 @@ pub struct StatementFacts {
     pub expires_at: u64,
 }
 
-/// The statement of an approval given on this device: a phone surface, phishing-resistant
-/// evidence (the key signs H(AAS) of the exact render the Kernel rebuilt), the material fields of
-/// the verified `render`.
+/// The statement of an approval given on this device: a phone surface, a person's presence as
+/// its evidence and the material fields of the verified `render`. A device key is not a
+/// phishing-resistant authenticator (§10.3.1), so Access checks this statement and answers
+/// `approval-inline-assertion-required`; a refusal counts.
 #[must_use]
 pub fn statement(request: &InlineRequest, render: &Render, facts: StatementFacts) -> ApprovalAct {
     ApprovalAct {
@@ -137,7 +140,7 @@ pub fn statement(request: &InlineRequest, render: &Render, facts: StatementFacts
         surface_profile: String::from(SURFACE_PROFILE),
         surface_version: SURFACE_VERSION,
         surface_class: Some(SurfaceClass::Phone),
-        evidence: Some(EvidenceLevel::PhishingResistant),
+        evidence: Some(EvidenceLevel::Presence),
         render_digest: request.render_digest,
         material_fields: render::material_fields(render),
         issued_at: facts.issued_at,

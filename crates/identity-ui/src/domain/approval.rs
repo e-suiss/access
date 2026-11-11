@@ -1353,7 +1353,7 @@ pub fn paths(paths: &mut Map<String, Value>) {
             "requestBody": body("BatchStart"),
             "responses": {
                 "201": json_response("Every item opened, each with its own statement and options.", "BatchStarted"),
-                "400": problem("approval-batch-invalid: more than 10 items, another requester or action class, a tier above CT1, or a batch the realm did not open; the whole batch is refused."),
+                "422": problem("approval-batch-invalid: more than 10 items, another requester or action class, a tier above CT1, or a batch the realm did not open; the whole batch is refused."),
                 "401": problem("The approver has no live session."),
                 "503": problem("Temporarily unavailable."),
             },
@@ -1368,7 +1368,7 @@ pub fn paths(paths: &mut Map<String, Value>) {
             "requestBody": body("BatchFinish"),
             "responses": {
                 "200": { "description": "Each item's result: its Exercise or its problem." },
-                "400": problem("approval-batch-invalid."),
+                "422": problem("approval-batch-invalid."),
                 "503": problem("Temporarily unavailable."),
             },
         }}),
@@ -1377,15 +1377,14 @@ pub fn paths(paths: &mut Map<String, Value>) {
         INLINE_PATH.to_owned(),
         json!({ "post": {
             "operationId": "answerInlineApproval",
-            "summary": "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key (surface_profile suiss-approver-sdk); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m), §13.7.3, SEC26).",
+            "summary": "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded, and an approval is refused with approval-inline-assertion-required because a device key is no phishing-resistant assertion (§10.2, §10.3.1); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m), §13.7.3, SEC26).",
             "parameters": [idempotency()],
             "requestBody": body("InlineAnswer"),
             "responses": {
-                "200": { "description": "Approved or denied." },
+                "200": { "description": "The refusal was recorded." },
                 "401": problem("approver-unknown: not an activated approver key, or a signature that does not verify."),
-                "403": problem("approval-inline-off, or a request above CT1."),
                 "404": problem("approval-request-unknown: no invitation for this device, or it was answered already."),
-                "409": problem("The render or the request changed."),
+                "409": problem("approval-inline-off: the channel is closed or the request is above CT1; approval-inline-assertion-required: the answer is valid but carries no phishing-resistant assertion; or the render or the request changed."),
                 "503": problem("Temporarily unavailable."),
             },
         }}),

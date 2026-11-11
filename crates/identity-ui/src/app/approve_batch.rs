@@ -26,10 +26,10 @@ const FLOW_LEN: usize = 16;
 
 fn invalid(why: &'static str) -> Reply {
     Reply::json(
-        400,
+        422,
         json!({
             "type": "urn:suiss:access:problem:approval-batch-invalid",
-            "status": 400,
+            "status": 422,
             "code": "approval-batch-invalid",
             "title": why,
         }),

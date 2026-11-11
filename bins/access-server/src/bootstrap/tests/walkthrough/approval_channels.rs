@@ -10,7 +10,7 @@ use access_kernel::aas::ApprovalAct;
 use access_kernel::combinator::Capacity;
 use access_kernel::model::{Binding, Consumption, Independence, ProofKind, RequirementTerm};
 use access_kernel::render;
-use access_local_client::approve::{Approve, push_only};
+use access_local_client::approve::{Approve, approve, push_only};
 use access_local_client::login::{Jar, post_json};
 use access_local_client::passkey::{Passkey, relying_party};
 use access_sdk::agent::contract::{Proof, Step};
@@ -18,6 +18,8 @@ use access_sdk::approver::inline::{
     InlineRequest, StatementFacts, answer_body, approve_to_be_signed, deny_to_be_signed, statement,
 };
 use access_sdk::approver::{registration_body, registration_message, thumbprint, to_raw_signature};
+use access_store::authority::read_head;
+use access_store::scope::DomainId;
 use serde_json::Value;
 use suiss_crypto::cose::PublicKey as CosePublicKey;
 use suiss_crypto::signer::SoftSigner;
@@ -65,6 +67,52 @@ impl Desk {
         assert!(t.attest_app_factor_key(self.subject, row.id).await.unwrap());
         t.commit().await.unwrap();
         Phone { key, print }
+    }
+
+    async fn log_head(&self) -> u64 {
+        read_head(&self.w.db.sequencer, &DomainId::from_bytes(self.domain.0))
+            .await
+            .unwrap()
+            .pos
+    }
+
+    /// P's approval of `ex` on the hosted surface, as it answers.
+    async fn hosted_approval(
+        &self,
+        ex: &Exercise,
+        intent: &Value,
+    ) -> Result<Value, access_local_client::ClientError> {
+        let request = self.pushed_request(ex, intent).await;
+        let device = self.token.signer(local::TEST_DEVICE_LABEL).unwrap();
+        let passkey_key = self.token.signer(local::TEST_PASSKEY_LABEL).unwrap();
+        let (rp_id, origin) = relying_party(&self.user.issuer).unwrap();
+        let passkey = Passkey {
+            key: &passkey_key,
+            rp_id: &rp_id,
+            origin: &origin,
+        };
+        approve(
+            &self.http,
+            &Approve {
+                issuer: &self.user.issuer,
+                api_base: "https://access.test",
+                redirect_uri: &self.user.redirect_uri,
+                identifier: &self.user.identifier,
+                passkey: &passkey,
+                device: &device,
+                pep_leaf_der: &self.leaf,
+                domain: self.domain,
+                party: self.person,
+                instance: Some(id_of(&self.user.instance)),
+                intent,
+                basis: holding_of(&self.allowed["basis"]),
+                contribution: holding_of(&self.allowed["contribution"]["basis"]),
+                reason: "The mail agent wants to close the main ledger for you.",
+                request: Some(&request),
+                work_gate: None,
+            },
+        )
+        .await
     }
 
     /// The coordinator's push of the waiting `ex`, as `adjust` changes it: the push's status,
@@ -184,9 +232,24 @@ fn inline_request(intent: &Value) -> (InlineRequest, render::Render) {
     )
 }
 
-// SEC26, TN-100, §13.7.3, §8.17.6.3, OP-157 m.3 (m), X-L7, Ek B 5416, 5477, 5499, 5631
+/// Posts the device's signed answer.
+async fn answer(d: &Desk, phone: &Phone, signed: &[u8]) -> (u16, Value) {
+    let signature = to_raw_signature(&phone.key.sign(signed).unwrap()).unwrap();
+    let mut browser = Jar::default();
+    let answered = post_json(
+        &d.http,
+        &format!("{}/v1/approve/inline", d.user.issuer),
+        &mut browser,
+        Some(serde_json::from_str::<Value>(&answer_body(signed, &signature)).unwrap()),
+    )
+    .await
+    .unwrap();
+    (answered.status, answered.json())
+}
+
+// §10.2, §10.3.1, MD-11, SEC26, TN-100, §13.7.3, §8.17.6.3, OP-157 m.3 (m), X-L7, Ek B 5416, 5477, 5499, 5631
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_ct1_approval_inside_the_notification_is_signed_on_the_approver_device() {
+async fn a_valid_device_statement_is_refused_and_records_nothing() {
     let d = Desk::open("v7-inline", false).await;
     let phone = d.phone().await;
     let (_, held) = d.agent_grant().await;
@@ -194,7 +257,6 @@ async fn a_ct1_approval_inside_the_notification_is_signed_on_the_approver_device
     let mut ex = d.exercise(&intent, held);
     assert!(matches!(d.ask(&mut ex), Step::Wait(_)));
 
-    // §13.7.3
     d.root_change(Change::ApprovalInline(true)).await;
     let (status, pushed, env) = d.push_waiting(&ex, &intent, |_| {}).await;
     assert_eq!(status, 201, "{pushed}");
@@ -204,68 +266,73 @@ async fn a_ct1_approval_inside_the_notification_is_signed_on_the_approver_device
 
     let act = d.inline_statement(&request, &env, &shown).await;
     let signed = approve_to_be_signed(&request, &act, &phone.print);
-    let signature = to_raw_signature(&phone.key.sign(&signed).unwrap()).unwrap();
-    let mut browser = Jar::default();
-    let answered = post_json(
-        &d.http,
-        &format!("{}/v1/approve/inline", d.user.issuer),
-        &mut browser,
-        Some(serde_json::from_str::<Value>(&answer_body(&signed, &signature)).unwrap()),
-    )
-    .await
-    .unwrap();
-    assert_eq!(answered.status, 200, "{}", answered.json());
-    let exercise = Digest(
-        <[u8; 32]>::try_from(
-            access_kernel::json::b64url_decode(answered.json()["exercise"].as_str().unwrap())
-                .unwrap(),
-        )
-        .unwrap(),
+    let before = d.log_head().await;
+    let (status, body) = answer(&d, &phone, &signed).await;
+    assert_eq!(
+        (status, body["code"].as_str()),
+        (409, Some("approval-inline-assertion-required")),
+        "{body}"
     );
-    ex.prove(Proof::Contribution(exercise)).unwrap();
-    assert!(matches!(d.ask(&mut ex), Step::Proceed(_)));
-
-    let again = post_json(
-        &d.http,
-        &format!("{}/v1/approve/inline", d.user.issuer),
-        &mut browser,
-        Some(serde_json::from_str::<Value>(&answer_body(&signed, &signature)).unwrap()),
-    )
-    .await
-    .unwrap();
-    assert_eq!(again.status, 404, "{}", again.json());
+    assert_eq!(d.log_head().await, before, "nothing is recorded");
+    assert!(matches!(d.ask(&mut ex), Step::Wait(_)));
+    let (status, body) = answer(&d, &phone, &signed).await;
+    assert_eq!(
+        (status, body["code"].as_str()),
+        (409, Some("approval-inline-assertion-required")),
+        "{body}"
+    );
 
     // C30
-    let refused = d.intent_json("second").await;
-    let mut other = d.exercise(&refused, held);
-    assert!(matches!(d.ask(&mut other), Step::Wait(_)));
-    let (status, pushed, env) = d.push_waiting(&other, &refused, |_| {}).await;
-    assert_eq!(status, 201, "{pushed}");
-    let (request, shown) = inline_request(&refused);
     let deny = deny_to_be_signed(&request, &phone.print);
-    let signature = to_raw_signature(&phone.key.sign(&deny).unwrap()).unwrap();
-    let denied = post_json(
-        &d.http,
-        &format!("{}/v1/approve/inline", d.user.issuer),
-        &mut browser,
-        Some(serde_json::from_str::<Value>(&answer_body(&deny, &signature)).unwrap()),
+    let (status, body) = answer(&d, &phone, &deny).await;
+    assert_eq!(
+        (status, body["decision"].as_str()),
+        (200, Some("denied")),
+        "{body}"
+    );
+    let (status, body) = answer(&d, &phone, &signed).await;
+    assert_eq!(status, 404, "{body}");
+    d.close().await;
+}
+
+// §13.7.3, SEC26, TN-100, OP-157 m.3 (m), Ek B 5477, 5499, 5631
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_ct2_request_is_only_invited_and_cannot_be_answered_from_a_notification() {
+    let d = Desk::open("v7-inline-ct2", false).await;
+    let phone = d.phone().await;
+    let (_, held) = d.agent_grant().await;
+    let mut intent = d.intent_json("main").await;
+    intent["params"]["amount"] =
+        serde_json::json!({ "amount": { "value": 1, "unit": "usd_cent" } });
+    let mut ex = d.exercise(&intent, held);
+    assert!(matches!(d.ask(&mut ex), Step::Wait(_)));
+    d.root_change(Change::ApprovalInline(true)).await;
+    let redirect = d.user.redirect_uri.clone();
+    let (status, pushed, env) = d
+        .push_waiting(&ex, &intent, |b| {
+            b["redirect_uri"] = Value::from(redirect);
+        })
+        .await;
+    assert_eq!(status, 201, "{pushed}");
+    let invited = identity_events_until(
+        &d.w.db,
+        "relay.message.approval_requested.v1",
+        |q| !q.is_empty(),
+        "the invitation",
     )
-    .await
-    .unwrap();
-    assert_eq!(denied.status, 200, "{}", denied.json());
-    assert_eq!(denied.json()["decision"], "denied");
+    .await;
+    assert_eq!(invited.len(), 1);
+    let (request, shown) = inline_request(&intent);
     let act = d.inline_statement(&request, &env, &shown).await;
-    let late = approve_to_be_signed(&request, &act, &phone.print);
-    let signature = to_raw_signature(&phone.key.sign(&late).unwrap()).unwrap();
-    let after = post_json(
-        &d.http,
-        &format!("{}/v1/approve/inline", d.user.issuer),
-        &mut browser,
-        Some(serde_json::from_str::<Value>(&answer_body(&late, &signature)).unwrap()),
-    )
-    .await
-    .unwrap();
-    assert_eq!(after.status, 404, "{}", after.json());
+    let signed = approve_to_be_signed(&request, &act, &phone.print);
+    let before = d.log_head().await;
+    let (status, body) = answer(&d, &phone, &signed).await;
+    assert_eq!(
+        (status, body["code"].as_str()),
+        (409, Some("approval-inline-off")),
+        "{body}"
+    );
+    assert_eq!(d.log_head().await, before);
     d.close().await;
 }
 
@@ -307,7 +374,7 @@ async fn a_realm_that_did_not_open_the_channel_answers_approval_inline_off() {
     )
     .await
     .unwrap();
-    assert_eq!(answered.status, 403, "{}", answered.json());
+    assert_eq!(answered.status, 409, "{}", answered.json());
     assert_eq!(answered.json()["code"], "approval-inline-off");
     d.close().await;
 }
@@ -359,32 +426,21 @@ async fn the_sixth_invitation_in_an_hour_is_429_and_one_intent_invites_once() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_statement_from_a_surface_the_domain_does_not_accept_is_refused() {
     let d = Desk::open("v7-surfaces", false).await;
-    let phone = d.phone().await;
     let (_, held) = d.agent_grant().await;
     let intent = d.intent_json("main").await;
     let mut ex = d.exercise(&intent, held);
     assert!(matches!(d.ask(&mut ex), Step::Wait(_)));
-    d.root_change(Change::ApprovalInline(true)).await;
-    let (status, pushed, env) = d.push_waiting(&ex, &intent, |_| {}).await;
-    assert_eq!(status, 201, "{pushed}");
-    let (request, shown) = inline_request(&intent);
-    // OP-157 m.3 (n)
-    d.set_policy_default_surfaces(&["suiss-approval-surface"])
-        .await;
-    let act = d.inline_statement(&request, &env, &shown).await;
-    let signed = approve_to_be_signed(&request, &act, &phone.print);
-    let signature = to_raw_signature(&phone.key.sign(&signed).unwrap()).unwrap();
-    let mut browser = Jar::default();
-    let answered = post_json(
-        &d.http,
-        &format!("{}/v1/approve/inline", d.user.issuer),
-        &mut browser,
-        Some(serde_json::from_str::<Value>(&answer_body(&signed, &signature)).unwrap()),
-    )
-    .await
-    .unwrap();
-    assert_eq!(answered.status, 409, "{}", answered.json());
-    assert_eq!(answered.json()["reason"], "approval-surface-not-accepted");
+    d.set_policy_default_surfaces(&["suiss-approver-sdk"]).await;
+    let refused = d
+        .hosted_approval(&ex, &intent)
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(
+        refused.contains("approval-surface-not-accepted"),
+        "{refused}"
+    );
+    assert!(matches!(d.ask(&mut ex), Step::Wait(_)));
     d.close().await;
 }
 
@@ -463,7 +519,7 @@ async fn a_batch_is_ten_at_most_of_one_requester_each_with_its_own_statement() {
     let (status, body) = start_batch(&d, &mut jar, &uris).await;
     assert_eq!(
         (status, body["code"].as_str()),
-        (400, Some("approval-batch-invalid")),
+        (422, Some("approval-batch-invalid")),
         "{body}"
     );
     d.root_change(Change::ApprovalBatch(true)).await;
@@ -473,7 +529,7 @@ async fn a_batch_is_ten_at_most_of_one_requester_each_with_its_own_statement() {
     let (status, body) = start_batch(&d, &mut jar, &eleven).await;
     assert_eq!(
         (status, body["code"].as_str()),
-        (400, Some("approval-batch-invalid")),
+        (422, Some("approval-batch-invalid")),
         "{body}"
     );
 
@@ -495,7 +551,7 @@ async fn a_batch_is_ten_at_most_of_one_requester_each_with_its_own_statement() {
     let (status, body) = start_batch(&d, &mut jar, &mixed).await;
     assert_eq!(
         (status, body["code"].as_str()),
-        (400, Some("approval-batch-invalid")),
+        (422, Some("approval-batch-invalid")),
         "{body}"
     );
 

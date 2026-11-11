@@ -1016,14 +1016,14 @@ where
         Ok(Verified {
             factors: vec![factor.clone()],
             levels: levels(&vector(&[factor])),
-            detail: Some(WebauthnDetail {
+            detail: WebauthnDetail {
                 aaguid: stored.aaguid.0,
                 sign_count: u64::from(verified.sign_count),
                 up: true,
                 uv: verified.assurance.user_verified,
                 be: stored.backup_eligible,
                 bs: verified.backup_state,
-            }),
+            },
             evidence,
             created_ms: stored.created_at.saturating_mul(1_000),
         })
@@ -1114,7 +1114,7 @@ pub(super) fn finished_reply(
 /// SI-5, §10.1.5, OP-149 m.33 (c): the `authentication` Claim bound to the statement and to the
 /// approver's Instance, issued now through the realm's courier; only an admitted Claim is a
 /// proof.
-pub(super) async fn issue_claim<A, I, P, Q: ApprovalClaims>(
+async fn issue_claim<A, I, P, Q: ApprovalClaims>(
     devices: &Devices<A, I, P, Q>,
     kit: &RealmKit,
     subject: [u8; 16],
@@ -1125,14 +1125,10 @@ pub(super) async fn issue_claim<A, I, P, Q: ApprovalClaims>(
 ) -> Result<Id, Reply> {
     let order = claims::authentication(AuthFacts {
         subject,
-        method: if verified.detail.is_some() {
-            AuthMethod::Webauthn
-        } else {
-            AuthMethod::DeviceKey
-        },
+        method: AuthMethod::Webauthn,
         auth_time: now,
         assurance: verified.levels.clone(),
-        webauthn: verified.detail,
+        webauthn: Some(verified.detail),
         evidence: Some(verified.evidence),
         bind: Bind::Statement {
             statement,
@@ -1199,7 +1195,7 @@ pub(super) fn statement_of(
 /// The Exercise a contribution verdict names, or the reply that says why there is none: a
 /// statement over another render is "the request changed" (§9.14.2); a DENY or `REQUIRE_ACTION`
 /// is reported with its outcome, a refusal with its reason.
-pub(super) fn committed(
+fn committed(
     verdict: Result<Verdict, access_internal_api::idp::Unavailable>,
 ) -> Result<Digest, Reply> {
     match verdict {
@@ -1250,12 +1246,12 @@ pub(super) struct Finished {
 }
 
 /// What a verified approval assertion established.
-pub(super) struct Verified {
-    pub(super) factors: Vec<Factor>,
-    pub(super) levels: std::collections::BTreeMap<String, u64>,
-    pub(super) detail: Option<WebauthnDetail>,
-    pub(super) evidence: Digest,
-    pub(super) created_ms: u64,
+struct Verified {
+    factors: Vec<Factor>,
+    levels: std::collections::BTreeMap<String, u64>,
+    detail: WebauthnDetail,
+    evidence: Digest,
+    created_ms: u64,
 }
 
 impl<K, C, M> Hosted<K, C, M>

@@ -160,14 +160,15 @@ Nobody gives more than they hold, and moving a role to a new version is an expli
 
 ### Approving outside the page
 
-A realm can open two more ways to give a low-consequence approval, each turned on by its own setting and closed with one write:
+A realm can open two more channels for low-consequence requests, each turned on by its own setting and closed with one write:
 
-- **Inside the notification** (`PUT .../settings/approval-inline`): a CT1 request goes to the person's registered and activated approver device with its whole render. The app embeds `access_sdk::approver::inline`, which rebuilds the render with the Kernel, refuses a digest it can't reproduce and signs the statement with its device key; the answer is `POST /v1/approve/inline`. CT2 and CT3 requests are never approved from a notification: the message is only an invitation to the Approval Surface.
+- **Inside the notification** (`PUT .../settings/approval-inline`): a CT1 request goes to the person's registered and activated approver device with its whole render. The app embeds `access_sdk::approver::inline`, which rebuilds the render with the Kernel and refuses a digest it can't reproduce. The person can refuse from there with `POST /v1/approve/inline`. An approval sent that way is checked and then answered `approval-inline-assertion-required`, because a device key is not a phishing-resistant authenticator: approving happens on the Approval Surface. CT2 and CT3 requests only ever get an invitation.
 - **In a batch** (`PUT .../settings/approval-batch`): at most ten CT1 requests of one requester and one action, all listed, each with its own statement and passkey assertion. The button reads "Approve these 4 requests"; there is no "Approve all".
 
 A push invites an approver once per intent, and a requester can invite the same approver at most five times an hour (then `429` with `Retry-After`). Login push, authority invitation and in-notification approval are three separate Relay message types.
 
 A domain lists the surfaces whose statements count in its `approval_surfaces` policy default; the hosted page and the approver SDK are the default, removing one is a tightening and adding one a loosening. For ranking, the push answer gives the coordinator `facts` (class, amount, reserved) and never a score. Access computes no reputation.
+
 ### Produce events on purpose
 
 Your product's end-to-end tests can make Access emit the events it subscribes to:

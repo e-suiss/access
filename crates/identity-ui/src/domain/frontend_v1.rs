@@ -1414,7 +1414,7 @@ pub const ROUTES: &[Route] = &[
         Verb::Post,
         "/v1/approve/inline",
         "answerInlineApproval",
-        "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key (surface_profile suiss-approver-sdk); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m)).",
+        "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded, and an approval is refused with approval-inline-assertion-required because a device key is no phishing-resistant assertion (§10.2, §10.3.1); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m)).",
     ),
     live(
         Owner::V6,

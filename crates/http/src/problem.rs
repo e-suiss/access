@@ -535,6 +535,8 @@ pub const CODES: &[Code] = &[
     codes::realm::OFFBOARDING_DISPOSITION_MISSING,
     codes::realm::CEREMONY_QUORUM_MISSING,
     codes::realm::CASE_SYSTEM_UNKNOWN,
+    // OP-157 m.4 (b)
+    codes::realm::APPROVAL_INLINE_ASSERTION_REQUIRED,
 ];
 
 /// The type URI of `code`.

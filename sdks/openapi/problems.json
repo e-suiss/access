@@ -1241,6 +1241,13 @@
       "status": 404,
       "title": "Not Found",
       "description": "No live support case system by that name in the realm (OP-157 m.3 (e))."
+    },
+    {
+      "code": "approval-inline-assertion-required",
+      "type": "urn:suiss:access:problem:approval-inline-assertion-required",
+      "status": 409,
+      "title": "Conflict",
+      "description": "A device key's signature over H(AAS) is not a phishing-resistant assertion, so the approval was not recorded; approve on the Approval Surface (§10.2, §10.3.1, OP-157 m.3 (m))."
     }
   ]
 }

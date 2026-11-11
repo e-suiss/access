@@ -488,35 +488,3 @@ pub async fn answer_invite(
     .await?;
     Ok(done.rows_affected() == 1)
 }
-
-/// Records an approval the approver's device gave inside a notification: the statement it
-/// signed and the Exercise it became, with no browser session (OP-157 m.3 (m)).
-///
-/// # Errors
-/// [`StoreError`].
-pub async fn finish_inline(
-    t: &mut TenantTx,
-    id: &[u8; 16],
-    statement: &[u8; 32],
-    aas: &[u8],
-    exercise: &[u8; 32],
-    now_ms: u64,
-) -> Result<bool, StoreError> {
-    let (tenant, realm) = scope(t)?;
-    let done = sqlx::query!(
-        "UPDATE access.approval_requests
-            SET statement = $4, aas = $5, started_ms = $6, finished_ms = $6, exercise = $7
-          WHERE tenant_id = $1 AND realm_id = $2 AND request_id = $3
-            AND started_ms IS NULL AND finished_ms IS NULL",
-        tenant,
-        realm,
-        Uuid::from_bytes(*id),
-        statement.as_slice(),
-        aas,
-        signed(now_ms)?,
-        exercise.as_slice(),
-    )
-    .execute(&mut *t.tx)
-    .await?;
-    Ok(done.rows_affected() == 1)
-}

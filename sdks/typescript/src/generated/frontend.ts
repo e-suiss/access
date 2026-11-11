@@ -169,7 +169,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key (surface_profile suiss-approver-sdk); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m), §13.7.3, SEC26). */
+        /** An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded, and an approval is refused with approval-inline-assertion-required because a device key is no phishing-resistant assertion (§10.2, §10.3.1); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m), §13.7.3, SEC26). */
         post: operations["answerInlineApproval"];
         delete?: never;
         options?: never;
@@ -1017,8 +1017,8 @@ export interface operations {
                     "application/json": components["schemas"]["BatchStarted"];
                 };
             };
-            /** @description approval-batch-invalid: more than 10 items, another requester or action class, a tier above CT1, or a batch the realm did not open; the whole batch is refused. */
-            400: {
+            /** @description The approver has no live session. */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1026,8 +1026,8 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The approver has no live session. */
-            401: {
+            /** @description approval-batch-invalid: more than 10 items, another requester or action class, a tier above CT1, or a batch the realm did not open; the whole batch is refused. */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1071,7 +1071,7 @@ export interface operations {
                 content?: never;
             };
             /** @description approval-batch-invalid. */
-            400: {
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1105,7 +1105,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Approved or denied. */
+            /** @description The refusal was recorded. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1114,15 +1114,6 @@ export interface operations {
             };
             /** @description approver-unknown: not an activated approver key, or a signature that does not verify. */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description approval-inline-off, or a request above CT1. */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1139,7 +1130,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description The render or the request changed. */
+            /** @description approval-inline-off: the channel is closed or the request is above CT1; approval-inline-assertion-required: the answer is valid but carries no phishing-resistant assertion; or the render or the request changed. */
             409: {
                 headers: {
                     [name: string]: unknown;

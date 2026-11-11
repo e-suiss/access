@@ -1,8 +1,8 @@
 //! The approval channels outside the page (OP-157 m.3 (m), §13.7.3, SEC26, TN-100): the
 //! invitation a pushed request sends, one per approver and intent and at most five an hour from a
-//! requester, and the approver device's in-notification CT1 answer: its own rendering's digest
-//! and its signature over H(AAS), `surface_profile = "suiss-approver-sdk"`, H(AAS)-bound
-//! `authentication` Claim, the contribution, and its one audit line.
+//! requester, and the approver device's in-notification CT1 answer. A refusal is recorded; an
+//! approval is checked in full and then refused, because a device key's signature over H(AAS)
+//! is not the phishing-resistant assertion §10.2 and §10.3.1 ask for: no Claim, no contribution.
 
 use access_crypto::Secret;
 use access_identity_account::app::vault::reveal_with_kek;
@@ -10,12 +10,8 @@ use access_identity_account::domain::login::Problem;
 use access_identity_account::notify::message::{Address, Body, Message, Prompt};
 use access_identity_account::notify::ports::Notifier;
 use access_identity_oauth::ports::RealmEntry;
-use access_identity_session::app::claims::levels;
-use access_identity_session::domain::assurance::{Factor, vector};
-use access_internal_api::approvals::Contribution;
-use access_kernel::aas::{self, Act};
+use access_kernel::aas::Act;
 use access_kernel::assurance;
-use access_kernel::digest::Digest;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_kernel::meta::ExerciseBasis;
 use access_kernel::render;
@@ -24,18 +20,24 @@ use access_store::approvals::{self as store, ApprovalChannel, NewInvite};
 use access_store::identity::TenantTx;
 use access_store::idp;
 use serde_json::{Value, json};
-use suiss_crypto::digest::context_digest;
 
-use super::approve::{Verified, committed, issue_claim, problem, tier_of, unknown_reply};
+use super::approve::{problem, tier_of, unknown_reply};
 use super::me::{Devices, unavailable};
 use super::{Hosted, Reply};
 use crate::domain::approval::{
     ApprovalPush, Envelope, INVITE_WINDOW_MS, INVITES_PER_HOUR, InlineAnswer, InlineDecision, Kept,
     Pushed, SDK_SURFACE_PROFILE, envelope, inline_answer, requester_party,
 };
-use crate::ports::{ApprovalClaims, Approvals, Kits, Messages, RealmKit};
+use crate::ports::{Approvals, Kits, Messages, RealmKit};
 
-const INLINE_EVIDENCE: &str = "access/approval-inline-answer/v1";
+/// `approval-inline-assertion-required`: every check passed, but the answer carries no
+/// phishing-resistant assertion bound to H(AAS) (§10.2, §10.3.1, MD-11).
+const ASSERTION_REQUIRED: Problem = Problem {
+    status: 409,
+    code: "approval-inline-assertion-required",
+    title: "Open this request on the Approval Surface to approve it",
+    retry_after_s: None,
+};
 
 /// `approval-invite-limit`: a requester reached the hourly limit for an approver.
 pub(super) fn invite_limit() -> Problem {
@@ -298,9 +300,9 @@ where
     /// `POST /v1/approve/inline` (`approval-inline.cddl`, §13.7.3, SEC26, TN-100).
     #[expect(
         clippy::too_many_lines,
-        reason = "one answer: key, invitation, statement, Claim, contribution"
+        reason = "one answer: key, invitation, render, statement, eligibility"
     )]
-    pub async fn answer_inline<A, I, P: Approvals, Q: ApprovalClaims>(
+    pub async fn answer_inline<A, I, P: Approvals, Q>(
         &self,
         devices: &Devices<A, I, P, Q>,
         entry: &RealmEntry,
@@ -335,7 +337,7 @@ where
         };
         if !enabled {
             return problem(
-                403,
+                409,
                 "approval-inline-off",
                 "Notification approval is not open in this realm",
             );
@@ -376,7 +378,7 @@ where
         // §13.7.3
         if !inline_tier(invite.tier) {
             return problem(
-                403,
+                409,
                 "approval-inline-off",
                 "This request can't be approved from a notification",
             );
@@ -411,7 +413,7 @@ where
         };
         let Some(tier) = tier_of(opening.tier).filter(|_| inline_tier(opening.tier)) else {
             return problem(
-                403,
+                409,
                 "approval-inline-off",
                 "This request can't be approved from a notification",
             );
@@ -473,89 +475,9 @@ where
             Ok(_) => return problem(403, "approval-not-eligible", "You can't approve this"),
             Err(_) => return unavailable(),
         }
-        let (Ok(aas_bytes), Ok(statement)) = (
-            access_kernel::codec::Canonical::to_bytes(&*act),
-            aas::digest(&act),
-        ) else {
-            return unavailable();
-        };
-        let factor = Factor::approver_statement(key.id, now);
-        let verified = Verified {
-            levels: levels(&vector(std::slice::from_ref(&factor))),
-            factors: vec![factor],
-            detail: None,
-            evidence: inline_evidence(&bytes, &signature),
-            created_ms: key.created_ms.try_into().unwrap_or(u64::MAX),
-        };
-        let claim = match issue_claim(
-            devices,
-            &kit,
-            key.subject,
-            statement.0,
-            act.instance,
-            &verified,
-            now,
-        )
-        .await
-        {
-            Ok(c) => c,
-            Err(r) => return r,
-        };
-        let verdict = devices
-            .approvals
-            .contribute(Contribution {
-                domain: act.domain,
-                nonce: env.nonce.clone(),
-                target: act.target,
-                class: env.class.clone(),
-                basis: env.basis,
-                capacity: env.capacity,
-                validity: env.validity,
-                ais: env.ais.clone(),
-                aas: aas_bytes.clone(),
-                claim,
-                pep: devices.pep.clone(),
-            })
-            .await;
-        let exercise = match committed(verdict) {
-            Ok(e) => e,
-            Err(r) => return r,
-        };
-        let actor = kit.ids.encode("usr", key.subject).unwrap_or_default();
-        let finished = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
-            store::finish_inline(&mut t, &row.id, &statement.0, &aas_bytes, &exercise.0, now)
-                .await?;
-            store::answer_invite(&mut t, &invite.id, "approved", now).await?;
-            t.audit(&access_store::audit::AuditEvent {
-                event_type: "approval.inline",
-                actor: &actor,
-                target: &actor,
-                correlation: "approval",
-            })
-            .await?;
-            t.commit().await
-        };
-        if finished.await.is_err() {
-            return unavailable();
-        }
-        Reply::json(
-            200,
-            json!({
-                "decision": "approved",
-                "exercise": b64url_encode(&exercise.0),
-                "render_digest": b64url_encode(&act.render_digest.0),
-                "claim": b64url_encode(&claim.0),
-            }),
-        )
+        // §10.2, §10.3.1, MD-11
+        Reply::problem(ASSERTION_REQUIRED)
     }
-}
-
-fn inline_evidence(answer: &[u8], signature: &[u8]) -> Digest {
-    let mut input = Vec::with_capacity(answer.len().saturating_add(signature.len()));
-    input.extend_from_slice(answer);
-    input.extend_from_slice(signature);
-    Digest(context_digest(INLINE_EVIDENCE, &input).0)
 }
 
 /// The requester's display name a push carries, for the invitation's text.

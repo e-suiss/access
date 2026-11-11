@@ -18,7 +18,7 @@ test.describe("@live batch approval", () => {
       headers: { origin },
     });
     expect(started.status()).not.toBe(501);
-    expect([400, 401, 403]).toContain(started.status());
+    expect([401, 403, 422]).toContain(started.status());
     const eleven = await page.request.post(`${REALM}/v1/approve/batch`, {
       data: {
         requests: Array.from({ length: 11 }, (_, n) => `urn:x:${String(n)}`),
@@ -27,7 +27,7 @@ test.describe("@live batch approval", () => {
       },
       headers: { origin },
     });
-    expect(eleven.status()).toBe(400);
+    expect(eleven.status()).toBe(422);
     expect(((await eleven.json()) as { code: string }).code).toBe("approval-batch-invalid");
   });
 });
