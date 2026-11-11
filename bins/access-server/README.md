@@ -252,6 +252,30 @@ imported is reported by its number and reason, never echoed:
   way to move passkeys between relying parties. Party IDs and their key events are portable and
   free to export, so people keep their own keys when the provider changes.
 
+## Handing a domain over
+
+A domain moves to another conformant Access install without losing a record, and keeps its
+`DomainID`, Genesis and positions:
+
+1. The outgoing install freezes the domain at `k`: from then on only the handover commits.
+2. It signs `C_k`, which an independent witness cosigns, and hands the full Record Export to `C_k`
+   to the incoming install (the root's own `audit_export` Exercise, committed before the freeze).
+3. The incoming install folds the package from Genesis, reproduces `C_k`'s root and replays the
+   decisions. A decision it does not reproduce is declared as a divergence set; it never stops
+   the move.
+4. The root commits `domain_handover`. The batch is the outgoing binding's no-write statement,
+   the incoming binding's continuation statement (which names the passing `provider` conformance
+   profile) and the decision that binds the incoming provider. Both statements cite `C_k`.
+5. The witnesses cosign `C_{h+1}` under the old binding, learn the new binding from the record,
+   and cosign nothing larger under the old one. The outgoing install's domain stays frozen.
+6. The incoming install takes the batch from the mirror and `C_{h+1}` from a witness, adopts the
+   domain at `h + 1` and publishes the old binding as superseded at `C_{h+1}`. An artefact
+   signed under the old binding is accepted only with its inclusion bundle.
+
+A binding re-anchor is the same handover inside one install: the next binding generation is a
+new HSM key under a versioned label, no export or fold is needed, no record is signed again, and
+the install writes again from `h + 1` once `C_{h+1}` is witnessed.
+
 ## Background work
 
 While serving, the process also runs, each stopping with the server:

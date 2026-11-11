@@ -10,6 +10,13 @@ checkpoint only when
   configured with, valid at the checkpoint's `issued_at` and declared for `checkpoint`, and
 - an RFC 9162 consistency proof from its last cosigned checkpoint verifies.
 
+When a domain changes its binding, by a handover to another provider or a re-anchor inside one,
+the checkpoint that ends with the `domain_handover` record carries that record and its inclusion
+proof. The witness cosigns it under the old binding, learns the new binding keys from the record,
+and from then on cosigns nothing larger under the old binding (`fenced`); checkpoints under the
+new binding extend the same chain. The learned keys and the fence are lines of its state file,
+so a restart keeps them.
+
 Its state is one append-only, hash-chained file per domain; a changed or missing line stops the
 witness from starting. A cosignature is on disk before it is answered. A checkpoint with the
 same size as the base but another root is refused and kept as evidence.
