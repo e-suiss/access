@@ -775,7 +775,7 @@ pub fn new_key() -> EcdsaKeyPair {
 pub type Extra = (String, String, String, Vec<String>);
 
 /// Spare ALLOWs of every realm's domain, after its clients' registrations.
-pub const SPARE: usize = 8;
+pub const SPARE: usize = 16;
 
 impl Cluster {
     /// Realms `slugs`, each in its own tenant, with the three fixture clients.
