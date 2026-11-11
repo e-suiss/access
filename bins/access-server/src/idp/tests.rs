@@ -69,6 +69,8 @@ mod profiles;
 mod records;
 mod relay;
 mod resources;
+// OP-157 m.3 (w)
+mod review;
 mod scim;
 mod signals;
 mod social;
