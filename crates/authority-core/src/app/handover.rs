@@ -75,22 +75,17 @@ pub struct Received {
     pub records: Vec<RecordEnvelope>,
     /// The folded state at `k − 1`.
     pub state: State,
-    /// The decisions the open Kernel did not replay; never a reason to stop (G32).
-    pub divergence: Option<access_verifier::replay::DivergenceSet>,
+    /// The records as the package disclosed them, for the incoming provider's replay: a
+    /// decision it does not reproduce is a divergence set, never a reason to stop (G32).
+    pub disclosed: Vec<Disclosure>,
 }
 
 /// HO-5: reads `package`, checks it runs from Genesis to `cited` in full disclosure, folds it
-/// and reproduces `cited`'s root; every decision is re-evaluated at `q − 1` and the difference
-/// comes back as a divergence set, evaluated as `evaluator` at `now`.
+/// and reproduces `cited`'s root.
 ///
 /// # Errors
 /// [`HandoverError`].
-pub fn receive(
-    package: &[u8],
-    cited: Cited,
-    evaluator: &str,
-    now: u64,
-) -> Result<Received, HandoverError> {
+pub fn receive(package: &[u8], cited: Cited) -> Result<Received, HandoverError> {
     let read = crate::domain::export::read_stream(package)
         .map_err(|_| HandoverError::Package("stream"))?;
     if read.coverage != crate::domain::export::Coverage::Full
@@ -102,29 +97,36 @@ pub fn receive(
     if read.size != cited.0 || read.root != cited.1 {
         return Err(HandoverError::Root);
     }
-    let mut replay = access_verifier::replay::Replay::new();
     let mut records = Vec::with_capacity(read.records.len());
-    for d in &read.records {
-        if !d.withheld.is_empty() {
-            return Err(HandoverError::Package("withheld"));
+    let mut state = None;
+    for (i, d) in read.records.iter().enumerate() {
+        if !d.withheld.is_empty() || u64::try_from(i).ok() != Some(d.header.pos) {
+            return Err(HandoverError::Package("record"));
         }
-        replay
-            .push(d, true)
-            .map_err(|_| HandoverError::Package("order"))?;
-        records.push(envelope(d));
+        let r = envelope(d);
+        match state.as_mut() {
+            None => {
+                state = Some(
+                    access_kernel::fold::genesis(&r)
+                        .map_err(|_| HandoverError::Package("genesis"))?,
+                );
+            }
+            Some(s) => {
+                access_kernel::fold::apply(s, &r).map_err(|_| HandoverError::Package("fold"))?;
+            }
+        }
+        records.push(r);
     }
-    let domain = replay.domain().ok_or(HandoverError::Package("genesis"))?;
-    let state = replay
-        .state()
-        .cloned()
-        .ok_or(HandoverError::Package("fold"))?;
-    let divergence = replay.set((0, read.range.1), evaluator, now);
+    let domain = records
+        .first()
+        .and_then(|g| g.domain().ok())
+        .ok_or(HandoverError::Package("genesis"))?;
     Ok(Received {
         domain,
         cited,
         records,
-        state,
-        divergence,
+        state: state.ok_or(HandoverError::Package("genesis"))?,
+        disclosed: read.records,
     })
 }
 

@@ -25,13 +25,17 @@ const AUTHORITY_TABLES: [&str; 11] = [
 ];
 
 /// Where those tables may be written: the store's authority module, its test harness, the
-/// migrations that create them, and the cell move, which writes only the replayed records and
-/// state another cell committed (OP-158 m.3 (n), m.4 (b) W7).
-const WRITERS: [&str; 4] = [
+/// migrations that create them, the cell move, which writes only the replayed records and
+/// state another cell committed (OP-158 m.3 (n), m.4 (b) W7), and the handover's freeze and
+/// adoption with their test.
+const WRITERS: [&str; 6] = [
     "crates/store/src/authority.rs",
     "crates/store/src/testing.rs",
     "crates/store/migrations/",
     "crates/store/src/cells.rs",
+    // OP-158 m.3 (l), HO-1, HO-8
+    "crates/store/src/handover.rs",
+    "crates/store/tests/handover.rs",
 ];
 
 /// The statements that write a table, assembled so that this file holds none of them.

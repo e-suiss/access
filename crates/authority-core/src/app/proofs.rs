@@ -272,7 +272,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let mut next = head;
         for p in proofs {
             match p {
-                // §16.6 HO-6: the handover statements are binding-signed, staged apart
+                // §16.6 HO-6
                 ProofRef::Claim(bytes)
                     if access_authority_signer::handover::kind_of(bytes).is_some() =>
                 {

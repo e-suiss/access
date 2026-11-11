@@ -141,7 +141,7 @@ async fn cosign_request(State(w): State<Arc<Witness>>, body: Bytes) -> Response 
     if let Err(e) = chain.cosigned(&cp, binding, at, format!("{}{line}", req.note)) {
         return (StatusCode::SERVICE_UNAVAILABLE, e).into_response();
     }
-    // U11, §16.6 HO-7: the old binding signs nothing larger than C_{h+1} from now on
+    // U11, §16.6 HO-7
     if let Some(keys) = learned
         && let Err(e) = chain.rebind(binding, cp.size, keys, at)
     {

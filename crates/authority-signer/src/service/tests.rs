@@ -110,7 +110,7 @@ fn a_re_anchor_moves_to_the_next_generation_and_keeps_the_old_binding_superseded
         panic!("next binding");
     };
     assert_ne!(current.kid, next.kid);
-    // RB-4: each statement under its own binding; nothing else is binding-signed on request
+    // RB-4
     let statement = |next| Request::Statement {
         domain: d,
         next,
@@ -184,7 +184,6 @@ fn a_re_anchor_moves_to_the_next_generation_and_keeps_the_old_binding_superseded
         )
         .is_ok()
     );
-    // the vault keeps the generation and the superseded binding across a restart
     drop(s);
     let mut s = Service::start(Soft, gens, vault, Policy::AUTHORITY, 0).unwrap();
     let m = metadata_of(&mut s);

@@ -372,7 +372,7 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
     let before = metadata_of(&p.w.domains, d).await;
     let (old_excerpt, old_iat) = artefact(&a_socket, d).await;
 
-    // G32: a decision the open Kernel does not reproduce does not stop the exit
+    // G32
     let faulty = super::replay::faulty_allow(&p).await;
     let package_body = commit_export(
         &p,
@@ -391,7 +391,7 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
     assert!(String::from_utf8_lossy(&b).contains("handover-frozen"));
     assert_eq!(read_head(&p.w.db.app, &id).await.unwrap().pos, head);
 
-    // HO-4: C_k with an independent cosignature, and the package to C_k
+    // HO-4
     let (ck, out) = step(&p.w.db, &a_socket, &publisher, d).await;
     assert_eq!((ck.size, out.independent), (frozen.k, 1), "{out:?}");
     let (status, package, _) = start(&p, &router, &package_body).await;
@@ -402,7 +402,6 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
         String::from_utf8_lossy(&package)
     );
 
-    // The second install: its own database, HSM token, signer and binding
     let (wb, signer_b) = super::super::World::open_install("w5-ho-b", b_token).await;
     super::super::schedule(&signer_b);
     let b_socket = signer_socket("w5-ho-b");
@@ -411,9 +410,13 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
         .unwrap();
 
     // HO-5
-    let received = handover::receive(&package, (ck.size, ck.root), "provider-b", now()).unwrap();
+    let received = handover::receive(&package, (ck.size, ck.root)).unwrap();
     assert_eq!(received.records.len() as u64, frozen.k);
-    let set = received.divergence.clone().unwrap();
+    let mut replay = access_verifier::replay::Replay::new();
+    for r in &received.disclosed {
+        replay.push(r, true).unwrap();
+    }
+    let set = replay.set((0, frozen.k - 1), "provider-b", now()).unwrap();
     assert!(set.items.iter().any(|i| i.position == faulty), "{set:?}");
     let b_binding = wb.domains.binding_key(d, false).await.unwrap();
     assert_ne!(b_binding.kid, a_binding.kid);
@@ -430,7 +433,7 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
             .await
             .unwrap();
 
-    // OP-158 m.3 (l): a continuation that names no passing provider profile writes no batch
+    // OP-158 m.3 (l)
     let mut failing = cont.clone();
     failing.conformance = Digest([7; 32]);
     let unconformant = wb
@@ -499,7 +502,7 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
             .any(|s| s.step == "committed" && s.h == Some(h))
     );
 
-    // HO-7: C_{h+1} under the old key; the witnesses learn the new binding from record h
+    // HO-7
     let (ch1, out) = step(&p.w.db, &a_socket, &publisher, d).await;
     assert_eq!(
         (ch1.size, out.independent, out.cosigned),
@@ -508,7 +511,7 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
     );
     assert!(independent.cosigned(d.0).unwrap().contains(&(h + 1)));
 
-    // U11: the old provider writes nothing more, through the decision point or the database
+    // U11
     let (s, b) = evaluate(&router, &p.allowed(Mode::Commit).await).await;
     assert_eq!(s, StatusCode::CONFLICT, "{}", String::from_utf8_lossy(&b));
     let tail = read_head(&p.w.db.sequencer, &id).await.unwrap();
@@ -563,7 +566,7 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
         "{raw:?}"
     );
     assert_eq!(read_head(&p.w.db.app, &id).await.unwrap().pos, h);
-    // U11, HO-7: no witness cosigns a larger checkpoint under the old binding
+    // U11, HO-7
     let (note, excerpt) = forged(&a_socket, d, h + 2).await;
     let fenced = add_checkpoint(
         &target(&independent, INDEPENDENT),
@@ -578,8 +581,7 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
         "{fenced:?}"
     );
 
-    // HO-8: the incoming provider takes the batch from the mirror and the witnessed C_{h+1}
-    // from the independent witness itself
+    // HO-8
     let (records, _, ch1_excerpt) = mirror(&p, &router, mirror_run, frozen.k, h).await;
     let (entry, cosigned) = latest(&target(&independent, INDEPENDENT), &d)
         .await
@@ -618,7 +620,7 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
             .unwrap(),
         h + 1
     );
-    // G32: the difference is declared on the new provider; nothing stops
+    // G32
     access_authority_core::app::divergence::declare(
         &wb.db.app,
         d,
@@ -635,13 +637,12 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
     .await
     .unwrap();
 
-    // HO-8: the Domain Metadata names the new binding and the old one superseded at C_{h+1}
+    // HO-8
     let m = metadata_of(&wb.domains, d).await;
     assert!(m.binding[&b_binding.kid].superseded.is_none());
     let old = m.binding[&a_binding.kid].superseded.unwrap();
     assert_eq!((old.at, old.cited), (Digest(ch1.root), Digest(ck.root)));
 
-    // The new provider commits from h + 1 and its checkpoints are cosigned under its binding
     let b_router = adp(&wb.domains);
     let (s, b) = evaluate(&b_router, &p.allowed(Mode::Commit).await).await;
     assert_eq!(s, StatusCode::OK, "{}", String::from_utf8_lossy(&b));
@@ -654,7 +655,7 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
     let (next, out) = step(&wb.db, &b_socket, &b_publisher, d).await;
     assert_eq!((next.size, out.independent), (after + 1, 1), "{out:?}");
 
-    // U27: after C_{h+1} an old-key artefact outside the lineage is refused without a bundle
+    // U27
     let refused = operational_key(
         &PureBackend,
         &m,
@@ -676,7 +677,6 @@ async fn a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced() {
         .is_ok()
     );
 
-    // The witnesses' own state on disk names the fence and the learned binding
     independent.restart().unwrap();
     let (note, excerpt) = forged(&a_socket, d, next.size + 1).await;
     let fenced = add_checkpoint(
@@ -723,7 +723,7 @@ async fn a_binding_re_anchor_double_signs_rotates_the_binding_and_re_signs_no_re
         sinks: Vec::new(),
     };
 
-    // RB-0: without a declared independent witness of the incoming algorithm, no re-anchor
+    // RB-0
     let refused = p.w.domains.freeze(d, Role::Reanchor).await;
     assert!(
         matches!(
@@ -741,13 +741,13 @@ async fn a_binding_re_anchor_double_signs_rotates_the_binding_and_re_signs_no_re
     let (s, _) = evaluate(&router, &p.allowed(Mode::Commit).await).await;
     assert_eq!(s, StatusCode::OK);
 
-    // RB-1, RB-3: a short freeze and a witnessed C_k; no export or fold
+    // RB-1, RB-3
     let frozen = p.w.domains.freeze(d, Role::Reanchor).await.unwrap();
     let (ck, out) = step(&p.w.db, &socket, &publisher, d).await;
     assert_eq!((ck.size, out.independent), (frozen.k, 1), "{out:?}");
     let log_before = read_log(&p.w.db.app, &id, 0, frozen.k - 1).await.unwrap();
 
-    // RB-2: the next binding generation, cloneable, under a versioned HSM label (OP-158 m.9)
+    // RB-2
     let next = p.w.domains.binding_key(d, true).await.unwrap();
     assert_ne!(next.kid, gen0.kid);
     assert!(
@@ -756,7 +756,7 @@ async fn a_binding_re_anchor_double_signs_rotates_the_binding_and_re_signs_no_re
             .is_ok()
     );
 
-    // RB-4: the old binding's no-write statement and the new binding's continuation
+    // RB-4
     let cited = (ck.size, ck.root);
     let nw = handover::no_write(d, OUTGOING, cited, frozen.at, now());
     let no_write =
@@ -783,11 +783,11 @@ async fn a_binding_re_anchor_double_signs_rotates_the_binding_and_re_signs_no_re
         .unwrap();
     let (forged_note, forged_excerpt) = forged(&socket, d, h + 2).await;
 
-    // RB-5: C_{h+1} under the old key; the witness learns the new binding
+    // RB-5
     let (ch1, out) = step(&p.w.db, &socket, &publisher, d).await;
     assert_eq!((ch1.size, out.independent), (h + 1, 1), "{out:?}");
 
-    // RB-6: the new generation signs from h + 1; the old one is superseded at C_{h+1}
+    // RB-6
     let run = frozen.run;
     assert_eq!(p.w.domains.thaw_reanchor(d, run).await.unwrap(), h + 1);
     let m = metadata_of(&p.w.domains, d).await;
@@ -799,7 +799,7 @@ async fn a_binding_re_anchor_double_signs_rotates_the_binding_and_re_signs_no_re
         Some(transcript(&d, (ck.size, ck.root), (ch1.size, ch1.root)))
     );
 
-    // CR-45 RA-4: no record is signed again; the log before k is byte for byte the same
+    // CR-45 RA-4
     assert_eq!(
         read_log(&p.w.db.app, &id, 0, frozen.k - 1).await.unwrap(),
         log_before
@@ -810,8 +810,7 @@ async fn a_binding_re_anchor_double_signs_rotates_the_binding_and_re_signs_no_re
     assert!(later.size > h + 1);
     assert_eq!(out.independent, 1, "{out:?}");
 
-    // U71: the old binding signs no new production; an earlier artefact stays accepted under
-    // the metadata a verifier held before (T20) and needs a bundle under the new metadata
+    // U71
     let fenced = add_checkpoint(
         &target(&independent, INDEPENDENT),
         &d,

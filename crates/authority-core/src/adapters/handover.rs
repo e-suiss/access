@@ -242,8 +242,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             return Err(CoreError::Refused(FROZEN));
         };
         let k = run.k;
-        // SEC26: a CT3 time-lock may make the batch two attempts of one nonce; the statements
-        // are recorded by the first, at k and k + 1
+        // SEC26
         let first = head.checked_add(1) == Some(k);
         if head.checked_add(1) < Some(k)
             || h.cited.size != k
@@ -251,7 +250,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         {
             return Err(CoreError::Protocol("payload"));
         }
-        // HO-4: C_k is signed and an independent witness cosigned it
+        // HO-4
         let ck = checkpoint_of_size(&self.setup.app, &id, k)
             .await
             .map_err(store)?;
@@ -316,7 +315,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             return Err(CoreError::Protocol("proof"));
         }
         let incoming: Vec<BindingKey> = h.binding.values().cloned().collect();
-        // RB-2: a re-anchor binds the generation the signer prepared
+        // RB-2
         if h.reanchor {
             let next = self.binding_key(req.domain, true).await?;
             if incoming.len() != 1 || incoming.first().map(|b| b.kid) != Some(next.kid) {

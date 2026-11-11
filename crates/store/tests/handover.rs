@@ -104,7 +104,6 @@ async fn an_outgoing_handover_moves_the_head_once_for_its_batch_and_never_again(
         freeze(&db.sequencer, &d, [2; 16], Role::Outgoing, 7_001).await,
         Err(StoreError::HeadMoved)
     ));
-    // the batch: statements, then the decision that writes the binding
     push(&db, &d, vec![]).await.unwrap();
     let h = push(&db, &d, vec![(binding_key(), 0, Some(vec![0xa0]))])
         .await
@@ -121,7 +120,6 @@ async fn an_outgoing_handover_moves_the_head_once_for_its_batch_and_never_again(
         thaw(&db.sequencer, &d, [1; 16]).await,
         Err(StoreError::HeadMoved)
     ));
-    // the freeze itself is kept
     let mut tx = db.sequencer.begin().await.unwrap();
     sqlx::query("SELECT set_config('app.domain_id', $1, true)")
         .bind("41".repeat(32))
