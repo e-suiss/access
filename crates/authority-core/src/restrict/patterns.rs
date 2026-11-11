@@ -239,6 +239,94 @@ pub fn support_protected() -> Option<Value> {
     .ok()
 }
 
+/// A containment or suspension, the ready restriction of a Party allowed to restrict (SI-4,
+/// §6.6, §7.9.12.1, §11.9.2, OP-157 m.3 (i)). It is a blocking `forbid` without a requirement:
+/// a new policy only narrows, so one `policy.set` contains at once and needs no quorum; lifting
+/// it retires the policy, which widens.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Containment {
+    /// Every Exercise by an Instance of `party`.
+    SuspendParty {
+        /// The suspended Party.
+        party: access_kernel::model::Id,
+    },
+    /// Every Exercise by `instance`.
+    SuspendInstance {
+        /// The suspended Instance.
+        instance: access_kernel::model::Id,
+    },
+    /// Every Exercise of `actions` (`namespace:name`), whoever asks.
+    ContainDomainAction {
+        /// The contained actions.
+        actions: BTreeSet<String>,
+    },
+}
+
+impl Containment {
+    /// Its name, the `@id` of its statement.
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Self::SuspendParty { .. } => "suspend-party",
+            Self::SuspendInstance { .. } => "suspend-instance",
+            Self::ContainDomainAction { .. } => "contain-action",
+        }
+    }
+}
+
+fn hex(id: &access_kernel::model::Id) -> String {
+    id.0.iter().fold(String::with_capacity(32), |mut out, b| {
+        let _ = std::fmt::Write::write_fmt(&mut out, format_args!("{b:02x}"));
+        out
+    })
+}
+
+/// The `policy.set` content of `containment` on `target` (`domain`, or an Anchor's id); `None`
+/// when an action is not an action name or the list is empty or too long.
+#[must_use]
+pub fn containment(
+    containment: &Containment,
+    target: Option<access_kernel::model::Id>,
+) -> Option<Value> {
+    let id = containment.name();
+    let statement = match containment {
+        Containment::SuspendParty { party } => format!(
+            "@id(\"{id}\") forbid(principal is Instance, action, resource) when {{ principal.party == \"{}\" }};",
+            hex(party)
+        ),
+        Containment::SuspendInstance { instance } => format!(
+            "@id(\"{id}\") forbid(principal == Instance::\"{}\", action, resource);",
+            hex(instance)
+        ),
+        Containment::ContainDomainAction { actions } => {
+            if actions.is_empty()
+                || actions.len() > MAX_NAMES
+                || !actions.iter().all(|a| action_name(a))
+            {
+                return None;
+            }
+            format!(
+                "@id(\"{id}\") forbid(principal, action, resource) when {{ {}.contains(context.action) }};",
+                list(actions)
+            )
+        }
+    };
+    let target = match target {
+        None => Value::text("domain"),
+        Some(a) => Value::Map(vec![(Value::text("anchor"), a.to_value())]),
+    };
+    let content = Value::Map(vec![
+        (Value::text("schema"), Value::text(RESTRICTION_SCHEMA)),
+        (Value::text("source"), Value::text(&statement)),
+        (Value::text("target"), target),
+    ]);
+    dcbor::decode(
+        &dcbor::encode(&content, Limits::CEILING).ok()?,
+        Limits::CEILING,
+    )
+    .ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -330,5 +418,52 @@ mod tests {
             );
         }
         assert!(crate::app::templates::support::PROTECTED.len() <= MAX_NAMES);
+    }
+
+    // SI-4, §6.6, §7.9.12.1, §11.9.2, OP-157 m.3 (i), Ek B 5581, 5659
+    #[test]
+    fn every_containment_compiles_and_only_blocks() {
+        let id = access_kernel::model::Id([0xab; 16]);
+        for (c, target) in [
+            (Containment::SuspendParty { party: id }, None),
+            (Containment::SuspendInstance { instance: id }, Some(id)),
+            (
+                Containment::ContainDomainAction {
+                    actions: BTreeSet::from([String::from("pay.transfer:send")]),
+                },
+                None,
+            ),
+        ] {
+            let v = containment(&c, target).unwrap();
+            assert!(
+                super::super::compile(&v).is_ok(),
+                "{c:?} {:?}",
+                super::super::compile(&v).err()
+            );
+            assert!(v.get("requirements").is_none());
+            let Some(Value::Text(source)) = v.get("source") else {
+                panic!("a source");
+            };
+            assert!(source.contains(&"ab".repeat(16)) || source.contains("pay.transfer:send"));
+            assert!(!source.contains("@require") && !source.contains("@breakglass_exempt"));
+        }
+        assert!(
+            containment(
+                &Containment::ContainDomainAction {
+                    actions: BTreeSet::from([String::from("x\"] || true || [\"")]),
+                },
+                None,
+            )
+            .is_none()
+        );
+        assert!(
+            containment(
+                &Containment::ContainDomainAction {
+                    actions: BTreeSet::new(),
+                },
+                None,
+            )
+            .is_none()
+        );
     }
 }
