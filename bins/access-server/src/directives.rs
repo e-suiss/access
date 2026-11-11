@@ -14,7 +14,7 @@ use std::time::Duration;
 use access_crypto::breakglass::{Directive, DirectiveState, hex, unhex};
 use access_store::Pool as PgPool;
 use access_store::identity::TenantTx;
-use access_store::operational::{OperationalEvent, record_operational};
+use access_store::operational::{OperationalEvent, RoleBackend, record_operational, role_backends};
 
 use crate::ServerDomains;
 use crate::config::Breakglass;
@@ -177,6 +177,60 @@ pub(crate) async fn tick(
         applied.recorded = d.seq;
     }
     state
+}
+
+/// The role operators read the database as (`deploy/breakglass/operator-role.sql`).
+pub(crate) const OPERATOR_ROLE: &str = "access_operator";
+
+/// How often operator database sessions are looked for (PD).
+pub(crate) const SESSIONS_EVERY: Duration = Duration::from_secs(5);
+
+/// Writes one `operator.db_session` row for each backend of `role` not seen before (SEC19,
+/// SA-51, OP-157 m.3 (k)); the statements themselves are in the database's own log.
+pub(crate) async fn sessions_tick(
+    app: &PgPool,
+    role: &str,
+    seen: &mut std::collections::HashSet<RoleBackend>,
+) -> usize {
+    let Ok(now) = role_backends(app, role).await else {
+        return 0;
+    };
+    seen.retain(|b| now.contains(b));
+    let mut written = 0_usize;
+    for b in now {
+        if seen.contains(&b) {
+            continue;
+        }
+        let actor = format!("db:{role}");
+        let target = format!("backend:{}", b.pid);
+        let correlation = format!("{}-{}", b.pid, b.started_ms);
+        // SEC19, OP-157 m.3 (k)
+        let row = OperationalEvent {
+            occurred_at_ms: u64::try_from(b.started_ms).unwrap_or(0),
+            tenant: None,
+            domain: None,
+            event_type: "operator.db_session",
+            actor: &actor,
+            target: &target,
+            reason: "",
+            correlation: &correlation,
+        };
+        if record_operational(app, &row).await.is_ok() {
+            seen.insert(b);
+            written = written.saturating_add(1);
+        }
+    }
+    written
+}
+
+/// Runs [`sessions_tick`] for [`OPERATOR_ROLE`] until the task is aborted.
+pub(crate) async fn watch_sessions(app: PgPool) {
+    let mut seen = std::collections::HashSet::new();
+    let mut every = tokio::time::interval(SESSIONS_EVERY);
+    loop {
+        every.tick().await;
+        sessions_tick(&app, OPERATOR_ROLE, &mut seen).await;
+    }
 }
 
 /// Runs [`tick`] every second until the task is aborted.

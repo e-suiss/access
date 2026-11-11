@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT pid AS \"pid!\", (extract(epoch FROM backend_start) * 1000)::bigint AS \"started!\"\n             FROM pg_stat_activity\n            WHERE usename = $1 AND datname = current_database() AND backend_type = 'client backend'\n            ORDER BY pid",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pid!",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "pg_stat_activity",
+            "name": "pid"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "started!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Name"
+      ]
+    },
+    "nullable": [
+      true,
+      null
+    ]
+  },
+  "hash": "8d53a5785eb6984105c9cac774e67a29b4d690cb3d6bcaf8d03c9f86f4e16b29"
+}

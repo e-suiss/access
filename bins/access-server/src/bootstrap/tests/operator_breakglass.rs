@@ -109,7 +109,7 @@ fn cell(root: &Path) -> (PathBuf, PathBuf, Vec<PathBuf>, String) {
 // G63, OP-46, CMP-25, SI-22, OP-157 m.3 (j), (k), Ek B 5546, 5547, 5548, 5551, 5608
 #[tokio::test(flavor = "multi_thread")]
 async fn g63_operator_directives_end_sessions_and_stand_the_leader_down_without_a_decision() {
-    let c = console("op-breakglass", false).await;
+    let c = Box::pin(console("op-breakglass", false)).await;
     let app = hosted(&c, Recording::default());
     let mia = account(&c, "mia@example.com", true).await;
     let mut before = Page::default();
@@ -234,4 +234,30 @@ async fn g63_operator_directives_end_sessions_and_stand_the_leader_down_without_
         && r.correlation.len() == 64));
     let alarms = std::fs::read_to_string(root.join("alarms")).unwrap();
     assert!(alarms.starts_with("used eu-1 "), "{alarms}");
+}
+
+// SEC19, SA-51, OP-157 m.3 (k), Ek B 5551
+#[tokio::test(flavor = "multi_thread")]
+async fn sec19_operator_database_sessions_are_recorded_once() {
+    let db = access_store::testing::fresh().await.unwrap();
+    let mut seen = std::collections::HashSet::new();
+    let role = "access_test_app";
+    assert!(crate::directives::sessions_tick(&db.app, role, &mut seen).await >= 1);
+    assert_eq!(
+        crate::directives::sessions_tick(&db.app, role, &mut seen).await,
+        0
+    );
+    let rows = access_store::operational::operational_rows(&db.checkpointer, 1000)
+        .await
+        .unwrap();
+    let sessions: Vec<_> = rows
+        .iter()
+        .filter(|r| r.event_type == "operator.db_session")
+        .collect();
+    assert_eq!(sessions.len(), seen.len());
+    assert!(
+        sessions
+            .iter()
+            .all(|r| r.actor == "db:access_test_app" && r.target.starts_with("backend:"))
+    );
 }

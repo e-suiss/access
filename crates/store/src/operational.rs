@@ -226,3 +226,35 @@ pub async fn append_operational_checkpoint(
     .await?;
     Ok(())
 }
+
+/// A live client backend of a role in this database (SEC19, OP-157 m.3 (k)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct RoleBackend {
+    /// Backend process id.
+    pub pid: i32,
+    /// When the backend started, Unix milliseconds.
+    pub started_ms: i64,
+}
+
+/// The client backends `role` has open in this database now, from `pg_stat_activity`.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn role_backends(pool: &PgPool, role: &str) -> Result<Vec<RoleBackend>, StoreError> {
+    let rows = sqlx::query!(
+        r#"SELECT pid AS "pid!", (extract(epoch FROM backend_start) * 1000)::bigint AS "started!"
+             FROM pg_stat_activity
+            WHERE usename = $1 AND datname = current_database() AND backend_type = 'client backend'
+            ORDER BY pid"#,
+        role,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| RoleBackend {
+            pid: r.pid,
+            started_ms: r.started,
+        })
+        .collect())
+}

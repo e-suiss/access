@@ -39,7 +39,7 @@ use trail::Trail;
 const MAX_DOCUMENT: u64 = 64 * 1024;
 
 /// How long the alarm hook may run.
-const ALARM_TIMEOUT: Duration = Duration::from_secs(10);
+const ALARM_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Why the tool stopped.
 #[derive(Debug)]

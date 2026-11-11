@@ -1852,6 +1852,8 @@ async fn serve(
         ))),
         None => None,
     };
+    // SEC19, OP-157 m.3 (k)
+    let watching_operators = tokio::spawn(directives::watch_sessions(product_app.clone()));
     // OP-38, OP-44, CMP-6, T16
     let led = domains.clone();
     let checkpointing = checkpoints::Checkpointers::start(
@@ -2111,6 +2113,7 @@ async fn serve(
     if let Some(d) = directing {
         d.abort();
     }
+    watching_operators.abort();
     renewing.stop().await;
     scim_outbound.stop().await;
     domains.release().await;
