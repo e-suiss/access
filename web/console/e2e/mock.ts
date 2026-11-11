@@ -176,6 +176,8 @@ const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   putApprovalBatch: ["idp.realm", "approval_batch"],
   // V9, OP-157 m.4 (b): the envelope of an offboarding commit
   commitOffboarding: ["idp.realm", "offboarding"],
+  // V10, OP-157 m.4 (b): a reviewer's keep, signed over its keep digest
+  keepReviewItem: ["idp.review", "keep"],
 };
 
 export interface Write {
@@ -493,6 +495,11 @@ export class ConsoleMock {
           body: b,
           ...(ifMatch === undefined ? {} : { ifMatch }),
         });
+        // V10, OP-157 m.3 (w): a keep records review.kept and is no Exercise
+        const kept = /\/reviews\/([^/]+)\/items\/([^/]+)\/keep$/.exec(rest);
+        if (kept !== null) {
+          return reply(200, { review: kept[1], grant: kept[2], kept: true });
+        }
         // V9, OP-157 m.3 (v): the departure committed, so the Party reads as offboarded
         if (/\/offboarding\/[^/]+\/commit$/.test(rest)) {
           return reply(200, {

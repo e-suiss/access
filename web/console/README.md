@@ -86,6 +86,7 @@ control anywhere — each domain accepts only by its own protected change.
 | Admin     | Restrictions & requirements     | what restrictions and requirements are; no stop-all control                                              | §8.17.7.5                     |
 | Admin     | Protected actions & break-glass | protected actions, emergency access as a delegation                                                      | §8.17.9.4                     |
 | Admin     | Offboarding                     | preview every channel, one explicit choice each, no default; offboarded only after the departure commits | §8.17.9.6, E6, OP-157 m.3 (v) |
+| Admin     | Access reviews                  | campaigns by period; your team's Grants; Keep records a check, Remove is your own revoke of one Grant    | IDP-39, OP-157 m.3 (w)        |
 | Admin     | Domain                          | constitution, provider, partner authority ceilings                                                       | §8.17.9.7, §5.13              |
 | Admin     | Changes                         | what changed, at your depth; information only                                                            | IA-2                          |
 | Admin     | History                         | every recorded change, grouped by the record that made it                                                | §8.17.9.1                     |

@@ -153,12 +153,16 @@ export async function metaWrites(
   confirm: Confirm,
   subject: string,
   payloads: readonly MetaPayload[],
+  given?: readonly (Basis | undefined)[],
 ): Promise<readonly MetaResult[]> {
   if (payloads.length === 0) return [];
   const k = await loadKernel();
   const prepared = await Promise.all(payloads.map((p) => prepare(instance, p)));
   const bases = await Promise.all(
     prepared.map(async (p, i): Promise<Basis> => {
+      // OP-157 m.3 (w): a reviewer's removal is signed on the basis Access named for it
+      const named = given?.[i];
+      if (named !== undefined) return named;
       const anchor = p.draft.basis?.anchor;
       const payload = payloads[i];
       const from = payload === undefined ? undefined : issuedFrom(payload);
@@ -238,8 +242,9 @@ export async function metaWrite(
   confirm: Confirm,
   subject: string,
   payload: MetaPayload,
+  basis?: Basis,
 ): Promise<MetaResult> {
-  const [r] = await metaWrites(instance, confirm, subject, [payload]);
+  const [r] = await metaWrites(instance, confirm, subject, [payload], [basis]);
   if (r === undefined) throw new Problem(502, "malformed", undefined);
   return r;
 }

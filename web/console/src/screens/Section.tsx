@@ -14,6 +14,7 @@ import * as O from "./Organizations.js";
 import type { Ctx } from "./parts.js";
 import { Planned } from "./Planned.js";
 import { Proxy } from "./Proxy.js";
+import { Reviews } from "./Reviews.js";
 import { SignInSettings } from "./SignInSettings.js";
 import { Export as SiemExport } from "./Export.js";
 import { Linux } from "./Linux.js";
@@ -103,7 +104,7 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
     case "breakglass":
       return <BreakGlass ctx={ctx} />;
     case "reviews":
-      return <Planned />;
+      return <Reviews ctx={ctx} />;
     case "support":
       return <Planned />;
     case "sign-in":
