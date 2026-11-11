@@ -357,6 +357,8 @@ pub(crate) async fn notices_step<K: access_identity_events::adapters::RealmKek>(
         )
         .await
         .map_err(|x| x.to_string())?;
+        // OP-157 m.3 (f), (g), §8.16
+        support_sweep(&mut s, (&*kek, ids), &r.slug).await?;
         s.commit().await.map_err(e)?;
         let at = access_store::relay::notice_cursor(&pools.app, &domain)
             .await
@@ -381,6 +383,11 @@ pub(crate) async fn notices_step<K: access_identity_events::adapters::RealmKek>(
                 if breakglass_used(&mut t, (&*kek, ids), &ev, (&r.slug, &r.issuer)).await? {
                     queued = queued.saturating_add(1);
                 }
+                continue;
+            }
+            // OP-157 m.3 (f), SI-21
+            if support_revoked(&mut t, (&*kek, ids), &ev, &r.slug).await? {
+                queued = queued.saturating_add(1);
                 continue;
             }
             // OP-157 m.3 (h), §12.3.8 (5)
@@ -419,6 +426,50 @@ pub(crate) async fn notices_step<K: access_identity_events::adapters::RealmKek>(
             .map_err(e)?;
     }
     Ok(queued)
+}
+
+/// Ends the realm's support access past its end and shreds its expired support artifacts
+/// (OP-157 m.3 (f), (g)).
+async fn support_sweep(
+    t: &mut TenantTx,
+    (kek, ids): (&(dyn suiss_crypto::envelope::Kek + Send + Sync), &IdKey),
+    slug: &str,
+) -> Result<(), String> {
+    use access_identity_account::adapters::system::SystemEntropy;
+    access_identity_account::app::support::sweep(
+        t,
+        (kek, ids),
+        (&SystemEntropy, &SystemClock),
+        access_identity_account::ports::Clock::now_ms(&SystemClock),
+        slug,
+    )
+    .await
+    .map(drop)
+    .map_err(|x| x.to_string())
+}
+
+/// When `ev` revokes a support Grant, the support access it gave ends and the person is told
+/// (OP-157 m.3 (f), SI-21); whether it did.
+async fn support_revoked(
+    t: &mut TenantTx,
+    (kek, ids): (&(dyn suiss_crypto::envelope::Kek + Send + Sync), &IdKey),
+    ev: &access_internal_api::events::Event,
+    slug: &str,
+) -> Result<bool, String> {
+    use access_identity_account::adapters::system::SystemEntropy;
+    use access_internal_api::events::{Kind, Subject};
+    let (Kind::AuthorityRevoked, Subject::Grant(g)) = (ev.kind, ev.subject) else {
+        return Ok(false);
+    };
+    access_identity_account::app::support::revoked(
+        t,
+        (kek, ids),
+        (&SystemEntropy, &SystemClock),
+        (g.0, ev.at),
+        slug,
+    )
+    .await
+    .map_err(|x| x.to_string())
 }
 
 /// The acting organization of a break-glass use: the Party's own organization, or the first
