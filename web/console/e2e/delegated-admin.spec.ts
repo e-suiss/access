@@ -14,7 +14,13 @@ test("opening and closing admin roles are signed changes", async ({ page, bff })
   expect(bff.writes).toEqual([]);
 
   await page.getByRole("button", { name: "Allow admin roles" }).click();
-  await expect.poll(() => bff.writes.length).toBe(1);
-  const w = bff.writes.at(0);
-  expect(w?.path).toContain("settings/delegated-admin");
+  await page
+    .getByRole("dialog", { name: "Review and sign" })
+    .getByRole("button", { name: "Sign" })
+    .click();
+  await expect(page.getByRole("status")).toContainText("Recorded as change");
+  expect(bff.writes.map((w) => [w.method, w.path])).toEqual([
+    ["PUT", "realms/acme/settings/delegated-admin"],
+  ]);
+  expect(bff.writes[0]?.body).toMatchObject({ enabled: true });
 });
