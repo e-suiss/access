@@ -36,7 +36,4 @@ CREATE TRIGGER no_truncate BEFORE TRUNCATE ON access.export_runs
 GRANT SELECT, INSERT ON access.export_runs TO access_app;
 GRANT SELECT ON access.export_runs TO access_sequencer;
 
--- OP-158 m.3 (f): a mirror stream reads the checkpoints of a size range
-CREATE INDEX authority_checkpoint_size ON access.authority_checkpoint (domain_id, size);
-
 RESET ROLE;

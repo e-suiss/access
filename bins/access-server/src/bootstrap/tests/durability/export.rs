@@ -72,7 +72,7 @@ async fn start(
     (status, bytes, location)
 }
 
-// AP-14, INV-27, PI-6, TN-79, B3, anti-hostage k.2, G28, SI-15, OP-158 m.3 (g)
+// AP-14, INV-27, PI-6, TN-79, B3, G28, SI-15, OP-158 m.3 (g)
 #[tokio::test(flavor = "multi_thread")]
 async fn a_full_export_streams_whole_in_chunks_is_a_recorded_exercise_and_no_rate_class_closes_it()
 {
@@ -114,7 +114,7 @@ async fn a_full_export_streams_whole_in_chunks_is_a_recorded_exercise_and_no_rat
     if read.size == size {
         assert_eq!(read.root, cp.root);
     }
-    // G28, SI-15: the export is the recorded, allowed Exercise it names
+    // G28, SI-15
     let nonce = b64url_decode(body["context"]["nonce"].as_str().unwrap()).unwrap();
     let row =
         access_store::authority::find_nonce(&p.w.db.app, &DomainId::from_bytes(p.domain.0), &nonce)
@@ -126,8 +126,7 @@ async fn a_full_export_streams_whole_in_chunks_is_a_recorded_exercise_and_no_rat
         read.export_exercise,
         access_kernel::meta::exercise_id(&p.domain, &nonce).unwrap()
     );
-    // anti-hostage k.2: the same run streams again from any position, more often than any
-    // rate class allows explanations, and the stream is the same record
+    // B18, OP-35
     let location = location.unwrap();
     for _ in 0..=access_authority_core::rate::EXPLAIN.0 {
         let (s, again) = call(
@@ -141,7 +140,7 @@ async fn a_full_export_streams_whole_in_chunks_is_a_recorded_exercise_and_no_rat
         let r = read_stream(&again).unwrap();
         assert_eq!((r.range, r.size, r.root), ((4, head), read.size, read.root));
     }
-    // TN-79: the domain's record export is its own route, apart from a person's data export
+    // TN-79
     let elsewhere = as_pep(
         harden(
             access_http::mirror::router(p.w.domains.clone(), 1 << 16),
@@ -155,7 +154,7 @@ async fn a_full_export_streams_whole_in_chunks_is_a_recorded_exercise_and_no_rat
     )
     .await;
     assert_eq!(s, StatusCode::BAD_REQUEST);
-    // N-11, §7.9.12.5: a digest package withholds every body and keeps every leaf
+    // N-11, §7.9.12.5
     let redacted = commit_export(&p, &router, &[]).await;
     let (status, digest, _) = start(&p, &router, &redacted).await;
     assert_eq!(status, StatusCode::OK);
@@ -170,7 +169,7 @@ async fn a_full_export_streams_whole_in_chunks_is_a_recorded_exercise_and_no_rat
     let now = p.w.domains.head(p.domain).await.unwrap().0;
     assert_eq!(d.range, (0, now));
     assert!(d.records.len() > read.records.len());
-    // PI-4: a body that is not an allowed export Exercise starts nothing
+    // PI-4
     let mut forged = redacted.clone();
     forged["context"]["nonce"] = serde_json::Value::from(b64url_encode(
         &access_crypto::random::bytes::<16>().unwrap(),

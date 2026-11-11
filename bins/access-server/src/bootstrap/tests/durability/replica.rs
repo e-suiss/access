@@ -267,7 +267,7 @@ async fn a_real_replica_follows_acks_fails_closed_when_killed_and_redacts_its_ow
     let bin = bin("access-replica", "access-replica");
     let mut replica = Replica::start(&bin, &root, "acme-replica", &follows).unwrap();
     declare(&p, &replica);
-    // TI-13: the copy and its signed ack come only after a signed checkpoint
+    // TI-13
     let first = checkpoint(&p, label).await;
     assert_eq!(replica.acked(first, ACK_WAIT), Some(first));
     assert_eq!(stored_ack(&p, "acme-replica").await, first);
@@ -278,7 +278,7 @@ async fn a_real_replica_follows_acks_fails_closed_when_killed_and_redacts_its_ow
     let head = json(&head);
     assert_eq!(head["advisory"], true);
     assert_eq!(head["checkpoint"]["size"], first.to_string());
-    // TI-RT11: the copy holds the very commitment the domain signed
+    // TI-RT11
     let signed =
         access_store::authority_checkpoint::latest(&p.w.db.app, &DomainId::from_bytes(p.domain.0))
             .await
@@ -290,7 +290,7 @@ async fn a_real_replica_follows_acks_fails_closed_when_killed_and_redacts_its_ow
     assert_eq!(zero["advisory"], true);
     assert!(zero["record"].is_string(), "{zero}");
     assert_eq!(zero.get("decision"), None);
-    // SEC23: a killed replica acknowledges nothing more, and nothing waits it into an ack
+    // SEC23
     replica.kill().unwrap();
     let _ = p
         .post("/access/v1/evaluation", &p.allowed(Mode::Commit).await)
@@ -315,11 +315,10 @@ async fn a_real_replica_follows_acks_fails_closed_when_killed_and_redacts_its_ow
         )
         .await;
     assert_eq!(looked, Err(first));
-    // its own files: started again, it resumes from its copy and acks the rest
     replica.restart().unwrap();
     assert_eq!(replica.acked(second, ACK_WAIT), Some(second));
     assert_eq!(replica.kept_acks(p.domain.0).unwrap().len(), 2);
-    // U22, N-11: the provider's redaction does not reach the copy; the operator applies it
+    // U22, N-11
     let report = replica.apply_redactions(&[1]).unwrap();
     assert_eq!(report.trim(), "applied 1");
     let (_, one) = replica.read("/v1/records/1").unwrap();
@@ -432,7 +431,7 @@ async fn an_ack_counts_only_under_the_declared_key_for_a_signed_checkpoint_and_a
     .await;
     assert_eq!(s, StatusCode::NO_CONTENT);
     assert_eq!(stored_ack(&p, "r1").await, size);
-    // G28: only the PEP that committed the export Exercise reads its run
+    // G28
     let mirror = format!(
         "/access/v1/domains/{}/mirror?export={}&from=0",
         domain_path(&p.domain),

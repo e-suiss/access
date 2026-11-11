@@ -2174,6 +2174,294 @@
         }
       }
     },
+    "/access/v1/domains/{domain}/exports": {
+      "post": {
+        "operationId": "startExport",
+        "summary": "Starts a Record Export: the body is the ADP request that committed the access.audit_export Exercise, with its AIS, and the authenticated PEP is the one its AIS names. A package streams at once as a CBOR sequence (export.cddl) read 10 000 records at a time with no limit on the range; with `stream: \"mirror\"` the answer names the Replica Mirror run. Billing, quota or plan state never closes it (anti-hostage k.2). It is the domain's record, apart from a person's data export (TN-79).",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "The request is not this PEP's allowed export Exercise, or its range or disclosure is refused.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "pep-unauthenticated: no authenticated PEP.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The package.",
+            "content": {
+              "application/cbor-seq": {
+                "schema": {}
+              }
+            }
+          },
+          "201": {
+            "description": "The mirror run: its `export` id and first size.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/domains/{domain}/exports/{export}": {
+      "get": {
+        "operationId": "getExport",
+        "summary": "A started package's stream again from `from`, for the PEP that committed its Exercise (OP-158 m.3 (g)).",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "export",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "No such run for this PEP, or `from` is outside its range.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "pep-unauthenticated: no authenticated PEP.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The package from `from`.",
+            "content": {
+              "application/cbor-seq": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/domains/{domain}/mirror": {
+      "get": {
+        "operationId": "getMirror",
+        "summary": "The Replica Mirror of run `export`: the records from tree size `from` and the signed checkpoints after size `checkpoint` with their key excerpts, as a CBOR sequence (mirror.cddl); when nothing is new within a few seconds, a heartbeat. Resumable from any size. Only the PEP that started the run reads it, and only while its Party still audits the domain (T21, G28). A replica copy is advisory: never a source of ALLOW (P43).",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "export",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "checkpoint",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "No such mirror run for this PEP, its Party no longer audits the domain, or the query is malformed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "pep-unauthenticated: no authenticated PEP.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The frames.",
+            "content": {
+              "application/cbor-seq": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "ackMirror",
+        "summary": "A declared replica's signed-replica-ack (mirror.cddl): it holds the whole prefix up to `size` with `root`. It counts only under the key the domain declares for the replica and for a checkpoint the domain signed; without one, no revocation or CT3 commit is acknowledged (TI-13, SEC23).",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "replica-ack: malformed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "replica-unknown, replica-ack-signature or replica-ack-checkpoint: not counted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Kept.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/proxy/v1/check/{engine}": {
       "get": {
         "operationId": "proxyCheck",
@@ -2507,169 +2795,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RelayStatus"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/access/v1/domains/{domain}/mirror": {
-      "get": {
-        "operationId": "getMirror",
-        "summary": "The Replica Mirror from `from` (a tree size): a resumable, long-polled CBOR sequence of records, bodies and checkpoints (mirror.cddl) for a Party holding the domain's access.audit.export Grant; replicas answer signed replica_ack frames (T21, TI-13, OP-158 m.3 (f)).",
-        "x-suiss-status": "planned",
-        "parameters": [
-          {
-            "name": "domain",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
-          }
-        ],
-        "responses": {
-          "400": {
-            "description": "The request is refused; nothing is read.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Temporarily unavailable; retry.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/access/v1/domains/{domain}/exports": {
-      "post": {
-        "operationId": "startExport",
-        "summary": "Starts a Record Export: the body is the access.audit.export Exercise with its AIS; the package streams as a CBOR sequence (export.cddl) in chunks of at most 10 000 records, and billing, quota or plan never close it (AP-14, OP-158 m.3 (g)).",
-        "x-suiss-status": "planned",
-        "parameters": [
-          {
-            "name": "domain",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
-          }
-        ],
-        "responses": {
-          "400": {
-            "description": "The request is refused; nothing is read.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Temporarily unavailable; retry.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/access/v1/domains/{domain}/exports/{export}": {
-      "get": {
-        "operationId": "getExport",
-        "summary": "A started export's stream, resumable from its last position (OP-158 m.3 (g)).",
-        "x-suiss-status": "planned",
-        "parameters": [
-          {
-            "name": "domain",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
-          },
-          {
-            "name": "export",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            }
-          }
-        ],
-        "responses": {
-          "400": {
-            "description": "The request is refused; nothing is read.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Temporarily unavailable; retry.",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)).",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }

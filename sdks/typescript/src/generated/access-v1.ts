@@ -432,6 +432,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/access/v1/domains/{domain}/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Starts a Record Export: the body is the ADP request that committed the access.audit_export Exercise, with its AIS, and the authenticated PEP is the one its AIS names. A package streams at once as a CBOR sequence (export.cddl) read 10 000 records at a time with no limit on the range; with `stream: "mirror"` the answer names the Replica Mirror run. Billing, quota or plan state never closes it (anti-hostage k.2). It is the domain's record, apart from a person's data export (TN-79). */
+        post: operations["startExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access/v1/domains/{domain}/exports/{export}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A started package's stream again from `from`, for the PEP that committed its Exercise (OP-158 m.3 (g)). */
+        get: operations["getExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access/v1/domains/{domain}/mirror": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Replica Mirror of run `export`: the records from tree size `from` and the signed checkpoints after size `checkpoint` with their key excerpts, as a CBOR sequence (mirror.cddl); when nothing is new within a few seconds, a heartbeat. Resumable from any size. Only the PEP that started the run reads it, and only while its Party still audits the domain (T21, G28). A replica copy is advisory: never a source of ALLOW (P43). */
+        get: operations["getMirror"];
+        put?: never;
+        /** A declared replica's signed-replica-ack (mirror.cddl): it holds the whole prefix up to `size` with `root`. It counts only under the key the domain declares for the replica and for a checkpoint the domain signed; without one, no revocation or CT3 commit is acknowledged (TI-13, SEC23). */
+        post: operations["ackMirror"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/proxy/v1/check/{engine}": {
         parameters: {
             query?: never;
@@ -510,57 +562,6 @@ export interface paths {
         };
         /** {relay_lag_ms, notifications_delayed}: the age of the courier's oldest undelivered message, or null when none waits, and whether it is past 60 s; authority never waits on delivery (OP-156 m.3 (c), E30). */
         get: operations["getRelayStatus"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/access/v1/domains/{domain}/mirror": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The Replica Mirror from `from` (a tree size): a resumable, long-polled CBOR sequence of records, bodies and checkpoints (mirror.cddl) for a Party holding the domain's access.audit.export Grant; replicas answer signed replica_ack frames (T21, TI-13, OP-158 m.3 (f)). */
-        get: operations["getMirror"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/access/v1/domains/{domain}/exports": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Starts a Record Export: the body is the access.audit.export Exercise with its AIS; the package streams as a CBOR sequence (export.cddl) in chunks of at most 10 000 records, and billing, quota or plan never close it (AP-14, OP-158 m.3 (g)). */
-        post: operations["startExport"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/access/v1/domains/{domain}/exports/{export}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** A started export's stream, resumable from its last position (OP-158 m.3 (g)). */
-        get: operations["getExport"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3973,6 +3974,218 @@ export interface operations {
             };
         };
     };
+    startExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The package. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/cbor-seq": unknown;
+                };
+            };
+            /** @description The mirror run: its `export` id and first size. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description The request is not this PEP's allowed export Exercise, or its range or disclosure is refused. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description pep-unauthenticated: no authenticated PEP. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporarily unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getExport: {
+        parameters: {
+            query?: {
+                from?: string;
+            };
+            header?: never;
+            path: {
+                domain: string;
+                export: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The package from `from`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/cbor-seq": unknown;
+                };
+            };
+            /** @description No such run for this PEP, or `from` is outside its range. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description pep-unauthenticated: no authenticated PEP. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporarily unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getMirror: {
+        parameters: {
+            query?: {
+                export?: string;
+                from?: string;
+                checkpoint?: string;
+            };
+            header?: never;
+            path: {
+                domain: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The frames. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/cbor-seq": unknown;
+                };
+            };
+            /** @description No such mirror run for this PEP, its Party no longer audits the domain, or the query is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description pep-unauthenticated: no authenticated PEP. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporarily unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    ackMirror: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Kept. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description replica-ack: malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description replica-unknown, replica-ack-signature or replica-ack-checkpoint: not counted. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporarily unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     proxyCheck: {
         parameters: {
             query?: never;
@@ -4282,127 +4495,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RelayStatus"];
-                };
-            };
-            /** @description Temporarily unavailable; retry. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    getMirror: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                domain: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The request is refused; nothing is read. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)). */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Temporarily unavailable; retry. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    startExport: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                domain: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The request is refused; nothing is read. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)). */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Temporarily unavailable; retry. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    getExport: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                domain: string;
-                export: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The request is refused; nothing is read. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)). */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Temporarily unavailable; retry. */
