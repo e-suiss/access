@@ -351,7 +351,7 @@ pub fn shape(
     {
         return Err(PROTECTED_ACTION);
     }
-    // §8.16 #12, TN-74
+    // §8.16, TN-74
     let artifacts = named.exact.len() == 1
         && named
             .exact
@@ -556,18 +556,18 @@ pub struct Facts {
     pub acceptance: Option<Digest>,
 }
 
-impl<L: access_authority_sequencer::ports::DomainLog, R: crate::ports::Reader, B: crate::ports::Binding, S: crate::ports::Salts>
-    crate::app::Authority<L, R, B, S>
+impl<
+    L: access_authority_sequencer::ports::DomainLog,
+    R: crate::ports::Reader,
+    B: crate::ports::Binding,
+    S: crate::ports::Salts,
+> crate::app::Authority<L, R, B, S>
 {
     /// The [`Facts`] of `party` and the case system `issuer` at the head.
     ///
     /// # Errors
     /// The reader's errors.
-    pub async fn support_facts(
-        &self,
-        party: &Id,
-        issuer: &Id,
-    ) -> Result<Facts, crate::CoreError> {
+    pub async fn support_facts(&self, party: &Id, issuer: &Id) -> Result<Facts, crate::CoreError> {
         self.settled(|snap| Facts {
             anchor: read::<meta::PartyState>(snap, kind::PARTY, party)
                 .filter(|p| p.ended.is_none())
