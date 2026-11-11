@@ -1,8 +1,8 @@
 # OP-146 I11, §14.8 SA-T2, B9, T42, IDP-40, OP-155 m.3 (q): the OIDF profile plans, the
-# differential tests and the interop lab, called every night and on every release tag. A plan or
-# a counterpart list is a breaking gate once its expected list is recorded; a release run refuses
-# an unrecorded one. Counterpart containers are pinned by digest in scripts/ci/interop/images.sh
-# and go into no image.
+# differential tests and the interop lab, called every night and on every release tag, and run by
+# hand to check a fix before a tag. A plan or a counterpart list is a breaking gate once its
+# expected list is recorded; a release run refuses an unrecorded one. Counterpart containers are
+# pinned by digest in scripts/ci/interop/images.sh and go into no image.
 name: Conformance
 
 on:
@@ -10,6 +10,12 @@ on:
     inputs:
       release:
         description: A release tag run; an unrecorded expected list fails it.
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Gate as a release tag run does; an unrecorded expected list fails it.
         type: boolean
         default: false
 

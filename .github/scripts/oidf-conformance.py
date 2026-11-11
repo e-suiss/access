@@ -32,6 +32,7 @@ MODULE_TIMEOUT_S = 300
 POLL_S = 2
 FINAL = {"FINISHED", "INTERRUPTED"}
 PASS = ("PASSED", "WARNING")
+NOT_CREATED = "NOT_CREATED"
 
 CONTEXT = ssl.create_default_context()
 CONTEXT.check_hostname = False
@@ -152,7 +153,10 @@ def run_plan(base, directory, plan, out, runtime=None, target_ca=None):
         config,
     )
     if status != 201:
-        fail(f"plan {plan['name']} was not created: HTTP {status} {body[:500]!r}")
+        print(f"::error::plan {plan['name']} was not created: HTTP {status} {body[:500]!r}")
+        return {"plan": plan_key(plan), "id": None, "variant": variant, "modules": [
+            {"module": NOT_CREATED, "variant": variant, "status": NOT_CREATED, "result": f"HTTP {status}"}
+        ]}
     created = json.loads(body)
     plan_id = created["id"]
     results = [run_module(base, plan_id, m) for m in created.get("modules", [])]
@@ -216,7 +220,8 @@ def classify(summary, expected, release=False):
     """OP-152 m.5 (j): a module passes only when it finished PASSED or WARNING; SKIPPED, REVIEW
     and every other outcome fail unless expected.json lists the module with its reason.
     OP-155 m.3 (q): a plan expected.json does not list is in its first run; its failures are
-    only reported, unless this is a release."""
+    only reported, unless this is a release. A plan the suite refuses to create always fails, and
+    the other plans of the group still run."""
     bad, notes, candidate = [], [], {}
     for p in summary:
         recorded = p["plan"] in expected
@@ -230,7 +235,7 @@ def classify(summary, expected, release=False):
                 notes.append(f"::warning::{p['plan']}/{m['module']} now passes; remove it from expected.json")
             elif not passed and m["module"] in known:
                 notes.append(f"{p['plan']}/{m['module']}: expected failure ({known[m['module']]})")
-            elif not passed and recorded:
+            elif not passed and (recorded or m["status"] == NOT_CREATED):
                 bad.append(f"{p['plan']}/{m['module']}: {m['status']} {m['result']}")
             elif not passed:
                 notes.append(f"::warning::{p['plan']}/{m['module']}: first run, {m['status']} {m['result']}")

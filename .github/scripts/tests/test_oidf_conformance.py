@@ -58,6 +58,11 @@ class Classify(unittest.TestCase):
         bad, _, _ = OIDF.classify(summary(("a", "FINISHED", "PASSED")), {"p": {}}, release=True)
         self.assertEqual(bad, [])
 
+    # OP-155 m.3 (q)
+    def test_a_plan_the_suite_does_not_create_fails_even_in_a_first_run(self):
+        bad, _, _ = OIDF.classify(summary((OIDF.NOT_CREATED, OIDF.NOT_CREATED, "HTTP 400")), {})
+        self.assertEqual(bad, ["p/NOT_CREATED: NOT_CREATED HTTP 400"])
+
 
 class Substitute(unittest.TestCase):
     # OP-155 m.3 (q)

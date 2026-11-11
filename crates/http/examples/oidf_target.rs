@@ -248,6 +248,7 @@ async fn configure(cluster: &Cluster, extra: &[Extra], rt: &mut Runtime) {
         &access_store::oidf::FederationSettingsRow {
             enabled: true,
             ta_enabled: true,
+            registration_open: true,
             ..access_store::oidf::FederationSettingsRow::default()
         },
     )

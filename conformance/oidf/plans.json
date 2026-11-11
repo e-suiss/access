@@ -21,9 +21,7 @@
         "client_auth_type": "private_key_jwt",
         "sender_constrain": "dpop",
         "openid": "openid_connect",
-        "fapi_profile": "plain_fapi",
-        "fapi_request_method": "unsigned",
-        "fapi_response_mode": "plain_response"
+        "fapi_profile": "plain_fapi"
       },
       "config": "access-fapi2.json",
       "redirect_uri": "https://localhost.emobix.co.uk:8443/test/a/access-fapi2/callback",
