@@ -1655,8 +1655,6 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::ApprovalInline(_) | Change::ApprovalBatch(_) => {
                 return Err(Invalid::NotYetServed.into());
             }
-            // TN-114, OP-157 m.3 (t): the flag is the bound decision itself
-            Change::DelegatedAdmin(_) => true,
             Change::ClientRegister(c) | Change::ClientUpdate(c) => {
                 let (done, s) = self
                     .write_client(t, bound, c, matches!(change, Change::ClientRegister(_)))
