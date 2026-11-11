@@ -111,7 +111,7 @@ fn without_a_usable_path_the_data_is_lost_and_said_so() {
     assert_eq!(kek_recovery(&[], Assurance::Low), KekRecovery::DataLost);
 }
 
-// E66 (2), OP-74, Ek C C.1.1 (2)
+// E66 (2), OP-74
 #[test]
 fn forgetting_one_record_destroys_only_its_record_key_everywhere() {
     let all = copies();
@@ -170,7 +170,7 @@ fn a_class_shred_destroys_the_class_dek_and_its_record_keys_and_nothing_else() {
     );
 }
 
-// E52 (3), Ek C C.1.1 (2) 1
+// E52 (3)
 #[test]
 fn an_offline_device_destroys_its_copy_when_it_reconnects_and_the_entry_waits() {
     let all = copies();
@@ -202,7 +202,7 @@ fn an_offline_device_destroys_its_copy_when_it_reconnects_and_the_entry_waits() 
     );
 }
 
-// OP-78 m.1–m.4, Ek C C.4
+// OP-78 m.1–m.4
 #[test]
 fn a_hold_suspends_destruction_gives_no_readability_and_releases_the_pending_erasure() {
     let all = copies();

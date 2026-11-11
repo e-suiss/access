@@ -6,7 +6,7 @@ fn t() -> TenantId {
     TenantId::new("t1")
 }
 
-// OP-77, Ek C C.3.7
+// OP-77
 #[test]
 fn every_one_class_but_the_lineage_is_user_keyed_and_goes_with_the_account() {
     for c in Class::ALL {
@@ -18,7 +18,7 @@ fn every_one_class_but_the_lineage_is_user_keyed_and_goes_with_the_account() {
     }
 }
 
-// OP-77, Ek C C.3.7, C.5 #26, #27
+// OP-77
 #[test]
 fn the_one_defaults_follow_ek_c() {
     let s = |c| Schedule::one_default(t(), c, V).unwrap();
@@ -43,7 +43,7 @@ fn the_one_defaults_follow_ek_c() {
     assert_eq!(lineage.start, Event::ModelWithdrawn);
 }
 
-// OP-77, Ek C C.3.7
+// OP-77
 #[test]
 fn one_data_maps_to_its_class_and_an_export_to_its_most_restrictive_source() {
     assert_eq!(OneData::TaskRecord.class(), Class::OneMemory);
