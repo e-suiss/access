@@ -262,6 +262,26 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             return Err(CoreError::Protocol("payload"));
         }
         let cited = (k, h.cited.root.0);
+        let (no_write, continuation) = self.statements(req, h, cited, frozen_at).await?;
+        if !first {
+            return Ok(Vec::new());
+        }
+        Ok(vec![
+            Statement::of(NO_WRITE, no_write).ok_or(CoreError::Protocol("proof"))?,
+            Statement::of(CONTINUATION, continuation).ok_or(CoreError::Protocol("proof"))?,
+        ])
+    }
+
+    /// HO-6, RB-4: the request's no-write statement under the current binding and its
+    /// continuation under the incoming one, both citing `cited`; the continuation names a
+    /// passing provider profile.
+    async fn statements(
+        &self,
+        req: &crate::domain::Request,
+        h: &access_kernel::recovery::HandoverInput,
+        cited: (u64, [u8; 32]),
+        frozen_at: u64,
+    ) -> Result<(Vec<u8>, Vec<u8>), CoreError> {
         let (mut no_write, mut continuation) = (None, None);
         for p in &req.proofs {
             match p {
@@ -315,13 +335,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         if c.conformance != conformance_digest() {
             return Err(CoreError::Refused(NOT_CONFORMANT));
         }
-        if !first {
-            return Ok(Vec::new());
-        }
-        Ok(vec![
-            Statement::of(NO_WRITE, no_write).ok_or(CoreError::Protocol("proof"))?,
-            Statement::of(CONTINUATION, continuation).ok_or(CoreError::Protocol("proof"))?,
-        ])
+        Ok((no_write, continuation))
     }
 
     /// RB-5, RB-6: once an independent witness cosigned `C_{h+1}` of the committed re-anchor

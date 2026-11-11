@@ -282,7 +282,7 @@ fn kind_word(k: RecordKind) -> &'static str {
         RecordKind::Genesis => "genesis",
         RecordKind::Opening => "opening",
         RecordKind::Decision => "decision",
-        _ => "claim",
+        RecordKind::Claim => "claim",
     }
 }
 
@@ -304,7 +304,8 @@ fn adopted_nonces(
     records: &[RecordEnvelope],
 ) -> Result<Vec<access_store::handover::AdoptedNonce>, HandoverError> {
     let field = |r: &RecordEnvelope, k: &str| r.fields.get(k).map(|f| f.value.clone());
-    let mut actors: std::collections::BTreeMap<Vec<u8>, Vec<u8>> = Default::default();
+    let mut actors: std::collections::BTreeMap<Vec<u8>, Vec<u8>> =
+        std::collections::BTreeMap::new();
     let mut out = Vec::new();
     for r in records {
         let Some(Value::Bytes(nonce)) = field(r, "nonce") else {
@@ -343,8 +344,11 @@ fn adopted_nonces(
     Ok(out)
 }
 
-fn consumed(records: &[RecordEnvelope]) -> (Vec<(Vec<u8>, u64)>, Vec<(Vec<u8>, u64)>) {
-    let mut counters: std::collections::BTreeMap<Vec<u8>, u64> = Default::default();
+/// Keys with an amount or a position.
+type Keyed = Vec<(Vec<u8>, u64)>;
+
+fn consumed(records: &[RecordEnvelope]) -> (Keyed, Keyed) {
+    let mut counters: std::collections::BTreeMap<Vec<u8>, u64> = std::collections::BTreeMap::new();
     let mut single = Vec::new();
     for r in records {
         let Some(c) = r.fields.get("consumption").map(|f| &f.value) else {
@@ -371,23 +375,15 @@ fn consumed(records: &[RecordEnvelope]) -> (Vec<(Vec<u8>, u64)>, Vec<(Vec<u8>, u
     (counters.into_iter().collect(), single)
 }
 
-/// HO-8: checks the batch `k..h` and the witnessed `C_{h+1}` the incoming provider read from
-/// the outgoing provider's mirror against what it answered: the batch starts at `k` with the
-/// outgoing binding's no-write statement and this provider's own `continuation` statement, ends
-/// with the `domain_handover` decision that binds `mine`, folds on the received state, and
-/// `note` is `C_{h+1}` over exactly those records with a cosignature of an independent
-/// `witnesses` key. The adoption for the store, as run `run`.
-///
-/// # Errors
-/// [`HandoverError::Batch`].
-pub fn take_over(
+/// HO-6, RB-4: the batch starts at `k` with the outgoing binding's no-write statement and the
+/// incoming provider's own continuation, and ends with the `domain_handover` decision that
+/// binds `mine`; that decision.
+fn check_batch<'a>(
     received: &Received,
-    batch: &[RecordEnvelope],
+    batch: &'a [RecordEnvelope],
     (continuation, mine): (&[u8], &access_kernel::verify::key_scope::BindingKey),
-    (note, witnesses): (&str, &[suiss_crypto::note::Verifier]),
     outgoing: &[access_kernel::verify::key_scope::BindingKey],
-    run: [u8; 16],
-) -> Result<TakeOver, HandoverError> {
+) -> Result<&'a RecordEnvelope, HandoverError> {
     let k = received.cited.0;
     let [first, second, .., last] = batch else {
         return Err(HandoverError::Batch("short"));
@@ -415,6 +411,28 @@ pub fn take_over(
         Some((keys, how)) if how == "handover" && keys.iter().any(|b| b.kid == mine.kid) => {}
         _ => return Err(HandoverError::Batch("binding")),
     }
+    Ok(last)
+}
+
+/// HO-8: checks the batch `k..h` and the witnessed `C_{h+1}` the incoming provider read from
+/// the outgoing provider's mirror against what it answered: the batch starts at `k` with the
+/// outgoing binding's no-write statement and this provider's own `continuation` statement, ends
+/// with the `domain_handover` decision that binds `mine`, folds on the received state, and
+/// `note` is `C_{h+1}` over exactly those records with a cosignature of an independent
+/// `witnesses` key. The adoption for the store, as run `run`.
+///
+/// # Errors
+/// [`HandoverError::Batch`].
+pub fn take_over(
+    received: &Received,
+    batch: &[RecordEnvelope],
+    (continuation, mine): (&[u8], &access_kernel::verify::key_scope::BindingKey),
+    (note, witnesses): (&str, &[suiss_crypto::note::Verifier]),
+    outgoing: &[access_kernel::verify::key_scope::BindingKey],
+    run: [u8; 16],
+) -> Result<TakeOver, HandoverError> {
+    let k = received.cited.0;
+    let last = check_batch(received, batch, (continuation, mine), outgoing)?;
     let mut state = received.state.clone();
     let mut all: Vec<RecordEnvelope> = received.records.clone();
     for (i, r) in batch.iter().enumerate() {

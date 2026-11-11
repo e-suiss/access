@@ -317,6 +317,37 @@ pub async fn adopt(
         .execute(&mut *t.tx)
         .await?;
     }
+    consumed(&mut t, tenant, a).await?;
+    let frontier: Vec<Vec<u8>> = a.head.frontier.iter().map(|h| h.to_vec()).collect();
+    sqlx::query!(
+        "INSERT INTO access.domain_head (domain_id, pos, epoch, leaf_hash, recorded_at, frontier)
+         VALUES ($1, $2, 0, $3, $4, $5)",
+        id,
+        signed(a.head.pos)?,
+        a.head.leaf_hash.as_slice(),
+        signed(a.head.recorded_at)?,
+        &frontier,
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    sqlx::query!(
+        "INSERT INTO access.handover_runs (domain_id, run, step, role, k, h, cited_root)
+         VALUES ($1, $2, 'adopted', 'incoming', $3, $4, $5)",
+        id,
+        Uuid::from_bytes(a.run),
+        signed(a.k)?,
+        signed(a.head.pos)?,
+        a.cited_root.as_slice(),
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    t.commit().await
+}
+
+/// The nonces, counters and single-use flags an adopted log consumed (TI-2, T9).
+async fn consumed(t: &mut DomainTx, tenant: Uuid, a: &Adoption) -> Result<(), StoreError> {
+    let id = t.domain.as_bytes().to_vec();
+    let id = id.as_slice();
     for n in &a.nonces {
         sqlx::query!(
             "INSERT INTO access.authority_nonce
@@ -355,30 +386,7 @@ pub async fn adopt(
         .execute(&mut *t.tx)
         .await?;
     }
-    let frontier: Vec<Vec<u8>> = a.head.frontier.iter().map(|h| h.to_vec()).collect();
-    sqlx::query!(
-        "INSERT INTO access.domain_head (domain_id, pos, epoch, leaf_hash, recorded_at, frontier)
-         VALUES ($1, $2, 0, $3, $4, $5)",
-        id,
-        signed(a.head.pos)?,
-        a.head.leaf_hash.as_slice(),
-        signed(a.head.recorded_at)?,
-        &frontier,
-    )
-    .execute(&mut *t.tx)
-    .await?;
-    sqlx::query!(
-        "INSERT INTO access.handover_runs (domain_id, run, step, role, k, h, cited_root)
-         VALUES ($1, $2, 'adopted', 'incoming', $3, $4, $5)",
-        id,
-        Uuid::from_bytes(a.run),
-        signed(a.k)?,
-        signed(a.head.pos)?,
-        a.cited_root.as_slice(),
-    )
-    .execute(&mut *t.tx)
-    .await?;
-    t.commit().await
+    Ok(())
 }
 
 fn len(a: &Adoption) -> Result<u64, StoreError> {

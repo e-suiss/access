@@ -1,5 +1,5 @@
 //! Cooperative handover and binding re-anchor between two `access-server` installs (OP-158 m.3 (l)),
-//! on the real router, sequencer, store and SoftHSM signers with real `access-witness` processes
+//! on the real router, sequencer, store and `SoftHSM` signers with real `access-witness` processes
 //! (OP-158 m.5, OP-153 m.3 (gg)): freeze, `C_k`, the export, the incoming provider's fold, the
 //! double-signed batch, `C_{h+1}` and the witnesses' fence, the take-over, and the old
 //! provider's refused writes and old-key artefacts afterwards.
@@ -10,6 +10,7 @@
     clippy::indexing_slicing,
     clippy::arithmetic_side_effects,
     clippy::too_many_lines,
+    clippy::many_single_char_names,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 

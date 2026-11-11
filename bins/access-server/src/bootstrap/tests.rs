@@ -222,7 +222,7 @@ impl World {
         (world, service)
     }
 
-    /// A second install in this process (OP-158 m.3 (l)): its own database, its own SoftHSM
+    /// A second install in this process (OP-158 m.3 (l)): its own database, its own `SoftHSM`
     /// token `token` made before this process first opened the module (the module lists the
     /// tokens once), and its own authority signer.
     async fn open_install(name: &str, token: (PathBuf, String)) -> (Self, AuthoritySigner) {

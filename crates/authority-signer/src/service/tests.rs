@@ -81,6 +81,7 @@ fn metadata_of(
 
 // OP-60, §16.6.1 RB-2, RB-4, RB-6, OP-158 m.3 (l)
 #[test]
+#[expect(clippy::too_many_lines, reason = "one re-anchor walkthrough")]
 fn a_re_anchor_moves_to_the_next_generation_and_keeps_the_old_binding_superseded() {
     let vault = Mem::default();
     let gens = Generations::default();

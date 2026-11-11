@@ -125,7 +125,6 @@ pub(crate) fn binding_change(
 #[cfg(test)]
 #[allow(clippy::unwrap_used, reason = "test code")]
 mod tests {
-    use access_kernel::codec::Canonical as _;
     use access_kernel::record::{Header, Opened, RecordEnvelope, RecordKind};
     use suiss_crypto::dcbor::Value;
     use suiss_ledger::checkpoint::witness::BindingChange;

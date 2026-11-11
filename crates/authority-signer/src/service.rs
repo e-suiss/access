@@ -263,6 +263,45 @@ impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
         self.next.get(domain)
     }
 
+    // RB-5, RB-6
+    fn rebind(
+        &mut self,
+        domain: Digest,
+        (at, cited): (Digest, Digest),
+        transcript: Digest,
+        now: u64,
+    ) -> Response {
+        if self.next_binding(&domain).is_none() {
+            return Response::Error(String::from("signer-binding"));
+        }
+        let Some((generation, signer)) = self.next.remove(&domain) else {
+            return Response::Error(String::from("signer-binding"));
+        };
+        let Some((_, ring)) = self.rings.get(&domain) else {
+            return Response::Error(String::from("signer-unknown-domain"));
+        };
+        let superseded = access_kernel::verify::key_scope::Superseded { at, cited };
+        match ring.rebound(
+            signer,
+            generation,
+            superseded,
+            transcript,
+            &mut self.factory,
+            now,
+        ) {
+            Ok(ring) => {
+                let template = ring.template().clone();
+                self.rings.insert(domain, (template, ring));
+                if self.persist(&domain) {
+                    Response::Opened
+                } else {
+                    Response::Error(String::from("signer-binding"))
+                }
+            }
+            Err(e) => Response::Error(String::from(e.code())),
+        }
+    }
+
     // OP-158 m.3 (l), OP-60, §16.6 HO-6, HO-8, §16.6.1 RB-2, RB-4, RB-6
     fn binding_request(&mut self, request: Request, now: u64) -> Response {
         let unknown = || Response::Error(String::from("signer-unknown-domain"));
@@ -323,37 +362,7 @@ impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
                 at,
                 cited,
                 transcript,
-            } => {
-                if self.next_binding(&domain).is_none() {
-                    return Response::Error(String::from("signer-binding"));
-                }
-                let Some((generation, signer)) = self.next.remove(&domain) else {
-                    return Response::Error(String::from("signer-binding"));
-                };
-                let Some((_, ring)) = self.rings.get(&domain) else {
-                    return unknown();
-                };
-                let superseded = access_kernel::verify::key_scope::Superseded { at, cited };
-                match ring.rebound(
-                    signer,
-                    generation,
-                    superseded,
-                    transcript,
-                    &mut self.factory,
-                    now,
-                ) {
-                    Ok(ring) => {
-                        let template = ring.template().clone();
-                        self.rings.insert(domain, (template, ring));
-                        if self.persist(&domain) {
-                            Response::Opened
-                        } else {
-                            Response::Error(String::from("signer-binding"))
-                        }
-                    }
-                    Err(e) => Response::Error(String::from(e.code())),
-                }
-            }
+            } => self.rebind(domain, (at, cited), transcript, now),
             Request::Supersede { domain, keys } => {
                 let Some((_, ring)) = self.rings.get_mut(&domain) else {
                     return unknown();
