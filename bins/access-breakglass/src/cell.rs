@@ -87,7 +87,7 @@ impl Cell {
             ops: ops
                 .map(PathBuf::from)
                 .ok_or(Failure::Setup("ops directory"))?,
-            // §17.7.3 principle 7
+            // §17.7.3
             alarm: alarm
                 .map(PathBuf::from)
                 .ok_or(Failure::Setup("alarm hook"))?,

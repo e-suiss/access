@@ -26,7 +26,7 @@ struct Cell {
 fn tool(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_access-breakglass"))
         .args(args)
-        // G63: the cell's database is not reachable, and the tool never asks for it
+        // G63
         .env("DATABASE_URL", "postgres://nobody@127.0.0.1:1/unreachable")
         .output()
         .unwrap()
@@ -141,8 +141,7 @@ fn refused(o: &Output, code: &str) {
     assert!(String::from_utf8_lossy(&o.stderr).contains(code), "{o:?}");
 }
 
-// G63, CMP-25, OP-46: 2-of-3 verifies offline with no database; the directives verify under
-// the cell's key and name only infrastructure operations; every use is trailed and alarmed
+// G63, CMP-25, OP-46
 #[test]
 fn g63_two_of_three_writes_signed_directives_without_a_database() {
     let c = cell("run", true);
@@ -171,8 +170,7 @@ fn g63_two_of_three_writes_signed_directives_without_a_database() {
     ok(&["verify", s(&c.dir)]);
 }
 
-// §17.7.3 principle 8, OP-57 m.9: the same document twice is refused, and a new document under
-// the spent key set is refused until a rotation installs fresh keys
+// OP-46, §17.7.3, OP-57 m.9
 #[test]
 fn op_46_single_use_and_rotation_after_use() {
     let c = cell("rotate", true);
@@ -210,7 +208,7 @@ fn op_46_single_use_and_rotation_after_use() {
     assert!(!DirectiveState::fold(&directives(&c)).leader_unhealthy);
 }
 
-// §17.7.3 principle 8: a window over 15 minutes is never made, and a document past its end is refused
+// OP-46, §17.7.3
 #[test]
 fn op_46_fifteen_minutes_at_most() {
     let c = cell("window", true);
@@ -255,7 +253,7 @@ fn op_46_fifteen_minutes_at_most() {
     );
 }
 
-// §17.7.3 principle 6: a broken trail stops the tool before anything happens
+// OP-46, §17.7.3
 #[test]
 fn op_46_a_broken_trail_stops_the_tool() {
     let c = cell("trail", true);
@@ -272,8 +270,7 @@ fn op_46_a_broken_trail_stops_the_tool() {
     assert_eq!(directives(&c), []);
 }
 
-// §17.7.3 principles 7 and 9: a drill runs the whole path and applies nothing; without a
-// confirmed alarm nothing is applied either
+// OP-46, §17.7.3
 #[test]
 fn op_46_drill_and_alarm() {
     let c = cell("drill", true);
@@ -303,7 +300,7 @@ fn op_46_drill_and_alarm() {
     assert!(trail.contains(" alarm-failed "), "{trail}");
 }
 
-// OP-129 m.3, OP-157: key material comes from owner-only files, never from the environment
+// OP-129 m.3, OP-157
 #[test]
 fn op_157_secrets_come_from_files_only() {
     let c = cell("secrets", true);

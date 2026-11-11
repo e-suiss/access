@@ -38,7 +38,7 @@ fn doc(ops: &[&str]) -> Document {
     .unwrap()
 }
 
-// CMP-25, §17.7.3 principles 3–4: two of three Ed25519 approvals verify offline
+// CMP-25, §17.7.3
 #[test]
 fn cmp_25_two_of_three_verifies_offline() {
     let (k, set) = keys(3);
@@ -51,7 +51,7 @@ fn cmp_25_two_of_three_verifies_offline() {
     assert_eq!(back.verify(&set, "eu-1", NOW + 1).unwrap(), ["k0", "k2"]);
 }
 
-// CMP-25: the same approver twice, an unknown key or a forged signature is refused
+// CMP-25
 #[test]
 fn cmp_25_repeated_unknown_or_forged_approvals_are_refused() {
     let (k, set) = keys(3);
@@ -87,7 +87,7 @@ fn cmp_25_repeated_unknown_or_forged_approvals_are_refused() {
     );
 }
 
-// §17.7.3 principles 8 and 10, OP-57 m.9: 15 minutes at most, only inside the window, one cell
+// §17.7.3, OP-57 m.9
 #[test]
 fn op_46_window_and_cell_bind_the_document() {
     assert_eq!(
@@ -120,7 +120,7 @@ fn op_46_window_and_cell_bind_the_document() {
     assert_eq!(d.verify(&set, "eu-2", NOW), Err(BreakGlassError::Cell));
 }
 
-// G63, SI-22: only the operator path's operations parse; none names authority state
+// G63, SI-22
 #[test]
 fn g63_operations_are_closed() {
     for op in [
@@ -146,7 +146,7 @@ fn g63_operations_are_closed() {
     assert!(!Op::Health.directs() && !Op::ConfigRead.directs() && Op::EpochFloor.directs());
 }
 
-// CMP-25: a key set needs a generation, a threshold of at least two, distinct keys
+// CMP-25
 #[test]
 fn cmp_25_key_sets_need_a_real_quorum() {
     let (k, _) = keys(2);
@@ -205,7 +205,7 @@ impl SecurityKey {
     }
 }
 
-// CMP-25, §17.7.3 principle 3: FIDO2 assertions over the document digest count toward the quorum
+// CMP-25, §17.7.3
 #[test]
 fn cmp_25_fido2_assertions_verify_offline() {
     let k = [OperatorKey::generate().unwrap().0];
@@ -252,7 +252,7 @@ fn cmp_25_fido2_assertions_verify_offline() {
     }
 }
 
-// OP-157 m.3 (j): a directive verifies only under the cell's directive key, and reads are not directives
+// OP-157 m.3 (j)
 #[test]
 fn op_157_directives_are_signed() {
     let (key, seed) = OperatorKey::generate().unwrap();
@@ -284,7 +284,7 @@ fn op_157_directives_are_signed() {
     assert!(format!("{key:?}").contains("redacted"));
 }
 
-// OP-157 m.3 (j): later directives win; the floor only rises
+// OP-157 m.3 (j)
 #[test]
 fn op_157_directives_fold_in_sequence() {
     let at = |seq, op: &str, at_ms| Directive {

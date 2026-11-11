@@ -89,7 +89,7 @@ mod tests {
 
     use super::*;
 
-    // §17.7.3 principle 6: the chain verifies, and any edit to a past line breaks it
+    // §17.7.3
     #[test]
     fn op_46_a_broken_chain_is_refused() {
         let dir = std::env::temp_dir().join(format!("bg-trail-{}", std::process::id()));

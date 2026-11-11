@@ -114,7 +114,7 @@ mod tests {
 
     use super::*;
 
-    // §17.7.3 principle 6, RFC 5424
+    // §17.7.3, RFC 5424
     #[test]
     fn op_46_messages_are_rfc_5424() {
         assert_eq!(timestamp(0), "1970-01-01T00:00:00.000Z");

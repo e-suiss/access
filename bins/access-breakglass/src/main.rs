@@ -156,7 +156,7 @@ fn admit(cell: &Cell, keys: &KeySet, doc: &Document) -> Result<Vec<String>, &'st
     {
         return Err("replayed");
     }
-    // §17.7.3 principle 8
+    // §17.7.3
     if cell
         .spent_generation()
         .map_err(|_| "spent-file")?
@@ -241,7 +241,7 @@ fn use_document(dir: &Path, document: &Path, drill: bool) -> Result<(), Failure>
         return Ok(());
     }
     let key = operator_key(&cell.directive_key())?;
-    // §17.7.3 principle 8
+    // §17.7.3
     cell.spend(keys.generation)?;
     record(
         &cell,
