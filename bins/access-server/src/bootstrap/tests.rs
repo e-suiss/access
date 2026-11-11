@@ -2059,6 +2059,19 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
         .await
         .unwrap();
     assert_eq!(page.status, 200, "{}", page.text());
+    // the page's relative script and flows resolve under the realm's own path
+    assert!(page.text().contains("<script src=\"approve/app.js\">"));
+    let script = http
+        .request(
+            "GET",
+            &format!("{}/v1/approve/app.js", user.issuer),
+            &[],
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(script.status, 200);
+    assert!(script.text().contains("call(\"approve/flows\""));
 
     // §9.14.2, XI-7
     let other = commit_intent(&allowed, "other", now);

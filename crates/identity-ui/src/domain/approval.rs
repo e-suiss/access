@@ -1069,8 +1069,10 @@ pub fn wysiwys(
 }
 
 /// The page (OP-150 m.3 (r)): one element the script fills. Its script is [`PAGE_JS`] at
-/// [`APP_PATH`], so the hosted login's CSP (`script-src 'self'`) holds.
-pub const PAGE_HTML: &str = "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Approve</title>\n</head>\n<body>\n<main id=\"approve\"><p>Loading the request…</p></main>\n<script src=\"/v1/approve/app.js\"></script>\n</body>\n</html>\n";
+/// [`APP_PATH`], so the hosted login's CSP (`script-src 'self'`) holds. The page names the
+/// script and the flows relative to itself, so a realm under `/realms/{slug}` (a path issuer)
+/// reaches its own routes as a subdomain realm does (OP-157 m.6 (i)).
+pub const PAGE_HTML: &str = "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Approve</title>\n</head>\n<body>\n<main id=\"approve\"><p>Loading the request…</p></main>\n<script src=\"approve/app.js\"></script>\n</body>\n</html>\n";
 
 /// The page's script: starts the flow with the call's parameters, shows the render the decision
 /// point produced, runs one assertion over H(AAS) and follows the redirect (§9.14.1 A steps 2
@@ -1084,7 +1086,7 @@ pub const PAGE_JS: &str = r#"(async () => {
   const say = (text) => root.replaceChildren(el("p", text));
   const headers = () => ({ "content-type": "application/json", "idempotency-key": crypto.randomUUID() });
   const call = (path, body) => fetch(path, { method: "POST", headers: headers(), body: JSON.stringify(body), credentials: "same-origin" });
-  const started = await call("/v1/approve/flows", { request: q.get("request"), redirect_uri: q.get("redirect_uri"), state: q.get("state") });
+  const started = await call("approve/flows", { request: q.get("request"), redirect_uri: q.get("redirect_uri"), state: q.get("state") });
   if (started.status === 401) { say("Sign in first, then open this request again."); return; }
   const s = await started.json().catch(() => ({}));
   if (!started.ok) { say(s.title || "This request cannot be approved."); return; }
@@ -1117,7 +1119,7 @@ pub const PAGE_JS: &str = r#"(async () => {
     const publicKey = PublicKeyCredential.parseRequestOptionsFromJSON(s.options);
     const cred = s.spc && window.PaymentRequest ? await confirmPayment() : await navigator.credentials.get({ publicKey }).catch(() => null);
     if (!cred) { button.disabled = false; return; }
-    const r = await call("/v1/approve/flows/" + encodeURIComponent(s.flow), { credential: cred.toJSON(), redirect_uri: q.get("redirect_uri"), state: q.get("state") });
+    const r = await call("approve/flows/" + encodeURIComponent(s.flow), { credential: cred.toJSON(), redirect_uri: q.get("redirect_uri"), state: q.get("state") });
     const out = await r.json().catch(() => ({}));
     if (r.ok) { location.assign(out.redirect); } else { say(out.title || "The approval was not recorded."); }
   };
@@ -1914,12 +1916,14 @@ mod tests {
     // OP-146 m.12 (f)
     #[test]
     fn the_page_fits_the_hosted_csp() {
-        assert!(PAGE_HTML.contains("<script src=\"/v1/approve/app.js\"></script>"));
+        assert!(PAGE_HTML.contains("<script src=\"approve/app.js\"></script>"));
         assert!(!PAGE_HTML.contains("<script>"));
         assert!(!PAGE_JS.contains("innerHTML") && !PAGE_JS.contains("eval("));
         assert!(PAGE_JS.contains("v.does_not") && PAGE_JS.contains("v.blocked"));
         assert!(PAGE_JS.contains("v.requester_note") && !PAGE_JS.contains("ndependent"));
-        assert!(PAGE_JS.contains("\"/v1/approve/flows\""));
+        // OP-157 m.6 (i)
+        assert!(PAGE_JS.contains("call(\"approve/flows\""));
+        assert!(!PAGE_JS.contains("\"/v1/") && !PAGE_HTML.contains("\"/v1/"));
         let d = request_digest(b"{}");
         assert_eq!(d, context_digest(REQUEST_DIGEST_CONTEXT, b"{}").0);
         assert!(request_uri(&[5; 32]).starts_with(REQUEST_URI_PREFIX));
