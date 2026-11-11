@@ -28,7 +28,7 @@ struct Product {
 
 impl Product {
     async fn open(label: &str, product: &str) -> Self {
-        let s = Seam::open(label, product).await;
+        let s = Box::pin(Seam::open(label, product)).await;
         let schema = schema(product);
         s.twin.publish_schema(&s.domain, &schema).await.unwrap();
         s.accept_schema(&schema).await;

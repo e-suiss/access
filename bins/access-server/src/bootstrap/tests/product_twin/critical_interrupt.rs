@@ -36,7 +36,7 @@ async fn attempt(
         },
     );
     MetaExercises::lead(&s.w.plane, s.domain).await.unwrap();
-    let verdict = MetaExercises::meta(
+    let verdict = Box::pin(MetaExercises::meta(
         &s.w.plane,
         Request {
             domain: s.domain,
@@ -52,7 +52,7 @@ async fn attempt(
         },
         ais,
         String::from(IDENTITY_PEP),
-    )
+    ))
     .await
     .unwrap();
     schedule(&s.signer);

@@ -202,7 +202,7 @@ impl Seam {
         label: &str,
         products: &[&str],
     ) -> (Self, Vec<(ProductTwin, Id)>, SoftSigner) {
-        let (w, signer) = World::open(label, true).await;
+        let (w, signer) = Box::pin(World::open(label, true)).await;
         let signer = signer.unwrap();
         schedule(&signer);
         let mut own = None;
@@ -232,23 +232,25 @@ impl Seam {
                 .collect(),
             ..plan()
         };
-        let summary = serde_json::to_value(w.run(&plan).await).unwrap();
+        let summary = serde_json::to_value(Box::pin(w.run(&plan)).await).unwrap();
         schedule(&signer);
-        let (tenant, created_realm, domain) = realm(&w, SLUG).await;
+        let (tenant, created_realm, domain) = Box::pin(realm(&w, SLUG)).await;
         let root = root_key(&w.keys).unwrap();
         let root_party = root_party(&root.public_key());
         let declared = DeclaredTargets::default();
-        Bootstrap {
-            app: &w.db.app,
-            router: &w.db.router,
-            plane: &w.plane,
-            realm_keys: &w.keyring,
-            hsm: &w.keys,
-            base: &w.base,
-            declared: &declared,
-            console: None,
-        }
-        .onboard(tenant, created_realm, domain, &root, root_party)
+        Box::pin(
+            Bootstrap {
+                app: &w.db.app,
+                router: &w.db.router,
+                plane: &w.plane,
+                realm_keys: &w.keyring,
+                hsm: &w.keys,
+                base: &w.base,
+                declared: &declared,
+                console: None,
+            }
+            .onboard(tenant, created_realm, domain, &root, root_party),
+        )
         .await
         .unwrap();
         schedule(&signer);
@@ -307,7 +309,7 @@ impl Seam {
                 Keys { service, client },
                 (listener.clone(), Wall, Os),
             );
-            let paired = twin.register(&tnt).await.unwrap();
+            let paired = Box::pin(twin.register(&tnt)).await.unwrap();
             assert_eq!(paired.len(), 1, "{paired:?}");
             assert_eq!(paired[0].domain, domain);
             let party = paired[0].party;
@@ -351,11 +353,15 @@ impl Seam {
     async fn root(&self, payload: Payload) -> (Digest, u64) {
         let nonce = access_crypto::random::bytes::<16>().unwrap();
         let declared = DeclaredTargets::default();
-        let position = self
-            .bootstrap(&declared)
-            .commit_meta(self.domain, &self.root, &nonce, payload, self.root_party)
-            .await
-            .unwrap();
+        let position = Box::pin(self.bootstrap(&declared).commit_meta(
+            self.domain,
+            &self.root,
+            &nonce,
+            payload,
+            self.root_party,
+        ))
+        .await
+        .unwrap();
         schedule(&self.signer);
         (meta::exercise_id(&self.domain, &nonce).unwrap(), position)
     }
@@ -467,7 +473,7 @@ impl Seam {
             validity,
         });
         r.create.ais = signed(&challenge, &r.create_payload());
-        match self.w.plane.register(r).await.unwrap() {
+        match Box::pin(self.w.plane.register(r)).await.unwrap() {
             RegistrationVerdict::Registered(_) => {}
             other @ RegistrationVerdict::Refused { .. } => panic!("{other:?}"),
         }
@@ -525,7 +531,7 @@ impl Seam {
         MetaExercises::lead(&self.w.plane, self.domain)
             .await
             .unwrap();
-        let verdict = MetaExercises::meta(
+        let verdict = Box::pin(MetaExercises::meta(
             &self.w.plane,
             Request {
                 domain: self.domain,
@@ -541,7 +547,7 @@ impl Seam {
             },
             ais,
             String::from(IDENTITY_PEP),
-        )
+        ))
         .await
         .unwrap();
         let Verdict::Committed(c) = verdict else {

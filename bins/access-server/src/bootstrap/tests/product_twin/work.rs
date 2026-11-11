@@ -78,7 +78,7 @@ struct Coordinator {
 
 impl Coordinator {
     async fn open(label: &str, product: &str) -> Self {
-        let (w, signer) = World::open(label, true).await;
+        let (w, signer) = Box::pin(World::open(label, true)).await;
         let signer = signer.unwrap();
         schedule(&signer);
         let (service, pkcs8) = SoftSigner::generate_ed25519().unwrap();
@@ -97,7 +97,7 @@ impl Coordinator {
             }],
             ..plan()
         };
-        let summary = serde_json::to_value(w.run(&plan).await).unwrap();
+        let summary = serde_json::to_value(Box::pin(w.run(&plan)).await).unwrap();
         let client_id = summary["clients"][0]["client_id"]
             .as_str()
             .unwrap()
@@ -107,21 +107,23 @@ impl Coordinator {
             .unwrap()
             .to_owned();
         schedule(&signer);
-        let (tenant, created_realm, domain) = realm(&w, SLUG).await;
+        let (tenant, created_realm, domain) = Box::pin(realm(&w, SLUG)).await;
         let root = root_key(&w.keys).unwrap();
         let root_party = root_party(&root.public_key());
         let declared = DeclaredTargets::default();
-        Bootstrap {
-            app: &w.db.app,
-            router: &w.db.router,
-            plane: &w.plane,
-            realm_keys: &w.keyring,
-            hsm: &w.keys,
-            base: &w.base,
-            declared: &declared,
-            console: None,
-        }
-        .onboard(tenant, created_realm, domain, &root, root_party)
+        Box::pin(
+            Bootstrap {
+                app: &w.db.app,
+                router: &w.db.router,
+                plane: &w.plane,
+                realm_keys: &w.keyring,
+                hsm: &w.keys,
+                base: &w.base,
+                declared: &declared,
+                console: None,
+            }
+            .onboard(tenant, created_realm, domain, &root, root_party),
+        )
         .await
         .unwrap();
         schedule(&signer);
@@ -170,7 +172,7 @@ impl Coordinator {
         );
         let tnt =
             access_identity_events::ports::TenantIds::external(&*ids, tenant.as_bytes()).unwrap();
-        let paired = twin.register(&tnt).await.unwrap();
+        let paired = Box::pin(twin.register(&tnt)).await.unwrap();
         assert_eq!(paired.len(), 1, "{paired:?}");
         let party = paired[0].party;
         schedule(&signer);
@@ -460,7 +462,7 @@ impl Coordinator {
         MetaExercises::lead(&self.s.w.plane, self.s.domain)
             .await
             .unwrap();
-        let verdict = MetaExercises::meta(
+        let verdict = Box::pin(MetaExercises::meta(
             &self.s.w.plane,
             Request {
                 domain: self.s.domain,
@@ -476,7 +478,7 @@ impl Coordinator {
             },
             ais,
             String::from(IDENTITY_PEP),
-        )
+        ))
         .await
         .unwrap();
         schedule(&self.s.signer);
