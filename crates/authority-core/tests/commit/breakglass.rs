@@ -539,3 +539,32 @@ async fn only_a_declared_exemption_lets_breakglass_past_a_blocking_rule() {
     ));
     fold_check(&db.sequencer, d).await.unwrap();
 }
+
+// TN-93, §13.7.1, OP-157 m.3 (b), (h), Ek B 5538
+#[tokio::test]
+async fn declaring_an_exemption_is_ct3_and_waits_out_the_time_lock() {
+    let db = fresh().await.unwrap();
+    let (g, _) = three_approvers(None);
+    let (mut core, d) = core_of(&db, g).await;
+    let set = send(&mut core, policy_set(d, 10, None, FREEZE, None), ROOT_KEY)
+        .await
+        .unwrap();
+    allowed(&set);
+    let freeze = meta::object_id(&set.exercise.unwrap(), kind::POLICY, 0);
+    let mut declare = policy_set(d, 11, Some(freeze), EXEMPT, None);
+    declare.intent.validity = Window {
+        from: NOW - 1_000,
+        until: NOW + 48 * 3_600_000,
+    };
+    let declared = send(&mut core, declare, ROOT_KEY).await.unwrap();
+    assert!(time_locked(&declared), "{declared:?}");
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
+fn time_locked(r: &Response) -> bool {
+    r.decision.outcome == Outcome::RequireAction
+        && r.decision
+            .blockers
+            .iter()
+            .any(|b| b.subcode.as_deref() == Some("time-lock"))
+}
