@@ -115,7 +115,6 @@ pub(crate) struct Config {
     pub(crate) transparency: Transparency,
 }
 
-
 /// The declared HTTPS hooks that receive every identity audit checkpoint's signed note (OP-37,
 /// U52, OP-158 m.3 (w)).
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -144,7 +143,6 @@ pub(crate) struct AuditCold {
     /// The directory.
     pub(crate) dir: PathBuf,
 }
-
 
 /// Where checkpoints go and where time comes from (§16.6, CMP-6, T17, TI-RT2, OP-158 m.3).
 /// Without witnesses, no checkpoint is cosigned and `witnessed_through` stays 0: nothing the
