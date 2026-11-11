@@ -12,7 +12,9 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::AccountError;
 use crate::domain::legacy;
-use crate::domain::password::{self, Argon2Params, HashFailure, Password, Verification};
+use crate::domain::password::{
+    self, Argon2Params, HashFailure, HashPolicy, Password, Verification,
+};
 use crate::ports::{LegacyIdp, LegacyIdpUnavailable};
 
 /// CR-36 m.3: the longest wait for a permit.
@@ -137,11 +139,26 @@ impl Hasher {
     }
 
     async fn permit(&self) -> Result<OwnedSemaphorePermit, AccountError> {
+        self.permits(1).await
+    }
+
+    /// The permits a hash under `policy` takes: its memory over the configured hash's, at
+    /// least one and at most all of them, so a high-memory hash cannot run beside as many
+    /// others as a canonical one (CR-36 m.3, OP-158 m.3 (y)).
+    fn weight(&self, policy: &HashPolicy) -> u32 {
+        let per = |p: &Argon2Params| u64::from(p.m_kib).saturating_mul(u64::from(p.p));
+        let base = per(&self.config.params).max(1);
+        let need = per(&policy.params_for_permits()).div_ceil(base);
+        let all = u64::try_from(self.config.permits.max(1)).unwrap_or(u64::MAX);
+        u32::try_from(need.clamp(1, all)).unwrap_or(u32::MAX)
+    }
+
+    async fn permits(&self, n: u32) -> Result<OwnedSemaphorePermit, AccountError> {
         let start = tokio::time::Instant::now();
         self.metrics.queue(true);
         let acquired = tokio::time::timeout(
             self.config.queue_wait,
-            self.semaphore.clone().acquire_owned(),
+            self.semaphore.clone().acquire_many_owned(n),
         )
         .await;
         self.metrics.queue(false);
@@ -166,7 +183,15 @@ impl Hasher {
         &self,
         work: impl FnOnce() -> Result<T, HashFailure> + Send + 'static,
     ) -> Result<T, AccountError> {
-        let permit = self.permit().await?;
+        self.run_weighted(1, work).await
+    }
+
+    async fn run_weighted<T: Send + 'static>(
+        &self,
+        weight: u32,
+        work: impl FnOnce() -> Result<T, HashFailure> + Send + 'static,
+    ) -> Result<T, AccountError> {
+        let permit = self.permits(weight).await?;
         let out = tokio::task::spawn_blocking(move || {
             let held = permit;
             let out = work();
@@ -207,6 +232,47 @@ impl Hasher {
         let password = password.clone();
         self.run(move || password::verify(&password, &phc, &params))
             .await
+    }
+
+    /// The PHC string of `password` under a realm's `policy`: Argon2id at its profile or, under
+    /// the FIPS crypto profile, PBKDF2-HMAC-SHA-256 (§10.2.1, CR-15, CR-36, OP-158 m.3 (y)).
+    ///
+    /// # Errors
+    /// [`AccountError::Busy`] when no permit came in time; [`AccountError::Hash`].
+    pub async fn hash_as(
+        &self,
+        policy: HashPolicy,
+        password: &Password,
+        salt: [u8; 16],
+    ) -> Result<Secret<String>, AccountError> {
+        let password = password.clone();
+        self.run_weighted(self.weight(&policy), move || {
+            password::hash_with(&policy, &password, &salt)
+        })
+        .await
+    }
+
+    /// Checks `password` against a stored Argon2id or PBKDF2 PHC string under a realm's
+    /// `policy`; a hash of the other algorithm or below the policy is to be rehashed (CR-37).
+    ///
+    /// # Errors
+    /// [`AccountError::Busy`]; [`AccountError::Hash`] for a malformed hash.
+    pub async fn verify_as(
+        &self,
+        policy: HashPolicy,
+        password: &Password,
+        phc: Secret<String>,
+    ) -> Result<Verification, AccountError> {
+        let stored = password::stored_params(phc.expose())
+            .ok()
+            .flatten()
+            .map_or(HashPolicy::Pbkdf2 { iterations: 0 }, HashPolicy::Argon2);
+        let weight = self.weight(&stored);
+        let password = password.clone();
+        self.run_weighted(weight, move || {
+            password::verify_with(&password, &phc, &policy)
+        })
+        .await
     }
 
     /// Checks `password` against an imported hash of `algorithm` (TN-85, OP-153 m.11 (h)), on
@@ -257,5 +323,48 @@ impl Hasher {
     pub async fn admit(&self) -> Result<(), AccountError> {
         drop(self.permit().await?);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod profile_tests {
+    #![allow(clippy::unwrap_used, reason = "test code")]
+
+    use super::*;
+    use crate::domain::password::HashProfile;
+
+    fn hasher(permits: usize) -> Hasher {
+        Hasher::new(HasherConfig {
+            permits,
+            ..HasherConfig::sized(Argon2Params::CANONICAL, permits, None)
+        })
+    }
+
+    // CR-36, OP-158
+    #[test]
+    fn a_high_memory_hash_takes_every_permit() {
+        let h = hasher(8);
+        assert_eq!(h.weight(&HashPolicy::Argon2(Argon2Params::CANONICAL)), 1);
+        assert_eq!(h.weight(&HashPolicy::of(HashProfile::HighMemory, false)), 8);
+        assert_eq!(h.weight(&HashPolicy::of(HashProfile::Standard, true)), 1);
+    }
+
+    // CR-15, CR-37, OP-158
+    #[tokio::test]
+    async fn a_fips_realm_hashes_and_verifies_on_the_same_pool() {
+        let h = hasher(2);
+        let pw = Password::new("correct horse battery").unwrap();
+        let fips = HashPolicy::of(HashProfile::Standard, true);
+        let salt = access_crypto::random::bytes::<16>().unwrap();
+        let phc = h.hash_as(fips, &pw, salt).await.unwrap();
+        assert!(phc.expose().starts_with("$pbkdf2-sha256$"));
+        let v = h.verify_as(fips, &pw, phc.clone()).await.unwrap();
+        assert!(v.matched && !v.rehash);
+        let v = h
+            .verify_as(HashPolicy::Argon2(Argon2Params::CANONICAL), &pw, phc)
+            .await
+            .unwrap();
+        assert!(v.matched && v.rehash);
+        assert_eq!(h.metrics().hashes(), 3);
     }
 }

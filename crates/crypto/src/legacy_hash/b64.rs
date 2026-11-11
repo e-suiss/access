@@ -49,12 +49,24 @@ pub(super) fn decode_bcrypt(text: &str) -> Option<Vec<u8>> {
 
 /// Encodes in bcrypt's alphabet without padding.
 pub(super) fn encode_bcrypt(data: &[u8]) -> String {
+    encode_with(data, BCRYPT)
+}
+
+/// The RFC 4648 standard alphabet.
+const STANDARD: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/// Encodes in the RFC 4648 standard alphabet without padding, as PHC strings do.
+pub(super) fn encode_standard(data: &[u8]) -> String {
+    encode_with(data, STANDARD)
+}
+
+fn encode_with(data: &[u8], alphabet: &[u8; 64]) -> String {
     let mut out = String::with_capacity((data.len().saturating_mul(4) / 3).saturating_add(1));
     let mut acc: u32 = 0;
     let mut bits: u32 = 0;
     let mut push = |v: u32| {
         let i = usize::try_from(v & 0x3f).unwrap_or(0);
-        out.push(char::from(BCRYPT.get(i).copied().unwrap_or(b'.')));
+        out.push(char::from(alphabet.get(i).copied().unwrap_or(b'.')));
     };
     for b in data {
         acc = acc.wrapping_shl(8) | u32::from(*b);

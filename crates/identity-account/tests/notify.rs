@@ -1315,8 +1315,7 @@ async fn keepalive_server() -> (RelayServer, Arc<std::sync::atomic::AtomicUsize>
         .with_no_client_auth();
     (
         RelayServer {
-            endpoint: RelayEndpoint::parse(&format!("https://localhost:{port}/v1/events"))
-                .unwrap(),
+            endpoint: RelayEndpoint::parse(&format!("https://localhost:{port}/v1/events")).unwrap(),
             tls: Arc::new(tls),
             heads,
         },

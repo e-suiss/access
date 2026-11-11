@@ -223,6 +223,183 @@ pub fn verify(
     })
 }
 
+/// A realm's password hash profile (§10.2.1, CR-15, CR-36, OP-33, OP-158 m.3 (y)).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum HashProfile {
+    /// Argon2id at the canonical parameters (m = 7 MiB, t = 5, p = 1).
+    #[default]
+    Standard,
+    /// Argon2id at RFC 9106's first recommendation (m = 2 GiB, t = 1, p = 4).
+    HighMemory,
+}
+
+/// A profile change that would lower the hash cost (OP-33: raise only).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("a password hash profile may only be raised")]
+pub struct ProfileDowngrade;
+
+impl ProfileDowngrade {
+    /// The problem code (OP-158 m.3 (aa)).
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        "hash-profile-downgrade"
+    }
+}
+
+impl HashProfile {
+    /// RFC 9106 §4, first recommended option.
+    pub const HIGH_MEMORY: Argon2Params = Argon2Params {
+        m_kib: 2 * 1024 * 1024,
+        t: 1,
+        p: 4,
+    };
+
+    /// The Argon2id parameters of the profile.
+    #[must_use]
+    pub const fn argon2(self) -> Argon2Params {
+        match self {
+            Self::Standard => Argon2Params::CANONICAL,
+            Self::HighMemory => Self::HIGH_MEMORY,
+        }
+    }
+
+    /// The profile a realm moves to from `self` (OP-33).
+    ///
+    /// # Errors
+    /// [`ProfileDowngrade`] for a lower one.
+    pub fn raise_to(self, next: Self) -> Result<Self, ProfileDowngrade> {
+        if next < self {
+            return Err(ProfileDowngrade);
+        }
+        Ok(next)
+    }
+
+    /// The stable name (`standard`, `high_memory`).
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Standard => "standard",
+            Self::HighMemory => "high_memory",
+        }
+    }
+
+    /// The profile named `name`.
+    #[must_use]
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "standard" => Some(Self::Standard),
+            "high_memory" => Some(Self::HighMemory),
+            _ => None,
+        }
+    }
+}
+
+/// What a realm's passwords are hashed with: Argon2id at its profile, or under the FIPS crypto
+/// profile PBKDF2-HMAC-SHA-256 with 600 000 iterations (CR-15, CR-36 m.1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HashPolicy {
+    /// Argon2id.
+    Argon2(Argon2Params),
+    /// PBKDF2-HMAC-SHA-256, FIPS 140-3 approved.
+    Pbkdf2 {
+        /// Iterations.
+        iterations: u32,
+    },
+}
+
+impl HashPolicy {
+    /// The policy of a realm with `profile`, under FIPS when `fips`.
+    #[must_use]
+    pub const fn of(profile: HashProfile, fips: bool) -> Self {
+        if fips {
+            Self::Pbkdf2 {
+                iterations: access_crypto::legacy_hash::FIPS_PBKDF2_ITERATIONS,
+            }
+        } else {
+            Self::Argon2(profile.argon2())
+        }
+    }
+
+    /// The memory one hash takes, for the semaphore (CR-36 m.3).
+    #[must_use]
+    pub const fn params_for_permits(&self) -> Argon2Params {
+        match self {
+            Self::Argon2(p) => *p,
+            Self::Pbkdf2 { .. } => Argon2Params {
+                m_kib: 1,
+                t: 1,
+                p: 1,
+            },
+        }
+    }
+}
+
+/// The PHC string of `password` under `policy`.
+///
+/// # Errors
+/// [`HashFailure`].
+pub fn hash_with(
+    policy: &HashPolicy,
+    password: &Password,
+    salt: &[u8; 16],
+) -> Result<Secret<String>, HashFailure> {
+    match policy {
+        HashPolicy::Argon2(params) => hash(params, password, salt),
+        HashPolicy::Pbkdf2 { iterations } => {
+            let n = core::num::NonZeroU32::new(*iterations).ok_or(HashFailure::Params)?;
+            Ok(Secret::new(access_crypto::legacy_hash::pbkdf2_sha256(
+                n,
+                salt,
+                password.bytes(),
+            )))
+        }
+    }
+}
+
+/// Checks `password` against a stored Argon2id or PBKDF2-SHA-256 PHC string, and whether it
+/// needs a rehash under `policy`: a weaker hash, or one of the other algorithm (CR-37).
+///
+/// # Errors
+/// [`HashFailure`] for a malformed or foreign hash.
+pub fn verify_with(
+    password: &Password,
+    phc: &Secret<String>,
+    policy: &HashPolicy,
+) -> Result<Verification, HashFailure> {
+    if access_crypto::legacy_hash::is_argon2(phc.expose()) {
+        let floor = match policy {
+            HashPolicy::Argon2(p) => *p,
+            HashPolicy::Pbkdf2 { .. } => Argon2Params::CANONICAL,
+        };
+        let v = verify(password, phc, &floor)?;
+        return Ok(Verification {
+            matched: v.matched,
+            rehash: v.rehash || matches!(policy, HashPolicy::Pbkdf2 { .. }),
+        });
+    }
+    let stored = access_crypto::legacy_hash::LegacyHash::parse(phc.expose())
+        .map_err(|_| HashFailure::Malformed)?;
+    let access_crypto::legacy_hash::LegacyHash::Pbkdf2 {
+        prf: access_crypto::legacy_hash::Pbkdf2Prf::Sha256,
+        iterations,
+        ..
+    } = &stored
+    else {
+        return Err(HashFailure::Malformed);
+    };
+    let matched = stored
+        .verify(
+            &access_crypto::legacy_hash::Transform::default(),
+            password.bytes(),
+        )
+        .map_err(|_| HashFailure::Compute)?;
+    let rehash = match policy {
+        HashPolicy::Pbkdf2 { iterations: want } => iterations < want,
+        HashPolicy::Argon2(_) => true,
+    };
+    Ok(Verification { matched, rehash })
+}
+
 /// The hash semaphore's size (CR-36 m.3, OP-146 m.4 (f)):
 /// `min(cores, ⌊budget × 0.5 / m⌋)`, at least one. Without a budget the cores decide.
 #[must_use]

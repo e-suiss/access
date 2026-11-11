@@ -576,6 +576,29 @@ impl LegacyHash {
     }
 }
 
+/// Iterations of the FIPS profile's password hash (CR-15, CR-36 m.1).
+pub const FIPS_PBKDF2_ITERATIONS: u32 = 600_000;
+
+/// The PHC string `$pbkdf2-sha256$i=<iterations>$<salt>$<hash>` of `password` with a 32-byte
+/// PBKDF2-HMAC-SHA-256 output: the FIPS profile's password hash (CR-15, CR-36, OP-158 m.3 (y)).
+/// [`LegacyHash::parse`] reads it back.
+#[must_use]
+pub fn pbkdf2_sha256(iterations: NonZeroU32, salt: &[u8; 16], password: &[u8]) -> String {
+    let mut out = Zeroizing::new([0_u8; 32]);
+    pbkdf2::derive(
+        pbkdf2::PBKDF2_HMAC_SHA256,
+        iterations,
+        salt,
+        password,
+        out.as_mut_slice(),
+    );
+    format!(
+        "$pbkdf2-sha256$i={iterations}${}${}",
+        b64::encode_standard(salt),
+        b64::encode_standard(out.as_slice())
+    )
+}
+
 /// Checks `password` (after `transform`) against `hash`; the final comparison is constant
 /// time.
 ///

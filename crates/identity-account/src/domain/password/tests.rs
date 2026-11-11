@@ -90,3 +90,74 @@ fn semaphore_size() {
     assert_eq!(permits(8, Some(1024), &c), 1);
     assert_eq!(permits(0, None, &c), 1);
 }
+
+fn salt() -> [u8; 16] {
+    access_crypto::random::bytes::<16>().unwrap()
+}
+
+// CR-15, CR-36, IDP-3, OP-158
+#[test]
+fn a_fips_realm_hashes_with_pbkdf2_not_argon2() {
+    let pw = Password::new("correct horse battery").unwrap();
+    let fips = HashPolicy::of(HashProfile::Standard, true);
+    let phc = hash_with(&fips, &pw, &salt()).unwrap();
+    assert!(
+        phc.expose().starts_with("$pbkdf2-sha256$i=600000$"),
+        "{}",
+        phc.expose()
+    );
+    assert!(!access_crypto::legacy_hash::is_argon2(phc.expose()));
+    let v = verify_with(&pw, &phc, &fips).unwrap();
+    assert!(v.matched && !v.rehash);
+    let wrong = Password::new("correct horse battery!").unwrap();
+    assert!(!verify_with(&wrong, &phc, &fips).unwrap().matched);
+    let argon = HashPolicy::Argon2(LIGHT);
+    let back = verify_with(&pw, &phc, &argon).unwrap();
+    assert!(back.matched && back.rehash);
+    let weak = HashPolicy::Pbkdf2 { iterations: 1_000 };
+    let fewer = hash_with(&weak, &pw, &salt()).unwrap();
+    let v = verify_with(&pw, &fewer, &fips).unwrap();
+    assert!(v.matched && v.rehash);
+}
+
+// CR-15, CR-37
+#[test]
+fn an_argon2_hash_moves_to_pbkdf2_when_fips_is_turned_on() {
+    let pw = Password::new("correct horse battery").unwrap();
+    let phc = hash(&LIGHT, &pw, &salt()).unwrap();
+    let v = verify_with(&pw, &phc, &HashPolicy::of(HashProfile::Standard, true)).unwrap();
+    assert!(v.matched && v.rehash);
+    assert!(
+        verify_with(
+            &pw,
+            &Secret::new("$2b$10$x".into()),
+            &HashPolicy::Argon2(LIGHT)
+        )
+        .is_err()
+    );
+}
+
+// OP-33, OP-158, §10.2.1
+#[test]
+fn the_argon2_profile_may_only_be_raised() {
+    assert_eq!(
+        HashProfile::Standard.raise_to(HashProfile::HighMemory),
+        Ok(HashProfile::HighMemory)
+    );
+    assert_eq!(
+        HashProfile::HighMemory.raise_to(HashProfile::HighMemory),
+        Ok(HashProfile::HighMemory)
+    );
+    assert_eq!(
+        HashProfile::HighMemory.raise_to(HashProfile::Standard),
+        Err(ProfileDowngrade)
+    );
+    assert_eq!(ProfileDowngrade.code(), "hash-profile-downgrade");
+    let high = HashProfile::HighMemory.argon2();
+    assert_eq!((high.m_kib, high.t, high.p), (2 * 1024 * 1024, 1, 4));
+    assert!(HashProfile::Standard.argon2().weaker_than(&high) || high.t < 5);
+    for p in [HashProfile::Standard, HashProfile::HighMemory] {
+        assert_eq!(HashProfile::parse(p.name()), Some(p));
+    }
+    assert_eq!(HashProfile::parse("low"), None);
+}
