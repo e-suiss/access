@@ -342,7 +342,7 @@ async fn an_unaccepted_schema_or_a_body_that_does_not_match_closes_the_approval(
 
     let (status, s) = d
         .surface(&ex, &intent, |push| {
-            push["request"]["action"]["schema"] = json!(b64url_encode(&[0x5c; 32]));
+            push["request"]["action"]["major"] = json!(2);
         })
         .await;
     assert_eq!(status, 200, "{s}");

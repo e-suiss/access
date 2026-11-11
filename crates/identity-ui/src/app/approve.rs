@@ -409,7 +409,7 @@ where
             .render
             .as_deref()
             .and_then(|bytes| render::decode(bytes).ok())
-            .filter(|r| faithful(r, &request, &p.intent));
+            .filter(|r| faithful(r, &request));
         let ceiling = now.saturating_add(assurance::aas_expiry_ceiling(tier));
         let mut view = render_view(
             shown.as_ref(),

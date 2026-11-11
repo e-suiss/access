@@ -603,15 +603,28 @@ pub fn bodies(
         .collect()
 }
 
-/// Whether the render can be shown faithfully for the pushed request (§8.17.6.2, E10): it is
-/// the decision point's render of the target, from the Action Schema the request names.
+/// Whether the render can be shown faithfully for the pushed request (§8.17.6.2, E10): the
+/// decision point kept a render only for an accepted Action Schema, and a request that names a
+/// typed action must name the action and major version that render shows; another version can't
+/// be shown from it.
 #[must_use]
-pub fn faithful(shown: &Render, request: &Value, target: &Digest) -> bool {
-    let schema = request
-        .get("action")
-        .and_then(|a| b64(a.get("schema"), 32))
-        .and_then(|b| <[u8; 32]>::try_from(b).ok());
-    shown.intent == *target && schema == Some(shown.schema.0)
+pub fn faithful(shown: &Render, request: &Value) -> bool {
+    let Some(action) = request.get("action").filter(|a| a.is_object()) else {
+        return true;
+    };
+    let named = (
+        action.get("namespace").and_then(Value::as_str),
+        action.get("name").and_then(Value::as_str),
+        action.get("major").and_then(Value::as_u64),
+    );
+    let (Some(namespace), Some(name), Some(major)) = named else {
+        return false;
+    };
+    shown
+        .fields
+        .iter()
+        .find(|f| f.name == access_kernel::render::ACTION)
+        .is_some_and(|f| f.text == format!("{namespace}/{name}@{major}"))
 }
 
 /// The capacity line (OP-157 m.3 (l), §8.17.6.1): what the approver's basis makes it.
@@ -1474,17 +1487,22 @@ mod tests {
 
     // §8.17.6.2, E10, OP-157 m.3 (l), Ek B 5627
     #[test]
-    fn only_the_render_of_the_named_schema_and_target_is_faithful() {
+    fn only_the_render_of_the_named_action_version_is_faithful() {
         let r = shown(None, true);
         let req = request();
-        assert!(faithful(&r, &req, &Digest([4; 32])));
-        assert!(!faithful(&r, &req, &Digest([5; 32])));
+        assert!(faithful(&r, &req));
         let mut other = req.clone();
-        other["action"]["schema"] = json!(b64url_encode(&[2; 32]));
-        assert!(!faithful(&r, &other, &Digest([4; 32])));
-        let mut none = req;
-        none["action"].as_object_mut().unwrap().remove("schema");
-        assert!(!faithful(&r, &none, &Digest([4; 32])));
+        other["action"]["major"] = json!(2);
+        assert!(!faithful(&r, &other));
+        let mut renamed = req.clone();
+        renamed["action"]["name"] = json!("charge");
+        assert!(!faithful(&r, &renamed));
+        let mut typeless = req.clone();
+        typeless["action"] = json!("payment_initiation");
+        assert!(faithful(&r, &typeless));
+        let mut partial = req;
+        partial["action"].as_object_mut().unwrap().remove("major");
+        assert!(!faithful(&r, &partial));
     }
 
     // PI-17, §8.17.6.2, P30, OP-157 m.3 (l), Ek B 5628
