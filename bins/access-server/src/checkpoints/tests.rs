@@ -338,3 +338,5 @@ async fn a_led_domain_gets_signed_checkpoints() {
         .unwrap();
     assert_eq!((stored.issued_at, stored.size), (later, first.size));
 }
+
+mod witnesses;
