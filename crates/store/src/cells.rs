@@ -137,7 +137,7 @@ pub struct Image {
     pub counters: Vec<(Vec<u8>, u64)>,
     /// Single-use flags, as (key, position).
     pub single_use: Vec<(Vec<u8>, u64)>,
-    /// Consumed nonces.
+    /// Consumed nonces, the archived ones with them (TI-RT3): on the target they are hot rows.
     pub nonces: Vec<NonceRow>,
     /// Outbox events.
     pub outbox: Vec<OutboxRow>,
@@ -245,8 +245,14 @@ pub async fn image(sequencer: &PgPool, domain: &DomainId) -> Result<Image, Store
     .map(|r| Ok((r.key, unsigned(r.pos)?)))
     .collect::<Result<Vec<_>, StoreError>>()?;
     let nonces = sqlx::query!(
-        "SELECT nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier
-           FROM access.authority_nonce WHERE domain_id = $1 ORDER BY decision_pos, nonce",
+        r#"SELECT nonce AS "nonce!", actor AS "actor!", intent_digest AS "intent_digest!",
+                  decision_pos AS "decision_pos!", outcome AS "outcome!", render_digest, tier
+             FROM (SELECT nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier
+                     FROM access.authority_nonce WHERE domain_id = $1
+                   UNION
+                   SELECT nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier
+                     FROM access.authority_nonce_archive WHERE domain_id = $1) n
+            ORDER BY decision_pos, nonce"#,
         id,
     )
     .fetch_all(&mut *t.tx)
