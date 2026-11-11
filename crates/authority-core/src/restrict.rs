@@ -14,6 +14,7 @@ use access_kernel::restriction::{PolicyDeny, RestrictionOutcome};
 use suiss_crypto::dcbor::{self, Limits as Cbor, Value};
 use suiss_restriction::{Denial, Engine, Limits, Outcome, RequestJson};
 
+pub mod derived;
 pub mod patterns;
 
 /// Access's restriction schema `access/restriction/v1` (OP-141 m.27 (a)).
@@ -33,6 +34,19 @@ action "exercise" appliesTo {
     risk: String,
     posture: String,
     labels: Set<String>,
+    derived: {
+      party_consumption: Long,
+      open_require_action: Long,
+      selector_transitions: Long,
+      cited_instance_state: Long,
+      mapping_pin_age_s: Long,
+      claim_age_s: Long,
+      unreported_contracts: Long,
+      rollback_guard: Long,
+      projection_issue_count: Long,
+      open_offline_paps: Long,
+      threshold_adjacent: Long,
+    },
   }
 };"#;
 
@@ -48,6 +62,8 @@ pub struct Facts {
     pub tier: u8,
     /// The accepted external signals (OP-156 m.3 (r)).
     pub signals: Signals,
+    /// The `derived.*` values (§16.5, OP-157 m.3 (o)).
+    pub derived: derived::Derived,
 }
 
 /// The external signals the domain accepted, as the restriction context names them
@@ -162,6 +178,7 @@ fn context(
         "risk": facts.signals.risk.map_or("none", access_internal_api::signals::RiskLevel::name),
         "posture": facts.signals.posture.name(),
         "labels": facts.signals.labels,
+        "derived": facts.derived.json(),
     })
     .to_string()
 }

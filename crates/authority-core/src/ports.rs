@@ -255,6 +255,25 @@ pub type Comparing<'a> = std::pin::Pin<Box<dyn Future<Output = PolicyRelation> +
 pub trait PolicyAnalysis: Send + Sync {
     /// The relation of `new` to `old`, both written against `schema`.
     fn compare<'a>(&'a self, schema: &'a str, old: &'a str, new: &'a str) -> Comparing<'a>;
+
+    /// Whether a solver is wired; without one the Kernel's structural rule decides alone
+    /// (OP-157 m.3 (n)).
+    fn wired(&self) -> bool {
+        true
+    }
+}
+
+impl PolicyRelation {
+    /// Whether this answer raises a structurally narrowing `policy.set` to expansion: widening,
+    /// incomparable, may-error, and, from a wired solver, no answer (OP-157 m.3 (n)).
+    #[must_use]
+    pub const fn raises(self, wired: bool) -> bool {
+        match self {
+            Self::Widening | Self::Incomparable | Self::MayError => true,
+            Self::Unknown => wired,
+            Self::Equivalent | Self::Narrowing => false,
+        }
+    }
 }
 
 /// No analysis is wired: every change is [`PolicyRelation::Unknown`].
@@ -265,6 +284,10 @@ impl PolicyAnalysis for NoAnalysis {
     fn compare<'a>(&'a self, schema: &'a str, old: &'a str, new: &'a str) -> Comparing<'a> {
         let _ = (schema, old, new);
         Box::pin(std::future::ready(PolicyRelation::Unknown))
+    }
+
+    fn wired(&self) -> bool {
+        false
     }
 }
 

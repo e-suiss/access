@@ -54,6 +54,7 @@ fn outcome(source: &str, signals: Signals) -> RestrictionOutcome {
         agent: false,
         tier: 1,
         signals,
+        derived: derived::Derived::empty(),
     };
     results_with(
         &[policy(source)],
@@ -118,4 +119,27 @@ fn an_external_signal_reaches_only_a_forbid_policy() {
         outcome(label, Signals::default()),
         RestrictionOutcome::NoObjection
     );
+}
+
+// INV-36, RT26, OP-157 m.3 (o)
+#[test]
+fn only_whitelisted_derived_values_compile() {
+    let policy = |condition: &str| {
+        Value::Map(vec![
+            (Value::text("schema"), Value::text(RESTRICTION_SCHEMA)),
+            (
+                Value::text("source"),
+                Value::text(&format!(
+                    "@id(\"t\") forbid(principal, action, resource) when {{ {condition} }};"
+                )),
+            ),
+            (Value::text("target"), Value::text("domain")),
+        ])
+    };
+    for name in derived::NAMES {
+        let c = compile(&policy(&format!("context.derived.{name} > 0")));
+        assert!(c.is_ok(), "{name} {:?}", c.err());
+    }
+    assert!(compile(&policy("context.derived.reputation > 0")).is_err());
+    assert!(compile(&policy("context.trust_score > 0")).is_err());
 }

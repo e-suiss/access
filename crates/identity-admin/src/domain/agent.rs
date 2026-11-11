@@ -65,17 +65,6 @@ pub const MAX_WINDOW_S: u64 = 31 * DAY_S;
 /// The deepest delegation an agent Grant allows (OP-154 m.3 (g), C15).
 pub const MAX_DEPTH: u64 = 1;
 
-/// Threshold-adjacent guard (OP-154 m.3 (g), PD): this many intents in one hour between
-/// [`ADJACENT_FROM_PERCENT`] and 100 % of the per-intent cap answer `REQUIRE_ACTION`.
-pub const ADJACENT_INTENTS: u64 = 3;
-
-/// The lower bound of the threshold-adjacent band, in percent of the per-intent cap.
-pub const ADJACENT_FROM_PERCENT: u64 = 95;
-
-/// Mass-selection guard (OP-154 m.3 (g), PD): an intent naming more resources answers
-/// `REQUIRE_ACTION`.
-pub const MASS_SELECTION: usize = 100;
-
 /// Stable code of an agent exercise whose `sponsored_by` requirement found no live Claim: the
 /// agent has no active human sponsor and waits for one (OP-154 m.3 (e), AG-41).
 pub const SPONSOR_REQUIRED: &str = "sponsor-required";

@@ -9,6 +9,8 @@
 //! - [`Pattern::Disclosure`]: disclosing data through these actions needs the data owner's
 //!   `disclose` contribution, lowering its label their `declassify` (IFC Option B, F11, SEC30).
 //!   The label stays the owner's Claim; Access holds only the authority.
+//! - [`Pattern::PartyTotal`], [`Pattern::ThresholdAdjacent`], [`Pattern::MassSelection`]: the
+//!   structuring guards (§13.7.6, U18, OP-157 m.3 (q)), on the `derived.*` values.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -47,7 +49,35 @@ pub enum Pattern {
         /// Whether the action lowers the label rather than discloses.
         declassify: bool,
     },
+    /// The actor Party's consumption in the window above `limit` (in the threshold unit) needs
+    /// `approval` (§13.7.6, U18).
+    PartyTotal {
+        /// The domain's limit.
+        limit: u64,
+        /// The approval it needs.
+        approval: RequirementTerm,
+    },
+    /// The [`ADJACENT_REPEAT`]th Exercise to one target in the window within 80 % of a tier
+    /// threshold needs `approval` (§13.7.6, U18).
+    ThresholdAdjacent {
+        /// The approval it needs.
+        approval: RequirementTerm,
+    },
+    /// A new holder's CT2+ Exercise while more than [`MASS_NEW_HOLDERS`] Parties became holders
+    /// of the same selector in the window needs `approval` (§13.7.6, U18).
+    MassSelection {
+        /// The approval it needs.
+        approval: RequirementTerm,
+    },
 }
+
+/// Threshold-adjacent Exercises to one target in the window that need an approval (§13.7.6,
+/// U18, PD).
+pub const ADJACENT_REPEAT: u64 = 3;
+
+/// New holders of one selector in the window above which a new holder's CT2+ Exercise needs an
+/// approval (§13.7.6, U18, PD).
+pub const MASS_NEW_HOLDERS: u64 = 5;
 
 /// A contribution of `class` bound to the exact intent, used once, from a Party other than the
 /// actor's and, with `source`, from that selector only.
@@ -138,6 +168,27 @@ pub fn content(pattern: &Pattern) -> Option<Value> {
                 contribution(class, Some(owner.clone())),
             )
         }
+        // U18, OP-157 m.3 (q)
+        Pattern::PartyTotal { limit, approval } => {
+            let limit = i64::try_from(*limit).ok()?;
+            (
+                "party-total",
+                format!("context.derived.party_consumption > {limit}"),
+                approval.clone(),
+            )
+        }
+        Pattern::ThresholdAdjacent { approval } => (
+            "threshold-adjacent",
+            format!("context.derived.threshold_adjacent >= {ADJACENT_REPEAT}"),
+            approval.clone(),
+        ),
+        Pattern::MassSelection { approval } => (
+            "mass-selection",
+            format!(
+                "context.derived.selector_transitions > {MASS_NEW_HOLDERS} && context.tier >= 2"
+            ),
+            approval.clone(),
+        ),
     };
     let source = format!(
         "@id(\"{id}\") @require(\"rs-{id}\") forbid(principal, action, resource) when {{ {condition} }};"
@@ -187,6 +238,16 @@ mod tests {
                 actions: BTreeSet::from([String::from("health.records:relabel")]),
                 owner: owner.clone(),
                 declassify: true,
+            },
+            Pattern::PartyTotal {
+                limit: 500_000,
+                approval: contribution(APPROVE, Some(owner.clone())),
+            },
+            Pattern::ThresholdAdjacent {
+                approval: contribution(APPROVE, Some(owner.clone())),
+            },
+            Pattern::MassSelection {
+                approval: contribution(APPROVE, Some(owner.clone())),
             },
         ] {
             let c = content(&p).unwrap();

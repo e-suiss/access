@@ -139,8 +139,8 @@ fn fields(
         .collect()
 }
 
-fn state_basis_value(reads: &[(Vec<u8>, u64)]) -> Value {
-    Value::Map(vec![
+fn state_basis_value(reads: &[(Vec<u8>, u64)], shape: &Shape<'_>) -> Value {
+    let mut basis = vec![
         (Value::text("at"), Value::Unsigned(0)),
         (
             Value::text("reads"),
@@ -151,7 +151,16 @@ fn state_basis_value(reads: &[(Vec<u8>, u64)]) -> Value {
                     .collect(),
             ),
         ),
-    ])
+    ];
+    // SI-8, OP-157 m.3 (o)
+    if shape.window.values != crate::restrict::derived::Derived::empty() {
+        basis.push((Value::text("derived"), shape.window.values.cited()));
+    }
+    // OP-157 m.3 (n)
+    if let Some(r) = shape.raised {
+        basis.push((Value::text("policy_relation"), Value::text(r.word())));
+    }
+    Value::Map(basis)
 }
 
 fn effects_value(effects: &[Effect]) -> Value {
@@ -224,6 +233,7 @@ struct Opening {
 struct Past {
     state: access_kernel::fold::State,
     counters: BTreeMap<Vec<u8>, u64>,
+    cited: window::Cited,
 }
 
 impl Past {
@@ -265,6 +275,8 @@ impl Past {
                     _ => return Err(bad()),
                 };
                 past.state = folded.ok_or_else(bad)?;
+                // SI-8, OP-157 m.3 (n), (o)
+                past.cited = window::Cited::of(field("state_basis"));
                 return Ok((
                     past,
                     r.header.recorded_at,
@@ -604,6 +616,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             None => self.recovery_binding(req, actor, at).await?,
         };
         let signals = Box::pin(self.signals(actor, req, &resolved, at)).await?;
+        // SI-8, OP-157 m.3 (n), (o)
+        let cited = self.cited().cloned().unwrap_or_default();
+        let derived = cited
+            .derived
+            .unwrap_or(crate::restrict::derived::Derived::empty());
         let frame = Frame {
             intent_digest: digest,
             exercise,
@@ -616,6 +633,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             policies: &self.policies,
             compromised,
             signals: &signals,
+            derived: &derived,
+            widened: cited.raised.is_some(),
         };
         let (mut evaluation, _) = self.passes(req, &frame).await?;
         let tier = crate::requirements::tier_of(
@@ -919,6 +938,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             policies: &self.policies,
             compromised,
             signals,
+            derived: &window::EMPTY,
+            widened: false,
         }
     }
 
@@ -1520,13 +1541,18 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 .map_err(|_| CoreError::Protocol("proofs"))?
                 .saturating_add(u64::from(!open))
                 .saturating_add(1);
-            let frame = self.frame(
+            // §16.5, OP-157 m.3 (n), (o)
+            let window = self.window_of(inc, actor, &resolved, now).await?;
+            let raised = self.policy_raised(req.payload.as_ref()).await?;
+            let mut frame = self.frame(
                 (digest, exercise, head.saturating_add(records)),
                 actor,
                 now,
                 &resolved,
                 (compromised, &signals),
             );
+            frame.derived = &window.values;
+            frame.widened = raised.is_some();
             let (mut evaluation, snapshot) = self.passes(req, &frame).await?;
             let (tier, render, render_bytes) = rendered(req, &evaluation)?;
             self.tiered(req, &mut evaluation, open, now).await?;
@@ -1566,6 +1592,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 render,
                 render_bytes,
                 tier,
+                window: &window,
+                raised,
             };
             let derived = self.derived(req, &resolved, exercise, now).await?;
             let items = self.items(inc, &shape, &evaluation, &snapshot, &resolved, &derived)?;
@@ -1765,7 +1793,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         reads.sort();
         let mut decision = vec![
             ("outcome", decision_value(&evaluation.decision)),
-            ("state_basis", state_basis_value(&reads)),
+            ("state_basis", state_basis_value(&reads, shape)),
             (
                 "versions",
                 Value::Map(vec![
@@ -1794,7 +1822,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if !effects.is_empty() {
             decision.push(("effects", effects_value(&effects)));
         }
-        let draws = draws_of(evaluation);
+        let draws: Vec<Draw> = draws_of(evaluation)
+            .into_iter()
+            .chain(window::draws(shape.window, allowed))
+            .collect();
         // OP-141 m.36 (a)
         if let Some(c) = consumption_value(&draws, &single_use) {
             decision.push(("consumption", c));
@@ -2045,6 +2076,10 @@ struct Shape<'a> {
     render: Digest,
     render_bytes: Vec<u8>,
     tier: access_kernel::tier::Tier,
+    /// The `derived.*` values the decision read and the window counters an ALLOW adds (SI-8).
+    window: &'a crate::restrict::derived::Window,
+    /// The analysis answer that raised a `policy.set` to expansion (OP-157 m.3 (n)).
+    raised: Option<crate::ports::PolicyRelation>,
 }
 
 pub use access_kernel::contribution::NAMESPACE as CONTRIBUTION_NAMESPACE;
@@ -2084,6 +2119,7 @@ pub mod sources;
 pub mod ssh;
 pub mod templates;
 pub mod vault;
+mod window;
 mod workload;
 
 pub use ingest::Ingested;

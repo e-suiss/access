@@ -393,7 +393,19 @@ mod tests {
                 "tier",
                 "risk",
                 "posture",
-                "labels"
+                "labels",
+                "derived",
+                "party_consumption",
+                "open_require_action",
+                "selector_transitions",
+                "cited_instance_state",
+                "mapping_pin_age_s",
+                "claim_age_s",
+                "unreported_contracts",
+                "rollback_guard",
+                "projection_issue_count",
+                "open_offline_paps",
+                "threshold_adjacent"
             ]
         );
         let opaque: BTreeMap<String, access_kernel::digest::Digest> = BTreeMap::new();

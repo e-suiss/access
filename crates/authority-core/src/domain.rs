@@ -1441,6 +1441,10 @@ pub struct Frame<'a> {
     pub compromised: Option<&'static str>,
     /// The accepted external signals the restriction context reads (OP-156 m.3 (r)).
     pub signals: &'a crate::restrict::Signals,
+    /// The `derived.*` values the restriction context reads (§16.5, OP-157 m.3 (o)).
+    pub derived: &'a crate::restrict::derived::Derived,
+    /// The control-plane analysis raised this `policy.set` to expansion (OP-157 m.3 (n)).
+    pub widened: bool,
 }
 
 /// One pass of the evaluation over `snapshot` (§17.1.1 steps 7–8). Implicit powers of a
@@ -1464,6 +1468,8 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         policies,
         compromised,
         signals,
+        derived,
+        widened,
     } = *frame;
     snapshot.restart();
     // SEC12, OP-141 m.31 (c), (d)
@@ -1630,7 +1636,11 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             capacity: req.capacity,
             catalog,
         };
-        let out = meta::apply(&ctx, payload, snapshot);
+        let mut out = meta::apply(&ctx, payload, snapshot);
+        // OP-157 m.3 (n)
+        if widened && let Ok(o) = out.as_mut() {
+            meta::widen(&ctx, payload, snapshot, o);
+        }
         let missing = snapshot.missing();
         if !missing.is_empty() {
             return Pass::Need(missing);
@@ -1859,6 +1869,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         agent: actor_is_agent,
         tier: crate::app::approval::tier_code(tier),
         signals: signals.clone(),
+        derived: derived.clone(),
     };
     let mut restrictions = match crate::restrict::results_with(
         &applicable,

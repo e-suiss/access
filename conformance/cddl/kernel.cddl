@@ -512,7 +512,15 @@ state-key = bstr .size (1..512)
 state-basis = {
   at: uint,
   reads: [* [key: state-key, version: uint]],
+  ; SI-8, OP-157 m.3 (o): the derived.* values the restriction context read
+  ? derived: { * derived-name => int },
+  ; OP-157 m.3 (n): the control-plane answer that raised a policy_set to expansion
+  ? policy_relation: "widening" / "incomparable" / "may_error" / "unknown",
 }
+
+derived-name = "party_consumption" / "open_require_action" / "selector_transitions" /
+  "cited_instance_state" / "mapping_pin_age_s" / "claim_age_s" / "unreported_contracts" /
+  "rollback_guard" / "projection_issue_count" / "open_offline_paps" / "threshold_adjacent"
 
 consumption = {
   ? draws: [+ [key: state-key, amount: uint]],

@@ -3325,12 +3325,18 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             ));
         }
     }
-    // §13.7.3, SEC26, OP-141 m.43
+    quorum(ctx, payload, view, &mut out);
+    out.effects = sorted(out.effects);
+    Ok(out)
+}
+
+// §13.7.3, SEC26, OP-141 m.43
+fn quorum(ctx: &Context<'_>, payload: &Payload, view: &dyn View, out: &mut Outcome) {
     if crate::tier::meta_tier(payload, out.expansion) == crate::tier::Tier::Ct3
         && let ExerciseBasis::Anchor(a) = ctx.basis
         && let Ok(anchor) = read::<AnchorState>(view, kind::ANCHOR, &a)
         && let Root::Joint { parties, k } = &anchor.root
-        && parties.contains(&actor.party)
+        && parties.contains(&ctx.actor.party)
     {
         let others = u64::try_from(parties.len())
             .unwrap_or(u64::MAX)
@@ -3341,8 +3347,17 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             out.requirements.insert(co_root(need));
         }
     }
-    out.effects = sorted(out.effects);
-    Ok(out)
+}
+
+/// Raises an allowed meta-action's outcome to expansion, with the joint-root quorum an
+/// expansion needs: a control-plane analysis may only raise a structurally narrowing change,
+/// never lower one (OP-157 m.3 (n)). The raised outcome is a function of the recorded inputs, so
+/// a decision record that cites the analysis reproduces it.
+pub fn widen(ctx: &Context<'_>, payload: &Payload, view: &dyn View, out: &mut Outcome) {
+    if !out.expansion {
+        out.expansion = true;
+        quorum(ctx, payload, view, out);
+    }
 }
 
 /// `SHA-256("access/bounds/v1" ‖ 0x00 ‖ dCBOR(canonical-authority))`, the bounds of a

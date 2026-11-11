@@ -8,6 +8,8 @@
 
 #[path = "commit/agents.rs"]
 mod agents;
+#[path = "commit/policy_engine.rs"]
+mod policy_engine;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
