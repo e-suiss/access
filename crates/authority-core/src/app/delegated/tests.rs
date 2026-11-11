@@ -93,8 +93,19 @@ fn a_grant_on_a_meta_action_needs_the_flag_and_a_domain_grant_does_not() {
     let admin = set(&[action("access", "grant_revoke")], &[]);
     let prefixed = set(&[], &["access"]);
     let plain = set(&[action("idp.account", "read")], &[]);
-    let approver = set(&[action("access", "contribute")], &[]);
-    assert!(!needs_open(&issue(approver), None));
+    for own in NOT_ADMIN {
+        assert!(
+            !needs_open(&issue(set(&[action("access", own)], &[])), None),
+            "{own}"
+        );
+    }
+    let mut bootstrap = crate::genesis::bootstrap_authority().authority;
+    assert!(!names_meta(&bootstrap));
+    bootstrap
+        .actions
+        .exact
+        .insert(action("access", "grant_issue"));
+    assert!(names_meta(&bootstrap));
     assert!(needs_open(&issue(admin), None));
     assert!(needs_open(&issue(prefixed), None));
     assert!(!needs_open(&issue(plain), None));

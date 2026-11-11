@@ -11,9 +11,21 @@ use crate::app::breakglass;
 /// The blocker subcode and problem of a new admin Grant while the flag is closed.
 pub const OFF: &str = "delegated-admin-off";
 
-/// The holder-side meta-actions: giving an approval or a token under one's own holding is not
-/// administration (§5.9, CI-14).
-const NOT_ADMIN: [&str; 2] = ["contribute", "projection_issue"];
+/// The holder-side meta-actions: an approval, a token, a Party's own sign-up and its own
+/// Instances, Mandates and renunciation act on nobody else, so holding them is not
+/// administration (§5.9, CI-14, L0-META-7).
+const NOT_ADMIN: [&str; 10] = [
+    "contribute",
+    "projection_issue",
+    "party_register",
+    "instance_create",
+    "instance_rekey",
+    "instance_recover",
+    "mandate_bind",
+    "mandate_rebind",
+    "mandate_revoke",
+    "grant_renounce",
+];
 
 fn meta_names(set: &ActionSet) -> impl Iterator<Item = &str> {
     set.exact

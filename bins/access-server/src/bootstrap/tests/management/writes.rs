@@ -382,6 +382,15 @@ async fn the_management_reads_answer_from_the_real_decision_point() {
     assert_eq!(version["authority"], authority_set_to_json(&v1).unwrap());
     assert!(version["not_included"]["reserved"].is_array());
 
+    // OP-157 m.3 (t)
+    let open = c
+        .put_setting(
+            "delegated-admin",
+            "putDelegatedAdmin",
+            serde_json::json!({ "enabled": true }),
+        )
+        .await;
+    assert_eq!(open.status, StatusCode::OK, "{}", open.body);
     // §8.17.9.2
     let admin = AuthoritySet {
         actions: ActionSet {
