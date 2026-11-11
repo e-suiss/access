@@ -2641,11 +2641,8 @@ impl Change {
             Self::SupportArtifactPolicy(p) => {
                 p.as_ref().map_or(Ok(()), support::ArtifactPolicy::check)
             }
-            // OP-157 m.4 (a)
-            Self::Review(r) => {
-                r.check()?;
-                Err(Invalid::NotYetServed)
-            }
+            // OP-157 m.3 (w)
+            Self::Review(r) => r.check(),
             Self::DelegatedAdmin(_) | Self::ApprovalInline(_) | Self::ApprovalBatch(_) => {
                 Err(Invalid::NotYetServed)
             }
