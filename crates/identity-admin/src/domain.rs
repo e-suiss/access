@@ -2635,11 +2635,9 @@ impl Change {
             Self::GatewayKeytabEmergency { gateway, kvno } => gateway::emergency(gateway, *kvno),
             Self::Iys { recipient_type, .. } => iys_recipient(recipient_type),
             Self::PreferenceTopics(topics) => preference_topics(topics),
+            // OP-157 m.3 (e)
+            Self::CaseSystem(c) => c.check(),
             // OP-157 m.4 (a)
-            Self::CaseSystem(c) => {
-                c.check()?;
-                Err(Invalid::NotYetServed)
-            }
             Self::SupportArtifactPolicy(p) => {
                 p.as_ref().map_or(Ok(()), support::ArtifactPolicy::check)?;
                 Err(Invalid::NotYetServed)

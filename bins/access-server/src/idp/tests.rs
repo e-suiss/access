@@ -70,6 +70,7 @@ mod resources;
 mod scim;
 mod signals;
 mod social;
+mod support;
 mod workloads;
 
 const NOW: u64 = 10_000;
