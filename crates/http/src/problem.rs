@@ -113,6 +113,7 @@ impl Code {
 pub mod codes {
     use super::Code;
 
+    pub mod durability;
     pub mod platform;
     pub mod realm;
 
@@ -537,6 +538,25 @@ pub const CODES: &[Code] = &[
     codes::realm::CASE_SYSTEM_UNKNOWN,
     // OP-157 m.4 (b)
     codes::realm::APPROVAL_INLINE_ASSERTION_REQUIRED,
+    // OP-158 m.3 (aa)
+    codes::durability::ROLLBACK_GUARD,
+    codes::durability::RECOVERY_UNAVAILABLE,
+    codes::durability::RECOVERY_ENTRY_INVALID,
+    codes::durability::HANDOVER_FROZEN,
+    codes::durability::PROVIDER_NOT_CONFORMANT,
+    codes::durability::DOMAIN_SEALED,
+    codes::durability::PLACEMENT_MISMATCH,
+    codes::durability::REHOME_INCOMPLETE,
+    codes::durability::AS_OF_EXPIRED,
+    codes::durability::INDEX_QUOTA_EXCEEDED,
+    codes::durability::HASH_PROFILE_DOWNGRADE,
+    codes::durability::AUDIT_TIER_TOO_SHORT,
+    codes::durability::EXPORT_IN_PROGRESS,
+    codes::durability::WITNESS_PENDING,
+    codes::durability::UPGRADE_INCOMPATIBLE,
+    codes::durability::RESTORE_RESHRED_PENDING,
+    codes::durability::DEGRADED_IDENTITY,
+    codes::durability::QUOTA_EXCEEDED,
 ];
 
 /// The type URI of `code`.

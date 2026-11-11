@@ -1248,6 +1248,132 @@
       "status": 409,
       "title": "Conflict",
       "description": "The approval carries no passkey assertion over H(AAS); a device key's signature alone is not phishing resistant, so nothing was recorded; send the approver's passkey assertion with it, or approve on the Approval Surface (§10.2, §10.3.1, OP-157 m.17)."
+    },
+    {
+      "code": "rollback-guard",
+      "type": "urn:suiss:access:problem:rollback-guard",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The recovery cites a checkpoint below R*, the highest witnessed checkpoint the records reproduce; nothing changed (SEC21, SEC22, OP-158 m.3 (b))."
+    },
+    {
+      "code": "recovery-unavailable",
+      "type": "urn:suiss:access:problem:recovery-unavailable",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The domain has no recovery entry, so forced recovery is not available (§13.6, OP-158 m.3 (m))."
+    },
+    {
+      "code": "recovery-entry-invalid",
+      "type": "urn:suiss:access:problem:recovery-entry-invalid",
+      "status": 422,
+      "title": "Unprocessable Content",
+      "description": "The recovery entry has too few hardware-bound keys, a threshold out of range or a key held by the provider or its operator (SEC20, U16)."
+    },
+    {
+      "code": "handover-frozen",
+      "type": "urn:suiss:access:problem:handover-frozen",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The domain is frozen for a handover; no write commits until the handover ends (OP-158 m.3 (l))."
+    },
+    {
+      "code": "provider-not-conformant",
+      "type": "urn:suiss:access:problem:provider-not-conformant",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The incoming provider has not passed the provider conformance profile; the export was given and no handover batch was written (OP-158 m.3 (l))."
+    },
+    {
+      "code": "domain-sealed",
+      "type": "urn:suiss:access:problem:domain-sealed",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The domain is sealed for a cell move; it commits again once the target cell accepts it (OP-158 m.3 (n))."
+    },
+    {
+      "code": "placement-mismatch",
+      "type": "urn:suiss:access:problem:placement-mismatch",
+      "status": 421,
+      "title": "Misdirected Request",
+      "description": "This cell is not the domain's or realm's placement; ask the cell the placement names (TI-17, OP-158 m.3 (o))."
+    },
+    {
+      "code": "rehome-incomplete",
+      "type": "urn:suiss:access:problem:rehome-incomplete",
+      "status": 409,
+      "title": "Conflict",
+      "description": "A realm rehome needs an Exercise in both the old and the new governing domain; the realm stays where it is (OP-158 m.3 (o))."
+    },
+    {
+      "code": "as-of-expired",
+      "type": "urn:suiss:access:problem:as-of-expired",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The as_of position is outside the 24 hour history window, or its snapshot expired (OP-158 m.3 (u))."
+    },
+    {
+      "code": "index-quota-exceeded",
+      "type": "urn:suiss:access:problem:index-quota-exceeded",
+      "status": 422,
+      "title": "Unprocessable Content",
+      "description": "The relationship index quota (depth 25, width 10, 1 000 tuples per write, 200 types per store) was exceeded; nothing was recorded (§9.7A.5, OP-158 m.3 (u))."
+    },
+    {
+      "code": "hash-profile-downgrade",
+      "type": "urn:suiss:access:problem:hash-profile-downgrade",
+      "status": 409,
+      "title": "Conflict",
+      "description": "A password hash profile can be raised and never lowered (OP-33, OP-158 m.3 (a))."
+    },
+    {
+      "code": "audit-tier-too-short",
+      "type": "urn:suiss:access:problem:audit-tier-too-short",
+      "status": 422,
+      "title": "Unprocessable Content",
+      "description": "The hot audit window is shorter than 30 days (OP-37, OP-158 m.3 (a), (w))."
+    },
+    {
+      "code": "export-in-progress",
+      "type": "urn:suiss:access:problem:export-in-progress",
+      "status": 409,
+      "title": "Conflict",
+      "description": "An export of this domain is already streaming; resume it from its last position (OP-158 m.3 (g))."
+    },
+    {
+      "code": "witness-pending",
+      "type": "urn:suiss:access:problem:witness-pending",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The record is committed and effective; its acknowledgement waits for a witness cosign and the replica (SEC23, CL-2, OP-158 m.3 (e))."
+    },
+    {
+      "code": "upgrade-incompatible",
+      "type": "urn:suiss:access:problem:upgrade-incompatible",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The release cannot join the running set: its semantics, schema or wire versions do not overlap (OP-56, OP-158 m.3 (q))."
+    },
+    {
+      "code": "restore-reshred-pending",
+      "type": "urn:suiss:access:problem:restore-reshred-pending",
+      "status": 503,
+      "title": "Service Unavailable",
+      "description": "The environment was restored and its crypto-shredding has not been re-applied; writes stay refused (OP-42, OP-158 m.3 (r))."
+    },
+    {
+      "code": "degraded-identity",
+      "type": "urn:suiss:access:problem:degraded-identity",
+      "status": 503,
+      "title": "Service Unavailable",
+      "description": "Sign-in isn't available right now; tokens already issued keep working within their lifetime (OP-45, OP-158 m.3 (s))."
+    },
+    {
+      "code": "quota-exceeded",
+      "type": "urn:suiss:access:problem:quota-exceeded",
+      "status": 429,
+      "title": "Too Many Requests",
+      "description": "A tenant, realm or domain quota was reached; narrowing actions, export, handover and recovery are never counted (T27, OP-158 m.3 (v))."
     }
   ]
 }
