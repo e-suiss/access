@@ -4353,3 +4353,434 @@ surface = "account"
 class = "action"
 owner = "identity_plane"
 protected = false
+
+# Stage 12 (OP-157 m.4 (a)): support access, break-glass, the Approval Surface, batch approval, offboarding, reviews and hygiene
+[[message]]
+key = "approval-capacity"
+text_id = "approval.capacity"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-still_needed"
+text_id = "approval.still_needed"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-not_requester"
+text_id = "approval.not_requester"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-different_person"
+text_id = "approval.different_person"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-different_device"
+text_id = "approval.different_device"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-different_app"
+text_id = "approval.different_app"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-counts_as_one"
+text_id = "approval.counts_as_one"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-not_eligible"
+text_id = "approval.not_eligible"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-unfaithful"
+text_id = "approval.unfaithful"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-changed"
+text_id = "approval.changed"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-does"
+text_id = "approval.does"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-does_not"
+text_id = "approval.does_not"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-requester_note"
+text_id = "approval.requester_note"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-reversible"
+text_id = "approval.reversible"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-irreversible"
+text_id = "approval.irreversible"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-confirm_passkey"
+text_id = "approval.confirm_passkey"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-confirm_security_key"
+text_id = "approval.confirm_security_key"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-body_mismatch"
+text_id = "approval.body_mismatch"
+surface = "login"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "approval-batch_title"
+text_id = "approval.batch_title"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-give_title"
+text_id = "support.give_title"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-give_terms"
+text_id = "support.give_terms"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-give_access"
+text_id = "action.give_access"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-declined"
+text_id = "support.declined"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "breakglass-sso_refused"
+text_id = "breakglass.sso_refused"
+surface = "login"
+class = "auth_failed"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-title"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-intro"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-active"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-ended"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-revoked"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-revoke"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-none"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-requests_title"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-request"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-decline"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-block"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-block_on"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-standing"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-read_only"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-artifacts_title"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-artifact_redacted"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "support-artifact_refused"
+surface = "account"
+class = "remediation"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "activity-support_by"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "change-support_granted"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-support_ended"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-support_revoked"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-breakglass_used"
+surface = "hub"
+class = "notice"
+owner = "access"
+protected = true
+
+[[message]]
+key = "change-role_ended"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-direct_grants_stay"
+surface = "hub"
+class = "info"
+owner = "access"
+protected = false
+
+[[message]]
+key = "hygiene-unused"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "hygiene-expiring"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "hygiene-broad"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "hygiene-suggestion"
+surface = "hub"
+class = "info"
+owner = "access"
+protected = false
+
+[[message]]
+key = "review-open"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "mail-support_access_request-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-support_access_notice-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-breakglass_used-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-breakglass_alarm-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-review_campaign-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false

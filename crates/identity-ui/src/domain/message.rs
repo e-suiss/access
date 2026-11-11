@@ -489,11 +489,83 @@ pub enum TextId {
     /// P1: Access cannot be reached and the host's saved sign-in has run out; refused (MD-8).
     #[serde(rename = "linux.unavailable")]
     LinuxUnavailable,
+    /// V6: the capacity the approver approves in (OP-157 m.3 (l)).
+    #[serde(rename = "approval.capacity")]
+    ApprovalCapacity,
+    /// V6: what the request still needs after this approval.
+    #[serde(rename = "approval.still_needed")]
+    ApprovalStillNeeded,
+    /// V6: a requirement term that excludes the requester.
+    #[serde(rename = "approval.not_requester")]
+    ApprovalNotRequester,
+    /// V6: a requirement term that needs a different Party.
+    #[serde(rename = "approval.different_person")]
+    ApprovalDifferentPerson,
+    /// V6: a requirement term that needs a different Instance.
+    #[serde(rename = "approval.different_device")]
+    ApprovalDifferentDevice,
+    /// V6, V7: a requirement term that needs a different approval surface.
+    #[serde(rename = "approval.different_app")]
+    ApprovalDifferentApp,
+    /// V6: approvals of one Party, or a threshold shown as one identity, count once (OP-157 m.3 (l)).
+    #[serde(rename = "approval.counts_as_one")]
+    ApprovalCountsAsOne,
+    /// V6: the viewer is not in the eligible set; only what it may see is listed (E26).
+    #[serde(rename = "approval.not_eligible")]
+    ApprovalNotEligible,
+    /// V6: the schema or its version is not accepted (E10).
+    #[serde(rename = "approval.unfaithful")]
+    ApprovalUnfaithful,
+    /// V6: the intent changed after the approval (L14).
+    #[serde(rename = "approval.changed")]
+    ApprovalChanged,
+    /// V6: the effect class section.
+    #[serde(rename = "approval.does")]
+    ApprovalDoes,
+    /// V6: what the effect class leaves out.
+    #[serde(rename = "approval.does_not")]
+    ApprovalDoesNot,
+    /// V6: agent or requester text, shown second and never as the approval (E32).
+    #[serde(rename = "approval.requester_note")]
+    ApprovalRequesterNote,
+    /// V6: the action is reversible.
+    #[serde(rename = "approval.reversible")]
+    ApprovalReversible,
+    /// V6: the action is irreversible.
+    #[serde(rename = "approval.irreversible")]
+    ApprovalIrreversible,
+    /// V6: the concrete assurance action for a passkey (OP-157 m.3 (l)).
+    #[serde(rename = "approval.confirm_passkey")]
+    ApprovalConfirmPasskey,
+    /// V6: the concrete assurance action for a security key.
+    #[serde(rename = "approval.confirm_security_key")]
+    ApprovalConfirmSecurityKey,
+    /// V6: the pushed body digest does not match the intent (PI-17).
+    #[serde(rename = "approval.body_mismatch")]
+    ApprovalBodyMismatch,
+    /// V7: a CT1 batch of at most 10 requests, each shown (OP-157 m.3 (m)).
+    #[serde(rename = "approval.batch_title")]
+    ApprovalBatchTitle,
+    /// V2: the person gives support access on their own page; the verb is give, not approve (OP-157 m.3 (f)).
+    #[serde(rename = "support.give_title")]
+    SupportGiveTitle,
+    /// V2: what the support access allows and never allows.
+    #[serde(rename = "support.give_terms")]
+    SupportGiveTerms,
+    /// V2: gives the support access.
+    #[serde(rename = "action.give_access")]
+    GiveAccess,
+    /// V2: the person declined.
+    #[serde(rename = "support.declined")]
+    SupportDeclined,
+    /// V3: a break-glass account never signs in through SSO or an upstream provider (OP-157 m.3 (h)).
+    #[serde(rename = "breakglass.sso_refused")]
+    BreakglassSsoRefused,
 }
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 161] = [
+    pub const ALL: [Self; 185] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -655,6 +727,30 @@ impl TextId {
         Self::LinuxPending,
         Self::LinuxStepUp,
         Self::LinuxUnavailable,
+        Self::ApprovalCapacity,
+        Self::ApprovalStillNeeded,
+        Self::ApprovalNotRequester,
+        Self::ApprovalDifferentPerson,
+        Self::ApprovalDifferentDevice,
+        Self::ApprovalDifferentApp,
+        Self::ApprovalCountsAsOne,
+        Self::ApprovalNotEligible,
+        Self::ApprovalUnfaithful,
+        Self::ApprovalChanged,
+        Self::ApprovalDoes,
+        Self::ApprovalDoesNot,
+        Self::ApprovalRequesterNote,
+        Self::ApprovalReversible,
+        Self::ApprovalIrreversible,
+        Self::ApprovalConfirmPasskey,
+        Self::ApprovalConfirmSecurityKey,
+        Self::ApprovalBodyMismatch,
+        Self::ApprovalBatchTitle,
+        Self::SupportGiveTitle,
+        Self::SupportGiveTerms,
+        Self::GiveAccess,
+        Self::SupportDeclined,
+        Self::BreakglassSsoRefused,
     ];
 
     /// The stable id on the wire.
@@ -823,6 +919,30 @@ impl TextId {
             Self::LinuxPending => "linux.signin_pending",
             Self::LinuxStepUp => "linux.step_up",
             Self::LinuxUnavailable => "linux.unavailable",
+            Self::ApprovalCapacity => "approval.capacity",
+            Self::ApprovalStillNeeded => "approval.still_needed",
+            Self::ApprovalNotRequester => "approval.not_requester",
+            Self::ApprovalDifferentPerson => "approval.different_person",
+            Self::ApprovalDifferentDevice => "approval.different_device",
+            Self::ApprovalDifferentApp => "approval.different_app",
+            Self::ApprovalCountsAsOne => "approval.counts_as_one",
+            Self::ApprovalNotEligible => "approval.not_eligible",
+            Self::ApprovalUnfaithful => "approval.unfaithful",
+            Self::ApprovalChanged => "approval.changed",
+            Self::ApprovalDoes => "approval.does",
+            Self::ApprovalDoesNot => "approval.does_not",
+            Self::ApprovalRequesterNote => "approval.requester_note",
+            Self::ApprovalReversible => "approval.reversible",
+            Self::ApprovalIrreversible => "approval.irreversible",
+            Self::ApprovalConfirmPasskey => "approval.confirm_passkey",
+            Self::ApprovalConfirmSecurityKey => "approval.confirm_security_key",
+            Self::ApprovalBodyMismatch => "approval.body_mismatch",
+            Self::ApprovalBatchTitle => "approval.batch_title",
+            Self::SupportGiveTitle => "support.give_title",
+            Self::SupportGiveTerms => "support.give_terms",
+            Self::GiveAccess => "action.give_access",
+            Self::SupportDeclined => "support.declined",
+            Self::BreakglassSsoRefused => "breakglass.sso_refused",
         }
     }
 
@@ -1065,12 +1185,50 @@ impl TextId {
             Self::LinuxUnavailable => {
                 "Access can't be reached and this computer's saved sign-in has run out. Try again when it's online."
             }
+            Self::ApprovalCapacity => "You approve as: { $capacity }",
+            Self::ApprovalStillNeeded => "Still needed: { $needed }",
+            Self::ApprovalNotRequester => "not the requester",
+            Self::ApprovalDifferentPerson => "a different person",
+            Self::ApprovalDifferentDevice => "a different device",
+            Self::ApprovalDifferentApp => "a different approval app",
+            Self::ApprovalCountsAsOne => "These count as one approval",
+            Self::ApprovalNotEligible => {
+                "You can't approve this. Eligible: { $eligible } ({ $count })"
+            }
+            Self::ApprovalUnfaithful => {
+                "This request can't be displayed faithfully here; it can't be approved from this surface"
+            }
+            Self::ApprovalChanged => {
+                "The request changed after you approved; your approval no longer applies"
+            }
+            Self::ApprovalDoes => "What this does",
+            Self::ApprovalDoesNot => "What this doesn't do",
+            Self::ApprovalRequesterNote => "Requester's note",
+            Self::ApprovalReversible => "This can be undone",
+            Self::ApprovalIrreversible => "This can't be undone",
+            Self::ApprovalConfirmPasskey => "Confirm with your passkey",
+            Self::ApprovalConfirmSecurityKey => "Confirm with your security key",
+            Self::ApprovalBodyMismatch => {
+                "The details sent with this request don't match it. It can't be approved."
+            }
+            Self::ApprovalBatchTitle => "Approve these { $count } requests",
+            Self::SupportGiveTitle => "Give { $organization } access",
+            Self::SupportGiveTerms => {
+                "{ $what } · case { $case } · for { $minutes } minutes · can't change sign-in methods, payments or email · can't pass on"
+            }
+            Self::GiveAccess => "Give access",
+            Self::SupportDeclined => "You didn't give access. Nothing changed.",
+            Self::BreakglassSsoRefused => "This account signs in only with its own security key.",
         }
     }
 
     /// Whether the text may be shown before the first factor succeeds: it must say nothing
     /// about whether an account exists or what state it is in (X34, XI-24).
     #[must_use]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one arm listing the ids shown after sign-in"
+    )]
     pub const fn pre_auth(self) -> bool {
         !matches!(
             self,
@@ -1166,6 +1324,30 @@ impl TextId {
                 | Self::SshRequest
                 | Self::SshApproved
                 | Self::LinuxStepUp
+                | Self::ApprovalCapacity
+                | Self::ApprovalStillNeeded
+                | Self::ApprovalNotRequester
+                | Self::ApprovalDifferentPerson
+                | Self::ApprovalDifferentDevice
+                | Self::ApprovalDifferentApp
+                | Self::ApprovalCountsAsOne
+                | Self::ApprovalNotEligible
+                | Self::ApprovalUnfaithful
+                | Self::ApprovalChanged
+                | Self::ApprovalDoes
+                | Self::ApprovalDoesNot
+                | Self::ApprovalRequesterNote
+                | Self::ApprovalReversible
+                | Self::ApprovalIrreversible
+                | Self::ApprovalConfirmPasskey
+                | Self::ApprovalConfirmSecurityKey
+                | Self::ApprovalBodyMismatch
+                | Self::ApprovalBatchTitle
+                | Self::SupportGiveTitle
+                | Self::SupportGiveTerms
+                | Self::GiveAccess
+                | Self::SupportDeclined
+                | Self::BreakglassSsoRefused
         )
     }
 }

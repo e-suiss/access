@@ -72,4 +72,6 @@ keys = [
   "root-sole_confirm",
   "hub-owner",
   "aftermath-recorded_at",
+  "activity-support_by",
+  "change-breakglass_used",
 ]
