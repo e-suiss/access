@@ -95,6 +95,7 @@ fn output(child: &mut Child) -> String {
 
 // OP-94, OP-158 m.3 (y), SAI-45
 #[test]
+#[ignore = "the signer applies its lockdown at start, which needs root: just test-signer-shutdown"]
 fn sigterm_closes_the_token_in_order() {
     let dir = std::env::temp_dir().join(format!("ais-proc-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
