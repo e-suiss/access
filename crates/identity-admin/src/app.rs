@@ -1652,8 +1652,26 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-157 m.3 (w)
             Change::Review(r) => review::write(t, bound, r).await?,
             // OP-157 m.4 (a)
-            Change::ApprovalInline(_) | Change::ApprovalBatch(_) => {
-                return Err(Invalid::NotYetServed.into());
+            // OP-157 m.3 (m)
+            Change::ApprovalInline(on) => {
+                access_store::approvals::put_approval_channel(
+                    t,
+                    bound,
+                    access_store::approvals::ApprovalChannel::Inline,
+                    *on,
+                )
+                .await?;
+                true
+            }
+            Change::ApprovalBatch(on) => {
+                access_store::approvals::put_approval_channel(
+                    t,
+                    bound,
+                    access_store::approvals::ApprovalChannel::Batch,
+                    *on,
+                )
+                .await?;
+                true
             }
             Change::ClientRegister(c) | Change::ClientUpdate(c) => {
                 let (done, s) = self

@@ -1782,7 +1782,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "registerCaseSystem" => (ResourceKind::CaseSystems, CREATE),
         "retireCaseSystem" => (ResourceKind::CaseSystems, w(false)),
         "listSupportGrants" => (ResourceKind::SupportGrants, Shape::Planned("Page")),
-        "putApprovalInline" | "putApprovalBatch" => (Settings, Shape::Planned("WriteResult")),
+        // OP-157 m.3 (m)
+        "putApprovalInline" | "putApprovalBatch" => (Settings, w(true)),
         // OP-157 m.3 (h)
         "listBreakglassAccounts" => (ResourceKind::BreakglassAccounts, Shape::List(&[])),
         "markBreakglassAccount" => (ResourceKind::BreakglassAccounts, CREATE),

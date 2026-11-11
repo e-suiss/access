@@ -2643,9 +2643,10 @@ impl Change {
             }
             // OP-157 m.3 (w)
             Self::Review(r) => r.check(),
-            // OP-157 m.4 (a)
-            Self::ApprovalInline(_) | Self::ApprovalBatch(_) => Err(Invalid::NotYetServed),
-            Self::DelegatedAdmin(_)
+            // OP-157 m.3 (m)
+            Self::ApprovalInline(_)
+            | Self::ApprovalBatch(_)
+            | Self::DelegatedAdmin(_)
             | Self::AccountBind(_)
             | Self::Breakglass(_)
             | Self::BreakglassReview(_)

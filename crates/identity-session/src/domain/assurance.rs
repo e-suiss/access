@@ -108,7 +108,7 @@ pub const fn fal(p: Presentation) -> Fal {
     }
 }
 
-/// How phishing resistance was proven (§10.3.1). Only these two paths set the flag.
+/// How phishing resistance was proven (§10.3.1, OP-157 m.3 (m)).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PhishingProof {
@@ -116,6 +116,9 @@ pub enum PhishingProof {
     ChannelBinding,
     /// Verifier name binding: the WebAuthn origin and RP ID.
     VerifierNameBinding,
+    /// Statement binding: a registered approver key signed H(AAS) of the exact render the
+    /// Kernel rebuilt on the device (SEC26, OP-157 m.3 (m)); there is no page to phish.
+    StatementBinding,
 }
 
 /// Key binding strength (§10.2, IDP-8).
@@ -339,6 +342,25 @@ impl Factor {
             replay_resistant: true,
             app_controlled: true,
             credential: Some(approver),
+            ..Self::base(
+                MethodClass::AppControlled,
+                vec![FactorKind::Possession, FactorKind::Knowledge],
+                at_ms,
+            )
+        }
+    }
+
+    /// An activated approver key's signature over H(AAS) in a notification (§13.7.3, SEC26,
+    /// OP-157 m.3 (m)): a present human behind the app's own PIN, statement bound, hardware
+    /// bound, without UV, so it reaches CT1 and no higher.
+    #[must_use]
+    pub fn approver_statement(approver: [u8; 16], at_ms: u64) -> Self {
+        Self {
+            credential: Some(approver),
+            phishing: Some(PhishingProof::StatementBinding),
+            binding: BindingStrength::DeviceBound,
+            human_presence: true,
+            replay_resistant: true,
             ..Self::base(
                 MethodClass::AppControlled,
                 vec![FactorKind::Possession, FactorKind::Knowledge],
@@ -668,6 +690,16 @@ mod tests {
         assert!(!v.phishing_resistant);
         assert_eq!(v.auth_time_ms, T + 5);
         assert_eq!(ct_ceiling(&f), CtCeiling::None);
+    }
+
+    // SEC26, §13.7.3, OP-157 m.3 (m)
+    #[test]
+    fn an_approver_statement_reaches_ct1_and_no_higher() {
+        let f = [Factor::approver_statement([7; 16], T)];
+        let v = vector(&f);
+        assert!(v.phishing_resistant && v.human_presence && v.hardware_bound);
+        assert!(!v.uv);
+        assert_eq!(ct_ceiling(&f), CtCeiling::Ct1);
     }
 
     // §10.3.1, OP-146 m.9 (c), IDP-8

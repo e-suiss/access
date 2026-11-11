@@ -19,6 +19,7 @@ use access_kernel::meta::{self, Actor, ContributionState, InstanceState, Payload
 use access_kernel::model::ProofKind;
 use access_kernel::requirement::Proof;
 use access_kernel::tier::Tier;
+use suiss_crypto::dcbor::Value;
 use suiss_crypto::dcbor::{self, Limits};
 
 use crate::CoreError;
@@ -111,6 +112,10 @@ fn unbound(proofs: &[Proof], actor: Actor, statement: Digest) -> Vec<BindingFace
     facets
 }
 
+/// A statement from a surface the domain does not accept (§13.7.3, OP-157 m.3 (m)).
+const SURFACE_NOT_ACCEPTED: &str = "approval-surface-not-accepted";
+/// The policy default that names the accepted surfaces (OP-157 m.3 (n)).
+const APPROVAL_SURFACES: &str = "approval_surfaces";
 /// What the approver's act established, written to the contribution's state.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Approved {
@@ -145,6 +150,20 @@ fn protocol(e: aas::AasError) -> CoreError {
 }
 
 impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
+    /// Whether the domain's `approval_surfaces` policy default accepts `profile`; the default
+    /// is the hosted page and the approver SDK (OP-157 m.3 (m), (n)).
+    async fn surface_accepted(&self, profile: &str) -> Result<bool, CoreError> {
+        let mut snap = Snapshot::default();
+        let key = meta::policy_default_key(APPROVAL_SURFACES);
+        Ok(match self.get(&mut snap, &key).await? {
+            Some(Value::Array(items)) => items
+                .iter()
+                .any(|v| matches!(v, Value::Text(t) if t == profile)),
+            Some(_) => false,
+            None => meta::APPROVAL_SURFACES_DEFAULT.contains(&profile),
+        })
+    }
+
     async fn instance_key(
         &self,
         instance: &access_kernel::model::Id,
@@ -299,6 +318,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let (act, h) = self.statement(bytes, actor, &expected).await?;
         if act.act != Act::Contribution(class.clone()) {
             return Err(CoreError::Protocol("aas-act"));
+        }
+        // §13.7.3, OP-157 m.3 (m)
+        if !self.surface_accepted(&act.surface_profile).await? {
+            return Err(CoreError::Protocol(SURFACE_NOT_ACCEPTED));
         }
         fits(&act, actor, req, tier)?;
         // SI-5
