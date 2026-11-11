@@ -1,0 +1,20 @@
+{
+  "cases": [
+    {
+      "cbor": "a66261741b0000019b76d26aa063736571006463656c6c6465752d3164707265765820000000000000000000000000000000000000000000000000000000000000000066616374696f6e7373657373696f6e5f65706f63685f666c6f6f7268646f63756d656e7458200e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e",
+      "edn": "{\"seq\": 0, \"at\": 1767225060000, \"cell\": \"eu-1\", \"action\": \"session_epoch_floor\", \"document\": h'0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e', \"prev\": h'0000000000000000000000000000000000000000000000000000000000000000'}",
+      "id": "first",
+      "valid": true
+    },
+    {
+      "cbor": "a66261741b0000019b76d291b063736571016463656c6c6465752d31647072657658200f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f66616374696f6e656472696c6c68646f63756d656e7458200e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e",
+      "edn": "{\"seq\": 1, \"at\": 1767225070000, \"cell\": \"eu-1\", \"action\": \"drill\", \"document\": h'0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e', \"prev\": h'0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f'}",
+      "id": "drill",
+      "valid": true
+    }
+  ],
+  "cddl": [
+    "breakglass-directive.cddl"
+  ],
+  "contract": "breakglass-trail-entry"
+}

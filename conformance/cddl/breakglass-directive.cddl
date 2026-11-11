@@ -1,0 +1,65 @@
+; Operator break-glass, version 1 (RFC 8610; OP-157 m.3 (j), OP-46, CMP-25, G63, §17.7.3).
+; Deterministic CBOR (RFC 8949 §4.2.1). `access-breakglass` verifies the operator offline,
+; against the cell's pre-distributed keys, and writes a signed directive file into the cell's
+; ops directory (`ops/directives/<seq>.cbor`). `access-server` reads directives; none produces
+; an authority decision or touches authority state or user data. Times are Unix milliseconds.
+
+; The short-lived M-of-N document the operators sign (default 2-of-3 Ed25519).
+breakglass-document = {
+  cell: cell-id,
+  ops: [+ breakglass-op],           ; sorted, without repeats
+  nonce: bstr .size 32,             ; from the RNG; a used nonce is refused
+  not_before: uint,
+  not_after: uint,                  ; at most 15 minutes after not_before
+  key_set: bstr .size 32,           ; SHA-256 of the cell's key set; a new set after every use
+}
+
+breakglass-op = "config_read" / "health" / "feature_flag" / "session_epoch_floor" / "leader_unhealthy"
+
+; The document and its proof: M-of-N Ed25519 signatures over the dCBOR bytes of the document,
+; or one FIDO2 assertion whose challenge is the SHA-256 of those bytes.
+signed-breakglass-document = {
+  document: breakglass-document,
+  ? signatures: [2* operator-signature],
+  ? fido2: fido2-assertion,
+}
+
+operator-signature = {
+  key: bstr .size 32,               ; the Ed25519 public key, one of the cell's
+  sig: bstr .size 64,
+}
+
+fido2-assertion = {
+  credential: bstr .size (16..1023),
+  authenticator_data: bstr .size (37..1024),
+  client_data_json: bstr .size (1..4096),
+  sig: bstr .size (8..256),         ; ES256 (DER) or Ed25519
+}
+
+; One directive file. The server checks the authorization against the cell's keys before it
+; applies the operation, caches directives for at most one second, and ignores a directive whose
+; document has expired.
+breakglass-directive = {
+  cell: cell-id,
+  seq: uint,                        ; strictly increasing per cell
+  issued_at: uint,
+  op: directive-op,
+  authorization: signed-breakglass-document,
+}
+
+directive-op = { session_epoch_floor: uint }                       ; max(epoch, floor) on every check
+  / { leader_unhealthy: { leader: tstr .size (1..255), until: uint } } ; the leader gives up its lease
+  / { feature_flag: { flag: flag-name, on: bool } }
+
+; One link of the local append-only trail; hash = SHA-256(dCBOR(trail-entry)).
+breakglass-trail-entry = {
+  seq: uint,
+  at: uint,
+  cell: cell-id,
+  action: breakglass-op / "drill" / "rotation",
+  document: bstr .size 32,          ; SHA-256 of the signed document's dCBOR bytes
+  prev: bstr .size 32,              ; the previous entry's hash; 32 zero bytes for the first
+}
+
+cell-id = tstr .regexp "[a-z0-9][a-z0-9-]{0,62}"
+flag-name = tstr .regexp "[a-z][a-z0-9_]{0,62}"

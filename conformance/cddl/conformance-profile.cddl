@@ -1,0 +1,18 @@
+; Access conformance profile, version 1 (RFC 8610; OP-157 m.3 (s), §9.1 L3, P2).
+;
+; A profile is data (`conformance/profiles/<name>.toml`): what an implementation of one role
+; must pass. `access-pep-conformance --profile <name>` runs it. Every name it lists must exist
+; in this repository. Passing a profile is conformance, not endorsement. The JSON form is
+; `conformance-profile.schema.json`; both describe the same value.
+
+conformance-profile = {
+  v: 1,
+  profile: "provider" / "decision-pep" / "offline-verifier" / "approval-surface"
+    / "claim-issuer" / "schema-publisher" / "coordinator" / "event-receiver",
+  title: tstr .size (1..128),
+  ? shared_with: [+ tstr .regexp "[a-z][a-z0-9-]{0,31}"],   ; other Suiss products, e.g. "work"
+  vectors: [* tstr .regexp "[a-z][a-z0-9_-]{0,62}/[0-9]{1,3}"], ; track/version under vectors/
+  pep_cases: [* tstr .regexp "[a-z0-9][a-z0-9_-]{0,127}"],    ; case ids under pep/
+  cddl: [* tstr .regexp "[a-z][a-z0-9-]{0,62}\\.cddl"],       ; files under cddl/
+  ? metadata_signature: bool,       ; Domain Metadata is verified against the domain root
+}

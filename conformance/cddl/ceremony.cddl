@@ -1,0 +1,45 @@
+; Binding key ceremony, version 1 (RFC 8610; OP-157 m.3 (x), CR-29, §10.1.7).
+; Deterministic CBOR (RFC 8949 §4.2.1). `access-signer` performs a binding key operation only
+; under a permit k-of-n ceremony keys signed (default 2-of-3). Every ceremony step is a link of
+; a hash-chained, signed transcript. Times are Unix milliseconds.
+
+ceremony-permit = {
+  op: "sign" / "rotate" / "retire",
+  key: tstr .size (1..255),         ; the binding key id
+  digest: bstr .size 32,            ; SHA-256 of what the operation covers
+  nonce: bstr .size 32,             ; from the RNG; single use
+  not_after: uint,                  ; at most 15 minutes after the first approval
+}
+
+; The permit and its approvals over the permit's dCBOR bytes: Ed25519 or a FIDO2 assertion whose
+; challenge is the SHA-256 of those bytes.
+signed-ceremony-permit = {
+  permit: ceremony-permit,
+  approvals: [2* ceremony-approval],
+}
+
+ceremony-approval = { ed25519: { key: bstr .size 32, sig: bstr .size 64 } }
+  / { fido2: {
+      credential: bstr .size (16..1023),
+      authenticator_data: bstr .size (37..1024),
+      client_data_json: bstr .size (1..4096),
+      sig: bstr .size (8..256),
+    } }
+
+; One transcript link (`init`, `approve`, `sign`, `close`); hash = SHA-256(dCBOR(entry)).
+ceremony-transcript-entry = {
+  seq: uint,
+  at: uint,
+  ceremony: bstr .size 16,
+  step: "init" / "approve" / "sign" / "close",
+  ? permit: bstr .size 32,          ; SHA-256 of the permit's dCBOR bytes
+  ? approver: bstr .size 32,        ; the ceremony public key or credential digest
+  prev: bstr .size 32,              ; 32 zero bytes for the first
+}
+
+; A transcript link and the signature of the key that wrote it.
+signed-ceremony-transcript-entry = {
+  entry: ceremony-transcript-entry,
+  key: bstr .size 32,
+  sig: bstr .size 64,
+}

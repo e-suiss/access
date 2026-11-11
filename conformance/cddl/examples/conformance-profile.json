@@ -1,0 +1,62 @@
+{
+  "cases": [
+    {
+      "cbor": "a7617601646364646c826b6b65726e656c2e6364646c706578706c616e6174696f6e2e6364646c657469746c656c4465636973696f6e205045506770726f66696c656c6465636973696f6e2d70657067766563746f72738166636f72652f31697065705f636173657380726d657461646174615f7369676e6174757265f5",
+      "edn": "{\"v\": 1, \"profile\": \"decision-pep\", \"title\": \"Decision PEP\", \"vectors\": [\"core/1\"], \"pep_cases\": [], \"cddl\": [\"kernel.cddl\", \"explanation.cddl\"], \"metadata_signature\": true}",
+      "id": "decision-pep",
+      "json": {
+        "cddl": [
+          "kernel.cddl",
+          "explanation.cddl"
+        ],
+        "metadata_signature": true,
+        "pep_cases": [],
+        "profile": "decision-pep",
+        "title": "Decision PEP",
+        "v": 1,
+        "vectors": [
+          "core/1"
+        ]
+      },
+      "valid": true
+    },
+    {
+      "cbor": "a7617601646364646c816b6b65726e656c2e6364646c657469746c6570417070726f76616c20537572666163656770726f66696c6570617070726f76616c2d7375726661636567766563746f727380697065705f6361736573806b7368617265645f776974688164776f726b",
+      "edn": "{\"v\": 1, \"profile\": \"approval-surface\", \"title\": \"Approval Surface\", \"shared_with\": [\"work\"], \"vectors\": [], \"pep_cases\": [], \"cddl\": [\"kernel.cddl\"]}",
+      "id": "approval-surface-shared",
+      "json": {
+        "cddl": [
+          "kernel.cddl"
+        ],
+        "pep_cases": [],
+        "profile": "approval-surface",
+        "shared_with": [
+          "work"
+        ],
+        "title": "Approval Surface",
+        "v": 1,
+        "vectors": []
+      },
+      "valid": true
+    },
+    {
+      "cbor": "",
+      "edn": "{\"v\": 1, \"profile\": \"certified\", \"title\": \"Certified\", \"vectors\": [], \"pep_cases\": [], \"cddl\": []}",
+      "id": "unknown-role",
+      "json": {
+        "cddl": [],
+        "pep_cases": [],
+        "profile": "certified",
+        "title": "Certified",
+        "v": 1,
+        "vectors": []
+      },
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "conformance-profile.cddl"
+  ],
+  "contract": "conformance-profile",
+  "schema": "conformance-profile.schema.json"
+}

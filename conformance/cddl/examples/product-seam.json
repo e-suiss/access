@@ -107,6 +107,36 @@
       "edn": "[\"credit_score\", {\"score\": 700}]",
       "id": "unknown-class",
       "valid": false
+    },
+    {
+      "cbor": "826c737570706f72745f63617365a4646361736558200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a646f70656ef5677375626a65637450010101010101010101010101010101016d6f70657261746f725f7465616d6c61636d652e737570706f7274",
+      "edn": "[\"support_case\", {\"case\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"subject\": h'01010101010101010101010101010101', \"open\": true, \"operator_team\": \"acme.support\"}]",
+      "id": "support-case-open",
+      "valid": true
+    },
+    {
+      "cbor": "826c737570706f72745f63617365a3646361736558200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a646f70656ef4677375626a6563745001010101010101010101010101010101",
+      "edn": "[\"support_case\", {\"case\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"subject\": h'01010101010101010101010101010101', \"open\": false}]",
+      "id": "support-case-closed",
+      "valid": true
+    },
+    {
+      "cbor": "",
+      "edn": "[\"support_case\", {\"case\": \"Customer cannot log in\", \"subject\": h'01010101010101010101010101010101', \"open\": true}]",
+      "id": "support-case-free-text",
+      "valid": false
+    },
+    {
+      "cbor": "826b636f7572745f6f72646572a4656f7264657258200c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c6573636f706581726964702e6163636f756e742e6578706f727465756e74696c1b0000019c115970006c6a7572697364696374696f6e625452",
+      "edn": "[\"court_order\", {\"order\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c', \"jurisdiction\": \"TR\", \"scope\": [\"idp.account.export\"], \"until\": 1769817600000}]",
+      "id": "court-order",
+      "valid": true
+    },
+    {
+      "cbor": "82716f776e6572736869705f6368616e676564a462746f50040404040404040404040404040404046466726f6d500303030303030303030303030303030366616e63686f7250020202020202020202020202020202026c6566666563746976655f61741b0000019b76d18040",
+      "edn": "[\"ownership_changed\", {\"anchor\": h'02020202020202020202020202020202', \"from\": h'03030303030303030303030303030303', \"to\": h'04040404040404040404040404040404', \"effective_at\": 1767225000000}]",
+      "id": "ownership-changed",
+      "valid": true
     }
   ],
   "cddl": [

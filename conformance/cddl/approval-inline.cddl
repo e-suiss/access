@@ -1,0 +1,14 @@
+; In-notification approval answer, version 1 (RFC 8610; OP-157 m.3 (m), §13.7.3, SEC26).
+; Deterministic CBOR (RFC 8949 §4.2.1). Only for CT1 and only where the realm turned on
+; `idp.realm.approval_inline`. The `approval_inline` Relay body carries the whole canonical
+; render to the registered approver device; the approver SDK renders again with the Kernel,
+; compares `render_digest`, and signs H(AAS) with its device key (ES256 over the dCBOR bytes of
+; this map). The names this file does not define are those of kernel.cddl.
+
+approval-inline-answer = {
+  invite: bstr .size 32,            ; the invite id from the body; single use
+  decision: "approve" / "deny",
+  ? aas: approval-act-statement,    ; required to approve; surface.profile "suiss-approver-sdk"
+  render_digest: digest,            ; what the device rendered
+  device_key: bstr .size 32,        ; JWK thumbprint (RFC 7638) of the signing device key
+}

@@ -1,0 +1,32 @@
+{
+  "cases": [
+    {
+      "cbor": "a5626f70a17373657373696f6e5f65706f63685f666c6f6f72182a63736571016463656c6c6465752d31696973737565645f61741b0000019b76d26aa06d617574686f72697a6174696f6ea268646f63756d656e74a6636f7073817373657373696f6e5f65706f63685f666c6f6f726463656c6c6465752d31656e6f6e636558200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a676b65795f73657458200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b696e6f745f61667465721b0000019b76df3be06a6e6f745f6265666f72651b0000019b76d180406a7369676e61747572657382a2636b657958200c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c6373696758405c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5ca2636b657958200d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d6373696758405d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d",
+      "edn": "{\"cell\": \"eu-1\", \"seq\": 1, \"issued_at\": 1767225060000, \"op\": {\"session_epoch_floor\": 42}, \"authorization\": {\"document\": {\"cell\": \"eu-1\", \"ops\": [\"session_epoch_floor\"], \"nonce\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"not_before\": 1767225000000, \"not_after\": 1767225900000, \"key_set\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b'}, \"signatures\": [{\"key\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c', \"sig\": h'5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c'}, {\"key\": h'0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d', \"sig\": h'5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d'}]}}",
+      "id": "epoch-floor",
+      "valid": true
+    },
+    {
+      "cbor": "a5626f70a1706c65616465725f756e6865616c746879a265756e74696c1b0000019b76df3be0666c65616465726f6163636573732d7365727665722d3063736571026463656c6c6465752d31696973737565645f61741b0000019b76d26aa06d617574686f72697a6174696f6ea268646f63756d656e74a6636f7073817373657373696f6e5f65706f63685f666c6f6f726463656c6c6465752d31656e6f6e636558200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a676b65795f73657458200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b696e6f745f61667465721b0000019b76df3be06a6e6f745f6265666f72651b0000019b76d180406a7369676e61747572657382a2636b657958200c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c6373696758405c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5ca2636b657958200d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d6373696758405d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d",
+      "edn": "{\"cell\": \"eu-1\", \"seq\": 2, \"issued_at\": 1767225060000, \"op\": {\"leader_unhealthy\": {\"leader\": \"access-server-0\", \"until\": 1767225900000}}, \"authorization\": {\"document\": {\"cell\": \"eu-1\", \"ops\": [\"session_epoch_floor\"], \"nonce\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"not_before\": 1767225000000, \"not_after\": 1767225900000, \"key_set\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b'}, \"signatures\": [{\"key\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c', \"sig\": h'5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c'}, {\"key\": h'0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d', \"sig\": h'5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d'}]}}",
+      "id": "leader-unhealthy",
+      "valid": true
+    },
+    {
+      "cbor": "",
+      "edn": "{\"cell\": \"eu-1\", \"seq\": 3, \"issued_at\": 1767225060000, \"op\": {\"session_epoch_floor\": 42}, \"authorization\": {\"document\": {\"cell\": \"eu-1\", \"ops\": [\"session_epoch_floor\"], \"nonce\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"not_before\": 1767225000000, \"not_after\": 1767225900000, \"key_set\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b'}, \"signatures\": [{\"key\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c', \"sig\": h'5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c'}]}}",
+      "id": "one-signature",
+      "valid": false
+    },
+    {
+      "cbor": "",
+      "edn": "{\"cell\": \"eu-1\", \"seq\": 4, \"issued_at\": 1767225060000, \"op\": {\"grant_issue\": 1}, \"authorization\": {\"document\": {\"cell\": \"eu-1\", \"ops\": [\"session_epoch_floor\"], \"nonce\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"not_before\": 1767225000000, \"not_after\": 1767225900000, \"key_set\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b'}, \"signatures\": [{\"key\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c', \"sig\": h'5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c'}, {\"key\": h'0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d', \"sig\": h'5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d'}]}}",
+      "id": "authority-write",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "breakglass-directive.cddl"
+  ],
+  "contract": "breakglass-directive"
+}

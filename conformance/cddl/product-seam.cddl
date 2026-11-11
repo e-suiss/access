@@ -1,5 +1,5 @@
 ; Product seam Claim classes outside the Kernel table, version 1 (RFC 8610; OP-156 m.3 (b),
-; (f), (k), (r), (t), (u)). Deterministic CBOR (RFC 8949 §4.2.1).
+; (f), (k), (r), (t), (u), OP-157 m.3 (e), (i)). Deterministic CBOR (RFC 8949 §4.2.1).
 ; A product, a signal source or an operator issues these Claims under its own issuer key; their
 ; effect comes only from the domain's Acceptance (§7.9.10.3, PI-3, E38). A class with a body
 ; carries in the Claim's `value` the digest
@@ -17,7 +17,10 @@ product-seam-claim = ["commitment_active", commitment-active] /
   ["resource_lifecycle", resource-lifecycle] /
   ["pay_limit", pay-limit] /
   ["funds_available", funds-available] /
-  ["discovered_app", discovered-app]
+  ["discovered_app", discovered-app] /
+  ["support_case", support-case] /
+  ["court_order", court-order] /
+  ["ownership_changed", ownership-changed]
 
 ; A Work commitment a commitment-scoped Grant is held under (`WhileCondition::ClaimHeld`,
 ; OP-156 m.3 (t)). An affirmative `false` ends the Grant; a later `true` never revives it (E14).
@@ -119,6 +122,34 @@ discovered-app = {
   ? name: tstr .size (1..512),
   ? principal: tstr .size (1..512), ; whose access it is in the service
   scopes: [* tstr],
+}
+
+; OP-157 m.3 (e): a support case from a registered case system (`idp.support.case_system_register`),
+; accepted as `predicate-input`. A support Grant is held while it is open
+; (`WhileCondition::ClaimHeld`); closed, missing or stale, every support Exercise is denied.
+support-case = {
+  case: digest,                     ; the PurposeRef::Case digest of (system, case id)
+  subject: bstr .size 16,           ; the Party the case is about
+  open: bool,
+  ? operator_team: ref,
+}
+
+; OP-157 m.3 (i): a court order a legal-process Grant is held under; never authority by itself
+; (CI-13).
+court-order = {
+  order: digest,                    ; digest of the order reference
+  jurisdiction: tstr .regexp "[A-Z]{2}",
+  scope: [+ ref],
+  until: uint,                      ; Unix milliseconds
+}
+
+; OP-157 m.3 (i): a change of legal ownership from a Money or Pay issuer, the condition of a
+; pre-written `anchor.transfer` Grant; Access never asserts ownership (CI-13).
+ownership-changed = {
+  anchor: bstr .size 16,
+  from: bstr .size 16,              ; the previous owner Party
+  to: bstr .size 16,                ; the new owner Party
+  effective_at: uint,               ; Unix milliseconds
 }
 
 ref = tstr .regexp "[a-z0-9][a-z0-9._:-]{0,127}"
