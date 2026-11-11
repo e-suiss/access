@@ -757,3 +757,161 @@ async fn revoking_support_ends_only_the_operators_access_and_every_use_names_the
         "the person's own Instance and key act as before"
     );
 }
+
+const ISSUER: &str = "https://access.test/realms/seams";
+const RS: &str = "https://support.access.test/api";
+
+/// The operator's `projection.issue` of `authority` for [`RS`] in `capacity` on `basis`,
+/// decided and signed by the authority plane over `SoftHSM`.
+async fn token(
+    d: &Desk,
+    operator: &Actor,
+    authority: &CanonicalAuthority,
+    (capacity, basis): (Capacity, ExerciseBasis),
+) -> access_internal_api::projections::TokenProjection {
+    use access_internal_api::projections::{
+        Confirmation, Projections as _, TokenKind, TokenProfile, TokenProjectionRequest,
+    };
+    use access_kernel::validity::{ProfileClass, ProfileVariant};
+    let now = server_time(&d.s.w.db.app).await.unwrap();
+    let mut bounds = authority.clone();
+    bounds.constraints.validity = Window {
+        from: now.max(authority.constraints.validity.from),
+        until: now + 120_000,
+    };
+    let payload = Payload::ProjectionIssue {
+        bounds,
+        audience: BTreeSet::from([String::from(RS)]),
+        class: ProfileClass::Online,
+        variant: ProfileVariant::OnlineStrict,
+        max_staleness_ms: None,
+        offline_slice: None,
+    };
+    let validity = Window {
+        from: now - 60_000,
+        until: now + 600_000,
+    };
+    let intent = self_signed_intent(&payload, operator.party, validity).unwrap();
+    let nonce = access_crypto::random::bytes::<16>().unwrap().to_vec();
+    let ais = Seam::ais(
+        &operator.key,
+        &Statement {
+            domain: d.s.domain,
+            nonce: nonce.clone(),
+            intent: intent_digest(&intent).unwrap(),
+            mode: Mode::Commit,
+            pep: String::from(IDENTITY_PEP),
+            capacity,
+            basis,
+            iat: now,
+            exercise: None,
+        },
+    );
+    let issued =
+        d.s.w
+            .plane
+            .issue(TokenProjectionRequest {
+                domain: d.s.domain,
+                nonce,
+                intent,
+                payload: payload.to_bytes().unwrap(),
+                basis,
+                capacity,
+                ais,
+                pep: String::from(IDENTITY_PEP),
+                issuer: String::from(ISSUER),
+                client_id: String::from("support-console"),
+                kind: TokenKind::Bounds,
+                target: None,
+                confirmation: Confirmation::DpopJkt(thumbprint(&operator.key.public_key())),
+                resources: vec![String::from(RS)],
+                family: None,
+                profile: TokenProfile::default(),
+            })
+            .await
+            .unwrap();
+    schedule(&d.s.signer);
+    issued
+}
+
+// §8.16 #1, §9.9.4, §11.21.3, MD-9, P53, TN-70, TNI-13, L22, OP-157 m.3 (d), Ek B 5430, 5436,
+// 5506
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_support_token_names_the_person_as_subject_and_the_operator_as_act() {
+    use access_internal_api::projections::TokenProjection;
+    let d = Desk::open("support-token").await;
+    let person = d.s.actor().await;
+    let operator = d.s.actor().await;
+    d.state(person.party, "4411", true).await;
+    let give = d
+        .give(
+            &person,
+            operator.party,
+            (Template::Session, &[IdpAction::AccountRead], 30),
+            "4411",
+        )
+        .await;
+    let content = give.grant().unwrap();
+    let basis = d.issue(&person, content.clone()).await.unwrap();
+    // TNI-13, P53
+    let issued = token(
+        &d,
+        &operator,
+        &content.authority,
+        (Capacity::For(person.party), basis),
+    )
+    .await;
+    let TokenProjection::Issued(t) = issued else {
+        panic!("{issued:?}");
+    };
+    let header: Json = serde_json::from_slice(
+        &access_kernel::json::b64url_decode(t.token.split('.').next().unwrap()).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(header["typ"], "at+jwt");
+    let claims: Json = serde_json::from_slice(
+        &access_kernel::json::b64url_decode(t.token.split('.').nth(1).unwrap()).unwrap(),
+    )
+    .unwrap();
+    let act = &claims["act"];
+    assert!(act["sub"].is_string(), "{claims}");
+    assert_ne!(claims["sub"], act["sub"], "{claims}");
+    assert_eq!(details_capacity(&claims), claims["sub"], "{claims}");
+    assert!(
+        act.get("act").is_none(),
+        "support passes on to no one: {claims}"
+    );
+    let details = claims["authorization_details"].as_array().unwrap();
+    assert!(
+        details
+            .iter()
+            .all(|x| x["type"] == "idp.account:read:1" && x["kind"] == "bounds"),
+        "{claims}"
+    );
+    assert_eq!(
+        details[0]["purpose"],
+        json!([{ "case": format!("sha-256:{}", b64url_encode(&d.case("4411").0)) }]),
+        "{claims}"
+    );
+
+    // MD-9, §8.16 #10
+    let own = token(&d, &operator, &content.authority, (Capacity::Own, basis)).await;
+    assert!(!matches!(own, TokenProjection::Issued(_)), "{own:?}");
+    d.state(person.party, "4411", false).await;
+    let closed = token(
+        &d,
+        &operator,
+        &content.authority,
+        (Capacity::For(person.party), basis),
+    )
+    .await;
+    assert!(
+        matches!(&closed, TokenProjection::Denied { decision, .. }
+            if decision.blockers.iter().any(|b| b.subcode.as_deref() == Some(templates::CASE_CLOSED))),
+        "{closed:?}"
+    );
+}
+
+fn details_capacity(claims: &Json) -> Json {
+    claims["authorization_details"][0]["capacity"]["for"].clone()
+}

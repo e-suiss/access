@@ -22,8 +22,8 @@ use access_kernel::codec::Canonical;
 use access_kernel::combinator::{Capacity, HopStatus};
 use access_kernel::digest::Digest;
 use access_kernel::meta::{
-    self, AnchorScope, AnchorState, ContentState, GrantBasis, GrantContent, GrantState, Payload,
-    View, kind,
+    self, AnchorScope, AnchorState, ContentState, ExerciseBasis, GrantBasis, GrantContent,
+    GrantState, Payload, View, kind,
 };
 use access_kernel::model::{
     ActionRef, ActionSet, AuthoritySet, CanonicalAuthority, ConstraintSet, DelegationTerms,
@@ -97,6 +97,10 @@ pub const PASSES_ON: &str = "support-depth";
 
 /// Refused: a support Grant not issued by the person on their own self-anchor (MD-9).
 pub const NOT_OWN: &str = "support-not-own";
+
+/// Refused: a projection of a support Grant whose case is closed, or whose open-case Claim is
+/// missing or stale (OP-157 m.3 (e)).
+pub const CASE_CLOSED: &str = "support-case-closed";
 
 /// Refused: an amendment of a support Grant; a longer one is a new `grant.issue` (§8.16 #5).
 pub const AMENDED: &str = "support-new-consent";
@@ -388,11 +392,17 @@ fn max_minutes(view: &Snapshot) -> Option<u64> {
 
 /// Whether a meta-action may stand as far as support access goes (MD-9, §8.16, OP-157 m.3 (c)):
 /// a new support Grant has the template shape and derives from the self-anchor of the one it
-/// acts for; a support Grant is never amended, nor is a Grant amended into one.
+/// acts for; a support Grant is never amended, nor is a Grant amended into one; a projection on a
+/// support Grant needs its case open now.
 ///
 /// # Errors
 /// The refusal reason.
-pub(crate) fn admissible(view: &Snapshot, payload: &Payload, now: u64) -> Result<(), &'static str> {
+pub(crate) fn admissible(
+    view: &Snapshot,
+    payload: &Payload,
+    basis: ExerciseBasis,
+    now: u64,
+) -> Result<(), &'static str> {
     match payload {
         Payload::GrantIssue(content) if is_support(&content.authority, &content.agency) => {
             shape(content, now, max_minutes(view))?;
@@ -419,6 +429,15 @@ pub(crate) fn admissible(view: &Snapshot, payload: &Payload, now: u64) -> Result
                 Ok(())
             }
         }
+        // OP-157 m.3 (d), (e)
+        Payload::ProjectionIssue { .. } => match basis {
+            ExerciseBasis::Holding(h) => {
+                let held = read::<GrantState>(view, kind::GRANT, &h.grant)
+                    .is_none_or(|g| status(view, &g, Some(now)).is_none());
+                if held { Ok(()) } else { Err(CASE_CLOSED) }
+            }
+            _ => Ok(()),
+        },
         _ => Ok(()),
     }
 }

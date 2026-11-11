@@ -1680,7 +1680,12 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 // EI-5, OP-156 m.3 (t)
                 let admissible = crate::app::commitment::admissible(snapshot, &req.intent, payload);
                 // MD-9, TN-71, OP-157 m.3 (c)
-                let support = crate::app::templates::support::admissible(snapshot, payload, now);
+                let support =
+                    crate::app::templates::support::admissible(snapshot, payload, req.basis, now);
+                let missing_scans = snapshot.missing_scans();
+                if !missing_scans.is_empty() {
+                    return Pass::NeedScans(missing_scans);
+                }
                 let missing = snapshot.missing();
                 if !missing.is_empty() {
                     return Pass::Need(missing);
