@@ -200,11 +200,25 @@ async function eligible(
   }
 }
 
+/**
+ * One round of probes per device Instance and realm (§13.7.4): the check limit counts every
+ * eligibility check of a console session, so a page that sets the same Instance again asks
+ * nothing again.
+ */
+const rounds = new Map<string, Promise<ReadonlySet<Screen>>>();
+
 /** The screens the viewer may see: any probe of the screen answered eligible. */
-export async function visibleScreens(
-  instance: Instance,
-  realm: string,
-): Promise<ReadonlySet<Screen>> {
+export function visibleScreens(instance: Instance, realm: string): Promise<ReadonlySet<Screen>> {
+  const key = `${realm}/${instance.id}`;
+  let round = rounds.get(key);
+  if (round === undefined) {
+    round = probeScreens(instance, realm);
+    rounds.set(key, round);
+  }
+  return round;
+}
+
+async function probeScreens(instance: Instance, realm: string): Promise<ReadonlySet<Screen>> {
   const all = Object.keys(PROBES) as Screen[];
   const probes = new Map<string, Promise<boolean>>();
   let held: Promise<readonly Holding[]> | undefined;

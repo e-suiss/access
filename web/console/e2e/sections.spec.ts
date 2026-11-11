@@ -25,6 +25,21 @@ test("only the screens the viewer can exercise are listed", async ({ page, bff }
   await expect(page.getByRole("heading", { level: 2, name: "Sign-in settings" })).toBeVisible();
 });
 
+// IA-5, §13.7.4: a session's check limit counts every probe, so each is asked once per device
+test("each screen's probe is asked once however often the page sets the device", async ({
+  page,
+  bff,
+}) => {
+  await open(page, bff, "/console/admin/roles", ["idp.realm/branding"]);
+  await expect(page.getByRole("heading", { level: 2, name: "Sign-in settings" })).toBeVisible();
+  await page.getByRole("link", { name: "Your profile" }).click();
+  await page.getByRole("link", { name: "Admin" }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "Sign-in settings" })).toBeVisible();
+  const asked = bff.probesAsked.filter((p) => p.endsWith("|anchor"));
+  expect(asked.length).toBeGreaterThan(0);
+  expect(new Set(asked).size).toBe(asked.length);
+});
+
 // Ek B 2995, §8.11: Sign-in settings is apart from authority admin; billing is not here
 test("Sign-in settings and authority admin are separate screens", async ({ page, bff }) => {
   await open(page, bff, "/console/admin/sign-in");

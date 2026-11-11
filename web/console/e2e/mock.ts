@@ -213,6 +213,8 @@ export class ConsoleMock {
   down = false;
   /** Actions (`namespace/name`) eligibility answers yes for; empty means every action. */
   readonly eligibleActions = new Set<string>();
+  /** Every eligibility check the console asked, as `namespace/name|basis kind`. */
+  readonly probesAsked: string[] = [];
   /** Management API answers by path under `/admin/v1/`. */
   readonly admin = new Map<string, unknown>();
   /** ADP search answers by kind. */
@@ -581,8 +583,10 @@ export class ConsoleMock {
       }
       const intent = set.intent;
       const act = intent === undefined ? "" : `${intent.action.namespace}/${intent.action.name}`;
+      const held = typeof set.basis === "object" && set.basis !== null && "holding" in set.basis;
+      this.probesAsked.push(`${act}|${held ? "holding" : "anchor"}`);
       // OP-152 m.7 (b): a delegated admin's probe names its own holding
-      if (typeof set.basis === "object" && set.basis !== null && "holding" in set.basis) {
+      if (held) {
         return reply(200, { eligible: s.kid !== undefined && this.heldActions.has(act) });
       }
       const yes =
