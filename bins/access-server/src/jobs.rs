@@ -2,7 +2,7 @@
 //! through the jobs table (OP-129 m.2) so that one node of the cell does it per day: each
 //! node schedules today's job, one claims it and opens today and the days ahead as the
 //! archive role, and this month's and next month's identity audit partitions (OP-13b, OP-134
-//! m.2). Closing old days is not done here (OP-73).
+//! m.2). Closing old days is the archive jobs' (`tiers`, OP-73 m.7).
 //!
 //! The same tick releases the management API's `Idempotency-Key` answers past their 24 hours
 //! (TN-126, OP-151 m.3 (c)): the answer is cleared and the key released in place, never deleted.
@@ -294,6 +294,10 @@ pub(crate) async fn run(app: Pool, archive: Pool, router: Pool, worker: String) 
         // TN-126, OP-151 m.3 (c)
         if let Err(error) = release_answers(&app, now).await {
             tracing::warn!(%error, "idempotency answers not released");
+        }
+        // OP-73 m.4, m.7; OP-158 m.3 (w)
+        if let Err(error) = crate::tiers::tick(&app, &archive, &worker, now).await {
+            tracing::warn!(%error, "archive jobs failed");
         }
     }
 }

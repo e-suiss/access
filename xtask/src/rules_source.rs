@@ -476,6 +476,48 @@ fn strip_sql_comments(sql: &str) -> String {
     out
 }
 
+/// The marker of the one partition drop OP-73 allows (OP-158 m.3 (w)).
+pub(crate) const EPHEMERAL_MARKER: &str = "-- OP-73-exception: ephemeral-protocol";
+
+/// The schema an ephemeral protocol partition is moved into before it is dropped.
+const EPHEMERAL_SCHEMA: &str = "ACCESS_EPHEMERAL.";
+
+/// True when the finding at `at` (line `line` of `sql`, the comment-free `raw`) is a
+/// `DROP TABLE access_ephemeral.<partition>` marked on its own line or the one before it
+/// (OP-73 m.7, OP-146 m.5 (f), OP-158 m.3 (w)).
+pub(crate) fn ephemeral_drop_exempt(raw: &str, sql: &str, at: usize, line: usize) -> bool {
+    let marked = |n: usize| {
+        n.checked_sub(1)
+            .and_then(|i| raw.lines().nth(i))
+            .is_some_and(|l| l.contains(EPHEMERAL_MARKER))
+    };
+    if !(marked(line) || marked(line.saturating_sub(1))) {
+        return false;
+    }
+    let rest = sql.get(at..).unwrap_or_default().to_ascii_uppercase();
+    let mut tail = rest.as_str();
+    for expected in ["DROP", "TABLE"] {
+        let Some(after) = tail.trim_start().strip_prefix(expected) else {
+            return false;
+        };
+        tail = after;
+    }
+    if let Some(after) = tail.trim_start().strip_prefix("IF") {
+        let Some(after) = after.trim_start().strip_prefix("EXISTS") else {
+            return false;
+        };
+        tail = after;
+    }
+    let tail = tail.trim_start();
+    let end = tail
+        .find(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '%' | '"')))
+        .unwrap_or(tail.len());
+    let (target, after) = tail.split_at(end);
+    let closes_literal = after.starts_with('\'');
+    let more = !closes_literal && after.trim_start().starts_with(',');
+    target.starts_with(EPHEMERAL_SCHEMA) && target.len() > EPHEMERAL_SCHEMA.len() && !more
+}
+
 pub(crate) fn check_delete(root: &Path) -> Result<Vec<Violation>, String> {
     let allow_path = root.join(DELETE_ALLOWLIST_FILE);
     let allow = if allow_path.exists() {
@@ -488,9 +530,13 @@ pub(crate) fn check_delete(root: &Path) -> Result<Vec<Violation>, String> {
         let rel_path = rel(root, &path);
         match path.extension().and_then(|e| e.to_str()) {
             Some("sql") => {
-                let sql = strip_sql_comments(&read(&path)?);
+                let raw = read(&path)?;
+                let sql = strip_sql_comments(&raw);
                 for (at, msg) in delete_findings(&sql, &allow, false) {
-                    out.push(violation(DELETE, &rel_path, line_at(&sql, at), msg));
+                    let line = line_at(&sql, at);
+                    if !ephemeral_drop_exempt(&raw, &sql, at, line) {
+                        out.push(violation(DELETE, &rel_path, line, msg));
+                    }
                 }
             }
             Some("rs")
@@ -1336,6 +1382,33 @@ mod tests {
         );
         assert_eq!(migration_version("README.md"), None);
         assert!(migration_version("20261107230200_m1c_admin_jobs.sql") < Some(ONLINE_DDL_FROM));
+    }
+
+    // OP-73 m.7, OP-158 m.3 (w)
+    #[test]
+    fn only_a_marked_ephemeral_partition_drop_passes() {
+        let check = |raw: &str| {
+            let sql = strip_sql_comments(raw);
+            delete_findings(&sql, &[], false)
+                .into_iter()
+                .filter(|&(at, _)| !ephemeral_drop_exempt(raw, &sql, at, line_at(&sql, at)))
+                .count()
+        };
+        let marked =
+            format!("{EPHEMERAL_MARKER}\nEXECUTE format('DROP TABLE access_ephemeral.%I', n);");
+        assert_eq!(check(&marked), 0);
+        let same_line = format!("DROP TABLE access_ephemeral.dpop_replay_d1; {EPHEMERAL_MARKER}");
+        assert_eq!(check(&same_line), 0);
+        for bad in [
+            String::from("EXECUTE format('DROP TABLE access_ephemeral.%I', n);"),
+            format!("{EPHEMERAL_MARKER}\nDROP TABLE access.identity_audit_202601;"),
+            format!("{EPHEMERAL_MARKER}\nDROP TABLE access_ephemeral.a, access.b;"),
+            format!("{EPHEMERAL_MARKER}\nDROP SCHEMA access_ephemeral;"),
+            format!("{EPHEMERAL_MARKER}\n\nDROP TABLE access_ephemeral.x;"),
+            format!("{EPHEMERAL_MARKER}\nDELETE FROM access_ephemeral.x;"),
+        ] {
+            assert_eq!(check(&bad), 1, "{bad}");
+        }
     }
 
     // OP-17, OP-73

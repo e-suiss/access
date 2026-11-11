@@ -2,7 +2,8 @@
 //! flows, authorization requests and codes, client assertion and DPoP replay keys, login
 //! counters and Claim Ingest submission digests (OP-150 m.2). The archive role opens each day
 //! ahead; a day that is not open is a cache outage for DPoP and Claim Ingest and lands in the
-//! default partition elsewhere. Closing old days is the archive job's and is not here (OP-73).
+//! default partition elsewhere. Once a day is past its TTL, the archive job closes it: the one
+//! partition drop OP-73 allows, for these tables only (OP-73 m.7, OP-158 m.3 (w)).
 
 use sqlx::PgPool;
 
@@ -38,6 +39,20 @@ pub async fn partitions(owner: &PgPool, table: &str) -> Result<Vec<String>, Stor
     )
     .fetch_all(owner)
     .await?)
+}
+
+/// Closes every ephemeral protocol day partition past its TTL (archive role): detached, moved
+/// into `access_ephemeral` and dropped there (OP-73 m.7, OP-158 m.3 (w)). The TTL is the
+/// database's, from its own clock; no caller can name a partition. Returns the closed names.
+///
+/// # Errors
+/// [`StoreError`]. A partition that cannot be closed is left as it was and tried next time.
+pub async fn close_days(archive: &PgPool) -> Result<Vec<String>, StoreError> {
+    Ok(
+        sqlx::query_scalar!(r#"SELECT access.close_ephemeral_days() AS "name!""#)
+            .fetch_all(archive)
+            .await?,
+    )
 }
 
 /// What one table family did for one day.

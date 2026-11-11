@@ -13,3 +13,9 @@ GRANT USAGE ON SCHEMA access_ops TO access_app, access_outbox_reader, access_che
 CREATE SCHEMA IF NOT EXISTS access_derived AUTHORIZATION access_migrator;
 REVOKE ALL ON SCHEMA access_derived FROM PUBLIC;
 GRANT USAGE ON SCHEMA access_derived TO access_deriver, access_app;
+-- OP-73 m.7, OP-158 m.3 (w) (W12): ephemeral protocol partitions past their TTL, dropped only here
+CREATE SCHEMA IF NOT EXISTS access_ephemeral AUTHORIZATION access_migrator;
+REVOKE ALL ON SCHEMA access_ephemeral FROM PUBLIC;
+-- OP-40, OP-73 m.4, OP-158 m.3 (w) (W12): identity audit partitions detached after their copy reached the cold tier
+CREATE SCHEMA IF NOT EXISTS access_audit_cold AUTHORIZATION access_migrator;
+REVOKE ALL ON SCHEMA access_audit_cold FROM PUBLIC;
