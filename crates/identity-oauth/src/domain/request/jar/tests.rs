@@ -119,6 +119,20 @@ fn claims_and_times_are_held() {
         verify(&es256(&k, H, &wrong_aud), &keys, &rules(false)),
         Err(JarError::Claims)
     );
+    // OP-155 m.3 (k)
+    let among = claims("").replace(
+        &format!(r#""aud":"{ISS}""#),
+        &format!(r#""aud":["https://other.test","{ISS}"]"#),
+    );
+    assert!(verify(&es256(&k, H, &among), &keys, &rules(false)).is_ok());
+    let without = claims("").replace(
+        &format!(r#""aud":"{ISS}""#),
+        r#""aud":["https://other.test","invalid"]"#,
+    );
+    assert_eq!(
+        verify(&es256(&k, H, &without), &keys, &rules(false)),
+        Err(JarError::Claims)
+    );
     let nested = claims(r#","request_uri":"urn:x""#);
     assert_eq!(
         verify(&es256(&k, H, &nested), &keys, &rules(false)),

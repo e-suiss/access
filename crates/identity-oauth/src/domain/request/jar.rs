@@ -73,7 +73,7 @@ impl From<JwtError> for JarError {
 pub struct JarRules<'a> {
     /// The client that pushed it.
     pub client_id: &'a str,
-    /// The realm issuer, its one audience.
+    /// The realm issuer, which `aud` names alone or among others (RFC 7519 §4.1.3).
     pub issuer: &'a str,
     /// Now, Unix milliseconds.
     pub now_ms: u64,
@@ -126,9 +126,7 @@ pub fn verify(token: &str, keys: &[Jwk], rules: &JarRules<'_>) -> Result<Params,
     let text = |n: &str| c.get(n).and_then(Json::as_str);
     let aud_ok = match c.get("aud") {
         Some(Json::Str(a)) => a == rules.issuer,
-        Some(Json::Array(a)) => {
-            a.len() == 1 && a.first().and_then(Json::as_str) == Some(rules.issuer)
-        }
+        Some(Json::Array(a)) => a.iter().any(|v| v.as_str() == Some(rules.issuer)),
         _ => false,
     };
     if text("iss") != Some(rules.client_id) || text("client_id") != Some(rules.client_id) || !aud_ok
