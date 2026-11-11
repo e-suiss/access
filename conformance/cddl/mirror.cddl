@@ -2,10 +2,13 @@
 ; `GET /v1/domains/{domain}/mirror?from=<size>` answers a CBOR sequence (RFC 8742) of frames,
 ; long-polled and resumable from any size. A replica checks size, root and consistency, appends
 ; the records to its own files and answers a signed `replica-ack`; without a verified ack no
-; SEC23 acknowledgement is given. Times are Unix milliseconds.
+; SEC23 acknowledgement is given. Times are Unix milliseconds. A checkpoint carries the
+; binding-signed excerpt of the key that signed it, so a replica verifies every checkpoint it
+; accepts against the binding keys it holds. A redaction names the destroyed
+; body by its `access/redaction/v1` digest; it carries no key.
 
 mirror-frame = { record: mirror-record }
-             / { checkpoint: { note: tstr .size (1..65536), cosignatures: [* bstr .size (1..1024)] } }
+             / { checkpoint: { note: tstr .size (1..65536), cosignatures: [* bstr .size (1..1024)], ? excerpt: bstr .size (1..65536) } }
              / { redaction: { position: uint, dek: bstr .size 32 } }
              / { heartbeat: { size: uint, at: uint } }
 

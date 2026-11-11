@@ -29,6 +29,8 @@ proptest = { workspace = true, features = ["std"] }
 
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+# OP-158 m.3 (f): the replica-ack tests sign with a runtime Ed25519 key
+suiss-crypto = { workspace = true, features = ["verify", "signer"] }
 
 [lints]
 workspace = true

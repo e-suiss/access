@@ -16,6 +16,18 @@
       "edn": "{\"record\": {\"position\": 7, \"envelope\": h'a1'}, \"heartbeat\": {\"size\": 8, \"at\": 1}}",
       "id": "two-kinds",
       "valid": false
+    },
+    {
+      "cbor": "a16a636865636b706f696e74a3646e6f7465727368612d3235363a43676e386e4377734c6e676578636572707442d2846c636f7369676e61747572657380",
+      "edn": "{\"checkpoint\": {\"note\": \"sha-256:Cg\\n8\\nCwsL\\n\", \"cosignatures\": [], \"excerpt\": h'd284'}}",
+      "id": "checkpoint-with-excerpt",
+      "valid": true
+    },
+    {
+      "cbor": "a169726564616374696f6ea26364656b58200c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c68706f736974696f6e07",
+      "edn": "{\"redaction\": {\"position\": 7, \"dek\": h'0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c'}}",
+      "id": "redaction",
+      "valid": true
     }
   ],
   "cddl": [

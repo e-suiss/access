@@ -42,3 +42,20 @@ fn the_replica_checks_size_root_and_consistency() {
     f.accept(&cp(4, root(&data)), &proof).unwrap();
     assert_eq!(f.accepted(), Some((4, root(&data))));
 }
+
+// T21, TI-13
+#[test]
+fn a_follower_accepts_its_own_growing_tree_without_a_proof() {
+    let data: [&[u8]; 3] = [b"a", b"b", b"c"];
+    let mut f = Follower::new("example.com/log");
+    f.append(leaf_hash(data[0])).unwrap();
+    f.accept_own(&cp(1, root(&data[..1]))).unwrap();
+    f.append(leaf_hash(data[1])).unwrap();
+    assert_eq!(
+        f.accept_own(&cp(2, root(&data[1..]))),
+        Err(ReplicaError::Root)
+    );
+    assert_eq!(f.accept_own(&cp(3, root(&data))), Err(ReplicaError::Size));
+    f.accept_own(&cp(2, root(&data[..2]))).unwrap();
+    assert_eq!(f.accepted(), Some((2, root(&data[..2]))));
+}

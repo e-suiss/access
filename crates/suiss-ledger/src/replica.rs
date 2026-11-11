@@ -8,6 +8,8 @@ use suiss_crypto::note::Checkpoint;
 use crate::Hash;
 use crate::merkle::{Frontier, FrontierError};
 
+pub mod mirror;
+
 /// Why a mirrored record or checkpoint is refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
@@ -83,6 +85,26 @@ impl Follower {
         if let Some((size, root)) = self.accepted {
             verify_consistency(size, cp.size, &root, &cp.root, proof)
                 .map_err(ReplicaError::Inconsistent)?;
+        }
+        self.accepted = Some((cp.size, cp.root));
+        Ok(())
+    }
+
+    /// Accepts a verified checkpoint of the leaves this follower appended itself, without a
+    /// proof: its tree only grows by [`Follower::append`], so a root it rebuilt at a larger size
+    /// extends every root it accepted before (RFC 9162 §2.1.4).
+    ///
+    /// # Errors
+    /// [`ReplicaError`] other than `Inconsistent`.
+    pub fn accept_own(&mut self, cp: &Checkpoint) -> Result<(), ReplicaError> {
+        if cp.origin != self.origin {
+            return Err(ReplicaError::Origin);
+        }
+        if cp.size != self.tree.size() || self.accepted.is_some_and(|(s, _)| cp.size < s) {
+            return Err(ReplicaError::Size);
+        }
+        if cp.root != self.tree.root() {
+            return Err(ReplicaError::Root);
         }
         self.accepted = Some((cp.size, cp.root));
         Ok(())
