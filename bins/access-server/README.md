@@ -14,6 +14,7 @@ access-server bootstrap <plan.toml>             # a local deployment's tenants a
 access-server client-update <plan.toml> <product> <display name>
 access-server client-retire <plan.toml> <product>
 access-server import-accounts <realm> <file.jsonl>   # accounts from another identity provider
+access-server reshred                           # apply the shred journal again after a restore
 ```
 
 There is no other mode and no flag that relaxes a check. Two signer processes run beside it and
@@ -202,6 +203,18 @@ start.
 |---|---|---|
 | `legacy_idp_verify_url` | none | The previous identity provider's password check (`https://…`) for imported accounts that brought no hash. |
 
+### `[audit_cold]`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `dir` | none | The identity audit log's cold tier: a directory whose objects are written once and never overwritten, the local stand-in for an object-locked bucket. It holds the moved audit partitions, the published checkpoint notes, the frozen yearly tiles and the shred journal. Without it every audit partition stays hot and nothing is journaled. |
+
+### `[audit_publication]`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `hooks` | `[]` | `{name, url}` HTTPS hooks that receive each identity audit checkpoint's signed note as `text/plain`. |
+
 ## Moving accounts in
 
 `import-accounts` reads one JSON object per line and prints a summary; a line that cannot be
@@ -245,8 +258,14 @@ While serving, the process also runs, each stopping with the server:
   opened ahead once a day by one node of the cell;
 - the daily tenant analytics, and the release of management API `Idempotency-Key` answers after
   24 hours (cleared in place, never deleted);
-- the audit checkpointer: every second the identity audit log and the authority operational
+- the audit checkpointer: every 500 ms the identity audit log and the authority operational
   stream are integrated into their Merkle trees and signed by the identity signer's cell key;
+  each identity checkpoint then goes to the cold tier and the declared hooks, the tree's full
+  tiles are written, and each ended year is frozen as static tiles in the cold tier;
+- the archive jobs, once a day on one node: ephemeral protocol day partitions past their TTL are
+  closed, and identity audit partitions past their hot window (at least 30 days, 90 by default)
+  whose rows are all checkpointed are copied to the cold tier as OCSF Parquet, checked against
+  their Merkle root and only then detached. No audit row is ever deleted;
 - the domain checkpointer: every 60 seconds the committed head of each domain this process leads
   is signed by the authority signer, a quiet domain's too;
 - the Token Status List publisher, which signs a changed list at once and an unchanged one again
@@ -256,6 +275,10 @@ While serving, the process also runs, each stopping with the server:
 - the export pass: every 10 seconds one node sends each realm's export sinks the audit rows they
   have not accepted yet, as a copy, never the record. Syslog sinks are reached over TLS on port
   6514, or at a declared delivery target's host and port.
+
+After a restore the server does not start serving while the restore is not re-shredded, or while
+the database still holds a key the shred journal says was destroyed; `access-server reshred`
+destroys those keys again and lets it start.
 
 `/readyz` answers ready only when every pool answers, both signers accept a connection, every
 realm's JWKS loaded at start-up and every courier and consumer is running.
