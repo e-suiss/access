@@ -586,6 +586,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/access/v1/domains/{domain}/divergence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Records a signed divergence set (recovery.cddl) as a divergence_notice Claim for the domain's root and Security Party; it never stops an exit and writes no restriction (G32, G33, OP-158 m.3 (i)). */
+        post: operations["declareDivergence"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/access/v1/domains/{domain}/checkpoints": {
         parameters: {
             query?: never;
@@ -593,7 +610,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The domain's published checkpoints (C2SP signed notes) with their witness cosignatures, newest first (§16.6, OP-158 m.3 (c), (d)). */
+        /** witnessed_through, the newest checkpoint an independent witness cosigned with its cosignatures and key excerpt, the declared witnesses and whether equivocation may be called detectable (§16.6, U9, OP-158 m.3 (c), (d)). Anyone may copy it. */
         get: operations["listCheckpoints"];
         put?: never;
         post?: never;
@@ -610,7 +627,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The inclusion bundle of the record at `position` in the checkpoint of `size`: the exact record, the inclusion proof, the cosigned checkpoint and, after a handover, the consistency path (inclusion-bundle.cddl, P18, SEC25). */
+        /** The inclusion bundle of the record at `position` in the witnessed checkpoint of `size` (inclusion-bundle.cddl): the record disclosure with only `artifacts` opened, the inclusion proof and the checkpoint with its cosignatures (T19, §17.6.1 rule 5). For an authenticated PEP. */
         get: operations["getInclusionBundle"];
         put?: never;
         post?: never;
@@ -620,17 +637,17 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/access/v1/domains/{domain}/divergence": {
+    "/access/v1/domains/{domain}/tile/{level}/{index}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** A C2SP tlog-tiles hash tile of the witnessed tree: `index` in three-digit groups, `.p/<width>` for a partial tile (K15). Entries are not published. */
+        get: operations["getTile"];
         put?: never;
-        /** Records a signed divergence set (recovery.cddl) as a divergence_notice Claim for the domain's root and Security Party; it never stops an exit and writes no restriction (G32, G33, OP-158 m.3 (i)). */
-        post: operations["declareDivergence"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4439,88 +4456,6 @@ export interface operations {
             };
         };
     };
-    listCheckpoints: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                domain: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The request is refused; nothing is read. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)). */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Temporarily unavailable; retry. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    getInclusionBundle: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                domain: string;
-                size: string;
-                position: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The request is refused; nothing is read. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)). */
-            501: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Temporarily unavailable; retry. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
     declareDivergence: {
         parameters: {
             query?: never;
@@ -4551,6 +4486,157 @@ export interface operations {
                 };
             };
             /** @description Temporarily unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listCheckpoints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The domain's witnessed checkpoint. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description checkpoint-unknown: no such domain. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description checkpoints-unavailable: retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getInclusionBundle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: string;
+                size: string;
+                position: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The bundle. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/cbor": unknown;
+                };
+            };
+            /** @description pep-required: no authenticated PEP. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description checkpoint-unknown: no such domain, size or position. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description checkpoint-not-witnessed: no independent witness cosigned a checkpoint of that size. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description checkpoints-unavailable: retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getTile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: string;
+                level: string;
+                index: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The tile's hashes, concatenated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
+                };
+            };
+            /** @description checkpoint-unknown: no such tile in the witnessed tree. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description checkpoint-not-witnessed: nothing is witnessed yet. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description checkpoints-unavailable: retry. */
             503: {
                 headers: {
                     [name: string]: unknown;
