@@ -3594,10 +3594,36 @@ export interface components {
             classification?: "drill" | "emergency" | "misuse" | null;
             reviewer?: string | null;
         };
-        /** @description An access review campaign, a view and never a queue (IDP-39 (3), OP-157 m.3 (w)); its lane names its members when it serves it. */
-        Review: Record<string, never>;
-        /** @description One Grant of a campaign, as the reviewer may see it (OP-157 m.3 (w)); its lane names its members when it serves it. */
-        ReviewItem: Record<string, never>;
+        /** @description An access review campaign, a view and never a queue (IDP-39 (3), OP-157 m.3 (w)): its period and scope, and when its next period starts while it is live. It writes no authority. */
+        Review: {
+            name: string;
+            period_days: number;
+            /** @enum {string} */
+            scope: "manager_team";
+            /** @enum {string} */
+            status: "live" | "closed";
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            next_run?: string | null;
+            version: number;
+        };
+        /** @description One Grant of a campaign, as the reviewer may see it (OP-157 m.3 (w)): a live Grant in the reviewer's own lineage, with how many Grants derive from it. `remove` names the reviewer's own revokeGrant and the basis it is signed on; a keep records review.kept and writes no authority. */
+        ReviewItem: {
+            review: string;
+            grant: string;
+            holder: Record<string, never>;
+            actions: Record<string, never>[];
+            resource: Record<string, never>;
+            /** Format: date-time */
+            valid_until?: string | null;
+            since: string;
+            issued_by?: string | null;
+            delegable: boolean;
+            derived: number;
+            remove: Record<string, never>;
+            kept?: boolean;
+        };
         /** @description What offboarding a Party would do, channel by channel, with no defaults (OP-157 m.3 (v), §8.17.9.6): each channel lists its members and the choices it offers, and the commit must name one for every member. `status` is `offboarded` only once the departure Exercise committed and was recorded; `ended` lists the rule-shaped holdings whose episode already ended ("Finance role ended (HR, 6 Oct)"), and `survive` counts the Grants held by name that HR's change never touches. */
         OffboardingPreview: {
             party: string;
@@ -13206,7 +13232,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -13233,7 +13258,7 @@ export interface operations {
         };
         responses: {
             /** @description Committed: the Exercise record (TN-110). */
-            200: {
+            201: {
                 headers: {
                     "Request-Id": components["headers"]["Request-Id"];
                     "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
@@ -13251,7 +13276,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -13280,14 +13304,13 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Declared"];
+                    "application/json": components["schemas"]["Review"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -13334,7 +13357,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -13377,7 +13399,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -13416,7 +13437,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WriteResult"];
+                    "application/json": components["schemas"]["ReviewItem"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -13426,7 +13447,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
