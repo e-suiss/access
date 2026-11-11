@@ -89,6 +89,7 @@ mod support {
             ended: Vec::new(),
             explained: None,
             causal: None,
+            witnessed_through: None,
         }
     }
 }

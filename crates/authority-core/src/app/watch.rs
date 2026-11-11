@@ -44,7 +44,8 @@ pub struct Watched {
     pub next: u64,
     /// The domain's head when answered.
     pub head: u64,
-    /// The largest tree size a witness has cosigned; 0 before the first (§16.6, SEC23).
+    /// The largest tree size an independent witness has cosigned; 0 before the first (§16.6,
+    /// SEC23).
     pub witnessed_through: u64,
 }
 
@@ -109,7 +110,7 @@ pub async fn watch(
             });
         }
     }
-    let witnessed_through = access_store::authority::witnessed_through(app, &id).await?;
+    let witnessed_through = access_store::witness::witnessed_through(app, &id).await?;
     Ok(Watched {
         next: changes.last().map_or(from, |c| c.position),
         changes,

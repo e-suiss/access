@@ -30,6 +30,7 @@ fn answer(outcome: Outcome) -> Response {
         ended: Vec::new(),
         explained: None,
         causal: None,
+        witnessed_through: None,
     }
 }
 

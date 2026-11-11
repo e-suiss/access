@@ -960,23 +960,6 @@ pub async fn archive_nonces(
     Ok(n)
 }
 
-/// The largest tree size of `domain` a witness has cosigned; 0 before the first (§16.6,
-/// OP-158 m.3 (u)).
-///
-/// # Errors
-/// [`StoreError`].
-pub async fn witnessed_through(pool: &PgPool, domain: &DomainId) -> Result<u64, StoreError> {
-    let mut t = DomainTx::begin(pool, domain).await?;
-    let size = sqlx::query_scalar!(
-        "SELECT max(size) FROM access.witness_cosign WHERE domain_id = $1",
-        domain.as_bytes().as_slice(),
-    )
-    .fetch_one(&mut *t.tx)
-    .await?;
-    t.commit().await?;
-    size.map_or(Ok(0), unsigned)
-}
-
 /// The latest outcome of each nonce of `domain` that starts with `prefix`, at most 16: the
 /// attempts of one deterministic, time-locked meta-Exercise (OP-151 m.18 (g)).
 ///

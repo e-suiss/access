@@ -114,7 +114,7 @@ const FREQUENT: &[Frequent] = &[
         name: "witnessed_through",
         sql: concat!(
             "EXPLAIN (GENERIC_PLAN) ",
-            "SELECT max(size) FROM access.witness_cosign WHERE domain_id = $1"
+            "SELECT max(size) FROM access.witness_cosign WHERE domain_id = $1 AND independent"
         ),
         sorts: false,
     },
