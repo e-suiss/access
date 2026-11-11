@@ -798,7 +798,7 @@ reason = "OP-152 m.5 (e): Ek B line 1430, stage 3 item 'Dağıtık cache doğrul
 [[rule_overrides]]
 id = "OP-54-RL10"
 stage = 12
-reason = "OP-152 m.5 (e): Ek B line 5654, stage 12 item 'DB'de duran acil durum admin hesabı yok'"
+reason = "OP-152 m.5 (e): Ek B line 5654, stage 12 item 'DB'de duran acil durum admin hesabı yok'; built in Stage 12 lane V5 (OP-157 m.3 (j), xtask no-standing-admin)"
 
 [[rule_overrides]]
 id = "OP-54-RL11"
@@ -1113,7 +1113,7 @@ reason = "OP-152 m.5 (e): Ek B line 1160, stage 3 item 'Approver bağımsızlı�
 [[rule_overrides]]
 id = "U18"
 stage = 12
-reason = "OP-152 m.5 (e): Ek B line 5670, stage 12 item 'Structuring / abuse guard'ları (Party toplamı, eşik-bitişik tekrar, kitlesel seçim)'; the Stage 3 Structuring / abuse guards item (line 1166) moved here (OP-142); rate and oracle limits exist earlier but the structuring controls the row bundles are this open item"
+reason = "OP-152 m.5 (e): Ek B line 5670, stage 12 item 'Structuring / abuse guard'ları (Party toplamı, eşik-bitişik tekrar, kitlesel seçim)'; the Stage 3 Structuring / abuse guards item (line 1166) moved here (OP-142); rate and oracle limits exist earlier but the structuring controls the row bundles are this open item; built in Stage 12 lane V11 (OP-157 m.3 (q))"
 
 [[rule_overrides]]
 id = "U23"
