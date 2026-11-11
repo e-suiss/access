@@ -15,7 +15,11 @@ test.describe("@live batch approval", () => {
         redirect_uri: "https://shop.example/a",
         state: "s",
       },
-      headers: { origin },
+      headers: {
+        origin,
+        "sec-fetch-site": "same-origin",
+        "idempotency-key": crypto.randomUUID(),
+      },
     });
     expect(started.status()).not.toBe(501);
     expect([401, 403, 422]).toContain(started.status());
@@ -25,7 +29,11 @@ test.describe("@live batch approval", () => {
         redirect_uri: "https://shop.example/a",
         state: "s",
       },
-      headers: { origin },
+      headers: {
+        origin,
+        "sec-fetch-site": "same-origin",
+        "idempotency-key": crypto.randomUUID(),
+      },
     });
     expect(eleven.status()).toBe(422);
     expect(((await eleven.json()) as { code: string }).code).toBe("approval-batch-invalid");
