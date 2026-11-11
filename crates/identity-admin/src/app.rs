@@ -283,6 +283,19 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     /// # Errors
     /// [`AdminError`]; a slug taken by another realm leaves the new domain without a realm.
     pub async fn create_realm(&self, r: &NewRealm<'_>) -> Result<CreatedRealm, AdminError> {
+        self.create_realm_with(r, None).await
+    }
+
+    /// [`Self::create_realm`] whose governing domain's meta-anchor carries the rootTerms
+    /// recovery entry `recovery` the template built (§13.6, OP-158 m.3 (m)).
+    ///
+    /// # Errors
+    /// [`AdminError`].
+    pub async fn create_realm_with(
+        &self,
+        r: &NewRealm<'_>,
+        recovery: Option<access_kernel::recovery::RecoveryEntry>,
+    ) -> Result<CreatedRealm, AdminError> {
         let issuer = self.base.issuer(r.slug, r.style)?;
         // §10.1.4 rule 3, OP-150 L2
         let claim_issuer = issuer::new_party()?;
@@ -316,6 +329,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     ])
                     .collect(),
                 issuer_predicate_input: predicate_input(&r.issuer_predicate_input),
+                recovery,
             })
             .await
             .map_err(|e| AdminError::Unavailable(e.0))?;

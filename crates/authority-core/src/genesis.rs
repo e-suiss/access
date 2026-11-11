@@ -272,8 +272,13 @@ pub fn realm(
         ),
         (Value::text("root"), root.clone()),
     ]);
+    // §13.6, SEC20, OP-158 m.3 (m)
+    let mut meta_anchor = vec![(Value::text("root"), root)];
+    if let Some(e) = &order.recovery {
+        meta_anchor.push((Value::text("recovery"), e.to_value()));
+    }
     let mut fields = vec![
-        ("meta_anchor", Value::Map(vec![(Value::text("root"), root)])),
+        ("meta_anchor", Value::Map(meta_anchor)),
         ("anchors", set(vec![idp])?),
         ("grants", set(vec![bootstrap()])?),
         (

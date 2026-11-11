@@ -1669,6 +1669,9 @@ pub struct GenesisOrder {
     /// too (§10.1.4 rule 3, L2-CLM-3): what a hosted approval's `authentication` Claim proves
     /// with (SI-5, OP-149 m.29 (b)). Empty keeps `actor-binding` alone.
     pub issuer_predicate_input: Vec<String>,
+    /// The meta-anchor's rootTerms recovery entry, when the template could build one (§13.6,
+    /// SEC20, OP-158 m.3 (m)).
+    pub recovery: Option<access_kernel::recovery::RecoveryEntry>,
 }
 
 /// The domain a Genesis opened.

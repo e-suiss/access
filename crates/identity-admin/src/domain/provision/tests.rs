@@ -21,6 +21,7 @@ fn order(root: Root, ack: bool) -> RealmOrder {
         ct3_delay_s: None,
         causal_binding: false,
         acknowledge_no_recovery: ack,
+        recovery: None,
     }
 }
 
@@ -60,13 +61,101 @@ fn a_joint_root_needs_two_of_its_parties_at_least() {
     );
 }
 
-// TN-111, §13.7.7, N-14
-#[test]
-fn recovery_is_declared_not_available() {
-    for root in [Root::Sole(Id([1; 16])), joint(2, 3)] {
-        assert_eq!(recovery(&root), Recovery::NotAvailable);
-        assert_eq!(recovery(&root).name(), "not_available");
+fn keys(holders: &[u8]) -> RecoveryKeys {
+    RecoveryKeys {
+        held_on: access_kernel::recovery::KeyHolding::Device,
+        keys: holders
+            .iter()
+            .enumerate()
+            .map(|(i, p)| RecoveryKey {
+                party: Id([*p; 16]),
+                kid: suiss_crypto::digest::sha256(&[u8::try_from(i).unwrap()]),
+            })
+            .collect(),
     }
+}
+
+// TN-111, §13.6, §13.7.7, N-14, SEC20, SEC10, OP-158 m.3 (m), Ek B 6030, 5748
+#[test]
+fn the_template_builds_the_recovery_entry_or_says_why_not() {
+    use NotAvailable as N;
+    let cases = [
+        (joint(2, 3), None, Recovery::NotAvailable(N::NoKeys)),
+        (
+            Root::Sole(Id([1; 16])),
+            Some(keys(&[1, 1, 1])),
+            Recovery::NotAvailable(N::SoleRoot),
+        ),
+        (
+            joint(2, 3),
+            Some(keys(&[1, 2])),
+            Recovery::NotAvailable(N::TooFewKeys),
+        ),
+        (
+            joint(2, 3),
+            Some(keys(&[1, 1, 1])),
+            Recovery::NotAvailable(N::TooFewKeys),
+        ),
+        (
+            joint(2, 3),
+            Some(keys(&[1, 2, 9])),
+            Recovery::NotAvailable(N::HolderNotRoot),
+        ),
+        (
+            joint(2, 3),
+            Some(keys(&[1, 2, 3])),
+            Recovery::Available {
+                threshold: 2,
+                keys: 3,
+            },
+        ),
+        (
+            joint(3, 5),
+            Some(keys(&[1, 2, 3, 4, 5])),
+            Recovery::Available {
+                threshold: 3,
+                keys: 5,
+            },
+        ),
+    ];
+    for (root, k, want) in cases {
+        let (got, entry) = recovery(&root, k.as_ref());
+        assert_eq!(got, want, "{root:?} {k:?}");
+        assert_eq!(entry.is_some(), matches!(want, Recovery::Available { .. }));
+        if let Some(e) = entry {
+            assert_eq!(
+                e.hardware_bound_min,
+                access_kernel::recovery::HARDWARE_BOUND_MIN
+            );
+            let Root::Joint { parties, .. } = &root else {
+                panic!("joint")
+            };
+            assert!(e.holders.is_subset(parties));
+        }
+    }
+    let mut twice = keys(&[1, 2, 3]);
+    twice.keys[2].kid = twice.keys[0].kid;
+    assert_eq!(
+        recovery(&joint(2, 3), Some(&twice)).0,
+        Recovery::NotAvailable(N::DuplicateKey)
+    );
+    assert_eq!(Recovery::NotAvailable(N::NoKeys).name(), "not_available");
+    assert_eq!(
+        Recovery::NotAvailable(N::NoKeys).reason(),
+        Some("no-recovery-keys")
+    );
+    assert_eq!(
+        Recovery::Available {
+            threshold: 2,
+            keys: 3
+        }
+        .reason(),
+        None
+    );
+    let mut o = order(joint(2, 3), false);
+    o.recovery = Some(keys(&[1, 2, 3]));
+    assert!(o.value().get("recovery").is_some());
+    assert!(order(joint(2, 3), false).value().get("recovery").is_none());
 }
 
 // TN-16, OP-40

@@ -19,7 +19,8 @@ use access_identity_admin::app::provision::{
 };
 use access_identity_admin::app::rest::{self, default_validity, rfc3339};
 use access_identity_admin::domain::provision::{
-    DEFAULT_PLACEMENT, PlatformChange, ProvisionInvalid, RealmOrder, Recovery,
+    DEFAULT_PLACEMENT, PlatformChange, ProvisionInvalid, RealmOrder, Recovery, RecoveryKey,
+    RecoveryKeys,
 };
 use access_identity_admin::ports::{Decider, Governance, Instances, RealmKeys};
 use access_identity_events::domain::catalog::TENANT_PREFIX;
@@ -49,9 +50,13 @@ const REALM_BODY: &[&str] = &[
     "ct3_delay_s",
     "causal_binding",
     "acknowledge_no_recovery",
+    "recovery",
     "sandbox",
     rest::VALIDITY,
 ];
+
+/// Most recovery keys a realm creation names (§13.6).
+const MAX_RECOVERY_KEYS: usize = 16;
 
 fn invalid(i: ProvisionInvalid) -> &'static Code {
     use codes::platform as p;
@@ -117,6 +122,43 @@ fn root(v: Option<&Value>) -> Result<Root, &'static Code> {
     }
 }
 
+/// `{"held_on": "device" | "offline", "keys": [{"party": <party>, "kid": <thumbprint>}, …]}`: the
+/// founders' recovery keys by thumbprint only (§13.6, SEC20, OP-158 m.3 (m)).
+fn recovery_keys(v: Option<&Value>) -> Result<Option<RecoveryKeys>, &'static Code> {
+    let bad = &codes::realm::INVALID_BODY;
+    let o = match v {
+        None | Some(Value::Null) => return Ok(None),
+        Some(Value::Object(o)) => o,
+        Some(_) => return Err(bad),
+    };
+    only(o, &["held_on", "keys"])?;
+    let held_on = match o.get("held_on").and_then(Value::as_str) {
+        None | Some("device") => access_kernel::recovery::KeyHolding::Device,
+        Some("offline") => access_kernel::recovery::KeyHolding::Offline,
+        Some(_) => return Err(bad),
+    };
+    let list = o.get("keys").and_then(Value::as_array).ok_or(bad)?;
+    if list.len() > MAX_RECOVERY_KEYS {
+        return Err(bad);
+    }
+    let mut keys = Vec::with_capacity(list.len());
+    for k in list {
+        let k = k.as_object().ok_or(bad)?;
+        only(k, &["party", "kid"])?;
+        let kid = k
+            .get("kid")
+            .and_then(Value::as_str)
+            .and_then(|t| b64url_decode(t).ok())
+            .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+            .ok_or(bad)?;
+        keys.push(RecoveryKey {
+            party: k.get("party").and_then(party).ok_or(bad)?,
+            kid,
+        });
+    }
+    Ok(Some(RecoveryKeys { held_on, keys }))
+}
+
 fn text<'a>(m: &'a Map<String, Value>, k: &str) -> Result<Option<&'a str>, &'static Code> {
     match m.get(k) {
         None | Some(Value::Null) => Ok(None),
@@ -165,6 +207,8 @@ fn change(
             Some(Value::Bool(b)) => *b,
             Some(_) => return Err(&codes::realm::INVALID_BODY),
         },
+        // §13.6, OP-158 m.3 (m)
+        recovery: recovery_keys(body.get("recovery"))?,
     };
     // OP-151 m.3 (m)
     let sandbox = match body.get("sandbox") {
@@ -528,16 +572,21 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                         "key_state".to_owned(),
                         json!(key_state(&self.keys, m, crate::admin::WallClock::now()).await),
                     );
-                    // TN-111, §13.7.7
-                    o.insert(
-                        "genesis".to_owned(),
-                        json!({
-                            "digest": b64url_encode(&domain.0),
-                            "root": root,
-                            "recovery": recovery.name(),
-                            "recovery_reason": Recovery::reason(recovery),
-                        }),
-                    );
+                    // TN-111, §13.6, §13.7.7, OP-158 m.3 (m)
+                    let mut genesis = json!({
+                        "digest": b64url_encode(&domain.0),
+                        "root": root,
+                        "recovery": recovery.name(),
+                    });
+                    match recovery {
+                        Recovery::Available { threshold, keys } => {
+                            genesis["recovery_threshold"] = json!({ "k": threshold, "n": keys });
+                        }
+                        Recovery::NotAvailable(r) => {
+                            genesis["recovery_reason"] = json!(r.code());
+                        }
+                    }
+                    o.insert("genesis".to_owned(), genesis);
                 }
                 view
             }

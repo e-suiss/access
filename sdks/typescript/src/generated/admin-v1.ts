@@ -4036,6 +4036,20 @@ export interface components {
             causal_binding: boolean;
             /** @default false */
             acknowledge_no_recovery: boolean;
+            /** @description The founders' recovery keys, by thumbprint only: the keys stay on their own devices or offline, never with the provider (§13.6, SEC20). Five or more keys build a 3-of-n entry, three or four a 2-of-n one; every holder is a root Party, and a sole root cannot be recovered. Without them the Genesis says `recovery: not_available`. */
+            recovery?: {
+                /**
+                 * @default device
+                 * @enum {string}
+                 */
+                held_on: "device" | "offline";
+                keys: {
+                    /** @description The root Party that holds the key. */
+                    party: string;
+                    /** @description The key's RFC 7638 thumbprint. */
+                    kid: string;
+                }[];
+            };
             /** @description Open the governing domain from the sandbox template, a separate AuthorityDomain with its fixed budget (OP-151 m.3 (m)); always true on `sandbox-domains`. */
             sandbox?: boolean;
             validity?: components["schemas"]["Validity"];
@@ -4052,7 +4066,7 @@ export interface components {
          *         "n": 2
          *       },
          *       "recovery": "not_available",
-         *       "recovery_reason": "no-recover-entry"
+         *       "recovery_reason": "no-recovery-keys"
          *     }
          */
         Genesis: {
@@ -4064,11 +4078,16 @@ export interface components {
                 n?: number;
             };
             /**
-             * @description `not_available`: the rootTerms `domain.recover` entry cannot be built; the domain cannot be recovered (NG, N-14).
+             * @description `available`: the meta-anchor carries the rootTerms `domain.recover` entry. `not_available`: it cannot be built and the domain cannot be recovered (NG, N-14); the console says "Recovery not available".
              * @enum {string}
              */
-            recovery?: "not_available";
-            /** @description A stable reason code. */
+            recovery?: "available" | "not_available";
+            /** @description How many of the entry's keys a recovery needs. */
+            recovery_threshold?: {
+                k?: number;
+                n?: number;
+            };
+            /** @description Why recovery is not available: `no-recovery-keys`, `sole-root`, `too-few-recovery-keys`, `recovery-holder-not-root` or `duplicate-recovery-key`. */
             recovery_reason?: string;
         };
         /** @description The `idp.platform.*` Exercise the write compiled to (TN-110), what it created, and for a realm its Genesis. */

@@ -767,6 +767,28 @@ fn schemas() -> Value {
                 "ct3_delay_s": { "type": "integer", "minimum": 3600, "maximum": 2_592_000 },
                 "causal_binding": { "type": "boolean", "default": false, "description": "Declare causal-bound allowances: an upstream ExerciseID backs at most one downstream Exercise, and chained decisions answer `causal_binding: enforced` (§7.9.7.4, E17)." },
                 "acknowledge_no_recovery": { "type": "boolean", "default": false },
+                "recovery": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["keys"],
+                    "description": "The founders' recovery keys, by thumbprint only: the keys stay on their own devices or offline, never with the provider (§13.6, SEC20). Five or more keys build a 3-of-n entry, three or four a 2-of-n one; every holder is a root Party, and a sole root cannot be recovered. Without them the Genesis says `recovery: not_available`.",
+                    "properties": {
+                        "held_on": { "type": "string", "enum": ["device", "offline"], "default": "device" },
+                        "keys": {
+                            "type": "array",
+                            "maxItems": 16,
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": ["party", "kid"],
+                                "properties": {
+                                    "party": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$", "description": "The root Party that holds the key." },
+                                    "kid": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$", "description": "The key's RFC 7638 thumbprint." },
+                                },
+                            },
+                        },
+                    },
+                },
                 "sandbox": { "type": "boolean", "description": "Open the governing domain from the sandbox template, a separate AuthorityDomain with its fixed budget (OP-151 m.3 (m)); always true on `sandbox-domains`." },
                 "validity": r("schemas", "Validity"),
                 "ais": text("The caller's AIS, when not in the header."),
@@ -776,7 +798,7 @@ fn schemas() -> Value {
             "type": "object",
             "additionalProperties": false,
             "description": "What the new governing domain's Genesis declares (TN-111, §13.7.7): its digest (the DomainID), its root's shape, and whether it can be recovered.",
-            "examples": [{ "digest": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc", "root": { "kind": "joint", "k": 2, "n": 2 }, "recovery": "not_available", "recovery_reason": "no-recover-entry" }],
+            "examples": [{ "digest": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc", "root": { "kind": "joint", "k": 2, "n": 2 }, "recovery": "not_available", "recovery_reason": "no-recovery-keys" }],
             "properties": {
                 "digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
                 "root": {
@@ -788,8 +810,14 @@ fn schemas() -> Value {
                         "n": { "type": "integer" },
                     },
                 },
-                "recovery": { "type": "string", "enum": ["not_available"], "description": "`not_available`: the rootTerms `domain.recover` entry cannot be built; the domain cannot be recovered (NG, N-14)." },
-                "recovery_reason": text("A stable reason code."),
+                "recovery": { "type": "string", "enum": ["available", "not_available"], "description": "`available`: the meta-anchor carries the rootTerms `domain.recover` entry. `not_available`: it cannot be built and the domain cannot be recovered (NG, N-14); the console says \"Recovery not available\"." },
+                "recovery_threshold": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "How many of the entry's keys a recovery needs.",
+                    "properties": { "k": { "type": "integer" }, "n": { "type": "integer" } },
+                },
+                "recovery_reason": text("Why recovery is not available: `no-recovery-keys`, `sole-root`, `too-few-recovery-keys`, `recovery-holder-not-root` or `duplicate-recovery-key`."),
             },
         },
         "PlatformWriteResult": {

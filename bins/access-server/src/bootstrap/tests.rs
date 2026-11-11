@@ -2196,7 +2196,8 @@ mod provision {
         Created, Order, Platform, ProvisionError, Provisioned,
     };
     use access_identity_admin::domain::provision::{
-        PlatformChange, ProvisionInvalid, RealmOrder, Recovery, SANDBOX_BUDGET,
+        NotAvailable, PlatformChange, ProvisionInvalid, RealmOrder, Recovery, RecoveryKey,
+        RecoveryKeys, SANDBOX_BUDGET,
     };
     use access_store::sandbox;
 
@@ -2245,6 +2246,7 @@ mod provision {
             ct3_delay_s: None,
             causal_binding: false,
             acknowledge_no_recovery: ack,
+            recovery: None,
         }
     }
 
@@ -2309,7 +2311,23 @@ mod provision {
             parties: [founder, Id([0x42; 16])].into_iter().collect(),
             k: 2,
         };
-        let shop = PlatformChange::Realm(realm(tenant, "shop", joint.clone(), false));
+        // §13.6, SEC20, OP-158 m.3 (m), Ek B 6030
+        let mut with_keys = realm(tenant, "shop", joint.clone(), false);
+        with_keys.recovery = Some(RecoveryKeys {
+            held_on: access_kernel::recovery::KeyHolding::Device,
+            keys: [
+                (founder, b"a".as_slice()),
+                (founder, b"b"),
+                (Id([0x42; 16]), b"c"),
+            ]
+            .into_iter()
+            .map(|(party, seed)| RecoveryKey {
+                party,
+                kid: suiss_crypto::digest::sha256(seed),
+            })
+            .collect(),
+        });
+        let shop = PlatformChange::Realm(with_keys);
         let Provisioned::Done {
             exercise, created, ..
         } = provision(&w, &admin, &platform, &shop, [3; 16])
@@ -2328,7 +2346,34 @@ mod provision {
         else {
             panic!("not a production realm");
         };
-        assert_eq!(recovery, Recovery::NotAvailable);
+        assert_eq!(
+            recovery,
+            Recovery::Available {
+                threshold: 2,
+                keys: 3
+            }
+        );
+        let entry = access_store::authority::state_of(
+            &w.db.app,
+            &DomainId::from_bytes(domain.0),
+            &[access_kernel::recovery::entry_key()],
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .find_map(|r| r.value)
+        .map(|v| {
+            access_kernel::recovery::RecoveryEntry::from_value(
+                &suiss_crypto::dcbor::decode(&v, suiss_crypto::dcbor::Limits::CEILING).unwrap(),
+            )
+            .unwrap()
+        })
+        .unwrap();
+        assert_eq!((entry.threshold, entry.keys.len()), (2, 3));
+        assert_eq!(
+            access_identity_admin::domain::provision::recovery(&joint, None).0,
+            Recovery::NotAvailable(NotAvailable::NoKeys)
+        );
         // OP-149 m.29 (b), SI-5, §10.1.4 rule 3
         let gates: Vec<access_kernel::claim::Gate> =
             access_store::authority::state(&w.db.sequencer, &DomainId::from_bytes(domain.0))

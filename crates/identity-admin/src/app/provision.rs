@@ -311,20 +311,25 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 if !Self::tenant_active(p, tenant).await? {
                     return Err(ProvisionInvalid::NoTenant.into());
                 }
+                // §13.6, OP-158 m.3 (m)
+                let (_, entry) = recovery(&o.root, o.recovery.as_ref());
                 let created = self
-                    .create_realm(&NewRealm {
-                        tenant,
-                        slug: &o.slug,
-                        style: o.style,
-                        placement: &o.placement,
-                        root: o.root.clone(),
-                        ct3_delay_s: o.ct3_delay_s,
-                        causal_binding: o.causal_binding,
-                        schemas: Vec::new(),
-                        acceptances: Vec::new(),
-                        issuer_predicate_input: Vec::new(),
-                        provisioned_by: Some(*exercise),
-                    })
+                    .create_realm_with(
+                        &NewRealm {
+                            tenant,
+                            slug: &o.slug,
+                            style: o.style,
+                            placement: &o.placement,
+                            root: o.root.clone(),
+                            ct3_delay_s: o.ct3_delay_s,
+                            causal_binding: o.causal_binding,
+                            schemas: Vec::new(),
+                            acceptances: Vec::new(),
+                            issuer_predicate_input: Vec::new(),
+                            provisioned_by: Some(*exercise),
+                        },
+                        entry,
+                    )
                     .await?;
                 (
                     created.realm,
@@ -344,7 +349,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             realm,
             domain,
             issuer,
-            recovery: recovery(&o.root),
+            recovery: recovery(&o.root, o.recovery.as_ref()).0,
             sandbox: budget,
         })
     }

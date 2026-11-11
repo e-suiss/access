@@ -23723,6 +23723,48 @@
             "type": "boolean",
             "default": false
           },
+          "recovery": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "keys"
+            ],
+            "description": "The founders' recovery keys, by thumbprint only: the keys stay on their own devices or offline, never with the provider (§13.6, SEC20). Five or more keys build a 3-of-n entry, three or four a 2-of-n one; every holder is a root Party, and a sole root cannot be recovered. Without them the Genesis says `recovery: not_available`.",
+            "properties": {
+              "held_on": {
+                "type": "string",
+                "enum": [
+                  "device",
+                  "offline"
+                ],
+                "default": "device"
+              },
+              "keys": {
+                "type": "array",
+                "maxItems": 16,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "party",
+                    "kid"
+                  ],
+                  "properties": {
+                    "party": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{22}$",
+                      "description": "The root Party that holds the key."
+                    },
+                    "kid": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{43}$",
+                      "description": "The key's RFC 7638 thumbprint."
+                    }
+                  }
+                }
+              }
+            }
+          },
           "sandbox": {
             "type": "boolean",
             "description": "Open the governing domain from the sandbox template, a separate AuthorityDomain with its fixed budget (OP-151 m.3 (m)); always true on `sandbox-domains`."
@@ -23749,7 +23791,7 @@
               "n": 2
             },
             "recovery": "not_available",
-            "recovery_reason": "no-recover-entry"
+            "recovery_reason": "no-recovery-keys"
           }
         ],
         "properties": {
@@ -23779,13 +23821,27 @@
           "recovery": {
             "type": "string",
             "enum": [
+              "available",
               "not_available"
             ],
-            "description": "`not_available`: the rootTerms `domain.recover` entry cannot be built; the domain cannot be recovered (NG, N-14)."
+            "description": "`available`: the meta-anchor carries the rootTerms `domain.recover` entry. `not_available`: it cannot be built and the domain cannot be recovered (NG, N-14); the console says \"Recovery not available\"."
+          },
+          "recovery_threshold": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "How many of the entry's keys a recovery needs.",
+            "properties": {
+              "k": {
+                "type": "integer"
+              },
+              "n": {
+                "type": "integer"
+              }
+            }
           },
           "recovery_reason": {
             "type": "string",
-            "description": "A stable reason code."
+            "description": "Why recovery is not available: `no-recovery-keys`, `sole-root`, `too-few-recovery-keys`, `recovery-holder-not-root` or `duplicate-recovery-key`."
           }
         }
       },

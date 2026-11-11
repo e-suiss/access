@@ -153,11 +153,49 @@ pub const MIN_CT3_DELAY_S: u64 = 3_600;
 /// Longest CT3 time-lock a Genesis may set, seconds.
 pub const MAX_CT3_DELAY_S: u64 = 30 * 86_400;
 
-/// Whether recovery can be declared for the new domain (§13.7.7, N-14).
+/// Why the Suiss-hosted template cannot build the rootTerms `domain.recover` entry (§13.6,
+/// §13.7.7, N-14): S7 then says "Recovery not available".
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NotAvailable {
+    /// No recovery keys were named.
+    NoKeys,
+    /// A sole root: the Kernel never counts the actor Party's own contributions toward an
+    /// independent term (SEC10), so its own recovery keys could never recover it.
+    SoleRoot,
+    /// Fewer than three keys, or keys held by fewer Parties than the threshold.
+    TooFewKeys,
+    /// A key is held by a Party outside the founding root (SEC20).
+    HolderNotRoot,
+    /// A key is named twice.
+    DuplicateKey,
+}
+
+impl NotAvailable {
+    /// The stable reason code.
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::NoKeys => "no-recovery-keys",
+            Self::SoleRoot => "sole-root",
+            Self::TooFewKeys => "too-few-recovery-keys",
+            Self::HolderNotRoot => "recovery-holder-not-root",
+            Self::DuplicateKey => "duplicate-recovery-key",
+        }
+    }
+}
+
+/// Whether recovery can be declared for the new domain (§13.6, §13.7.7, N-14).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Recovery {
+    /// The Genesis carries a `threshold`-of-`keys` recovery entry.
+    Available {
+        /// Contributions a recovery needs.
+        threshold: u64,
+        /// Keys in the entry.
+        keys: u64,
+    },
     /// The rootTerms `domain.recover` entry cannot be built: "Recovery not available" (NG).
-    NotAvailable,
+    NotAvailable(NotAvailable),
 }
 
 impl Recovery {
@@ -165,25 +203,89 @@ impl Recovery {
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
-            Self::NotAvailable => "not_available",
+            Self::Available { .. } => "available",
+            Self::NotAvailable(_) => "not_available",
         }
     }
 
-    /// The stable reason, for the operator to show.
+    /// The stable reason a recovery is not available.
     #[must_use]
-    pub const fn reason(self) -> &'static str {
+    pub const fn reason(self) -> Option<&'static str> {
         match self {
-            Self::NotAvailable => "no-recover-entry",
+            Self::Available { .. } => None,
+            Self::NotAvailable(r) => Some(r.code()),
         }
     }
 }
 
-/// The recovery a Genesis with `root` declares (TN-111, §13.7.7). The Kernel has no
-/// `domain.recover` meta-action, so no root can carry a recovery entry yet: every new domain is
-/// "Recovery not available" (NG, N-14), whatever its root.
+/// One recovery key a founder names: the root Party that holds it and its RFC 7638 thumbprint.
+/// The key itself stays on the holder's device or offline; Access only ever sees the
+/// thumbprint (SEC20, U16).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct RecoveryKey {
+    /// The holder.
+    pub party: Id,
+    /// The key's thumbprint.
+    pub kid: [u8; 32],
+}
+
+/// The recovery keys of a new domain and how they are held.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecoveryKeys {
+    /// Device keys (passkey or security key) or offline ceremony keys.
+    pub held_on: access_kernel::recovery::KeyHolding,
+    /// The keys.
+    pub keys: Vec<RecoveryKey>,
+}
+
+/// Keys from which the template builds the organization entry, 3-of-5 (§13.6 POLICY DEFAULT).
+pub const ORGANIZATION_KEYS: usize = 5;
+
+/// Keys from which the template builds the small-domain entry, 2-of-3 (§13.6 POLICY DEFAULT).
+pub const SMALL_KEYS: usize = 3;
+
+/// The recovery a Genesis with `root` and the founders' `keys` declares, and the entry it
+/// carries (§13.6, SEC20, OP-158 m.3 (m)): five or more keys build 3-of-n, three or four build
+/// 2-of-n; at least two are hardware-bound, every holder is a root Party, and the keys are spread
+/// over at least `threshold` Parties, since the actor's own contributions never count (SEC10).
 #[must_use]
-pub const fn recovery(_root: &Root) -> Recovery {
-    Recovery::NotAvailable
+pub fn recovery(
+    root: &Root,
+    keys: Option<&RecoveryKeys>,
+) -> (Recovery, Option<access_kernel::recovery::RecoveryEntry>) {
+    let not = |r| (Recovery::NotAvailable(r), None);
+    let Some(keys) = keys.filter(|k| !k.keys.is_empty()) else {
+        return not(NotAvailable::NoKeys);
+    };
+    let parties = match root {
+        Root::Sole(_) => return not(NotAvailable::SoleRoot),
+        Root::Joint { parties, .. } => parties,
+    };
+    let kids: std::collections::BTreeSet<[u8; 32]> = keys.keys.iter().map(|k| k.kid).collect();
+    if kids.len() != keys.keys.len() {
+        return not(NotAvailable::DuplicateKey);
+    }
+    let holders: std::collections::BTreeSet<Id> = keys.keys.iter().map(|k| k.party).collect();
+    if !holders.is_subset(parties) {
+        return not(NotAvailable::HolderNotRoot);
+    }
+    let threshold: u64 = match kids.len() {
+        n if n >= ORGANIZATION_KEYS => 3,
+        n if n >= SMALL_KEYS => 2,
+        _ => return not(NotAvailable::TooFewKeys),
+    };
+    if u64::try_from(holders.len()).unwrap_or(0) < threshold {
+        return not(NotAvailable::TooFewKeys);
+    }
+    let n = u64::try_from(kids.len()).unwrap_or(u64::MAX);
+    let entry = access_kernel::recovery::RecoveryEntry::new(
+        threshold,
+        kids,
+        access_kernel::recovery::HARDWARE_BOUND_MIN,
+        keys.held_on,
+        holders,
+    );
+    (Recovery::Available { threshold, keys: n }, Some(entry))
 }
 
 /// Checks a founding root (TN-111, §13.7.7): `Joint(k >= 2)` is the recommendation; a sole root
@@ -274,6 +376,9 @@ pub struct RealmOrder {
     pub causal_binding: bool,
     /// Whether the caller acknowledged that the domain cannot be recovered.
     pub acknowledge_no_recovery: bool,
+    /// The founders' recovery keys, from which the Suiss-hosted template builds the rootTerms
+    /// recovery entry (§13.6, OP-158 m.3 (m)).
+    pub recovery: Option<RecoveryKeys>,
 }
 
 impl RealmOrder {
@@ -316,6 +421,10 @@ impl RealmOrder {
         }
         if self.causal_binding {
             fields.push((Value::text("causal_binding"), Value::Bool(true)));
+        }
+        // §13.6, OP-158 m.3 (m)
+        if let (_, Some(entry)) = recovery(&self.root, self.recovery.as_ref()) {
+            fields.push((Value::text("recovery"), entry.to_value()));
         }
         Value::Map(fields)
     }
