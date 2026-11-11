@@ -171,3 +171,30 @@ async fn a_realm_request_quota_follows_its_rate_limit() {
         Some(RequestRefusal::Tenant)
     );
 }
+
+// MD-8: a clock stepped back is refused for one burst window, not for the step
+#[tokio::test]
+async fn a_clock_stepped_back_is_refused_for_one_burst_window_only() {
+    let db = fresh().await.unwrap();
+    let t = create_tenant(&db.app, "pool-default").await.unwrap();
+    let d = domain(&db, t, 9).await;
+    let (tenant, own) = (rate(1_000, 1_000), rate(10, 2));
+    let hour = 3_600_000;
+    assert_eq!(
+        take_commit(&db.app, &d, NOW + hour, tenant, own)
+            .await
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        take_commit(&db.app, &d, NOW, tenant, own).await.unwrap(),
+        Some(CommitRefusal::Tenant)
+    );
+    assert_eq!(
+        take_commit(&db.app, &d, NOW + 1_100, tenant, own)
+            .await
+            .unwrap(),
+        None,
+        "past the longest burst window (the tenant's second) it admits again"
+    );
+}
