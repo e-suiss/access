@@ -22,7 +22,7 @@ pub const OUTBOX_PREFIX: &str = "event.";
 /// Every event name, authority events first; the identity events of OP-151 m.3 (i) last, then
 /// the agent events of OP-154, the enterprise events of OP-155 and the integration events of
 /// OP-156 (appended).
-pub const NAMES: [&str; 37] = [
+pub const NAMES: [&str; 39] = [
     "authority-revoked",
     "authority-narrowed",
     "authority-expired",
@@ -60,6 +60,8 @@ pub const NAMES: [&str; 37] = [
     "proxy.registered",
     "ssh.certificate_issued",
     "export.sink_failed",
+    "support.access_changed",
+    "breakglass.used",
 ];
 
 /// The Access semantic events that close CAEP's agent gap: an agent is an Instance, so these
@@ -85,8 +87,15 @@ pub fn urn(name: &str) -> String {
 /// (g)), the SSH certificate authority `ssh.certificate_issued` (OP-156 m.3 (o)), the export
 /// pass `export.sink_failed` (OP-156 m.3 (s)). `org.sso_enforced` waits for
 /// `idp.org.sso_enforce` (OP-155 m.3 (i)); the other Stage 11 events wait for the HR job and
-/// `idp.proxy.register` (OP-156 m.3 (l), (q)).
-pub const UNPRODUCED: [&str; 3] = ["org.sso_enforced", "hr.record_due", "proxy.registered"];
+/// `idp.proxy.register` (OP-156 m.3 (l), (q)); the Stage 12 events wait for support access and
+/// break-glass (OP-157 m.3 (aa)).
+pub const UNPRODUCED: [&str; 5] = [
+    "org.sso_enforced",
+    "hr.record_due",
+    "proxy.registered",
+    "support.access_changed",
+    "breakglass.used",
+];
 
 /// Whether a webhook or stream may subscribe to `name`: a catalog event with a producer.
 #[must_use]
@@ -158,10 +167,15 @@ pub enum IdentityKind {
     SshCertificateIssued,
     /// `export.sink_failed`: an export sink stopped accepting the projection (OP-156 m.3 (s)).
     ExportSinkFailed,
+    /// `support.access_changed`: a support Grant was given, started, ended or revoked (OP-157 m.3
+    /// (aa)).
+    SupportAccessChanged,
+    /// `breakglass.used`: a break-glass Grant was exercised on an account (OP-157 m.3 (aa)).
+    BreakglassUsed,
 }
 
 impl IdentityKind {
-    const ALL: [Self; 22] = [
+    const ALL: [Self; 24] = [
         Self::TenantCreated,
         Self::OrganizationCreated,
         Self::OrganizationUpdated,
@@ -184,6 +198,8 @@ impl IdentityKind {
         Self::ProxyRegistered,
         Self::SshCertificateIssued,
         Self::ExportSinkFailed,
+        Self::SupportAccessChanged,
+        Self::BreakglassUsed,
     ];
 
     /// The event name.
@@ -213,6 +229,8 @@ impl IdentityKind {
             Self::ProxyRegistered => "proxy.registered",
             Self::SshCertificateIssued => "ssh.certificate_issued",
             Self::ExportSinkFailed => "export.sink_failed",
+            Self::SupportAccessChanged => "support.access_changed",
+            Self::BreakglassUsed => "breakglass.used",
         }
     }
 
@@ -243,6 +261,8 @@ impl IdentityKind {
             Self::ProxyRegistered => "event.proxy.registered",
             Self::SshCertificateIssued => "event.ssh.certificate_issued",
             Self::ExportSinkFailed => "event.export.sink_failed",
+            Self::SupportAccessChanged => "event.support.access_changed",
+            Self::BreakglassUsed => "event.breakglass.used",
         }
     }
 
@@ -685,6 +705,58 @@ impl IdentityEvent {
                 "sink": sink,
                 "adapter": adapter,
                 "since": since,
+                "at": at,
+            }),
+        }
+    }
+
+    /// `support.access_changed`: the support Grant `grant` of the operator Party `operator` on
+    /// `account` (its `usr_` id) was `change`d, `granted`, `started`, `ended` or `revoked`; the case
+    /// is named by its case system only (OP-157 m.3 (aa)).
+    #[must_use]
+    pub fn support_access_changed(
+        id: [u8; 32],
+        realm: &[u8; 16],
+        (account, grant, operator, case_system): (&str, &str, &[u8; 16], &str),
+        change: &str,
+        at: u64,
+    ) -> Self {
+        Self {
+            kind: IdentityKind::SupportAccessChanged,
+            id,
+            payload: json!({
+                "realm": uuid(realm),
+                "account": account,
+                "grant": grant,
+                "operator": uuid(operator),
+                "case_system": case_system,
+                "change": change,
+                "at": at,
+            }),
+        }
+    }
+
+    /// `breakglass.used`: the break-glass Exercise `exercise` of the organization Party `org` on
+    /// `account` (its `usr_` id) carried `approvals` approvals and lasts until `until` (OP-157 m.3
+    /// (aa)).
+    #[must_use]
+    pub fn breakglass_used(
+        id: [u8; 32],
+        realm: &[u8; 16],
+        (account, exercise, org): (&str, &str, &[u8; 16]),
+        (approvals, until): (u32, u64),
+        at: u64,
+    ) -> Self {
+        Self {
+            kind: IdentityKind::BreakglassUsed,
+            id,
+            payload: json!({
+                "realm": uuid(realm),
+                "account": account,
+                "exercise": exercise,
+                "organization": uuid(org),
+                "approvals": approvals,
+                "until": until,
                 "at": at,
             }),
         }

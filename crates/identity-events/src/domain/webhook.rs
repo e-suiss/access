@@ -312,6 +312,10 @@ mod tests {
         }
         // OP-156 m.3 (s)
         assert!(event_names(&[String::from("export.sink_failed")]).is_ok());
+        // OP-157 m.3 (aa)
+        for name in ["support.access_changed", "breakglass.used"] {
+            assert!(event_names(&[String::from(name)]).is_err(), "{name}");
+        }
     }
 
     // EI-25

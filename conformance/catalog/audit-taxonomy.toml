@@ -1740,3 +1740,269 @@ ocsf_class = 3001
 ocsf_activity = 3
 caep = ""
 webhook = false
+
+# ---------------------------------------------------------------- Stage 12 (OP-157 m.3 (aa), m.4 (a), appended): support access, break-glass, operator and signer, reviews, offboarding, approval channels, mappings, policy defaults, incidents
+
+[[event]]
+event = "support.access_requested"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "support.access_granted"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "support.access_ended"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target", "reason"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "support.artifact_uploaded"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "support.artifact_read"
+plane = "identity"
+class = "audit-access"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6001
+ocsf_activity = 2
+caep = ""
+webhook = false
+
+[[event]]
+event = "breakglass.account_marked"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "breakglass.account_signin"
+plane = "identity"
+class = "authentication"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "breakglass.used"
+plane = "authority"
+class = "decision"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "breakglass.reviewed"
+plane = "authority"
+class = "decision"
+outcome = "success"
+fields = ["actor", "target", "reason"]
+ocsf_class = 3003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "breakglass.review_overdue"
+plane = "authority"
+class = "detection"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 2004
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "breakglass.drill_overdue"
+plane = "authority"
+class = "detection"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 2004
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "breakglass.rotation_required"
+plane = "authority"
+class = "detection"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 2004
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "operator.directive"
+plane = "authority"
+class = "audit-access"
+outcome = "success"
+fields = ["actor", "target", "reason"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "operator.db_session"
+plane = "authority"
+class = "audit-access"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6001
+ocsf_activity = 2
+caep = ""
+webhook = false
+
+[[event]]
+event = "signer.hsm_used"
+plane = "authority"
+class = "audit-access"
+outcome = "success"
+fields = ["actor", "target", "reason"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "signer.ceremony"
+plane = "authority"
+class = "configuration"
+outcome = "success"
+fields = ["actor", "target", "reason"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "signer.rotated"
+plane = "authority"
+class = "configuration"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "review.kept"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "offboarding.committed"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "approval.inline"
+plane = "authority"
+class = "decision"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "approval.batch"
+plane = "authority"
+class = "decision"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "mapping.pinned"
+plane = "authority"
+class = "configuration"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "policy.default_changed"
+plane = "authority"
+class = "configuration"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "incident.contained"
+plane = "identity"
+class = "detection"
+outcome = "success"
+fields = ["actor", "target", "reason"]
+ocsf_class = 2004
+ocsf_activity = 1
+caep = ""
+webhook = false

@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:event:support.access_changed:1",
+  "title": "Support access to an account changed (OP-157 m.3 (aa))",
+  "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:support.access_changed`. A support Grant was given, started, ended or revoked; ids and names only, never the case text. A notification, never an authority source (INV-24).",
+  "type": "object",
+  "required": [
+    "realm",
+    "account",
+    "grant",
+    "operator",
+    "case_system",
+    "change",
+    "at",
+    "access_position"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "realm": {
+      "$ref": "#/$defs/uuid"
+    },
+    "account": {
+      "type": "string",
+      "pattern": "^usr_[0-9a-hjkmnp-tv-z]{26}$",
+      "description": "The account's opaque external id (OP-137)."
+    },
+    "grant": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "The support Grant's external id."
+    },
+    "operator": {
+      "$ref": "#/$defs/uuid"
+    },
+    "case_system": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "The case system's name in the realm."
+    },
+    "change": {
+      "type": "string",
+      "enum": [
+        "granted",
+        "started",
+        "ended",
+        "revoked"
+      ]
+    },
+    "at": {
+      "$ref": "#/$defs/ms"
+    },
+    "access_position": {
+      "$ref": "#/$defs/access_position"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix time, milliseconds."
+    },
+    "access_position": {
+      "type": "object",
+      "description": "The event's monotone version field (OP-22): it only grows within its source, the domain for an authority event and the issuer for an identity event. A receiver that has applied a later or equal position re-queries instead of applying this event.",
+      "required": [
+        "pos",
+        "idx"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "pos": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idx": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

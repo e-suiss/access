@@ -156,6 +156,8 @@ profile is used by Relay, so one verifier accepts both products. Test vectors:
 | `proxy.registered` | a proxy becomes a policy enforcement point of the realm |
 | `ssh.certificate_issued` | the realm's SSH certificate authority issues a certificate |
 | `export.sink_failed` | an export sink stops accepting the audit copy |
+| `support.access_changed` | support access to an account is given, starts, ends or is revoked |
+| `breakglass.used` | emergency access is used on an account |
 
 The tenant, organization and API client events of the catalogue (`tenant.created`,
 `organization.*`, `api_client.*`) and the authority events reach subscribers through streams.
@@ -173,3 +175,6 @@ certificate it issues, and `export.sink_failed` by the export pass once a sink h
 batches in a row. `hr.record_due` and `proxy.registered` are catalogued and refused the same
 way until the HR job and proxy registration raise them. `preference.changed` may carry an `iys` member naming
 the commercial message channels a change touched, for realms that record consent with İYS.
+
+`support.access_changed` and `breakglass.used` are catalogued and refused the same way until
+support access and break-glass raise them.

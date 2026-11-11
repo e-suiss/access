@@ -691,3 +691,124 @@ severity = "warn"
 since = "unreleased"
 fields = ["status"]
 ocsf = "application_error"
+
+# Stage 12 (OP-157 m.4 (a), appended)
+[[event]]
+name = "breakglass.tool.used"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["op", "cell"]
+ocsf = "api_activity"
+
+[[event]]
+name = "breakglass.tool.refused"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "breakglass.trail.broken"
+plane = "ops"
+severity = "error"
+since = "unreleased"
+fields = ["cell"]
+ocsf = "application_error"
+
+[[event]]
+name = "ops.directive.applied"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["kind"]
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "ops.directive.refused"
+plane = "ops"
+severity = "error"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "application_error"
+
+[[event]]
+name = "ingest.narrowing.lag"
+plane = "authority"
+severity = "warn"
+since = "unreleased"
+fields = ["age_s"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "policy.analyzer.unavailable"
+plane = "authority"
+severity = "warn"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "application_error"
+
+[[event]]
+name = "policy.polarity.raised"
+plane = "authority"
+severity = "info"
+since = "unreleased"
+fields = ["result"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "breakglass.review.overdue"
+plane = "authority"
+severity = "warn"
+since = "unreleased"
+fields = ["count"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "approval.invite.limited"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "support.artifact.refused"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["format"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "support.case.stale"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = ["case_system"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "review.campaign.opened"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["items"]
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "signer.ceremony.refused"
+plane = "signer"
+severity = "warn"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "signer.hsm.audit_failed"
+plane = "signer"
+severity = "error"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "application_error"

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:event:breakglass.used:1",
+  "title": "Emergency access was used on an account (OP-157 m.3 (aa))",
+  "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:breakglass.used`. A break-glass Grant was exercised on the account with at least two approvals. A notification, never an authority source (INV-24).",
+  "type": "object",
+  "required": [
+    "realm",
+    "account",
+    "exercise",
+    "organization",
+    "approvals",
+    "until",
+    "at",
+    "access_position"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "realm": {
+      "$ref": "#/$defs/uuid"
+    },
+    "account": {
+      "type": "string",
+      "pattern": "^usr_[0-9a-hjkmnp-tv-z]{26}$",
+      "description": "The account's opaque external id (OP-137)."
+    },
+    "exercise": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "The break-glass Exercise's external id."
+    },
+    "organization": {
+      "$ref": "#/$defs/uuid"
+    },
+    "approvals": {
+      "type": "integer",
+      "minimum": 2
+    },
+    "until": {
+      "$ref": "#/$defs/ms"
+    },
+    "at": {
+      "$ref": "#/$defs/ms"
+    },
+    "access_position": {
+      "$ref": "#/$defs/access_position"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix time, milliseconds."
+    },
+    "access_position": {
+      "type": "object",
+      "description": "The event's monotone version field (OP-22): it only grows within its source, the domain for an authority event and the issuer for an identity event. A receiver that has applied a later or equal position re-queries instead of applying this event.",
+      "required": [
+        "pos",
+        "idx"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "pos": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idx": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

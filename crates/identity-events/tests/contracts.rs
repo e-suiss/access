@@ -223,6 +223,14 @@ fn identity_events() -> Vec<IdentityEvent> {
             5,
         ),
         IdentityEvent::export_sink_failed([46; 32], &realm, ("splunk", "http"), 4, 5),
+        IdentityEvent::support_access_changed(
+            [47; 32],
+            &realm,
+            (ACCOUNT, "grt_x", &[5; 16], "zendesk"),
+            "granted",
+            5,
+        ),
+        IdentityEvent::breakglass_used([48; 32], &realm, (ACCOUNT, "exr_x", &[6; 16]), (2, 9), 5),
     ];
     for (i, (from, to)) in [
         (AccountStatus::Locked, AccountStatus::Active),
