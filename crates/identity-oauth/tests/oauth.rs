@@ -1748,6 +1748,104 @@ async fn with_the_identity_database_cut_off_only_local_verification_goes_on() {
     assert_eq!(body(&r, 200)["token_type"], "DPoP");
 }
 
+// U35, EP-3, MD-7, OP-21, OP-32, OP-61, §13.7.9, §17.5.1, Ek B 5701
+#[tokio::test(flavor = "multi_thread")]
+async fn measured_revocation_reaches_another_node_within_the_cluster_budget() {
+    let w = world().await;
+    let env = w.oauth.env();
+    let node_b = OAuth::new(TestEnv {
+        db: PgOAuth::with_reader(w.db.app.clone(), w.db.reader.clone()),
+        signer: SignerKeys::new(w.socket.clone()),
+        keys: w.keys.clone(),
+        directory: PgDirectory::new(w.db.router.clone()),
+        pool: w.db.app.clone(),
+        as_ring: env.as_ring.clone(),
+        rs_ring: env.rs_ring.clone(),
+        profile: DpopProfile::default(),
+        ids: IdKey::new(Secret::new([0x1d; 32])),
+        claims: VaultSource {
+            pool: w.db.app.clone(),
+            vault: test_vault(),
+        },
+    });
+    let realm_b = node_b.realm(HOST, None).await.unwrap().unwrap();
+    async fn introspect(oauth: &OAuth<TestEnv>, realm: &Realm, token: &str) -> Value {
+        let p = Params::new(vec![("token".into(), token.into())]).unwrap();
+        let authorization = basic(CONFIDENTIAL, SECRET);
+        body(
+            &oauth.introspect(realm, &p, Some(&authorization)).await,
+            200,
+        )["active"]
+            .clone()
+    }
+    let n = 40;
+    let mut same = Vec::with_capacity(n);
+    let mut cluster = Vec::with_capacity(n);
+    for _ in 0..n {
+        let code = w.code(CONFIDENTIAL).await;
+        let t = body(
+            &w.token(
+                &[
+                    ("grant_type", "authorization_code"),
+                    ("code", &code),
+                    ("redirect_uri", CB),
+                    ("code_verifier", VERIFIER),
+                ],
+                Some(&basic(CONFIDENTIAL, SECRET)),
+            )
+            .await,
+            200,
+        );
+        let access = t["access_token"].as_str().unwrap().to_owned();
+        let refresh = t["refresh_token"].as_str().unwrap().to_owned();
+        assert_eq!(introspect(&node_b, &realm_b, &access).await, true);
+        let revoke = Params::new(vec![("token".into(), refresh.into())]).unwrap();
+        let start = std::time::Instant::now();
+        let done = w
+            .oauth
+            .revoke(&w.realm, &revoke, Some(&basic(CONFIDENTIAL, SECRET)))
+            .await;
+        assert_eq!(body(&done, 200), serde_json::json!({}));
+        let committed = start.elapsed();
+        assert_eq!(introspect(&w.oauth, &w.realm, &access).await, false);
+        same.push(start.elapsed().saturating_sub(committed).as_micros() as u64);
+        let at_b = std::time::Instant::now();
+        assert_eq!(
+            introspect(&node_b, &realm_b, &access).await,
+            false,
+            "the first read after the revocation"
+        );
+        cluster.push((committed + at_b.elapsed()).as_micros() as u64);
+    }
+    let summary = |mut v: Vec<u64>| {
+        v.sort_unstable();
+        let at = |q: usize| v[(q * v.len()).div_ceil(100).clamp(1, v.len()) - 1];
+        serde_json::json!({ "n": v.len(), "p50_us": at(50), "p99_us": at(99), "max_us": v[v.len() - 1] })
+    };
+    let version = access_store::testing::server_version(&w.db).await.unwrap();
+    let report = serde_json::json!({
+        "rule": "U35, EP-3",
+        "note": "revocation committed at node A, then the first introspection on node A and on node B (two authorization server instances over one primary); the cluster figure includes the revocation request",
+        "same_node_after_commit": summary(same),
+        "cluster_revoke_to_inactive": summary(cluster),
+        "targets": { "same_node_us": 0, "cluster_p99_us": 250_000 },
+        "environment": {
+            "os": std::env::consts::OS,
+            "arch": std::env::consts::ARCH,
+            "cores": std::thread::available_parallelism().map_or(0, std::num::NonZero::get),
+            "postgres": version,
+            "path": "in-process: two OAuth services, real PostgreSQL (one local server, no standby), real identity signer",
+            "profile": if cfg!(debug_assertions) { "debug" } else { "release" },
+        },
+    });
+    println!("measure {report}");
+    assert!(
+        report["cluster_revoke_to_inactive"]["p99_us"]
+            .as_u64()
+            .is_some()
+    );
+}
+
 // §10.4.6, G57, MD-7, IDP-24
 #[tokio::test]
 async fn logout_ends_the_session_and_notifies_clients() {
