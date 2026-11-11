@@ -146,6 +146,12 @@ docker compose -f deploy/compose/access.yaml run --rm local-client approve \
 
 `--intent <file>` reads the intent from a file instead. With `--request <file>`, a typed authority request your product already built for its own `REQUIRE_ACTION` (`require_action` naming the same intent), the client only pushes and approves it and prints the contribution; the product then commits again with that contribution as its proof. A request for an intent nothing waits for is `approval-request-changed`; a key that is not the user's passkey is refused at sign-in.
 
+### What the Approval Surface shows
+
+The hosted page at `/v1/approve` shows the request exactly as the decision point rendered it from the accepted Action Schema, so the digest the approver signs is the digest of what they saw. Beside it: the capacity the approver approves in, what is still needed in words anyone can check ("1 more · not the requester · a different person"; two approvals by the same person count as one), what approving does and doesn't do, the concrete act ("Confirm with your passkey"), and the requester's note, shown second. A request whose render can't be shown faithfully, whose attached body doesn't match the digest in the intent, or that the viewer isn't eligible to approve has no button. `GET /consent` sends the browser to the same page; consent is never a form post.
+
+Access doesn't own your approval UI. Any surface that passes the WYSIWYS vectors in `conformance/vectors/approval/1/` can collect approvals: Access keeps the approval rules, the digest and the required assurance, the surface shows the render faithfully and takes the user's act, your coordinator says why, and your product carries out the effect. A notification or an agent's summary is only an invitation, never the approval.
+
 ### Produce events on purpose
 
 Your product's end-to-end tests can make Access emit the events it subscribes to:
