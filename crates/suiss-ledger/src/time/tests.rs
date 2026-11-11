@@ -1,4 +1,4 @@
-use super::{TimeError, TrustedClock, UNCERTAINTY_MS, check_against_witness};
+use super::{Sample, TimeError, TrustedClock, UNCERTAINTY_MS, check_against_witness};
 
 // TI-RT2
 #[test]
@@ -50,4 +50,54 @@ fn witness_time_bounds_the_log_clock() {
         Err(TimeError::AheadOfWitness)
     );
     assert_eq!(check_against_witness(5, 100, UNCERTAINTY_MS), Ok(()));
+}
+
+// TI-RT2, FA-3, OP-158 m.3 (k)
+#[test]
+fn one_deviating_source_of_three_is_left_out() {
+    let mut c = TrustedClock::default();
+    assert_eq!(c.read(&[10_000, 10_100, 90_000], 0), Ok(10_000));
+    assert_eq!(c.deviating(), 1);
+    assert_eq!(c.read(&[10_500, 10_550, 10_520], 500), Ok(10_520));
+    assert_eq!(c.deviating(), 0);
+}
+
+// TI-RT2, OP-158 m.3 (k)
+#[test]
+fn without_a_strict_majority_nothing_is_trusted() {
+    let mut c = TrustedClock::default();
+    assert_eq!(
+        c.read(&[10_000, 20_000, 30_000], 0),
+        Err(TimeError::Disagree)
+    );
+    assert_eq!(
+        c.read(&[10_000, 10_000, 20_000, 20_000], 0),
+        Err(TimeError::Disagree)
+    );
+    assert_eq!(c.read(&[0, 200, 400], 0), Err(TimeError::Disagree));
+}
+
+// TI-RT2, OP-158 m.3 (k)
+#[test]
+fn a_roughtime_radius_widens_agreement_but_not_the_answer() {
+    let mut c = TrustedClock::default();
+    let rough = Sample {
+        at: 11_000,
+        radius: 1_000,
+    };
+    let got = c.read_samples(&[Sample::exact(10_100), Sample::exact(10_000), rough], 0);
+    assert_eq!(got, Ok(10_000));
+    assert_eq!(c.deviating(), 0);
+    let far = Sample {
+        at: 20_000,
+        radius: 1_000,
+    };
+    let got = c.read_samples(&[Sample::exact(10_100), Sample::exact(10_050), far], 100);
+    assert_eq!(got, Ok(10_050));
+    assert_eq!(c.deviating(), 1);
+    let mut alone = TrustedClock::default();
+    assert_eq!(
+        alone.read_samples(&[Sample::exact(10_000), far], 0),
+        Err(TimeError::Disagree)
+    );
 }
