@@ -9,6 +9,7 @@ import * as A from "./Admin.js";
 import { Agents } from "./Agents.js";
 import * as Au from "./Audit.js";
 import * as D from "./Developer.js";
+import { Offboarding } from "./Offboarding.js";
 import * as O from "./Organizations.js";
 import type { Ctx } from "./parts.js";
 import { Proxy } from "./Proxy.js";
@@ -73,7 +74,7 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
     case "protected":
       return <A.Protected />;
     case "offboarding":
-      return <A.Offboarding ctx={ctx} />;
+      return <Offboarding ctx={ctx} />;
     case "domain":
       return <A.Domain ctx={ctx} />;
     case "changes":
