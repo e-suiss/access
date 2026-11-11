@@ -207,7 +207,7 @@ fn the_add_checkpoint_body_round_trips() {
     }
 }
 
-// K15, C2SP tlog-tiles
+// K15
 #[test]
 fn tiles_hold_complete_subtree_hashes() {
     let l = leaves(70_000);

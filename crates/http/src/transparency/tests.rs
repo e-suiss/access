@@ -124,7 +124,7 @@ async fn an_inclusion_bundle_needs_a_pep_and_a_witnessed_checkpoint() {
     );
 }
 
-// K15, C2SP tlog-tiles
+// K15
 #[test]
 fn tile_paths_are_canonical() {
     assert_eq!(tile_index("000"), Some((0, 256)));
