@@ -109,6 +109,12 @@ pub trait Kek {
     /// [`EnvelopeError::Wrap`].
     fn unwrap(&self, wrapped: &[u8]) -> Result<Dek, EnvelopeError>;
 
+    /// Whether a key recorded under `kek_id` is this KEK's to open: its own id, or one of the
+    /// generations it was rotated from (OP-138, OP-158 m.3 (y)).
+    fn opens(&self, kek_id: &str) -> bool {
+        kek_id == self.id()
+    }
+
     /// Applies the password pepper that goes with this KEK (CR-37, OP-150 m.3 (f)): AES-GCM
     /// under a key that never leaves the token, returning its version and `nonce ‖ ciphertext`.
     /// A KEK with no pepper refuses.

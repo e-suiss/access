@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT serial, blob FROM access.mds_cache WHERE source = $1 ORDER BY serial DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "serial",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.mds_cache",
+            "name": "serial"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "blob",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.mds_cache",
+            "name": "blob"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "70be02ad256e007289e0c73557f4a2475a70e44ac7a641166c781b7d6882b558"
+}

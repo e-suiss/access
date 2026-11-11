@@ -69,7 +69,7 @@ impl<K: RealmKek> KeySeal<K> {
         sealed: &SealedKey,
     ) -> Result<Zeroizing<Vec<u8>>, Unavailable> {
         let kek = self.0.kek(tenant, realm).ok_or_else(|| down("none"))?;
-        if kek.id() != sealed.kek_id {
+        if !kek.opens(&sealed.kek_id) {
             return Err(down("version"));
         }
         let dek = kek

@@ -2605,3 +2605,5 @@ mod durability;
 mod faults;
 // OP-158 m.4 (b) (W12)
 mod reshred;
+// OP-158 m.4 (b)
+mod kek_rotation;

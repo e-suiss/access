@@ -1,0 +1,60 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT from_kek, to_kek, rewrapped, finished_at IS NOT NULL AS \"finished!\"\n               FROM access.kek_rotations WHERE tenant_id = $1 AND realm_id = $2\n              ORDER BY finished_at IS NULL DESC, started_at DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "from_kek",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.kek_rotations",
+            "name": "from_kek"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "to_kek",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.kek_rotations",
+            "name": "to_kek"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "rewrapped",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.kek_rotations",
+            "name": "rewrapped"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "finished!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "495d00ebc0e06d5436679ece1a0ee2e9ed14caa0ef4289080338d730ffb4e6fb"
+}

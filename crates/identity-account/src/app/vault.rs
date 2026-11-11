@@ -138,7 +138,7 @@ pub async fn class_key(
         let Some(wrapped) = row.wrapped_dek else {
             return Ok(None);
         };
-        if row.kek_id != vault.kek.id() {
+        if !vault.kek.opens(&row.kek_id) {
             return Err(AccountError::Corrupt);
         }
         return Ok(Some(vault.kek.unwrap(&wrapped)?));
@@ -281,7 +281,7 @@ pub async fn reveal_with_kek(
             let Some(wrapped) = row.wrapped_dek else {
                 return Ok(None);
             };
-            if row.kek_id != kek.id() {
+            if !kek.opens(&row.kek_id) {
                 return Err(AccountError::Corrupt);
             }
             let dek = kek.unwrap(&wrapped)?;

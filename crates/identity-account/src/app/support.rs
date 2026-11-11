@@ -252,7 +252,7 @@ pub async fn display_name(
     let mut found: BTreeMap<String, String> = BTreeMap::new();
     if let Some(row) = tx.subject_key(subject, PiiClass::Profile.name()).await?
         && let Some(wrapped) = row.wrapped_dek
-        && row.kek_id == kek.id()
+        && kek.opens(&row.kek_id)
         && let Ok(dek) = kek.unwrap(&wrapped)
     {
         for (field, nonce, ciphertext) in tx.profile_fields(subject).await? {

@@ -117,7 +117,7 @@ impl RealmKeys for Keks {
         realm: RealmId,
         kek_id: &str,
     ) -> Option<Arc<dyn Kek + Send + Sync>> {
-        self.0.kek(tenant, realm).filter(|k| k.id() == kek_id)
+        self.0.kek(tenant, realm).filter(|k| k.opens(kek_id))
     }
 }
 

@@ -58,7 +58,7 @@ pub fn open(
     sink: &[u8; 16],
     sealed: &SealedKey,
 ) -> Result<SinkSecret, Unsealed> {
-    if kek.id() != sealed.kek_id {
+    if !kek.opens(&sealed.kek_id) {
         return Err(Unsealed);
     }
     let dek = kek.unwrap(&sealed.wrapped_dek).map_err(|_| Unsealed)?;

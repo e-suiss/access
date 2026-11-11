@@ -55,7 +55,7 @@ pub(crate) async fn recipient_key(
         .await?
         .ok_or(NotifyError::NoSubject)?;
     let wrapped = key.wrapped_dek.ok_or(NotifyError::NoSubject)?;
-    if key.kek_id != realm.kek.id() {
+    if !realm.kek.opens(&key.kek_id) {
         return Err(NotifyError::NoSubject);
     }
     realm.kek.unwrap(&wrapped).map_err(|_| NotifyError::Seal)

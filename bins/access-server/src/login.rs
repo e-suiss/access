@@ -59,10 +59,41 @@ pub(crate) fn pepper_label(realm: &[u8; 16]) -> String {
 /// The pepper version the token's pepper key applies; rotation adds the next.
 const PEPPER_VERSION: u16 = 1;
 
-/// The id of a realm's KEK as sealed rows record it (`kek_id`): `access:realm-kek:<RealmID
-/// hex>`, the label in the alphabet the tables' checks allow.
-pub(crate) fn kek_id(realm: &[u8; 16]) -> String {
-    kek_label(realm).replace('/', ":")
+/// The token label of generation `generation` of a realm's KEK (OP-138, OP-158 m.3 (y)): the
+/// first is [`kek_label`], a rotation adds `/<generation>`.
+pub(crate) fn kek_label_at(realm: &[u8; 16], generation: u32) -> String {
+    if generation <= 1 {
+        kek_label(realm)
+    } else {
+        format!("{}/{generation}", kek_label(realm))
+    }
+}
+
+/// The `kek_id` of generation `generation` as sealed rows record it: `access:realm-kek:<RealmID
+/// hex>[:<generation>]`, the label in the alphabet the tables' checks allow.
+pub(crate) fn kek_id_at(realm: &[u8; 16], generation: u32) -> String {
+    kek_label_at(realm, generation).replace('/', ":")
+}
+
+/// Most KEK generations probed in the token.
+const MAX_GENERATIONS: u32 = 64;
+
+/// How long a loaded KEK set is used before the token is probed again for a newer generation
+/// another process made (OP-158 m.3 (y); PD).
+const REPROBE_MS: u64 = 5 * 60 * 1000;
+
+/// The KEKs of a realm in the token, newest first: generation and key.
+pub(crate) fn realm_keks(keys: &KeyStore, realm: &[u8; 16]) -> Result<Vec<(u32, HsmKek)>, String> {
+    let mut out = Vec::new();
+    for generation in 1..=MAX_GENERATIONS {
+        match keys.kek(&kek_label_at(realm, generation)) {
+            Ok(k) => out.push((generation, k)),
+            Err(_) if generation > 1 => break,
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    out.reverse();
+    Ok(out)
 }
 
 /// A token KEK behind a lock: a PKCS#11 session serves one caller at a time. Unwrapped DEKs
@@ -71,9 +102,39 @@ pub(crate) fn kek_id(realm: &[u8; 16]) -> String {
 struct LockedKek {
     id: String,
     inner: Mutex<HsmKek>,
+    older: Mutex<Vec<HsmKek>>,
+    older_ids: Vec<String>,
     pepper: HsmAead,
     cache: Mutex<DekCache>,
     clock: fn() -> u64,
+    loaded_ms: u64,
+}
+
+/// A realm's current KEK with the generations before it: wraps with the current one, opens
+/// with whichever wrapped the key (AES Key Wrap checks its own integrity), so rows a rotation
+/// has not reached yet still open (OP-138).
+struct Generations<'a> {
+    current: &'a HsmKek,
+    older: &'a [HsmKek],
+}
+
+impl Kek for Generations<'_> {
+    fn id(&self) -> &str {
+        self.current.id()
+    }
+
+    fn wrap(&self, dek: &Dek) -> Result<Vec<u8>, EnvelopeError> {
+        self.current.wrap(dek)
+    }
+
+    fn unwrap(&self, wrapped: &[u8]) -> Result<Dek, EnvelopeError> {
+        self.current.unwrap(wrapped).or_else(|e| {
+            self.older
+                .iter()
+                .find_map(|k| k.unwrap(wrapped).ok())
+                .ok_or(e)
+        })
+    }
 }
 
 /// How long an unwrapped DEK stays cached (CR-32 m.2; PD 5 minutes): a shredded key's last
@@ -90,12 +151,27 @@ fn now_ms() -> u64 {
 }
 
 impl LockedKek {
+    #[cfg(test)]
     fn new(id: String, kek: HsmKek, pepper: HsmAead, clock: fn() -> u64) -> Self {
+        Self::with_older(id, kek, Vec::new(), pepper, clock)
+    }
+
+    fn with_older(
+        id: String,
+        kek: HsmKek,
+        older: Vec<(String, HsmKek)>,
+        pepper: HsmAead,
+        clock: fn() -> u64,
+    ) -> Self {
+        let (older_ids, older) = older.into_iter().unzip();
         Self {
             id,
             inner: Mutex::new(kek),
+            older: Mutex::new(older),
+            older_ids,
             pepper,
             cache: Mutex::new(DekCache::new(DEK_CACHE_TTL_MS, DEK_CACHE_MAX)),
+            loaded_ms: clock(),
             clock,
         }
     }
@@ -104,6 +180,10 @@ impl LockedKek {
 impl Kek for LockedKek {
     fn id(&self) -> &str {
         &self.id
+    }
+
+    fn opens(&self, kek_id: &str) -> bool {
+        kek_id == self.id || self.older_ids.iter().any(|i| i == kek_id)
     }
 
     fn wrap(&self, dek: &Dek) -> Result<Vec<u8>, EnvelopeError> {
@@ -116,7 +196,12 @@ impl Kek for LockedKek {
     fn unwrap(&self, wrapped: &[u8]) -> Result<Dek, EnvelopeError> {
         let mut cache = self.cache.lock().map_err(|_| EnvelopeError::Wrap)?;
         let inner = self.inner.lock().map_err(|_| EnvelopeError::Wrap)?;
-        let dek = cache.get(&*inner, wrapped, (self.clock)())?;
+        let older = self.older.lock().map_err(|_| EnvelopeError::Wrap)?;
+        let all = Generations {
+            current: &inner,
+            older: &older,
+        };
+        let dek = cache.get(&all, wrapped, (self.clock)())?;
         Ok(Dek::from_secret(Secret::new(*dek.secret().expose())))
     }
 
@@ -149,6 +234,10 @@ struct SharedKek(Arc<LockedKek>);
 impl Kek for SharedKek {
     fn id(&self) -> &str {
         self.0.id()
+    }
+
+    fn opens(&self, kek_id: &str) -> bool {
+        self.0.opens(kek_id)
     }
 
     fn wrap(&self, dek: &Dek) -> Result<Vec<u8>, EnvelopeError> {
@@ -228,21 +317,38 @@ impl RealmKeks {
         }
     }
 
+    /// Drops the loaded KEKs of `realm`, so the next use probes the token again: after a
+    /// rotation made a new generation (OP-138).
+    pub(crate) fn reload(&self, realm: &[u8; 16]) {
+        if let Ok(mut loaded) = self.loaded.lock() {
+            loaded.remove(realm);
+        }
+    }
+
+    /// The token these KEKs live in.
+    pub(crate) fn token(&self) -> &KeyStore {
+        &self.keys
+    }
+
     fn get(&self, realm: &[u8; 16]) -> Result<Arc<LockedKek>, String> {
         let mut loaded = self.loaded.lock().map_err(|_| "kek cache")?;
-        if let Some(k) = loaded.get(realm) {
+        if let Some(k) = loaded.get(realm)
+            && now_ms().saturating_sub(k.loaded_ms) < REPROBE_MS
+        {
             return Ok(k.clone());
         }
-        let label = kek_label(realm);
         let pepper = pepper_label(realm);
         let pepper = self
             .keys
             .aead(&pepper)
             .or_else(|_| self.keys.generate_aead(&pepper))
             .map_err(|e| e.to_string())?;
-        let kek = Arc::new(LockedKek::new(
-            kek_id(realm),
-            self.keys.kek(&label).map_err(|e| e.to_string())?,
+        let mut generations = realm_keks(&self.keys, realm)?.into_iter();
+        let (generation, current) = generations.next().ok_or("realm KEK missing")?;
+        let kek = Arc::new(LockedKek::with_older(
+            kek_id_at(realm, generation),
+            current,
+            generations.map(|(g, k)| (kek_id_at(realm, g), k)).collect(),
             pepper,
             now_ms,
         ));

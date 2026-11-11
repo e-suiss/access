@@ -50,7 +50,7 @@ pub fn new_subject_key(realm: &Realm<'_>) -> Result<Vec<u8>, AccountError> {
 /// [`AccountError::Envelope`]; [`AccountError::Corrupt`] when another KEK wrapped it or it
 /// was shredded.
 pub fn subject_key(realm: &Realm<'_>, row: &SubjectRow) -> Result<Dek, AccountError> {
-    if row.kek_id != realm.kek.id() {
+    if !realm.kek.opens(&row.kek_id) {
         return Err(AccountError::Corrupt);
     }
     let wrapped = row.wrapped_dek.as_deref().ok_or(AccountError::Corrupt)?;

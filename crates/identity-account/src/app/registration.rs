@@ -459,7 +459,7 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
         row: &ChallengeRow,
     ) -> Result<String, AccountError> {
         let wrapped = row.wrapped_dek.as_ref().ok_or(AccountError::Shredded)?;
-        if row.kek_id != self.realm.kek.id() {
+        if !self.realm.kek.opens(&row.kek_id) {
             return Err(AccountError::Corrupt);
         }
         let dek = self.realm.kek.unwrap(wrapped)?;

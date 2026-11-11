@@ -101,6 +101,10 @@ pub mod workloads;
 pub mod offboarding;
 // OP-157 m.3 (w)
 pub mod review;
+// OP-158 m.3 (y)
+pub mod kek;
+// OP-158 m.3 (y)
+pub mod mds;
 
 #[cfg(feature = "testing")]
 pub mod testing;

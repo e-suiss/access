@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.kek_rotations (tenant_id, realm_id, from_kek, to_kek)\n             VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "700707a83221917a15f0ea5d443c4a7217d26a3d404607866fa4d081b9a5a532"
+}

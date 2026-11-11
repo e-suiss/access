@@ -104,7 +104,7 @@ impl<K: RealmKek> Sealer for KekSealer<K> {
         sealed: &SealedKey,
     ) -> Result<Zeroizing<Vec<u8>>, Unavailable> {
         let kek = self.0.kek(tenant, realm).ok_or(Unavailable)?;
-        if kek.id() != sealed.kek_id {
+        if !kek.opens(&sealed.kek_id) {
             return Err(Unavailable);
         }
         let dek = kek.unwrap(&sealed.wrapped_dek).map_err(|_| Unavailable)?;

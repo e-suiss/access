@@ -56,6 +56,8 @@ mod status;
 mod testing;
 mod tiers;
 mod upstream;
+// OP-158 m.3 (y)
+mod kek_rotation;
 
 use std::ffi::OsString;
 use std::fmt::Write as _;
@@ -180,6 +182,9 @@ enum Command {
     /// `reshred`: apply the shred journal again after a restore, then let the server open
     /// (OP-42, OP-57).
     Reshred,
+    /// `rotate-kek <realm slug>`: rotate the realm's KEK, or resume its open rotation
+    /// (OP-138, OP-158 m.3 (y)).
+    RotateKek(String),
 }
 
 /// A one-shot job over the bootstrap plan.
@@ -204,6 +209,7 @@ fn command(args: &[OsString]) -> Option<Command> {
         [] => Some(Command::Serve),
         [c] if c == "migrate" => Some(Command::Migrate),
         [c] if c == "reshred" => Some(Command::Reshred),
+        [c, slug] if c == "rotate-kek" => Some(Command::RotateKek(text(slug)?)),
         [c, plan] if c == "bootstrap" => Some(Command::Local(PathBuf::from(plan), Job::Bootstrap)),
         [c, plan, product, name] if c == "client-update" => Some(Command::Local(
             PathBuf::from(plan),
@@ -233,7 +239,7 @@ fn main() -> ExitCode {
             eprintln!(
                 "usage: access-server [migrate | bootstrap <plan.toml> | client-update <plan.toml> \
                  <product> <display name> | client-retire <plan.toml> <product> | \
-                 import-accounts <realm> <file.jsonl> | reshred]"
+                 import-accounts <realm> <file.jsonl> | reshred | rotate-kek <realm>]"
             );
         }
         return ExitCode::FAILURE;
@@ -256,7 +262,11 @@ fn main() -> ExitCode {
             .config(&config.log, "access-server", env!("CARGO_PKG_VERSION"));
     let logged = match command {
         Command::Serve => access_telemetry::install(&settings, std::io::stdout),
-        Command::Migrate | Command::Local(..) | Command::Import(..) | Command::Reshred => {
+        Command::Migrate
+        | Command::Local(..)
+        | Command::Import(..)
+        | Command::Reshred
+        | Command::RotateKek(..) => {
             settings.otlp_endpoint = None;
             access_telemetry::install(&settings, std::io::stderr)
         }
@@ -282,6 +292,56 @@ fn main() -> ExitCode {
         Command::Local(plan, job) => local_main(&config, &plan, job),
         Command::Import(slug, file) => import_main(&config, &slug, &file),
         Command::Reshred => reshred_main(&config),
+        Command::RotateKek(slug) => rotate_kek_main(&config, &slug),
+    }
+}
+
+/// `rotate-kek`: rotates the KEK of the realm named `slug`, or resumes its open rotation, and
+/// prints the rotation as JSON (OP-138, OP-158 m.3 (y)).
+fn rotate_kek_main(config: &Config, slug: &str) -> ExitCode {
+    let run = || -> Result<String, String> {
+        let prepared = prepare(config, tls_config(config)?)?;
+        let runtime = locked(config)?;
+        runtime.block_on(async {
+            let all = pools(config, &prepared).await?;
+            let route = access_store::tenancy::routes(&all.router)
+                .await
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .find(|r| r.slug == slug)
+                .ok_or_else(|| format!("no live realm {slug}"))?;
+            let keks = login::RealmKeks::new(prepared.login_keys.clone());
+            let run = kek_rotation::rotate(
+                &keks,
+                &all.app,
+                (route.tenant, route.realm),
+                kek_rotation::BATCH,
+                u32::MAX,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+            Ok(serde_json::json!({
+                "from_kek": run.rotation.from_kek,
+                "to_kek": run.rotation.to_kek,
+                "rewrapped": run.rotation.rewrapped,
+                "moved": run.moved,
+                "finished": run.rotation.finished,
+            })
+            .to_string())
+        })
+    };
+    match run() {
+        Ok(report) => {
+            #[allow(clippy::print_stdout)]
+            {
+                println!("{report}");
+            }
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            tracing::error!(%error, "KEK rotation stopped; run it again to resume");
+            ExitCode::FAILURE
+        }
     }
 }
 

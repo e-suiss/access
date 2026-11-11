@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.kek_rotations SET rewrapped = rewrapped + $4,\n                    finished_at = CASE WHEN $5 THEN clock_timestamp() ELSE NULL END\n              WHERE tenant_id = $1 AND realm_id = $2 AND to_kek = $3 AND finished_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "362184a47a73359f20ad8b33ca12616c09d7ecf930556b83ead9d28f63998960"
+}
