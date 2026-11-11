@@ -1,0 +1,41 @@
+# OP-159 m.3 (ff), SA-5
+
+flow = "break-glass"
+title = "Break-glass access"
+tree = "conformance/threat/trees/break-glass.toml"
+components = ["provider-operator", "support-staff", "anchor-root"]
+
+[[stage]]
+name = "objectives"
+summary = "Emergency access that acts only through reserved Grants with their approvals, and is reviewed. Assets: break-glass Grants, the time lock, the trail"
+refs = ["G53"]
+
+[[stage]]
+name = "technical-scope"
+summary = "Break-glass sign-in, operator directives, operator database sessions"
+refs = ["SEC19"]
+
+[[stage]]
+name = "decomposition"
+summary = "Marked accounts, approvers, the operator tool, the reviewers"
+refs = []
+
+[[stage]]
+name = "threat-analysis"
+summary = "Malicious operator, collusion, approval fatigue"
+refs = ["TH-9", "TH-18", "TH-14"]
+
+[[stage]]
+name = "vulnerability-analysis"
+summary = "A break-glass basis without approvals; a blocking rule skipped without an exemption"
+refs = ["DL-6"]
+
+[[stage]]
+name = "attack-modeling"
+summary = "Attack tree conformance/threat/trees/break-glass.toml"
+refs = []
+
+[[stage]]
+name = "risk-impact"
+summary = "Residual: colluding approvers stay within the break-glass limit"
+refs = ["DL-6", "RR-6"]

@@ -1,0 +1,41 @@
+# OP-159 m.3 (ff), SA-5
+
+flow = "pq-re-anchor"
+title = "Post-quantum re-anchor"
+tree = "conformance/threat/trees/pq-re-anchor.toml"
+components = ["operational-key", "binding-key", "witness"]
+
+[[stage]]
+name = "objectives"
+summary = "Keep earlier records verifiable after a classical algorithm breaks. Assets: re-anchor checkpoints and their PQ cosignatures, verifier PQ anchors"
+refs = ["N-55"]
+
+[[stage]]
+name = "technical-scope"
+summary = "PQ checkpoint publication, witness PQ cosign, verifier pins"
+refs = ["N-37"]
+
+[[stage]]
+name = "decomposition"
+summary = "ML-DSA operational key, witnesses, verifiers holding a PQ anchor"
+refs = []
+
+[[stage]]
+name = "threat-analysis"
+summary = "Downgrade to classical signatures, forgery after a CRQC, key theft"
+refs = ["TH-29", "TH-13"]
+
+[[stage]]
+name = "vulnerability-analysis"
+summary = "Records after the last re-anchor; immature ML-DSA verifiers"
+refs = ["RR-37"]
+
+[[stage]]
+name = "attack-modeling"
+summary = "Attack tree conformance/threat/trees/pq-re-anchor.toml"
+refs = []
+
+[[stage]]
+name = "risk-impact"
+summary = "Residual: records between the last re-anchor and the break gain no PQ existed-by-T"
+refs = ["RR-35", "HL-34"]

@@ -1,6 +1,6 @@
 # §13.2, SA-7, SEC5, OP-159 m.3 (gg)
 #
-# name          the component as the trust model names it
+# component     the component as the trust model names it
 # trust         what it is trusted with
 # not_trusted   what it is never trusted with
 # blast_radius  the widest result when it is fully malicious
@@ -8,3 +8,311 @@
 # containment   the attributable lever that stops it
 # rows          catalog rows that carry the boundary
 # tests         tests that exercise the boundary on the real path
+
+[[component]]
+id = "anchor-root"
+component = "Anchor root (sole or joint)"
+trust = "Being the source of authority within its own Anchor scope"
+not_trusted = "Authority of another Anchor or domain"
+blast_radius = "Everything in its own scope, within the rootTerms requirements"
+never = "Act outside its scope; use a reserved action without the rootTerms requirement; erase history"
+containment = "Joint root (k-of-n) with delay; for a sole root, only a covering root or a new genesis"
+rows = ["INV-1", "INV-2", "SI-4"]
+tests = []
+
+[[component]]
+id = "recover-entry"
+component = "rootTerms domain.recover entry"
+trust = "Replacing the provider binding through forced recovery"
+not_trusted = "Writing Grants, Acceptances or policy"
+blast_radius = "Replacing the provider binding; a rollback attempt citing an old checkpoint fails the evaluator-side guard"
+never = "Write authority state other than domain.recover; act from an anonymous request"
+containment = "Evaluator-side witness and replica checkpoint guard, witness and replica before ack, separate custody"
+rows = ["SEC20", "SEC22", "SEC23"]
+tests = []
+
+[[component]]
+id = "provider"
+component = "Access provider (evaluator)"
+trust = "Producing decisions to the spec and keeping the records"
+not_trusted = "Owning authority"
+blast_radius = "Wrong ALLOW or DENY, denial of service, equivocation, lost suffix"
+never = "Produce an Exercise on an actor's behalf without an AIS; own authority; rewrite history undetectably when a witness exists"
+containment = "domain.handover or domain.recover; detection by re-evaluation"
+rows = ["INV-29", "PI-7", "DL-4", "N-13", "U9", "U13"]
+tests = []
+
+[[component]]
+id = "provider-operator"
+component = "Provider operator (including Suiss-hosted)"
+trust = "Running the provider"
+not_trusted = "Being counted as root, custodian or surface owner"
+blast_radius = "The provider's radius, plus DL-1 when it is also custodian and DL-2 when it also serves the surface"
+never = "Hold authority not granted at genesis; impersonate Parties whose keys it does not hold"
+containment = "Separation of duties and user-gated custody"
+rows = ["INV-29", "DL-1", "DL-2", "SEC17", "SEC19", "N-16"]
+tests = []
+
+[[component]]
+id = "provider-signing-key"
+component = "Provider signing key"
+trust = "Signing receipts, PAPs, checkpoints and metadata"
+not_trusted = "Authority (custody attestation)"
+blast_radius = "Forged current PAPs, receipts and tokens within each verifier's local acceptance ceiling until the recovery record reaches it"
+never = "Make an online ADP decision; draw budget or record an Exercise centrally; be accepted after recovery without an exact-content inclusion proof"
+containment = "Verifier-side local ceilings and metadata freshness; domain.recover from the last verified checkpoint"
+rows = ["U25", "N-26", "SEC21"]
+tests = []
+
+[[component]]
+id = "identity-plane"
+component = "Identity plane (issuer and custodian)"
+trust = "Issuing authentication, authenticator-binding and identity-binding Claims, as far as each is accepted"
+not_trusted = "Creating authority"
+blast_radius = "Impersonation up to the authority Parties already hold in the accepted subject class; designation changes when custodial"
+never = "Create a Grant, an Acceptance, authority above a ceiling or a reserved action"
+containment = "Acceptance narrowing and ingest-time cutoff; a non-custodial controller"
+rows = ["INV-12", "INV-15", "G45", "G54"]
+tests = []
+
+[[component]]
+id = "external-idp"
+component = "External IdP"
+trust = "The use it is accepted for"
+not_trusted = "Any other use"
+blast_radius = "Impersonation within the accepted subject class; selection within existing rule-shaped Grant ceilings"
+never = "Create a Grant, an Acceptance or a meta-action"
+containment = "acceptance.amend cutoff"
+rows = ["INV-15", "SEC9"]
+tests = []
+
+[[component]]
+id = "claim-issuer"
+component = "HR or claim issuer (subject selection)"
+trust = "Selection facts"
+not_trusted = "Being a grantor"
+blast_radius = "The holder set of rule-shaped Grants that already exist, within their ceilings"
+never = "Exceed a Grant ceiling, reserved actions or budget"
+containment = "Cutoff as an affirmative disqualify"
+rows = ["INV-16", "SEC9"]
+tests = []
+
+[[component]]
+id = "schema-publisher"
+component = "Schema publisher"
+trust = "The meaning of its namespace, as far as the exact accepted digest"
+not_trusted = "Versions or mappings that were not accepted"
+blast_radius = "The rendering and meaning of the accepted digest; mislabelling a pinned mapping"
+never = "Change scope with a digest that was not accepted; drop a reserved flag silently"
+containment = "Revoke the schema-definition Acceptance (fails closed as schema-not-accepted)"
+rows = ["EI-16"]
+tests = []
+
+[[component]]
+id = "foreign-domain"
+component = "Foreign domain"
+trust = "Evidence of authority within a foreign-authority Acceptance"
+not_trusted = "Local authority"
+blast_radius = "Up to the bridging Grant ceiling"
+never = "Act outside the ceiling; write to the local record"
+containment = "Revoke the bridging Grant or Acceptance (exact locally)"
+rows = ["INV-17", "PI-24", "G52"]
+tests = []
+
+[[component]]
+id = "pep"
+component = "PEP"
+trust = "Enforcing the decision before the effect (declared)"
+not_trusted = "Being an actor"
+blast_radius = "The effects it physically controls, which it could do without Access"
+never = "Produce an actor signature to obtain ALLOW; carry a receipt to another intent"
+containment = "Revoke the verifier or PEP Acceptance; domain operations"
+rows = ["PI-7", "PI-8"]
+tests = []
+
+[[component]]
+id = "offline-verifier"
+component = "Offline verifier"
+trust = "Following the contract (declared)"
+not_trusted = "The accuracy of its reports"
+blast_radius = "Contracts in its own audience, up to horizon and slice"
+never = "Spend a slice a second time centrally; obtain a new contract after its profile Acceptance is revoked"
+containment = "Revoke the predicate-input Acceptance; issuer-side refusal"
+rows = ["SEC13", "PI-12", "DL-3"]
+tests = []
+
+[[component]]
+id = "executor"
+component = "Executor"
+trust = "Asking at continuation and declaring stop"
+not_trusted = "The truth of an effect (a Claim)"
+blast_radius = "Continuing running work; false attestation"
+never = "Request continuation on its own behalf; release on its own"
+containment = "Instance restriction or termination; revoke the attestation issuer Acceptance"
+rows = ["PI-7", "N-3"]
+tests = []
+
+[[component]]
+id = "approval-surface"
+component = "Approval Surface"
+trust = "Faithful rendering and collecting the user's act (declared)"
+not_trusted = "Detecting from the record that the rendering was faithful"
+blast_radius = "Collecting assertions from its own users for a different intent (DL-2)"
+never = "Contribute without the approver's AIS and assertion; approve past a DENY"
+containment = "Surface conformance Acceptance; the independent surface requirement"
+rows = ["DL-2", "N-7", "U7", "XI-6"]
+tests = []
+
+[[component]]
+id = "relay"
+component = "Relay or SSF transmitter"
+trust = "Delivery (best effort)"
+not_trusted = "Any security decision"
+blast_radius = "Delayed, lost or forged events"
+never = "Widen authority"
+containment = "Receiver re-query; event signatures"
+rows = ["INV-24", "PI-9"]
+tests = []
+
+[[component]]
+id = "work"
+component = "Work or coordinator"
+trust = "Gates and attention management"
+not_trusted = "Satisfying an Access requirement"
+blast_radius = "Misrouting approval requests; bombarding approvers"
+never = "Create authority; pass a DENY through a Gate"
+containment = "Work's own controls; the Access request rate policy"
+rows = ["EI-4", "SEC28"]
+tests = []
+
+[[component]]
+id = "agent"
+component = "One, agent or model"
+trust = "Exercising within its own Instance and Mandate"
+not_trusted = "Being a source of instructions"
+blast_radius = "Everything within Grant, Mandate and budget"
+never = "Grant, widen or approve without the user's Instance"
+containment = "Mandate revoke, instance.terminate, suspend"
+rows = ["DL-6", "PI-11", "RR-12"]
+tests = []
+
+[[component]]
+id = "witness"
+component = "Witness"
+trust = "Co-signing checkpoints faithfully"
+not_trusted = "Authority"
+blast_radius = "False co-signatures; hiding equivocation when it is the only witness"
+never = "Change authority state"
+containment = "Witness diversity (at least two); the domain replaces the witness"
+rows = ["SI-12", "HL-7", "SEC23"]
+tests = []
+
+[[component]]
+id = "protocol-governance"
+component = "Protocol governance"
+trust = "Publishing the core spec and meta-schema"
+not_trusted = "Taking effect in a domain on its own"
+blast_radius = "Publishing a bad core version"
+never = "Affect a domain that does not adopt it"
+containment = "The domain does not adopt it (adoption is a reserved root meta-Exercise)"
+rows = ["INV-2"]
+tests = []
+
+[[component]]
+id = "party-controller"
+component = "Party controller"
+trust = "Managing the Party's key state and issuer designation"
+not_trusted = "Authority (controller is not authority)"
+blast_radius = "The Party's Instance setup and issuer designation"
+never = "Write a Grant"
+containment = "Regime recovery of the Party"
+rows = ["SI-13", "U15"]
+tests = []
+
+[[component]]
+id = "realm-signing-key"
+component = "Realm JOSE or SAML signing key (identity plane)"
+trust = "Signing authentication results for its own realm's relying parties"
+not_trusted = "Signing authority artefacts; any other realm"
+blast_radius = "Golden SAML or forged ID tokens for any user at every relying party of the realm until rotation; on the Access side only as far as the authentication use"
+never = "Create authority; write a Grant or Acceptance; be valid at another realm's relying party"
+containment = "Key rotation and removal from the JWKS (key_epoch increment), issuer cutoff, HSM or signer process"
+rows = ["HL-35", "INV-15", "SI-3", "SEC18", "SEC9", "G46"]
+tests = []
+
+[[component]]
+id = "operational-key"
+component = "Operational signing key (domain-scoped, separate signer process)"
+trust = "Signing its own domain's PAP, receipt and checkpoint excerpts within its lifetime"
+not_trusted = "Another domain; changing the binding"
+blast_radius = "Forged PAPs and receipts in its own domain, within the key lifetime and each verifier's local ceiling"
+never = "Be accepted in another domain; stand in for the binding key"
+containment = "key_epoch increment; domain.recover; rebuild the signer process"
+rows = ["G47", "U25", "U41", "SEC21"]
+tests = []
+
+[[component]]
+id = "binding-key"
+component = "Binding key (HSM, quorum)"
+trust = "Signing the Domain Metadata binding and operational key delegation"
+not_trusted = "Everyday signing"
+blast_radius = "The provider signing key's radius plus operational key authorisation"
+never = "Be used without quorum (HSM policy)"
+containment = "domain.recover; HSM quorum change"
+rows = ["U25", "N-26", "HL-34"]
+tests = []
+
+[[component]]
+id = "legacy-gateway"
+component = "LDAP, Kerberos, RADIUS or WS-Fed gateway process"
+trust = "Turning a legacy protocol bind into an identity plane authentication event"
+not_trusted = "Authority; credentials other than passwords"
+blast_radius = "Passwords of users who bind through it (it sees cleartext); forged authentication for that realm"
+never = "Leave its realm; reach the signer key (separate process and sandbox profile); let the Kerberos C FFI reach the main process memory"
+containment = "Close the gateway; reset credentials for affected users; realm cutoff"
+rows = ["RR-28", "INV-15"]
+tests = []
+
+[[component]]
+id = "scim-client"
+component = "SCIM client (inbound provisioning)"
+trust = "The subject-selection and identity-binding attributes declared in its Acceptance"
+not_trusted = "Being a grantor"
+blast_radius = "As for an HR or claim issuer: selection within existing rule-shaped Grant ceilings; stale positive Claims"
+never = "Exceed a Grant ceiling"
+containment = "Revoke the SCIM token; Acceptance cutoff"
+rows = ["INV-16", "SEC9"]
+tests = []
+
+[[component]]
+id = "parser-worker"
+component = "Parser worker (SAML/XML and, where needed, BER or CBOR; isolated process)"
+trust = "Turning input into a normalised structure"
+not_trusted = "Deciding a signature verification result alone; key material"
+blast_radius = "Accepting a forged assertion through XSW-class misparsing in the realm it serves; crashing (denial of service)"
+never = "Reach the signer or the main process memory (separate process, no network syscalls)"
+containment = "Restart the worker; XSW regression corpus; roll back the parser version"
+rows = ["RR-20"]
+tests = []
+
+[[component]]
+id = "co-tenant"
+component = "Co-tenant (another tenant or workload on the same physical host)"
+trust = "Nothing"
+not_trusted = "Everything"
+blast_radius = "Secret leakage through microarchitectural side channels (DL-10)"
+never = "Change authority, a record or a decision (a side channel only affects confidentiality)"
+containment = "Dedicated compute; mitigations=auto,nosmt"
+rows = ["DL-10", "HL-17", "U54", "N-32"]
+tests = []
+
+[[component]]
+id = "support-staff"
+component = "Support staff (support access)"
+trust = "Reading and acting within the support Grant the user gave"
+not_trusted = "Producing an AIS on the user's behalf (no impersonation)"
+blast_radius = "The scope and duration of the support Grant"
+never = "Sign in as the user; act outside the Grant"
+containment = "Revoke the support Grant; expiry"
+rows = ["G53", "TNI-13"]
+tests = []

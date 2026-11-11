@@ -1,0 +1,41 @@
+# OP-159 m.3 (ff), SA-5
+
+flow = "binding-re-anchor"
+title = "Binding key re-anchor"
+tree = "conformance/threat/trees/binding-re-anchor.toml"
+components = ["binding-key", "operational-key", "provider"]
+
+[[stage]]
+name = "objectives"
+summary = "Rotate the binding key without breaking verification of earlier records. Assets: the binding, operational key delegations, earlier records"
+refs = ["G47"]
+
+[[stage]]
+name = "technical-scope"
+summary = "Re-anchor statements, Domain Metadata"
+refs = ["U25"]
+
+[[stage]]
+name = "decomposition"
+summary = "Old and new binding keys, the HSM, verifiers"
+refs = []
+
+[[stage]]
+name = "threat-analysis"
+summary = "Binding key theft and downgrade to the old binding"
+refs = ["TH-13", "TH-29"]
+
+[[stage]]
+name = "vulnerability-analysis"
+summary = "A re-anchor signed by one key only; an old key compromised before the re-anchor"
+refs = ["HL-34"]
+
+[[stage]]
+name = "attack-modeling"
+summary = "Attack tree conformance/threat/trees/binding-re-anchor.toml"
+refs = []
+
+[[stage]]
+name = "risk-impact"
+summary = "Residual: the re-anchor must precede the compromise of the old binding key"
+refs = ["HL-34"]

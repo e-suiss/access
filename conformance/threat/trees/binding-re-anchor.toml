@@ -1,0 +1,40 @@
+# OP-159 m.3 (ff), SA-5
+
+flow = "binding-re-anchor"
+goal = "Forge the domain binding across a re-anchor"
+
+[[node]]
+id = "BR"
+gate = "or"
+title = "Forge the domain binding across a re-anchor"
+
+[[node]]
+id = "BR.1"
+parent = "BR"
+gate = "leaf"
+title = "Re-anchor with only the new key or only the old one"
+threat = "TH-13"
+tests = [
+  "bins/access-server/src/bootstrap/tests/durability/handover.rs::a_binding_re_anchor_double_signs_rotates_the_binding_and_re_signs_no_record",
+]
+limits = []
+
+[[node]]
+id = "BR.2"
+parent = "BR"
+gate = "leaf"
+title = "Steal the old binding key before the re-anchor"
+threat = "TH-13"
+tests = []
+limits = ["HL-34"]
+
+[[node]]
+id = "BR.3"
+parent = "BR"
+gate = "leaf"
+title = "Present the old binding after the rotation"
+threat = "TH-29"
+tests = [
+  "bins/access-server/src/bootstrap/tests/durability/handover.rs::a_binding_re_anchor_double_signs_rotates_the_binding_and_re_signs_no_record",
+]
+limits = []

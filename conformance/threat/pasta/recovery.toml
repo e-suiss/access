@@ -1,0 +1,41 @@
+# OP-159 m.3 (ff), SA-5
+
+flow = "recovery"
+title = "Forced domain recovery"
+tree = "conformance/threat/trees/recovery.toml"
+components = ["recover-entry", "provider", "witness", "provider-signing-key"]
+
+[[stage]]
+name = "objectives"
+summary = "Replace a lost or compromised provider from the last verified checkpoint without widening authority. Assets: the record, the witnessed head R*, the replica"
+refs = ["SEC20", "SEC21", "SEC22"]
+
+[[stage]]
+name = "technical-scope"
+summary = "domain.recover requests, checkpoint claims, replica streams"
+refs = ["SEC23"]
+
+[[stage]]
+name = "decomposition"
+summary = "rootTerms domain.recover entry, evaluator-side guard, witnesses, replica"
+refs = []
+
+[[stage]]
+name = "threat-analysis"
+summary = "Lost suffix, rollback to an old checkpoint, abuse of forced migration, provider key theft"
+refs = ["TH-25", "TH-26", "TH-13"]
+
+[[stage]]
+name = "vulnerability-analysis"
+summary = "Recovery without its entry; a checkpoint below R*; no witness or replica"
+refs = ["U10"]
+
+[[stage]]
+name = "attack-modeling"
+summary = "Attack tree conformance/threat/trees/recovery.toml"
+refs = []
+
+[[stage]]
+name = "risk-impact"
+summary = "Residual: suffix lost without witness or replica; forged artefacts before detection"
+refs = ["DL-5", "RR-5", "RR-14", "N-26"]

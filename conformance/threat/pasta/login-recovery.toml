@@ -1,0 +1,41 @@
+# OP-159 m.3 (ff), SA-5
+
+flow = "login-recovery"
+title = "Sign-in and account recovery"
+tree = "conformance/threat/trees/login-recovery.toml"
+components = ["identity-plane", "realm-signing-key", "external-idp"]
+
+[[stage]]
+name = "objectives"
+summary = "Authenticate the right person and recover an account no weaker than it was protected. Assets: credentials, sessions, recovery evidence"
+refs = ["U44"]
+
+[[stage]]
+name = "technical-scope"
+summary = "Login flows, the recovery start, push and TOTP second factors"
+refs = ["N-41", "N-45"]
+
+[[stage]]
+name = "decomposition"
+summary = "Hosted login, the account page, the authenticator, the user's browser"
+refs = []
+
+[[stage]]
+name = "threat-analysis"
+summary = "AiTM phishing, push bombing, enumeration, session theft"
+refs = ["TH-2", "TH-15", "identity plane #1", "identity plane #3"]
+
+[[stage]]
+name = "vulnerability-analysis"
+summary = "Phishable factors; recovery resting on one email; post-authentication token theft"
+refs = ["RR-29", "RR-30", "HL-23"]
+
+[[stage]]
+name = "attack-modeling"
+summary = "Attack tree conformance/threat/trees/login-recovery.toml"
+refs = []
+
+[[stage]]
+name = "risk-impact"
+summary = "Residual: password and TOTP are phishable through a reverse proxy; session theft after sign-in"
+refs = ["N-41", "HL-23", "RR-29", "RR-30"]

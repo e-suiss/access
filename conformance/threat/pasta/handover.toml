@@ -1,0 +1,41 @@
+# OP-159 m.3 (ff), SA-5
+
+flow = "handover"
+title = "Domain handover to another provider"
+tree = "conformance/threat/trees/handover.toml"
+components = ["anchor-root", "provider", "provider-operator", "witness", "binding-key"]
+
+[[stage]]
+name = "objectives"
+summary = "The domain moves to a new provider with its full history; the old provider stops deciding. Assets: handover statements, Domain Metadata, the record and its checkpoints"
+refs = ["INV-2", "SEC21"]
+
+[[stage]]
+name = "technical-scope"
+summary = "Signed handover statements, the new install's metadata, artefacts issued before the move"
+refs = ["INV-29"]
+
+[[stage]]
+name = "decomposition"
+summary = "Meta-anchor root, old provider, new provider, witnesses, verifiers"
+refs = []
+
+[[stage]]
+name = "threat-analysis"
+summary = "Forced migration abuse, equivocation by either provider, replay of old artefacts"
+refs = ["TH-26", "TH-24", "TH-28"]
+
+[[stage]]
+name = "vulnerability-analysis"
+summary = "A handover not signed by the meta-anchor root; an old provider that keeps answering"
+refs = ["U9"]
+
+[[stage]]
+name = "attack-modeling"
+summary = "Attack tree conformance/threat/trees/handover.toml"
+refs = []
+
+[[stage]]
+name = "risk-impact"
+summary = "Residual: provider equivocation is only detected, not prevented"
+refs = ["DL-4", "RR-4"]

@@ -2251,7 +2251,7 @@ section = "13.5"
 status = "canonical"
 class = "NG"
 stage = 13
-title = "No per-tenant or per-realm row-level restore in identity plane"
+title = "Identity plane restores whole clusters, never one tenant or realm alone"
 tests = []
 
 [[rule]]
@@ -2441,6 +2441,9 @@ section = "13.9"
 status = "reference"
 title = "Custodian impersonation in custodial mode"
 tests = []
+owner = "Identity plane (custodian) and the domain"
+acceptance = "Usability; the non-custodial option is always open"
+signal = ["none-declared"]
 
 [[rule]]
 id = "RR-2"
@@ -2449,6 +2452,9 @@ section = "13.9"
 status = "reference"
 title = "Unfaithful or compromised approval surface"
 tests = []
+owner = "Surface operator; the domain (Acceptance)"
+acceptance = "An authenticator cannot show content"
+signal = ["audit:spc.mismatch"]
 
 [[rule]]
 id = "RR-3"
@@ -2457,6 +2463,9 @@ section = "13.9"
 status = "reference"
 title = "Abuse within offline or intermittent window"
 tests = []
+owner = "The domain (contract issuer) and the verifier operator"
+acceptance = "Connectivity is a fact of the deployment"
+signal = ["none-declared"]
 
 [[rule]]
 id = "RR-4"
@@ -2465,6 +2474,13 @@ section = "13.9"
 status = "reference"
 title = "Provider wrong decision or equivocation"
 tests = []
+owner = "Provider; the domain (witness, re-evaluation)"
+acceptance = "The provider's decision is physically in its hands"
+signal = [
+  "event:witness.equivocation.detected",
+  "alert:AccessWitnessEquivocation",
+  "event:replay.divergence.found",
+]
 
 [[rule]]
 id = "RR-5"
@@ -2474,6 +2490,13 @@ status = "reference"
 stage = 13
 title = "Lost suffix without witness or replica"
 tests = []
+owner = "Domain root"
+acceptance = "Witness and off-provider replica are optional (mandatory in the Suiss-hosted template)"
+signal = [
+  "event:replica.lag",
+  "event:checkpoint.witness.pending",
+  "audit:replica.lagging",
+]
 
 [[rule]]
 id = "RR-6"
@@ -2482,6 +2505,9 @@ section = "13.9"
 status = "reference"
 title = "Authorized malicious actor or collusion"
 tests = []
+owner = "Domain governance; Work accountability"
+acceptance = "Approved is not the same as wise"
+signal = ["metric:access_requester_throttled_total"]
 
 [[rule]]
 id = "RR-7"
@@ -2490,6 +2516,9 @@ section = "13.9"
 status = "reference"
 title = "Policy oracle threshold inference"
 tests = []
+owner = "The domain (policy design); security tooling"
+acceptance = "Determinism forbids random noise in decisions"
+signal = ["metric:access_advisory_requests_total"]
 
 [[rule]]
 id = "RR-8"
@@ -2498,6 +2527,12 @@ section = "13.9"
 status = "reference"
 title = "Availability cost of fail-closed"
 tests = []
+owner = "The domain (continuity plan); the provider"
+acceptance = "Security comes before availability"
+signal = [
+  "metric:access_protocol_rejections_total",
+  "metric:access_decisions_total",
+]
 
 [[rule]]
 id = "RR-9"
@@ -2506,6 +2541,9 @@ section = "13.9"
 status = "reference"
 title = "Ambiguous publisher mapping semantics"
 tests = []
+owner = "Publisher; domain admins"
+acceptance = "Access cannot verify meaning"
+signal = ["audit:authority.decision.require_action"]
 
 [[rule]]
 id = "RR-10"
@@ -2514,6 +2552,9 @@ section = "13.9"
 status = "reference"
 title = "Sole root compromise"
 tests = []
+owner = "Root Party"
+acceptance = "Simplicity of personal domains"
+signal = ["none-declared"]
 
 [[rule]]
 id = "RR-11"
@@ -2522,6 +2563,9 @@ section = "13.9"
 status = "reference"
 title = "Denial of service through narrowing"
 tests = []
+owner = "The domain (restriction scope)"
+acceptance = "The deliberate cost of narrowing always being allowed"
+signal = ["audit:incident.contained"]
 
 [[rule]]
 id = "RR-12"
@@ -2531,6 +2575,9 @@ status = "reference"
 stage = 9
 title = "Prompt injection or model error within Grant and Mandate"
 tests = []
+owner = "Agent operator; One and Executor"
+acceptance = "Models make mistakes; Access bounds, it does not prevent"
+signal = ["none-declared"]
 
 [[rule]]
 id = "RR-13"
@@ -2540,6 +2587,9 @@ status = "reference"
 stage = 7
 title = "Effects executed during compromise window"
 tests = []
+owner = "Effect owners (Pay, the domain, Executor)"
+acceptance = "Recovery is prospective"
+signal = ["none-declared"]
 
 [[rule]]
 id = "RR-14"
@@ -2548,6 +2598,12 @@ section = "13.9"
 status = "reference"
 title = "Forged PAP/receipt acceptance before provider key theft detected"
 tests = []
+owner = "Provider operator (key custody); the domain (local ceilings, recovery); verifier operators"
+acceptance = "The key is not the evaluator; containment is only possible at the verifier"
+signal = [
+  "event:witness.equivocation.detected",
+  "alert:AccessWitnessEquivocation",
+]
 
 [[rule]]
 id = "RR-15"
@@ -2556,6 +2612,9 @@ section = "13.9"
 status = "reference"
 title = "Party unaware of un-ingested regime key events"
 tests = []
+owner = "Party Identity Regime (Work and Access governance)"
+acceptance = "Key-event history belongs to the regime"
+signal = ["none-declared"]
 
 [[rule]]
 id = "RR-16"
@@ -2564,6 +2623,9 @@ section = "13.9"
 status = "reference"
 title = "No formally verified Argon2 implementation"
 tests = []
+owner = "Identity plane (credential store); security team"
+acceptance = "Industry-standard password hash with no alternative; passkeys are the primary factor"
+signal = ["ci:nightly/audit"]
 
 [[rule]]
 id = "RR-17"
@@ -2572,6 +2634,9 @@ section = "13.9"
 status = "reference"
 title = "No verified RS256 implementation; Marvin flaw unpatched in rsa crate"
 tests = []
+owner = "Identity plane"
+acceptance = "Opt-in per client only, through aws-lc-rs; authority artefacts are never RSA"
+signal = ["ci:nightly/audit"]
 
 [[rule]]
 id = "RR-18"
@@ -2580,6 +2645,9 @@ section = "13.9"
 status = "reference"
 title = "OAuth/OIDC AS written from scratch in Rust"
 tests = []
+owner = "Identity plane engineering"
+acceptance = "Single-backend decision; compensated by differential tests and the OIDF suite"
+signal = ["ci:conformance/oidf-conformance", "ci:conformance/differential"]
 
 [[rule]]
 id = "RR-19"
@@ -2588,6 +2656,9 @@ section = "13.9"
 status = "reference"
 title = "Correlated single-maintainer critical dependencies (bus factor)"
 tests = []
+owner = "Supply chain owner"
+acceptance = "Rust ecosystem reality; vendoring and fork readiness"
+signal = ["ci:ci/supply-chain", "ci:nightly/supply-chain-watch"]
 
 [[rule]]
 id = "RR-20"
@@ -2596,6 +2667,9 @@ section = "13.9"
 status = "reference"
 title = "SAML/XML complexity: c14n, signature wrapping, libxml2-class bugs"
 tests = []
+owner = "Identity plane (SAML gateway)"
+acceptance = "SAML is in scope; isolated parser worker; DocType refused"
+signal = ["ci:nightly/test-full", "ci:conformance/interop-lab"]
 
 [[rule]]
 id = "RR-21"
@@ -2604,6 +2678,9 @@ section = "13.9"
 status = "reference"
 title = "Malicious packages via unsigned crates.io/npm publishing"
 tests = []
+owner = "Supply chain owner"
+acceptance = "Registry reality; detection and containment"
+signal = ["ci:ci/supply-chain", "ci:nightly/audit", "ci:nightly/npm-audit"]
 
 [[rule]]
 id = "RR-22"
@@ -2612,6 +2689,9 @@ section = "13.9"
 status = "reference"
 title = "Residual linkability via claims, cnf keys and timing"
 tests = []
+owner = "Identity plane; the domain (attribute disclosure policy)"
+acceptance = "Network and timing information cannot be erased by cryptography"
+signal = ["metric:access_public_sub_opt_in_total"]
 
 [[rule]]
 id = "RR-23"
@@ -2620,6 +2700,9 @@ section = "13.9"
 status = "reference"
 title = "Co-tenant side channel"
 tests = []
+owner = "Hosting operator; the tenant (dedicated choice)"
+acceptance = "Cost; the dedicated option is open"
+signal = ["none-declared"]
 
 [[rule]]
 id = "RR-24"
@@ -2628,6 +2711,9 @@ section = "13.9"
 status = "reference"
 title = "Account enumeration timing channel"
 tests = []
+owner = "Identity plane"
+acceptance = "Measurement threshold under network jitter"
+signal = ["ci:nightly/test-full"]
 
 [[rule]]
 id = "RR-25"
@@ -2637,6 +2723,12 @@ status = "reference"
 stage = 13
 title = "Pre-signed tokens accepted until expiry during identity degraded window"
 tests = []
+owner = "Identity plane; RS operator"
+acceptance = "Availability; the window is the declared token lifetime"
+signal = [
+  "metric:access_identity_degraded_seconds",
+  "alert:AccessIdentityDegradedLong",
+]
 
 [[rule]]
 id = "RR-26"
@@ -2645,6 +2737,9 @@ section = "13.9"
 status = "reference"
 title = "Compiler breaks constant-time code"
 tests = []
+owner = "Security team"
+acceptance = "The compiler gives no constant-time guarantee"
+signal = ["ci:nightly/dudect", "ci:nightly/ctgrind"]
 
 [[rule]]
 id = "RR-27"
@@ -2653,6 +2748,9 @@ section = "13.9"
 status = "reference"
 title = "Bugs in async/HTTP layer outside formal scope"
 tests = []
+owner = "Engineering"
+acceptance = "Tool maturity"
+signal = ["ci:nightly/test-full"]
 
 [[rule]]
 id = "RR-28"
@@ -2662,6 +2760,9 @@ status = "reference"
 stage = 10
 title = "Kerberos C FFI introduces memory-unsafe code"
 tests = []
+owner = "Gateway owner"
+acceptance = "Kerberos compatibility; isolated process"
+signal = ["ci:weekly/kerberos-asan"]
 
 [[rule]]
 id = "RR-29"
@@ -2670,6 +2771,9 @@ section = "13.9"
 status = "reference"
 title = "Phishable authentication factors (TOTP, push, SMS)"
 tests = []
+owner = "The domain (factor policy); identity plane"
+acceptance = "Regulation and user reality; CT2+ needs a phishing-resistant factor"
+signal = ["metric:access_sign_in_factor_total"]
 
 [[rule]]
 id = "RR-30"
@@ -2678,6 +2782,9 @@ section = "13.9"
 status = "reference"
 title = "Post-authentication token or session theft, including DPoP key misuse"
 tests = []
+owner = "Identity plane; RS"
+acceptance = "A passkey protects the sign-in, not the session after it; DPoP and DBSC narrow it"
+signal = ["audit:session.device_mismatch"]
 
 [[rule]]
 id = "RR-31"
@@ -2686,6 +2793,12 @@ section = "13.9"
 status = "reference"
 title = "HSM/KMS throughput and quota correlation"
 tests = []
+owner = "Provider operator"
+acceptance = "Hardware and cloud reality"
+signal = [
+  "metric:access_signer_call_duration_seconds",
+  "alert:AccessSignerSlow",
+]
 
 [[rule]]
 id = "RR-32"
@@ -2694,6 +2807,9 @@ section = "13.9"
 status = "reference"
 title = "Missing post-quantum support in WebAuthn"
 tests = []
+owner = "Standards bodies; identity plane (watching)"
+acceptance = "No standard exists"
+signal = ["none-declared"]
 
 [[rule]]
 id = "RR-33"
@@ -2702,6 +2818,9 @@ section = "13.9"
 status = "reference"
 title = "Unclear CRA classification and manufacturer scope"
 tests = []
+owner = "Suiss management"
+acceptance = "Decision pending; preparation follows the Class I default"
+signal = ["none-declared"]
 
 [[rule]]
 id = "RR-34"
@@ -2710,6 +2829,9 @@ section = "13.9"
 status = "reference"
 title = "Fake or inflated security data used as decision input"
 tests = []
+owner = "Security team"
+acceptance = "Every number is source-labelled and unverified ones are marked"
+signal = ["none-declared"]
 
 [[rule]]
 id = "RR-35"
@@ -2719,6 +2841,9 @@ status = "reference"
 stage = 14
 title = "Records before PQ re-anchor lack PQ-verifiable existed-by-T"
 tests = []
+owner = "The domain (PQ profile and cadence); the provider (re-anchor production)"
+acceptance = "The CRQC date is unknown; re-anchoring is periodic"
+signal = ["none-declared"]
 
 [[rule]]
 id = "RR-36"
@@ -2728,6 +2853,9 @@ status = "reference"
 stage = 10
 title = "Harvest-now-decrypt-later on encrypted identity tokens"
 tests = []
+owner = "The realm (JWE use) and the RP"
+acceptance = "There is no PQ KEM standard for JOSE"
+signal = ["none-declared"]
 
 [[rule]]
 id = "RR-37"
@@ -2736,6 +2864,9 @@ section = "13.9"
 status = "reference"
 title = "Immature ML-DSA implementations may accept forged signatures"
 tests = []
+owner = "The provider (library choice); the domain (PQ profile)"
+acceptance = "Maturity takes time"
+signal = ["ci:nightly/f0-differential"]
 
 [[rule]]
 id = "RR-38"
@@ -2745,6 +2876,9 @@ status = "reference"
 stage = 6
 title = "Managed platforms may lack memory hardening backends"
 tests = []
+owner = "Provider or self-host operator"
+acceptance = "Platform limits"
+signal = ["metric:access_secret_memory_backend"]
 
 [[rule]]
 id = "RR-39"
@@ -2753,6 +2887,9 @@ section = "13.9"
 status = "reference"
 title = "Unused; reserved ID"
 tests = []
+owner = "None (reserved ID)"
+acceptance = "Reserved; never reused"
+signal = ["none-declared"]
 
 [[rule]]
 id = "RR-40"
@@ -2785,6 +2922,9 @@ section = "13.9"
 status = "reference"
 title = "Brokered upstream tokens stay bearer due to missing DPoP support"
 tests = []
+owner = "Identity plane (broker); the domain (upstream connection choice)"
+acceptance = "Upstream ecosystem reality; the CT2+ default is broker-as-PEP"
+signal = ["none-declared"]
 
 [[rule]]
 id = "RR-44"
@@ -2794,6 +2934,9 @@ status = "reference"
 stage = 6
 title = "Mainstream MCP clients limited to Public scope until AIS support"
 tests = []
+owner = "Product; MCP PEP owner"
+acceptance = "PI-11 is frozen; bearer authority is never given"
+signal = ["none-declared"]
 
 [[rule]]
 id = "RR-45"
@@ -2803,6 +2946,9 @@ status = "reference"
 stage = 8
 title = "RP ID change invalidates passkeys, forcing weakest recovery path"
 tests = []
+owner = "The tenant (domain name decision); identity plane"
+acceptance = "WebAuthn binds passkeys to the RP ID"
+signal = ["metric:access_recovery_weakest_path_total"]
 
 [[rule]]
 id = "SEC1"

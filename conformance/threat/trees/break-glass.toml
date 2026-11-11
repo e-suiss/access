@@ -1,0 +1,53 @@
+# OP-159 m.3 (ff), SA-5
+
+flow = "break-glass"
+goal = "Act with emergency power outside its limits"
+
+[[node]]
+id = "BG"
+gate = "or"
+title = "Act with emergency power outside its limits"
+
+[[node]]
+id = "BG.1"
+parent = "BG"
+gate = "leaf"
+title = "Use a break-glass Grant without its approvals"
+threat = "TH-9"
+tests = [
+  "crates/authority-core/tests/commit/breakglass.rs::only_a_breakglass_grant_with_its_approvals_acts_and_within_its_own_limit",
+]
+limits = []
+
+[[node]]
+id = "BG.2"
+parent = "BG"
+gate = "leaf"
+title = "Skip the time lock or a blocking rule"
+threat = "TH-9"
+tests = [
+  "crates/authority-core/tests/commit/breakglass.rs::a_breakglass_basis_skips_the_time_lock_only_with_its_own_approvals",
+  "crates/authority-core/tests/commit/breakglass.rs::only_a_declared_exemption_lets_breakglass_past_a_blocking_rule",
+]
+limits = []
+
+[[node]]
+id = "BG.3"
+parent = "BG"
+gate = "leaf"
+title = "Use operator directives or database sessions to decide"
+threat = "TH-9"
+tests = [
+  "bins/access-server/src/bootstrap/tests/operator_breakglass.rs::g63_operator_directives_end_sessions_and_stand_the_leader_down_without_a_decision",
+  "bins/access-server/src/bootstrap/tests/operator_breakglass.rs::sec19_operator_database_sessions_are_recorded_once",
+]
+limits = []
+
+[[node]]
+id = "BG.4"
+parent = "BG"
+gate = "leaf"
+title = "Approvers collude within the limit"
+threat = "TH-18"
+tests = []
+limits = ["DL-6"]

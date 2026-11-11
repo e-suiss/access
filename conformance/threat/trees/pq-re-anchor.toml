@@ -1,0 +1,36 @@
+# OP-159 m.3 (ff), SA-5
+
+flow = "pq-re-anchor"
+goal = "Forge history after a classical break"
+
+[[node]]
+id = "PQ"
+gate = "or"
+title = "Forge history after a classical break"
+
+[[node]]
+id = "PQ.1"
+parent = "PQ"
+gate = "leaf"
+title = "Forge a record dated after the last re-anchor"
+threat = "TH-29"
+tests = []
+limits = ["RR-35", "N-55"]
+
+[[node]]
+id = "PQ.2"
+parent = "PQ"
+gate = "leaf"
+title = "Strip the PQ signature from a hybrid artefact"
+threat = "TH-29"
+tests = []
+limits = ["N-37"]
+
+[[node]]
+id = "PQ.3"
+parent = "PQ"
+gate = "leaf"
+title = "Exploit a verifier bug in ML-DSA"
+threat = "TH-13"
+tests = []
+limits = ["RR-37"]

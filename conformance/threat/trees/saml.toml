@@ -1,0 +1,53 @@
+# OP-159 m.3 (ff), SA-5
+
+flow = "saml"
+goal = "Get an SP to accept a forged SAML assertion"
+
+[[node]]
+id = "SA"
+gate = "or"
+title = "Get an SP to accept a forged SAML assertion"
+
+[[node]]
+id = "SA.1"
+parent = "SA"
+gate = "leaf"
+title = "Sign assertions with a leaked realm key"
+threat = "identity plane #2"
+tests = []
+limits = ["HL-35"]
+
+[[node]]
+id = "SA.2"
+parent = "SA"
+gate = "leaf"
+title = "Wrap a signature around a different assertion"
+threat = "identity plane #2"
+tests = [
+  "bins/access-parser-worker/src/saml_tests.rs::idi_8_xsw_corpus_is_refused",
+  "bins/access-server/src/bootstrap/tests/management/saml.rs::xmlsec1_verifies_a_real_response_and_metadata_and_refuses_a_tampered_one",
+]
+limits = []
+
+[[node]]
+id = "SA.3"
+parent = "SA"
+gate = "leaf"
+title = "Get a response without an attested session"
+threat = "identity plane #2"
+tests = [
+  "bins/access-server/src/bootstrap/tests/management/saml.rs::idi_7_signed_responses_come_only_from_an_attested_session",
+  "bins/access-server/src/bootstrap/tests/management/saml.rs::unsolicited_sso_needs_the_opt_in",
+]
+limits = []
+
+[[node]]
+id = "SA.4"
+parent = "SA"
+gate = "leaf"
+title = "Exhaust the parser with entities"
+threat = "TH-30"
+tests = [
+  "bins/access-parser-worker/src/parse.rs::a_doctype_is_refused_before_any_entity_is_read",
+]
+limits = []

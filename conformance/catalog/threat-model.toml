@@ -360,7 +360,11 @@ family = "AB"
 section = "14.2"
 status = "frozen"
 title = "Agent wears down a human to collect approvals"
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/walkthrough/approval_channels.rs::the_sixth_invitation_in_an_hour_is_429_and_one_intent_invites_once",
+  "crates/authority-core/tests/commit.rs::approval_requests_are_throttled_per_requester",
+  "crates/http/tests/login/push.rs::the_fourth_push_in_ten_minutes_and_a_push_after_a_refusal_are_held",
+]
 
 [[abuse_case]]
 id = "AB-2"
@@ -368,7 +372,11 @@ family = "AB"
 section = "14.2"
 status = "frozen"
 title = "Budget splitting"
-tests = []
+tests = [
+  "crates/authority-core/tests/commit.rs::a_budget_is_drawn_until_it_is_exhausted",
+  "crates/authority-core/tests/commit/policy_engine.rs::a_party_total_above_the_domain_limit_needs_an_approval",
+  "crates/authority-core/tests/commit/policy_engine.rs::the_third_threshold_adjacent_exercise_needs_an_approval",
+]
 
 [[abuse_case]]
 id = "AB-3"
@@ -376,7 +384,11 @@ family = "AB"
 section = "14.2"
 status = "frozen"
 title = "Infiltrating rule-shaped selection through HR feed manipulation"
-tests = []
+tests = [
+  "crates/authority-core/tests/commit.rs::an_issuer_quota_quarantines_the_excess",
+  "crates/authority-core/tests/commit/policy_engine.rs::a_mass_selections_new_holders_need_an_approval_from_ct2",
+  "crates/authority-core/tests/ingest.rs::the_issuer_quota_holds_only_qualifying_claims",
+]
 
 [[abuse_case]]
 id = "AB-4"
@@ -384,7 +396,11 @@ family = "AB"
 section = "14.2"
 status = "frozen"
 title = "Bootstrap and admission abuse"
-tests = []
+tests = [
+  "crates/authority-core/tests/commit.rs::bootstrap_grants_are_limited_per_context",
+  "crates/http/tests/login.rs::an_invitation_from_an_inviter_who_left_grants_nothing",
+  "crates/http/tests/login.rs::autojoin_admits_a_verified_domains_people_never_a_consumer_domains_and_cools",
+]
 
 [[abuse_case]]
 id = "AB-5"
@@ -392,7 +408,11 @@ family = "AB"
 section = "14.2"
 status = "frozen"
 title = "Revocation race"
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/executor.rs::a_revoked_grant_stops_the_job_at_its_next_check_and_the_stop_is_confirmed",
+  "crates/authority-core/tests/commit.rs::a_continuation_after_revocation_is_denied",
+  "crates/authority-core/tests/commit/quota.rs::a_full_domain_refuses_widening_commits_and_still_revokes",
+]
 
 [[abuse_case]]
 id = "AB-6"
@@ -400,7 +420,10 @@ family = "AB"
 section = "14.2"
 status = "frozen"
 title = "Offline slice abuse"
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/product_twin/seams/serve.rs::a_pos_terminal_refuses_offline_once_its_slice_is_spent",
+  "crates/authority-core/tests/commit.rs::an_offline_slice_is_drawn_in_advance",
+]
 
 [[abuse_case]]
 id = "AB-7"
@@ -408,7 +431,11 @@ family = "AB"
 section = "14.2"
 status = "frozen"
 title = "Schema mapping manipulation"
-tests = []
+tests = [
+  "crates/authority-core/tests/compat.rs::a_pinned_broadening_mapping_is_never_applied",
+  "crates/authority-core/tests/compat.rs::a_pinned_narrowing_mapping_needs_an_approval_through_its_probation",
+  "crates/authority-core/tests/compat.rs::only_a_mapping_the_publisher_declared_can_be_pinned",
+]
 
 [[abuse_case]]
 id = "AB-8"
@@ -416,7 +443,11 @@ family = "AB"
 section = "14.2"
 status = "frozen"
 title = "Delegation chain laundering"
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/exchange.rs::an_exchange_writes_act_from_the_lineage_only",
+  "bins/access-server/src/bootstrap/tests/management/delegated.rs::an_admin_never_gives_a_meta_action_above_its_own_set",
+  "bins/access-server/src/bootstrap/tests/product_twin/one.rs::one_acts_for_the_person_only_within_what_the_person_gave_it",
+]
 
 [[abuse_case]]
 id = "AB-9"
@@ -424,7 +455,11 @@ family = "AB"
 section = "14.2"
 status = "frozen"
 title = "Capacity spoofing (false acting-for claim)"
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/exchange.rs::an_exchange_writes_act_from_the_lineage_only",
+  "bins/access-server/src/bootstrap/tests/product_twin/one.rs::one_acts_for_the_person_only_within_what_the_person_gave_it",
+  "crates/authority-core/tests/commit.rs::an_authority_act_meets_the_actors_own_intent_bound_authentication",
+]
 
 [[abuse_case]]
 id = "AB-10"
@@ -432,4 +467,8 @@ family = "AB"
 section = "14.2"
 status = "frozen"
 title = "Cross-product confused deputy"
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/mcp.rs::a_token_for_another_audience_is_401_and_bounds_ask_for_scope",
+  "crates/authority-core/tests/commit.rs::a_nonce_returns_its_decision_and_binds_its_intent",
+  "crates/identity-oauth/tests/oauth.rs::a_platform_product_gets_a_service_token_for_another_product",
+]

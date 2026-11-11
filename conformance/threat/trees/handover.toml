@@ -1,0 +1,42 @@
+# OP-159 m.3 (ff), SA-5
+
+flow = "handover"
+goal = "Take over or fork a domain during handover"
+
+[[node]]
+id = "HO"
+gate = "or"
+title = "Take over or fork a domain during handover"
+
+[[node]]
+id = "HO.1"
+parent = "HO"
+gate = "leaf"
+title = "Rebind the provider without the meta-anchor root"
+threat = "TH-26"
+tests = [
+  "crates/authority-core/tests/commit/domain_scope.rs::only_the_meta_anchor_root_rebinds_the_provider",
+]
+limits = []
+
+[[node]]
+id = "HO.2"
+parent = "HO"
+gate = "leaf"
+title = "Keep the old provider deciding after the move"
+threat = "TH-26"
+tests = [
+  "bins/access-server/src/bootstrap/tests/durability/handover.rs::a_domain_moves_to_a_second_install_and_the_old_provider_is_fenced",
+]
+limits = []
+
+[[node]]
+id = "HO.3"
+parent = "HO"
+gate = "leaf"
+title = "Show different histories to different verifiers"
+threat = "TH-24"
+tests = [
+  "bins/access-server/src/bootstrap/tests/durability/checkpoint.rs::real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation",
+]
+limits = ["DL-4"]

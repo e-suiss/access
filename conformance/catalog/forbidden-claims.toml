@@ -1430,3 +1430,138 @@ phrases = ["attestation proves the device is uncompromised", "attested authentic
 negation = true
 sources = ["HL-19", "OP-159 m.3 (ll)"]
 honest = "Attestation names the authenticator model and its certificate chain under the direct policy; it says nothing about the device's later state."
+
+# OP-159 m.3 (gg), (hh), m.4 (b) (J8)
+
+[[claim]]
+id = "j8-hl10-merkle-position-private"
+scope = "all"
+phrases = ["inclusion proofs reveal nothing", "merkle proofs hide the position", "position-hiding inclusion proof"]
+negation = true
+sources = ["HL-10", "§13.5", "OP-159 m.3 (gg)"]
+rows = ["HL-10"]
+honest = "An inclusion proof reveals the record's position (its leaf index) in the log and the log size."
+
+[[claim]]
+id = "j8-hl11-status-list-anonymous"
+scope = "all"
+phrases = ["status lists are anonymous", "status checks reveal nothing", "unlinkable status checks"]
+negation = true
+sources = ["HL-11", "§13.5", "OP-159 m.3 (gg)"]
+rows = ["HL-11"]
+honest = "A status list hides a token only among the other entries of the same list; the herd is never larger than the list."
+
+[[claim]]
+id = "j8-hl12-identical-everywhere"
+scope = "all"
+phrases = ["every implementation decides identically", "identical decisions across all implementations", "bit-for-bit identical on all inputs"]
+negation = true
+sources = ["HL-12", "§13.5", "OP-159 m.3 (gg)"]
+rows = ["HL-12"]
+honest = "Implementations agree on the published test vectors and the differential runs; beyond their coverage agreement is not guaranteed."
+
+[[claim]]
+id = "j8-hl15-verified-runtime"
+scope = "all"
+phrases = ["verified async runtime", "the async runtime is proven", "the http layer is proven"]
+negation = true
+sources = ["HL-15", "§13.5", "OP-159 m.3 (gg)"]
+rows = ["HL-15"]
+honest = "The async runtime and the HTTP layer are outside the formal models; fuzzing, deterministic simulation and tests cover them."
+
+[[claim]]
+id = "j8-hl16-constant-time-hardware"
+scope = "all"
+phrases = ["constant-time on every cpu", "the cpu guarantees constant time", "constant time on any hardware"]
+negation = true
+sources = ["HL-16", "§13.5", "OP-159 m.3 (gg)"]
+rows = ["HL-16"]
+honest = "Constant-time code is measured (dudect, ctgrind, assembly snapshots); neither the compiler nor the CPU guarantees it."
+
+[[claim]]
+id = "j8-hl17-cotenant-immune"
+scope = "all"
+phrases = ["immune to co-tenant side channels", "side-channel-free hosting", "co-tenant side channels are impossible"]
+negation = true
+sources = ["HL-17", "DL-10", "§13.5", "OP-159 m.3 (gg)"]
+rows = ["HL-17"]
+honest = "On shared hardware co-tenant side channels remain possible; dedicated compute is the option that removes them."
+
+[[claim]]
+id = "j8-hl19-pq-passkeys"
+scope = "all"
+phrases = ["post-quantum passkeys", "passkeys are post-quantum", "pqc passkeys"]
+negation = true
+sources = ["HL-19", "§10.2.4", "OP-159 m.3 (gg)"]
+rows = ["HL-19"]
+honest = "Passkeys don't use post-quantum cryptography yet; after a cryptographically relevant quantum computer new assertions could be forged."
+
+[[claim]]
+id = "j8-hl27-fips-and-pq"
+scope = "all"
+phrases = ["fips and post-quantum together", "fips-validated post-quantum", "fips with ml-dsa"]
+negation = true
+sources = ["HL-27", "§15.6", "OP-159 m.3 (gg)"]
+rows = ["HL-27"]
+honest = "FIPS and post-quantum profiles can't be combined; a realm or domain picks one of them."
+
+[[claim]]
+id = "j8-hl29-whole-system-proven"
+scope = "all"
+phrases = ["fully verified system", "verified end to end", "the whole system is proven"]
+negation = true
+sources = ["HL-29", "CR-50", "OP-159 m.3 (gg)"]
+rows = ["HL-29"]
+honest = "Property P of model M is machine-checked (Lean, Kani or TLA+); see the formal scope for what is outside it."
+
+[[claim]]
+id = "j8-hl34-late-reanchor"
+scope = "all"
+phrases = ["re-anchor after the key is compromised", "re-anchoring rescues a compromised key", "re-anchor any time"]
+negation = true
+sources = ["HL-34", "§15.18", "OP-159 m.3 (gg)"]
+rows = ["HL-34"]
+honest = "A binding re-anchor protects history only when it happens before the old binding key is compromised."
+
+[[claim]]
+id = "j8-hl35-golden-saml-proof"
+scope = "all"
+phrases = ["golden saml proof", "immune to golden saml", "forged assertions are impossible"]
+negation = true
+sources = ["HL-35", "§13.2", "OP-159 m.3 (gg)"]
+rows = ["HL-35"]
+honest = "Whoever holds a leaked realm signing key can forge ID tokens and SAML assertions for that realm until the key is rotated out of the JWKS and the metadata."
+
+[[claim]]
+id = "j8-hl36-cimd-permanent"
+scope = "all"
+phrases = ["cimd clients can't be taken over", "a client id url always belongs to its owner", "client identity takeover is impossible"]
+negation = true
+sources = ["HL-36", "§11", "OP-159 m.3 (gg)"]
+rows = ["HL-36"]
+honest = "A CIMD client is whoever controls its domain; an expired or resold domain hands the client identity to the new owner until the realm policy drops that domain."
+
+[[claim]]
+id = "j8-endorsed-by-suiss"
+scope = "all"
+phrases = ["endorsed by suiss", "suiss-endorsed", "suiss endorsement", "approved by suiss"]
+negation = true
+sources = ["§9.1", "§9.17", "B9", "P2", "OP-159 m.3 (gg)"]
+honest = "Passing the conformance suite is a published test result; it needs no Suiss account or relationship and is not endorsement."
+
+[[claim]]
+id = "j8-suiss-certification"
+scope = "all"
+phrases = ["suiss certification", "suiss assessment", "suiss certificate of", "certified by a suiss audit"]
+negation = true
+sources = ["§18.12", "D3", "OP-159 m.3 (gg)"]
+honest = "Suiss sells no certification or assessment service; an independent audit report is published as the auditor's report."
+
+[[claim]]
+id = "j8-aitm-passkeys"
+scope = "all"
+phrases = ["passkeys stop session theft", "passkeys make sessions unstealable", "aitm-proof sign-in"]
+negation = true
+sources = ["SA-12", "N-41", "HL-23", "OP-159 m.3 (hh)"]
+rows = ["N-41", "HL-23"]
+honest = "A passkey sign-in can't be relayed through a phishing proxy; it does not stop theft of the session or token after sign-in, and password with TOTP can be relayed."

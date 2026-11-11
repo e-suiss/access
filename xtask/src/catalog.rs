@@ -16,6 +16,9 @@ mod claims;
 mod ids;
 #[path = "catalog_mappings.rs"]
 mod mappings;
+// OP-159 m.3 (ff)
+#[path = "catalog_pasta.rs"]
+pub(crate) mod pasta;
 #[path = "catalog_scan.rs"]
 mod scan;
 #[path = "catalog_spec.rs"]
@@ -127,6 +130,15 @@ pub(crate) struct Rule {
     /// `path` or `path::function`, relative to the workspace root.
     #[serde(default)]
     pub(crate) tests: Vec<String>,
+    /// RR rows: who owns the risk (§13.9).
+    #[serde(default)]
+    pub(crate) owner: Option<String>,
+    /// RR rows: why the risk is accepted (§13.9).
+    #[serde(default)]
+    pub(crate) acceptance: Option<String>,
+    /// RR rows: the monitoring signals, `kind:name` or `none-declared` (§13.9).
+    #[serde(default)]
+    pub(crate) signal: Vec<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -282,6 +294,16 @@ fn render_entries(table: &str, rules: &[Rule]) -> String {
             let _ = writeln!(out, "aliases = {}", list(&r.aliases));
         }
         let _ = writeln!(out, "tests = {}", list(&r.tests));
+        // OP-159 m.3 (gg)
+        if let Some(o) = &r.owner {
+            let _ = writeln!(out, "owner = {}", quote(o));
+        }
+        if let Some(a) = &r.acceptance {
+            let _ = writeln!(out, "acceptance = {}", quote(a));
+        }
+        if !r.signal.is_empty() {
+            let _ = writeln!(out, "signal = {}", list(&r.signal));
+        }
     }
     out
 }
@@ -365,6 +387,9 @@ fn merge(
                 title,
                 aliases: s.aliases.clone(),
                 tests: tests.into_iter().collect(),
+                owner: old.and_then(|o| o.owner.clone()),
+                acceptance: old.and_then(|o| o.acceptance.clone()),
+                signal: old.map(|o| o.signal.clone()).unwrap_or_default(),
             }
         })
         .collect()
@@ -924,9 +949,24 @@ pub(crate) fn threat_violations(catalog: &Catalog) -> Vec<Violation> {
     out
 }
 
+/// Each forbidden claim's ID, the rows it is the honest wording for, and that wording.
+pub(crate) fn claims_rows(root: &Path) -> Result<Vec<(String, Vec<String>, String)>, String> {
+    Ok(claims::load(root)?
+        .claim
+        .into_iter()
+        .map(|c| (c.id, c.rows, c.honest))
+        .collect())
+}
+
+/// Resolves a `path` or `path::function` test link.
+pub(crate) fn link_exists(root: &Path, link: &str) -> bool {
+    scan::link_exists(root, link)
+}
+
 fn check_threat_model(root: &Path) -> Result<Vec<Violation>, String> {
     let catalog = load(root)?;
     let mut out = threat_violations(&catalog);
+    out.extend(pasta::check(root, &catalog)?);
     let covered = catalog
         .threats
         .iter()

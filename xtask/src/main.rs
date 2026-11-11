@@ -85,6 +85,7 @@ fn usage() -> ExitCode {
     eprintln!("  interop-table      regenerate conformance/interop/COMPATIBILITY.md from lab.toml");
     eprintln!("  seam-dependencies  regenerate conformance/seams/DEPENDENCIES.md (PI-14)");
     eprintln!("  calibrate          measure password hashing on this host (OP-146 m.4 (f))");
+    eprintln!("  security-model     regenerate conformance/SECURITY-MODEL.md; --check only compares");
     ExitCode::FAILURE
 }
 
@@ -121,6 +122,16 @@ fn main() -> ExitCode {
             }
         },
         Some("calibrate") => calibrate(&root),
+        // OP-159 m.3 (gg)
+        Some("security-model") => {
+            match rules::security_model::write(&root, args.get(1).is_some_and(|a| a == "--check")) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    eprintln!("security-model: {error}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         _ => usage(),
     }
 }

@@ -1,0 +1,63 @@
+# OP-159 m.3 (ff), SA-5
+
+flow = "recovery"
+goal = "Roll back or widen authority through forced recovery"
+
+[[node]]
+id = "RC"
+gate = "or"
+title = "Roll back or widen authority through forced recovery"
+
+[[node]]
+id = "RC.1"
+parent = "RC"
+gate = "leaf"
+title = "Recover without the declared domain.recover entry"
+threat = "TH-26"
+tests = [
+  "crates/authority-core/tests/commit/domain_scope.rs::a_recovery_needs_its_entry_and_passes_the_rollback_guard",
+]
+limits = []
+
+[[node]]
+id = "RC.2"
+parent = "RC"
+gate = "leaf"
+title = "Recover from a checkpoint below the witnessed head"
+threat = "TH-25"
+tests = [
+  "crates/authority-core/tests/ingest.rs::an_admitted_checkpoint_claim_is_the_witness_head_the_rollback_guard_reads",
+]
+limits = []
+
+[[node]]
+id = "RC.3"
+parent = "RC"
+gate = "leaf"
+title = "Lose acknowledged revocations in the dropped suffix"
+threat = "TH-25"
+tests = [
+  "bins/access-server/src/bootstrap/tests/durability/replica.rs::a_revocation_is_acknowledged_only_once_a_real_replica_holds_it_and_a_real_witness_cosigned_it",
+  "bins/access-server/src/bootstrap/tests/faults/witness.rs::fo_06_without_a_witness_a_revocation_is_recorded_and_its_ack_waits",
+]
+limits = ["DL-5"]
+
+[[node]]
+id = "RC.4"
+parent = "RC"
+gate = "leaf"
+title = "Keep what a divergence widened after recovery"
+threat = "TH-9"
+tests = [
+  "bins/access-server/src/bootstrap/tests/durability/replay.rs::a_declared_divergence_stops_nothing_and_the_roots_quarantine_denies_what_it_widened",
+]
+limits = []
+
+[[node]]
+id = "RC.5"
+parent = "RC"
+gate = "leaf"
+title = "Use a stolen provider key before the recovery record arrives"
+threat = "TH-13"
+tests = []
+limits = ["N-26", "RR-14"]

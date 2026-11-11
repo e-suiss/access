@@ -1,0 +1,75 @@
+# OP-159 m.3 (ff), SA-5
+
+flow = "login-recovery"
+goal = "Take over an account"
+
+[[node]]
+id = "LR"
+gate = "or"
+title = "Take over an account"
+
+[[node]]
+id = "LR.1"
+parent = "LR"
+gate = "leaf"
+title = "Relay a passkey sign-in through a reverse proxy"
+threat = "TH-2"
+tests = [
+  "bins/access-server/src/bootstrap/tests/aitm.rs::a_passkey_sign_in_through_a_reverse_proxy_is_refused",
+]
+limits = []
+
+[[node]]
+id = "LR.2"
+parent = "LR"
+gate = "leaf"
+title = "Relay password and TOTP through a reverse proxy"
+threat = "TH-2"
+tests = [
+  "bins/access-server/src/bootstrap/tests/aitm.rs::password_and_totp_through_a_reverse_proxy_hand_over_the_session",
+]
+limits = ["N-41"]
+
+[[node]]
+id = "LR.3"
+parent = "LR"
+gate = "leaf"
+title = "Push-bomb the user into approving"
+threat = "TH-15"
+tests = [
+  "crates/http/tests/login/push.rs::the_fourth_push_in_ten_minutes_and_a_push_after_a_refusal_are_held",
+]
+limits = []
+
+[[node]]
+id = "LR.4"
+parent = "LR"
+gate = "leaf"
+title = "Recover the account with one email"
+threat = "identity plane #1"
+tests = [
+  "bins/access-server/src/bootstrap/tests/recovery.rs::an_aal2_account_cannot_rest_its_recovery_on_one_email",
+  "bins/access-server/src/bootstrap/tests/recovery.rs::the_owners_own_sign_in_denies_a_running_recovery",
+]
+limits = []
+
+[[node]]
+id = "LR.5"
+parent = "LR"
+gate = "leaf"
+title = "Enumerate accounts through sign-in or recovery"
+threat = "identity plane #3"
+tests = [
+  "crates/http/tests/login.rs::enumeration_parity_on_login",
+  "bins/access-server/src/bootstrap/tests/recovery_authority.rs::recovery_starts_answer_alike_for_live_unknown_and_deleted_accounts",
+]
+limits = []
+
+[[node]]
+id = "LR.6"
+parent = "LR"
+gate = "leaf"
+title = "Steal the session after sign-in"
+threat = "identity plane #1"
+tests = []
+limits = ["HL-23", "RR-30"]

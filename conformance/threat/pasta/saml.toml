@@ -1,0 +1,41 @@
+# OP-159 m.3 (ff), SA-5
+
+flow = "saml"
+title = "SAML single sign-on"
+tree = "conformance/threat/trees/saml.toml"
+components = ["realm-signing-key", "parser-worker", "identity-plane"]
+
+[[stage]]
+name = "objectives"
+summary = "Issue SAML responses only for attested sessions and refuse tampered input. Assets: assertions, the realm SAML key, metadata"
+refs = ["RR-20"]
+
+[[stage]]
+name = "technical-scope"
+summary = "SP-initiated and unsolicited SSO, single logout, metadata"
+refs = ["HL-35"]
+
+[[stage]]
+name = "decomposition"
+summary = "Parser worker, SAML signer, SPs"
+refs = []
+
+[[stage]]
+name = "threat-analysis"
+summary = "Golden SAML, signature wrapping, replay, parser DoS"
+refs = ["identity plane #2", "TH-28", "TH-30"]
+
+[[stage]]
+name = "vulnerability-analysis"
+summary = "XSW-class misparsing; a leaked realm signing key"
+refs = ["RR-20", "HL-35"]
+
+[[stage]]
+name = "attack-modeling"
+summary = "Attack tree conformance/threat/trees/saml.toml"
+refs = []
+
+[[stage]]
+name = "risk-impact"
+summary = "Residual: a leaked realm key forges assertions until rotation"
+refs = ["HL-35", "RR-20"]
