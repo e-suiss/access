@@ -48,6 +48,10 @@ ALTER TABLE access_ops.cell_profile ENABLE ROW LEVEL SECURITY;
 ALTER TABLE access_ops.cell_profile FORCE ROW LEVEL SECURITY;
 REVOKE ALL ON access_ops.cell_profile FROM PUBLIC;
 CREATE POLICY rows ON access_ops.cell_profile AS PERMISSIVE USING (true);
+CREATE POLICY readers ON access_ops.cell_profile AS RESTRICTIVE FOR SELECT
+  USING (pg_has_role(current_user, 'access_app', 'MEMBER')
+         OR pg_has_role(current_user, 'access_router', 'MEMBER')
+         OR pg_has_role(current_user, 'access_migrator', 'MEMBER'));
 CREATE POLICY writers ON access_ops.cell_profile AS RESTRICTIVE FOR INSERT
   WITH CHECK (pg_has_role(current_user, 'access_app', 'MEMBER'));
 CREATE TRIGGER append_only_row BEFORE UPDATE OR DELETE ON access_ops.cell_profile

@@ -23,8 +23,8 @@ ALTER TABLE access.realm_governors FORCE ROW LEVEL SECURITY;
 REVOKE ALL ON access.realm_governors FROM PUBLIC;
 CREATE POLICY rows ON access.realm_governors AS PERMISSIVE USING (true);
 CREATE POLICY tenant_scope ON access.realm_governors AS RESTRICTIVE TO access_app
-  USING (tenant_id = (SELECT access.tenant_scope()))
-  WITH CHECK (tenant_id = (SELECT access.tenant_scope()));
+  USING (tenant_id = (SELECT access.tenant_scope()) AND realm_id = (SELECT access.realm_scope()))
+  WITH CHECK (tenant_id = (SELECT access.tenant_scope()) AND realm_id = (SELECT access.realm_scope()));
 CREATE TRIGGER append_only_row BEFORE UPDATE OR DELETE ON access.realm_governors
   FOR EACH ROW EXECUTE FUNCTION access.reject_mutation();
 CREATE TRIGGER append_only_truncate BEFORE TRUNCATE ON access.realm_governors
