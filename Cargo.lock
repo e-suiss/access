@@ -1084,6 +1084,7 @@ dependencies = [
  "esuiss-access-verifier",
  "esuiss-crypto",
  "esuiss-ledger",
+ "esuiss-restriction-analysis",
  "esuiss-sandbox",
  "figment",
  "http-body-util",

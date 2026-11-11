@@ -95,6 +95,20 @@ pub(crate) struct Config {
     /// The app-controlled factor's attestation (OP-156 m.3 (e)).
     #[serde(default)]
     pub(crate) app_factor: AppFactor,
+    /// The restriction policy analysis (OP-105, OP-157 m.3 (n)).
+    #[serde(default)]
+    pub(crate) policy: Policy,
+}
+
+/// The control-plane analysis of `policy.set` changes (OP-105, OP-157 m.3 (n)): with
+/// `analyzer`, the pinned cvc5 (`supply-chain/cvc5.toml`) may raise a structurally narrowing
+/// change to expansion; without it the Kernel's structural rule decides alone. The operator
+/// provides the binary; the image carries none.
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub(crate) struct Policy {
+    /// The cvc5 executable.
+    pub(crate) analyzer: Option<PathBuf>,
 }
 
 /// The app-controlled factor (MD-11, OP-156 m.3 (e)): Android key attestation is checked against
@@ -652,6 +666,7 @@ impl Default for Config {
             migration: Migration::default(),
             doorbell: None,
             app_factor: AppFactor::default(),
+            policy: Policy::default(),
         }
     }
 }

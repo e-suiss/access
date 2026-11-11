@@ -140,6 +140,9 @@ pub struct PolicyChange {
     /// The relation of the candidate to the policy in force; [`PolicyRelation::Unknown`] when
     /// not proved.
     pub relation: PolicyRelation,
+    /// Whether the Kernel's structural rule reads the change as narrowing, so CT1 unless the
+    /// analysis raises it (OP-157 m.3 (b), (n)).
+    pub structural_narrowing: bool,
     /// The candidate's compile error, when it would be refused (OP-141 m.27 (e)).
     pub refused: Option<&'static str>,
 }
@@ -596,16 +599,24 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             Some(Value::Text(s)) => Some(s.clone()),
             _ => None,
         };
-        let old = match policy {
-            None => Some(String::new()),
+        let in_force = match policy {
+            None => None,
             Some(p) => {
                 settle(&self.reader, |snap| {
-                    read::<ContentState>(snap, kind::POLICY, &p)
-                        .filter(|s| s.ended.is_none())
-                        .and_then(|s| source(&s.content))
+                    read::<ContentState>(snap, kind::POLICY, &p).filter(|s| s.ended.is_none())
                 })
                 .await?
             }
+        };
+        // OP-157 m.3 (b), (n)
+        let structural_narrowing = match (&policy, &in_force) {
+            (None, _) => true,
+            (Some(_), Some(s)) => access_kernel::meta::policy_narrows(&s.content, candidate),
+            (Some(_), None) => false,
+        };
+        let old = match policy {
+            None => Some(String::new()),
+            Some(_) => in_force.as_ref().and_then(|s| source(&s.content)),
         };
         let relation = match (refused, old, source(candidate)) {
             (None, Some(old), Some(new)) => {
@@ -616,6 +627,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Ok(PolicyChange {
             policy,
             relation,
+            structural_narrowing,
             refused,
         })
     }

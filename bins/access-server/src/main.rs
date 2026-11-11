@@ -11,6 +11,7 @@
 //! output is its result, so its logs go to standard error.
 
 mod admin;
+mod analysis;
 mod bootstrap;
 mod certificate;
 mod checkpoints;
@@ -457,8 +458,8 @@ async fn seed(
         deriver: all.deriver.clone(),
         signer: config.signer.clone(),
         api_base: config.issuer.clone().ok_or("no issuer")?,
-        // OP-105
-        analysis: Arc::new(access_authority_core::ports::NoAnalysis),
+        // OP-105, OP-157 m.3 (n)
+        analysis: analysis::configured(config)?,
     }));
     let plane = idp::Plane::new(
         domains.clone(),
@@ -1819,8 +1820,8 @@ async fn serve(
         deriver,
         signer: config.signer.clone(),
         api_base: issuer.clone(),
-        // OP-105
-        analysis: Arc::new(access_authority_core::ports::NoAnalysis),
+        // OP-105, OP-157 m.3 (n)
+        analysis: analysis::configured(config)?,
     });
     // OP-156 m.3 (j)
     let domains = Arc::new(match &doorbell {

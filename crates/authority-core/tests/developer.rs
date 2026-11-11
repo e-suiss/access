@@ -1004,6 +1004,8 @@ async fn a_policy_candidate_is_simulated_and_previewed() {
         preview.relation,
         access_authority_core::ports::PolicyRelation::Unknown
     );
+    // OP-157 m.3 (n)
+    assert!(preview.structural_narrowing);
     assert_eq!(preview.refused, None);
     assert_eq!(core.head(), head);
 }

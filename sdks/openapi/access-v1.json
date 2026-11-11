@@ -4470,6 +4470,14 @@
               "unknown"
             ]
           },
+          "structural": {
+            "type": "string",
+            "enum": [
+              "narrowing",
+              "widening"
+            ],
+            "description": "For a policy candidate: the Kernel's structural reading (OP-157 m.3 (b)); a narrowing is CT1 unless the analysis answers anything but narrowing or equivalent."
+          },
           "refused": {
             "type": [
               "string",

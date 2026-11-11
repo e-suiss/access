@@ -41,6 +41,8 @@ access-identity-webauthn = { workspace = true }
 access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 access-store = { workspace = true }
+# OP-105, OP-157 m.3 (n)
+restriction-analysis = { package = "esuiss-restriction-analysis", path = "../../crates/restriction-analysis" }
 suiss-crypto = { workspace = true, features = ["pkcs11", "signer"] }
 suiss-sandbox = { workspace = true }
 suiss-ledger = { workspace = true, features = ["doorbell"] }

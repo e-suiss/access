@@ -1128,6 +1128,11 @@ export interface components {
             policy?: string | null;
             /** @enum {string} */
             relation: "equivalent" | "narrowing" | "widening" | "incomparable" | "may_error" | "unknown";
+            /**
+             * @description For a policy candidate: the Kernel's structural reading (OP-157 m.3 (b)); a narrowing is CT1 unless the analysis answers anything but narrowing or equivalent.
+             * @enum {string}
+             */
+            structural?: "narrowing" | "widening";
             /** @description The candidate's compile error. */
             refused?: string | null;
             /** @description The Grants to amend, one Exercise each. */

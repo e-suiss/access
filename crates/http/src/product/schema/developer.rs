@@ -473,6 +473,7 @@ fn reports() -> Value {
                 "pin": { "type": "object", "description": "The pin each `grant.amend` of the move carries." },
                 "policy": { "type": ["string", "null"], "description": "For a policy candidate: the policy replaced." },
                 "relation": { "type": "string", "enum": ["equivalent", "narrowing", "widening", "incomparable", "may_error", "unknown"] },
+                "structural": { "type": "string", "enum": ["narrowing", "widening"], "description": "For a policy candidate: the Kernel's structural reading (OP-157 m.3 (b)); a narrowing is CT1 unless the analysis answers anything but narrowing or equivalent." },
                 "refused": { "type": ["string", "null"], "description": "The candidate's compile error." },
                 "moves": list(&b64("Grant"), "The Grants to amend, one Exercise each."),
                 "amends": list(&r("MetaPayload"), "The `grant_amend` payload of each move, in the order of `moves` (L1-ADP-17): the Grant's own constraints, requirements and agency kept, the authority set and pin of the new version; the console drafts, shows and signs each as its own Exercise (X20, §8.17.9.8)."),

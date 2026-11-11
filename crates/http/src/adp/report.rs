@@ -430,6 +430,7 @@ fn policy_change(c: &PolicyChange) -> Out {
         "type": "change_impact",
         "policy": c.policy.as_ref().map(id),
         "relation": c.relation.word(),
+        "structural": if c.structural_narrowing { "narrowing" } else { "widening" },
         "refused": c.refused,
         "advisory": true,
     })
