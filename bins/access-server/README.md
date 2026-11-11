@@ -43,6 +43,7 @@ the start. Unknown keys are refused.
 | `security_policy` | no | the project's policy URL | `security.txt` `Policy` URI. |
 | `security_txt_valid_days` | no | `180` | `security.txt` validity, 1 to 364 days. |
 | `delivery_targets` | no | `[]` | Push and webhook endpoints that may be on a private address or a port other than 443: `[{ url = "https://host:8443/path", ca_file = "/ca.pem" }]`. |
+| `trusted_proxies` | no | `[]` | Proxies in front of the public listener, each an address or a CIDR block. Only a request from one of them has its `X-Forwarded-For` read, as the right-most address that is not a proxy; otherwise the client address is the TCP peer's. |
 
 ### `[tls]` (required)
 
@@ -70,6 +71,7 @@ the start. Unknown keys are refused.
 | `checkpointer` | yes | Login of `access_checkpointer`: integrates and signs the audit chains. |
 | `migrator` | for `migrate` | Login of `access_migrator`; never used while serving. |
 | `replica_host` | no | A read replica for admin search and listing, reached with the `app` login. |
+| `admin_pool` | no | Size of the management listener's own `access_app` pool, 4 when unset, so admin and report requests and sign-in never wait behind each other. |
 
 Each login is `{ user = "...", password_file = "...", pool = N }` with `pool` at least 1.
 
@@ -282,6 +284,26 @@ destroys those keys again and lets it start.
 
 `/readyz` answers ready only when every pool answers, both signers accept a connection, every
 realm's JWKS loaded at start-up and every courier and consumer is running.
+
+## Limits
+
+- Every request to a realm's sign-in, account, authorization server and SCIM routes draws from
+  the realm's rate (`putRateLimit`, 200 a second until set) and its tenant's (1 000 a second),
+  with two seconds of burst. Over either it is `429 quota-exceeded` with `Retry-After`.
+- Every authority commit that widens draws from its domain's quota (200 a second, 1 000 at once)
+  and its tenant's (500 a second, 2 500 at once). Over either, or while the tenant is on billing
+  hold, the commit is refused with `429 quota-exceeded`: nothing is recorded and the nonce can
+  be used again.
+- Sign-out, logout, revocation, termination and other narrowing commits, export, handover and
+  recovery are never counted and never refused for a quota.
+- Each client address may send 1 000 requests a second (5 000 at once) to the public listener
+  and 100 (500 at once) to the management listener.
+- The public listener runs at most 1 024 requests at once and the management listener 64, each
+  with a queue of the same size. A request that cannot start within a second is `503` with
+  `Retry-After`, and so is one that waits five seconds for its domain's leader. The queues are
+  the `access_pool_queue_depth` gauge.
+- A counter that cannot answer refuses the request; nothing is ever admitted because a limit
+  could not be checked.
 
 ## Tests
 
