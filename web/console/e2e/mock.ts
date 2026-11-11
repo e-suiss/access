@@ -168,6 +168,7 @@ const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   putSupportArtifactPolicy: ["idp.support", "artifact_policy"],
   markBreakglassAccount: ["idp.org", "member_breakglass"],
   clearBreakglassAccount: ["idp.org", "member_breakglass_clear"],
+  reviewBreakglassUse: ["idp.org", "breakglass_review"],
   scheduleReview: ["idp.review", "schedule"],
   closeReview: ["idp.review", "schedule_close"],
   putDelegatedAdmin: ["idp.realm", "delegated_admin"],

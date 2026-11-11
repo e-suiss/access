@@ -980,6 +980,15 @@ export const en = {
     "Only low-risk (CT1) requests: at most 10, from one requester and of one kind, each approved on its own.",
   settingOn: "Turn on",
   settingOff: "Turn off",
+  // OP-157 m.4 (b): break-glass screen
+  breakglassOrganization: "Organization",
+  breakglassMember: "Member",
+  breakglassMarkedAt: "{name} · marked {date}",
+  breakglassNoReviews: "No break-glass use yet.",
+  breakglassUsed: "Used {date}",
+  breakglassReviewAs: "Review as {class}",
+  breakglassReviewedAs: "Reviewed: {class}",
+  breakglassDrill: "Drill",
 } as const;
 
 export type Key = keyof typeof en;

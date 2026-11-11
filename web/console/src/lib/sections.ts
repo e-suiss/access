@@ -93,7 +93,11 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
   // OP-156 m.3 (q)
   hr: [idp("hr", "source_register"), idp("hr", "import"), idp("hr", "connector_register")],
   // OP-157 m.3 (h)
-  breakglass: planned([idp("org", "member_breakglass"), idp("org", "member_breakglass_clear")]),
+  breakglass: [
+    idp("org", "member_breakglass"),
+    idp("org", "member_breakglass_clear"),
+    idp("org", "breakglass_review"),
+  ],
   // OP-157 m.3 (w)
   reviews: planned([idp("review", "schedule"), idp("review", "schedule_close")]),
   // OP-157 m.3 (c), (e), (g)

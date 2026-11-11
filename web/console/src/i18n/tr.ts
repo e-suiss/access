@@ -989,4 +989,13 @@ export const tr: Record<Key, string> = {
     "Yalnız düşük riskli (CT1) istekler: en çok 10, tek bir isteyenden ve tek türde, her biri ayrı onaylanır.",
   settingOn: "Aç",
   settingOff: "Kapat",
+  // OP-157 m.4 (b): break-glass screen
+  breakglassOrganization: "Organizasyon",
+  breakglassMember: "Üye",
+  breakglassMarkedAt: "{name} · işaretlendi {date}",
+  breakglassNoReviews: "Henüz acil erişim kullanımı yok.",
+  breakglassUsed: "Kullanıldı {date}",
+  breakglassReviewAs: "{class} olarak incele",
+  breakglassReviewedAs: "İncelendi: {class}",
+  breakglassDrill: "Tatbikat",
 };

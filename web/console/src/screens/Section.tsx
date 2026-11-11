@@ -17,6 +17,7 @@ import { Proxy } from "./Proxy.js";
 import { SignInSettings } from "./SignInSettings.js";
 import { Export as SiemExport } from "./Export.js";
 import { Linux } from "./Linux.js";
+import { BreakGlass } from "./BreakGlass.js";
 import { Hr } from "./Hr.js";
 import { Ssh } from "./Ssh.js";
 
@@ -100,7 +101,7 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
     case "hr":
       return <Hr ctx={ctx} />;
     case "breakglass":
-      return <Planned />;
+      return <BreakGlass ctx={ctx} />;
     case "reviews":
       return <Planned />;
     case "support":
