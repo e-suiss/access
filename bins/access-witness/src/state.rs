@@ -48,6 +48,10 @@ pub(crate) struct Chain {
     pub(crate) latest: Option<StateEntry>,
     /// Refused checkpoints kept as evidence.
     pub(crate) evidence: usize,
+    /// The Ed25519 binding keys learned from handover records, newest last (U11).
+    pub(crate) learned: Vec<[u8; 32]>,
+    /// Old bindings by kid and the size above which they are not cosigned (U11).
+    pub(crate) fenced: std::collections::BTreeMap<[u8; 32], u64>,
 }
 
 /// The chain file of `domain` in `dir`.
@@ -78,6 +82,8 @@ impl Chain {
         let text = read(&p)?;
         let mut prev = [0_u8; 32];
         let (mut base, mut fence, mut latest) = (None, None, None);
+        let mut learned = Vec::new();
+        let mut fenced = std::collections::BTreeMap::new();
         let mut next_seq = 0_u64;
         for (n, line) in text.lines().enumerate() {
             let broken = || {
@@ -95,8 +101,16 @@ impl Chain {
             }
             prev = entry.hash().map_err(|_| broken())?;
             next_seq = next_seq.checked_add(1).ok_or_else(broken)?;
-            if let Some(f) = entry.fence {
-                fence = Some(fence.map_or(f, |g: u64| g.min(f)));
+            match (&entry.keys, entry.fence) {
+                (Some(keys), f) => {
+                    if let Some(f) = f {
+                        fenced.insert(entry.binding, f);
+                    }
+                    learned.clone_from(keys);
+                    fence = None;
+                }
+                (None, Some(f)) => fence = Some(fence.map_or(f, |g: u64| g.min(f))),
+                (None, None) => {}
             }
             if entry.note.is_some() {
                 base = Some((entry.size, entry.root));
@@ -114,7 +128,37 @@ impl Chain {
             log: LogState::resume(base, fence),
             latest,
             evidence,
+            learned,
+            fenced,
         })
+    }
+
+    /// U11, §16.6 HO-7: the binding `old` signs nothing larger than `max` from now on and
+    /// `keys` are the domain's binding; synced before it returns.
+    pub(crate) fn rebind(
+        &mut self,
+        old: [u8; 32],
+        max: u64,
+        keys: Vec<[u8; 32]>,
+        at: u64,
+    ) -> Result<(), String> {
+        let (base, root) = self.log.base().unwrap_or((0, [0; 32]));
+        self.append(StateEntry {
+            seq: 0,
+            domain: self.domain.0,
+            size: base,
+            root,
+            binding: old,
+            at,
+            prev: [0; 32],
+            note: None,
+            fence: Some(max),
+            keys: Some(keys.clone()),
+        })?;
+        self.fenced.insert(old, max);
+        self.learned = keys;
+        self.log.rebind();
+        Ok(())
     }
 
     fn append(&mut self, mut entry: StateEntry) -> Result<StateEntry, String> {
@@ -157,6 +201,7 @@ impl Chain {
             prev: [0; 32],
             note: Some(note),
             fence: None,
+            keys: None,
         })?;
         self.log = probe;
         self.latest = Some(entry);
@@ -176,6 +221,7 @@ impl Chain {
             prev: [0; 32],
             note: None,
             fence: Some(size),
+            keys: None,
         })?;
         self.log.fence_at(size);
         Ok(())
@@ -257,5 +303,23 @@ mod tests {
                 .unwrap()
                 .contains("chain broken")
         );
+    }
+
+    // U11, OP-158 m.3 (l)
+    #[test]
+    fn a_learned_binding_and_the_old_bindings_fence_survive_a_restart() {
+        let d = dir("rebind");
+        let domain = Digest([6; 32]);
+        let mut c = Chain::open(&d, &domain).unwrap();
+        c.cosigned(&cp(4, [1; 32]), [9; 32], 7, note(4, [1; 32]))
+            .unwrap();
+        c.rebind([9; 32], 4, vec![[3; 32]], 8).unwrap();
+        assert_eq!(c.log.fence(), None);
+        drop(c);
+        let c = Chain::open(&d, &domain).unwrap();
+        assert_eq!(c.learned, vec![[3; 32]]);
+        assert_eq!(c.fenced.get(&[9; 32]), Some(&4));
+        assert_eq!(c.log.fence(), None);
+        assert_eq!(c.log.base(), Some((4, [1; 32])));
     }
 }

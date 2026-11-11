@@ -1,7 +1,9 @@
 //! The witness's HTTP surface (`witness.cddl`, §16.6 witness protocol):
 //! - `POST /cosign`: a `cosign-request`; the answer is a `cosign-response`, `200` with the
 //!   cosignature or `400`/`403`/`409`/`422` with the refusal. A request whose base is not the
-//!   one the witness holds is `inconsistent`; the log reads `/gossip` and retries from it.
+//!   one the witness holds is `inconsistent`; the log reads `/gossip` and retries from it. A
+//!   request carrying the `domain_handover` record its note ends with teaches the witness the
+//!   new binding; the old one is then `fenced` above that note's size (U11).
 //! - `GET /gossip/{domain}`: the last cosigned head as a `gossip-entry` with its note, for
 //!   monitors and the log (§9.16).
 //! - `GET /info`: the cosigner name, its verifier key and the operator (SI-12).
@@ -92,16 +94,24 @@ async fn cosign_request(State(w): State<Arc<Witness>>, body: Bytes) -> Response 
     let (Some(log), Some(chain)) = (w.config.logs.get(&o), w.chains.get(&o)) else {
         return refuse(Refused::UnknownKey);
     };
-    // U11
-    if req.binding_change.is_some() {
-        return refuse(Refused::UnknownKey);
-    }
-    let (cp, binding) = match checkpoint(log, &req.note, &req.excerpt) {
+    let mut chain = chain.lock().await;
+    let trusted = with_learned(log, &chain.learned);
+    let (cp, binding) = match checkpoint(&trusted, &req.note, &req.excerpt) {
         Ok(v) => v,
         Err(crate::verify::Refused::Malformed) => return refuse(Refused::Malformed),
         Err(crate::verify::Refused::Key) => return refuse(Refused::UnknownKey),
     };
-    let mut chain = chain.lock().await;
+    // U11, §16.6 HO-7
+    if chain.fenced.get(&binding).is_some_and(|max| cp.size > *max) {
+        return refuse(Refused::Fenced);
+    }
+    let learned = match &req.binding_change {
+        None => None,
+        Some(change) => match crate::verify::binding_change(&log.domain, &cp, change) {
+            Ok(keys) if !chain.fenced.contains_key(&binding) => Some(keys),
+            _ => return refuse(Refused::UnknownKey),
+        },
+    };
     if req.base != chain.log.base() {
         return refuse(Refused::Inconsistent);
     }
@@ -131,7 +141,24 @@ async fn cosign_request(State(w): State<Arc<Witness>>, body: Bytes) -> Response 
     if let Err(e) = chain.cosigned(&cp, binding, at, format!("{}{line}", req.note)) {
         return (StatusCode::SERVICE_UNAVAILABLE, e).into_response();
     }
+    // U11, §16.6 HO-7: the old binding signs nothing larger than C_{h+1} from now on
+    if let Some(keys) = learned
+        && let Err(e) = chain.rebind(binding, cp.size, keys, at)
+    {
+        return (StatusCode::SERVICE_UNAVAILABLE, e).into_response();
+    }
     cbor(StatusCode::OK, &CosignResponse::Cosigned(cosignature))
+}
+
+/// The log's configured binding keys and those learned from handover records.
+fn with_learned(log: &crate::config::Log, learned: &[[u8; 32]]) -> crate::config::Log {
+    let mut out = log.clone();
+    for k in learned {
+        let public = suiss_crypto::cose::PublicKey::Ed25519(*k);
+        let kid = access_kernel::verify::key_scope::thumbprint(&public);
+        let _ = out.bindings.insert(kid, public);
+    }
+    out
 }
 
 async fn gossip(State(w): State<Arc<Witness>>, Path(domain): Path<String>) -> Response {

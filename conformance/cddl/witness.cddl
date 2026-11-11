@@ -62,4 +62,6 @@ witness-state-entry = {
   binding: bstr .size 32,             ; kid of the binding the cosigned checkpoint was under
   at: uint,
   prev: bstr .size 32,                ; 32 zero bytes for the first
+  ? w5_keys: [+ bstr .size 32],       ; Ed25519 binding keys learned from a handover record;
+                                      ; `binding` is then the old binding, fenced (U11)
 }

@@ -255,6 +255,7 @@ fn witness_messages_round_trip_in_deterministic_cbor() {
         prev: [0; 32],
         note: None,
         fence: Some(4),
+        keys: Some(vec![[1; 32]]),
     };
     assert_eq!(StateEntry::from_bytes(&e.to_bytes().unwrap()).unwrap(), e);
     assert_ne!(

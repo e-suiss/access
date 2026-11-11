@@ -602,6 +602,9 @@ pub struct StateEntry {
     pub note: Option<String>,
     /// The fence the entry sets.
     pub fence: Option<u64>,
+    /// The Ed25519 binding keys the entry learned from a handover record; the entry's
+    /// `binding` is then the old binding, fenced at `fence` (`w5_keys`, U11; OP-158 m.4 (b)).
+    pub keys: Option<alloc::vec::Vec<Hash>>,
 }
 
 impl StateEntry {
@@ -620,6 +623,7 @@ impl StateEntry {
             ("prev", Some(Value::Bytes(self.prev.to_vec()))),
             ("w2_note", self.note.as_deref().map(Value::text)),
             ("w2_fence", self.fence.map(Value::Unsigned)),
+            ("w5_keys", self.keys.as_deref().map(hash_array)),
         ]))
     }
 
@@ -633,6 +637,7 @@ impl StateEntry {
             &v,
             &[
                 "seq", "domain", "size", "root", "binding", "at", "prev", "w2_note", "w2_fence",
+                "w5_keys",
             ],
         )?;
         Ok(Self {
@@ -648,6 +653,7 @@ impl StateEntry {
                 .map(|n| text(Some(n), MAX_NOTE))
                 .transpose()?,
             fence: v.get("w2_fence").map(|n| uint(Some(n))).transpose()?,
+            keys: v.get("w5_keys").map(|k| hashes(Some(k))).transpose()?,
         })
     }
 

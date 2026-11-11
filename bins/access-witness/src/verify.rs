@@ -66,3 +66,59 @@ pub(crate) fn checkpoint(
         verify_checkpoint(&PureBackend, note, &origin, &v, &[]).map_err(|_| Refused::Key)?;
     Ok((cp, verified.kid))
 }
+
+/// The binding a handover record moves the domain to (§16.6 HO-7, U11): the record sits at
+/// its position in `cp`, which ends right after it, is a decision of `domain` whose effects
+/// write the provider binding by `domain_handover`, and every new binding key is Ed25519. The
+/// new keys.
+pub(crate) fn binding_change(
+    domain: &access_kernel::digest::Digest,
+    cp: &Checkpoint,
+    change: &suiss_ledger::checkpoint::witness::BindingChange,
+) -> Result<Vec<[u8; 32]>, Refused> {
+    use access_kernel::record::{RecordEnvelope, RecordKind};
+    let record = RecordEnvelope::from_bytes(&change.record).map_err(|_| Refused::Malformed)?;
+    let ends_here = change.position.checked_add(1) == Some(cp.size);
+    if record.header.pos != change.position
+        || record.header.kind != RecordKind::Decision
+        || record.header.domain != Some(*domain)
+        || !ends_here
+        || record.leaf_hash().map_or(true, |leaf| {
+            suiss_crypto::digest::verify_inclusion(
+                change.position,
+                cp.size,
+                &leaf,
+                &change.inclusion,
+                &cp.root,
+            )
+            .is_err()
+        })
+    {
+        return Err(Refused::Key);
+    }
+    let effects = access_kernel::fold::effects(&record).map_err(|_| Refused::Key)?;
+    let key = access_kernel::recovery::binding_key();
+    let Some((_, Some(value))) = effects.iter().find(|(k, _)| *k == key) else {
+        return Err(Refused::Key);
+    };
+    if !matches!(value.get("how"), Some(suiss_crypto::dcbor::Value::Text(t)) if t == "handover")
+    {
+        return Err(Refused::Key);
+    }
+    let Some(suiss_crypto::dcbor::Value::Array(keys)) = value.get("binding") else {
+        return Err(Refused::Key);
+    };
+    let mut out = Vec::new();
+    for k in keys {
+        let b = access_kernel::verify::key_scope::BindingKey::from_value(k)
+            .map_err(|_| Refused::Key)?;
+        match b.key {
+            PublicKey::Ed25519(pk) if b.superseded.is_none() => out.push(pk),
+            _ => return Err(Refused::Key),
+        }
+    }
+    if out.is_empty() {
+        return Err(Refused::Key);
+    }
+    Ok(out)
+}
