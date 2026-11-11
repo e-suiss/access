@@ -132,7 +132,10 @@ async fn behind(app: &Pool, entries: &[Entry]) -> Result<Vec<Entry>, String> {
 pub(crate) async fn gate(app: &Pool, cold: Option<&FileCold>) -> Result<(), String> {
     let closed = |g: u64| {
         format!(
-            "restore generation {g} is not re-shredded: run `access-server reshred` before serving (OP-42)"
+            "{}: restore generation {g} is not re-shredded; run `access-server reshred` before serving (OP-42)",
+            access_http::problem::type_uri(
+                access_http::problem::codes::durability::RESTORE_RESHRED_PENDING.code
+            )
         )
     };
     if let Some(g) = pending_reshred(app).await.map_err(|e| e.to_string())? {

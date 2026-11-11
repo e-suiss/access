@@ -92,7 +92,7 @@ async fn a_restore_before_a_destruction_keeps_the_server_closed_until_it_is_resh
     let closed = crate::reshred::gate(&c.w.db.app, Some(&cold))
         .await
         .unwrap_err();
-    assert!(closed.contains("reshred"), "{closed}");
+    assert!(closed.contains("restore-reshred-pending"), "{closed}");
     assert_eq!(pending_reshred(&c.w.db.app).await.unwrap(), Some(1));
     assert!(
         crate::reshred::gate(&c.w.db.app, None).await.is_err(),
