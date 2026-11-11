@@ -84,12 +84,12 @@ pub const INDEX_QUOTA_EXCEEDED: Code = code(
     "The relationship index quota (depth 25, width 10, 1 000 tuples per write, 200 types per store) was exceeded; nothing was recorded (§9.7A.5, OP-158 m.3 (u)).",
 );
 
-/// A password hash profile can be raised and never lowered (OP-33, OP-158 m.3 (a)).
+/// A hash profile can be raised and never lowered (OP-33, OP-158 m.3 (a)).
 pub const HASH_PROFILE_DOWNGRADE: Code = code(
     "hash-profile-downgrade",
     409,
     "Conflict",
-    "A password hash profile can be raised and never lowered (OP-33, OP-158 m.3 (a)).",
+    "A hash profile can be raised and never lowered (OP-33, OP-158 m.3 (a)).",
 );
 
 /// The hot audit window is shorter than 30 days (OP-37, OP-158 m.3 (a), (w)).

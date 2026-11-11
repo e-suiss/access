@@ -1324,7 +1324,7 @@
       "type": "urn:suiss:access:problem:hash-profile-downgrade",
       "status": 409,
       "title": "Conflict",
-      "description": "A password hash profile can be raised and never lowered (OP-33, OP-158 m.3 (a))."
+      "description": "A hash profile can be raised and never lowered (OP-33, OP-158 m.3 (a))."
     },
     {
       "code": "audit-tier-too-short",

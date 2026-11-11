@@ -95,7 +95,8 @@ pub enum Op {
     PutSecurityNotices,
     /// `deleteAccount`: `idp.account.delete`, reserved (OP-153 m.3 (bb)).
     DeleteAccount,
-    /// `rehomeRealm`: `idp.realm.rehome`, reserved and declaration only (OP-150 m.11 (b)).
+    /// `rehomeRealm`: `idp.realm.rehome`, reserved, CT3, an Exercise in both governing domains
+    /// (OP-150 m.11 (b), OP-158 m.3 (o)).
     RehomeRealm,
     /// `createResetIntent`: `idp.account.reset_intent` (TN-61).
     ResetIntent,
@@ -345,6 +346,18 @@ pub enum Op {
     KeepReviewItem,
     /// `reviewBreakglassUse`: `idp.org.breakglass_review` (OP-157 m.3 (h), m.4 (b)).
     ReviewBreakglassUse,
+    /// `putResidency`: `idp.realm.residency`, reserved (OP-158 m.3 (o)).
+    PutResidency,
+    /// `putDrProfile`: `idp.realm.dr_profile`, or `dr_profile_close` (OP-158 m.3 (r)).
+    PutDrProfile,
+    /// `putRateLimit`: `idp.realm.rate_limit` (OP-158 m.3 (v)).
+    PutRateLimit,
+    /// `putCryptoProfile`: `idp.realm.crypto_profile` (OP-158 m.3 (y)).
+    PutCryptoProfile,
+    /// `putHashProfile`: `idp.realm.hash_profile`, raise only (OP-158 m.3 (a)).
+    PutHashProfile,
+    /// `putAuditTier`: `idp.realm.audit_tier`, or `audit_tier_close` (OP-158 m.3 (w)).
+    PutAuditTier,
 }
 
 impl Op {
@@ -505,6 +518,12 @@ impl Op {
             "commitOffboarding" => Self::CommitOffboarding,
             "keepReviewItem" => Self::KeepReviewItem,
             "reviewBreakglassUse" => Self::ReviewBreakglassUse,
+            "putResidency" => Self::PutResidency,
+            "putDrProfile" => Self::PutDrProfile,
+            "putRateLimit" => Self::PutRateLimit,
+            "putCryptoProfile" => Self::PutCryptoProfile,
+            "putHashProfile" => Self::PutHashProfile,
+            "putAuditTier" => Self::PutAuditTier,
             _ => return None,
         })
     }
@@ -1868,7 +1887,8 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             only(m, &[])?;
             Change::AccountDelete(subject(ids, key_of(key)?)?)
         }
-        Op::RehomeRealm => return Err(Invalid::Reserved),
+        // OP-158 m.3 (a), (o)
+        Op::RehomeRealm => Change::Rehome(crate::domain::resilience::Rehome::parse(&own_body(m))?),
         // TN-61
         Op::ResetIntent => {
             only(m, &["ttl_s"])?;
@@ -2231,6 +2251,25 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             Change::ApprovalBatch(flag(m, "enabled")?)
         }
         Op::CommitOffboarding | Op::KeepReviewItem => return Err(Invalid::NotYetServed),
+        // OP-158 m.3 (a)
+        Op::PutResidency => {
+            Change::Residency(crate::domain::resilience::Residency::parse(&own_body(m))?)
+        }
+        Op::PutDrProfile => {
+            Change::DrProfile(crate::domain::resilience::DrProfile::parse(&own_body(m))?)
+        }
+        Op::PutRateLimit => {
+            Change::RateLimit(crate::domain::resilience::RateLimit::parse(&own_body(m))?)
+        }
+        Op::PutCryptoProfile => Change::CryptoProfile(
+            crate::domain::resilience::CryptoProfile::parse(&own_body(m))?,
+        ),
+        Op::PutHashProfile => Change::HashProfileSet(
+            crate::domain::resilience::HashProfileSet::parse(&own_body(m))?,
+        ),
+        Op::PutAuditTier => {
+            Change::AuditTier(crate::domain::resilience::AuditTier::parse(&own_body(m))?)
+        }
         Op::ResendRelay => {
             only(m, &[])?;
             Change::RelayResend(super::relay::event_id(key_of(key)?)?)
@@ -2665,6 +2704,10 @@ pub enum Kind {
     ReviewItems,
     /// What offboarding one Party would do, by its Party's base64url (OP-157 m.3 (v)).
     OffboardingPreviews,
+    /// The realm's and its domains' cell placement, by subject (OP-158 m.3 (o)).
+    Placement,
+    /// The realm's durability, DR and residency declaration (OP-158 m.3 (n), (p)).
+    Durability,
 }
 
 /// How many days the analytics read covers, today included (PD).
@@ -3423,9 +3466,9 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             },
             // OP-157 m.4 (a)
             (Kind::Deliveries | Kind::SsoPreview, None)
-            | (Kind::SupportGrants | Kind::ReviewItems | Kind::OffboardingPreviews, _) => {
-                Read::default()
-            }
+            | (Kind::SupportGrants | Kind::ReviewItems | Kind::OffboardingPreviews, _)
+            // OP-158 m.4 (a)
+            | (Kind::Placement | Kind::Durability, _) => Read::default(),
             (Kind::Settings, _) => {
                 let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
                 let p = resources::policies(t).await?;

@@ -233,6 +233,10 @@ pub enum ResourceKind {
     ReviewItems,
     /// What offboarding a Party would do, by its Party's base64url (OP-157 m.3 (v)).
     OffboardingPreviews,
+    /// The realm's cell placement, one resource (OP-158 m.3 (o)).
+    Placement,
+    /// The realm's durability and DR declaration, one resource (OP-158 m.3 (n), (p)).
+    Durability,
 }
 
 impl ResourceKind {
@@ -276,6 +280,8 @@ impl ResourceKind {
             Self::Reviews => "reviews",
             Self::ReviewItems => "review-items",
             Self::OffboardingPreviews => "offboarding-previews",
+            Self::Placement => "placement",
+            Self::Durability => "durability",
         }
     }
 }

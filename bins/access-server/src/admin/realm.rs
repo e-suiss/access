@@ -123,6 +123,8 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::Reviews => Kind::Reviews,
         ResourceKind::ReviewItems => Kind::ReviewItems,
         ResourceKind::OffboardingPreviews => Kind::OffboardingPreviews,
+        ResourceKind::Placement => Kind::Placement,
+        ResourceKind::Durability => Kind::Durability,
     }
 }
 

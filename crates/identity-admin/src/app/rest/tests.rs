@@ -181,6 +181,66 @@ fn no_body_sets_a_credential() {
     );
 }
 
+// OP-158 m.3 (a), m.4 (a)
+#[test]
+fn catalog_8_writes_compile_into_their_changes_and_are_not_yet_served() {
+    let ids = ids();
+    let domain = access_kernel::json::b64url_encode(&[7; 32]);
+    let declared = access_identity_oauth::adapters::outbound::DeclaredTargets::default();
+    for (op, body, action) in [
+        (
+            Op::RehomeRealm,
+            json!({"domain": domain}),
+            "idp.realm.rehome",
+        ),
+        (
+            Op::PutResidency,
+            json!({"region": "eu-central", "class": "regional"}),
+            "idp.realm.residency",
+        ),
+        (
+            Op::PutDrProfile,
+            json!({"rpo_s": 60}),
+            "idp.realm.dr_profile",
+        ),
+        (Op::PutDrProfile, json!({}), "idp.realm.dr_profile_close"),
+        (Op::PutRateLimit, json!({"rps": 50}), "idp.realm.rate_limit"),
+        (
+            Op::PutCryptoProfile,
+            json!({"fips": true}),
+            "idp.realm.crypto_profile",
+        ),
+        (
+            Op::PutHashProfile,
+            json!({"profile": "high-memory"}),
+            "idp.realm.hash_profile",
+        ),
+        (
+            Op::PutAuditTier,
+            json!({"hot_days": 90, "target": "s3://audit"}),
+            "idp.realm.audit_tier",
+        ),
+        (Op::PutAuditTier, json!({}), "idp.realm.audit_tier_close"),
+    ] {
+        let change = compile(op, None, &body, &ids).unwrap_or_else(|e| panic!("{op:?}: {e}"));
+        assert_eq!(change.action().label(), action, "{op:?}");
+        assert_eq!(
+            change.check(&declared),
+            Err(Invalid::NotYetServed),
+            "{op:?}"
+        );
+    }
+    assert_eq!(
+        compile(
+            Op::PutAuditTier,
+            None,
+            &json!({"hot_days": 7, "target": "s3://audit"}),
+            &ids
+        ),
+        Err(Invalid::AuditTierTooShort)
+    );
+}
+
 // TN-117
 #[test]
 fn a_group_names_its_one_membership_issuer() {

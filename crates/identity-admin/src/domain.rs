@@ -40,6 +40,7 @@ pub mod provision;
 pub use access_identity_risk::domain::mode::ProtectionMode;
 
 pub mod realm;
+pub mod resilience;
 pub mod review;
 pub mod saml;
 pub mod scim;
@@ -639,6 +640,15 @@ pub enum Invalid {
     /// An offboarding without one explicit choice for every channel (OP-157 m.3 (v)).
     #[error("offboarding disposition missing")]
     OffboardingDispositionMissing,
+    /// A hot audit window shorter than 30 days (OP-158 m.3 (a)).
+    #[error("audit tier too short")]
+    AuditTierTooShort,
+    /// A hash profile lower than the realm's (OP-33, OP-158 m.3 (a)).
+    #[error("hash profile downgrade")]
+    HashProfileDowngrade,
+    /// A rehome without an Exercise in both governing domains (OP-158 m.3 (o)).
+    #[error("rehome incomplete")]
+    RehomeIncomplete,
 }
 
 impl Invalid {
@@ -786,6 +796,9 @@ impl Invalid {
             Self::CaseSystemUnknown => "case-system-unknown",
             Self::DelegatedAdminOff => "delegated-admin-off",
             Self::OffboardingDispositionMissing => "offboarding-disposition-missing",
+            Self::AuditTierTooShort => "audit-tier-too-short",
+            Self::HashProfileDowngrade => "hash-profile-downgrade",
+            Self::RehomeIncomplete => "rehome-incomplete",
         }
     }
 }
@@ -2147,6 +2160,20 @@ pub enum Change {
     /// `idp.org.breakglass_review` (CT1): another Party classifies one break-glass use
     /// (OP-157 m.3 (h), m.4 (b)).
     BreakglassReview(breakglass::BreakglassReview),
+    /// `idp.realm.rehome` (reserved, CT3, OP-158 m.3 (o)).
+    Rehome(resilience::Rehome),
+    /// `idp.realm.residency` (reserved, CT3, OP-158 m.3 (o)).
+    Residency(resilience::Residency),
+    /// `idp.realm.dr_profile` (`Some`, CT3) or `dr_profile_close` (`None`, CT1) (OP-158 m.3 (r)).
+    DrProfile(Option<resilience::DrProfile>),
+    /// `idp.realm.rate_limit` (CT2, OP-158 m.3 (v)).
+    RateLimit(resilience::RateLimit),
+    /// `idp.realm.crypto_profile` (CT2, OP-158 m.3 (y)).
+    CryptoProfile(resilience::CryptoProfile),
+    /// `idp.realm.hash_profile` (CT1, raise only, OP-158 m.3 (a)).
+    HashProfileSet(resilience::HashProfileSet),
+    /// `idp.realm.audit_tier` (`Some`, CT2) or `audit_tier_close` (`None`, CT1) (OP-158 m.3 (w)).
+    AuditTier(Option<resilience::AuditTier>),
 }
 
 /// A change to an organization's profile (TN-98): its name, and whether home realm discovery
@@ -2437,6 +2464,14 @@ impl Change {
             Self::ApprovalInline(false) => IdpAction::RealmApprovalInlineClose,
             Self::ApprovalBatch(true) => IdpAction::RealmApprovalBatch,
             Self::ApprovalBatch(false) => IdpAction::RealmApprovalBatchClose,
+            // OP-158 m.3 (a)
+            Self::Rehome(_) => IdpAction::RealmRehome,
+            Self::Residency(_) => IdpAction::RealmResidency,
+            Self::DrProfile(p) => resilience::DrProfile::action(p.as_ref()),
+            Self::RateLimit(_) => IdpAction::RealmRateLimit,
+            Self::CryptoProfile(_) => IdpAction::RealmCryptoProfile,
+            Self::HashProfileSet(_) => IdpAction::RealmHashProfile,
+            Self::AuditTier(t) => resilience::AuditTier::action(t.as_ref()),
             Self::ClientRegister(_) => IdpAction::ClientRegister,
             Self::ClientUpdate(_) => IdpAction::ClientUpdate,
             Self::ClientRetire(_) => IdpAction::ClientRetire,
@@ -2643,6 +2678,14 @@ impl Change {
             }
             // OP-157 m.3 (w)
             Self::Review(r) => r.check(),
+            // OP-158 m.4 (a)
+            Self::Rehome(_)
+            | Self::Residency(_)
+            | Self::DrProfile(_)
+            | Self::RateLimit(_)
+            | Self::CryptoProfile(_)
+            | Self::HashProfileSet(_)
+            | Self::AuditTier(_) => Err(Invalid::NotYetServed),
             // OP-157 m.3 (m)
             Self::ApprovalInline(_)
             | Self::ApprovalBatch(_)
@@ -2895,6 +2938,14 @@ impl Change {
             Self::DelegatedAdmin(on) | Self::ApprovalInline(on) | Self::ApprovalBatch(on) => {
                 Value::Map(vec![(Value::text("enabled"), Value::Bool(*on))])
             }
+            // OP-158 m.3 (a)
+            Self::Rehome(r) => r.body(),
+            Self::Residency(r) => r.body(),
+            Self::DrProfile(p) => resilience::DrProfile::body(p.as_ref()),
+            Self::RateLimit(r) => r.body(),
+            Self::CryptoProfile(c) => c.body(),
+            Self::HashProfileSet(p) => p.body(),
+            Self::AuditTier(t) => resilience::AuditTier::body(t.as_ref()),
         }
     }
 
@@ -3034,7 +3085,14 @@ impl Change {
             | Self::SupportArtifactPolicy(_)
             | Self::DelegatedAdmin(_)
             | Self::ApprovalInline(_)
-            | Self::ApprovalBatch(_) => path.push(String::from("realm")),
+            | Self::ApprovalBatch(_)
+            | Self::Rehome(_)
+            | Self::Residency(_)
+            | Self::DrProfile(_)
+            | Self::RateLimit(_)
+            | Self::CryptoProfile(_)
+            | Self::HashProfileSet(_)
+            | Self::AuditTier(_) => path.push(String::from("realm")),
             // OP-157 m.3 (a)
             Self::CaseSystem(c) => path.extend(c.path()),
             Self::Review(r) => path.extend(r.path()),

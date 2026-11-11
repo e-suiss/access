@@ -67,6 +67,8 @@ pub const fn id_member(kind: ResourceKind) -> &'static str {
         ResourceKind::BreakglassAccounts => "account_id",
         ResourceKind::BreakglassDrills | ResourceKind::BreakglassReviews => "exercise",
         ResourceKind::OffboardingPreviews => "party",
+        // OP-158 m.4 (a)
+        ResourceKind::Placement | ResourceKind::Durability => "realm",
         ResourceKind::CustomDomains => "host",
         _ => "client_id",
     }

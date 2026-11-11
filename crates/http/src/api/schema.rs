@@ -504,6 +504,14 @@ fn schemas() -> Value {
                 "ended": { "type": "array", "items": { "type": "object" } },
             },
         },
+        "Placement": {
+            "type": "object",
+            "description": "The cell the realm and its governing domain are placed in, with residency; it routes and is never a decision input (TI-17, OP-158 m.3 (o)); its lane names its members when it serves it.",
+        },
+        "Durability": {
+            "type": "object",
+            "description": "The realm's durability profile, DR class, RPO and its domain's witnesses and replicas (HL-40, OP-158 m.3 (n), (p)); its lane names its members when it serves it.",
+        },
         "Declared": {
             "type": "object",
             "description": "A resource whose route is declared and not served yet; its lane names its members when it serves it (OP-155 m.4).",
@@ -831,6 +839,9 @@ fn body_of(row: &Route) -> &'static str {
             ResourceKind::Reviews => "Review",
             ResourceKind::ReviewItems => "ReviewItem",
             ResourceKind::OffboardingPreviews => "OffboardingPreview",
+            // OP-158 m.4 (a)
+            ResourceKind::Placement => "Placement",
+            ResourceKind::Durability => "Durability",
         },
         _ => "ExerciseRef",
     }

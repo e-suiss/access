@@ -841,6 +841,57 @@ const STAGE12: [Route; 22] = [
     ),
 ];
 
+/// The Stage 13 realm routes, declared before their lanes serve them (OP-158 m.4 (a)): each
+/// answers `501 not-yet-served` behind its permission until its lane fills the handler.
+const STAGE13: [Route; 8] = [
+    read(
+        "/admin/v1/realms/{slug}/placement",
+        "getPlacement",
+        "The cell the realm and its governing domain are placed in, with residency; the placement routes requests and is never a decision input (TI-17, OP-158 m.3 (o)).",
+    ),
+    read(
+        "/admin/v1/realms/{slug}/durability",
+        "getDurability",
+        "The realm's durability profile (replicated or single-node), DR class, RPO and the witnesses and replicas its domain declares (HL-40, OP-158 m.3 (n), (p)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/residency",
+        "putResidency",
+        "Declares the realm's residency {region, class}: idp.realm.residency, reserved; a change is a cell move (OP-158 m.3 (o)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/dr-profile",
+        "putDrProfile",
+        "Declares the async DR profile {rpo_s} (idp.realm.dr_profile, CT3) or returns to the synchronous class with {} (dr_profile_close, CT1) (OP-158 m.3 (r)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/rate-limit",
+        "putRateLimit",
+        "Sets the realm's rate limit {rps}: idp.realm.rate_limit (OP-35, OP-158 m.3 (v)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/crypto-profile",
+        "putCryptoProfile",
+        "Sets the realm's crypto profile {fips}: idp.realm.crypto_profile; the FIPS profile allows only FIPS-approved algorithms (CR-15, OP-158 m.3 (y)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/hash-profile",
+        "putHashProfile",
+        "Raises the realm's Argon2id hash profile {profile}; it is never lowered, and a lower profile answers 409 hash-profile-downgrade (OP-33, OP-158 m.3 (a)).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/audit-tier",
+        "putAuditTier",
+        "Sets the cold audit tier {hot_days, target} (idp.realm.audit_tier) or closes it with {} (audit_tier_close); a hot window under 30 days answers 422 audit-tier-too-short (OP-158 m.3 (w)).",
+    ),
+];
+
 /// Every realm resource route, in contract order.
 pub const ROWS: &[Route] = &ALL_ROWS;
 
@@ -854,9 +905,10 @@ const BASE_LEN: usize = BASE.len();
     clippy::large_const_arrays,
     reason = "composed at compile time into the manifest, which a static cannot be"
 )]
-const ALL_ROWS: [Route; BASE_LEN + STAGE9.len() + STAGE10.len() + STAGE11.len() + STAGE12.len()] = {
-    let mut out =
-        [BASE[0]; BASE_LEN + STAGE9.len() + STAGE10.len() + STAGE11.len() + STAGE12.len()];
+const ALL_ROWS: [Route;
+    BASE_LEN + STAGE9.len() + STAGE10.len() + STAGE11.len() + STAGE12.len() + STAGE13.len()] = {
+    let mut out = [BASE[0];
+        BASE_LEN + STAGE9.len() + STAGE10.len() + STAGE11.len() + STAGE12.len() + STAGE13.len()];
     let mut i = 0;
     while i < BASE_LEN {
         out[i] = BASE[i];
@@ -882,17 +934,24 @@ const ALL_ROWS: [Route; BASE_LEN + STAGE9.len() + STAGE10.len() + STAGE11.len() 
         out[BASE_LEN + STAGE9.len() + STAGE10.len() + STAGE11.len() + m] = STAGE12[m];
         m += 1;
     }
+    let mut n = 0;
+    while n < STAGE13.len() {
+        out[BASE_LEN + STAGE9.len() + STAGE10.len() + STAGE11.len() + STAGE12.len() + n] =
+            STAGE13[n];
+        n += 1;
+    }
     out
 };
 
-/// Whether a realm row is a Stage 9, 10, 11 or 12 declaration (OP-154 m.4, OP-155 m.4, OP-156
-/// m.4, OP-157 m.4).
+/// Whether a realm row is a Stage 9, 10, 11, 12 or 13 declaration (OP-154 m.4, OP-155 m.4,
+/// OP-156 m.4, OP-157 m.4, OP-158 m.4).
 fn declared(operation_id: &str) -> bool {
     STAGE9
         .iter()
         .chain(STAGE10.iter())
         .chain(STAGE11.iter())
         .chain(STAGE12.iter())
+        .chain(STAGE13.iter())
         .any(|r| r.operation_id == operation_id)
 }
 
@@ -1325,7 +1384,7 @@ const BASE: &[Route] = &[
         Verb::Post,
         "/admin/v1/realms/{slug}/rehome",
         "rehomeRealm",
-        "Moves the realm to another governing domain: declared and reserved, never applied.",
+        "Moves the realm to another governing domain {domain}: idp.realm.rehome, reserved and CT3; it needs an Exercise in both the old and the new governing domain, or the realm stays (OP-158 m.3 (o)).",
     ),
     write(
         Verb::Put,
@@ -1774,6 +1833,11 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
             Shape::List(&["event_id", "kind", "reason"]),
         ),
         "resendRelayMessage" => (RelayUndelivered, w(false)),
+        // OP-158 m.4 (a)
+        "getPlacement" => (ResourceKind::Placement, Shape::Planned("Declared")),
+        "getDurability" => (ResourceKind::Durability, Shape::Planned("Declared")),
+        "putResidency" | "putDrProfile" | "putRateLimit" | "putCryptoProfile"
+        | "putHashProfile" | "putAuditTier" => (Settings, Shape::Planned("WriteResult")),
         // OP-157 m.4 (a)
         "listCaseSystems" => (
             ResourceKind::CaseSystems,
@@ -2059,6 +2123,10 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::CaseSystemUnknown => &r::CASE_SYSTEM_UNKNOWN,
             Invalid::DelegatedAdminOff => &r::DELEGATED_ADMIN_OFF,
             Invalid::OffboardingDispositionMissing => &r::OFFBOARDING_DISPOSITION_MISSING,
+            // OP-158 m.3 (aa)
+            Invalid::AuditTierTooShort => &codes::durability::AUDIT_TIER_TOO_SHORT,
+            Invalid::HashProfileDowngrade => &codes::durability::HASH_PROFILE_DOWNGRADE,
+            Invalid::RehomeIncomplete => &codes::durability::REHOME_INCOMPLETE,
         },
         AdminError::Issuer(_) | AdminError::NoRealm => &codes::NOT_FOUND,
         // TN-91
