@@ -77,7 +77,7 @@ async fn a_full_domain_quota_refuses_only_that_domain() {
     );
 }
 
-// TN-24: the tenant counter spans its domains, all or none
+// TN-24
 #[tokio::test]
 async fn the_tenant_quota_spans_its_domains_and_a_refusal_draws_nothing() {
     let db = fresh().await.unwrap();
@@ -151,7 +151,7 @@ async fn a_malformed_limit_is_an_error_never_an_admission() {
     );
 }
 
-// OP-35, TN-24: a realm's rate limit and its tenant's request quota
+// OP-35, TN-24
 #[tokio::test]
 async fn a_realm_request_quota_follows_its_rate_limit() {
     let db = fresh().await.unwrap();
@@ -172,7 +172,7 @@ async fn a_realm_request_quota_follows_its_rate_limit() {
     );
 }
 
-// MD-8: a clock stepped back is refused for one burst window, not for the step
+// MD-8
 #[tokio::test]
 async fn a_clock_stepped_back_is_refused_for_one_burst_window_only() {
     let db = fresh().await.unwrap();

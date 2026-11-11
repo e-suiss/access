@@ -130,7 +130,7 @@ async fn a_full_domain_refuses_widening_commits_and_still_revokes() {
     );
 
     let ExerciseBasis::Holding(h) = holding else {
-        unreachable!()
+        panic!("a holding")
     };
     let shop = meta::object_id(&d, kind::ANCHOR, 1);
     allowed(
@@ -162,7 +162,7 @@ async fn a_full_domain_refuses_widening_commits_and_still_revokes() {
         "termination draws no quota: {r:?}"
     );
 
-    // SI-20: the refused nonce was not spent
+    // SI-20
     let later = send_at(
         &mut core,
         shop_request(d, 7, Mode::Commit, holding),
@@ -244,7 +244,7 @@ async fn a_billing_hold_is_only_a_protocol_rejection_of_widening_commits() {
         .unwrap(),
     );
     let ExerciseBasis::Holding(h) = holding else {
-        unreachable!()
+        panic!("a holding")
     };
     let shop = meta::object_id(&d, kind::ANCHOR, 1);
     allowed(

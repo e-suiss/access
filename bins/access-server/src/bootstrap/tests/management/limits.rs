@@ -97,8 +97,12 @@ async fn a_realm_rate_limit_is_committed_and_bounds_its_identity_routes() {
 struct Down;
 
 impl RequestQuotas for Down {
-    async fn take(&self, _: &str, _: Option<&str>) -> Result<Taken, Unavailable> {
-        Err(Unavailable)
+    fn take(
+        &self,
+        _: &str,
+        _: Option<&str>,
+    ) -> impl std::future::Future<Output = Result<Taken, Unavailable>> + Send {
+        std::future::ready(Err(Unavailable))
     }
 }
 
@@ -115,4 +119,41 @@ async fn a_request_counter_that_cannot_answer_refuses() {
         StatusCode::SERVICE_UNAVAILABLE,
         "revocation needs no counter"
     );
+}
+
+// GHSA-84jc-3hj2-hwc7, SA-27
+#[tokio::test]
+async fn an_unauthenticated_request_is_refused_before_its_body_is_parsed() {
+    let c = console("auth-before-body", false).await;
+    let garbage = "{\"rps\": [[[[[[[[[[[[[[[[";
+    let (r, body) = send(
+        &c.management,
+        Request::put("/admin/v1/realms/acme/settings/rate-limit")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(garbage))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        r.status(),
+        StatusCode::UNAUTHORIZED,
+        "{}",
+        String::from_utf8_lossy(&body)
+    );
+    let adp = access_http::adp::adapters::router(
+        access_http::adp::app::Service::new(c.w.domains.clone(), 64 * 1024),
+        access_http::adp::adapters::Discovery {
+            issuer: String::from("https://access.test"),
+        },
+    );
+    let (r, body) = send(
+        &adp,
+        Request::post("/access/v1/evaluation")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(garbage))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
+    assert!(String::from_utf8_lossy(&body).contains("pep-unauthenticated"));
 }

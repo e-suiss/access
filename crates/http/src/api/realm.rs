@@ -1850,9 +1850,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "retireCaseSystem" => (ResourceKind::CaseSystems, w(false)),
         "listSupportGrants" => (ResourceKind::SupportGrants, Shape::Planned("Page")),
         // OP-157 m.3 (m)
-        "putApprovalInline" | "putApprovalBatch" | "putAuditTier" => (Settings, w(true)),
-        // OP-158 m.3 (v)
-        "putRateLimit" => (Settings, w(true)),
+        "putApprovalInline" | "putApprovalBatch" | "putAuditTier" | "putRateLimit" => {
+            (Settings, w(true))
+        }
         // OP-157 m.3 (h)
         "listBreakglassAccounts" => (ResourceKind::BreakglassAccounts, Shape::List(&[])),
         "markBreakglassAccount" => (ResourceKind::BreakglassAccounts, CREATE),

@@ -4657,7 +4657,7 @@ async fn a_foreign_pap_holds_a_bridging_grant() {
     let leader = Leader::acquire(log, b, EventKey::new(Secret::new([5; 32])))
         .await
         .unwrap();
-    // OP-158 m.3 (v): the test steps its clock an hour ahead and back
+    // OP-158 m.3 (v)
     let reader =
         PgReader::new(db.app.clone(), DomainId::from_bytes(b.0)).with_quotas(quota::CLOCK_STEPS);
     let mut core: Core = Authority::new(leader, reader, binding(), Counter(0), b);
