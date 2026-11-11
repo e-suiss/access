@@ -14,6 +14,7 @@
 
 mod agent;
 mod catalog;
+mod governance;
 pub(crate) mod local;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -168,6 +169,9 @@ struct PlanFile {
     test_user: Option<TestUserFile>,
     compromise: Option<CompromiseFile>,
     sample_agent: Option<agent::SampleAgentFile>,
+    support_operator: Option<governance::SupportOperatorFile>,
+    breakglass_account: Option<governance::BreakglassAccountFile>,
+    review_schedule: Option<governance::ReviewScheduleFile>,
 }
 
 /// `[test_user]` as written: the password is never in the plan file itself unless the operator
@@ -805,6 +809,13 @@ impl Plan {
                 redirect_uris,
             });
         }
+        // OP-157 m.4 (a)
+        governance::Fixtures {
+            support_operator: file.support_operator.as_ref(),
+            breakglass_account: file.breakglass_account.as_ref(),
+            review_schedule: file.review_schedule.as_ref(),
+        }
+        .check(&file.tenants)?;
         // OP-154 m.15 (i)
         let sample_agent = match file.sample_agent {
             None => None,
