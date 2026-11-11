@@ -1098,6 +1098,7 @@ severity = "info"
 since = "unreleased"
 fields = ["decision"]
 ocsf = "application_lifecycle"
+
 # OP-158 m.4 (b) (W6)
 [[event]]
 name = "authority.recovery.undeclared"
