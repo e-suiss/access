@@ -697,3 +697,14 @@ pub async fn app_reads_cold_audit(db: &TestDb, name: &str) -> Result<(), TestDbE
     .at("app reads cold")?;
     Ok(())
 }
+
+/// The cluster's `server_version`, for measurements that print their environment (OP-158 m.3 (z)).
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn server_version(db: &TestDb) -> Result<String, TestDbError> {
+    sqlx::query_scalar("SHOW server_version")
+        .fetch_one(&db.app)
+        .await
+        .at("server version")
+}

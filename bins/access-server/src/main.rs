@@ -41,6 +41,7 @@ mod orgs;
 mod platform;
 mod product;
 mod proxy;
+mod publication;
 mod relay;
 mod retention;
 mod reviews;
@@ -1883,6 +1884,8 @@ async fn serve(
             identity_signer: identity_section.signer.clone(),
             authority_signer: config.signer.clone().ok_or("no signer")?,
             holder: holder()?,
+            // OP-37, U52
+            publication: publication::Targets::from_config(config, &prepared.outbound)?,
         },
         move || led.led(),
     );

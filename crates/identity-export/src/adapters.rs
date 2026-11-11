@@ -3,6 +3,7 @@
 //! 6514 or to a declared target's host and port.
 
 pub mod cold_file;
+pub mod publish;
 
 use std::time::Duration;
 

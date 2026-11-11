@@ -215,3 +215,20 @@ impl crate::ports::Tiers for PgTiers {
         Ok(access_store::audit_tier::detach(&self.0, moved).await?)
     }
 }
+
+/// The publication records in PostgreSQL, as `access_checkpointer`.
+pub struct PgPublications(pub Pool);
+
+impl crate::ports::Publications for PgPublications {
+    async fn published_through(&self, sink: &str) -> Result<u64, AuditError> {
+        Ok(access_store::audit_publication::published_through(&self.0, sink).await?)
+    }
+
+    async fn record(&self, sink: &str, size: u64) -> Result<(), AuditError> {
+        Ok(access_store::audit_publication::record_published(&self.0, sink, size).await?)
+    }
+
+    async fn latest_after(&self, after: u64) -> Result<Option<CheckpointRow>, AuditError> {
+        Ok(access_store::audit_publication::latest_after(&self.0, after).await?)
+    }
+}

@@ -106,6 +106,29 @@ pub(crate) struct Config {
     /// stays hot.
     #[serde(default)]
     pub(crate) audit_cold: Option<AuditCold>,
+    /// Where the identity audit log's checkpoints are published besides the cold tier (OP-37,
+    /// U52); none by default.
+    #[serde(default)]
+    pub(crate) audit_publication: AuditPublication,
+}
+
+/// The declared HTTPS hooks that receive every identity audit checkpoint's signed note (OP-37,
+/// U52, OP-158 m.3 (w)).
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub(crate) struct AuditPublication {
+    /// The hooks.
+    pub(crate) hooks: Vec<AuditHook>,
+}
+
+/// One hook: its name, as its publications are recorded, and its URL.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AuditHook {
+    /// Lower-case letters, digits and `:._-`, at most 63; not `object-store`.
+    pub(crate) name: String,
+    /// The `https` URL the note is posted to.
+    pub(crate) url: String,
 }
 
 /// Where the identity audit log's cold tier keeps its objects: a directory, the local equivalent
@@ -699,6 +722,7 @@ impl Default for Config {
             policy: Policy::default(),
             breakglass: None,
             audit_cold: None,
+            audit_publication: AuditPublication::default(),
         }
     }
 }

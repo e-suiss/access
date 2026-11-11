@@ -25,8 +25,9 @@ use access_store::audit_lease::{AuditChain, acquire_audit_lease};
 use access_store::authority_checkpoint::{AuthorityCheckpoint, append};
 use access_store::scope::DomainId;
 
-/// How often the audit chains are integrated (PD; Ek B "periodic ~1 s").
-pub(crate) const AUDIT_INTERVAL: Duration = Duration::from_secs(1);
+/// How often the audit chains are integrated and published: half the identity MMD of 1 s, so a
+/// row is in a published checkpoint within it (PD; U52, OP-38, OP-158 m.3 (w)).
+pub(crate) const AUDIT_INTERVAL: Duration = Duration::from_millis(500);
 
 /// The domain checkpoint cadence (T16 POLICY DEFAULT 60 s).
 pub(crate) const DOMAIN_INTERVAL: Duration = Duration::from_secs(60);
@@ -197,6 +198,8 @@ pub(crate) struct Inputs {
     pub(crate) authority_signer: PathBuf,
     /// This process's lease holder name for the cell audit chains (OP-152 m.5 (k)).
     pub(crate) holder: String,
+    /// Where the identity audit checkpoints are published (OP-37, U52).
+    pub(crate) publication: crate::publication::Targets,
 }
 
 impl Checkpointers {
@@ -212,6 +215,7 @@ impl Checkpointers {
             identity_signer,
             authority_signer,
             holder,
+            publication,
         } = inputs;
         let audit = tokio::spawn(async move {
             let signer = SignerNotes(identity_signer);
@@ -220,6 +224,7 @@ impl Checkpointers {
             loop {
                 every.tick().await;
                 audit_tick(&checkpointer, &holder, &signer, wall_ms()).await;
+                crate::publication::tick(&checkpointer, &publication).await;
             }
         });
         let led = Arc::new(led);

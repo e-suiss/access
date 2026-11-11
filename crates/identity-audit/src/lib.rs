@@ -34,6 +34,9 @@ pub enum AuditError {
     /// The cold tier refused or is unreachable; the partition stays hot (OP-73 m.4).
     #[error("cold tier: {0}")]
     Cold(String),
+    /// A publication target refused or is unreachable; it is tried again (OP-37, U52).
+    #[error("unpublished: {0}")]
+    Unpublished(String),
     /// The cold copy does not match the hot partition; nothing is detached (OP-73 m.4).
     #[error("cold copy does not match its partition")]
     ColdMismatch,

@@ -2,6 +2,7 @@
 //! cell's `audit-checkpoint` key sign it (OP-150 m.3 (h)). On the identity audit log, each realm
 //! the step touched then gets its own tree checkpoint under the realm's origin (OP-152 m.7 (d)).
 
+pub mod publish;
 pub mod tier;
 
 use access_crypto::AwsLcBackend;

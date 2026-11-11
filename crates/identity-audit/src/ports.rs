@@ -102,3 +102,27 @@ pub trait ColdCodec {
     /// [`AuditError::Cold`].
     fn decode(&self, file: &[u8]) -> Result<Vec<AuditRow>, AuditError>;
 }
+
+/// A declared target the identity audit log's checkpoints are published to: a witness, a
+/// customer hook, an object-locked store (OP-37, U52). Unpublished integrity is no claim.
+pub trait Publisher {
+    /// The target's stable name, as its publications are recorded.
+    fn name(&self) -> &str;
+    /// Hands the target the signed note of the checkpoint of `size`.
+    fn publish(&self, size: u64, note: &str)
+    -> impl Future<Output = Result<(), AuditError>> + Send;
+}
+
+/// How far each target has the log (OP-38).
+pub trait Publications {
+    /// The largest size `sink` has, 0 when none.
+    fn published_through(&self, sink: &str)
+    -> impl Future<Output = Result<u64, AuditError>> + Send;
+    /// Records that `sink` has the checkpoint of `size`.
+    fn record(&self, sink: &str, size: u64) -> impl Future<Output = Result<(), AuditError>> + Send;
+    /// The latest signed checkpoint larger than `after`.
+    fn latest_after(
+        &self,
+        after: u64,
+    ) -> impl Future<Output = Result<Option<CheckpointRow>, AuditError>> + Send;
+}

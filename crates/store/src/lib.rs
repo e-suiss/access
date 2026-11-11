@@ -9,6 +9,7 @@ pub mod api_idempotency;
 pub mod approvals;
 pub mod audit;
 pub mod audit_lease;
+pub mod audit_publication;
 pub mod audit_realm;
 pub mod audit_tier;
 pub mod authority;
