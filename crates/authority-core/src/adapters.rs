@@ -52,6 +52,7 @@ mod projection;
 mod proxy;
 mod reconcile;
 mod ssh;
+mod support;
 mod vault;
 mod workload;
 // OP-157 m.4 (d)

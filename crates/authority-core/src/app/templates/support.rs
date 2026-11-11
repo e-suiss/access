@@ -9,6 +9,8 @@
 //! - [`Template::Standing`]: read only, at most [`STANDING_MAX_MS`] (TN-137 (2)).
 //! - [`Template::Org`]: the same shape `For` an organization on its own resources (TN-72); an
 //!   employee's account is never reached this way.
+//! - [`Template::Artifacts`]: reading the person's support artifacts alone, at most
+//!   [`SESSION_MAX_MS`], a Grant apart from any other (§8.16 #12, TN-74).
 //!
 //! A meta-action that would make a support Grant of another shape is refused with the reason
 //! [`admissible`] names, and a support Grant is never amended: a longer one is a new consent.
@@ -55,6 +57,10 @@ pub const ELIGIBLE: [IdpAction; 2] = [IdpAction::AccountRead, IdpAction::Account
 
 /// The actions a read-only support Grant names (TN-137 (2), (4)).
 pub const READ_ONLY: [IdpAction; 1] = [IdpAction::AccountRead];
+
+/// The one action a support artifact Grant names; no other support Grant names it (§8.16 #12,
+/// TN-74, OP-157 m.3 (g)).
+pub const ARTIFACTS: [IdpAction; 1] = [IdpAction::AccountArtifactRead];
 
 /// The `idp.account` actions no support Grant names and the `support-protected` policy forbids
 /// for every `For` Exercise (§8.16 #3, OP-157 m.3 (a), (c)): every reserved one, the primary
@@ -114,6 +120,8 @@ pub enum Template {
     Standing,
     /// `support.org`: for an organization on its own resources.
     Org,
+    /// `support.artifacts`: reading the person's support artifacts.
+    Artifacts,
 }
 
 impl Template {
@@ -124,6 +132,7 @@ impl Template {
             Self::Session => "support.session",
             Self::Standing => "support.standing",
             Self::Org => "support.org",
+            Self::Artifacts => "support.artifacts",
         }
     }
 
@@ -132,7 +141,7 @@ impl Template {
     pub const fn ceiling_ms(self) -> u64 {
         match self {
             Self::Standing => STANDING_MAX_MS,
-            Self::Session | Self::Org => SESSION_MAX_MS,
+            Self::Session | Self::Org | Self::Artifacts => SESSION_MAX_MS,
         }
     }
 }
@@ -174,6 +183,7 @@ impl Give {
     pub fn grant(&self) -> Result<GrantContent, &'static str> {
         let actions: BTreeSet<ActionRef> = match self.template {
             Template::Standing => READ_ONLY.iter().map(|a| a.action_ref()).collect(),
+            Template::Artifacts => ARTIFACTS.iter().map(|a| a.action_ref()).collect(),
             Template::Session | Template::Org => {
                 self.actions.iter().map(|a| a.action_ref()).collect()
             }
@@ -341,13 +351,20 @@ pub fn shape(
     {
         return Err(PROTECTED_ACTION);
     }
+    // §8.16 #12, TN-74
+    let artifacts = named.exact.len() == 1
+        && named
+            .exact
+            .iter()
+            .all(|x| ARTIFACTS.iter().any(|e| e.action_ref() == *x));
     // §8.16, E34
     if named.exact.is_empty()
         || !named.prefix.is_empty()
-        || !named
-            .exact
-            .iter()
-            .all(|x| ELIGIBLE.iter().any(|e| e.action_ref() == *x))
+        || !(artifacts
+            || named
+                .exact
+                .iter()
+                .all(|x| ELIGIBLE.iter().any(|e| e.action_ref() == *x)))
         || !own_resource(&a.authority.resource, &party)
         || !a.authority.params.is_empty()
         || a.authority.recipient.is_some()
@@ -366,7 +383,9 @@ pub fn shape(
         .exact
         .iter()
         .all(|x| READ_ONLY.iter().any(|r| r.action_ref() == *x));
-    let template = if read_only {
+    let template = if artifacts {
+        Template::Artifacts
+    } else if read_only {
         Template::Standing
     } else {
         Template::Session
@@ -500,6 +519,63 @@ fn names_issuer(view: &Snapshot, issuer: &Id, acceptance: &Digest) -> bool {
                 && g.use_ == PREDICATE_INPUT
                 && g.classes.iter().any(|c| c == CLASS)
         })
+}
+
+/// The digest of the live `predicate-input` Acceptance of `issuer` that takes `support_case`
+/// Claims: what a support Grant's case condition names (OP-157 m.3 (e)). `None` while the domain
+/// accepts no such Claims from it.
+#[must_use]
+pub fn case_acceptance(view: &Snapshot, issuer: &Id) -> Option<Digest> {
+    view.get(&meta::key(kind::ACCEPTANCES, issuer))
+        .map(|v| match v {
+            Value::Array(ids) => ids,
+            _ => Vec::new(),
+        })
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|v| Id::from_value(v).ok())
+        .filter_map(|a| read::<ContentState>(view, kind::ACCEPTANCE, &a))
+        .filter(|a| {
+            Gate::of(&a.content).is_ok_and(|g| {
+                g.issuer == Some(*issuer)
+                    && g.use_ == PREDICATE_INPUT
+                    && g.classes.iter().any(|c| c == CLASS)
+            })
+        })
+        .map(|a| claim::acceptance_digest(&a.content))
+        .next()
+}
+
+/// What the identity plane needs to draft a person's support Grant (OP-157 m.3 (f)): the
+/// person's self-anchor and the Acceptance the case system's Claims count under.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Facts {
+    /// The self-anchor of the person, when the domain knows the Party.
+    pub anchor: Option<Id>,
+    /// The case system's `support_case` Acceptance, when the domain has one.
+    pub acceptance: Option<Digest>,
+}
+
+impl<L: access_authority_sequencer::ports::DomainLog, R: crate::ports::Reader, B: crate::ports::Binding, S: crate::ports::Salts>
+    crate::app::Authority<L, R, B, S>
+{
+    /// The [`Facts`] of `party` and the case system `issuer` at the head.
+    ///
+    /// # Errors
+    /// The reader's errors.
+    pub async fn support_facts(
+        &self,
+        party: &Id,
+        issuer: &Id,
+    ) -> Result<Facts, crate::CoreError> {
+        self.settled(|snap| Facts {
+            anchor: read::<meta::PartyState>(snap, kind::PARTY, party)
+                .filter(|p| p.ended.is_none())
+                .map(|p| p.anchor),
+            acceptance: case_acceptance(snap, issuer),
+        })
+        .await
+    }
 }
 
 #[cfg(test)]
