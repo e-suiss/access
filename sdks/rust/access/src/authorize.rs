@@ -559,6 +559,10 @@ impl Pep {
             return Err(Denied::Status(response.status));
         }
         let body = json::parse(&response.body, MAX_BODY).map_err(|_| Denied::Malformed)?;
+        // P43, §9.7A.2 k.1: a replica's or a cache's advisory answer is never commit input
+        if body.get("advisory").is_some() {
+            return Err(Denied::Malformed);
+        }
         let Some(Json::Bool(decision)) = body.get("decision") else {
             return Err(Denied::Malformed);
         };

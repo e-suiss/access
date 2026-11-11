@@ -96,6 +96,17 @@ fn an_allow_with_a_receipt_for_this_intent_nonce_and_audience_authorizes_once() 
     assert_eq!(ran, 7);
 }
 
+// P43, §9.7A.2 k.1, OP-158 m.3 (f)
+#[test]
+fn an_advisory_answer_is_never_taken_as_a_decision() {
+    let receipt = receipt_for(nonce().as_bytes(), PEP, &intent_hash());
+    let mut body = allow_body(&receipt, "");
+    body.pop();
+    body.extend_from_slice(br#","advisory":true}"#);
+    assert_eq!(run(ok(body)).err().map(|d| d.code()), Some("malformed"));
+    assert!(run(healthy()).is_ok());
+}
+
 // INV-19, §13.4 U6
 #[test]
 fn the_executed_body_must_be_the_approved_digest() {

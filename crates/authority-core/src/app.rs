@@ -926,7 +926,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 && !req.intent.params.iter().all(|(k, v)| {
                     matches!(
                         (k.as_str(), v),
-                        ("from" | "to", ParamValue::Count(_)) | ("disclosure", ParamValue::Enum(_))
+                        ("from" | "to", ParamValue::Count(_))
+                            | ("disclosure" | "stream", ParamValue::Enum(_))
                     )
                 }) =>
             {
