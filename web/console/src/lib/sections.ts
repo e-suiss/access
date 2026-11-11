@@ -114,7 +114,7 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
   // OP-158 m.4 (a), m.3 (n), (p), (r)
   durability: planned([idp("realm", "dr_profile"), idp("realm", "dr_profile_close")]),
   // OP-158 m.4 (a), m.3 (v)
-  ratelimits: planned([idp("realm", "rate_limit")]),
+  ratelimits: [idp("realm", "rate_limit")],
   "sign-in": [
     idp("realm", "signin_policy"),
     idp("realm", "branding"),

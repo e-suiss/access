@@ -14,6 +14,7 @@ import * as O from "./Organizations.js";
 import type { Ctx } from "./parts.js";
 import { Planned } from "./Planned.js";
 import { Proxy } from "./Proxy.js";
+import { RateLimits } from "./RateLimits.js";
 import { Reviews } from "./Reviews.js";
 import { SignInSettings } from "./SignInSettings.js";
 import { Export as SiemExport } from "./Export.js";
@@ -116,7 +117,7 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
     case "durability":
       return <Planned />;
     case "ratelimits":
-      return <Planned />;
+      return <RateLimits ctx={ctx} />;
     case "sign-in":
       return <SignInSettings ctx={ctx} />;
     case "schemas":

@@ -1044,6 +1044,10 @@ export const en = {
   failureUnknown: "UNKNOWN",
   failureMissing: "Not known yet: {what}",
   failureSafeDefault: "Until then: {default}",
+  // OP-158 m.4 (b) (W11)
+  rateLimitsLastHour: "Last hour: {n}",
+  rateLimitsLastDay: "Last 24 h: {n}",
+  rateLimitsRequests: "{n} requests",
 } as const;
 
 export type Key = keyof typeof en;

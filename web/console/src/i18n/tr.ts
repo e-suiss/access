@@ -1055,4 +1055,8 @@ export const tr: Record<Key, string> = {
   failureUnknown: "BİLİNMİYOR",
   failureMissing: "Henüz bilinmiyor: {what}",
   failureSafeDefault: "O zamana kadar: {default}",
+  // OP-158 m.4 (b) (W11)
+  rateLimitsLastHour: "Son bir saat: {n}",
+  rateLimitsLastDay: "Son 24 sa: {n}",
+  rateLimitsRequests: "{n} istek",
 };
