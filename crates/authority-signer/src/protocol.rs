@@ -4,7 +4,7 @@
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
 use access_kernel::verify::key_scope::{
-    Declarations, Hybrid, KeyUsage, Mmd, SpecVersions, VerifierCaps, Witness,
+    Declarations, Hybrid, KeyUsage, Mmd, Replica, SpecVersions, VerifierCaps, Witness,
 };
 use suiss_crypto::cose::Algorithm;
 use suiss_crypto::dcbor::{self, Limits, Value};
@@ -55,6 +55,14 @@ pub enum Request {
         claims: Vec<u8>,
         /// The signing time; within the signer's clock skew of its own clock.
         at: u64,
+    },
+    /// Replaces what an open domain's metadata declares and signs it again (OP-158 m.3 (b),
+    /// (f)).
+    Declare {
+        /// Domain.
+        domain: Digest,
+        /// The declarations.
+        declared: Box<Declarations>,
     },
 }
 
@@ -212,6 +220,25 @@ fn declared_value(d: &Declarations) -> Value {
                 .collect(),
         ),
     )];
+    // OP-158 m.3 (f)
+    if !d.replicas.is_empty() {
+        entries.push((
+            "replicas",
+            Value::Array(
+                d.replicas
+                    .iter()
+                    .map(|r| {
+                        map(vec![
+                            ("name", Value::text(&r.name)),
+                            ("key", r.key.to_value()),
+                            ("operator", Value::text(&r.operator)),
+                            ("independent", Value::Bool(r.independent)),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ));
+    }
     if let Some(m) = d.mmd {
         entries.push((
             "mmd",
@@ -255,6 +282,20 @@ fn declared_of(v: Option<&Value>) -> Result<Declarations, FrameError> {
                 alg(w.get("alg").ok_or(FrameError::Malformed)?)?,
                 text_of(w.get("operator"))?,
                 matches!(w.get("independent"), Some(Value::Bool(true))),
+            ));
+        }
+    }
+    if let Some(Value::Array(rs)) = v.get("replicas") {
+        for r in rs {
+            let key = r
+                .get("key")
+                .and_then(|k| <suiss_crypto::cose::PublicKey as Canonical>::from_value(k).ok())
+                .ok_or(FrameError::Malformed)?;
+            d.replicas.push(Replica::new(
+                text_of(r.get("name"))?,
+                key,
+                text_of(r.get("operator"))?,
+                matches!(r.get("independent"), Some(Value::Bool(true))),
             ));
         }
     }
@@ -348,10 +389,23 @@ impl Request {
                     ("at", Value::Unsigned(*at)),
                 ]),
             )]),
+            Self::Declare { domain, declared } => map(vec![(
+                "declare",
+                map(vec![
+                    ("domain", domain.to_value()),
+                    ("declared", declared_value(declared)),
+                ]),
+            )]),
         }
     }
 
     fn from_value(v: &Value) -> Result<Self, FrameError> {
+        if let Some(d) = v.get("declare") {
+            return Ok(Self::Declare {
+                domain: digest(d.get("domain"))?,
+                declared: Box::new(declared_of(d.get("declared"))?),
+            });
+        }
         if let Some(s) = v.get("sign_token") {
             return Ok(Self::SignToken {
                 domain: digest(s.get("domain"))?,

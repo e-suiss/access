@@ -58,6 +58,7 @@ fn scripted(s: &Scripted, inc: Incoming) -> Result<Response, CoreError> {
         ended: Vec::new(),
         explained: None,
         witnessed_through: None,
+        ack: None,
         causal,
     })
 }

@@ -84,7 +84,6 @@ const UNPRODUCED: &[&str] = &[
     "mapping.pinned",
     "policy.default_changed",
     // OP-158 m.4 (a)
-    "replica.lagging",
     "replay.divergence",
     "divergence.quarantined",
     "domain.frozen",

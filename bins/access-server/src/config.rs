@@ -98,10 +98,6 @@ pub(crate) struct Config {
     /// The restriction policy analysis (OP-105, OP-157 m.3 (n)).
     #[serde(default)]
     pub(crate) policy: Policy,
-    /// The replicas each domain declares (§16.6.1, TI-13, OP-158 m.3 (f)); without one no
-    /// revocation or CT3 commit of that domain is acknowledged.
-    #[serde(default)]
-    pub(crate) replication: Replication,
     /// The operator break-glass directives of this cell (OP-46, OP-157 m.3 (j)); none are read
     /// when unset.
     #[serde(default)]
@@ -778,79 +774,6 @@ pub(crate) struct Database {
     pub(crate) replica_host: Option<String>,
 }
 
-/// The replicas the provider declares for its domains (§16.6.1, CMP-21, OP-158 m.3 (f)).
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[serde(deny_unknown_fields, default)]
-pub(crate) struct Replication {
-    /// The replicas.
-    pub(crate) replicas: Vec<ReplicaEntry>,
-}
-
-/// One replica: whose signed acks count for which domains.
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct ReplicaEntry {
-    /// The name its acks carry.
-    pub(crate) name: String,
-    /// Its Ed25519 ack key, base64url.
-    pub(crate) key: String,
-    /// Who runs it.
-    pub(crate) operator: String,
-    /// Whether its operator is outside the provider (CMP-21).
-    #[serde(default)]
-    pub(crate) independent: bool,
-    /// The domains it follows: `DomainID`s, base64url.
-    pub(crate) domains: Vec<String>,
-}
-
-fn b64_32(text: &str) -> Option<[u8; 32]> {
-    access_kernel::json::b64url_decode(text)
-        .ok()
-        .and_then(|b| <[u8; 32]>::try_from(b).ok())
-}
-
-impl Replication {
-    /// The declared replicas of each domain.
-    pub(crate) fn declared(
-        &self,
-    ) -> Result<
-        std::collections::BTreeMap<
-            access_kernel::digest::Digest,
-            Vec<access_authority_core::app::mirror::Replica>,
-        >,
-        ConfigError,
-    > {
-        let mut out: std::collections::BTreeMap<
-            _,
-            Vec<access_authority_core::app::mirror::Replica>,
-        > = std::collections::BTreeMap::new();
-        for r in &self.replicas {
-            let named = !r.name.is_empty()
-                && r.name.len() <= 255
-                && r.name.bytes().all(|b| b.is_ascii_graphic())
-                && !r.operator.trim().is_empty();
-            let key = b64_32(&r.key)
-                .filter(|_| named)
-                .ok_or(ConfigError::Replication)?;
-            for d in &r.domains {
-                let domain =
-                    access_kernel::digest::Digest(b64_32(d).ok_or(ConfigError::Replication)?);
-                let list = out.entry(domain).or_default();
-                if list.iter().any(|x| x.name == r.name) {
-                    return Err(ConfigError::Replication);
-                }
-                list.push(access_authority_core::app::mirror::Replica {
-                    name: r.name.clone(),
-                    key,
-                    operator: r.operator.clone(),
-                    independent: r.independent,
-                });
-            }
-        }
-        Ok(out)
-    }
-}
-
 /// The PKCS#11 token holding the domains' keys.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -900,7 +823,6 @@ impl Default for Config {
             doorbell: None,
             app_factor: AppFactor::default(),
             policy: Policy::default(),
-            replication: Replication::default(),
             breakglass: None,
             audit_cold: None,
             audit_publication: AuditPublication::default(),
@@ -968,10 +890,6 @@ pub(crate) enum ConfigError {
         "doorbell: addr is host:port, server_name a DNS name, and ca_file, cert_file and key_file are set (OP-156 m.3 (j))"
     )]
     Doorbell,
-    #[error(
-        "replication: each replica has a name of at most 255 visible characters, a 32-byte base64url Ed25519 key, an operator and base64url DomainIDs, and no name is declared twice for a domain (OP-158 m.3 (f))"
-    )]
-    Replication,
     #[error(transparent)]
     SecretEnvironment(#[from] access_crypto::secret_file::SecretFileError),
     #[error(
@@ -1062,8 +980,6 @@ impl Config {
         if !(1..=364).contains(&self.security_txt_valid_days) {
             return Err(ConfigError::SecurityTxtValidity);
         }
-        // OP-158 m.3 (f)
-        self.replication.declared()?;
         // OP-148, OP-151 m.3 (b), §17.9.6
         check_listeners(self)?;
         // OP-156 m.3 (j)

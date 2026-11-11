@@ -1,7 +1,7 @@
-//! The replicas a provider declares for each domain and how far each acknowledged (§16.6.1,
-//! T21, TI-13, SEC23, OP-158 m.3 (e), (f)). An acknowledgement counts only when it verifies
-//! under the declared replica's key and names a checkpoint the domain signed; without a
-//! declared replica nothing is ever acknowledged (fail closed).
+//! How far each domain's declared replicas acknowledged (§16.6.1, T21, TI-13, SEC23, OP-158
+//! m.3 (e), (f)). The replicas are the ones the domain's Domain Metadata declares; an
+//! acknowledgement counts only when it verifies under the declared key and names a checkpoint
+//! the domain signed. Without a declared replica nothing is ever acknowledged (fail closed).
 
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock, PoisonError};
@@ -13,23 +13,49 @@ use tokio::sync::Notify;
 pub use access_store::mirror::{ExportRun, RunKind};
 pub use suiss_ledger::replica::mirror::{Frame, SignedReplicaAck};
 
-/// One declared replica: its name, the Ed25519 key its acks are signed with, its operator and
-/// whether that operator is outside the provider (CMP-21).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Replica {
-    /// The name its acks carry.
-    pub name: String,
-    /// Its Ed25519 public key.
-    pub key: [u8; 32],
-    /// Who runs it.
-    pub operator: String,
-    /// Not run by the provider's operator.
-    pub independent: bool,
+/// What the answer to a SEC23-class commit says of its acknowledgement (SEC23, CL-2, OP-158
+/// m.3 (e)). The record is committed and effective either way.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Ack {
+    /// A declared replica holds it and an independent witness cosigned it.
+    Witnessed,
+    /// Not yet: the client asks again with the same nonce.
+    Pending,
+}
+
+impl Ack {
+    /// The wire word.
+    #[must_use]
+    pub const fn word(self) -> &'static str {
+        match self {
+            Self::Witnessed => "witnessed",
+            Self::Pending => "pending",
+        }
+    }
+}
+
+/// The meta-actions whose commit is acknowledged only once mirrored and witnessed besides
+/// every CT3 commit and every `*revoke` action (SEC23, TI-6, OP-158 m.3 (e)): revocations,
+/// Instance termination, restriction and Acceptance changes. A `policy.set` and an Acceptance
+/// amendment count whichever way they go (fail closed).
+pub const SEC23_META: [&str; 6] = [
+    "grant_revoke",
+    "mandate_revoke",
+    "acceptance_revoke",
+    "acceptance_amend",
+    "instance_terminate",
+    "policy_set",
+];
+
+/// Whether a commit of action `name` (meta-action or domain action) at consequence tier
+/// `tier` is in the SEC23 class.
+#[must_use]
+pub fn sec23(name: &str, tier: Option<u8>) -> bool {
+    tier == Some(3) || SEC23_META.contains(&name) || name.ends_with("revoke")
 }
 
 #[derive(Default)]
 struct Slot {
-    declared: Vec<Replica>,
     acked: u64,
 }
 
@@ -43,27 +69,6 @@ pub struct Replicas {
 impl Replicas {
     fn with<T>(&self, f: impl FnOnce(&mut HashMap<Digest, Slot>) -> T) -> T {
         f(&mut self.slots.lock().unwrap_or_else(PoisonError::into_inner))
-    }
-
-    /// Declares `replicas` for `domain`, replacing what was declared.
-    pub fn declare(&self, domain: Digest, replicas: Vec<Replica>) {
-        self.with(|s| s.entry(domain).or_default().declared = replicas);
-    }
-
-    /// The replicas declared for `domain`.
-    #[must_use]
-    pub fn declared(&self, domain: &Digest) -> Vec<Replica> {
-        self.with(|s| {
-            s.get(domain)
-                .map(|slot| slot.declared.clone())
-                .unwrap_or_default()
-        })
-    }
-
-    /// The declared replica named `name`.
-    #[must_use]
-    pub fn named(&self, domain: &Digest, name: &str) -> Option<Replica> {
-        self.declared(domain).into_iter().find(|r| r.name == name)
     }
 
     /// A declared replica holds `size` records of `domain` durably; waiters it covers return.
@@ -146,17 +151,23 @@ mod tests {
         r.set_acked(d, 2);
         assert_eq!(r.acked(&d), 4);
         assert_eq!(r.wait(d, 4, short, || async { 0 }).await, Ok(4));
-        r.declare(
-            d,
-            vec![Replica {
-                name: String::from("a"),
-                key: access_crypto::random::bytes::<32>().unwrap(),
-                operator: String::from("o"),
-                independent: true,
-            }],
-        );
-        assert!(r.named(&d, "a").is_some());
-        assert!(r.named(&d, "b").is_none());
-        assert_eq!(r.declared(&Digest([0x52; 32])), Vec::new());
+        assert_eq!(r.acked(&Digest([0x52; 32])), 0);
+    }
+
+    // SEC23, TI-6
+    #[test]
+    fn revocations_restrictions_and_ct3_commits_are_the_sec23_class() {
+        for name in [
+            "grant_revoke",
+            "instance_terminate",
+            "policy_set",
+            "acceptance_amend",
+        ] {
+            assert!(sec23(name, Some(1)), "{name}");
+        }
+        assert!(sec23("idp.session.revoke", None));
+        assert!(sec23("grant_issue", Some(3)));
+        assert!(!sec23("grant_issue", Some(2)));
+        assert!(!sec23("audit_export", None));
     }
 }

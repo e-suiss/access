@@ -8,6 +8,7 @@
 //! and out of cycle when a commit waits for its cosignature (coalesced, OP-38, OP-158 m.3 (c));
 //! each is sent to the declared witnesses and compared with what they hold (§16.6).
 
+mod mirrored;
 pub(crate) mod publish;
 
 use std::path::PathBuf;
@@ -267,6 +268,8 @@ pub(crate) async fn domain_step<H: Heads + Sync, S: DomainSigner + Sync>(
         targets: access_authority_sequencer::witness::declared(&witnesses.targets, &declared),
         sinks: witnesses.sinks.clone(),
     };
+    // T21, TI-13, OP-158 m.3 (f)
+    let witnesses = mirrored::first(app, domain, &declared, row.size, witnesses).await;
     let outcome = publish::publish(
         &witnesses,
         (app, sequencer),

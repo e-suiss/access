@@ -73,6 +73,10 @@ pub struct Response {
     /// The largest log size an independent witness cosigned, as the leader saw it (§9.5,
     /// §9.11, SEC23, OP-158 m.3 (e)); set by the decision point.
     pub witnessed_through: Option<u64>,
+    /// For a commit of the SEC23 class, whether its acknowledgement waited out a declared
+    /// replica holding it and an independent witness cosigning it (SEC23, TI-13, OP-158 m.3
+    /// (e)); set by the decision point, `None` for every other answer.
+    pub ack: Option<crate::app::mirror::Ack>,
     /// For a request naming an upstream Exercise, whether its causal-bound allowance was
     /// enforced (§9.9.2, OP-152 m.7 (d) E11): `Some(true)` only when the domain declares it;
     /// `None` when the request names none or the answer was not evaluated now.
@@ -826,6 +830,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             ended: Vec::new(),
             explained: None,
             witnessed_through: None,
+            ack: None,
             causal: None,
         })))
     }
@@ -2176,6 +2181,7 @@ const fn answer(
         ended: Vec::new(),
         explained: None,
         witnessed_through: None,
+        ack: None,
         causal: None,
     }
 }

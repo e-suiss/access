@@ -44,6 +44,22 @@ fn messages_round_trip() {
             claims: br#"{"cnf":{}}"#.to_vec(),
             at: 6,
         },
+        // OP-158 m.3 (f)
+        Request::Declare {
+            domain: Digest([7; 32]),
+            declared: Box::new({
+                let mut d = crate::domain::declared_default();
+                let (k, _) = suiss_crypto::signer::SoftSigner::generate_ed25519().unwrap();
+                d.replicas
+                    .push(access_kernel::verify::key_scope::Replica::new(
+                        String::from("acme-replica"),
+                        suiss_crypto::signer::Signer::public_key(&k),
+                        String::from("Acme Replica Ltd"),
+                        true,
+                    ));
+                d
+            }),
+        },
     ];
     for r in requests {
         let f = encode_request(&r).unwrap();

@@ -2081,9 +2081,6 @@ async fn serve(
         },
     );
     // §16.6.1, OP-158 m.3 (f), (g)
-    for (domain, declared) in config.replication.declared().map_err(|e| e.to_string())? {
-        access_authority_core::app::mirror::replicas().declare(domain, declared);
-    }
     let adp = adp.merge(access_http::mirror::router(
         domains.clone(),
         limits.max_body_bytes,

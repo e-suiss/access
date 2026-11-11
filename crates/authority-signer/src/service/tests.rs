@@ -493,3 +493,48 @@ fn dropped_keys_stay_archived() {
     let again = Service::start(Soft, Binding(doc), vault, Policy::AUTHORITY, now).unwrap();
     assert_eq!(archived(&again), dropped);
 }
+
+// OP-158 m.3 (b), (f)
+#[test]
+fn a_declaration_is_published_in_newly_signed_metadata() {
+    let (mut s, binding, now) = ready();
+    let (replica, _) = SoftSigner::generate_ed25519().unwrap();
+    let mut declared = crate::domain::declared_default();
+    declared
+        .replicas
+        .push(access_kernel::verify::key_scope::Replica::new(
+            String::from("acme-replica"),
+            replica.public_key(),
+            String::from("Acme Replica Ltd"),
+            true,
+        ));
+    assert_eq!(
+        s.handle(
+            Request::Declare {
+                domain: Digest([9; 32]),
+                declared: Box::new(declared.clone()),
+            },
+            now
+        ),
+        Response::Error(String::from("signer-unknown-domain"))
+    );
+    assert_eq!(
+        s.handle(
+            Request::Declare {
+                domain: Digest([7; 32]),
+                declared: Box::new(declared.clone()),
+            },
+            now + 1
+        ),
+        Response::Opened
+    );
+    let Response::Metadata(m) = s.handle(Request::Metadata(Digest([7; 32])), now + 1) else {
+        panic!("metadata");
+    };
+    let metadata = verify_metadata(&PureBackend, &m, &trusted(&binding)).unwrap();
+    assert_eq!(metadata.declared.replicas, declared.replicas);
+    assert_eq!(metadata.issued_at, now + 1);
+    let Response::Signed { .. } = s.handle(sign(now + 1), now + 1) else {
+        panic!("still signs");
+    };
+}

@@ -267,6 +267,17 @@ impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
                 }
                 Response::Opened
             }
+            Request::Declare { domain, declared } => {
+                let Some((template, ring)) = self.rings.get_mut(&domain) else {
+                    return Response::Error(String::from("signer-unknown-domain"));
+                };
+                if ring.declare(*declared, now).is_err() {
+                    return Response::Error(String::from("signer-binding"));
+                }
+                *template = ring.template().clone();
+                let _ = self.tick_one(&domain, now);
+                Response::Opened
+            }
             Request::Genesis(domain) => self
                 .rings
                 .get(&domain)

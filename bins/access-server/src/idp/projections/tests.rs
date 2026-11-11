@@ -78,6 +78,7 @@ fn response(outcome: Outcome) -> Response {
         ended: Vec::new(),
         explained: None,
         witnessed_through: None,
+        ack: None,
         causal: None,
     }
 }

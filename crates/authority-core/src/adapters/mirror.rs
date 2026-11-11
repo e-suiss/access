@@ -12,6 +12,7 @@ use access_kernel::codec::Canonical as _;
 use access_kernel::digest::Digest;
 use access_kernel::json::b64url_encode;
 use access_kernel::record::RecordEnvelope;
+use access_kernel::verify::key_scope::{Declarations, DomainMetadata};
 use access_store::authority::{LogRecord, domain_tenant, read_head, read_log};
 use access_store::mirror::{
     ExportRun, ReplicaAckRow, RunKind, ack, checkpoint_exists, checkpoints, leaf_hashes, run,
@@ -19,6 +20,7 @@ use access_store::mirror::{
 };
 use access_store::operational::{OperationalEvent, record_operational};
 use access_store::scope::DomainId;
+use suiss_crypto::cose::PublicKey;
 use suiss_crypto::sig::PureBackend;
 use suiss_ledger::replica::mirror::{Frame, SignedReplicaAck};
 
@@ -27,7 +29,7 @@ use crate::CoreError;
 use crate::adapters::Domains;
 use crate::app::Incoming;
 use crate::app::export::Started;
-use crate::app::mirror::replicas;
+use crate::app::mirror::{Ack, replicas, sec23};
 use crate::domain::export::{Coverage, disclosure};
 use crate::ports::{Binding, Keys, Salts};
 
@@ -36,6 +38,9 @@ pub(crate) const AUDIT_EVENT_STREAMED: &str = "export.streamed";
 
 /// A declared replica acknowledged a checkpoint (TI-13).
 pub(crate) const AUDIT_EVENT_REPLICA_ACKED: &str = "replica.acked";
+
+/// How often an acknowledgement waiter looks at the replicas' acks other processes took.
+pub(crate) const ACK_POLL: Duration = Duration::from_millis(100);
 
 /// Most records one mirror answer carries (PD); the replica asks again from where it is.
 pub(crate) const MIRROR_BATCH: u64 = 512;
@@ -297,11 +302,18 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
     /// `replica-ack-checkpoint`; [`CoreError::Store`].
     pub async fn replica_ack(&self, signed: &SignedReplicaAck) -> Result<bool, CoreError> {
         let domain = Digest(signed.ack.domain);
-        let replica = replicas()
-            .named(&domain, &signed.ack.replica)
+        let replica = self
+            .declared(domain)
+            .await
+            .replicas
+            .into_iter()
+            .find(|r| r.name == signed.ack.replica)
             .ok_or(CoreError::Protocol("replica-unknown"))?;
+        let PublicKey::Ed25519(key) = replica.key else {
+            return Err(CoreError::Protocol("replica-ack-signature"));
+        };
         signed
-            .verify(&PureBackend, &replica.key)
+            .verify(&PureBackend, &key)
             .map_err(|_| CoreError::Protocol("replica-ack-signature"))?;
         let scope = id(&domain);
         if !checkpoint_exists(&self.setup.app, &scope, signed.ack.size, &signed.ack.root).await? {
@@ -340,5 +352,74 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             .map_err(|_| CoreError::Unavailable("audit"))?;
         }
         Ok(fresh)
+    }
+
+    /// What `domain`'s binding-signed Domain Metadata declares (§9.15, OP-158 m.3 (b)): its
+    /// replicas and witnesses; nothing when there is no metadata.
+    pub async fn declared(&self, domain: Digest) -> Declarations {
+        self.metadata(domain)
+            .await
+            .and_then(|signed| suiss_crypto::cose::parse_sign1(&signed).ok())
+            .and_then(|s| s.payload)
+            .and_then(|p| DomainMetadata::from_bytes(&p).ok())
+            .map(|m| m.declared)
+            .unwrap_or_default()
+    }
+
+    /// The largest size a replica `domain` declares acknowledged, from the store.
+    async fn acked_by_declared(&self, domain: Digest, names: &[String]) -> u64 {
+        access_store::mirror::acked(&self.setup.app, &id(&domain), names)
+            .await
+            .map_or(0, |all| all.iter().map(|(_, s)| *s).max().unwrap_or(0))
+    }
+
+    /// The acknowledgement of the committed `response` to `inc` (SEC23, TI-6, TI-13, CL-2,
+    /// OP-158 m.3 (e)): `None` outside the SEC23 class. In the class the answer waits at most
+    /// [`access_authority_sequencer::witness::ACK_WAIT`] for a declared replica to hold the
+    /// record and an independent witness to cosign it, and says `pending` otherwise; a
+    /// domain that declares no replica or no independent witness is never acknowledged.
+    pub async fn acknowledge(
+        &self,
+        inc: &Incoming,
+        response: &crate::app::Response,
+    ) -> Option<Ack> {
+        let pos = response.record?;
+        if response.decision.outcome != access_kernel::combinator::Outcome::Allow
+            || inc.request.mode != access_kernel::combinator::Mode::Commit
+        {
+            return None;
+        }
+        let domain = inc.request.domain;
+        let tier =
+            access_store::authority::find_nonce(&self.setup.app, &id(&domain), &inc.request.nonce)
+                .await
+                .ok()
+                .flatten()
+                .and_then(|n| n.tier);
+        let name = inc
+            .request
+            .payload
+            .as_ref()
+            .map_or(inc.request.intent.action.name.as_str(), |p| p.action());
+        if !sec23(name, tier) {
+            return None;
+        }
+        let declared = self.declared(domain).await;
+        if !declared.acknowledges() {
+            return Some(Ack::Pending);
+        }
+        let size = pos.saturating_add(1);
+        let names: Vec<String> = declared.replicas.iter().map(|r| r.name.clone()).collect();
+        let wait = access_authority_sequencer::witness::ACK_WAIT;
+        let witnessed = access_authority_sequencer::witness::board().wait(domain, size, wait);
+        let mirrored = replicas().wait(domain, size, (wait, ACK_POLL), || {
+            self.acked_by_declared(domain, &names)
+        });
+        let (w, m) = tokio::join!(witnessed, mirrored);
+        Some(if w.is_ok() && m.is_ok() {
+            Ack::Witnessed
+        } else {
+            Ack::Pending
+        })
     }
 }

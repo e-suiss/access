@@ -264,6 +264,35 @@ impl Keyring {
         Ok(ring)
     }
 
+    /// Publishes `declared` as what the domain declares (OP-158 m.3 (b), (f)): the metadata is
+    /// signed again at `now`; on a failure the declarations stay as they were.
+    ///
+    /// # Errors
+    /// [`SignerError`] when the binding key cannot sign the metadata.
+    pub fn declare(
+        &mut self,
+        declared: access_kernel::verify::key_scope::Declarations,
+        now: u64,
+    ) -> Result<(), SignerError> {
+        let before = std::mem::replace(&mut self.template.declared, declared);
+        match self.sign_metadata(now) {
+            Ok(m) => {
+                self.metadata = Some(m);
+                Ok(())
+            }
+            Err(e) => {
+                self.template.declared = before;
+                Err(e)
+            }
+        }
+    }
+
+    /// The template the keyring was opened with, as declared now.
+    #[must_use]
+    pub const fn template(&self) -> &Template {
+        &self.template
+    }
+
     /// The current binding-signed Domain Metadata.
     #[must_use]
     pub fn metadata(&self) -> Option<&[u8]> {

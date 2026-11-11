@@ -385,7 +385,14 @@ where
     C: Clock + Clone + Send + Sync,
 {
     async fn evaluate(&self, inc: Incoming) -> Result<Decided, CoreError> {
-        self.exercise(&inc).await
+        let mut decided = self.exercise(&inc).await?;
+        // SEC23, TI-13, OP-158 m.3 (e)
+        decided.ack = self.acknowledge(&inc, &decided).await;
+        if decided.ack.is_some() {
+            decided.witnessed_through =
+                Some(access_authority_sequencer::witness::board().witnessed(&inc.request.domain));
+        }
+        Ok(decided)
     }
 
     async fn eligible(&self, inc: Incoming, subject: Id) -> Result<Decided, CoreError> {

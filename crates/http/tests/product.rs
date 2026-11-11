@@ -1157,6 +1157,7 @@ impl Pdp for Eligible {
             ended: Vec::new(),
             explained: None,
             witnessed_through: None,
+            ack: None,
             causal: None,
         })
     }

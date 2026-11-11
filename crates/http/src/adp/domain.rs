@@ -1039,6 +1039,10 @@ pub fn encode_for(response: &Response, mode: Mode, scope: Scope) -> Out {
             Out::from(w.to_string().as_str()),
         );
     }
+    // SEC23, CL-2, OP-158 m.3 (e)
+    if let Some(a) = response.ack {
+        context.insert(String::from("ack"), Out::from(a.word()));
+    }
     // OP-141 m.22 (e)
     if let Some(r) = &response.basis_ref {
         context.insert(String::from("basis_ref"), Out::from(r.as_str()));

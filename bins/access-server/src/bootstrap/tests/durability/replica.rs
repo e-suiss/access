@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use access_authority_core::app::mirror::{Replica as Declared, replicas};
+use access_authority_core::app::mirror::replicas;
 use access_authority_sequencer::adapters::{PgHeads, SocketSigner};
 use access_http::adp::adapters::{Discovery, Pep, router as adp_router};
 use access_http::adp::app::Service;
@@ -232,15 +232,35 @@ async fn stored_ack(p: &Pdp, name: &str) -> u64 {
         .1
 }
 
-fn declare(p: &Pdp, r: &Replica) {
-    replicas().declare(
-        p.domain,
-        vec![Declared {
-            name: r.name.clone(),
-            key: r.key,
-            operator: String::from("Acme Replica Ltd"),
-            independent: true,
-        }],
+/// The domain's metadata declares the replica `name` with Ed25519 key `key` (§9.15).
+pub(super) async fn declare(p: &Pdp, label: &str, name: &str, key: [u8; 32]) {
+    use access_authority_signer::protocol::{Request as SignRequest, Response as SignResponse};
+    let mut declared = access_authority_signer::domain::declared_default();
+    declared
+        .replicas
+        .push(access_kernel::verify::key_scope::Replica::new(
+            String::from(name),
+            PublicKey::Ed25519(key),
+            String::from("Acme Replica Ltd"),
+            true,
+        ));
+    let answer = access_authority_signer::adapters::call(
+        &signer_socket(label),
+        &SignRequest::Declare {
+            domain: p.domain,
+            declared: Box::new(declared),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(answer, SignResponse::Opened);
+    assert!(
+        p.w.domains
+            .declared(p.domain)
+            .await
+            .replicas
+            .iter()
+            .any(|r| r.name == name)
     );
 }
 
@@ -266,7 +286,7 @@ async fn a_real_replica_follows_acks_fails_closed_when_killed_and_redacts_its_ow
     };
     let bin = bin("access-replica", "access-replica");
     let mut replica = Replica::start(&bin, &root, "acme-replica", &follows).unwrap();
-    declare(&p, &replica);
+    declare(&p, label, &replica.name, replica.key).await;
     // TI-13
     let first = checkpoint(&p, label).await;
     assert_eq!(replica.acked(first, ACK_WAIT), Some(first));
@@ -394,15 +414,7 @@ async fn an_ack_counts_only_under_the_declared_key_for_a_signed_checkpoint_and_a
         (s, code(&b)),
         (StatusCode::FORBIDDEN, Json::from("replica-unknown"))
     );
-    replicas().declare(
-        p.domain,
-        vec![Declared {
-            name: String::from("r1"),
-            key: pk,
-            operator: String::from("Acme Replica Ltd"),
-            independent: true,
-        }],
-    );
+    declare(&p, label, "r1", pk).await;
     let (s, b) = call(
         &router,
         post(signed_ack(&other, p.domain, "r1", (size, cp.root))),
@@ -456,5 +468,157 @@ async fn an_ack_counts_only_under_the_declared_key_for_a_signed_checkpoint_and_a
         frames[0],
         suiss_ledger::replica::mirror::Frame::Record { position: 0, .. }
     ));
+    p.w.domains.release().await;
+}
+
+/// The root's revocation intent: `idp.org` `invite_revoke`, in the SEC23 class by its name.
+async fn revoke(p: &Pdp) -> Json {
+    let nonce = access_crypto::random::bytes::<16>().unwrap();
+    let intent = p
+        .idp_intent(access_internal_api::idp::IdpAction::OrgInviteRevoke, "org")
+        .await;
+    let body = p
+        .body(Mode::Commit, &nonce, &intent, p.idp_basis(), PEP)
+        .await;
+    let a = p.post("/access/v1/evaluation", &body).await;
+    let v = a.json();
+    assert_eq!(a.status, StatusCode::OK, "{v}");
+    assert_eq!(v["decision"], true, "{v}");
+    v
+}
+
+fn witness_key(vkey: &str) -> (String, [u8; 32]) {
+    let (name, rest) = vkey.split_once('+').unwrap();
+    let raw = suiss_crypto::note::base64_decode(rest.split_once('+').unwrap().1).unwrap();
+    (name.to_owned(), raw[1..].try_into().unwrap())
+}
+
+// SEC23, TI-6, TI-13, T21, CL-2, OP-158 m.3 (e), (f)
+#[tokio::test(flavor = "multi_thread")]
+async fn a_revocation_is_acknowledged_only_once_a_real_replica_holds_it_and_a_real_witness_cosigned_it()
+ {
+    use access_authority_sequencer::witness::{Target, board};
+    use access_product_twin::witness::Witness;
+    let label = "w3-sec23";
+    let p = pdp(label).await;
+    let router = public(&p);
+    let server = serve(as_pep(router.clone(), PEP)).await;
+    let export = start_mirror(&p, &as_pep(router, PEP)).await;
+    let root = std::env::temp_dir().join(format!("w3-sec23-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let keys = bindings(&p).await;
+    let follows = Follows {
+        server,
+        domain: p.domain.0,
+        export,
+        bindings: keys.clone(),
+    };
+    // SEC23: declared nothing, a revocation is never acknowledged
+    let none = revoke(&p).await;
+    assert_eq!(none["context"]["ack"], "pending", "{none}");
+    let mut replica = Replica::start(
+        &bin("access-replica", "access-replica"),
+        &root,
+        "acme-replica",
+        &follows,
+    )
+    .unwrap();
+    let witness = Witness::start(
+        &bin("access-witness", "access-witness"),
+        &root,
+        ("w-independent", "Example Witness Ltd"),
+        p.domain.0,
+        keys[0],
+    )
+    .unwrap();
+    let mut declared = access_authority_signer::domain::declared_default();
+    declared
+        .replicas
+        .push(access_kernel::verify::key_scope::Replica::new(
+            replica.name.clone(),
+            PublicKey::Ed25519(replica.key),
+            String::from("Acme Replica Ltd"),
+            true,
+        ));
+    let (name, key) = witness_key(&witness.vkey);
+    declared
+        .witnesses
+        .push(access_kernel::verify::key_scope::Witness::new(
+            name,
+            PublicKey::Ed25519(key),
+            suiss_crypto::cose::Algorithm::Ed25519,
+            String::from("Example Witness Ltd"),
+            true,
+        ));
+    assert_eq!(
+        access_authority_signer::adapters::call(
+            &signer_socket(label),
+            &access_authority_signer::protocol::Request::Declare {
+                domain: p.domain,
+                declared: Box::new(declared),
+            },
+        )
+        .await
+        .unwrap(),
+        access_authority_signer::protocol::Response::Opened
+    );
+    let publisher = crate::checkpoints::publish::Publisher {
+        targets: vec![
+            Target::new(&witness.url, &witness.vkey, "Example Witness Ltd", "Suiss").unwrap(),
+        ],
+        sinks: Vec::new(),
+    };
+    let (app, sequencer, domain) = (p.w.db.app.clone(), p.w.db.sequencer.clone(), p.domain);
+    let socket = signer_socket(label);
+    let checkpointer = tokio::spawn(async move {
+        let heads = PgHeads(app.clone());
+        let signer = SocketSigner::new(socket);
+        let mut cadence = suiss_ledger::checkpoint::cadence::Cadence::default();
+        loop {
+            let now = access_authority_signer::adapters::now_ms();
+            let _ = crate::checkpoints::domain_step(
+                (&heads, &signer, &publisher),
+                (&app, &sequencer),
+                (domain, &mut cadence),
+                now,
+            )
+            .await;
+            tokio::select! {
+                () = board().woken() => {}
+                () = tokio::time::sleep(Duration::from_millis(250)) => {}
+            }
+        }
+    });
+    let caught_up = p.w.domains.head(p.domain).await.unwrap().0 + 1;
+    assert!(replica.acked(caught_up, ACK_WAIT).is_some());
+    assert!(board().wait(p.domain, caught_up, ACK_WAIT).await.is_ok());
+    // TI-13: the replica holds it and the witness cosigned it before the answer says so
+    let witnessed = revoke(&p).await;
+    assert_eq!(witnessed["context"]["ack"], "witnessed", "{witnessed}");
+    let through: u64 = witnessed["context"]["witnessed_through"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let pos = p.w.domains.head(p.domain).await.unwrap().0;
+    assert!(stored_ack(&p, "acme-replica").await > pos.saturating_sub(1));
+    assert!(through >= pos, "{through} < {pos}");
+    // CL-2: a killed replica: the revocation is effective, its answer says pending, and the
+    // witness is not sent what no replica holds (mirror before witness)
+    replica.kill().unwrap();
+    let pending = revoke(&p).await;
+    assert_eq!(pending["context"]["ack"], "pending", "{pending}");
+    assert_eq!(pending["context"]["outcome"], "allow");
+    let pos = p.w.domains.head(p.domain).await.unwrap().0;
+    assert!(
+        witness
+            .cosigned(p.domain.0)
+            .unwrap()
+            .iter()
+            .all(|s| *s <= pos),
+        "a checkpoint no replica holds was cosigned"
+    );
+    checkpointer.abort();
+    let _ = std::fs::remove_dir_all(&root);
     p.w.domains.release().await;
 }
