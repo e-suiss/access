@@ -116,7 +116,8 @@ impl Runtime {
 }
 
 /// The suite's clients of every config: `client_secret_basic` where a config gives a secret,
-/// `private_key_jwt` where it gives a JWKS, each redirecting to its plan's callback.
+/// `private_key_jwt` where it gives a JWKS, each redirecting to its plan's callback; the
+/// second client also to the callback with the query the FAPI 2.0 plans add to it.
 fn clients(rt: &mut Runtime) -> Vec<Extra> {
     let plans = read("plans.json");
     let default_redirect = plans["redirect_uri"].as_str().unwrap().to_owned();
@@ -149,7 +150,11 @@ fn clients(rt: &mut Runtime) -> Vec<Extra> {
                     rt.jwks(&c["jwks"], &format!("{id}-1")),
                 )
             };
-            out.push((id.to_owned(), method, secret, vec![redirect.clone()]));
+            let mut redirects = vec![redirect.clone()];
+            if k == "client2" {
+                redirects.push(format!("{redirect}?dummy1=lorem&dummy2=ipsum"));
+            }
+            out.push((id.to_owned(), method, secret, redirects));
         }
     }
     out
@@ -160,6 +165,23 @@ fn clients(rt: &mut Runtime) -> Vec<Extra> {
 fn extra_uuid(extra: &[Extra], id: &str) -> [u8; 16] {
     let k = u8::try_from(extra.iter().position(|e| e.0 == id).unwrap() + 4).unwrap();
     [40, k, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, k]
+}
+
+/// Gives the two clients of `config` the profile `row`.
+async fn profiles(cluster: &Cluster, extra: &[Extra], config: &str, row: &ClientProfileRow) {
+    let at = cluster.at(0);
+    let config = read(config);
+    for k in ["client", "client2"] {
+        let id = config[k]["client_id"].as_str().unwrap();
+        let mut tx = TenantTx::begin(&cluster.db.app, at.f.realm.tenant, at.f.realm.realm)
+            .await
+            .unwrap();
+        let b = at.bound(&mut tx, "idp.client.update").await;
+        access_store::client_profiles::put_profile(&mut tx, &b, extra_uuid(extra, id), row)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+    }
 }
 
 /// Turns on what the profile plans test, each under a spare ALLOW of its own action.
@@ -177,25 +199,19 @@ async fn configure(cluster: &Cluster, extra: &[Extra], rt: &mut Runtime) {
 
     // IDP-24, OP-155 m.3 (k)
     at.enable_frontchannel().await;
-    let logout = read("access-logout.json");
-    for k in ["client", "client2"] {
-        let id = logout[k]["client_id"].as_str().unwrap();
-        let mut tx = begin().await.unwrap();
-        let b = at.bound(&mut tx, "idp.client.update").await;
-        access_store::client_profiles::put_profile(
-            &mut tx,
-            &b,
-            extra_uuid(extra, id),
-            &ClientProfileRow {
-                frontchannel_logout_uri: Some(format!(
-                    "{suite}/test/a/access-logout/frontchannel_logout"
-                )),
-                ..ClientProfileRow::default()
-            },
-        )
-        .await
-        .unwrap();
-        tx.commit().await.unwrap();
+    let row = ClientProfileRow {
+        frontchannel_logout_uri: Some(format!("{suite}/test/a/access-logout/frontchannel_logout")),
+        ..ClientProfileRow::default()
+    };
+    profiles(cluster, extra, "access-logout.json", &row).await;
+
+    // OP-155 m.3 (k)
+    let row = ClientProfileRow {
+        fapi2: true,
+        ..ClientProfileRow::default()
+    };
+    for config in ["access-fapi2.json", "access-fapi2-ms.json"] {
+        profiles(cluster, extra, config, &row).await;
     }
 
     // OP-155 m.3 (l)

@@ -6,12 +6,12 @@
   },
   "client": {
     "client_id": "cli_c0nfeeeeeeeeeeeeeeeeeeeeee",
-    "scope": "openid",
+    "scope": "openid email",
     "jwks": "$runtime:jwks.fapi2-ms-1"
   },
   "client2": {
     "client_id": "cli_c0nfffffffffffffffffffffff",
-    "scope": "openid",
+    "scope": "openid email",
     "jwks": "$runtime:jwks.fapi2-ms-2"
   },
   "resource": {
