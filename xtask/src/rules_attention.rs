@@ -19,6 +19,9 @@ const AUTOMATIC: [&str; 3] = ["yes", "no", "never"];
 /// Path parts that mark scheduled or job code.
 const SCHEDULED: [&str; 6] = ["/jobs", "/job.", "sweep", "scheduler", "cron", "_timer"];
 
+/// Request handlers: a bulk job's items each carry the person's own AIS (TN-125, X20).
+const REQUEST_HANDLERS: &str = "crates/http/src/api/";
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Table {
@@ -31,8 +34,8 @@ struct Row {
     id: String,
     event: String,
     automatic: String,
-    #[serde(default)]
-    attention: Option<String>,
+    #[serde(default, rename = "attention")]
+    _attention: Option<String>,
     owner: String,
     #[serde(default)]
     never_payloads: Vec<String>,
@@ -52,6 +55,7 @@ fn scheduled(path: &str) -> bool {
             .iter()
             .any(|t| path.starts_with(t))
         && !is_test_file(path)
+        && !path.starts_with(REQUEST_HANDLERS)
         && SCHEDULED.iter().any(|m| path.contains(m))
 }
 
@@ -91,7 +95,6 @@ pub(crate) fn table_violations(text: &str) -> Vec<Violation> {
                 &format!("row `{}` is incomplete", row.id),
             ));
         }
-        let _ = &row.attention;
     }
     out
 }
@@ -165,6 +168,7 @@ mod tests {
         assert!(scheduled("crates/x/src/hygiene_sweep.rs"));
         assert!(!scheduled("crates/x/src/grant.rs"));
         assert!(!scheduled("crates/x/tests/jobs.rs"));
+        assert!(!scheduled("crates/http/src/api/realm/jobs.rs"));
     }
 
     #[test]

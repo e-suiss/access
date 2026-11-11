@@ -97,7 +97,7 @@ fn bodies_quote_their_text() {
     assert!(thumbprint(&[2; 65]).is_none());
 }
 
-// §13.7.3, OP-157 m.3 (m): the device refuses a render it can't reproduce.
+// §13.7.3, OP-157 m.3 (m)
 #[test]
 fn an_inline_body_with_another_render_digest_is_refused_on_the_device() {
     use access_kernel::digest::Digest;

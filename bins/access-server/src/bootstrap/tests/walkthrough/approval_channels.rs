@@ -194,7 +194,7 @@ async fn a_ct1_approval_inside_the_notification_is_signed_on_the_approver_device
     let mut ex = d.exercise(&intent, held);
     assert!(matches!(d.ask(&mut ex), Step::Wait(_)));
 
-    // §13.7.3: closed until the realm opens it
+    // §13.7.3
     d.root_change(Change::ApprovalInline(true)).await;
     let (status, pushed, env) = d.push_waiting(&ex, &intent, |_| {}).await;
     assert_eq!(status, 201, "{pushed}");
@@ -225,7 +225,6 @@ async fn a_ct1_approval_inside_the_notification_is_signed_on_the_approver_device
     ex.prove(Proof::Contribution(exercise)).unwrap();
     assert!(matches!(d.ask(&mut ex), Step::Proceed(_)));
 
-    // The invitation is single use.
     let again = post_json(
         &d.http,
         &format!("{}/v1/approve/inline", d.user.issuer),
@@ -236,7 +235,7 @@ async fn a_ct1_approval_inside_the_notification_is_signed_on_the_approver_device
     .unwrap();
     assert_eq!(again.status, 404, "{}", again.json());
 
-    // C30: a refusal uses the invitation up
+    // C30
     let refused = d.intent_json("second").await;
     let mut other = d.exercise(&refused, held);
     assert!(matches!(d.ask(&mut other), Step::Wait(_)));
@@ -279,8 +278,22 @@ async fn a_realm_that_did_not_open_the_channel_answers_approval_inline_off() {
     let intent = d.intent_json("main").await;
     let mut ex = d.exercise(&intent, held);
     assert!(matches!(d.ask(&mut ex), Step::Wait(_)));
-    let (status, pushed, env) = d.push_waiting(&ex, &intent, |_| {}).await;
+    let redirect = d.user.redirect_uri.clone();
+    let (status, pushed, env) = d
+        .push_waiting(&ex, &intent, |b| {
+            b["redirect_uri"] = Value::from(redirect);
+        })
+        .await;
     assert_eq!(status, 201, "{pushed}");
+    // X-L7
+    let invited = identity_events_until(
+        &d.w.db,
+        "relay.message.approval_requested.v1",
+        |q| !q.is_empty(),
+        "the invitation",
+    )
+    .await;
+    assert_eq!(invited.len(), 1);
     let (request, shown) = inline_request(&intent);
     let act = d.inline_statement(&request, &env, &shown).await;
     let signed = approve_to_be_signed(&request, &act, &phone.print);
@@ -446,7 +459,7 @@ async fn a_batch_is_ten_at_most_of_one_requester_each_with_its_own_statement() {
         .await
         .unwrap();
 
-    // §13.7.3: closed until the realm opens it
+    // §13.7.3
     let (status, body) = start_batch(&d, &mut jar, &uris).await;
     assert_eq!(
         (status, body["code"].as_str()),
@@ -455,9 +468,31 @@ async fn a_batch_is_ten_at_most_of_one_requester_each_with_its_own_statement() {
     );
     d.root_change(Change::ApprovalBatch(true)).await;
 
-    // §13.7.3: the eleventh item
+    // §13.7.3
     let eleven = vec![uris[0].clone(); 11];
     let (status, body) = start_batch(&d, &mut jar, &eleven).await;
+    assert_eq!(
+        (status, body["code"].as_str()),
+        (400, Some("approval-batch-invalid")),
+        "{body}"
+    );
+
+    // §13.7.3
+    let other_intent = d.intent_json("c").await;
+    let mut other = d.exercise(&other_intent, held);
+    assert!(matches!(d.ask(&mut other), Step::Wait(_)));
+    let someone = access_kernel::json::b64url_encode(&[0x77; 16]);
+    let (status, pushed, _) = d
+        .push_waiting(&other, &other_intent, |b| {
+            b["request"]["requester"]["party"] = Value::from(someone);
+        })
+        .await;
+    assert_eq!(status, 201, "{pushed}");
+    let mixed = vec![
+        uris[0].clone(),
+        String::from(pushed["request_uri"].as_str().unwrap()),
+    ];
+    let (status, body) = start_batch(&d, &mut jar, &mixed).await;
     assert_eq!(
         (status, body["code"].as_str()),
         (400, Some("approval-batch-invalid")),

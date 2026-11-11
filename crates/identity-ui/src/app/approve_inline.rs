@@ -393,7 +393,6 @@ where
                 Err(_) => unavailable(),
             };
         };
-        // Identical checks to the hosted page's, then the same contribution.
         let (Ok(kept), Ok(request)) = (
             serde_json::from_slice::<Kept>(&row.contribution),
             serde_json::from_slice::<Value>(&row.request),
