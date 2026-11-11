@@ -506,11 +506,75 @@ fn schemas() -> Value {
         },
         "Placement": {
             "type": "object",
-            "description": "The cell the realm and its governing domain are placed in, with residency; it routes and is never a decision input (TI-17, OP-158 m.3 (o)); its lane names its members when it serves it.",
+            "description": "The cell the realm and its governing domain are placed in, with residency; it routes and is never a decision input (TI-17, OP-158 m.3 (o)). A subject without a placement is served by the cell that holds it.",
+            "required": ["cell", "region", "dedicated_cell", "tenant", "realm", "domain", "governing_domain", "residency", "pending_rehome", "routing_only"],
+            "properties": {
+                "cell": { "type": ["string", "null"], "description": "This cell's name, as its configuration declares it." },
+                "region": { "type": ["string", "null"], "description": "This cell's region (OP-30)." },
+                "dedicated_cell": { "type": "boolean", "description": "Whether this cell serves one tenant alone (OP-12, OP-48)." },
+                "tenant": { "$ref": "#/components/schemas/Placed" },
+                "realm": { "$ref": "#/components/schemas/Placed" },
+                "domain": { "$ref": "#/components/schemas/Placed" },
+                "governing_domain": { "type": "string", "description": "The realm's governing domain, base64url." },
+                "residency": {
+                    "type": ["object", "null"],
+                    "required": ["region", "class"],
+                    "properties": {
+                        "region": { "type": "string" },
+                        "class": { "type": "string", "enum": ["regional", "multi-region-sync"] },
+                    },
+                },
+                "pending_rehome": { "type": "array", "items": {
+                    "type": "object",
+                    "required": ["side", "to", "position"],
+                    "properties": {
+                        "side": { "type": "string", "enum": ["from", "to"] },
+                        "to": { "type": "string" },
+                        "position": { "type": "string" },
+                    },
+                }, "description": "Committed rehome ends not yet matched by the other governing domain's (E14)." },
+                "routing_only": { "type": "boolean", "const": true },
+            },
+        },
+        "Placed": {
+            "type": ["object", "null"],
+            "description": "One placement version (OP-158 m.3 (o)).",
+            "required": ["cell", "dedicated", "version"],
+            "properties": {
+                "cell": { "type": "string" },
+                "dedicated": { "type": "boolean" },
+                "version": { "type": "integer", "minimum": 1 },
+            },
         },
         "Durability": {
             "type": "object",
-            "description": "The realm's durability profile, DR class, RPO and its domain's witnesses and replicas (HL-40, OP-158 m.3 (n), (p)); its lane names its members when it serves it.",
+            "description": "The realm's durability profile, DR class, RPO and its domain's witnesses and replicas (HL-40, OP-158 m.3 (n), (p)). A single-node cell declares no RPO; a SEC23 revocation is acknowledged only with a declared replica and an independent witness.",
+            "required": ["durability", "class", "region", "dr_profile", "rpo_s", "governing_domain"],
+            "properties": {
+                "durability": { "type": ["string", "null"], "enum": ["replicated", "single-node", null] },
+                "class": { "type": ["string", "null"], "enum": ["regional", "multi-region-sync", null] },
+                "region": { "type": ["string", "null"] },
+                "dr_profile": {
+                    "type": ["object", "null"],
+                    "required": ["rpo_s"],
+                    "properties": { "rpo_s": { "type": "integer", "minimum": 1 } },
+                },
+                "rpo_s": { "type": ["integer", "null"], "minimum": 0, "description": "0 for a synchronous class; the async DR profile's RPO when declared; null on a single-node cell." },
+                "governing_domain": { "type": "string" },
+                "witnesses": { "type": "array", "items": { "$ref": "#/components/schemas/DeclaredParty" } },
+                "replicas": { "type": "array", "items": { "$ref": "#/components/schemas/DeclaredParty" } },
+                "declared_durability": { "type": ["string", "null"], "description": "What the domain's metadata publishes (HL-40)." },
+                "acknowledges": { "type": "boolean", "description": "Whether the domain's declarations can ever acknowledge a SEC23 write." },
+            },
+        },
+        "DeclaredParty": {
+            "type": "object",
+            "required": ["name", "operator", "independent"],
+            "properties": {
+                "name": { "type": "string" },
+                "operator": { "type": "string" },
+                "independent": { "type": "boolean" },
+            },
         },
         "RateLimits": {
             "type": "object",

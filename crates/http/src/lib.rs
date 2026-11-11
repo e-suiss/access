@@ -40,6 +40,8 @@ pub mod quota;
 pub mod layers;
 // OP-158 m.3 (v)
 pub mod forwarded;
+// OP-158 m.3 (o)
+pub mod placement;
 
 use std::time::Duration;
 

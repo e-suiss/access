@@ -2301,6 +2301,8 @@ pub mod divergence;
 pub mod snapshot;
 // OP-158 m.4 (f)
 pub mod handover;
+// OP-158 m.4 (f)
+pub mod placement;
 
 pub use ingest::{Ingested, Lane, Lanes, Turn, lane_of};
 pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};

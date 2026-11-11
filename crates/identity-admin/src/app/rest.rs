@@ -963,6 +963,9 @@ fn profile_delta(op: Op, m: &Map<String, Json>) -> Result<crate::domain::Profile
 }
 
 /// The body without the members every write carries: its validity and AIS.
+/// The member of a `rehomeRealm` body that carries the new domain's AIS (E14, OP-158 m.3 (o)).
+pub const TARGET_AIS: &str = "target_ais";
+
 fn own_body(m: &Map<String, Json>) -> Json {
     let mut own = m.clone();
     own.remove(VALIDITY);
@@ -1888,7 +1891,13 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             Change::AccountDelete(subject(ids, key_of(key)?)?)
         }
         // OP-158 m.3 (a), (o)
-        Op::RehomeRealm => Change::Rehome(crate::domain::resilience::Rehome::parse(&own_body(m))?),
+        Op::RehomeRealm => {
+            let mut own = own_body(m);
+            if let Some(o) = own.as_object_mut() {
+                o.remove(TARGET_AIS);
+            }
+            Change::Rehome(crate::domain::resilience::Rehome::parse(&own)?)
+        }
         // TN-61
         Op::ResetIntent => {
             only(m, &["ttl_s"])?;
@@ -3468,14 +3477,19 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             },
             // OP-157 m.4 (a)
             (Kind::Deliveries | Kind::SsoPreview, None)
-            | (
-                Kind::SupportGrants
-                | Kind::ReviewItems
-                | Kind::OffboardingPreviews
-                | Kind::Placement
-                | Kind::Durability,
-                _,
-            ) => Read::default(),
+            | (Kind::SupportGrants | Kind::ReviewItems | Kind::OffboardingPreviews, _) => {
+                Read::default()
+            }
+            // TI-17, CMP-26, OP-158 m.3 (o)
+            (Kind::Placement, _) => Read {
+                items: vec![(super::rehome::placement_view(t).await?, 0)],
+                last: None,
+            },
+            // HL-40, OP-29, OP-158 m.3 (n), (p)
+            (Kind::Durability, _) => Read {
+                items: vec![(super::rehome::durability_view(t).await?, 0)],
+                last: None,
+            },
             // §12.5.4, OP-35, OP-158 m.3 (v)
             (Kind::RateLimits, _) => {
                 let set = access_store::quota::rate_limit(t).await?;

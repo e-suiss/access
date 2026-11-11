@@ -649,6 +649,10 @@ pub enum Invalid {
     /// A rehome without an Exercise in both governing domains (OP-158 m.3 (o)).
     #[error("rehome incomplete")]
     RehomeIncomplete,
+    /// A residency or a rehome target this cell is not the placement of (OP-158 m.3 (o),
+    /// m.4 (b) (W9)).
+    #[error("placement mismatch")]
+    PlacementMismatch,
 }
 
 impl Invalid {
@@ -799,6 +803,7 @@ impl Invalid {
             Self::AuditTierTooShort => "audit-tier-too-short",
             Self::HashProfileDowngrade => "hash-profile-downgrade",
             Self::RehomeIncomplete => "rehome-incomplete",
+            Self::PlacementMismatch => "placement-mismatch",
         }
     }
 }
@@ -2678,10 +2683,10 @@ impl Change {
             }
             // OP-157 m.3 (w)
             Self::Review(r) => r.check(),
-            // OP-158 m.4 (a)
-            Self::Rehome(_) | Self::Residency(_) => Err(Invalid::NotYetServed),
-            // OP-157 m.3 (m), OP-158 m.3 (r)
-            Self::DrProfile(_)
+            // OP-157 m.3 (m), OP-158 m.3 (o), (r)
+            Self::Rehome(_)
+            | Self::Residency(_)
+            | Self::DrProfile(_)
             | Self::ApprovalInline(_)
             | Self::ApprovalBatch(_)
             | Self::DelegatedAdmin(_)

@@ -1842,13 +1842,13 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         ),
         "resendRelayMessage" => (RelayUndelivered, w(false)),
         // OP-158 m.4 (a)
-        "getPlacement" => (ResourceKind::Placement, Shape::Planned("Declared")),
-        "getDurability" => (ResourceKind::Durability, Shape::Planned("Declared")),
+        // OP-158 m.3 (o), (p)
+        "getPlacement" => (ResourceKind::Placement, Shape::Get),
+        "getDurability" => (ResourceKind::Durability, Shape::Get),
         // OP-158 m.4 (b) (W11)
         "getRateLimits" => (ResourceKind::RateLimits, Shape::Get),
-        "putResidency" => (Settings, Shape::Planned("WriteResult")),
-        // OP-158 m.3 (r)
-        "putDrProfile" => (Settings, w(true)),
+        // OP-158 m.3 (o), (r)
+        "putResidency" | "putDrProfile" => (Settings, w(true)),
         // OP-157 m.4 (a)
         "listCaseSystems" => (
             ResourceKind::CaseSystems,
@@ -2140,6 +2140,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::AuditTierTooShort => &codes::durability::AUDIT_TIER_TOO_SHORT,
             Invalid::HashProfileDowngrade => &codes::durability::HASH_PROFILE_DOWNGRADE,
             Invalid::RehomeIncomplete => &codes::durability::REHOME_INCOMPLETE,
+            Invalid::PlacementMismatch => &codes::durability::PLACEMENT_MISMATCH,
         },
         AdminError::Issuer(_) | AdminError::NoRealm => &codes::NOT_FOUND,
         // TN-91

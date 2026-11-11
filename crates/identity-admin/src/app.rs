@@ -33,6 +33,8 @@ pub mod workloads;
 pub mod offboarding;
 // OP-157 m.3 (w)
 pub mod review;
+// OP-158 m.4 (b) (W9)
+pub mod rehome;
 
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::adapters::pg::PgTx;
@@ -833,10 +835,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::CryptoProfile(_)
             | Change::RateLimit(_)
             | Change::DrProfile(_) => {}
-            // OP-158 m.4 (a)
-            Change::Rehome(_) | Change::Residency(_) => {
-                return Err(Invalid::NotYetServed.into());
-            }
+            // E14, MD-5a, OP-158 m.3 (o)
+            Change::Rehome(r) => rehome::current(t, g, r).await?,
+            // CMP-26, OP-30, OP-158 m.3 (o)
+            Change::Residency(r) => rehome::residency_current(t, r).await?,
             // OP-33, OP-158 m.3 (a), m.6 (b)
             Change::HashProfileSet(p) => {
                 let now = t.realm_crypto().await?;
@@ -1657,9 +1659,13 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     ) -> Result<Option<ClientSecret>, AdminError> {
         let mut secret = None;
         let done = match change {
-            // OP-158 m.4 (a)
-            Change::Rehome(_) | Change::Residency(_) => {
-                return Err(Invalid::NotYetServed.into());
+            // E14: only the two-ended path writes a rehome
+            Change::Rehome(_) => return Err(Invalid::RehomeIncomplete.into()),
+            // CMP-26, OP-30, OP-158 m.3 (o)
+            Change::Residency(r) => {
+                access_store::placement::put_residency(t, bound, (&r.region, r.class.name()))
+                    .await?;
+                true
             }
             // OP-29, HL-31, OP-158 m.3 (r)
             Change::DrProfile(p) => {
