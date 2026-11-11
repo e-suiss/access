@@ -1853,6 +1853,9 @@ export interface components {
             } | {
                 /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
                 aim: string;
+            } | {
+                /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
+                case: string;
             })[];
         };
         CanonicalAuthority: {
@@ -1940,6 +1943,9 @@ export interface components {
             } | {
                 /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
                 aim: string;
+            } | {
+                /** @description A SHA-256 digest: its 32 bytes, base64url without padding. */
+                case: string;
             })[];
         } | {
             flag: boolean;

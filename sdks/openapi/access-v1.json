@@ -7226,6 +7226,20 @@
                       "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
                     }
                   }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "case"
+                  ],
+                  "properties": {
+                    "case": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]*$",
+                      "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+                    }
+                  }
                 }
               ]
             },
@@ -7677,6 +7691,20 @@
                       ],
                       "properties": {
                         "aim": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]*$",
+                          "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "case"
+                      ],
+                      "properties": {
+                        "case": {
                           "type": "string",
                           "pattern": "^[A-Za-z0-9_-]*$",
                           "description": "A SHA-256 digest: its 32 bytes, base64url without padding."
