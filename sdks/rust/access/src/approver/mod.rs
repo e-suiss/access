@@ -32,6 +32,8 @@
 //! assert!(to_raw_signature(&[0; 3]).is_none());
 //! ```
 
+pub mod inline;
+
 use alloc::format;
 use alloc::string::String;
 use alloc::vec;

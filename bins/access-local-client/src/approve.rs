@@ -524,6 +524,37 @@ pub async fn open_surface(
     Ok((started.status, started.json()))
 }
 
+/// Signs in, attaches the device and pushes the request with the contribution the device signed,
+/// after `adjust` has changed the push body, and answers the push's status and body with the
+/// contribution sent (OP-157 m.3 (m)): no flow starts.
+///
+/// # Errors
+/// [`ClientError`].
+pub async fn push_only(
+    http: &Http,
+    a: &Approve<'_>,
+    adjust: impl FnOnce(&mut Value),
+) -> Result<(u16, Value, Value), ClientError> {
+    let intent = crate::intent::parse(a.intent)?;
+    let digest = intent_digest(&intent).map_err(|_| ClientError::Encode)?;
+    let now = now_ms();
+    let mut jar = sign_in(http, a.issuer, a.identifier, Credential::Passkey(a.passkey)).await?;
+    attach_device(http, a.issuer, &mut jar, a.device).await?;
+    let (request, _) = opened(http, a, &intent, digest, now).await?;
+    let contribution = contribution(a, digest, now)?;
+    let mut body = json!({ "request": request, "contribution": contribution });
+    adjust(&mut body);
+    let mut coordinator = Jar::default();
+    let pushed = post_json(
+        http,
+        &format!("{}/v1/approve/requests", a.issuer),
+        &mut coordinator,
+        Some(body),
+    )
+    .await?;
+    Ok((pushed.status, pushed.json(), contribution))
+}
+
 /// Runs the approval and returns `{instance, exercise, contribution, claim, step_up,
 /// render_digest, request_uri, receipt}`: the device Instance the approval session was bound to,
 /// the allowed Exercise with its verified receipt when this client exercised the intent, the

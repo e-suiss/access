@@ -5,6 +5,7 @@
 //! one speaks only the standard bindings (PI-13): `AuthZEN` evaluation, OAuth 2.0 and its
 //! extensions, and `.well-known` discovery.
 
+mod approval_channels;
 mod approval_surface;
 mod ciba;
 mod cloud;

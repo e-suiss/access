@@ -96,3 +96,52 @@ fn bodies_quote_their_text() {
     assert!(body.starts_with(r#"{"name":"Ada's \"phone\"","public_key":""#));
     assert!(thumbprint(&[2; 65]).is_none());
 }
+
+// §13.7.3, OP-157 m.3 (m): the device refuses a render it can't reproduce.
+#[test]
+fn an_inline_body_with_another_render_digest_is_refused_on_the_device() {
+    use access_kernel::digest::Digest;
+    use access_kernel::render::{self, Field, Render};
+
+    use super::inline::{InlineRequest, approve_to_be_signed, deny_to_be_signed};
+
+    let render = Render {
+        schema: Digest([1; 32]),
+        intent: Digest([2; 32]),
+        locale: "en".into(),
+        template: None,
+        fields: alloc::vec![Field {
+            name: "action".into(),
+            text: "Close the ledger".into(),
+            material: true,
+        }],
+        reversibility: None,
+    };
+    let bytes = render::encode(&render).unwrap();
+    let digest = render::digest(&render).unwrap();
+    let body = |rendered: &[u8], d: &Digest| {
+        alloc::format!(
+            r#"{{"intent":"{}","render":"{}","render_digest":"{}","expires_at_ms":5}}"#,
+            hex(&render.intent.0),
+            access_kernel::json::b64url_encode(rendered),
+            hex(&d.0)
+        )
+        .into_bytes()
+    };
+    let good = InlineRequest::parse(&body(&bytes, &digest)).unwrap();
+    assert_eq!(good.verified().unwrap(), render);
+    let bad = InlineRequest::parse(&body(&bytes, &Digest([9; 32]))).unwrap();
+    assert!(bad.verified().is_err());
+
+    let deny = deny_to_be_signed(&good, &[3; 32]);
+    assert!(deny.windows(4).any(|w| w == b"deny"));
+    let _ = approve_to_be_signed;
+}
+
+fn hex(bytes: &[u8]) -> alloc::string::String {
+    let mut out = alloc::string::String::new();
+    for b in bytes {
+        core::fmt::Write::write_fmt(&mut out, format_args!("{b:02x}")).unwrap();
+    }
+    out
+}

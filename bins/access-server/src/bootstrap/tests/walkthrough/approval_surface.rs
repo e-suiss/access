@@ -20,7 +20,7 @@ const REASON: &str = "The mail agent wants to close the main ledger for you.";
 impl Desk {
     /// P's Grant of the allowed action to the agent, for P, whose approval term is `term`
     /// instead of the sample's.
-    async fn agent_grant_needing(&self, term: RequirementTerm) -> HoldingRef {
+    pub(super) async fn agent_grant_needing(&self, term: RequirementTerm) -> HoldingRef {
         let mut to_person = approve_plan(None)
             .sample
             .unwrap()
@@ -48,7 +48,7 @@ impl Desk {
     }
 
     /// The agent's waiting request for `ex` as a coordinator pushes it.
-    async fn pushed_request(&self, ex: &Exercise, intent: &Value) -> Value {
+    pub(super) async fn pushed_request(&self, ex: &Exercise, intent: &Value) -> Value {
         let envelope = access_local_client::intent::parse(intent).unwrap();
         let digest = intent_digest(&envelope).unwrap();
         let now = server_time(&self.w.db.app).await.unwrap();
@@ -73,7 +73,7 @@ impl Desk {
 
     /// P opens the surface for the agent's waiting `ex`, the push changed by `adjust`: the
     /// start answer's status and body.
-    async fn surface(
+    pub(super) async fn surface(
         &self,
         ex: &Exercise,
         intent: &Value,
