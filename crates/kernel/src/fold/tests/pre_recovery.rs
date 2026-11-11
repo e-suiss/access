@@ -25,7 +25,7 @@ fn pre_recovery_vectors_match() {
         let closed = pre_recovery(iat, at, known);
         lines.push(format!(
             "  {{\"id\": \"{id}\", {}, \"iat\": {iat}, \"recovered_at\": {at}, \"nonce_known\": {known}, \"closed\": {closed}}}",
-            field(&["TI-RT3", "U28"]),
+            field(&["L0-META-36"]),
         ));
     }
     assert!(pre_recovery(1, 2, false) && !pre_recovery(1, 2, true));

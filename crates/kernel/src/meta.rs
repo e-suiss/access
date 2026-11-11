@@ -529,6 +529,9 @@ pub enum MetaError {
     /// never allowed (OP-158 m.4 (a)).
     #[error("restricted")]
     Restricted,
+    /// A recovery cites a checkpoint below R* (SEC22).
+    #[error("rollback guard")]
+    RollbackGuard,
 }
 
 impl MetaError {
@@ -550,6 +553,7 @@ impl MetaError {
             Self::ReleaseExceedsDraw => "meta-release-exceeds-draw",
             Self::DefaultUnknown => "policy-default-unknown",
             Self::Restricted => "meta-restricted",
+            Self::RollbackGuard => "rollback-guard",
         }
     }
 }
@@ -2266,7 +2270,10 @@ pub fn genesis_effects(
     let mut f = Fields::of(meta)?;
     let meta_root = root(f.req("root")?)?;
     let meta_terms = requirements(f.opt("root_terms"))?;
+    // SEC20, OP-158 m.3 (b)
+    let entry = f.opt("recovery").cloned();
     f.done()?;
+    let keys_held = genesis_keys_held(entry.as_ref(), take("binding"), &meta_root)?;
     let mut anchors = alloc::vec![(AnchorScope::Domain, meta_root, meta_terms)];
     if let Some(list) = take("anchors") {
         for a in crate::codec::set_items(list, true)? {
@@ -2338,10 +2345,37 @@ pub fn genesis_effects(
     if let Some(policy) = take("policy") {
         out.extend(genesis_policy(policy)?);
     }
+    out.extend(keys_held);
     let _ = take("reserved");
     let _ = take("versions");
     if known != fields.len() {
         return Err(MetaError::Malformed(ModelError::Unknown));
+    }
+    Ok(out)
+}
+
+/// The Genesis provider binding and the meta-anchor's recovery entry, which no key of that
+/// binding and no Party outside the root may hold (§9.15, SEC20, U16, OP-158 m.3 (b)).
+fn genesis_keys_held(
+    entry: Option<&Value>,
+    binding: Option<&Value>,
+    meta_root: &Root,
+) -> Result<Vec<Effect>, MetaError> {
+    let mut out = Vec::new();
+    let provider = binding.map(crate::recovery::genesis_binding).transpose()?;
+    if let Some(e) = entry {
+        let e = crate::recovery::RecoveryEntry::from_value(e)?;
+        let kids = provider
+            .as_ref()
+            .map(|(k, _)| k.clone())
+            .unwrap_or_default();
+        if !crate::recovery::admissible(&e, &root_parties(meta_root), &kids) {
+            return Err(MetaError::NotWithin);
+        }
+        out.push((crate::recovery::entry_key(), Some(e.to_value())));
+    }
+    if let Some((_, v)) = provider {
+        out.push((crate::recovery::binding_key(), Some(v)));
     }
     Ok(out)
 }
@@ -3477,11 +3511,75 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                 ])),
             ));
         }
-        // OP-158 m.4 (a)
-        Payload::DomainHandover(_)
-        | Payload::DomainRecover(_)
-        | Payload::VersionActivate { .. }
-        | Payload::AlgorithmRetire { .. } => return Err(MetaError::Restricted),
+        // §9.13.7, §9.15, PI-15, OP-158 m.3 (b), (l)
+        Payload::DomainHandover(h) => {
+            out.requirements = domain_scope(ctx, view)?;
+            rebind(view, &mut out, ctx, &h.binding, &h.cited, "handover")?;
+            out.expansion = true;
+        }
+        // §13.6, SEC20, SEC21, SEC22, OP-158 m.3 (b), (m)
+        Payload::DomainRecover(r) => {
+            let general = domain_scope(ctx, view)?;
+            let entry = recovery_entry(view)?;
+            out.requirements = crate::recovery::entry_terms(&entry);
+            match recover_guard(ctx, view, r)? {
+                crate::fold::Guard::Pass => {}
+                crate::fold::Guard::Lossy { .. } => out.requirements.extend(general),
+            }
+            rebind(
+                view,
+                &mut out,
+                ctx,
+                &r.binding,
+                &r.cited_checkpoint,
+                "recover",
+            )?;
+            out.effects.push((
+                crate::recovery::recovered_key(),
+                Some(map([
+                    ("at", Some(Value::Unsigned(ctx.now))),
+                    ("pos", Some(Value::Unsigned(ctx.pos))),
+                    ("n", Some(Value::Unsigned(r.n))),
+                ])),
+            ));
+            out.expansion = true;
+        }
+        // OP-56, SI-18, §15.4, OP-158 m.3 (b)
+        Payload::VersionActivate { versions } => {
+            out.requirements = domain_root(ctx, view)?;
+            let k = crate::recovery::versions_key();
+            let (floor, pending) = match view.get(&k) {
+                None => (
+                    crate::verify::key_scope::SpecVersions::default(),
+                    crate::verify::key_scope::SpecVersions::default(),
+                ),
+                Some(v) => {
+                    let (floor, pending, at) =
+                        crate::recovery::versions_state(&v).map_err(|_| MetaError::Corrupt)?;
+                    (
+                        crate::version::minimum_at(&floor, &pending, at, ctx.now),
+                        pending,
+                    )
+                }
+            };
+            out.expansion = crate::version::lowers(&pending, versions);
+            out.effects.push((
+                k,
+                Some(crate::recovery::versions_value(&floor, versions, ctx.now)),
+            ));
+        }
+        // §15.16 k.3, k.4, OP-158 m.3 (b)
+        Payload::AlgorithmRetire { algorithm } => {
+            out.requirements = domain_root(ctx, view)?;
+            let k = crate::recovery::retired_key();
+            let mut retired = match view.get(&k) {
+                None => BTreeSet::new(),
+                Some(v) => set_of(&v, false, crate::codec::int).map_err(|_| MetaError::Corrupt)?,
+            };
+            retired.insert(algorithm.cose());
+            out.effects
+                .push((k, Some(set_value(retired.into_iter().map(Value::int)))));
+        }
     }
     quorum(ctx, payload, view, &mut out);
     out.effects = sorted(out.effects);
@@ -3490,6 +3588,10 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
 
 // §13.7.3, SEC26, OP-141 m.43
 fn quorum(ctx: &Context<'_>, payload: &Payload, view: &dyn View, out: &mut Outcome) {
+    // SEC20, SEC22
+    if matches!(payload, Payload::DomainRecover(_)) {
+        return;
+    }
     if crate::tier::meta_tier(payload, out.expansion) == crate::tier::Tier::Ct3
         && let ExerciseBasis::Anchor(a) = ctx.basis
         && let Ok(anchor) = read::<AnchorState>(view, kind::ANCHOR, &a)
@@ -3983,6 +4085,96 @@ fn forbid_only(content: &Value) -> bool {
         Some(Value::Text(source)) => statements(source).iter().all(|s| is_forbid(s)),
         _ => false,
     }
+}
+
+/// Root power over the meta-anchor, as the only basis of a domain-scope meta-action: any other
+/// Anchor, a holding or a `For` capacity cannot change the provider binding (§9.13.7, PI-15).
+fn domain_scope(
+    ctx: &Context<'_>,
+    view: &dyn View,
+) -> Result<BTreeSet<RequirementTerm>, MetaError> {
+    if ctx.capacity != Capacity::Own {
+        return Err(MetaError::Basis);
+    }
+    domain_root(ctx, view)
+}
+
+fn recovery_entry(view: &dyn View) -> Result<crate::recovery::RecoveryEntry, MetaError> {
+    let v = view
+        .get(&crate::recovery::entry_key())
+        .ok_or(MetaError::NotAuthorized)?;
+    crate::recovery::RecoveryEntry::from_value(&v).map_err(|_| MetaError::Corrupt)
+}
+
+/// The rollback guard over the witness `checkpoint` Claims a recovery names, read from the
+/// state, with its declared lost suffix and fork checked against the guard (SEC21, SEC22).
+fn recover_guard(
+    ctx: &Context<'_>,
+    view: &dyn View,
+    r: &crate::recovery::RecoverInput,
+) -> Result<crate::fold::Guard, MetaError> {
+    if r.cited_checkpoint.size != r.n || r.witness_claims.is_empty() {
+        return Err(MetaError::NotWithin);
+    }
+    let mut heads = Vec::new();
+    for id in &r.witness_claims {
+        let c: crate::claim::ClaimState = read(view, kind::CLAIM, id)?;
+        heads.push(crate::recovery::witness_head(&c, ctx.now));
+    }
+    let guard = crate::fold::rollback_guard(
+        &heads,
+        r.replica_head.map(|h| h.size),
+        (r.n, r.cited_checkpoint.root.0),
+        !r.fork.is_empty(),
+        ctx.now,
+    )
+    .map_err(|e| match e {
+        crate::fold::GuardError::Rollback => MetaError::RollbackGuard,
+        _ => MetaError::NotWithin,
+    })?;
+    let declared = r.lost_suffix.map(|s| (s.from, s.to));
+    let expected = match guard {
+        crate::fold::Guard::Lossy { from, until } if from < until => Some((from, until)),
+        _ => None,
+    };
+    if declared != expected {
+        return Err(MetaError::NotWithin);
+    }
+    Ok(guard)
+}
+
+/// Writes the new provider binding and marks the old one superseded at the cited checkpoint
+/// (§9.15, PI-15): the binding is the domain's one value, written only here.
+fn rebind(
+    view: &dyn View,
+    out: &mut Outcome,
+    ctx: &Context<'_>,
+    binding: &BTreeMap<[u8; 32], crate::verify::key_scope::BindingKey>,
+    cited: &crate::recovery::CheckpointRef,
+    how: &str,
+) -> Result<(), MetaError> {
+    if binding.values().any(|b| b.superseded.is_some()) {
+        return Err(MetaError::NotWithin);
+    }
+    let k = crate::recovery::binding_key();
+    if let Some(old) = view.get(&k) {
+        for kid in crate::recovery::binding_kids(&old).map_err(|_| MetaError::Corrupt)? {
+            if !binding.contains_key(&kid) {
+                out.effects.push((
+                    crate::recovery::superseded_key(&kid),
+                    Some(map([
+                        ("cited", Some(cited.to_value())),
+                        ("pos", Some(Value::Unsigned(ctx.pos))),
+                    ])),
+                ));
+            }
+        }
+    }
+    out.effects.push((
+        k,
+        Some(crate::recovery::binding_value(binding, cited, how, ctx.pos)),
+    ));
+    Ok(())
 }
 
 fn domain_root(ctx: &Context<'_>, view: &dyn View) -> Result<BTreeSet<RequirementTerm>, MetaError> {

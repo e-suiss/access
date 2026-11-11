@@ -898,13 +898,15 @@ genesis-grant = {
 }
 
 genesis-fields = {
-  meta_anchor: { root: root-value, ? root_terms: requirement-set },
+  meta_anchor: { root: root-value, ? root_terms: requirement-set, ? recovery: recovery-entry },
   ? anchors: [+ { scope: anchor-scope, root: root-value, ? root_terms: requirement-set }],
   ? grants: [+ genesis-grant],
   ? acceptances: [+ acceptance-content],
   ? reserved: [+ action-ref],
   ? policy: { ? ct3_delay_s: uint, ? causal_binding: true },
   versions: spec-versions,
+  ; OP-158 m.3 (b): the first provider binding; no recovery key may be one of its keys (SEC20).
+  ? binding: [+ binding-key],
 }
 
 ; ---------------------------------------------------------------- state values (OP-141 m.12)
@@ -1246,3 +1248,25 @@ status-list-cwt = {
   65533 => status-list,
   "as_of" => uint,
 }
+
+; ---------------------------------------------------------------- W1: domain-scope state (OP-158 m.3 (b), L0-META-36 to L0-META-38)
+
+; dCBOR(["provider_binding"]): the domain's one provider binding, written by Genesis,
+; domain_handover and domain_recover only (PI-15).
+provider-binding-state = {
+  binding: [+ binding-key],
+  ? cited: checkpoint-ref,
+  how: "genesis" / "handover" / "recover",
+  since: uint,
+}
+; dCBOR(["superseded", kid]): an old binding key and the checkpoint its successor cites.
+superseded-state = { cited: checkpoint-ref, pos: uint }
+; dCBOR(["recovery_entry"]): the meta-anchor's recovery entry from Genesis.
+; dCBOR(["recovered"]): the last forced recovery; `at` closes earlier AISs (TI-RT3).
+recovered-state = { at: uint, pos: uint, n: uint }
+; dCBOR(["versions"]): the domain minimum floor and the last activation (OP-56, §15.4).
+versions-state = { floor: spec-versions, activated: spec-versions, at: uint }
+; dCBOR(["retired_algorithms"]): the algorithms the domain declared broken (§15.16).
+retired-algorithms = [+ cose-alg]
+; The value of a witness `checkpoint` Claim: the bytes of dCBOR(checkpoint-ref).
+checkpoint-claim-value = bytes .cbor checkpoint-ref

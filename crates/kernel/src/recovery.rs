@@ -410,5 +410,218 @@ impl Canonical for RecoverInput {
     }
 }
 
+fn state_key(parts: &[&str]) -> alloc::vec::Vec<u8> {
+    suiss_crypto::dcbor::encode(
+        &Value::Array(parts.iter().map(|p| Value::text(p)).collect()),
+        suiss_crypto::dcbor::Limits::CEILING,
+    )
+    .unwrap_or_default()
+}
+
+/// `dCBOR(["recovery_entry"])`: the rootTerms recovery entry the Genesis declared (SEC20).
+#[must_use]
+pub fn entry_key() -> alloc::vec::Vec<u8> {
+    state_key(&["recovery_entry"])
+}
+
+/// `dCBOR(["provider_binding"])`: the domain's one provider binding, written by Genesis,
+/// `domain_handover` and `domain_recover` only (§9.15, PI-15).
+#[must_use]
+pub fn binding_key() -> alloc::vec::Vec<u8> {
+    state_key(&["provider_binding"])
+}
+
+/// `dCBOR(["superseded", kid])`: an old binding key and the checkpoint its successor cites
+/// (§9.10 recovery predicate).
+#[must_use]
+pub fn superseded_key(kid: &[u8; 32]) -> alloc::vec::Vec<u8> {
+    suiss_crypto::dcbor::encode(
+        &Value::Array(alloc::vec![
+            Value::text("superseded"),
+            Value::Bytes(kid.to_vec())
+        ]),
+        suiss_crypto::dcbor::Limits::CEILING,
+    )
+    .unwrap_or_default()
+}
+
+/// `dCBOR(["recovered"])`: the last forced recovery, `{at, pos, n}` (TI-RT3).
+#[must_use]
+pub fn recovered_key() -> alloc::vec::Vec<u8> {
+    state_key(&["recovered"])
+}
+
+/// `dCBOR(["versions"])`: the domain minimum and the last activation, `{floor, activated, at}`
+/// (OP-56, §15.4).
+#[must_use]
+pub fn versions_key() -> alloc::vec::Vec<u8> {
+    state_key(&["versions"])
+}
+
+/// `dCBOR(["retired_algorithms"])`: the algorithms the domain declared broken (§15.16).
+#[must_use]
+pub fn retired_key() -> alloc::vec::Vec<u8> {
+    state_key(&["retired_algorithms"])
+}
+
+/// The stored provider binding: its keys, the checkpoint it cites, how it was bound and when.
+#[must_use]
+pub fn binding_value(
+    binding: &BTreeMap<[u8; 32], BindingKey>,
+    cited: &CheckpointRef,
+    how: &str,
+    pos: u64,
+) -> Value {
+    map([
+        ("binding", Some(bindings_value(binding))),
+        ("cited", Some(cited.to_value())),
+        ("how", Some(Value::text(how))),
+        ("since", Some(Value::Unsigned(pos))),
+    ])
+}
+
+/// A Genesis `binding` field: the first provider binding's keys and its stored value
+/// (§9.15: the binding's root is Genesis).
+///
+/// # Errors
+/// [`ModelError`] when it is not a set of binding keys or a key is already superseded.
+pub fn genesis_binding(v: &Value) -> Result<(BTreeSet<[u8; 32]>, Value), ModelError> {
+    let b = bindings(v)?;
+    if b.is_empty() || b.values().any(|k| k.superseded.is_some()) {
+        return Err(ModelError::Range);
+    }
+    let value = map([
+        ("binding", Some(bindings_value(&b))),
+        ("how", Some(Value::text("genesis"))),
+        ("since", Some(Value::Unsigned(0))),
+    ]);
+    Ok((b.into_keys().collect(), value))
+}
+
+/// The `kid`s of a stored provider binding.
+///
+/// # Errors
+/// [`ModelError`] when it does not decode.
+pub fn binding_kids(v: &Value) -> Result<BTreeSet<[u8; 32]>, ModelError> {
+    let b = v.get("binding").ok_or(ModelError::Missing)?;
+    Ok(bindings(b)?.into_keys().collect())
+}
+
+/// The stored minimum `(floor, activated, at)`.
+///
+/// # Errors
+/// [`ModelError`] when it does not decode.
+pub fn versions_state(
+    v: &Value,
+) -> Result<
+    (
+        crate::verify::key_scope::SpecVersions,
+        crate::verify::key_scope::SpecVersions,
+        u64,
+    ),
+    ModelError,
+> {
+    let mut f = Fields::of(v)?;
+    let out = (
+        crate::verify::key_scope::SpecVersions::from_value(f.req("floor")?)?,
+        crate::verify::key_scope::SpecVersions::from_value(f.req("activated")?)?,
+        uint(f.req("at")?)?,
+    );
+    f.done()?;
+    Ok(out)
+}
+
+/// The stored minimum after an activation of `activated` at `at` over `floor`.
+#[must_use]
+pub fn versions_value(
+    floor: &crate::verify::key_scope::SpecVersions,
+    activated: &crate::verify::key_scope::SpecVersions,
+    at: u64,
+) -> Value {
+    map([
+        ("floor", Some(floor.to_value())),
+        ("activated", Some(activated.to_value())),
+        ("at", Some(Value::Unsigned(at))),
+    ])
+}
+
+/// The contribution class a recovery key gives to a `domain_recover` (SEC20).
+pub const RECOVER: &str = "recover";
+
+/// The requirement of a recovery entry: `threshold` `recover` contributions from distinct
+/// Instances, bound to the intent, each with human presence, user verification, a
+/// phishing-resistant assertion and a hardware-bound key (SEC20). Requiring every contribution
+/// hardware-bound is stricter than the entry's `hardware_bound_min`.
+#[must_use]
+pub fn entry_terms(entry: &RecoveryEntry) -> BTreeSet<crate::model::RequirementTerm> {
+    let assurance = [
+        "hardware_bound",
+        "human_presence",
+        "phishing_resistant",
+        "uv",
+    ]
+    .into_iter()
+    .map(|d| (alloc::string::String::from(d), 1))
+    .collect();
+    BTreeSet::from([crate::model::RequirementTerm {
+        proof_kind: crate::model::ProofKind::Contribution,
+        class: alloc::string::String::from(RECOVER),
+        count: entry.threshold,
+        binding: crate::model::Binding::IntentDigest,
+        freshness_ms: None,
+        independence: crate::model::Independence::DistinctInstance,
+        consumption: crate::model::Consumption::SingleUse,
+        source: None,
+        assurance,
+    }])
+}
+
+/// The head a witness `checkpoint` Claim states: its value is `dCBOR(checkpoint-ref)` as bytes,
+/// its time `issued_at`; `None` for a Claim of another class, ended or outside its validity.
+#[must_use]
+pub fn witness_head(
+    claim: &crate::claim::ClaimState,
+    now: u64,
+) -> Option<crate::fold::WitnessHead> {
+    let s = &claim.statement;
+    if claim.ended.is_some()
+        || s.class != crate::claim::CHECKPOINT
+        || now < s.validity.from
+        || now > s.validity.until
+    {
+        return None;
+    }
+    let Some(crate::model::EqValue::Bytes(bytes)) = &s.value else {
+        return None;
+    };
+    let value = suiss_crypto::dcbor::decode(bytes, suiss_crypto::dcbor::Limits::CEILING).ok()?;
+    let head = CheckpointRef::from_value(&value).ok()?;
+    Some(crate::fold::WitnessHead::new(
+        head.size,
+        head.root.0,
+        s.issued_at,
+    ))
+}
+
+/// When the last forced recovery took effect, from its stored value.
+#[must_use]
+pub fn recovered_at(v: &Value) -> Option<u64> {
+    match v.get("at") {
+        Some(Value::Unsigned(t)) => Some(*t),
+        _ => None,
+    }
+}
+
+/// Whether an entry is admissible for a Genesis (SEC20, U16): every holder is a Party of the
+/// meta-anchor's root, and no key is one of the provider binding's.
+#[must_use]
+pub fn admissible(
+    entry: &RecoveryEntry,
+    roots: &BTreeSet<Id>,
+    provider: &BTreeSet<[u8; 32]>,
+) -> bool {
+    entry.holders.is_subset(roots) && entry.keys.is_disjoint(provider)
+}
+
 #[cfg(test)]
 mod tests;

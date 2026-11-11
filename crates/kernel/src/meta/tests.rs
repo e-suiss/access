@@ -3089,22 +3089,6 @@ fn stage13_payloads() -> [Payload; 4] {
     ]
 }
 
-// OP-158 m.4 (a)
-#[test]
-fn stage13_meta_actions_are_refused_as_restricted_until_decided() {
-    let mut r = Run::new();
-    let meta = ExerciseBasis::Anchor(meta_anchor(&DOMAIN));
-    for p in stage13_payloads() {
-        assert_eq!(
-            r.act(ROOT, ROOT, meta, &p).map(|_| ()),
-            Err(MetaError::Restricted),
-            "{}",
-            p.action()
-        );
-    }
-    assert_eq!(MetaError::Restricted.code(), "meta-restricted");
-}
-
 // C10, E6
 #[test]
 fn a_disposition_is_keep_or_revoke() {
@@ -3837,3 +3821,5 @@ fn kernel_0_4_0_meta_payloads_decode_unchanged() {
     }
     assert!(decoded >= 50, "{decoded}");
 }
+
+mod domain;

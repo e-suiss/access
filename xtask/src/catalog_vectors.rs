@@ -9,7 +9,14 @@ use serde_json::Value;
 use crate::Violation;
 
 const TEXT_DIRS: &[&str] = &["protocol/l0", "protocol/l2"];
-const VECTOR_DIRS: &[&str] = &["conformance/vectors/core", "conformance/vectors/exchange"];
+const VECTOR_DIRS: &[&str] = &[
+    "conformance/vectors/core",
+    "conformance/vectors/exchange",
+    // OP-158 m.3 (b)
+    "conformance/vectors/handover",
+    "conformance/vectors/recovery",
+    "conformance/vectors/version",
+];
 const RULE: &str = "TI-RT12";
 const MARKER: &str = "<!-- no-vector:";
 

@@ -125,7 +125,7 @@ fn downgrade_vectors_match() {
         assert_eq!(downgrades((&old_min, &new_min), (&oa, &na)), widens, "{id}");
         lines.push(format!(
             "  {{\"id\": \"{id}\", {}, \"old_minimum\": \"{}\", \"new_minimum\": \"{}\", \"old_algorithms\": \"{}\", \"new_algorithms\": \"{}\", \"expansion\": {widens}}}",
-            field(&["SI-18", "CR-8"]),
+            field(&["L0-META-37"]),
             hex(&old_min.to_bytes().unwrap()),
             hex(&new_min.to_bytes().unwrap()),
             algs_hex(&oa),
@@ -177,7 +177,7 @@ fn transition_vectors_match() {
         let got = minimum_at(&current, &activated, t, now);
         lines.push(format!(
             "  {{\"id\": \"{id}\", {}, \"current\": \"{}\", \"activated\": \"{}\", \"activated_at\": {t}, \"now\": {now}, \"minimum\": \"{}\"}}",
-            field(&["SI-18"]),
+            field(&["L0-META-37"]),
             hex(&current.to_bytes().unwrap()),
             hex(&activated.to_bytes().unwrap()),
             hex(&got.to_bytes().unwrap()),

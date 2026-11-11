@@ -165,7 +165,7 @@ fn guard_vectors_match() {
         let replica_text = replica.map_or_else(|| String::from("null"), |r| format!("{r}"));
         lines.push(format!(
             "  {{\"id\": \"{id}\", {}, \"heads\": \"{}\", \"replica\": {replica_text}, \"cited\": {n}, \"cited_root\": \"{}\", \"fork\": {fork}, \"now\": {NOW}, {}}}",
-            field(&["SEC21", "SEC22"]),
+            field(&["L0-META-36"]),
             hex(&dcbor::encode(&heads_value(&heads), Limits::CEILING).unwrap()),
             hex(&[root; 32]),
             outcome(got),

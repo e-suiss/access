@@ -36,7 +36,9 @@ from .codec import (
     same,
 )
 from . import p256
-from .keyscope import check_binding_key, thumbprint
+from .keyscope import check_binding_key, check_spec_versions, thumbprint
+from . import fold as fold_rules
+from . import version_check
 from .polarity import is_forbid, policy_narrows, statements
 from .validity import VARIANT_CLASS
 
@@ -293,6 +295,11 @@ def check_nonempty_text(value):
         fail("expected non-empty text")
 
 
+def check_int_any(value):
+    if not isinstance(value, int) or isinstance(value, bool):
+        refuse("meta-malformed")
+
+
 PAYLOADS = {
     "anchor_create": ({"scope": check_scope, "root": check_root}, {"root_terms": check_requirement_set}),
     "anchor_transfer": ({"anchor": check_id, "root": check_root, "disposition": check_disposition}, {}),
@@ -327,6 +334,16 @@ PAYLOADS = {
         "audience": check_list(check_audience_id, nonempty=True, is_set=True),
         "profile": check_projection_profile,
     }, {"max_staleness_ms": check_uint, "offline_slice": check_slice_request}),
+    # OP-158 m.3 (b)
+    "domain_handover": ({"binding": check_list(check_binding_key, nonempty=True, is_set=True), "cited": check_dict_any},
+                        {"reanchor": check_true}),
+    "domain_recover": ({"n": check_uint, "cited_checkpoint": check_dict_any,
+                        "binding": check_list(check_binding_key, nonempty=True, is_set=True)},
+                       {"witness_claims": check_list(check_id, nonempty=True, is_set=True),
+                        "replica_head": check_dict_any, "lost_suffix": check_dict_any,
+                        "fork": check_list(check_dict_any, nonempty=True, is_set=True)}),
+    "version_activate": ({"versions": check_spec_versions}, {}),
+    "algorithm_retire": ({"algorithm": check_int_any}, {}),
 }
 
 
@@ -633,6 +650,107 @@ class Apply:
         self.requirements.extend(anchor.get("root_terms", []))
         self.requirements.extend(authority.get("requirements", []))
         return body["anchor"], anchor
+
+    # -- domain scope (L0-META-36 to L0-META-38)
+
+    def write_raw(self, key, value):
+        self.state[key] = value
+        self.effects.append((key, value))
+
+    def domain_scope(self):
+        # L0-META-36: only the meta-anchor's root, in its own capacity
+        if self.capacity != "own":
+            refuse("meta-basis")
+        self.meta_root()
+
+    def rebind(self, binding, cited, how):
+        # L0-META-36, PI-15
+        if any("superseded" in b for b in binding):
+            refuse("meta-not-within")
+        key = encode(["provider_binding"])
+        old = self.state.get(key)
+        new_kids = [b["kid"] for b in binding]
+        if old is not None:
+            for b in old["binding"]:
+                if b["kid"] not in new_kids:
+                    self.write_raw(encode(["superseded", b["kid"]]), {"cited": cited, "pos": self.pos})
+        self.write_raw(key, {"binding": binding, "cited": cited, "how": how, "since": self.pos})
+
+    def domain_handover(self, body):
+        self.domain_scope()
+        self.rebind(body["binding"], body["cited"], "handover")
+        return True
+
+    def domain_recover(self, body):
+        # L0-META-36, SEC20, SEC21, SEC22
+        if self.capacity != "own":
+            refuse("meta-basis")
+        ident, anchor = self.basis_anchor(self.meta_anchor_id())
+        if "ended" in anchor or not self.root_power(anchor):
+            refuse("meta-not-authorized")
+        entry = self.state.get(encode(["recovery_entry"]))
+        if entry is None:
+            refuse("meta-not-authorized")
+        cited = body["cited_checkpoint"]
+        claims = body.get("witness_claims", [])
+        if cited["size"] != body["n"] or not claims:
+            refuse("meta-not-within")
+        heads = []
+        for cid in claims:
+            state = self.read("claim", cid)
+            if state is None:
+                refuse("meta-unknown")
+            heads.append(witness_head(state, self.now))
+        replica = body["replica_head"]["size"] if "replica_head" in body else None
+        try:
+            guard = fold_rules.rollback_guard(heads, replica, body["n"], cited["root"][1], "fork" in body, self.now)
+        except fold_rules.GuardError as error:
+            refuse("rollback-guard" if error.code == "rollback-guard" else "meta-not-within")
+        expected = None
+        if guard["guard"] == "lossy" and guard["from"] < guard["until"]:
+            expected = {"from": guard["from"], "to": guard["until"]}
+        if body.get("lost_suffix") != expected:
+            refuse("meta-not-within")
+        terms = {
+            "proof_kind": "contribution",
+            "class": "recover",
+            "binding": "intent_digest",
+            "independence": {"distinct": "instance"},
+            "consumption": "single_use",
+            "assurance": {"hardware_bound": 1, "human_presence": 1, "phishing_resistant": 1, "uv": 1},
+        }
+        if entry["threshold"] >= 2:
+            terms["count"] = entry["threshold"]
+        self.requirements.append(terms)
+        if guard["guard"] == "lossy":
+            self.add_root_requirements(anchor)
+        self.rebind(body["binding"], cited, "recover")
+        self.write_raw(encode(["recovered"]), {"at": self.now, "pos": self.pos, "n": body["n"]})
+        return True
+
+    def version_activate(self, body):
+        # L0-META-37, SI-18, §15.4
+        self.meta_root()
+        key = encode(["versions"])
+        stored = self.state.get(key)
+        zero = {"core": 0, "meta_schema": 0}
+        if stored is None:
+            floor, pending = zero, zero
+        else:
+            floor = version_check.minimum_at(stored["floor"], stored["activated"], stored["at"], self.now)
+            pending = stored["activated"]
+        self.write_raw(key, {"floor": floor, "activated": body["versions"], "at": self.now})
+        return version_check.lowers(pending, body["versions"])
+
+    def algorithm_retire(self, body):
+        # L0-META-38, §15.16
+        self.meta_root()
+        key = encode(["retired_algorithms"])
+        retired = list(self.state.get(key) or [])
+        if body["algorithm"] not in retired:
+            retired.append(body["algorithm"])
+        self.write_raw(key, as_set(retired))
+        return False
 
     def anchor_amend(self, body):
         # L0-META-20, L0-META-28
@@ -1282,6 +1400,22 @@ def acceptance_narrows(new, old):
     return True
 
 
+def witness_head(state, now):
+    # L0-META-36: a live checkpoint Claim within its validity, its value dCBOR(checkpoint-ref)
+    validity = state.get("validity", [0, 2**64 - 1])
+    value = state.get("value")
+    if ("ended" in state or state.get("class") != "checkpoint" or not validity[0] <= now <= validity[1]
+            or not isinstance(value, (bytes, bytearray))):
+        return None
+    try:
+        ref = decode_canonical(bytes(value))
+    except Rejection:
+        return None
+    if not isinstance(ref, dict) or set(ref) != {"size", "root"}:
+        return None
+    return {"size": ref["size"], "root": bytes(ref["root"][1]), "at": state.get("issued_at", 0)}
+
+
 def core_action(name):
     # L0-META-1
     schema = {"name": name, "major": 1, "effect_class": "reversible"}
@@ -1295,7 +1429,7 @@ def core_action(name):
 CT3_META = {
     "anchor_create", "anchor_transfer", "anchor_amend", "anchor_retire", "party_depart",
     "instance_recover", "grant_amend", "acceptance_establish", "acceptance_amend", "policy_set",
-    "policy_retire",
+    "policy_retire", "domain_handover", "version_activate",
 }
 CT3_QUORUM = 2
 

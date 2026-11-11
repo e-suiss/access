@@ -51,7 +51,10 @@ pub const fn meta_tier(payload: &Payload, expansion: bool) -> Tier {
         | Payload::AcceptanceEstablish(_)
         | Payload::AcceptanceAmend { .. }
         | Payload::PolicySet { .. }
-        | Payload::PolicyRetire { .. } => Tier::Ct3,
+        | Payload::PolicyRetire { .. }
+        | Payload::DomainHandover(_)
+        | Payload::DomainRecover(_)
+        | Payload::VersionActivate { .. } => Tier::Ct3,
         _ => Tier::Ct2,
     }
 }
