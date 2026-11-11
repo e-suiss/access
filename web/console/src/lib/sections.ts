@@ -64,7 +64,7 @@ const AUDIT: Probe = { namespace: "access", name: "read", major: 1, resource: "a
 
 /** The actions behind each screen; a screen appears when any one of them is eligible. */
 export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
-  roles: [meta("authority_set_define"), meta("grant_amend")],
+  roles: [meta("authority_set_define"), meta("grant_amend"), idp("realm", "delegated_admin")],
   people: [meta("instance_terminate"), idp("account", "suspend")],
   sources: [meta("acceptance_establish"), meta("acceptance_amend")],
   restrictions: [meta("policy_set")],

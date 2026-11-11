@@ -352,6 +352,45 @@ function AdminMeta({ ctx }: { readonly ctx: Ctx }): ReactElement {
   );
 }
 
+/** TN-114, OP-157 m.3 (t): the realm's staged opening of meta-action role Grants. */
+function DelegatedAdmin({ ctx }: { readonly ctx: Ctx }): ReactElement {
+  const [w, write] = useRun<WriteResult>();
+  const set = (enabled: boolean) => {
+    write(() =>
+      change(ctx.instance, ctx.confirm, ctx.session.realm, {
+        operation: "putDelegatedAdmin",
+        method: "PUT",
+        path: "settings/delegated-admin",
+        body: { enabled },
+      }),
+    );
+  };
+  return (
+    <Panel id="delegated-admin" title={t("delegatedAdminTitle")}>
+      <p className="hint">{t("delegatedAdminIntro")}</p>
+      <button
+        type="button"
+        onClick={() => {
+          set(true);
+        }}
+      >
+        {t("delegatedAdminOn")}
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          set(false);
+        }}
+      >
+        {t("delegatedAdminOff")}
+      </button>
+      <Show l={w}>
+        {(r) => <p role="status">{t("changeRecorded", { exercise: r.exercise_id })}</p>}
+      </Show>
+    </Panel>
+  );
+}
+
 export function Roles({ ctx }: { readonly ctx: Ctx }): ReactElement {
   return (
     <>
@@ -359,6 +398,7 @@ export function Roles({ ctx }: { readonly ctx: Ctx }): ReactElement {
       <RoleEditor ctx={ctx} />
       <ImpactPreview ctx={ctx} />
       <AdminMeta ctx={ctx} />
+      <DelegatedAdmin ctx={ctx} />
     </>
   );
 }
