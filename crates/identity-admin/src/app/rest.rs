@@ -3466,9 +3466,14 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             },
             // OP-157 m.4 (a)
             (Kind::Deliveries | Kind::SsoPreview, None)
-            | (Kind::SupportGrants | Kind::ReviewItems | Kind::OffboardingPreviews, _)
-            // OP-158 m.4 (a)
-            | (Kind::Placement | Kind::Durability, _) => Read::default(),
+            | (
+                Kind::SupportGrants
+                | Kind::ReviewItems
+                | Kind::OffboardingPreviews
+                | Kind::Placement
+                | Kind::Durability,
+                _,
+            ) => Read::default(),
             (Kind::Settings, _) => {
                 let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
                 let p = resources::policies(t).await?;

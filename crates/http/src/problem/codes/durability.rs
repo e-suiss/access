@@ -68,7 +68,7 @@ pub const REHOME_INCOMPLETE: Code = code(
     "A realm rehome needs an Exercise in both the old and the new governing domain; the realm stays where it is (OP-158 m.3 (o)).",
 );
 
-/// The as_of position is outside the 24 hour history window, or its snapshot expired (OP-158 m.3 (u)).
+/// The `as_of` position is outside the 24 hour history window, or its snapshot expired (OP-158 m.3 (u)).
 pub const AS_OF_EXPIRED: Code = code(
     "as-of-expired",
     409,
