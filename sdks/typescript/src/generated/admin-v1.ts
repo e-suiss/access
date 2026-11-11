@@ -3598,8 +3598,25 @@ export interface components {
         Review: Record<string, never>;
         /** @description One Grant of a campaign, as the reviewer may see it (OP-157 m.3 (w)); its lane names its members when it serves it. */
         ReviewItem: Record<string, never>;
-        /** @description What offboarding a Party would do, channel by channel, with no defaults (OP-157 m.3 (v)); its lane names its members when it serves it. */
-        OffboardingPreview: Record<string, never>;
+        /** @description What offboarding a Party would do, channel by channel, with no defaults (OP-157 m.3 (v), §8.17.9.6): each channel lists its members and the choices it offers, and the commit must name one for every member. `status` is `offboarded` only once the departure Exercise committed and was recorded; `ended` lists the rule-shaped holdings whose episode already ended ("Finance role ended (HR, 6 Oct)"), and `survive` counts the Grants held by name that HR's change never touches. */
+        OffboardingPreview: {
+            party: string;
+            account_id?: string | null;
+            /** @enum {string} */
+            status: "active" | "offboarded";
+            departure?: Record<string, never> | null;
+            departed_position?: string | null;
+            channels: {
+                grants: Record<string, never>[];
+                instances: Record<string, never>[];
+                holdings: Record<string, never>[];
+                self_anchor: Record<string, never>;
+                reentry: Record<string, never>;
+            };
+            survive: number;
+            derived: Record<string, never>[];
+            ended: Record<string, never>[];
+        };
         /** @description A resource whose route is declared and not served yet; its lane names its members when it serves it (OP-155 m.4). */
         Declared: Record<string, never>;
         /** @description One page; the next is in the `Link` header (OP-65). Only what the realm may see is listed (TN-113). */
@@ -13439,14 +13456,13 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Declared"];
+                    "application/json": components["schemas"]["OffboardingPreview"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -13493,7 +13509,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
