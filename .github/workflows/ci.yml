@@ -82,6 +82,9 @@ jobs:
         run: scripts/ci/apt-install.sh softhsm2
       - name: Tests (SA-59 phase 0 layers)
         run: just test
+      # OP-66, OP-158 m.3 (z)
+      - name: EXPLAIN plan gate
+        run: just explain-gate
       # OP-116 m.6
       - name: Kernel vectors through the uniffi Python binding
         run: just uniffi-test

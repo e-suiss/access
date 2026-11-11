@@ -856,7 +856,7 @@ pub async fn position_at(
     let mut t = DomainTx::begin(pool, domain).await?;
     let pos = sqlx::query_scalar!(
         "SELECT pos FROM access.authority_log
-          WHERE domain_id = $1 AND recorded_at <= $2 ORDER BY pos DESC LIMIT 1",
+          WHERE domain_id = $1 AND recorded_at <= $2 ORDER BY recorded_at DESC, pos DESC LIMIT 1",
         domain.as_bytes().as_slice(),
         i64::try_from(at).unwrap_or(i64::MAX),
     )

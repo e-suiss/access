@@ -44,6 +44,10 @@ sqlx-prepare:
     DATABASE_URL="$base/$db" sqlx migrate run --source services/hr-connector/migrations --ignore-missing
     DATABASE_URL="$base/$db" SQLX_OFFLINE=false cargo sqlx prepare --workspace -- --all-targets -p access-store -p access-executor -p access-vc-verifier -p access-hr-connector --features testing
 
+# OP-66, OP-138, OP-158 m.3 (z): the frequent queries' plans use an index and sort only where listed
+explain-gate:
+    DATABASE_URL="${DATABASE_URL:-$(scripts/pg-local.sh up)}" cargo nextest run --locked -p access-store --features testing --test explain --no-capture
+
 # OP-66: the committed .sqlx query metadata matches the queries against a freshly migrated database
 sqlx-check:
     #!/usr/bin/env bash

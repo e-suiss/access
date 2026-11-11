@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT pos FROM access.authority_log\n          WHERE domain_id = $1 AND recorded_at <= $2 ORDER BY pos DESC LIMIT 1",
+  "query": "SELECT pos FROM access.authority_log\n          WHERE domain_id = $1 AND recorded_at <= $2 ORDER BY recorded_at DESC, pos DESC LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -25,5 +25,5 @@
       false
     ]
   },
-  "hash": "e05cb0f6524b6fdedc8f57cdf37bbf5502327e41a5be411361494404db4c1b5e"
+  "hash": "4f21f1c7488390a4e550756c99f1d71fb0db6e2b9e3bf8a4c9a34b92c7ec2f73"
 }
