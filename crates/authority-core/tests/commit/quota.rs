@@ -367,3 +367,55 @@ async fn a_hot_domain_is_busy_after_bounded_retries_and_never_allows() {
         "nothing was recorded and nothing was allowed"
     );
 }
+
+// §13.7.4, OP-35, SI-20
+#[tokio::test]
+async fn an_actor_commits_twenty_a_second_with_a_burst_of_a_hundred_and_checks_sixty_a_minute() {
+    let db = fresh().await.unwrap();
+    let (mut core, d) = core_of(&db, TENANT, 1_000, Quotas::default()).await;
+    let holding = granted(&mut core, d).await;
+    let mut committed = 0_u32;
+    let mut nonce = 10_u8;
+    let limited = loop {
+        nonce = nonce.checked_add(1).unwrap();
+        match send(
+            &mut core,
+            shop_request(d, nonce, Mode::Commit, holding),
+            ALICE_KEY,
+        )
+        .await
+        {
+            Ok(r) => {
+                allowed(&r);
+                committed += 1;
+            }
+            Err(e) => break e,
+        }
+    };
+    assert!(matches!(limited, CoreError::Limited), "{limited:?}");
+    assert_eq!(
+        committed + 1,
+        100,
+        "ALICE's burst, one of which her Instance's creation took"
+    );
+    allowed(
+        &send_at(
+            &mut core,
+            shop_request(d, nonce, Mode::Commit, holding),
+            ALICE_KEY,
+            NOW + 50,
+        )
+        .await
+        .unwrap(),
+    );
+
+    let checked = (0..61_u8)
+        .map(|n| shop_request(d, 200_u8.wrapping_add(n), Mode::Check, holding))
+        .collect::<Vec<_>>();
+    let mut answers = Vec::new();
+    for r in checked {
+        answers.push(send(&mut core, r, ALICE_KEY).await);
+    }
+    assert_eq!(answers.iter().filter(|a| a.is_ok()).count(), 60);
+    assert!(matches!(answers.last(), Some(Err(CoreError::Limited))));
+}

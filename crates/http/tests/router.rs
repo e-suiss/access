@@ -386,3 +386,27 @@ async fn an_address_over_its_rate_is_refused_before_its_body_is_read() {
         .unwrap();
     assert_eq!(other.status(), StatusCode::PAYLOAD_TOO_LARGE);
 }
+
+// §13.7.4, R-5
+#[tokio::test]
+async fn a_request_is_at_most_256_kib() {
+    let app = harden(
+        axum::Router::new().route(
+            "/echo",
+            axum::routing::post(|body: axum::body::Bytes| async move { body.len().to_string() }),
+        ),
+        Limits::default(),
+    );
+    let sized = |n: usize| {
+        app.clone().oneshot(
+            Request::post("/echo")
+                .body(Body::from(vec![b'a'; n]))
+                .unwrap(),
+        )
+    };
+    assert_eq!(sized(256 * 1024).await.unwrap().status(), StatusCode::OK);
+    assert_eq!(
+        sized(256 * 1024 + 1).await.unwrap().status(),
+        StatusCode::PAYLOAD_TOO_LARGE
+    );
+}

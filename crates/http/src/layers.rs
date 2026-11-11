@@ -242,4 +242,63 @@ mod tests {
         assert!(rate.admit(IpAddr::from([192, 0, 2, 2]), 1_000));
         assert!(rate.admit(a, 1_100));
     }
+
+    // OP-53, OP-36
+    #[tokio::test]
+    async fn a_waiting_request_is_the_lane_queue_depth() {
+        use tower::ServiceExt as _;
+        let lane = Lane::new(&Admission {
+            lane: "critical",
+            in_flight: 1,
+            queue: 1,
+            per_second: 1,
+            burst: 1,
+        });
+        let gate = Arc::new(tokio::sync::Notify::new());
+        let g = gate.clone();
+        let app = axum::Router::new()
+            .route(
+                "/",
+                axum::routing::get(move || {
+                    let g = g.clone();
+                    async move {
+                        g.notified().await;
+                        "done"
+                    }
+                }),
+            )
+            .layer(axum::middleware::from_fn_with_state(
+                lane.clone(),
+                super::lane,
+            ));
+        let get = || {
+            axum::http::Request::get("/")
+                .body(axum::body::Body::empty())
+                .unwrap_or_default()
+        };
+        let first = tokio::spawn(app.clone().oneshot(get()));
+        let busy = tokio::time::timeout(Duration::from_secs(5), async {
+            while lane.slots.available_permits() > 0 {
+                tokio::task::yield_now().await;
+            }
+        });
+        assert!(busy.await.is_ok());
+        let second = tokio::spawn(app.clone().oneshot(get()));
+        let queued = tokio::time::timeout(Duration::from_secs(5), async {
+            while lane.waiting() == 0 {
+                tokio::task::yield_now().await;
+            }
+        });
+        assert!(queued.await.is_ok());
+        assert_eq!(lane.waiting(), 1);
+        let shed = app.clone().oneshot(get()).await.map(|r| r.status());
+        assert_eq!(shed.ok(), Some(StatusCode::SERVICE_UNAVAILABLE));
+        gate.notify_one();
+        gate.notify_one();
+        for h in [first, second] {
+            let done = tokio::time::timeout(Duration::from_secs(5), h).await;
+            assert!(matches!(done, Ok(Ok(Ok(r))) if r.status() == StatusCode::OK));
+        }
+        assert_eq!(lane.waiting(), 0);
+    }
 }
