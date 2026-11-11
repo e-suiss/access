@@ -52,6 +52,16 @@ impl Cadence {
         }
     }
 
+    /// The same cadence with an interval of at most `ms`: a domain whose declared MMD is
+    /// shorter than the interval is checkpointed within it (§17.6.3, OP-158 m.6 (e)).
+    #[must_use]
+    pub const fn within(mut self, ms: u64) -> Self {
+        if ms > 0 && ms < self.interval_ms {
+            self.interval_ms = ms;
+        }
+        self
+    }
+
     /// Resumes after the checkpoint of `size` issued at `at`.
     #[must_use]
     pub const fn resume(mut self, size: u64, at: u64) -> Self {

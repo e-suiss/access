@@ -69,6 +69,30 @@ pub struct Target {
     verifier: Verifier,
 }
 
+/// The configured witnesses the domain's Domain Metadata declares (OP-158 m.3 (d), m.6 (e)):
+/// a witness counts only when the metadata names its key, and is independent only when both
+/// the declaration and the operators say so (SI-12, B13). Without a declaration none counts.
+#[must_use]
+pub fn declared(
+    targets: &[Target],
+    declared: &access_kernel::verify::key_scope::Declarations,
+) -> Vec<Target> {
+    targets
+        .iter()
+        .filter_map(|t| {
+            let w = declared.witnesses.iter().find(|w| {
+                let suiss_crypto::cose::PublicKey::Ed25519(k) = w.key else {
+                    return false;
+                };
+                Verifier::cosigner(&w.name, k).is_ok_and(|v| v.to_vkey() == t.vkey)
+            })?;
+            let mut t = t.clone();
+            t.independent = t.independent && w.independent;
+            Some(t)
+        })
+        .collect()
+}
+
 /// Whether two operator names are the same operator (trimmed, case-insensitive).
 #[must_use]
 pub fn same_operator(a: &str, b: &str) -> bool {

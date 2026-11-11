@@ -66,3 +66,42 @@ fn a_cosignature_older_than_the_log_stops_commits_until_one_agrees() {
     assert_eq!(cross_check(11_000, 11), Ok(()));
     assert_eq!(time_check(), Ok(()));
 }
+
+// SI-12, B13, OP-158 m.3 (d), m.6 (e)
+#[test]
+fn only_witnesses_the_domain_metadata_declares_count() {
+    use access_kernel::verify::key_scope::{Declarations, Witness};
+    let (s, _) = suiss_crypto::signer::SoftSigner::generate_ed25519().unwrap();
+    let suiss_crypto::cose::PublicKey::Ed25519(k) = suiss_crypto::signer::Signer::public_key(&s)
+    else {
+        panic!("ed25519");
+    };
+    let v = Verifier::cosigner("w.example", k).unwrap().to_vkey();
+    let configured = [
+        Target::new("http://127.0.0.1:1", &v, "Example Witness Ltd", "Suiss").unwrap(),
+        Target::new("http://127.0.0.1:2", &vkey("other"), "Other Ltd", "Suiss").unwrap(),
+    ];
+    assert!(declared(&configured, &Declarations::default()).is_empty());
+    let mut d = Declarations::default();
+    d.witnesses.push(Witness::new(
+        String::from("w.example"),
+        suiss_crypto::cose::PublicKey::Ed25519(k),
+        suiss_crypto::cose::Algorithm::Ed25519,
+        String::from("Example Witness Ltd"),
+        false,
+    ));
+    let counted = declared(&configured, &d);
+    assert_eq!(counted.len(), 1);
+    assert!(
+        !counted[0].independent,
+        "the domain did not declare it independent"
+    );
+    d.witnesses[0] = Witness::new(
+        String::from("w.example"),
+        suiss_crypto::cose::PublicKey::Ed25519(k),
+        suiss_crypto::cose::Algorithm::Ed25519,
+        String::from("Example Witness Ltd"),
+        true,
+    );
+    assert!(declared(&configured, &d)[0].independent);
+}

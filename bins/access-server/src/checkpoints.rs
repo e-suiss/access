@@ -194,6 +194,18 @@ pub(crate) async fn signed_checkpoint<H: Heads + Sync, S: DomainSigner + Sync>(
     Ok((row, noted))
 }
 
+/// The declarations of the binding-signed Domain Metadata `signed`; nothing declared when it
+/// cannot be read (OP-158 m.6 (e): an absent declaration grants nothing).
+fn declarations(signed: &[u8]) -> access_kernel::verify::key_scope::Declarations {
+    use access_kernel::codec::Canonical as _;
+    suiss_crypto::cose::parse_sign1(signed)
+        .ok()
+        .and_then(|s| s.payload)
+        .and_then(|p| access_kernel::verify::key_scope::DomainMetadata::from_bytes(&p).ok())
+        .map(|m| m.declared)
+        .unwrap_or_default()
+}
+
 /// One cadence step of `domain` at `now`: the checkpoint when one is due, published.
 pub(crate) async fn domain_step<H: Heads + Sync, S: DomainSigner + Sync>(
     (heads, keys, witnesses): (&H, &S, &publish::Publisher),
@@ -246,15 +258,24 @@ pub(crate) async fn domain_step<H: Heads + Sync, S: DomainSigner + Sync>(
     }
     let recorded_at =
         access_authority_sequencer::checkpoint::extensions(&noted.checkpoint)?.recorded_at;
+    // OP-158 m.6 (e)
+    let declared = declarations(&noted.metadata);
+    if let Some(m) = declared.mmd {
+        *cadence = cadence.within(m.authority_ms);
+    }
+    let witnesses = publish::Publisher {
+        targets: access_authority_sequencer::witness::declared(&witnesses.targets, &declared),
+        sinks: witnesses.sinks.clone(),
+    };
     let outcome = publish::publish(
-        witnesses,
+        &witnesses,
         (app, sequencer),
         domain,
         (&row, &noted, recorded_at),
     )
     .await;
     if !witnesses.targets.is_empty() {
-        publish::gossip(witnesses, (app, sequencer), domain, now).await;
+        publish::gossip(&witnesses, (app, sequencer), domain, now).await;
     }
     Ok(Some((row, outcome)))
 }
