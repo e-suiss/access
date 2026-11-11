@@ -536,6 +536,79 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         })
     }
 
+    /// Whether `viewer` may contribute `class` now, and, for a viewer the domain lets audit, how
+    /// many named holders may (§8.17.6.1, §7.9.5.3, E26, OP-157 m.3 (l)): the Approval Surface's
+    /// eligibility line. The Grant the viewer's contribution names is read first; otherwise a
+    /// named, rule-shaped or public holding found in the derived index counts. Only named
+    /// holders are counted. Nothing is recorded.
+    ///
+    /// # Errors
+    /// [`CoreError`].
+    pub async fn approval_eligibility(
+        &mut self,
+        class: &str,
+        viewer: Id,
+        basis: Option<Id>,
+        now: u64,
+    ) -> Result<(bool, Option<u32>), CoreError> {
+        let target = ResourceRef {
+            namespace: String::from(crate::app::CONTRIBUTION_NAMESPACE),
+            path: vec![String::from(class)],
+            incarnation: 0,
+        };
+        let catalog = self
+            .settled(|snap| accepted_catalog(snap, meta::NAMESPACE, now, &Catalog::default()))
+            .await?;
+        let actor = Actor {
+            party: viewer,
+            instance: Id([0; 16]),
+        };
+        let mut eligible = false;
+        if let Some(g) = basis
+            && self
+                .settled(|snap| covering_live(snap, &g, &target, &catalog, &actor, now))
+                .await?
+        {
+            eligible = self.holds(&g, &actor, now).await?;
+        }
+        // E26
+        let auditor = self.audits(&viewer, now).await?;
+        if eligible && !auditor {
+            return Ok((true, None));
+        }
+        let mut named = BTreeSet::new();
+        let mut after = None;
+        loop {
+            let page = self
+                .reader
+                .grants_in(&target.namespace, after, PAGE)
+                .await?;
+            for g in &page {
+                if let Some(p) = self
+                    .settled(|snap| eligible_holder(snap, g, &target, &catalog, now))
+                    .await?
+                {
+                    eligible |= p == viewer;
+                    if named.len() < ELIGIBLE_MAX {
+                        named.insert(p);
+                    }
+                } else if !eligible
+                    && self
+                        .settled(|snap| covering_live(snap, g, &target, &catalog, &actor, now))
+                        .await?
+                {
+                    eligible = self.holds(g, &actor, now).await?;
+                }
+            }
+            if page.len() < PAGE as usize {
+                break;
+            }
+            after = page.last().copied();
+        }
+        let shown = auditor.then(|| u32::try_from(named.len()).unwrap_or(u32::MAX));
+        Ok((eligible, shown))
+    }
+
     /// Whether `actor`'s Party holds Grant `g` now: by name, as `Public`, or as a group member.
     pub(crate) async fn holds(&self, g: &Id, actor: &Actor, now: u64) -> Result<bool, CoreError> {
         let holder = self
@@ -778,6 +851,37 @@ fn eligible_holder(
                 && crate::domain::conditions_hold(view, &c.conditions, Some(&actor), now)
         })
         .then_some(party)
+}
+
+/// Whether Grant `g`, whoever holds it, lets a holder contribute to `target` now as `actor`:
+/// every hop of its lineage live, in its validity window and with its while-conditions holding.
+fn covering_live(
+    view: &Snapshot,
+    g: &Id,
+    target: &ResourceRef,
+    catalog: &Catalog,
+    actor: &Actor,
+    now: u64,
+) -> bool {
+    let Some(grant) = read::<GrantState>(view, kind::GRANT, g) else {
+        return false;
+    };
+    let set = &grant.content.authority.authority;
+    let contribute = meta::core_action(access_kernel::contribution::ACTION);
+    if !catalog.covered(&set.actions).contains(&contribute)
+        || !resource_le(&ResourceSelector::Exact(target.clone()), &set.resource)
+    {
+        return false;
+    }
+    crate::domain::lineage_hops_at(view, g, Some(now)).is_some_and(|(hops, _)| {
+        hops.iter().all(|h| {
+            let c = &h.authority.constraints;
+            h.status == HopStatus::Active
+                && c.validity.from <= now
+                && now <= c.validity.until
+                && crate::domain::conditions_hold(view, &c.conditions, Some(actor), now)
+        })
+    })
 }
 
 /// The page token's body: the last candidate.

@@ -24,7 +24,7 @@ use access_identity_admin::ports::{
 use access_identity_oauth::adapters::SignerKeys;
 use access_identity_ui::ports::{Approvals, DeviceInstances};
 use access_internal_api::approvals::{
-    Contribution, Opening, contribute_intent, contribute_payload,
+    Contributed, Contribution, Eligibility, Opening, contribute_intent, contribute_payload,
 };
 use access_internal_api::context::RateContext;
 use access_internal_api::instances::{
@@ -965,10 +965,38 @@ where
                 render_digest: a.render,
                 render: a.render_bytes,
                 tier: access_authority_core::app::approval::tier_code(a.tier),
+                unmet: a.unmet,
+                // §8.17.6.4, OP-157 m.3 (l)
+                contributed: a
+                    .contributed
+                    .into_iter()
+                    .map(|c| Contributed {
+                        class: c.class,
+                        party: c.party,
+                        instance: c.instance,
+                        since: c.since,
+                    })
+                    .collect(),
+                counted: a.counted,
             })),
             Ok(None) => Ok(None),
             Err(e) => Err(Unavailable(e.to_string())),
         }
+    }
+
+    async fn eligibility(
+        &self,
+        domain: Digest,
+        class: &str,
+        viewer: Id,
+        basis: Option<Id>,
+    ) -> Result<Eligibility, Unavailable> {
+        // §8.17.6.1, E26, OP-157 m.3 (l)
+        self.domains
+            .approval_eligibility(domain, class, viewer, basis)
+            .await
+            .map(|(eligible, named)| Eligibility { eligible, named })
+            .map_err(|e| Unavailable(e.to_string()))
     }
 
     async fn contribute(&self, c: Contribution) -> Result<Verdict, Unavailable> {

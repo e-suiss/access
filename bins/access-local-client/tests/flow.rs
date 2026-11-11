@@ -192,6 +192,16 @@ impl Approvals for Offline {
         Err(offline())
     }
 
+    async fn eligibility(
+        &self,
+        _: Digest,
+        _: &str,
+        _: access_kernel::model::Id,
+        _: Option<access_kernel::model::Id>,
+    ) -> Result<access_internal_api::approvals::Eligibility, PlaneUnavailable> {
+        Err(offline())
+    }
+
     async fn contribute(&self, _: Contribution) -> Result<Verdict, PlaneUnavailable> {
         Err(offline())
     }

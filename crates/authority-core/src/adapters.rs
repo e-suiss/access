@@ -42,6 +42,7 @@ use crate::query::{Hit, Query, page_after, page_body};
 use crate::status::adapters::open_family;
 use crate::{keys, parties};
 
+mod asked;
 mod audit;
 mod binding;
 mod consent;
@@ -620,6 +621,24 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             .await
             .map_err(|_| CoreError::Unavailable("time"))?;
         Ok((guard, now))
+    }
+
+    /// The Approval Surface's eligibility line on `domain`'s leader (§8.17.6.1, OP-157 m.3 (l)).
+    ///
+    /// # Errors
+    /// As [`Authority::approval_eligibility`].
+    pub async fn approval_eligibility(
+        &self,
+        domain: Digest,
+        class: &str,
+        viewer: Id,
+        basis: Option<Id>,
+    ) -> Result<(bool, Option<u32>), CoreError> {
+        let (mut guard, now) = self.led_now(domain).await?;
+        let led = guard.as_mut().ok_or(CoreError::Unavailable("leader"))?;
+        led.core
+            .approval_eligibility(class, viewer, basis, now)
+            .await
     }
 
     /// Decision lab Check on the request's domain (§8.17.10.4, §9.7): advisory, recorded
@@ -1914,6 +1933,12 @@ pub struct Asked {
     pub render_bytes: Option<Vec<u8>>,
     /// The tier.
     pub tier: access_kernel::tier::Tier,
+    /// The requirement terms the decision left unmet (§8.17.6.4, OP-157 m.3 (l)).
+    pub unmet: Vec<access_kernel::combinator::Unmet>,
+    /// The unconsumed contributions to the intent recorded since the decision.
+    pub contributed: Vec<access_kernel::meta::ContributionState>,
+    /// Whether every record since the decision was read.
+    pub counted: bool,
 }
 
 impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K, B, S, C> {
@@ -1933,10 +1958,17 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             crate::app::approval::tier_of(row.tier).ok_or(CoreError::Store(StoreError::Corrupt))?;
         let render_bytes =
             access_store::claims::proof(&self.setup.app, &scope, &row.render_digest).await?;
+        // §8.17.6.4, OP-157 m.3 (l)
+        let unmet = asked::unmet(&self.setup.app, &scope, row.decision_pos).await?;
+        let (recorded, counted) =
+            asked::contributed(&self.setup.app, &scope, intent, row.decision_pos).await?;
         Ok(Some(Asked {
             render: Digest(row.render_digest),
             render_bytes,
             tier,
+            unmet,
+            contributed: recorded,
+            counted,
         }))
     }
 }

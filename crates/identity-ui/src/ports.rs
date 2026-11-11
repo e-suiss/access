@@ -16,7 +16,7 @@ use access_identity_session::domain::session::SessionPolicy;
 use access_identity_webauthn::adapters::RealmDecoyKeys;
 use access_identity_webauthn::domain::policy::RealmPolicy;
 use access_identity_webauthn::domain::rp::RelyingParty;
-use access_internal_api::approvals::{Contribution, Opening};
+use access_internal_api::approvals::{Contribution, Eligibility, Opening};
 use access_internal_api::idp::{Unavailable as InstancesUnavailable, Verdict};
 use access_internal_api::instances::{Recovery, Registration, RegistrationVerdict, Termination};
 use access_kernel::digest::Digest;
@@ -201,6 +201,17 @@ pub trait Approvals: Send + Sync {
         domain: Digest,
         intent: Digest,
     ) -> impl Future<Output = Result<Option<Opening>, InstancesUnavailable>> + Send;
+
+    /// Whether `viewer` may contribute `class` in `domain` now, the Grant its contribution
+    /// names (`basis`) read first, and how many named holders may when the domain lets the
+    /// viewer see that (§8.17.6.1, E26, OP-157 m.3 (l)).
+    fn eligibility(
+        &self,
+        domain: Digest,
+        class: &str,
+        viewer: access_kernel::model::Id,
+        basis: Option<access_kernel::model::Id>,
+    ) -> impl Future<Output = Result<Eligibility, InstancesUnavailable>> + Send;
 
     /// Commits the contribution as PEP, with the statement and the Claim as proofs.
     fn contribute(

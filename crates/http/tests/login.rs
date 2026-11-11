@@ -384,7 +384,23 @@ impl Approvals for Surface {
             render_digest,
             render: Some(render),
             tier: self.tier.load(Ordering::SeqCst),
+            unmet: Vec::new(),
+            contributed: Vec::new(),
+            counted: true,
         }))
+    }
+
+    async fn eligibility(
+        &self,
+        _: access_kernel::digest::Digest,
+        _: &str,
+        _: access_kernel::model::Id,
+        _: Option<access_kernel::model::Id>,
+    ) -> Result<access_internal_api::approvals::Eligibility, PlaneUnavailable> {
+        Ok(access_internal_api::approvals::Eligibility {
+            eligible: true,
+            named: None,
+        })
     }
 
     async fn contribute(&self, c: Contribution) -> Result<Verdict, PlaneUnavailable> {
