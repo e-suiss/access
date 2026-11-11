@@ -216,6 +216,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     events.push(base(Kind::AuthorityRevoked, g, Detail::None));
                 }
             }
+            // §13.6, OP-158 m.3 (m)
+            Some(Payload::DomainRecover(r)) => {
+                events.push(base(
+                    Kind::DomainRecovered,
+                    Subject::Domain(domain),
+                    Detail::Domain { position: r.n },
+                ));
+            }
             // OP-149 m.7
             Some(Payload::ClaimIssue {
                 subject,

@@ -1695,6 +1695,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             self.delegation_gate(req, &mut evaluation).await?;
             self.tiered(req, &mut evaluation, open, now).await?;
             self.pre_recovery(inc, &mut evaluation, open).await?;
+            // SEC20, OP-158 m.7 (c)
+            let given: Vec<_> = resolved
+                .contributions
+                .values()
+                .map(|(_, c)| c.clone())
+                .collect();
+            self.recovery_keys(req, &digest, &given, &mut evaluation)
+                .await?;
             self.recovery_rules(req, actor, &mut evaluation, tier, now)
                 .await?;
             self.approval(req, actor, &resolved, &mut evaluation, &exercise, now)
@@ -2254,6 +2262,7 @@ pub mod discovery;
 mod events;
 pub mod export;
 pub mod faces;
+pub mod forced;
 mod holdings;
 pub mod hub;
 pub mod impact;

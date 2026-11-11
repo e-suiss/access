@@ -16,6 +16,8 @@ mod containment;
 mod distinct_surface;
 #[path = "commit/domain_scope.rs"]
 mod domain_scope;
+#[path = "commit/forced.rs"]
+mod forced;
 #[path = "commit/leader_gate.rs"]
 mod leader_gate;
 #[path = "commit/mandate.rs"]

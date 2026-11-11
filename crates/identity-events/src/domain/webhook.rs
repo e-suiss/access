@@ -313,9 +313,9 @@ mod tests {
         // OP-156 m.3 (s)
         assert!(event_names(&[String::from("export.sink_failed")]).is_ok());
         // OP-158 m.3 (cc)
-        for name in ["domain-handover", "domain-recovered"] {
-            assert!(event_names(&[String::from(name)]).is_err(), "{name}");
-        }
+        assert!(event_names(&[String::from("domain-handover")]).is_err());
+        // OP-158 m.3 (m), Ek B 5883
+        assert!(event_names(&[String::from("domain-recovered")]).is_ok());
         // OP-157 m.3 (aa)
         assert!(event_names(&[String::from("proxy.registered")]).is_err());
         // OP-157 m.3 (h)

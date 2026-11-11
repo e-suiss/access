@@ -471,6 +471,39 @@ pub fn divergence_quarantine(w: &Widened) -> Option<Value> {
 /// The `@id` of the divergence quarantine's statement.
 pub const QUARANTINE_DIVERGENCE: &str = "quarantine-divergence";
 
+/// The `@id` of the post-recovery quarantine's statement.
+pub const QUARANTINE_POST_RECOVERY: &str = "quarantine-post-recovery";
+
+/// The post-recovery quarantine (SEC22 R1 (b), §13.6 PR-1, OP-158 m.3 (m)): after a forced
+/// recovery every CT2+ Exercise needs a contribution from another Party (the grantor or a root),
+/// bound to the exact intent. Its other two parts need no policy: a projection issued before N
+/// is accepted only by inclusion or re-issue (the `superseded-at` predicate), and the Kernel
+/// closes every pre-recovery nonce. It is its own policy, apart from the divergence quarantine;
+/// lifting it is CT3 and lifts nothing else (PR-5).
+#[must_use]
+pub fn post_recovery_quarantine() -> Option<Value> {
+    let source = format!(
+        "@id(\"{QUARANTINE_POST_RECOVERY}\") @require(\"rs-post-recovery\") forbid(principal, action, resource) when {{ context.tier >= 2 }};"
+    );
+    let content = Value::Map(vec![
+        (Value::text("schema"), Value::text(RESTRICTION_SCHEMA)),
+        (Value::text("source"), Value::text(&source)),
+        (Value::text("target"), Value::text("domain")),
+        (
+            Value::text("requirements"),
+            Value::Map(vec![(
+                Value::text("rs-post-recovery"),
+                Value::Array(vec![contribution(APPROVE, None).to_value()]),
+            )]),
+        ),
+    ]);
+    dcbor::decode(
+        &dcbor::encode(&content, Limits::CEILING).ok()?,
+        Limits::CEILING,
+    )
+    .ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -663,5 +696,22 @@ mod tests {
         assert!(source.contains(&"ab".repeat(16)) && source.contains(&"cd".repeat(16)));
         assert!(!source.contains(&"01".repeat(16)));
         assert!(c.get("requirements").is_none() && !source.contains("@breakglass_exempt"));
+    }
+    // SEC22 R1, §13.6 PR-1, PR-5, OP-158 m.3 (m), Ek B 6026
+    #[test]
+    fn the_post_recovery_quarantine_compiles_and_asks_a_contribution_from_ct2() {
+        let c = post_recovery_quarantine().unwrap();
+        assert!(
+            super::super::compile(&c).is_ok(),
+            "{:?}",
+            super::super::compile(&c).err()
+        );
+        let Some(Value::Text(source)) = c.get("source") else {
+            panic!("source");
+        };
+        assert!(source.starts_with("@id(\"quarantine-post-recovery\")"));
+        assert!(source.contains("context.tier >= 2"));
+        assert!(c.get("requirements").is_some());
+        assert_ne!(QUARANTINE_POST_RECOVERY, QUARANTINE_DIVERGENCE);
     }
 }

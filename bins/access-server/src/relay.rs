@@ -385,6 +385,19 @@ pub(crate) async fn notices_step<K: access_identity_events::adapters::RealmKek>(
                 }
                 continue;
             }
+            // §13.6, OP-158 m.3 (m)
+            if ev.kind == access_internal_api::events::Kind::DomainRecovered {
+                let sent = domain_recovered(
+                    &mut t,
+                    (&*kek, ids),
+                    &ev,
+                    (&pools.app, &domain),
+                    (&r.slug, &r.issuer),
+                )
+                .await?;
+                queued = queued.saturating_add(sent);
+                continue;
+            }
             // OP-157 m.3 (f), SI-21
             if support_revoked(&mut t, (&*kek, ids), &ev, &r.slug).await? {
                 queued = queued.saturating_add(1);
@@ -507,6 +520,77 @@ async fn acting_org(
         .into_iter()
         .next()
         .map(|(o, _)| o))
+}
+
+/// The console page the forced-recovery notice opens, under the realm issuer (§8.17.9.7).
+const RECOVERY_HISTORY_PATH: &str = "/console/recovery";
+
+/// Delivers one `domain-recovered` authority event in `t` to every root participant of the
+/// domain's meta-anchor with an account in this realm and to the realm's on-call Parties, its
+/// administrators (§13.6, OP-158 m.3 (m)); the notices queued. "Changes after" is the time of the
+/// last record the recovery kept, position N − 1.
+async fn domain_recovered(
+    t: &mut TenantTx,
+    (kek, ids): (&(dyn suiss_crypto::envelope::Kek + Send + Sync), &IdKey),
+    ev: &access_internal_api::events::Event,
+    (app, domain): (&Pool, &access_store::scope::DomainId),
+    (slug, issuer): (&str, &str),
+) -> Result<u32, String> {
+    use access_identity_account::adapters::system::SystemEntropy;
+    use access_identity_account::notify::message::Body;
+    use access_identity_account::notify::notices::queue_body;
+    use access_internal_api::events::Detail;
+    use access_kernel::codec::Canonical as _;
+    let e = |x: access_store::StoreError| x.to_string();
+    let Detail::Domain { position } = ev.detail else {
+        return Ok(0);
+    };
+    let meta = access_kernel::meta::meta_anchor(&access_kernel::digest::Digest(*domain.as_bytes()));
+    let key = access_kernel::meta::key(access_kernel::meta::kind::ANCHOR, &meta);
+    let roots = access_store::authority::state_of(app, domain, &[key])
+        .await
+        .map_err(e)?
+        .into_iter()
+        .find_map(|r| r.value)
+        .and_then(|v| suiss_crypto::dcbor::decode(&v, suiss_crypto::dcbor::Limits::CEILING).ok())
+        .and_then(|v| access_kernel::meta::AnchorState::from_value(&v).ok())
+        .map(|a| match a.root {
+            access_kernel::meta::Root::Sole(p) => vec![p],
+            access_kernel::meta::Root::Joint { parties, .. } => parties.into_iter().collect(),
+        })
+        .unwrap_or_default();
+    let kept = position.saturating_sub(1);
+    let lost_after_ms = access_store::authority::read_log(app, domain, kept, kept)
+        .await
+        .map_err(e)?
+        .first()
+        .map_or(ev.at, |r| r.recorded_at);
+    let mut to = std::collections::BTreeSet::new();
+    for p in roots {
+        if let Some(s) = access_store::idp::party_subject(t, &p.0).await.map_err(e)? {
+            to.insert(s);
+        }
+    }
+    to.extend(t.breakglass_on_call().await.map_err(e)?);
+    let link = format!("{}{RECOVERY_HISTORY_PATH}", issuer.trim_end_matches('/'));
+    let mut sent = 0_u32;
+    for subject in to {
+        let body = Body::DomainRecovered {
+            domain: slug.chars().take(200).collect(),
+            position,
+            lost_after_ms,
+            at_ms: ev.at,
+            link: Secret::new(link.clone()),
+        };
+        if queue_body(t, (kek, ids), &SystemEntropy, &SystemClock, subject, body)
+            .await
+            .map_err(|x| x.to_string())?
+            .is_some()
+        {
+            sent = sent.saturating_add(1);
+        }
+    }
+    Ok(sent)
 }
 
 /// Delivers one `breakglass.used` authority event in `t`: the record for its review, the
