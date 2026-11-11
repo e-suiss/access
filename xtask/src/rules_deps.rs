@@ -32,6 +32,9 @@ pub(crate) enum Class {
     RestrictionAnalysis,
     Testkit,
     Bin,
+    /// `access-witness`, `access-replica`, `access-load`: open binaries on public crates only
+    /// (OP-158 m.3 (dd)).
+    PublicBin,
     Bindings,
     Sdk,
     Service,
@@ -58,6 +61,8 @@ pub(crate) fn classify(dir: &str) -> Option<Class> {
         ("crates", n) if n.starts_with("suiss-") && !n.contains('/') => Class::Suiss,
         ("crates", n) if n.starts_with("authority-") && !n.contains('/') => Class::Authority,
         ("crates", n) if n.starts_with("identity-") && !n.contains('/') => Class::Identity,
+        // OP-158 m.3 (dd)
+        ("bins", "access-witness" | "access-replica" | "access-load") => Class::PublicBin,
         ("bins", n) if !n.is_empty() && !n.contains('/') => Class::Bin,
         ("sdks", n) if n == "bindings" || n.starts_with("bindings/") => Class::Bindings,
         ("sdks", n) if !n.is_empty() => Class::Sdk,
@@ -75,8 +80,8 @@ pub(crate) fn classify(dir: &str) -> Option<Class> {
 fn allowed_targets(from: Class) -> Option<&'static [Class]> {
     use Class::{
         Authority, Bin, Bindings, Crypto, Edge, Http, Identity, InternalApi, Kernel, Parse, Proto,
-        RestrictionAnalysis, Sandbox, Sdk, Service, Store, Suiss, SuissLedger, Telemetry, Testkit,
-        Tooling,
+        PublicBin, RestrictionAnalysis, Sandbox, Sdk, Service, Store, Suiss, SuissLedger,
+        Telemetry, Testkit, Tooling,
     };
     let targets: &'static [Class] = match from {
         // OP-93
@@ -119,6 +124,8 @@ fn allowed_targets(from: Class) -> Option<&'static [Class]> {
         Edge => &[Kernel, Proto, Parse, Crypto, InternalApi, Telemetry],
         // B21, B22, E24
         Service => &[Kernel, Proto, Sdk, Bindings],
+        // OP-158 m.3 (dd)
+        PublicBin => &[Kernel, Sdk, Suiss, SuissLedger],
         Sdk => &[Kernel, Proto, Bindings, Sdk],
         // OP-93, OP-62; OP-151 m.3
         Http => &[
@@ -220,6 +227,41 @@ mod tests {
     fn run(packages: &[serde_json::Value]) -> Vec<Violation> {
         let md = parse(&metadata(packages, &[])).unwrap_or_default();
         check_metadata(Path::new("/ws"), &md)
+    }
+
+    // OP-158 m.3 (dd)
+    #[test]
+    fn witness_replica_and_load_use_public_crates_only() {
+        let ok = run(&[
+            member("crates/kernel", &[]),
+            member("crates/suiss-ledger", &[]),
+            member("sdks/rust/access", &[]),
+            member(
+                "bins/access-witness",
+                &[
+                    ("crates/kernel", None),
+                    ("crates/suiss-ledger", None),
+                    ("sdks/rust/access", None),
+                ],
+            ),
+        ]);
+        assert!(ok.is_empty(), "{ok:?}");
+        for bin in [
+            "bins/access-witness",
+            "bins/access-replica",
+            "bins/access-load",
+        ] {
+            let bad = run(&[
+                member("crates/store", &[]),
+                member(bin, &[("crates/store", None)]),
+            ]);
+            assert_eq!(bad.len(), 1, "{bin}");
+        }
+        let server = run(&[
+            member("crates/store", &[]),
+            member("bins/access-server", &[("crates/store", None)]),
+        ]);
+        assert!(server.is_empty());
     }
 
     #[test]

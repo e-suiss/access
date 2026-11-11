@@ -1,0 +1,15 @@
+[package]
+name = "access-load"
+description = "Open Access load harness (OP-32, OP-61, OP-72, OP-158 m.3 (z)): commit, check, search, login, refresh, introspection and revocation scenarios with their environment."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+# OP-158 m.3 (dd): public crates only (`dependency-direction`)
+[dependencies]
+
+[lints]
+workspace = true

@@ -1,0 +1,15 @@
+[package]
+name = "access-replica"
+description = "Open Access replica agent (§16.6.1, OP-158 m.3 (f), (h)): follows a domain's Replica Mirror, verifies and stores it and acks it signed."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+# OP-158 m.3 (dd): public crates only (`dependency-direction`)
+[dependencies]
+
+[lints]
+workspace = true

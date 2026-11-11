@@ -1,0 +1,15 @@
+[package]
+name = "access-witness"
+description = "Open Access witness (§16.6, OP-158 m.3 (d)): checks a domain's checkpoint consistency, cosigns it and gossips cosigns to find equivocation."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+# OP-158 m.3 (dd): public crates only (`dependency-direction`)
+[dependencies]
+
+[lints]
+workspace = true
