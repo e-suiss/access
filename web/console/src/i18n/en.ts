@@ -989,6 +989,12 @@ export const en = {
   breakglassReviewAs: "Review as {class}",
   breakglassReviewedAs: "Reviewed: {class}",
   breakglassDrill: "Drill",
+  // V9, OP-157 m.4 (b)
+  offboardingRoleEnded: "{role} role ended ({source}, {at})",
+  offboardingSurviveCount:
+    "{n} delegations given directly to this person survive their role ending. Decide for each.",
+  offboardingElsewhere:
+    "Change a role or hand over the domain in Roles or Domains first, then preview again.",
 } as const;
 
 export type Key = keyof typeof en;

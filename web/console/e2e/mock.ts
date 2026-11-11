@@ -174,6 +174,8 @@ const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   putDelegatedAdmin: ["idp.realm", "delegated_admin"],
   putApprovalInline: ["idp.realm", "approval_inline"],
   putApprovalBatch: ["idp.realm", "approval_batch"],
+  // V9, OP-157 m.4 (b): the envelope of an offboarding commit
+  commitOffboarding: ["idp.realm", "offboarding"],
 };
 
 export interface Write {
@@ -491,6 +493,14 @@ export class ConsoleMock {
           body: b,
           ...(ifMatch === undefined ? {} : { ifMatch }),
         });
+        // V9, OP-157 m.3 (v): the departure committed, so the Party reads as offboarded
+        if (/\/offboarding\/[^/]+\/commit$/.test(rest)) {
+          return reply(200, {
+            exercise_id: Buffer.alloc(32, this.writes.length).toString("base64url"),
+            position: String(this.writes.length),
+            resource: { status: "offboarded" },
+          });
+        }
         return reply(200, {
           exercise_id: Buffer.alloc(32, this.writes.length).toString("base64url"),
           position: { seq: this.writes.length },

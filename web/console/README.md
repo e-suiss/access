@@ -78,29 +78,29 @@ device key signed that commit, and never signs anything itself. Publishing a sch
 statement, not a change: it is sent with a `check` signed in this browser, and there is no accept
 control anywhere — each domain accepts only by its own protected change.
 
-| Section   | Screen                          | Reads and changes                                                         | Spec                       |
-| --------- | ------------------------------- | ------------------------------------------------------------------------- | -------------------------- |
-| Admin     | Roles & templates               | role editor that saves versions; preview and bulk move; admin delegation  | §8.17.9.2, X20, E11        |
-| Admin     | People & agents                 | accounts (suspend, reactivate); own holdings; running copies' impact      | X31, §8.17.7.4, OP-142     |
-| Admin     | Sources                         | uses of a source; `schema-publications` waiting here, no accept control   | §8.17.9.3, §8.17.10.2, X21 |
-| Admin     | Restrictions & requirements     | what restrictions and requirements are; no stop-all control               | §8.17.7.5                  |
-| Admin     | Protected actions & break-glass | protected actions, emergency access as a delegation                       | §8.17.9.4                  |
-| Admin     | Offboarding                     | keep or revoke for each delegation, no default; end running copies        | §8.17.9.6, E6              |
-| Admin     | Domain                          | constitution, provider, partner authority ceilings                        | §8.17.9.7, §5.13           |
-| Admin     | Changes                         | what changed, at your depth; information only                             | IA-2                       |
-| Admin     | History                         | every recorded change, grouped by the record that made it                 | §8.17.9.1                  |
-| Admin     | Organizations                   | roots, members by membership source, domains, owner handovers, drafts     | §8.5 S7, §12.3.8           |
-| Admin     | Sign-in settings                | settings, branding, RP ID, apps, upstreams, keys, signals, analytics      | E34, TN-17, TN-111, §8.13  |
-| Developer | Namespaces & schemas            | publish a version; "Pending acceptance in: …"; no accept control          | §8.17.10.2, E10–E12, X21   |
-| Developer | Integrations                    | apps, hooks, webhooks                                                     | §8.11                      |
-| Developer | Decision lab                    | advisory Check and Explain; sandbox domains listed as domains             | §8.17.10.4, E-2, D7        |
-| Developer | Logs                            | a recorded event at viewer depth; audit-only chain link warning           | §8.17.10.3, §9.9.2         |
-| Audit     | Records                         | a record at audit depth (`reason_admin`, StateBasis, `basis_ref`); search | OP-151 m.8 (d), (e), (g)   |
-| Audit     | Replay                          | a recorded decision evaluated again; match or mismatch                    | INV-27                     |
-| Audit     | Revocation impact               | `revocation-impact`: subtree, exposure, aftermath, where it took effect   | §5.4, §8.17.7.3, §9.12.3   |
-| Audit     | Unknown outcomes                | `compromise-impact`: uses in a window, "Result unknown"                   | RR-13, EI-22               |
-| Audit     | Containment                     | each step (end a running copy, revoke) its own signed change              | §8.6, §8.13                |
-| Audit     | Export                          | an `access.audit_export` Exercise, signed here                            | OP-151 m.8 (b)             |
+| Section   | Screen                          | Reads and changes                                                                                        | Spec                          |
+| --------- | ------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| Admin     | Roles & templates               | role editor that saves versions; preview and bulk move; admin delegation                                 | §8.17.9.2, X20, E11           |
+| Admin     | People & agents                 | accounts (suspend, reactivate); own holdings; running copies' impact                                     | X31, §8.17.7.4, OP-142        |
+| Admin     | Sources                         | uses of a source; `schema-publications` waiting here, no accept control                                  | §8.17.9.3, §8.17.10.2, X21    |
+| Admin     | Restrictions & requirements     | what restrictions and requirements are; no stop-all control                                              | §8.17.7.5                     |
+| Admin     | Protected actions & break-glass | protected actions, emergency access as a delegation                                                      | §8.17.9.4                     |
+| Admin     | Offboarding                     | preview every channel, one explicit choice each, no default; offboarded only after the departure commits | §8.17.9.6, E6, OP-157 m.3 (v) |
+| Admin     | Domain                          | constitution, provider, partner authority ceilings                                                       | §8.17.9.7, §5.13              |
+| Admin     | Changes                         | what changed, at your depth; information only                                                            | IA-2                          |
+| Admin     | History                         | every recorded change, grouped by the record that made it                                                | §8.17.9.1                     |
+| Admin     | Organizations                   | roots, members by membership source, domains, owner handovers, drafts                                    | §8.5 S7, §12.3.8              |
+| Admin     | Sign-in settings                | settings, branding, RP ID, apps, upstreams, keys, signals, analytics                                     | E34, TN-17, TN-111, §8.13     |
+| Developer | Namespaces & schemas            | publish a version; "Pending acceptance in: …"; no accept control                                         | §8.17.10.2, E10–E12, X21      |
+| Developer | Integrations                    | apps, hooks, webhooks                                                                                    | §8.11                         |
+| Developer | Decision lab                    | advisory Check and Explain; sandbox domains listed as domains                                            | §8.17.10.4, E-2, D7           |
+| Developer | Logs                            | a recorded event at viewer depth; audit-only chain link warning                                          | §8.17.10.3, §9.9.2            |
+| Audit     | Records                         | a record at audit depth (`reason_admin`, StateBasis, `basis_ref`); search                                | OP-151 m.8 (d), (e), (g)      |
+| Audit     | Replay                          | a recorded decision evaluated again; match or mismatch                                                   | INV-27                        |
+| Audit     | Revocation impact               | `revocation-impact`: subtree, exposure, aftermath, where it took effect                                  | §5.4, §8.17.7.3, §9.12.3      |
+| Audit     | Unknown outcomes                | `compromise-impact`: uses in a window, "Result unknown"                                                  | RR-13, EI-22                  |
+| Audit     | Containment                     | each step (end a running copy, revoke) its own signed change                                             | §8.6, §8.13                   |
+| Audit     | Export                          | an `access.audit_export` Exercise, signed here                                                           | OP-151 m.8 (b)                |
 
 Explanations show a reason by its class and what is needed (§8.17.8); policy content, thresholds
 and statement bodies are never rendered, deeper identities stay pseudonymous, and an unknown

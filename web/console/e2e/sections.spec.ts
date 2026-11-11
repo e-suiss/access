@@ -146,32 +146,79 @@ test("a delegated admin sees the roles screen through its own holding", async ({
   expect(bff.queries.some((q) => q.kind === "holdings" && q.ais)).toBe(true);
 });
 
-// §8.17.9.6, E6, EI-8: every direct delegation needs an explicit choice; no default
-test("offboarding asks for a choice per delegation and labels only a recorded departure", async ({
+// §8.17.9.6, E6, EI-8, OP-157 m.3 (v), Ek B 5572, 5649: every channel needs its own choice
+test("offboarding asks for a choice on every channel and labels only a committed departure", async ({
   page,
   bff,
 }) => {
+  bff.admin.set("realms/acme/offboarding/cGFydHk/preview", {
+    party: "cGFydHk",
+    status: "active",
+    survive: 2,
+    channels: {
+      grants: [
+        { grant: "Z3JhbnQx", choices: ["keep", "revoke"] },
+        { grant: "Z3JhbnQy", choices: ["keep", "revoke"] },
+      ],
+      instances: [{ instance: "aW5zdDE", choices: ["terminate"] }],
+      holdings: [
+        {
+          grant: "aDE",
+          selects: [{ class: "hr_department", value: "Finance" }],
+          choices: ["retain", "exclude", "restrict"],
+        },
+      ],
+      self_anchor: { anchor: "YW5jaG9y", given: [], choices: ["retire", "transfer"] },
+      reentry: { choices: ["allowed", "blocked"] },
+    },
+    ended: [
+      {
+        grant: "ZW5kZWQ",
+        selects: [{ class: "hr_department", value: "Sales" }],
+        at: "2026-10-06T09:00:00Z",
+        source: "workday",
+      },
+    ],
+  });
   await open(page, bff, "/console/admin/offboarding");
   await page.getByLabel("Party ID").fill("cGFydHk");
-  await page.getByLabel(/Delegations given directly/).fill("Z3JhbnQx\nZ3JhbnQy");
+  await page.getByTestId("preview").click();
+  await expect(page.getByTestId("role-ended")).toContainText("Sales role ended (workday");
+  await expect(page.getByTestId("survive")).toContainText("2 delegations");
   const depart = page.getByTestId("depart");
   await expect(depart).toBeDisabled();
   await expect(page.getByTestId("offboarded")).toHaveCount(0);
   await page.getByRole("group", { name: "Z3JhbnQx" }).getByLabel("Keep").check();
-  await expect(depart).toBeDisabled();
   await page.getByRole("group", { name: "Z3JhbnQy" }).getByLabel("Revoke").check();
+  await page.getByRole("group", { name: "aW5zdDE" }).getByLabel("End").check();
+  await page
+    .getByRole("group", { name: "aDE (Finance)" })
+    .getByLabel("Leave this person out")
+    .check();
+  await page.getByRole("group", { name: "YW5jaG9y" }).getByLabel("Retire").check();
+  await expect(depart).toBeDisabled();
+  await page.getByRole("group", { name: "Coming back" }).getByLabel("Blocked").check();
+  await expect(depart).toBeDisabled();
+  await page.getByRole("group", { name: "aDE (Finance)" }).getByLabel("Keep").check();
+  await expect(depart).toBeEnabled();
   await depart.click();
   await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
   await expect(page.getByTestId("offboarded")).toHaveText("Offboarded");
-  expect(bff.metaCommits[0]?.payload).toEqual({
-    party_depart: {
-      party: "cGFydHk",
-      disposition: [
-        { grant: "Z3JhbnQx", disposition: "keep" },
-        { grant: "Z3JhbnQy", disposition: "revoke" },
-      ],
-    },
+  const commit = bff.writes.find((w) => w.path === "realms/acme/offboarding/cGFydHk/commit");
+  expect(commit?.body["choices"]).toEqual({
+    grants: { Z3JhbnQx: "keep", Z3JhbnQy: "revoke" },
+    instances: { aW5zdDE: "terminate" },
+    holdings: { aDE: "retain" },
+    self_anchor: "retire",
+    reentry: "blocked",
   });
+  const ops = commit?.body["operations"] as { operation: string; key: string }[];
+  expect(ops.map((o) => [o.operation, o.key])).toEqual([
+    ["revokeGrant", "Z3JhbnQy"],
+    ["terminateInstance", "aW5zdDE"],
+    ["departParty", "cGFydHk"],
+  ]);
+  expect(bff.drafts.some((d) => JSON.stringify(d).includes("party_depart"))).toBe(true);
 });
 
 // IA-2: Changes is information only

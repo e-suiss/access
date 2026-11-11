@@ -998,4 +998,10 @@ export const tr: Record<Key, string> = {
   breakglassReviewAs: "{class} olarak incele",
   breakglassReviewedAs: "İncelendi: {class}",
   breakglassDrill: "Tatbikat",
+  // V9, OP-157 m.4 (b)
+  offboardingRoleEnded: "{role} rolü bitti ({source}, {at})",
+  offboardingSurviveCount:
+    "Bu kişiye doğrudan verilen {n} yetkilendirme rolü bitse de kalır. Her biri için karar verin.",
+  offboardingElsewhere:
+    "Rolü değiştirmek ya da domain'i başka bir Tarafa bırakmak için önce Roller ya da Domain'ler ekranını kullanın, sonra yeniden önizleyin.",
 };
