@@ -29,8 +29,10 @@ use tower::ServiceExt as _;
 
 use super::*;
 
+mod breakglass;
 mod critical_interrupt;
 mod discovery;
+mod governance;
 mod one;
 
 /// The PEP name the twin's client certificate authenticates as (L1-ADP-2).
@@ -1303,7 +1305,9 @@ async fn a_domain_predicate_is_consumed_and_never_recomputed() {
     s.only_public();
 }
 
+mod review;
 mod seams;
 mod security;
 mod signals;
+mod support;
 mod work;
