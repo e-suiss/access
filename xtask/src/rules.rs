@@ -15,6 +15,8 @@ mod conformance_profiles;
 mod crypto;
 #[path = "rules_custody.rs"]
 mod custody;
+#[path = "rules_degraded_paths.rs"]
+mod degraded_paths;
 #[path = "rules_deps.rs"]
 pub(crate) mod deps;
 #[path = "rules_edge.rs"]
@@ -31,6 +33,8 @@ mod iys;
 mod kill_switch;
 #[path = "rules_kyc.rs"]
 mod kyc;
+#[path = "rules_layer_order.rs"]
+mod layer_order;
 #[path = "rules_lex.rs"]
 pub(crate) mod lex;
 #[path = "rules_limits.rs"]
@@ -51,6 +55,10 @@ mod profile;
 mod progress;
 #[path = "rules_proxy.rs"]
 mod proxy;
+#[path = "rules_recovery_custody.rs"]
+mod recovery_custody;
+#[path = "rules_replica_reads.rs"]
+mod replica_reads;
 #[path = "rules_reputation.rs"]
 mod reputation;
 #[path = "rules_restriction.rs"]
@@ -65,12 +73,20 @@ mod standing;
 mod support;
 #[path = "rules_switches.rs"]
 pub(crate) mod switches;
+#[path = "rules_sync_commit.rs"]
+mod sync_commit;
 #[path = "rules_telemetry.rs"]
 mod telemetry;
+#[path = "rules_tofu_infra_only.rs"]
+mod tofu_infra_only;
 #[path = "rules_ui_terms.rs"]
 pub(crate) mod ui_terms;
+#[path = "rules_validity_paths.rs"]
+mod validity_paths;
 #[path = "rules_vectors.rs"]
 mod vectors;
+#[path = "rules_witness_independence.rs"]
+mod witness_independence;
 
 use crate::Check;
 
@@ -290,6 +306,46 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "conformance-profiles",
             run: conformance_profiles::check,
+        },
+        // SEC20, U16, OP-158 m.3 (m)
+        Check {
+            name: "recovery-custody",
+            run: recovery_custody::check,
+        },
+        // OPI-2, OP-54-RL2, OP-158 m.3 (n)
+        Check {
+            name: "replica-reads",
+            run: replica_reads::check,
+        },
+        // TI-9, SEC27, SI-22, OP-158 m.3 (s)
+        Check {
+            name: "degraded-paths",
+            run: degraded_paths::check,
+        },
+        // EP-1…EP-10, OP-158 m.3 (t)
+        Check {
+            name: "validity-paths",
+            run: validity_paths::check,
+        },
+        // GHSA-84jc-3hj2-hwc7, OP-158 m.3 (v)
+        Check {
+            name: "layer-order",
+            run: layer_order::check,
+        },
+        // OP-158 m.3 (p)
+        Check {
+            name: "tofu-infra-only",
+            run: tofu_infra_only::check,
+        },
+        // OP-54-RL6, OP-158 m.3 (n)
+        Check {
+            name: "sync-commit",
+            run: sync_commit::check,
+        },
+        // SI-12, B13, OP-158 m.3 (d)
+        Check {
+            name: "witness-independence",
+            run: witness_independence::check,
         },
     ]);
     all
