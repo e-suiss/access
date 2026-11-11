@@ -21,6 +21,7 @@ tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "tim
 tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
+access-kernel = { workspace = true }
 suiss-crypto = { workspace = true, features = ["pkcs11", "testing"] }
 
 [lints]

@@ -1,6 +1,7 @@
 //! Access authority signer (CMP-22a, CR-21). Thin by design: it reads configuration, opens the
 //! HSM, locks itself down and serves the signer crate over a Unix socket (OP-62).
 
+mod ceremony;
 mod config;
 
 use std::ffi::OsString;
@@ -9,6 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use access_authority_signer::adapters::{DirVault, HsmBindings, SealedFactory, serve};
+use access_authority_signer::ceremony::{Gate, Quorate};
 use access_authority_signer::service::Service;
 use access_crypto::secret_file::SecretFile;
 use config::Config;
@@ -41,7 +43,83 @@ fn lockdown(config: &Config, hsm: &config::Hsm) -> Lockdown {
     for path in &hsm.paths {
         lockdown = lockdown.allow_read_write(path);
     }
+    // CR-29: the transcript is re-read each round; the ceremony commands replace it
+    if let Some(dir) = config.ceremony.as_ref().and_then(|c| c.transcript.parent()) {
+        lockdown = lockdown.allow_read(dir);
+    }
     lockdown
+}
+
+/// CR-29, OP-157 m.3 (x): the transcript as it is now; a head not seen before is logged as an
+/// adopted activation, and a chain that no longer verifies closes the gate.
+fn refresh(transcript: &std::path::Path, pin: &[u8; 32], gate: &Gate, head: &mut [u8; 32]) {
+    match ceremony::pinned(transcript, pin) {
+        Ok(t) => {
+            let state = t.state();
+            let adopted = gate.adopt(state);
+            if state.head != *head {
+                *head = state.head;
+                match adopted {
+                    Ok(_) => ceremony::adopted(state),
+                    Err(error) => {
+                        tracing::error!(code = error.code(), "binding keys not activated (CR-29)");
+                    }
+                }
+            }
+        }
+        Err(error) => {
+            gate.close();
+            tracing::error!(%error, "ceremony transcript does not verify; binding keys closed (CR-29)");
+        }
+    }
+}
+
+/// The pinned transcript at start, with the gate it opens: none when the chain is broken or the
+/// binding keys are not activated for the signer's rotation policy (CR-29).
+fn activated(c: &config::Ceremony) -> Option<(Gate, [u8; 32], [u8; 32])> {
+    let pin = match ceremony::pin(&c.genesis_file) {
+        Ok(pin) => pin,
+        Err(error) => {
+            tracing::error!(%error, "no ceremony genesis pin; refusing to start (CR-29)");
+            return None;
+        }
+    };
+    let transcript = match ceremony::pinned(&c.transcript, &pin) {
+        Ok(t) => t,
+        Err(error) => {
+            tracing::error!(%error, "ceremony transcript does not verify; refusing to start (CR-29)");
+            return None;
+        }
+    };
+    let gate = Gate::new(&Policy::AUTHORITY, now_ms);
+    if let Err(error) = gate.adopt(transcript.state()) {
+        tracing::error!(
+            code = error.code(),
+            "binding keys not activated; run the activation ceremony (CR-29)"
+        );
+        return None;
+    }
+    ceremony::adopted(transcript.state());
+    Some((gate, pin, transcript.state().head))
+}
+
+/// `access-signer ceremony ...`: the operator's commands, with the audit events on stderr.
+fn ceremony_command(args: &[OsString]) -> ExitCode {
+    let telemetry = access_telemetry::Config {
+        service: "access-signer",
+        version: env!("CARGO_PKG_VERSION"),
+        ..access_telemetry::Config::local("info")
+    };
+    if access_telemetry::install(&telemetry, std::io::stderr).is_err() {
+        return ExitCode::FAILURE;
+    }
+    match ceremony::run(args) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            tracing::error!(%error, "ceremony command refused");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 /// The configuration with telemetry installed, once the known-answer tests passed.
@@ -187,15 +265,48 @@ fn unsafe_host() -> bool {
         .is_err()
 }
 
+type Signer = Service<SealedFactory<suiss_crypto::pkcs11::HsmKek>, Quorate<HsmBindings>, DirVault>;
+
+/// CR-23, CR-28, CR-29: every `every`, re-reads the transcript and runs the key schedule on the
+/// blocking pool.
+async fn schedule(
+    service: Arc<Mutex<Signer>>,
+    every: Duration,
+    (transcript, pin, gate): (std::path::PathBuf, [u8; 32], Gate),
+    mut head: [u8; 32],
+) {
+    let mut interval = tokio::time::interval(every);
+    loop {
+        interval.tick().await;
+        let service = Arc::clone(&service);
+        let (transcript, gate) = (transcript.clone(), gate.clone());
+        let before = head;
+        let (report, seen) = tokio::task::spawn_blocking(move || {
+            let mut head = before;
+            refresh(&transcript, &pin, &gate, &mut head);
+            let report = service
+                .lock()
+                .map(|mut s| s.round(now_ms(), draw()))
+                .unwrap_or_default();
+            (report, head)
+        })
+        .await
+        .unwrap_or_else(|_| (access_authority_signer::service::Report::default(), before));
+        head = seen;
+        audit(&report);
+    }
+}
+
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
     let provision = match args.as_slice() {
         [] => false,
         [a] if a == "init" => true,
+        [a, rest @ ..] if a == "ceremony" => return ceremony_command(rest),
         _ => {
             #[allow(clippy::print_stderr)]
             {
-                eprintln!("usage: access-signer [init]");
+                eprintln!("usage: access-signer [init | ceremony ...]");
             }
             return ExitCode::FAILURE;
         }
@@ -209,6 +320,12 @@ fn main() -> ExitCode {
     if provision {
         return init(&config, hsm);
     }
+    let Some(ceremony) = &config.ceremony else {
+        return ExitCode::FAILURE;
+    };
+    let Some((gate, pin, head)) = activated(ceremony) else {
+        return ExitCode::FAILURE;
+    };
     let opened = open_hsm(hsm);
     let (store, kek) = match opened {
         Ok(opened) => opened,
@@ -248,7 +365,7 @@ fn main() -> ExitCode {
     }
     let service = match Service::start(
         SealedFactory::new(kek),
-        HsmBindings::new(store),
+        Quorate::new(HsmBindings::new(store), gate.clone()),
         DirVault::new(&config.vault),
         Policy::AUTHORITY,
         now_ms(),
@@ -259,26 +376,15 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let ticking = Arc::clone(&service);
     let every = Duration::from_secs(config.tick_seconds);
+    let rounds = schedule(
+        Arc::clone(&service),
+        every,
+        (ceremony.transcript.clone(), pin, gate),
+        head,
+    );
     let result = runtime.block_on(async move {
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(every);
-            loop {
-                interval.tick().await;
-                let service = Arc::clone(&ticking);
-                // CR-28
-                let report = tokio::task::spawn_blocking(move || {
-                    service
-                        .lock()
-                        .map(|mut s| s.round(now_ms(), draw()))
-                        .unwrap_or_default()
-                })
-                .await
-                .unwrap_or_default();
-                audit(&report);
-            }
-        });
+        tokio::spawn(rounds);
         let listener = tokio::net::UnixListener::from_std(listener)?;
         serve(listener, service, config.callers.clone(), now_ms).await
     });
@@ -302,12 +408,21 @@ mod tests {
     /// A fresh token in this test process's own `SoftHSM` store (`SOFTHSM2_CONF`, OP-69). Its
     /// handle is never dropped: unloading `SoftHSM` after it used OpenSSL leaves OpenSSL's exit
     /// handler behind in some hosts' loaders, and the test process then crashes at exit.
-    fn token() -> &'static KeyStore {
+    pub(crate) fn token() -> &'static KeyStore {
+        token_named("kek-init")
+    }
+
+    /// [`token`] under its own label, for another test of the same process.
+    pub(crate) fn token_named(name: &str) -> &'static KeyStore {
+        Box::leak(Box::new(fresh_token(name)))
+    }
+
+    fn module() -> std::path::PathBuf {
         assert!(
             std::env::var_os("SOFTHSM2_CONF").is_some(),
             "run the PKCS#11 tests through `just test`, which sets SOFTHSM2_CONF (OP-69)"
         );
-        let module = [
+        [
             std::env::var("SUISS_PKCS11_MODULE").unwrap_or_default(),
             String::from("/opt/homebrew/lib/softhsm/libsofthsm2.so"),
             String::from("/usr/lib/softhsm/libsofthsm2.so"),
@@ -317,8 +432,12 @@ mod tests {
         .iter()
         .map(std::path::PathBuf::from)
         .find(|p| p.is_file())
-        .unwrap();
-        let label = format!("kek-init-{}", std::process::id());
+        .unwrap()
+    }
+
+    /// A fresh token's store, owned; whoever holds it never drops it (see [`token`]).
+    pub(crate) fn fresh_token(name: &str) -> KeyStore {
+        let label = format!("{name}-{}", std::process::id());
         let out = suiss_crypto::pkcs11::token_tests::init_softhsm_token(
             None,
             &label,
@@ -327,14 +446,17 @@ mod tests {
         )
         .unwrap();
         assert!(out.status.success(), "{out:?}");
-        Box::leak(Box::new(
-            KeyStore::open(
-                &module,
-                &label,
-                &Secret::new(String::from("1234-test-only")),
-            )
-            .unwrap(),
-        ))
+        reopen(name)
+    }
+
+    /// Another session on the token [`fresh_token`] made for `name`.
+    pub(crate) fn reopen(name: &str) -> KeyStore {
+        KeyStore::open(
+            &module(),
+            &format!("{name}-{}", std::process::id()),
+            &Secret::new(String::from("1234-test-only")),
+        )
+        .unwrap()
     }
 
     // CR-21, OP-69

@@ -22,6 +22,18 @@ pub(crate) struct Config {
     pub(crate) tick_seconds: u64,
     /// The PKCS#11 token holding the binding keys and the KEK (CR-21, CR-29).
     pub(crate) hsm: Option<Hsm>,
+    /// The binding key ceremony transcript and its pin (CR-29, OP-157 m.3 (x)).
+    pub(crate) ceremony: Option<Ceremony>,
+}
+
+/// The binding key ceremony.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Ceremony {
+    /// The transcript the ceremony commands append to; the signer only reads it.
+    pub(crate) transcript: PathBuf,
+    /// A read-only file holding the hex digest of the transcript's first entry.
+    pub(crate) genesis_file: PathBuf,
 }
 
 /// The PKCS#11 token.
@@ -50,6 +62,7 @@ impl Default for Config {
             callers: Vec::new(),
             tick_seconds: 30,
             hsm: None,
+            ceremony: None,
         }
     }
 }
@@ -69,6 +82,9 @@ pub(crate) enum ConfigError {
     /// No PKCS#11 token.
     #[error("no hsm section")]
     NoHsm,
+    /// No binding key ceremony (CR-29).
+    #[error("no ceremony section")]
+    NoCeremony,
     /// The schedule interval is outside 1 to 300 seconds.
     #[error("tick_seconds out of range")]
     Tick,
@@ -96,6 +112,9 @@ impl Config {
         }
         if config.hsm.is_none() {
             return Err(ConfigError::NoHsm);
+        }
+        if config.ceremony.is_none() {
+            return Err(ConfigError::NoCeremony);
         }
         if !(1..=300).contains(&config.tick_seconds) {
             return Err(ConfigError::Tick);

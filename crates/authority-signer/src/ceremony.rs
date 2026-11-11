@@ -701,6 +701,18 @@ impl Transcript {
         })
     }
 
+    /// The hash of the first entry of `bytes`, unverified: what a pin would name.
+    ///
+    /// # Errors
+    /// [`CeremonyError::Chain`] when there is no first entry.
+    pub fn genesis_of(bytes: &[u8]) -> Result<[u8; 32], CeremonyError> {
+        let (_, used) = dcbor::decode_prefix(bytes, Limits::CEILING, &TagAllowlist::none())
+            .map_err(|_| CeremonyError::Chain)?;
+        Ok(suiss_crypto::digest::sha256(
+            bytes.get(..used).ok_or(CeremonyError::Chain)?,
+        ))
+    }
+
     /// Seals the quorate `permit` as the next entry at `now`.
     ///
     /// # Errors
