@@ -2553,6 +2553,7 @@ fn meta_vectors_match() {
         &Payload::PolicySet {
             policy: Some(amended),
             content: source("\nforbid(principal, action, resource) when { context.tier > 1 };"),
+            defaults: None,
         },
     );
     r.step(
@@ -2563,6 +2564,7 @@ fn meta_vectors_match() {
         &Payload::PolicySet {
             policy: Some(amended),
             content: source(""),
+            defaults: None,
         },
     );
     let json = format!(

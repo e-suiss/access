@@ -191,6 +191,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let Some(Payload::PolicySet {
             policy: Some(p),
             content,
+            ..
         }) = payload
         else {
             return Ok(None);

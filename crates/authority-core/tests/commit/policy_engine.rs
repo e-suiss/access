@@ -165,6 +165,7 @@ fn guard(d: Digest, nonce: u8, p: &Pattern) -> Request {
         Payload::PolicySet {
             policy: None,
             content: patterns::content(p).unwrap(),
+            defaults: None,
         },
     )
 }
