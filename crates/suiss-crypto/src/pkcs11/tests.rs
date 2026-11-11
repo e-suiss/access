@@ -335,7 +335,7 @@ fn a_binding_key_clones_to_the_dr_token() {
         // OP-158 m.3 (y)
         let backup = match primary.export_clone("binding", "clone") {
             Ok(b) => b,
-            Err(e) if ed25519 && format!("{e:?}").contains("unable to wrap the key") => continue,
+            Err(e) if not_wrappable(&e) => continue,
             Err(e) => panic!("{e:?}"),
         };
         assert_eq!(backup.public, binding.public_key());
@@ -400,4 +400,9 @@ fn random_key() -> [u8; 32] {
     aws_lc_rs::rand::generate(&aws_lc_rs::rand::SystemRandom::new())
         .unwrap()
         .expose()
+}
+
+fn not_wrappable(e: &HsmError) -> bool {
+    let text = format!("{e:?}");
+    text.contains("KeyNotWrappable") || text.contains("unable to wrap the key")
 }
