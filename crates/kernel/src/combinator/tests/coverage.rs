@@ -1056,7 +1056,7 @@ fn coverage_rules(id: &str) -> &'static [&'static str] {
         | "require-independent-own-contribution"
         | "allow-independent-other-contribution" => &["L0-EVAL-26"],
         "require-independent-own-party-contribution"
-        | "allow-independent-other-party-contribution" => &["L0-EVAL-26", "SEC10"],
+        | "allow-independent-other-party-contribution" => &["L0-EVAL-26"],
         "allow-chooses-earliest-position" | "allow-chooses-smaller-id-on-tie" => &["L0-EVAL-27"],
         "allow-reusable-proof-serves-two-terms" => &["L0-EVAL-28"],
         "allow-fuel-exact"

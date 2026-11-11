@@ -135,6 +135,10 @@ where
             .lanes
             .turn(sub.domain, crate::app::lane_of(sub))
             .await?;
+        Box::pin(self.ingest_led(sub)).await
+    }
+
+    async fn ingest_led(&self, sub: &ClaimSubmission) -> Result<Ingested, CoreError> {
         let mut guard = self.leading(sub.domain).await?;
         let Some(led) = guard.as_mut() else {
             return Err(CoreError::Unavailable("leader"));

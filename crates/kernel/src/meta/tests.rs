@@ -2547,7 +2547,7 @@ fn meta_vectors_match() {
     let amended = object_id(&set_policy, kind::POLICY, 0);
     r.step(
         "policy-amend-adds-forbid-narrows",
-        &["L0-META-28", "SI-18"],
+        &["L0-META-27", "L0-META-28"],
         (ROOT, ROOT),
         meta,
         &Payload::PolicySet {
@@ -2557,7 +2557,7 @@ fn meta_vectors_match() {
     );
     r.step(
         "policy-amend-drops-forbid-widens",
-        &["L0-META-28", "SI-18"],
+        &["L0-META-27", "L0-META-28"],
         (ROOT, ROOT),
         meta,
         &Payload::PolicySet {

@@ -1433,7 +1433,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if inc.request.mode != Mode::Check || inc.ais.is_some() || inc.request.payload.is_some() {
             return Err(CoreError::Protocol("eligibility"));
         }
-        self.run(inc, now, Some(subject)).await
+        Box::pin(self.run(inc, now, Some(subject))).await
     }
 
     /// Runs one request through the commit path (§17.1.1).
@@ -1441,7 +1441,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     /// # Errors
     /// [`CoreError`] for a request that gets no decision.
     pub async fn exercise(&mut self, inc: &Incoming, now: u64) -> Result<Response, CoreError> {
-        self.run(inc, now, None).await
+        Box::pin(self.run(inc, now, None)).await
     }
 
     /// The live Instance whose key signed the AIS of `inc`; `None` for an anonymous request or
@@ -1553,7 +1553,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             );
             frame.derived = &window.values;
             frame.widened = raised.is_some();
-            let (mut evaluation, snapshot) = self.passes(req, &frame).await?;
+            let (mut evaluation, snapshot) = Box::pin(self.passes(req, &frame)).await?;
             let (tier, render, render_bytes) = rendered(req, &evaluation)?;
             self.tiered(req, &mut evaluation, open, now).await?;
             self.recovery_rules(req, actor, &mut evaluation, tier, now)
