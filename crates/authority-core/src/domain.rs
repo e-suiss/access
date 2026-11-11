@@ -1921,6 +1921,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         intent_digest,
         now,
         actor_instance: actor.map(|a| a.instance),
+        actor_party: actor.map(|a| a.party),
         actor_is_agent,
         mandate: mandate.as_ref().map(|(_, m)| m),
         capacity: req.capacity,

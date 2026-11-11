@@ -678,6 +678,7 @@ def check_evaluation_input(value):
         "catalog": check_catalog,
     }, {
         "actor_instance": check_id,
+        "actor_party": check_id,
         "actor_is_agent": check_true,
         "mandate": check_mandate,
         "restrictions": check_list(check_policy_result, nonempty=True, is_set=True),

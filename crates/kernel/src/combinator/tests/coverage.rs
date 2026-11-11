@@ -532,8 +532,15 @@ fn count_scenarios(reusable: RequirementTerm) -> Vec<(&'static str, World)> {
     ));
     out.push((
         "allow-independent-other-contribution",
-        proved(own, vec![contribution(2)]),
+        proved(own.clone(), vec![contribution(2)]),
     ));
+    // SEC10, OP-157 m.3 (b)
+    let mut w = proved(own.clone(), vec![contribution(2)]);
+    w.actor_party = Some(party(2));
+    out.push(("require-independent-own-party-contribution", w));
+    let mut w = proved(own, vec![contribution(2)]);
+    w.actor_party = Some(party(9));
+    out.push(("allow-independent-other-party-contribution", w));
     out.push((
         "allow-chooses-earliest-position",
         proved(approval(false), vec![proof(3, 2, 1), proof(4, 1, 1)]),
@@ -1048,6 +1055,8 @@ fn coverage_rules(id: &str) -> &'static [&'static str] {
         "allow-count-two-distinct-parties"
         | "require-independent-own-contribution"
         | "allow-independent-other-contribution" => &["L0-EVAL-26"],
+        "require-independent-own-party-contribution"
+        | "allow-independent-other-party-contribution" => &["L0-EVAL-26", "SEC10"],
         "allow-chooses-earliest-position" | "allow-chooses-smaller-id-on-tie" => &["L0-EVAL-27"],
         "allow-reusable-proof-serves-two-terms" => &["L0-EVAL-28"],
         "allow-fuel-exact"

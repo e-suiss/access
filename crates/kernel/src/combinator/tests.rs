@@ -147,6 +147,7 @@ struct World {
     mode: Mode,
     capacity: Capacity,
     agent: bool,
+    actor_party: Option<Id>,
     fuel: u64,
 }
 
@@ -162,6 +163,7 @@ impl World {
             mode: Mode::Commit,
             capacity: Capacity::Own,
             agent: false,
+            actor_party: None,
             fuel: 10_000,
         }
     }
@@ -173,6 +175,7 @@ impl World {
             intent_digest: d(1),
             now: 50_000,
             actor_instance: Some(Id([1; 16])),
+            actor_party: self.actor_party,
             actor_is_agent: self.agent,
             mandate: self.mandate.as_ref(),
             capacity: self.capacity,
@@ -516,6 +519,7 @@ fn fuel_exhaustion_is_a_rejection() {
         intent_digest: d(1),
         now: 0,
         actor_instance: None,
+        actor_party: None,
         actor_is_agent: false,
         mandate: None,
         capacity: Capacity::Own,
@@ -536,6 +540,7 @@ impl World {
             intent_digest: d(1),
             now: 50_000,
             actor_instance: Some(Id([1; 16])),
+            actor_party: self.actor_party,
             actor_is_agent: self.agent,
             mandate: self.mandate.clone(),
             capacity: self.capacity,

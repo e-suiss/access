@@ -48,6 +48,7 @@ fn ctx() -> Context<'static> {
     Context {
         now: 10_000,
         actor_instance: Some(Id([9; 16])),
+        actor_party: None,
         intent_digest: &DIGEST,
         resources: &[],
     }

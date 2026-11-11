@@ -38,6 +38,8 @@ pub struct OwnedInput {
     pub now: u64,
     /// Actor instance.
     pub actor_instance: Option<Id>,
+    /// The actor Instance's Party.
+    pub actor_party: Option<Id>,
     /// Whether the actor is an agent.
     pub actor_is_agent: bool,
     /// Mandate.
@@ -64,6 +66,7 @@ impl OwnedInput {
             intent_digest: self.intent_digest,
             now: self.now,
             actor_instance: self.actor_instance,
+            actor_party: self.actor_party,
             actor_is_agent: self.actor_is_agent,
             mandate: self.mandate.as_ref(),
             capacity: self.capacity,
@@ -539,6 +542,10 @@ impl Canonical for OwnedInput {
                 self.actor_instance.as_ref().map(Canonical::to_value),
             ),
             (
+                "actor_party",
+                self.actor_party.as_ref().map(Canonical::to_value),
+            ),
+            (
                 "actor_is_agent",
                 self.actor_is_agent.then_some(Value::Bool(true)),
             ),
@@ -575,6 +582,7 @@ impl Canonical for OwnedInput {
             intent_digest: Canonical::from_value(f.req("intent_digest")?)?,
             now: uint(f.req("now")?)?,
             actor_instance: f.opt("actor_instance").map(Id::from_value).transpose()?,
+            actor_party: f.opt("actor_party").map(Id::from_value).transpose()?,
             actor_is_agent: match f.opt("actor_is_agent") {
                 None => false,
                 Some(Value::Bool(true)) => true,

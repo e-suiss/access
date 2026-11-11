@@ -129,6 +129,9 @@ pub struct Context<'a> {
     pub now: TrustedTime,
     /// Actor instance, if authenticated.
     pub actor_instance: Option<Id>,
+    /// The actor Instance's Party, if known; its contributions never meet an independent term
+    /// (SEC10, OP-157 m.3 (b)).
+    pub actor_party: Option<Id>,
     /// Digest of the intent.
     pub intent_digest: &'a Digest,
     /// Intent resources.
@@ -177,10 +180,10 @@ pub fn matches(term: &RequirementTerm, proof: &Proof, ctx: &Context<'_>) -> bool
             .is_some_and(|v| meets_floor(dim, *floor, *v))
     });
     let usable = term.consumption == Consumption::Reusable || !proof.consumed;
-    // L0-EVAL-26, OP-141 m.29
+    // L0-EVAL-26, OP-141 m.29, SEC10, OP-157 m.3 (b)
     let own = term.independence != Independence::None
         && proof.kind == ProofKind::Contribution
-        && ctx.actor_instance == Some(proof.instance);
+        && (ctx.actor_instance == Some(proof.instance) || ctx.actor_party == Some(proof.party));
     // OP-157 m.3 (b), §13.7.3
     let surface = term.independence != Independence::DistinctSurface;
     !own && surface

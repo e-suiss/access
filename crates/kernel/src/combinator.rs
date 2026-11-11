@@ -179,6 +179,8 @@ pub struct EvaluationInput<'a> {
     pub now: TrustedTime,
     /// Actor instance, if authenticated.
     pub actor_instance: Option<Id>,
+    /// The actor Instance's Party, if known (SEC10, OP-157 m.3 (b)).
+    pub actor_party: Option<Id>,
     /// Whether the actor is a software agent; the actor Party's `actor_kind` decides it
     /// ([`crate::meta::actor_is_agent`], OP-149 m.8).
     pub actor_is_agent: bool,
@@ -535,6 +537,7 @@ fn evaluate_basis(
     let ctx = requirement::Context {
         now: input.now,
         actor_instance: input.actor_instance,
+        actor_party: input.actor_party,
         intent_digest: &input.intent_digest,
         resources: &input.intent.resources,
     };

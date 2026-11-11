@@ -145,6 +145,7 @@ fn the_term_is_met_by_a_fresh_bound_claim_of_the_class() {
     let ctx = Context {
         now,
         actor_instance: Some(Id([3; 16])),
+        actor_party: None,
         intent_digest: &statement,
         resources: &[],
     };
