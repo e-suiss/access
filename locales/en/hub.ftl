@@ -196,3 +196,6 @@ hygiene-expiring = { $count } delegations end within 7 days
 hygiene-broad = { $count } broad delegations: any resource, or they can be passed on
 hygiene-suggestion = A suggestion only. Nothing changes until you act.
 review-open = Access review: { $count } delegations of your team to look at →
+# OP-157 m.4 (b)
+activity-support_viewed = Viewed your account
+activity-support_acted = Acted on your account

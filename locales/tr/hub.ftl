@@ -196,3 +196,6 @@ hygiene-expiring = { $count } yetki 7 gün içinde bitiyor
 hygiene-broad = { $count } geniş yetki: her kaynak ya da başkasına devredilebilir
 hygiene-suggestion = Yalnız bir öneri. Sen bir şey yapana kadar hiçbir şey değişmez.
 review-open = Erişim gözden geçirmesi: ekibinin bakılacak { $count } yetkisi →
+# OP-157 m.4 (b)
+activity-support_viewed = Hesabını görüntüledi
+activity-support_acted = Hesabında işlem yaptı

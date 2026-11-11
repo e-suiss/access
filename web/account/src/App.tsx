@@ -15,10 +15,18 @@ import { t } from "./lib/i18n.js";
 import { find, type Instance } from "./lib/instance.js";
 import { Privacy } from "./privacy/Privacy.js";
 import { SignedOutReason, SignIns } from "./signins/index.js";
+import { SupportPage } from "./support/Support.js";
 
-type Screen = "account" | Section | "merchants" | "payment" | "save-card";
+type Screen = "account" | Section | "merchants" | "payment" | "save-card" | "support";
 
-const SCREENS: readonly Screen[] = ["account", "authority", "activity", "changes", "merchants"];
+const SCREENS: readonly Screen[] = [
+  "account",
+  "authority",
+  "activity",
+  "changes",
+  "merchants",
+  "support",
+];
 
 function screenOf(path: string): Screen {
   const rest = path.slice(PAGE.length).replace(/^\//, "");
@@ -99,7 +107,9 @@ export function App(): ReactElement {
                   ? t("nav.authority")
                   : s === "merchants"
                     ? t("merchants.title")
-                    : t(`hub.${s}`)}
+                    : s === "support"
+                      ? t("support.title")
+                      : t(`hub.${s}`)}
             </a>
           ))}
         </nav>
@@ -117,6 +127,8 @@ export function App(): ReactElement {
           <MerchantsPage instance={instance} confirm={confirm} />
         ) : screen === "save-card" ? (
           <SaveCardPage instance={instance} confirm={confirm} />
+        ) : screen === "support" ? (
+          <SupportPage instance={instance} confirm={confirm} />
         ) : screen === "payment" ? (
           <OneTimePaymentPage instance={instance} confirm={confirm} />
         ) : (

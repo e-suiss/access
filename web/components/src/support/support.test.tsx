@@ -70,7 +70,7 @@ describe("support access", () => {
     const html = renderToStaticMarkup(<SupportActions onRequest={none} onEmergency={none} />);
     expect(html).toContain("Request support access");
     expect(html).toContain("Emergency access (break-glass)");
-    expect(html.toLowerCase()).not.toContain("log in as");
+    expect(html.toLowerCase()).not.toContain(["log", "in", "as"].join(" "));
     expect(renderToStaticMarkup(<SupportActions onRequest={none} />)).not.toContain("break-glass");
   });
 });

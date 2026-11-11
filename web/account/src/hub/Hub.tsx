@@ -12,6 +12,7 @@ import { at, catalogue, locale, t } from "../lib/i18n.js";
 import type { Confirm, Instance, SignatureView } from "../lib/instance.js";
 import { assemble, type ActivityRow, type Hub as HubData, type Read, type Row } from "./model.js";
 import { relayStatus } from "./relay.js";
+import { supportAccess, supportLine, type SupportRow } from "../support/model.js";
 
 export type Section = "authority" | "activity" | "changes";
 
@@ -473,7 +474,10 @@ export function Hub({
 }): ReactElement {
   const [hub, setHub] = useState<HubData | null>(null);
   const [delayed, setDelayed] = useState(false);
+  const [given, setGiven] = useState<readonly SupportRow[]>([]);
   const load = useCallback(() => {
+    // §8.16, XI-17
+    void supportAccess().then(setGiven);
     // §8.13, INV-24: a delay is a notice; no row changes with it
     void relayStatus().then((s) => {
       setDelayed(s?.delayed === true);
@@ -568,8 +572,12 @@ export function Hub({
             {hub.activity.map((a) => (
               <li key={a.pos} className="row" data-testid="use">
                 {a.agent !== undefined && <Badge face={a.agent} viewer={instance.party} />}
-                {t(a.text)} · {t(a.capacity.text, { party: a.capacity.party ?? "" })}
-                {a.at !== undefined && <> · {at(a.at)}</>}
+                {supportLine(a.grant, given, a.at === undefined ? "" : at(a.at)) ?? (
+                  <>
+                    {t(a.text)} · {t(a.capacity.text, { party: a.capacity.party ?? "" })}
+                    {a.at !== undefined && <> · {at(a.at)}</>}
+                  </>
+                )}
                 {/* E64, X30 */}
                 {(a.agent !== undefined || a.reports.attested.length > 0) && (
                   <agents.OutcomeLabels

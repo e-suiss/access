@@ -4800,3 +4800,18 @@ surface = "login"
 class = "consent"
 owner = "identity_plane"
 protected = false
+
+# OP-157 m.4 (b)
+[[message]]
+key = "activity-support_viewed"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "activity-support_acted"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false

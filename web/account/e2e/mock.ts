@@ -161,6 +161,8 @@ export class AccountMock {
     await context.route(/\/v1\/approvers(\/|$)/, (r) => this.approversRoute(r));
     await context.route(/\/v1\/me\/cloud-key-permissions/, (r) => this.cloudKeysRoute(r));
     await context.route(/\/v1\/me\/handles/, (r) => this.handlesRoute(r));
+    // OP-157 m.3 (f)
+    await context.route(/\/v1\/support\/|\/v1\/me\/support-/, (r) => this.supportRoute(r));
     await context.route(/\/v1\/account\/vault\/connections/, (r) => this.vaultRoute(r));
     await context.route(/\/v1\/account\/agent-connections/, (r) => this.agentsRoute(r));
     await context.route("**/access/v1/relay-status", (r) =>
@@ -179,6 +181,80 @@ export class AccountMock {
       destroy: false,
     },
   ];
+
+  /** OP-157 m.3 (f): the requests made to the person. */
+  supportRequests: Record<string, unknown>[] = [];
+  /** OP-157 m.3 (f): the support access the person gave. */
+  supportGiven: Record<string, unknown>[] = [];
+  supportBlocked = false;
+
+  /** A support request as `GET /v1/support/requests` lists it, with its drafted `grant.issue`. */
+  supportRequest(id: string): Record<string, unknown> {
+    const { envelope } = envelopeOf({
+      action: { namespace: "access", name: "grant_issue", major: 1 },
+      resources: [{ namespace: "access.party", path: ["aa"] }],
+    });
+    return {
+      id,
+      state: "waiting",
+      operator: "Mehmet Y.",
+      organization: "Acme Support",
+      case: "4411",
+      what: "view your account settings",
+      minutes: 60,
+      read_only: true,
+      give: {
+        template: "support.session",
+        payload: Buffer.alloc(8, 9).toString("base64url"),
+        intent: Buffer.from(envelope).toString("base64url"),
+        basis: { anchor: Buffer.alloc(16, 5).toString("base64url") },
+        pep: "identity-plane",
+        until: "2030-01-02T03:04:05.000Z",
+      },
+    };
+  }
+
+  private async supportRoute(r: Route): Promise<void> {
+    this.record(r);
+    const reply = (status: number, body: unknown) =>
+      r.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    if (!this.signedIn) return reply(401, { code: "session-required" });
+    const path = new URL(r.request().url()).pathname;
+    const blocked = this.supportBlocked;
+    if (path.endsWith("/v1/support/requests")) {
+      return reply(200, { requests: this.supportRequests, sent: [], blocked });
+    }
+    if (path.endsWith("/v1/me/support-access")) {
+      return reply(200, { access: this.supportGiven, blocked });
+    }
+    if (path.endsWith("/v1/me/support-block")) {
+      this.supportBlocked = (r.request().postDataJSON() as { blocked: boolean }).blocked;
+      return reply(200, { blocked: this.supportBlocked });
+    }
+    const answered = /\/requests\/([^/]+)\/(give|decline)$/.exec(path);
+    if (answered !== null) {
+      const row = this.supportRequests.find((q) => q["id"] === answered[1]);
+      this.supportRequests = this.supportRequests.filter((q) => q !== row);
+      if (answered[2] === "give" && row !== undefined) {
+        const { give: _given, ...rest } = row;
+        this.supportGiven.push({
+          ...rest,
+          state: "active",
+          until: "2030-01-02T03:04:05.000Z",
+          basis: { holding: { grant: "Z3JhbnQ", holder: "b3A", since: 7 } },
+          revoke: _given,
+        });
+      }
+      return reply(200, { state: answered[2] === "give" ? "active" : "declined" });
+    }
+    if (/\/support-access\/[^/]+\/revoke$/.test(path)) {
+      this.supportGiven = this.supportGiven.map((a) => {
+        return { ...a, revoke: undefined, state: "revoked", ended_at: "2029-01-02T03:04:05.000Z" };
+      });
+      return reply(200, { state: "revoked" });
+    }
+    return reply(404, { code: "support-request-unknown" });
+  }
 
   /** E56: the person's handles. */
   handles = [

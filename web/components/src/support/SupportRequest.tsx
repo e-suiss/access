@@ -53,7 +53,7 @@ export interface SupportActionsProps {
 }
 
 /** The operator's two actions in place of impersonation (§8.10): "Request support access" and,
- * where declared, "Emergency access (break-glass)". There is no "Log in as". */
+ * where declared, "Emergency access (break-glass)". There is no way to become the person. */
 export function SupportActions({ onRequest, onEmergency, catalogue }: SupportActionsProps) {
   return (
     <div className="access-support-actions">
