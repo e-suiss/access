@@ -284,6 +284,39 @@ def record_expected(case):
     return {field: case[field] for field in fields if field in case}
 
 
+def run_inclusion(case, document):
+    # L0-SIG-80: the superseded-at predicate (§9.10, §13.3, P18, SEC25, U12, U27)
+    refused = ({"error": "superseded"}, None)
+    binding = decode_canonical(bytes.fromhex(case["binding"]))
+    superseded = binding.get("superseded")
+    if superseded is None:
+        return refused
+    log = note.parse_vkey(document["log"])
+    witnesses = [w for w in (note.parse_vkey(v) for v in document["witnesses"])
+                 if w["kind"] == note.COSIGNER_KEY and (w["name"], w["id"]) != (log["name"], log["id"])]
+    try:
+        (_, size, root, _), accepted = note.verify_checkpoint(case["note"], document["origin"], log, witnesses)
+        disclosed = record.decode_disclosure(bytes.fromhex(case["record"]), envelope=False)
+        leaf = record.leaf_hash(disclosed)
+    except (note.NoteError, record.RecordError, Rejection):
+        return refused
+    cosigned = any(t is not None and any((w["name"], w["id"]) == (n, i) for w in witnesses) for n, i, t in accepted)
+    artefact = disclosed.get("fields", {}).get("artefact")
+    committed = isinstance(artefact, list) and len(artefact) == 2 and bytes(artefact[1]) == bytes.fromhex(case["artefact"])
+    path = [bytes.fromhex(h) for h in case["path"]]
+    if (not cosigned or not committed or root != bytes(superseded["cited"][1])
+            or not merkle.verify_inclusion(disclosed["pos"], size, leaf, path, root)):
+        return refused
+    at = bytes(superseded["at"][1])
+    if "consistency" not in case:
+        return ({"valid": True}, None) if at == bytes(superseded["cited"][1]) else refused
+    c = case["consistency"]
+    to_root = bytes.fromhex(c["to_root"])
+    if to_root != at or not merkle.verify_consistency(size, c["to_size"], root, to_root, [bytes.fromhex(h) for h in c["path"]]):
+        return refused
+    return {"valid": True}, None
+
+
 def run_recovery_guard(case, document):
     if document.get("freshness_ms") != fold.WITNESS_FRESHNESS_MS:
         return {"freshness_ms": document.get("freshness_ms")}, "freshness"
@@ -581,6 +614,7 @@ OPERATIONS = {
     "version.check": (run_version_check, ("valid", "error", "track")),
     "version.downgrade": (run_version_downgrade, ("expansion",)),
     "recovery.guard": (run_recovery_guard, ("guard", "from", "until", "error")),
+    "inclusion.verify": (run_inclusion, ("valid", "error")),
     "recovery.pre_recovery": (run_pre_recovery, ("closed",)),
     "version.transition": (run_version_transition, ("minimum",)),
     "algebra.meet": (run_algebra_meet, ("meet", "bottom", "rejection")),

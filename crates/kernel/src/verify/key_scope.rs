@@ -534,6 +534,115 @@ pub fn operational_key(
     Ok(key)
 }
 
+/// The record field that commits the digest of the artefact a decision produced (§13.3 rule 1).
+pub const ARTEFACT_FIELD: &str = "artefact";
+
+/// A consistency path to the checkpoint of `size` records with `root` (RFC 9162).
+pub type Consistency<'a> = (u64, [u8; 32], &'a [[u8; 32]]);
+
+/// What a verifier holds to accept an artefact signed under a superseded binding key: the
+/// committed record that names the artefact, its RFC 9162 path into the cited checkpoint, that
+/// checkpoint's signed note, and after a handover the consistency path to `C_{h+1}`
+/// (`to_size`, `to_root`, path) (§9.10, §13.3, P18, SEC25, U12, U27).
+#[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
+pub struct Inclusion<'a> {
+    /// The committed record, disclosed.
+    pub record: &'a crate::record::Disclosure,
+    /// Inclusion path of the record in the cited checkpoint.
+    pub path: &'a [[u8; 32]],
+    /// The cited checkpoint's signed note with its cosignatures.
+    pub note: &'a str,
+    /// The consistency path to the checkpoint the old key is superseded at.
+    pub consistency: Option<Consistency<'a>>,
+}
+
+impl<'a> Inclusion<'a> {
+    /// The evidence of `record` at `path` in the checkpoint `note`.
+    #[must_use]
+    pub const fn new(
+        record: &'a crate::record::Disclosure,
+        path: &'a [[u8; 32]],
+        note: &'a str,
+        consistency: Option<Consistency<'a>>,
+    ) -> Self {
+        Self {
+            record,
+            path,
+            note,
+            consistency,
+        }
+    }
+}
+
+/// The superseded-at predicate (§9.10 step 1, §13.3, P18, SEC25, U12, U27): an artefact with
+/// exact-content digest `artefact`, signed under `binding` whose key is superseded, is accepted
+/// only when its record commits `artefact` under [`ARTEFACT_FIELD`], sits in the cited checkpoint
+/// `N_cited` (its root is `Superseded::cited`), that checkpoint verifies under `log` from
+/// `origin` with at least one cosignature of the independent `witnesses`, and, when the key is
+/// superseded at another checkpoint (a handover's `C_{h+1}`), a consistency path reaches it. The
+/// artefact's own Exercise id or time is never evidence.
+///
+/// # Errors
+/// [`KeyScopeError::Superseded`] for every failed condition.
+pub fn superseded_inclusion(
+    backend: &impl Backend,
+    binding: &BindingKey,
+    artefact: &Digest,
+    evidence: &Inclusion<'_>,
+    (origin, log, witnesses): (
+        &str,
+        &suiss_crypto::note::Verifier,
+        &[suiss_crypto::note::Verifier],
+    ),
+) -> Result<(), KeyScopeError> {
+    let Some(superseded) = binding.superseded else {
+        return Err(KeyScopeError::Superseded);
+    };
+    let independent: Vec<suiss_crypto::note::Verifier> = witnesses
+        .iter()
+        .filter(|w| w.is_cosigner() && (w.name() != log.name() || w.id() != log.id()))
+        .cloned()
+        .collect();
+    let (cp, accepted) =
+        suiss_crypto::note::verify_checkpoint(backend, evidence.note, origin, log, &independent)
+            .map_err(|_| KeyScopeError::Superseded)?;
+    let cosigned = accepted.iter().any(|a| {
+        a.timestamp.is_some()
+            && independent
+                .iter()
+                .any(|w| w.name() == a.name && w.id() == a.id)
+    });
+    let committed = evidence
+        .record
+        .opened
+        .get(ARTEFACT_FIELD)
+        .is_some_and(|f| Digest::from_value(&f.value) == Some(*artefact));
+    if !cosigned
+        || !committed
+        || cp.root != superseded.cited.0
+        || evidence
+            .record
+            .verify_inclusion(cp.size, evidence.path, &cp.root)
+            .is_err()
+    {
+        return Err(KeyScopeError::Superseded);
+    }
+    match evidence.consistency {
+        None if superseded.at == superseded.cited => Ok(()),
+        Some((to_size, to_root, path))
+            if to_root == superseded.at.0
+                && crate::digest::verify_consistency(
+                    cp.size, to_size, &cp.root, &to_root, path,
+                )
+                .is_ok() =>
+        {
+            Ok(())
+        }
+        _ => Err(KeyScopeError::Superseded),
+    }
+}
+
 // OP-118 m.5, CR-55 m.1
 const fn hybrid_satisfiable(policy: Option<Hybrid>) -> bool {
     matches!(policy, None | Some(Hybrid::Classic))
