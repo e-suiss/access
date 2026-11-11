@@ -2053,6 +2053,13 @@ async fn serve(
         idp_plane.clone(),
         String::from(IDENTITY_PEP),
     );
+    // OP-157 m.3 (f), (g)
+    let support = access_http::login::support_router(
+        RealmDiscovery::new(PgDirectory::new(tenants_pool.clone()), signer()),
+        hosted.clone(),
+        idp_plane.clone(),
+        String::from(IDENTITY_PEP),
+    );
     let me = frontend(
         config,
         tenants_pool.clone(),
@@ -2082,6 +2089,7 @@ async fn serve(
             .merge(payment)
             .merge(first_contact)
             .merge(cloud_keys)
+            .merge(support)
             .merge(handles)
             .merge(sso_setup)
             .merge(account_pages)

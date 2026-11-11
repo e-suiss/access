@@ -81,11 +81,6 @@ const UNPRODUCED: &[&str] = &[
     "signal.refused",
     "cloud_key.destroyed",
     // OP-157 m.4 (a)
-    "support.access_requested",
-    "support.access_granted",
-    "support.access_ended",
-    "support.artifact_uploaded",
-    "support.artifact_read",
     "review.kept",
     "approval.inline",
     "approval.batch",

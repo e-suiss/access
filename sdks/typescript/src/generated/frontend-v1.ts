@@ -2472,6 +2472,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/support/requests/{request}/give": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The person's own device's grant.issue of exactly the support Grant the request drafted, for no longer than it asked: committed with the person's own assertion, then recorded and announced to the person (TN-137 (1), SI-21, OP-157 m.3 (f)). */
+        post: operations["giveSupportAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6407,7 +6424,15 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
@@ -6424,7 +6449,15 @@ export interface operations {
             };
         };
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
@@ -6443,7 +6476,15 @@ export interface operations {
             };
         };
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
@@ -6460,7 +6501,15 @@ export interface operations {
             };
         };
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
@@ -6475,7 +6524,15 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
@@ -6488,7 +6545,15 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
@@ -6507,7 +6572,15 @@ export interface operations {
             };
         };
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
@@ -6524,7 +6597,15 @@ export interface operations {
             };
         };
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
@@ -6607,6 +6688,33 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    giveSupportAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request: string;
+            };
             cookie?: never;
         };
         requestBody?: {

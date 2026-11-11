@@ -1339,56 +1339,56 @@ pub const ROUTES: &[Route] = &[
         "retireHandle",
         "Retires a handle: it is no longer shown or listed in the DID document.",
     ),
-    planned(
+    live(
         Owner::V2,
         Verb::Post,
         "/v1/support/requests",
         "createSupportRequest",
         "A support operator's request for support access: {subject, case, scope, minutes}. Access sends the person a support_access_request invitation; the operator never opens the person's trusted page, and only the person's own S1 grants access (OP-157 m.3 (f)).",
     ),
-    planned(
+    live(
         Owner::V2,
         Verb::Get,
         "/v1/support/requests",
         "listSupportRequests",
         "The person's open support access requests: who asks, for which case, which scope and for how long.",
     ),
-    planned(
+    live(
         Owner::V2,
         Verb::Post,
         "/v1/support/requests/{request}/decline",
         "declineSupportRequest",
         "The person declines a support access request; nothing is granted.",
     ),
-    planned(
+    live(
         Owner::V2,
         Verb::Post,
         "/v1/support/artifacts",
         "uploadSupportArtifact",
         "Uploads a support artifact for a case: HAR, JSON or a text log only, redacted on upload and sealed under its own key; an image or video answers 415 artifact-format-refused (idp.account.artifact_upload, OP-157 m.3 (g)).",
     ),
-    planned(
+    live(
         Owner::V2,
         Verb::Get,
         "/v1/support/artifacts/{artifact}",
         "getSupportArtifact",
         "Reads one redacted support artifact under a separate idp.account.artifact_read Grant (CT2).",
     ),
-    planned(
+    live(
         Owner::V2,
         Verb::Get,
         "/v1/me/support-access",
         "listSupportAccess",
         "The person's support access: active and ended support Grants with operator, organization, case, scope and end time (U57, OP-157 m.3 (f)).",
     ),
-    planned(
+    live(
         Owner::V2,
         Verb::Post,
         "/v1/me/support-access/{grant}/revoke",
         "revokeSupportAccess",
         "The person revokes a support Grant; only that Grant and its cascade end, the person's sessions are untouched (OP-157 m.3 (c)).",
     ),
-    planned(
+    live(
         Owner::V2,
         Verb::Put,
         "/v1/me/support-block",
@@ -1429,6 +1429,14 @@ pub const ROUTES: &[Route] = &[
         "/consent",
         "postConsent",
         "Answers 405: consent is never a form post outside the Approval Surface.",
+    ),
+    // OP-157 m.4 (b)
+    live(
+        Owner::V2,
+        Verb::Post,
+        "/v1/support/requests/{request}/give",
+        "giveSupportAccess",
+        "The person's own device's grant.issue of exactly the support Grant the request drafted, for no longer than it asked: committed with the person's own assertion, then recorded and announced to the person (TN-137 (1), SI-21, OP-157 m.3 (f)).",
     ),
 ];
 

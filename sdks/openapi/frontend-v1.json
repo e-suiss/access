@@ -4739,8 +4739,15 @@
         "operationId": "createSupportRequest",
         "summary": "A support operator's request for support access: {subject, case, scope, minutes}. Access sends the person a support_access_request invitation; the operator never opens the person's trusted page, and only the person's own S1 grants access (OP-157 m.3 (f)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -4754,21 +4761,26 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       },
       "get": {
         "operationId": "listSupportRequests",
         "summary": "The person's open support access requests: who asks, for which case, which scope and for how long.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/support/requests/{request}/decline": {
@@ -4776,8 +4788,15 @@
         "operationId": "declineSupportRequest",
         "summary": "The person declines a support access request; nothing is granted.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -4801,8 +4820,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/support/artifacts": {
@@ -4810,8 +4828,15 @@
         "operationId": "uploadSupportArtifact",
         "summary": "Uploads a support artifact for a case: HAR, JSON or a text log only, redacted on upload and sealed under its own key; an image or video answers 415 artifact-format-refused (idp.account.artifact_upload, OP-157 m.3 (g)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -4825,8 +4850,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/support/artifacts/{artifact}": {
@@ -4834,8 +4858,15 @@
         "operationId": "getSupportArtifact",
         "summary": "Reads one redacted support artifact under a separate idp.account.artifact_read Grant (CT2).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -4850,8 +4881,7 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       }
     },
     "/v1/me/support-access": {
@@ -4859,14 +4889,20 @@
         "operationId": "listSupportAccess",
         "summary": "The person's support access: active and ended support Grants with operator, organization, case, scope and end time (U57, OP-157 m.3 (f)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/me/support-access/{grant}/revoke": {
@@ -4874,8 +4910,15 @@
         "operationId": "revokeSupportAccess",
         "summary": "The person revokes a support Grant; only that Grant and its cascade end, the person's sessions are untouched (OP-157 m.3 (c)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -4899,8 +4942,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/me/support-block": {
@@ -4908,8 +4950,15 @@
         "operationId": "putSupportBlock",
         "summary": "Turns Block support access on, a CT1 narrowing policy.set on the person's self-anchor, or off as the person's own Exercise (OP-157 m.3 (c)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -4923,8 +4972,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/approve/batch": {
@@ -5047,6 +5095,46 @@
             "$ref": "#/components/responses/Problem"
           }
         },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/support/requests/{request}/give": {
+      "post": {
+        "operationId": "giveSupportAccess",
+        "summary": "The person's own device's grant.issue of exactly the support Grant the request drafted, for no longer than it asked: committed with the person's own assertion, then recorded and announced to the person (TN-137 (1), SI-21, OP-157 m.3 (f)).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "request",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {

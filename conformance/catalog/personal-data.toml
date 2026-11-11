@@ -281,3 +281,48 @@ basis = "contract"
 portable = "derived"
 export = false
 note = "The Party whose DID the handle must point at (E56)."
+
+[[field]]
+column = "access.support_requests.operator_id"
+vault = "none"
+retention = "audit"
+basis = "legitimate_interest"
+portable = "derived"
+export = false
+note = "The support operator's account that asked for support access (OP-157 m.3 (f)); a request grants nothing."
+
+[[field]]
+column = "access.support_requests.subject_id"
+vault = "none"
+retention = "audit"
+basis = "legitimate_interest"
+portable = "observed"
+export = true
+note = "The person a support access request was sent to (OP-157 m.3 (f), TN-137)."
+
+[[field]]
+column = "access.support_blocks.subject_id"
+vault = "none"
+retention = "consent"
+basis = "consent"
+portable = "observed"
+export = true
+note = "Whose Block support access setting this is (§8.16 #8, OP-157 m.3 (c))."
+
+[[field]]
+column = "access.support_artifacts.subject_id"
+vault = "none"
+retention = "contract"
+basis = "contract"
+portable = "observed"
+export = true
+note = "Whose support artifact this is (§8.16 #12, OP-157 m.3 (g))."
+
+[[field]]
+column = "access.support_artifacts.ciphertext"
+vault = "security_history"
+retention = "contract"
+basis = "contract"
+portable = "observed"
+export = true
+note = "A support artifact's redacted text, sealed under its own DEK; tokens, cookies and Authorization values were removed on upload and the raw upload is never kept. Shredded after the realm's retention (TN-74, OP-73)."
