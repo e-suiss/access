@@ -1,0 +1,1 @@
+{"webhookEvent":"jira:issue_updated","issue":{"key":"SUP-4411","fields":{"status":{"name":"In Progress","statusCategory":{"key":"indeterminate"}}}}}
