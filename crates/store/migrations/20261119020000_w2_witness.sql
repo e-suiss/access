@@ -7,7 +7,6 @@ SET LOCAL ROLE access_migrator;
 ALTER TABLE access.witness_cosign
   ADD COLUMN vkey text NOT NULL CHECK (octet_length(vkey) BETWEEN 1 AND 1024),
   ADD COLUMN independent boolean NOT NULL;
-CREATE INDEX witness_cosign_independent ON access.witness_cosign (domain_id, size) WHERE independent;
 
 CREATE TABLE access.equivocation_evidence (
   domain_id bytea NOT NULL CHECK (octet_length(domain_id) = 32),
