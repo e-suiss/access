@@ -158,8 +158,7 @@ async fn ti_17_the_directory_routes_a_misdirected_request_and_the_commit_path_ru
     );
     assert_eq!(p.w.domains.head(p.domain).await.unwrap().0, before);
 
-    // TI-17: a directory that does not answer (a role that may not read it) is not a decision
-    // input; the commit path runs
+    // TI-17
     let down = p.w.db.deriver.clone();
     let blind = access_http::placement::route(
         p.adp.clone(),
@@ -175,7 +174,7 @@ async fn ti_17_the_directory_routes_a_misdirected_request_and_the_commit_path_ru
     assert_eq!(body["decision"], true, "{body}");
     assert!(p.w.domains.head(p.domain).await.unwrap().0 > before);
 
-    // TI-17: a stale directory sends the request here; the leader refuses a sealed domain
+    // TI-17
     placement::place_tenant(
         app,
         tenant,
@@ -214,7 +213,7 @@ async fn tn_9_a_silo_move_takes_the_tenants_domains_to_a_dedicated_cell_and_no_o
         .unwrap();
     placement::declare_cell(
         &target.app,
-        &profile("cell-acme", "replicated", Some(*tenant.as_bytes())),
+        &profile("cell-acme", "replicated", Some(tenant)),
     )
     .await
     .unwrap();
@@ -246,7 +245,7 @@ async fn tn_9_a_silo_move_takes_the_tenants_domains_to_a_dedicated_cell_and_no_o
             (placed.cell.as_str(), placed.dedicated),
             ("cell-acme", true)
         );
-        let t = placement::cell_of(app, &Subject::Tenant(*tenant.as_bytes()))
+        let t = placement::cell_of(app, &Subject::Tenant(tenant))
             .await
             .unwrap()
             .unwrap();
@@ -257,7 +256,7 @@ async fn tn_9_a_silo_move_takes_the_tenants_domains_to_a_dedicated_cell_and_no_o
         .unwrap()
         .unwrap();
     assert!(head.accepted_epoch.is_some());
-    // OP-30: the source keeps no writer
+    // OP-30
     let sealed = p.w.domains.head(p.domain).await.unwrap().0;
     let (status, _, body) = post(
         &p.adp,
@@ -367,7 +366,7 @@ async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_do
     b.onboard(route.tenant, other.realm, to, &root, party)
         .await
         .unwrap();
-    // E14: the new domain covers the incoming realm with an Anchor of its own before its end
+    // E14
     let nonce = access_crypto::random::bytes::<16>().unwrap();
     b.commit_meta(
         to,
@@ -402,7 +401,7 @@ async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_do
         (Digest(*g.as_bytes()), open.len())
     };
 
-    // E14: one end alone leaves the realm where it is
+    // E14
     let (p, at) = rehome_proposal(&w, (route.tenant, route.realm), from, to).await;
     let prepared = admin.prepare(&p).await.unwrap();
     assert_eq!(prepared.domain, from);
@@ -418,7 +417,7 @@ async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_do
     );
     assert_eq!(governing().await, (from, 1));
 
-    // E14: a second end that names the wrong domain moves nothing
+    // E14
     let (p, at) = rehome_proposal(&w, (route.tenant, route.realm), from, to).await;
     let prepared = admin.prepare(&p).await.unwrap();
     let ais = sign(
@@ -441,7 +440,7 @@ async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_do
     assert!(matches!(unbound, Err(AdminError::Unbound)), "{unbound:?}");
     assert_eq!(governing().await.0, from);
 
-    // E14: both ends committed: the realm moves to the new domain and follows its cell
+    // E14
     let (p, at) = rehome_proposal(&w, (route.tenant, route.realm), from, to).await;
     let prepared = admin.prepare(&p).await.unwrap();
     let ais = sign(
@@ -465,7 +464,7 @@ async fn e14_a_rehome_moves_the_realm_only_with_an_exercise_in_both_governing_do
         .unwrap()
         .unwrap();
     assert_eq!(placed.cell, "cell-a");
-    // MD-5a: the realm's configuration is now decided in its new governing domain
+    // MD-5a
     let after = b
         .change_as(
             &admin,

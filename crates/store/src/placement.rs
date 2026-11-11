@@ -100,15 +100,15 @@ pub async fn place(
 /// [`StoreError`].
 pub async fn place_tenant(
     app: &PgPool,
-    tenant: TenantId,
+    tenant: [u8; 16],
     subject: &Subject,
     at: (&str, bool),
     since_ms: u64,
 ) -> Result<Option<u64>, StoreError> {
-    let mut t = TenantTx::begin_tenant(app, tenant).await?;
+    let mut t = TenantTx::begin_tenant(app, TenantId::from_bytes(tenant)).await?;
     let here = sqlx::query_scalar!(
         "SELECT EXISTS (SELECT 1 FROM access.tenants WHERE tenant_id = $1) AS \"here!\"",
-        Uuid::from_bytes(*tenant.as_bytes()),
+        Uuid::from_bytes(tenant),
     )
     .fetch_one(&mut *t.tx)
     .await?;
@@ -176,14 +176,14 @@ pub async fn history(t: &mut TenantTx, subject: &Subject) -> Result<Vec<Placed>,
 pub async fn domain_tenant(
     app: &PgPool,
     domain: &DomainId,
-) -> Result<Option<TenantId>, StoreError> {
+) -> Result<Option<[u8; 16]>, StoreError> {
     let t = sqlx::query_scalar!(
         "SELECT access.domain_tenant($1) AS tenant",
         domain.as_bytes().as_slice(),
     )
     .fetch_one(app)
     .await?;
-    Ok(t.map(|t| TenantId::from_bytes(t.into_bytes())))
+    Ok(t.map(Uuid::into_bytes))
 }
 
 /// This cell as its configuration declares it (OP-158 m.3 (o), (p)).
@@ -515,10 +515,10 @@ pub async fn tenant_domain(t: &mut TenantTx, domain: &DomainId) -> Result<bool, 
 ///
 /// # Errors
 /// [`StoreError`].
-pub async fn tenant_domains(app: &PgPool, tenant: TenantId) -> Result<Vec<DomainId>, StoreError> {
+pub async fn tenant_domains(app: &PgPool, tenant: [u8; 16]) -> Result<Vec<DomainId>, StoreError> {
     sqlx::query_scalar!(
         r#"SELECT d AS "d!" FROM access.tenant_domains($1) AS d"#,
-        Uuid::from_bytes(*tenant.as_bytes()),
+        Uuid::from_bytes(tenant),
     )
     .fetch_all(app)
     .await?
@@ -536,12 +536,12 @@ pub async fn tenant_domains(app: &PgPool, tenant: TenantId) -> Result<Vec<Domain
 ///
 /// # Errors
 /// [`StoreError`]; another tenant on a dedicated cell fails in the database.
-pub async fn adopt_tenant(app: &PgPool, tenant: TenantId, cell: &str) -> Result<bool, StoreError> {
-    let mut t = TenantTx::begin_tenant(app, tenant).await?;
+pub async fn adopt_tenant(app: &PgPool, tenant: [u8; 16], cell: &str) -> Result<bool, StoreError> {
+    let mut t = TenantTx::begin_tenant(app, TenantId::from_bytes(tenant)).await?;
     let done = sqlx::query!(
         "INSERT INTO access.tenants (tenant_id, placement_id, status) VALUES ($1, $2, 'active')
          ON CONFLICT (tenant_id) DO NOTHING",
-        Uuid::from_bytes(*tenant.as_bytes()),
+        Uuid::from_bytes(tenant),
         cell,
     )
     .execute(&mut *t.tx)

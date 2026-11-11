@@ -1080,3 +1080,21 @@ severity = "warn"
 since = "unreleased"
 fields = ["outcome"]
 ocsf = "detection_finding"
+
+# OP-158 m.4 (b) (W9): routing that went on without the Placement Directory, and a rehome left
+# with one end
+[[event]]
+name = "placement.unanswered"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = []
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "rehome.incomplete"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["decision"]
+ocsf = "application_lifecycle"

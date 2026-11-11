@@ -4636,7 +4636,7 @@ fn blocked(r: &Response) -> (access_kernel::combinator::BlockerClass, String) {
     (b.class, b.subcode.clone().unwrap_or_default())
 }
 
-// OP-143 m.13, §9.15A.2–4, §9.12.4, PI-3, INV-17, INV-21, G52, 2337–2339, 2455, 2494
+// OP-143 m.13, §9.15A.2–4, §9.12.4, PI-3, INV-17, INV-21, G52, P31, 2337–2339, 2455, 2494, 5691
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,

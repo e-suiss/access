@@ -3796,10 +3796,65 @@ export interface components {
             derived: Record<string, never>[];
             ended: Record<string, never>[];
         };
-        /** @description The cell the realm and its governing domain are placed in, with residency; it routes and is never a decision input (TI-17, OP-158 m.3 (o)); its lane names its members when it serves it. */
-        Placement: Record<string, never>;
-        /** @description The realm's durability profile, DR class, RPO and its domain's witnesses and replicas (HL-40, OP-158 m.3 (n), (p)); its lane names its members when it serves it. */
-        Durability: Record<string, never>;
+        /** @description The cell the realm and its governing domain are placed in, with residency; it routes and is never a decision input (TI-17, OP-158 m.3 (o)). A subject without a placement is served by the cell that holds it. */
+        Placement: {
+            /** @description This cell's name, as its configuration declares it. */
+            cell: string | null;
+            /** @description This cell's region (OP-30). */
+            region: string | null;
+            /** @description Whether this cell serves one tenant alone (OP-12, OP-48). */
+            dedicated_cell: boolean;
+            tenant: components["schemas"]["Placed"];
+            realm: components["schemas"]["Placed"];
+            domain: components["schemas"]["Placed"];
+            /** @description The realm's governing domain, base64url. */
+            governing_domain: string;
+            residency: {
+                region: string;
+                /** @enum {string} */
+                class: "regional" | "multi-region-sync";
+            } | null;
+            /** @description Committed rehome ends not yet matched by the other governing domain's (E14). */
+            pending_rehome: {
+                /** @enum {string} */
+                side: "from" | "to";
+                to: string;
+                position: string;
+            }[];
+            /** @constant */
+            routing_only: true;
+        };
+        /** @description One placement version (OP-158 m.3 (o)). */
+        Placed: {
+            cell: string;
+            dedicated: boolean;
+            version: number;
+        } | null;
+        /** @description The realm's durability profile, DR class, RPO and its domain's witnesses and replicas (HL-40, OP-158 m.3 (n), (p)). A single-node cell declares no RPO; a SEC23 revocation is acknowledged only with a declared replica and an independent witness. */
+        Durability: {
+            /** @enum {string|null} */
+            durability: "replicated" | "single-node" | null;
+            /** @enum {string|null} */
+            class: "regional" | "multi-region-sync" | null;
+            region: string | null;
+            dr_profile: {
+                rpo_s: number;
+            } | null;
+            /** @description 0 for a synchronous class; the async DR profile's RPO when declared; null on a single-node cell. */
+            rpo_s: number | null;
+            governing_domain: string;
+            witnesses?: components["schemas"]["DeclaredParty"][];
+            replicas?: components["schemas"]["DeclaredParty"][];
+            /** @description What the domain's metadata publishes (HL-40). */
+            declared_durability?: string | null;
+            /** @description Whether the domain's declarations can ever acknowledge a SEC23 write. */
+            acknowledges?: boolean;
+        };
+        DeclaredParty: {
+            name: string;
+            operator: string;
+            independent: boolean;
+        };
         /** @description The realm's rate limits and this node's view of their use (§12.5.4, TN-127, OP-158 m.3 (v)): nothing in it is labelled by a request value. */
         RateLimits: {
             realm: string;
@@ -13921,14 +13976,13 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Declared"];
+                    "application/json": components["schemas"]["Placement"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -13955,14 +14009,13 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Declared"];
+                    "application/json": components["schemas"]["Durability"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -14007,7 +14060,6 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
-            501: components["responses"]["NotYetServed"];
             503: components["responses"]["Unavailable"];
         };
     };

@@ -1659,7 +1659,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     ) -> Result<Option<ClientSecret>, AdminError> {
         let mut secret = None;
         let done = match change {
-            // E14: only the two-ended path writes a rehome
+            // E14
             Change::Rehome(_) => return Err(Invalid::RehomeIncomplete.into()),
             // CMP-26, OP-30, OP-158 m.3 (o)
             Change::Residency(r) => {

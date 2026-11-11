@@ -86,7 +86,6 @@ const UNPRODUCED: &[&str] = &[
     // OP-158 m.4 (a)
     "divergence.quarantined",
     "domain.recovered",
-    "realm.rehomed",
     "upgrade.activated",
     "identity.degraded",
 ];

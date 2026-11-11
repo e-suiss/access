@@ -80,7 +80,7 @@ mod tests {
         }
     }
 
-    // OP-50: the deployment manifests name the server's own bounds
+    // OP-50
     #[test]
     fn op_50_the_manifests_name_the_servers_bounds() {
         let deploy = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../deploy");
@@ -99,7 +99,7 @@ mod tests {
         assert!(k8s.lines().any(|l| l.trim() == grace));
     }
 
-    // OP-50: a shutdown that outlives its bound ends at the bound
+    // OP-50
     #[tokio::test]
     async fn op_50_in_flight_requests_end_at_the_shutdown_bound() {
         let bound = Duration::from_millis(50);

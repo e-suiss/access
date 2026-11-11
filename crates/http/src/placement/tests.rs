@@ -67,6 +67,6 @@ async fn ti_17_the_directory_routes_and_never_decides() {
     );
     assert_eq!(body_domain(body.as_bytes()), Some([7; 32]));
     assert_eq!(body_domain(b"{}"), None);
-    // TI-17: a directory that cannot answer is not a decision
+    // TI-17
     assert_eq!(status(app(Err(Unanswered))).await.0, StatusCode::OK);
 }

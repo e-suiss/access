@@ -11,7 +11,6 @@ use access_authority_sequencer::cell::{self, MoveError};
 use access_kernel::digest::Digest;
 use access_kernel::verify::key_scope::{Declarations, Durability, Residency};
 use access_store::Pool;
-use access_store::identity::TenantId;
 use access_store::placement::{self, Placed, Subject};
 use access_store::scope::DomainId;
 
@@ -86,7 +85,7 @@ pub async fn move_domain(
     let epoch = cell::accept(source.sequencer, target.sequencer, target.app, domain).await?;
     let dedicated = placement::cell_profile(target.app)
         .await?
-        .is_some_and(|p| p.dedicated_to == Some(*tenant.as_bytes()));
+        .is_some_and(|p| p.dedicated_to == Some(tenant));
     for app in [source.app, target.app] {
         placement::place_tenant(
             app,
@@ -118,7 +117,7 @@ pub struct Siloed {
 pub async fn silo(
     source: CellDb<'_>,
     target: CellDb<'_>,
-    tenant: TenantId,
+    tenant: [u8; 16],
     (holder, at_ms): (&str, u64),
 ) -> Result<Siloed, PlacementError> {
     let domains = placement::tenant_domains(source.app, tenant).await?;
@@ -128,7 +127,7 @@ pub async fn silo(
     placement::adopt_tenant(target.app, tenant, target.name).await?;
     let dedicated = placement::cell_profile(target.app)
         .await?
-        .is_some_and(|p| p.dedicated_to == Some(*tenant.as_bytes()));
+        .is_some_and(|p| p.dedicated_to == Some(tenant));
     let mut out = Siloed::default();
     for id in domains {
         let domain = Digest(*id.as_bytes());
@@ -143,7 +142,7 @@ pub async fn silo(
         placement::place_tenant(
             app,
             tenant,
-            &Subject::Tenant(*tenant.as_bytes()),
+            &Subject::Tenant(tenant),
             (target.name, dedicated),
             at_ms,
         )

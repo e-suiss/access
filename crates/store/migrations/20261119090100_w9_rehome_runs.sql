@@ -61,7 +61,8 @@ ALTER TABLE access.idp_config_log
   DROP CONSTRAINT idp_config_log_tenant_id_realm_id_domain_id_fkey;
 ALTER TABLE access.idp_config_log
   ADD CONSTRAINT idp_config_log_governor FOREIGN KEY (tenant_id, realm_id, domain_id)
-    REFERENCES access.realm_governors (tenant_id, realm_id, domain_id);
+    REFERENCES access.realm_governors (tenant_id, realm_id, domain_id) NOT VALID;
+ALTER TABLE access.idp_config_log VALIDATE CONSTRAINT idp_config_log_governor;
 
 -- EI-25, MD-5a: a decision binds only in the realm's governing domain at the time it binds
 CREATE FUNCTION access.idp_log_governing() RETURNS trigger

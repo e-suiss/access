@@ -22,7 +22,7 @@ fn hl_40_a_single_node_cell_declares_itself_so() {
             DrClass::Regional
         ))
     );
-    // HL-40: nothing a cell declares about itself acknowledges a SEC23 write
+    // HL-40
     assert!(!d.acknowledges());
     p.durability = String::from("replicated");
     p.region = None;
