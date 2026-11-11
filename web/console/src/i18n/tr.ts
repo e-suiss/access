@@ -1027,7 +1027,7 @@ export const tr: Record<Key, string> = {
   durabilityWitnessNotIndependent: "Sağlayıcı tarafından işletiliyor",
   durabilityReplicas: "Kopyalar",
   durabilityNoWitness:
-    "Bağımsız tanık ve kopya beyan edilmedi; bu yüzden geri almalar hiçbir zaman doğrulanmış gösterilmez.",
+    "Bağımsız tanık ve kopya beyan edilmedi; bu yüzden geri almalar hiçbir zaman kesinleşmiş gösterilmez.",
   recoveryNotAvailable: "Kurtarma kullanılamıyor",
   recoveryNotAvailableWhy:
     "Kurtarmayı kurmak için sağlayıcı dışında yeterli donanıma bağlı anahtar yok. Kurmak için güvenlik anahtarı ekleyin.",
