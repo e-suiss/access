@@ -2719,6 +2719,9 @@ pub enum Kind {
     Durability,
     /// The realm's rate limits (§12.5.4, OP-158 m.3 (v)).
     RateLimits,
+    /// Whether the governing domain can be recovered, and its handovers and forced recoveries
+    /// (§8.12, §8.17.9.7, §13.6, OP-158 m.3 (m)).
+    Recovery,
 }
 
 /// How many days the analytics read covers, today included (PD).
@@ -3490,6 +3493,17 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 items: vec![(super::rehome::durability_view(t).await?, 0)],
                 last: None,
             },
+            // §8.12, §8.17.9.7, §13.6, OP-158 m.3 (m)
+            (Kind::Recovery, _) => {
+                let gov = idp::governance(t).await?.ok_or(AdminError::NoRealm)?;
+                Read {
+                    items: vec![(
+                        crate::app::recovery_view::view(self.app, &gov.domain).await?,
+                        0,
+                    )],
+                    last: None,
+                }
+            }
             // §12.5.4, OP-35, OP-158 m.3 (v)
             (Kind::RateLimits, _) => {
                 let set = access_store::quota::rate_limit(t).await?;

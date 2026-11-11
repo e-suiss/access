@@ -129,6 +129,7 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::Placement => Kind::Placement,
         ResourceKind::Durability => Kind::Durability,
         ResourceKind::RateLimits => Kind::RateLimits,
+        ResourceKind::Recovery => Kind::Recovery,
     }
 }
 
@@ -704,6 +705,10 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                         }
                         if let (Some(d), Some(o)) = (&declared, body.as_object_mut()) {
                             o.extend(d.clone());
+                        }
+                        // §13.6, OP-158 m.3 (m)
+                        if let (ResourceKind::Recovery, Some(o)) = (q.kind, body.as_object_mut()) {
+                            o.insert(String::from("realm"), Value::String(q.slug.clone()));
                         }
                         if let (Some(u), Some(o)) = (&usage, body.as_object_mut()) {
                             o.insert(String::from("realm"), Value::String(q.slug.clone()));

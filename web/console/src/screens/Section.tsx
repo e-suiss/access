@@ -17,6 +17,7 @@ import { Durability } from "./Durability.js";
 import { Proxy } from "./Proxy.js";
 import { Placement } from "./Placement.js";
 import { RateLimits } from "./RateLimits.js";
+import { Recovery } from "./Recovery.js";
 import { Reviews } from "./Reviews.js";
 import { SignInSettings } from "./SignInSettings.js";
 import { Export as SiemExport } from "./Export.js";
@@ -145,7 +146,7 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
       return <Au.Export ctx={ctx} />;
 
     case "recovery":
-      return <Planned />;
+      return <Recovery ctx={ctx} />;
   }
 }
 

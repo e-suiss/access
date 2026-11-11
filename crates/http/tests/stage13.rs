@@ -16,7 +16,7 @@ use http_body_util::BodyExt as _;
 use tower::ServiceExt as _;
 
 /// The Stage 13 realm-admin operations (OP-158 m.4 (a)).
-const ADMIN: [&str; 9] = [
+const ADMIN: [&str; 10] = [
     "getPlacement",
     "getDurability",
     "putResidency",
@@ -26,11 +26,12 @@ const ADMIN: [&str; 9] = [
     "putHashProfile",
     "putAuditTier",
     "getRateLimits",
+    "getRecovery",
 ];
 
 /// The Stage 13 admin rows their lanes serve.
-// OP-158 m.3 (o), (p), (r), (v), (w), (y)
-const SERVED: [&str; 9] = [
+// OP-158 m.3 (m), (o), (p), (r), (v), (w), (y)
+const SERVED: [&str; 10] = [
     "getPlacement",
     "getDurability",
     "putResidency",
@@ -40,6 +41,7 @@ const SERVED: [&str; 9] = [
     "putHashProfile",
     "putRateLimit",
     "getRateLimits",
+    "getRecovery",
 ];
 
 // OP-158 m.4 (a)

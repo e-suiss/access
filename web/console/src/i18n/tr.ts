@@ -1059,4 +1059,7 @@ export const tr: Record<Key, string> = {
   rateLimitsLastHour: "Son bir saat: {n}",
   rateLimitsLastDay: "Son 24 sa: {n}",
   rateLimitsRequests: "{n} istek",
+  // OP-158 m.4 (b) (W6)
+  recoveryAvailable: "Kurtarma kurulu: {n} kurtarma anahtarından {k} tanesi gerekir",
+  recoveryHandoverAtPosition: "{position} numaralı kayıt konumunda yeni bir sağlayıcıya taşındı",
 };

@@ -3277,6 +3277,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/realms/{slug}/recovery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether the realm's governing domain can be recovered ("Recovery not available" otherwise), and its handovers and forced recoveries with the record position each took effect at and, for a recovery, the time after which changes may be lost (§8.17.9.7, §13.6, OP-158 m.3 (m)). */
+        get: operations["getRecovery"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/platform/intents": {
         parameters: {
             query?: never;
@@ -3886,6 +3903,38 @@ export interface components {
                 }[];
                 threshold_percent: number;
             };
+        };
+        /** @description Whether the governing domain can be recovered, and its handovers and forced recoveries (§8.12, §8.17.9.7, §13.6, OP-158 m.3 (m)). Read from the authority record; never a decision input. */
+        Recovery: {
+            realm: string;
+            /**
+             * @description `not_available`: no rootTerms recovery entry; the console says "Recovery not available".
+             * @enum {string}
+             */
+            recovery: "available" | "not_available";
+            recovery_threshold?: {
+                k?: number;
+                n?: number;
+            };
+            /**
+             * @description Where the recovery keys are: the root Parties' own devices or offline; never the provider (SEC20).
+             * @enum {string}
+             */
+            held_on?: "device" | "offline";
+            recovery_reason?: string;
+            history: {
+                /** @enum {string} */
+                kind: "recovered" | "handover";
+                /** @description The record position N (recovery) or h (handover). */
+                position: string;
+                /** Format: date-time */
+                at: string;
+                /**
+                 * Format: date-time
+                 * @description A recovery: changes after this time may be lost; a revocation made after it must be made again.
+                 */
+                lost_after?: string;
+            }[];
         };
         /** @description A resource whose route is declared and not served yet; its lane names its members when it serves it (OP-155 m.4). */
         Declared: Record<string, never>;
@@ -14326,6 +14375,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RateLimits"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getRecovery: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Recovery"];
                 };
             };
             400: components["responses"]["BadRequest"];

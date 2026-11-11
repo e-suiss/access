@@ -1048,6 +1048,9 @@ export const en = {
   rateLimitsLastHour: "Last hour: {n}",
   rateLimitsLastDay: "Last 24 h: {n}",
   rateLimitsRequests: "{n} requests",
+  // OP-158 m.4 (b) (W6)
+  recoveryAvailable: "Recovery is set up: {k} of {n} recovery keys are needed",
+  recoveryHandoverAtPosition: "Moved to a new provider at record position {position}",
 } as const;
 
 export type Key = keyof typeof en;

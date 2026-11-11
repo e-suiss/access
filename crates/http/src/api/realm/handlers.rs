@@ -68,7 +68,10 @@ pub const fn id_member(kind: ResourceKind) -> &'static str {
         ResourceKind::BreakglassDrills | ResourceKind::BreakglassReviews => "exercise",
         ResourceKind::OffboardingPreviews => "party",
         // OP-158 m.4 (a)
-        ResourceKind::Placement | ResourceKind::Durability | ResourceKind::RateLimits => "realm",
+        ResourceKind::Placement
+        | ResourceKind::Durability
+        | ResourceKind::RateLimits
+        | ResourceKind::Recovery => "realm",
         ResourceKind::CustomDomains => "host",
         _ => "client_id",
     }

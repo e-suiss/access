@@ -239,6 +239,9 @@ pub enum ResourceKind {
     Durability,
     /// The realm's rate limits and their use now, one resource (§12.5.4, OP-158 m.3 (v)).
     RateLimits,
+    /// Whether the governing domain can be recovered, with its handover and recovery history,
+    /// one resource (§8.17.9.7, §13.6, OP-158 m.4 (b) (W6)).
+    Recovery,
 }
 
 impl ResourceKind {
@@ -285,6 +288,7 @@ impl ResourceKind {
             Self::Placement => "placement",
             Self::Durability => "durability",
             Self::RateLimits => "rate-limits",
+            Self::Recovery => "recovery",
         }
     }
 }

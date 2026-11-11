@@ -843,7 +843,7 @@ const STAGE12: [Route; 22] = [
 
 /// The Stage 13 realm routes, declared before their lanes serve them (OP-158 m.4 (a)): each
 /// answers `501 not-yet-served` behind its permission until its lane fills the handler.
-const STAGE13: [Route; 9] = [
+const STAGE13: [Route; 10] = [
     read(
         "/admin/v1/realms/{slug}/placement",
         "getPlacement",
@@ -895,6 +895,12 @@ const STAGE13: [Route; 9] = [
         "/admin/v1/realms/{slug}/rate-limits",
         "getRateLimits",
         "The realm's rate limits and their use: each bucket's share in use now and over 1 h and 24 h, the 10 heaviest consumers as digests, refusals by type and the warning threshold; never labelled by the request (§12.5.4, TN-127, OP-158 m.3 (v)).",
+    ),
+    // OP-158 m.4 (b) (W6)
+    read(
+        "/admin/v1/realms/{slug}/recovery",
+        "getRecovery",
+        "Whether the realm's governing domain can be recovered (\"Recovery not available\" otherwise), and its handovers and forced recoveries with the record position each took effect at and, for a recovery, the time after which changes may be lost (§8.17.9.7, §13.6, OP-158 m.3 (m)).",
     ),
 ];
 
@@ -1849,6 +1855,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "getRateLimits" => (ResourceKind::RateLimits, Shape::Get),
         // OP-158 m.3 (o), (r)
         "putResidency" | "putDrProfile" => (Settings, w(true)),
+        // OP-158 m.4 (b) (W6)
+        "getRecovery" => (ResourceKind::Recovery, Shape::Get),
         // OP-157 m.4 (a)
         "listCaseSystems" => (
             ResourceKind::CaseSystems,

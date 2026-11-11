@@ -623,6 +623,31 @@ fn schemas() -> Value {
                 },
             },
         },
+        "Recovery": {
+            "type": "object",
+            "description": "Whether the governing domain can be recovered, and its handovers and forced recoveries (§8.12, §8.17.9.7, §13.6, OP-158 m.3 (m)). Read from the authority record; never a decision input.",
+            "required": ["realm", "recovery", "history"],
+            "properties": {
+                "realm": { "type": "string" },
+                "recovery": { "type": "string", "enum": ["available", "not_available"], "description": "`not_available`: no rootTerms recovery entry; the console says \"Recovery not available\"." },
+                "recovery_threshold": {
+                    "type": "object",
+                    "properties": { "k": { "type": "integer" }, "n": { "type": "integer" } },
+                },
+                "held_on": { "type": "string", "enum": ["device", "offline"], "description": "Where the recovery keys are: the root Parties' own devices or offline; never the provider (SEC20)." },
+                "recovery_reason": { "type": "string" },
+                "history": { "type": "array", "items": {
+                    "type": "object",
+                    "required": ["kind", "position", "at"],
+                    "properties": {
+                        "kind": { "type": "string", "enum": ["recovered", "handover"] },
+                        "position": { "type": "string", "pattern": "^[0-9]{1,20}$", "description": "The record position N (recovery) or h (handover)." },
+                        "at": { "type": "string", "format": "date-time" },
+                        "lost_after": { "type": "string", "format": "date-time", "description": "A recovery: changes after this time may be lost; a revocation made after it must be made again." },
+                    },
+                } },
+            },
+        },
         "Declared": {
             "type": "object",
             "description": "A resource whose route is declared and not served yet; its lane names its members when it serves it (OP-155 m.4).",
@@ -982,6 +1007,7 @@ fn body_of(row: &Route) -> &'static str {
             ResourceKind::Placement => "Placement",
             ResourceKind::Durability => "Durability",
             ResourceKind::RateLimits => "RateLimits",
+            ResourceKind::Recovery => "Recovery",
         },
         _ => "ExerciseRef",
     }

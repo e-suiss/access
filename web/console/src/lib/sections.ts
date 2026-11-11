@@ -135,8 +135,8 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
   // §8.6, Ek B 3921
   containment: [meta("instance_terminate"), meta("grant_revoke")],
   export: [AUDIT],
-  // OP-158 m.4 (a), m.3 (m)
-  recovery: planned([meta("domain_recover"), meta("domain_handover")]),
+  // OP-158 m.4 (a), m.3 (m): what an auditor reads; only `access-cli domain recover` recovers
+  recovery: [AUDIT],
 };
 
 /** The intent `probe` asks about in `realm`. */

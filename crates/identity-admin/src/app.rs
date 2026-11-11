@@ -17,6 +17,7 @@ pub mod orgs;
 pub mod platform;
 pub mod provision;
 pub mod proxy;
+pub mod recovery_view;
 pub mod relay;
 pub mod rest;
 pub mod saml;

@@ -20808,6 +20808,72 @@
         "x-access-visibility": "hidden"
       }
     },
+    "/admin/v1/realms/{slug}/recovery": {
+      "get": {
+        "operationId": "getRecovery",
+        "summary": "Whether the realm's governing domain can be recovered (\"Recovery not available\" otherwise), and its handovers and forced recoveries with the record position each took effect at and, for a recovery, the time after which changes may be lost (§8.17.9.7, §13.6, OP-158 m.3 (m)).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "realm.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recovery"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": "realm.read",
+        "x-access-visibility": "hidden"
+      }
+    },
     "/admin/v1/platform/intents": {
       "post": {
         "operationId": "draftPlatformIntent",
@@ -23343,6 +23409,84 @@
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 100
+              }
+            }
+          }
+        }
+      },
+      "Recovery": {
+        "type": "object",
+        "description": "Whether the governing domain can be recovered, and its handovers and forced recoveries (§8.12, §8.17.9.7, §13.6, OP-158 m.3 (m)). Read from the authority record; never a decision input.",
+        "required": [
+          "realm",
+          "recovery",
+          "history"
+        ],
+        "properties": {
+          "realm": {
+            "type": "string"
+          },
+          "recovery": {
+            "type": "string",
+            "enum": [
+              "available",
+              "not_available"
+            ],
+            "description": "`not_available`: no rootTerms recovery entry; the console says \"Recovery not available\"."
+          },
+          "recovery_threshold": {
+            "type": "object",
+            "properties": {
+              "k": {
+                "type": "integer"
+              },
+              "n": {
+                "type": "integer"
+              }
+            }
+          },
+          "held_on": {
+            "type": "string",
+            "enum": [
+              "device",
+              "offline"
+            ],
+            "description": "Where the recovery keys are: the root Parties' own devices or offline; never the provider (SEC20)."
+          },
+          "recovery_reason": {
+            "type": "string"
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "kind",
+                "position",
+                "at"
+              ],
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "recovered",
+                    "handover"
+                  ]
+                },
+                "position": {
+                  "type": "string",
+                  "pattern": "^[0-9]{1,20}$",
+                  "description": "The record position N (recovery) or h (handover)."
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "lost_after": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "A recovery: changes after this time may be lost; a revocation made after it must be made again."
+                }
               }
             }
           }

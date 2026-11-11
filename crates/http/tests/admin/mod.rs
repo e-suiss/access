@@ -250,6 +250,8 @@ fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
         ResourceKind::OffboardingPreviews => json!({ "party": key, "channels": [] }),
         ResourceKind::Placement => json!({ "realm": key, "cell": "pool-default" }),
         ResourceKind::Durability => json!({ "realm": key, "durability": "replicated" }),
+        ResourceKind::Recovery => json!({ "realm": key, "recovery": "not_available",
+                                          "recovery_reason": "no-recovery-entry", "history": [] }),
         ResourceKind::RateLimits => json!({ "realm": key, "rate_limit_rps": 200, "default": true,
                                             "tenant_rps": 1000, "burst_s": 2,
                                             "usage": { "buckets": [], "top_consumers": [],
