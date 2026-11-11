@@ -16,6 +16,7 @@
 //!     --grant <b64url> --grant-since <position> --contribute-grant <b64url>
 //!     --contribute-since <position> (--intent <envelope.json> | --intent-json <json>)
 //!     [--instance <b64url>] [--reason <text>] [--request <pushed-request.json>] [--connect <ip:port>]
+//! access-local-client push <the approve options but --request>
 //! access-local-client compromise --api <base> --ca <ca.crt> --cert <pep.crt> --key <pep.key>
 //!     --domain <b64url> --issuer-party <b64url> --party <b64url> [--occurred-at <ms>]
 //!     [--connect <ip:port>]
@@ -39,7 +40,7 @@ use access_kernel::digest::Digest;
 use access_kernel::json::b64url_decode;
 use access_kernel::model::Id;
 use access_local_client::ClientError;
-use access_local_client::approve::{Approve, approve};
+use access_local_client::approve::{Approve, approve, push_request};
 use access_local_client::claims::{Compromise, declare};
 use access_local_client::dpop::Es256Key;
 use access_local_client::http::{Http, Identity, leaf_der};
@@ -50,11 +51,12 @@ use access_local_client::platform::{PlatformClient, StatusChange};
 use access_local_client::token::Token;
 use suiss_crypto::signer::Signer;
 
-const USAGE: &str = "usage: access-local-client <login | approve | compromise | stream-status | service-token> --<option> <value>...\n\
+const USAGE: &str = "usage: access-local-client <login | approve | push | compromise | stream-status | service-token> --<option> <value>...\n\
   login:         --issuer --ca --client-id --redirect-uri --identifier (--password-env | --passkey --hsm-module --hsm-token --hsm-pin-file)\n\
                  [--device-key] [--resource] [--scope] [--connect]\n\
   approve:       --issuer --api --ca --cert --key --redirect-uri --identifier --hsm-module --hsm-token --hsm-pin-file --device-key --passkey\n\
                  --domain --party --grant --grant-since --contribute-grant --contribute-since (--intent | --intent-json) [--instance] [--reason] [--request] [--connect]\n\
+  push:          the approve options but --request; pushes the request and prints what opens it\n\
   compromise:    --api --ca --cert --key --domain --issuer-party --party [--occurred-at] [--connect]\n\
   stream-status: --api --issuer --ca --client-id --client-key --stream [--status [--reason]] [--connect]\n\
   service-token: --issuer --ca --client-id --client-key --resource [--connect]";
@@ -211,8 +213,9 @@ async fn login_command(o: &Options) -> Result<serde_json::Value, String> {
     .map_err(step)
 }
 
-/// `approve`: an allowed Exercise through the hosted Approval Surface (OP-149 m.29 (b)).
-async fn approve_command(o: &Options) -> Result<serde_json::Value, String> {
+/// `approve`: an allowed Exercise through the hosted Approval Surface (OP-149 m.29 (b)); with
+/// `push_only`, the request is pushed and what opens it in a browser printed (OP-157 m.6 (i)).
+async fn approve_command(o: &Options, push_only: bool) -> Result<serde_json::Value, String> {
     let step = |e: ClientError| e.to_string();
     let identity = Identity {
         chain_pem: o.file("cert")?,
@@ -242,37 +245,43 @@ async fn approve_command(o: &Options) -> Result<serde_json::Value, String> {
         .optional("request")
         .map(|_| o.json("request"))
         .transpose()?;
-    approve(
-        &http,
-        &Approve {
-            issuer,
-            api_base: o.required("api")?,
-            redirect_uri: o.required("redirect-uri")?,
-            identifier: o.required("identifier")?,
-            passkey: &passkey,
-            device: &device,
-            pep_leaf_der: &leaf,
-            domain: o.digest("domain")?,
+    if push_only && request.is_some() {
+        return Err(String::from(
+            "push builds its own request; --request is not taken",
+        ));
+    }
+    let a = Approve {
+        issuer,
+        api_base: o.required("api")?,
+        redirect_uri: o.required("redirect-uri")?,
+        identifier: o.required("identifier")?,
+        passkey: &passkey,
+        device: &device,
+        pep_leaf_der: &leaf,
+        domain: o.digest("domain")?,
+        party,
+        instance: o
+            .optional("instance")
+            .map(|_| o.id16("instance"))
+            .transpose()?,
+        intent: &intent,
+        basis: holding(o.id16("grant")?, party, o.position("grant-since")?),
+        contribution: holding(
+            o.id16("contribute-grant")?,
             party,
-            instance: o
-                .optional("instance")
-                .map(|_| o.id16("instance"))
-                .transpose()?,
-            intent: &intent,
-            basis: holding(o.id16("grant")?, party, o.position("grant-since")?),
-            contribution: holding(
-                o.id16("contribute-grant")?,
-                party,
-                o.position("contribute-since")?,
-            ),
-            reason: o
-                .optional("reason")
-                .unwrap_or("Local end-to-end test of an allowed Exercise."),
-            request: request.as_ref(),
-            work_gate: None,
-        },
-    )
-    .await
+            o.position("contribute-since")?,
+        ),
+        reason: o
+            .optional("reason")
+            .unwrap_or("Local end-to-end test of an allowed Exercise."),
+        request: request.as_ref(),
+        work_gate: None,
+    };
+    if push_only {
+        push_request(&http, &a).await
+    } else {
+        approve(&http, &a).await
+    }
     .map_err(step)
 }
 
@@ -280,7 +289,9 @@ async fn run(command: &str, o: &Options) -> Result<serde_json::Value, String> {
     let step = |e: ClientError| e.to_string();
     match command {
         "login" => login_command(o).await,
-        "approve" => approve_command(o).await,
+        "approve" => approve_command(o, false).await,
+        // OP-157 m.6 (i)
+        "push" => approve_command(o, true).await,
         "compromise" => {
             let identity = Identity {
                 chain_pem: o.file("cert")?,

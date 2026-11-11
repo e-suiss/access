@@ -2018,6 +2018,48 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
         access_local_client::adp::pep_name(&leaf)
     );
 
+    // OP-157 m.6 (i): the pushed request a browser opens
+    let live = commit_intent(&allowed, "live", now);
+    let pushed = access_local_client::approve::push_request(
+        &http,
+        &Approve {
+            intent: &live,
+            ..request
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(pushed["redirect_uri"], user.redirect_uri.as_str());
+    let encode = |v: &serde_json::Value| -> String {
+        v.as_str()
+            .unwrap()
+            .bytes()
+            .map(|b| {
+                if b.is_ascii_alphanumeric() || b"-._~".contains(&b) {
+                    char::from(b).to_string()
+                } else {
+                    format!("%{b:02X}")
+                }
+            })
+            .collect()
+    };
+    let page = http
+        .request(
+            "GET",
+            &format!(
+                "{}/v1/approve?request={}&redirect_uri={}&state={}",
+                user.issuer,
+                encode(&pushed["request_uri"]),
+                encode(&pushed["redirect_uri"]),
+                encode(&pushed["state"]),
+            ),
+            &[],
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(page.status, 200, "{}", page.text());
+
     // §9.14.2, XI-7
     let other = commit_intent(&allowed, "other", now);
     let other_digest =

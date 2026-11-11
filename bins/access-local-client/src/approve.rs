@@ -555,6 +555,34 @@ pub async fn push_only(
     Ok((pushed.status, pushed.json(), contribution))
 }
 
+/// Pushes the request for the intent this client commits as the product's PEP, with the
+/// contribution the device signed, and returns `{request_uri, redirect_uri, state}`: what
+/// `GET /v1/approve` names to open it in the approver's browser (§9.14.1 A step 1, OP-157 m.6
+/// (i)). Nothing is approved and no flow starts.
+///
+/// # Errors
+/// [`ClientError`]; a push the surface refuses is [`ClientError::Unexpected`].
+pub async fn push_request(http: &Http, a: &Approve<'_>) -> Result<Value, ClientError> {
+    let (status, body, _) = push_only(http, a, |_| {}).await?;
+    if status != 201 {
+        return Err(ClientError::Unexpected {
+            step: "push",
+            status,
+            body: body.to_string(),
+        });
+    }
+    let request_uri = text_at(&body, &["request_uri"]).ok_or(ClientError::Unexpected {
+        step: "push",
+        status,
+        body: body.to_string(),
+    })?;
+    Ok(json!({
+        "request_uri": request_uri,
+        "redirect_uri": a.redirect_uri,
+        "state": random_text::<8>()?,
+    }))
+}
+
 /// Runs the approval and returns `{instance, exercise, contribution, claim, step_up,
 /// render_digest, request_uri, receipt}`: the device Instance the approval session was bound to,
 /// the allowed Exercise with its verified receipt when this client exercised the intent, the
