@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT replica AS \"replica!\", max(size) AS \"size!\" FROM access.replica_ack\n            WHERE domain_id = $1 AND replica = ANY($2) GROUP BY replica",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "replica!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.replica_ack",
+            "name": "replica"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "size!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "a06ae7b98fbcfd4e68f554447eb4e8532f0f5c192a4c007dbd0256e845a71771"
+}

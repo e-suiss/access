@@ -59,6 +59,7 @@ pub mod ldap;
 pub mod linux;
 pub mod locks;
 pub mod mcp_pins;
+pub mod mirror;
 pub mod oauth;
 pub mod offline;
 pub mod oidf;

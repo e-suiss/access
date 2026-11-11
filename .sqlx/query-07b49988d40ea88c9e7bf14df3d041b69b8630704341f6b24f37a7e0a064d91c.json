@@ -1,0 +1,113 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT kind, party, instance, pep, range_from, range_to, coverage, started_at\n           FROM access.export_runs WHERE domain_id = $1 AND export_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.export_runs",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "party",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.export_runs",
+            "name": "party"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "instance",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.export_runs",
+            "name": "instance"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "pep",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.export_runs",
+            "name": "pep"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "range_from",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.export_runs",
+            "name": "range_from"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "range_to",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.export_runs",
+            "name": "range_to"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "coverage",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.export_runs",
+            "name": "coverage"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "started_at",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.export_runs",
+            "name": "started_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "07b49988d40ea88c9e7bf14df3d041b69b8630704341f6b24f37a7e0a064d91c"
+}
