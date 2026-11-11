@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.support_artifacts\n                SET wrapped_dek = NULL, nonce = NULL, ciphertext = NULL, shredded_at = clock_timestamp()\n              WHERE tenant_id = $1 AND realm_id = $2 AND shredded_at IS NULL AND retain_until_ms <= $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "783bdc7542d751e4974aac283add5f1dc481581fa20300715fee1470440d35ce"
+}

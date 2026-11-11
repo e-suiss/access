@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.support_blocks (tenant_id, realm_id, subject_id, version, blocked, at_ms)\n             SELECT $1, $2, $3, COALESCE(MAX(version), 0) + 1, $4, $5\n               FROM access.support_blocks\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bool",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "177d5816e80e2dd6dd8161d785679db9be26c021b543b3ed98d2b712b5f4cfb2"
+}

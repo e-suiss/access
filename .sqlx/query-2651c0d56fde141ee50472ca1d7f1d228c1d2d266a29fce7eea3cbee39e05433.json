@@ -1,0 +1,43 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.support_artifacts (tenant_id, realm_id, subject_id, subject_party,\n                    case_ref, format, size_bytes, redactions, digest, upload_exercise, kek_id,\n                    wrapped_dek, nonce, ciphertext, created_ms, retain_until_ms)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)\n             RETURNING artifact_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "artifact_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.support_artifacts",
+            "name": "artifact_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Int4",
+        "Int4",
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2651c0d56fde141ee50472ca1d7f1d228c1d2d266a29fce7eea3cbee39e05433"
+}

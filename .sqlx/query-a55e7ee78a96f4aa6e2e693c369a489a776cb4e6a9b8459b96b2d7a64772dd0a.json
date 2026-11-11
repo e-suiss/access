@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.request_id FROM access.support_request_outcomes a\n              WHERE a.tenant_id = $1 AND a.realm_id = $2 AND a.state = 'granted'\n                AND a.until_ms <= $3\n                AND NOT EXISTS (SELECT 1 FROM access.support_request_outcomes e\n                                 WHERE e.tenant_id = a.tenant_id AND e.realm_id = a.realm_id\n                                   AND e.request_id = a.request_id\n                                   AND e.state IN ('ended', 'revoked'))\n              ORDER BY a.until_ms\n              LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.support_request_outcomes",
+            "name": "request_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a55e7ee78a96f4aa6e2e693c369a489a776cb4e6a9b8459b96b2d7a64772dd0a"
+}

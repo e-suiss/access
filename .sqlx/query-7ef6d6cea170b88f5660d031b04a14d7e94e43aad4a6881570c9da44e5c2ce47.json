@@ -1,0 +1,258 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.request_id, r.operator_id, r.operator_party, r.subject_id, r.subject_party,\n                      r.case_system, r.case_label, r.case_ref, r.scope, r.minutes, r.created_ms,\n                      r.expires_ms,\n                      a.state AS \"answer?\", a.grant_id AS \"grant_id?\", a.exercise AS \"exercise?\",\n                      a.until_ms AS \"until_ms?\", a.template AS \"template?\",\n                      a.at_ms AS \"answered_ms?\",\n                      e.state AS \"end_state?\", e.at_ms AS \"ended_ms?\"\n                 FROM access.support_requests r\n                 LEFT JOIN access.support_request_outcomes a\n                   ON a.tenant_id = r.tenant_id AND a.realm_id = r.realm_id\n                  AND a.request_id = r.request_id AND a.state IN ('declined', 'granted')\n                 LEFT JOIN access.support_request_outcomes e\n                   ON e.tenant_id = r.tenant_id AND e.realm_id = r.realm_id\n                  AND e.request_id = r.request_id AND e.state IN ('ended', 'revoked')\n                WHERE r.tenant_id = $1 AND r.realm_id = $2 AND r.request_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.support_requests",
+            "name": "request_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "operator_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.support_requests",
+            "name": "operator_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "operator_party",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.support_requests",
+            "name": "operator_party"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.support_requests",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "subject_party",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.support_requests",
+            "name": "subject_party"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "case_system",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.support_requests",
+            "name": "case_system"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "case_label",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.support_requests",
+            "name": "case_label"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "case_ref",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.support_requests",
+            "name": "case_ref"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "scope",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.support_requests",
+            "name": "scope"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "minutes",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.support_requests",
+            "name": "minutes"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "created_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.support_requests",
+            "name": "created_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.support_requests",
+            "name": "expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "answer?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.support_request_outcomes",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "grant_id?",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.support_request_outcomes",
+            "name": "grant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "exercise?",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.support_request_outcomes",
+            "name": "exercise"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "until_ms?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.support_request_outcomes",
+            "name": "until_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "template?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.support_request_outcomes",
+            "name": "template"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "answered_ms?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.support_request_outcomes",
+            "name": "at_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "end_state?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.support_request_outcomes",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "ended_ms?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.support_request_outcomes",
+            "name": "at_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "7ef6d6cea170b88f5660d031b04a14d7e94e43aad4a6881570c9da44e5c2ce47"
+}

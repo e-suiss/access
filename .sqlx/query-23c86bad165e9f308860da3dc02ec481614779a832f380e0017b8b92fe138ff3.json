@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT open, max_bytes, retention_days FROM access.support_artifact_policies\n              WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "open",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.support_artifact_policies",
+            "name": "open"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "max_bytes",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.support_artifact_policies",
+            "name": "max_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "retention_days",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.support_artifact_policies",
+            "name": "retention_days"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "23c86bad165e9f308860da3dc02ec481614779a832f380e0017b8b92fe138ff3"
+}
