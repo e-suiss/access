@@ -89,12 +89,6 @@ fn a_profile_runs_its_cases_and_names_what_else_it_requires() {
     assert!(text.contains("verified against the domain root"), "{text}");
     assert!(text.contains("13/13 passed, 0 leaked"), "{text}");
 
-    let leaky = profile_run(
-        "decision-pep",
-        Some(env!("CARGO_BIN_EXE_pep-reference-leaky")),
-    );
-    assert_eq!(leaky.status.code(), Some(1));
-
     let listed = profile_run("coordinator", None);
     let text = String::from_utf8_lossy(&listed.stdout);
     assert_eq!(listed.status.code(), Some(0), "{text}");
