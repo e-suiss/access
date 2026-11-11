@@ -13,7 +13,9 @@ import { Offboarding } from "./Offboarding.js";
 import * as O from "./Organizations.js";
 import type { Ctx } from "./parts.js";
 import { Planned } from "./Planned.js";
+import { Durability } from "./Durability.js";
 import { Proxy } from "./Proxy.js";
+import { Placement } from "./Placement.js";
 import { RateLimits } from "./RateLimits.js";
 import { Reviews } from "./Reviews.js";
 import { SignInSettings } from "./SignInSettings.js";
@@ -113,9 +115,9 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
     case "support":
       return <Planned />;
     case "placement":
-      return <Planned />;
+      return <Placement ctx={ctx} />;
     case "durability":
-      return <Planned />;
+      return <Durability ctx={ctx} />;
     case "ratelimits":
       return <RateLimits ctx={ctx} />;
     case "sign-in":
