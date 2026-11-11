@@ -2074,3 +2074,45 @@ async fn the_hub_tells_stale_from_ended_and_a_rejoin_from_a_restore() {
         "a cutoff ended the episode"
     );
 }
+
+// XI-19, §8.17.12, OP-157 m.3 (w), Ek B 5566
+#[tokio::test]
+async fn a_delegation_idle_for_90_days_is_marked_until_it_is_used() {
+    let db = fresh().await.unwrap();
+    let (mut core, d) = with_ack_issuer(&db).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    define(&mut core, d, 9, &role_set(&["read"], &[])).await;
+    let (clerk, alice_holding) = clerk_grant(&mut core, d, 10).await;
+    let later = NOW + 91 * 86_400_000;
+    let marked = |found: &access_authority_core::query::Found| {
+        entries(found).into_iter().find_map(|e| match e {
+            Entry::Hygiene(h) if h.grant == clerk => Some(h),
+            _ => None,
+        })
+    };
+    let query = Query::Inventory { party: ROOT };
+    let inc = incoming(search_request(d, 40, query.kind()), ROOT_KEY);
+    let today = core.search(&inc, &query, None, NOW).await.unwrap();
+    assert!(!marked(&today).is_some_and(|h| h.unused), "just issued");
+    let head = core.head();
+    let inc = incoming(search_request(d, 41, query.kind()), ROOT_KEY);
+    let idle = core.search(&inc, &query, None, later).await.unwrap();
+    assert!(marked(&idle).unwrap().unused);
+    assert_eq!(core.head(), head, "the mark wrote nothing");
+    allowed(
+        &send(
+            &mut core,
+            shop_request(d, 12, Mode::Commit, alice_holding),
+            ALICE_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    let inc = incoming(search_request(d, 42, query.kind()), ROOT_KEY);
+    let used = core.search(&inc, &query, None, later).await.unwrap();
+    assert!(
+        !marked(&used).is_some_and(|h| h.unused),
+        "used inside the window"
+    );
+}
