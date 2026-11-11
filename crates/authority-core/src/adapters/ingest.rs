@@ -130,6 +130,11 @@ where
     /// # Errors
     /// [`CoreError`].
     pub async fn ingest(&self, sub: &ClaimSubmission) -> Result<Ingested, CoreError> {
+        // G44, OP-157 m.3 (p)
+        let _turn = self
+            .lanes
+            .turn(sub.domain, crate::app::lane_of(sub))
+            .await?;
         let mut guard = self.leading(sub.domain).await?;
         let Some(led) = guard.as_mut() else {
             return Err(CoreError::Unavailable("leader"));

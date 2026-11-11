@@ -33,6 +33,7 @@ Every metric name starts with `access_`. The section column is the row of the op
 | `access_sequencer_cas_failures_total` | counter | | CAS failures (alarm) |
 | `access_sequencer_fence_events_total` | counter | `reason` | Fence events (alarm) |
 | `access_ingest_claims_total` | counter | `outcome` | Quarantine rate |
+| `access_ingest_lane_total` | counter | `kind`, `outcome` | Ingest turns by lane; narrowing Claims never wait behind the general lane |
 | `access_claim_issuer_quota_reached_total` | counter | | Issuer quota |
 | `access_status_list_iat_age_seconds` | gauge | | Status list `iat` age (alarm near the TTL) |
 | `access_protocol_rejections_total` | counter | `surface`, `reason` | Protocol rejection rates |

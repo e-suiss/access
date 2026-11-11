@@ -626,3 +626,139 @@ fn signal_body(s: &Statement, body: Option<&[u8]>) -> Result<(), Refusal> {
 const fn current(s: &ClaimState, now: u64) -> bool {
     s.ended.is_none() && s.statement.validity.from <= now && now <= s.statement.validity.until
 }
+
+/// The ingest lane of a submission (G44, §13.7.4, §17.8.2, OP-157 m.3 (p)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Lane {
+    /// A Claim of a narrowing class: never behind the general lane, never quota-limited.
+    Narrowing,
+    /// Every other submission.
+    General,
+}
+
+impl Lane {
+    /// Its telemetry word.
+    #[must_use]
+    pub const fn word(self) -> &'static str {
+        match self {
+            Self::Narrowing => "narrowing",
+            Self::General => "general",
+        }
+    }
+
+    /// How long a submission may wait for its turn before it is answered unavailable (PD).
+    /// The wait is never a decision input (TI-18).
+    #[must_use]
+    pub const fn max_wait(self) -> std::time::Duration {
+        match self {
+            Self::Narrowing => std::time::Duration::from_secs(30),
+            Self::General => std::time::Duration::from_secs(5),
+        }
+    }
+}
+
+/// The lane `sub` takes, read from its statement before it is verified: a narrowing class
+/// (the [`carrier::narrowing`] predicate) or a Security Event Token, which only carries risk
+/// signals (CI-2, TN-42). A forged statement gains nothing: it is verified as any other and
+/// refused, and narrowing Claims draw no quota anyway.
+#[must_use]
+pub fn lane_of(sub: &ClaimSubmission) -> Lane {
+    let narrowing = match sub.carrier {
+        Carrier::Set => true,
+        Carrier::Cose => suiss_crypto::cose::parse_sign1(&sub.claim)
+            .ok()
+            .and_then(|m| m.payload)
+            .and_then(|p| {
+                suiss_crypto::dcbor::decode(&p, suiss_crypto::dcbor::Limits::CEILING).ok()
+            })
+            .and_then(|v| Statement::from_value(&v).ok())
+            .is_some_and(|s| carrier::narrowing(&s)),
+        _ => false,
+    };
+    if narrowing {
+        Lane::Narrowing
+    } else {
+        Lane::General
+    }
+}
+
+/// The general lane of each domain: one general submission at a time goes on to the leader,
+/// so a narrowing Claim waits behind at most one of them however many are queued
+/// (OP-157 m.3 (p)).
+#[derive(Debug, Default)]
+pub struct Lanes(
+    std::sync::Mutex<
+        std::collections::HashMap<
+            access_kernel::digest::Digest,
+            std::sync::Arc<tokio::sync::Semaphore>,
+        >,
+    >,
+);
+
+/// A submission's turn: held until its ingest is answered.
+#[derive(Debug)]
+pub struct Turn {
+    _held: Option<tokio::sync::OwnedSemaphorePermit>,
+}
+
+impl Lanes {
+    /// Waits for `lane`'s turn on `domain`, up to [`Lane::max_wait`]; a narrowing Claim has its
+    /// turn at once.
+    ///
+    /// # Errors
+    /// [`CoreError::Unavailable`] `ingest-lane` when the wait ran out.
+    pub async fn turn(
+        &self,
+        domain: access_kernel::digest::Digest,
+        lane: Lane,
+    ) -> Result<Turn, CoreError> {
+        if lane == Lane::Narrowing {
+            access_telemetry::signals::INGEST_LANE.incr([lane.word(), "taken"]);
+            return Ok(Turn { _held: None });
+        }
+        let general = self
+            .0
+            .lock()
+            .map_err(|_| CoreError::Unavailable("ingest-lane"))?
+            .entry(domain)
+            .or_insert_with(|| std::sync::Arc::new(tokio::sync::Semaphore::new(1)))
+            .clone();
+        if let Ok(Ok(permit)) = tokio::time::timeout(lane.max_wait(), general.acquire_owned()).await
+        {
+            access_telemetry::signals::INGEST_LANE.incr([lane.word(), "taken"]);
+            Ok(Turn {
+                _held: Some(permit),
+            })
+        } else {
+            access_telemetry::signals::INGEST_LANE.incr([lane.word(), "expired"]);
+            Err(CoreError::Unavailable("ingest-lane"))
+        }
+    }
+}
+
+#[cfg(test)]
+mod lane_tests {
+    use super::*;
+
+    // G44, §13.7.4, OP-157 m.3 (p), Ek B 5664
+    #[tokio::test]
+    async fn a_narrowing_claim_goes_first_while_the_general_lane_is_full() {
+        let lanes = Lanes::default();
+        let d = access_kernel::digest::Digest([1; 32]);
+        let held = lanes.turn(d, Lane::General).await.unwrap();
+        let narrowing = tokio::time::timeout(
+            std::time::Duration::from_millis(1),
+            lanes.turn(d, Lane::Narrowing),
+        )
+        .await;
+        assert!(matches!(narrowing, Ok(Ok(_))));
+        assert!(matches!(
+            lanes.turn(d, Lane::General).await,
+            Err(CoreError::Unavailable("ingest-lane"))
+        ));
+        let other = access_kernel::digest::Digest([2; 32]);
+        assert!(lanes.turn(other, Lane::General).await.is_ok());
+        drop(held);
+        assert!(lanes.turn(d, Lane::General).await.is_ok());
+    }
+}

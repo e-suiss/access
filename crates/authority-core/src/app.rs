@@ -1542,8 +1542,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 .saturating_add(u64::from(!open))
                 .saturating_add(1);
             // §16.5, OP-157 m.3 (n), (o)
-            let window = self.window_of(inc, actor, &resolved, now).await?;
-            let raised = self.policy_raised(req.payload.as_ref()).await?;
+            let window = Box::pin(self.window_of(inc, actor, &resolved, now)).await?;
+            let raised = Box::pin(self.policy_raised(req.payload.as_ref())).await?;
             let mut frame = self.frame(
                 (digest, exercise, head.saturating_add(records)),
                 actor,
@@ -2122,6 +2122,6 @@ pub mod vault;
 mod window;
 mod workload;
 
-pub use ingest::Ingested;
+pub use ingest::{Ingested, Lane, Lanes, Turn, lane_of};
 pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};
 pub use roles::ROLES_CLAIM;

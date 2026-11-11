@@ -487,6 +487,8 @@ pub struct Domains<K, B: Binding, S: Salts, C> {
     setup: Setup<K, B, S, C>,
     led: Mutex<HashMap<Digest, Slot<B, S, C>>>,
     bell: Option<Arc<dyn suiss_ledger::doorbell::Bell>>,
+    /// The general ingest lane of each domain (OP-157 m.3 (p)).
+    lanes: crate::app::Lanes,
 }
 
 impl<K: Keys, B: Binding, S: Salts, C> Domains<K, B, S, C> {
@@ -522,6 +524,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             setup,
             led: Mutex::new(HashMap::new()),
             bell: None,
+            lanes: crate::app::Lanes::default(),
         }
     }
 

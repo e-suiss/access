@@ -58,6 +58,14 @@ pub static INGEST_CLAIMS: Counter<1> = Counter::new(
     [Label::Outcome],
 );
 
+/// §17.8.2, OP-157 m.3 (p): ingest turns by lane (`kind`: `narrowing`, `general`) and
+/// `outcome` (`taken`, `expired`). Telemetry, never a decision input (TI-18).
+pub static INGEST_LANE: Counter<2> = Counter::new(
+    "access_ingest_lane_total",
+    "Claim ingest turns by lane and outcome (G44; TI-18: not a decision input)",
+    [Label::Kind, Label::Outcome],
+);
+
 /// §17.8.2 "Status list `iat` yaşı": seconds since the newest published list was issued.
 pub static STATUS_LIST_IAT_AGE: Gauge<0> = Gauge::new(
     "access_status_list_iat_age_seconds",

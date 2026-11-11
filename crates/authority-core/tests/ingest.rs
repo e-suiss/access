@@ -1756,3 +1756,55 @@ async fn a_grant_on_one_incarnation_does_not_cover_the_next() {
     assert_eq!(ask(2, 91).await, Outcome::Deny);
     assert_eq!(ask(0, 92).await, Outcome::Deny);
 }
+
+// G44, §13.7.4, OP-157 m.3 (p), Ek B 5664
+#[tokio::test]
+async fn narrowing_claims_take_their_own_lane_through_the_ledger() {
+    use access_authority_core::app::{Lane, lane_of};
+    let db = fresh().await.unwrap();
+    let (core, d) = setup(
+        &db,
+        vec![
+            regime_acceptance(),
+            acceptance(ALICE, "predicate-input", &["kyc"], vec![quota(1)]),
+        ],
+    )
+    .await;
+    core.release().await.unwrap();
+    let domains = Domains::new(Setup {
+        sequencer: db.sequencer.clone(),
+        app: db.app.clone(),
+        keys: Listed(d),
+        holder: "ingest".to_owned(),
+        ttl: TTL,
+        binding: binding(),
+        salts: Counter(40),
+        clock: Fixed,
+        deriver: db.deriver.clone(),
+        signer: None,
+        api_base: "https://api.example".to_owned(),
+        analysis: std::sync::Arc::new(access_authority_core::ports::NoAnalysis),
+    });
+    let compromise = signed(
+        &statement(d, REGIME, ALICE, "party_compromise", EqValue::Int(5_000)),
+        REGIME_KEY,
+    );
+    let suspended = signed(&status(d, BOB, "suspended", NOW, None), REGIME_KEY);
+    let active = signed(&status(d, BOB, "active", NOW, None), REGIME_KEY);
+    let kyc_claim = signed(&kyc(d, ALICE, 1), ALICE_KEY);
+    assert_eq!(lane_of(&compromise), Lane::Narrowing);
+    assert_eq!(lane_of(&suspended), Lane::Narrowing);
+    assert_eq!(lane_of(&active), Lane::General);
+    assert_eq!(lane_of(&kyc_claim), Lane::General);
+    for n in 1..=3 {
+        domains
+            .record(signed(&kyc(d, ALICE, n), ALICE_KEY), false)
+            .await
+            .unwrap();
+    }
+    assert!(matches!(
+        domains.record(compromise, false).await.unwrap(),
+        ClaimVerdict::Admitted { .. }
+    ));
+    domains.release().await;
+}
