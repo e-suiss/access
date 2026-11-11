@@ -995,6 +995,55 @@ export const en = {
     "{n} delegations given directly to this person survive their role ending. Decide for each.",
   offboardingElsewhere:
     "Change a role or hand over the domain in Roles or Domains first, then preview again.",
+  // OP-158 m.4 (a): Stage 13 screens
+  screenPlacement: "Placement",
+  placementIntro:
+    "Where this realm and its domain are served from. Placement only routes requests; it never decides who can do what.",
+  placementCell: "Cell",
+  placementResidency: "Data stays in {region} ({class})",
+  placementRehome: "Move to another governing domain",
+  placementRehomeBoth:
+    "A move needs an approval in both the current and the new governing domain. Until both are recorded, the realm stays where it is.",
+  placementDedicated: "Dedicated cell",
+  screenDurability: "Durability",
+  durabilityIntro:
+    "How safely changes are kept: copies inside the cluster, outside the provider, and what can be lost in a disaster.",
+  durabilityReplicated: "Replicated: no acknowledged change is lost when one machine fails.",
+  durabilitySingleNode: "Single node: an acknowledged change can be lost with the machine.",
+  durabilityDr: "Disaster recovery: {class}; up to {rpo} of changes can be lost",
+  durabilityDrSync: "Synchronous: no acknowledged change is lost",
+  durabilityWitnesses: "Witnesses",
+  durabilityWitnessIndependent: "Independent of the provider",
+  durabilityWitnessNotIndependent: "Run by the provider",
+  durabilityReplicas: "Replicas",
+  durabilityNoWitness:
+    "No independent witness and replica are declared, so revocations are never shown as confirmed.",
+  recoveryNotAvailable: "Recovery not available",
+  recoveryNotAvailableWhy:
+    "There aren't enough hardware-bound keys outside the provider to set up recovery. Add security keys to set it up.",
+  screenRateLimits: "Rate limits",
+  rateLimitsIntro:
+    "How much of each limit is in use. Narrowing actions, export, handover and recovery are never limited.",
+  rateLimitsBucket: "Bucket",
+  rateLimitsNow: "Now",
+  rateLimitsAverage24h: "24 h average",
+  rateLimitsAverage1h: "1 h average",
+  rateLimitsTopConsumers: "Top 10 consumers",
+  rateLimitsEvents: "Events",
+  rateLimitsThreshold: "Above {percent}% of the limit",
+  screenRecovery: "Recovery and handover",
+  recoveryIntro:
+    "Handovers to another provider and forced recoveries of this domain, with the record position each started from.",
+  recoveryRecoveredAt: "Recovered from previous provider at record position {position}",
+  recoveryChangesLost:
+    "Changes after {time} may be lost. If you revoked anything after {time}, revoke it again",
+  recoveryHandoverAt: "Moved to {provider} at record position {position}",
+  recoveryQuarantine: "Quarantine: {pattern}",
+  recoveryDecommission: "This domain closes on {date}. Export or move it before then.",
+  failureOwner: "Responsible: {owner}",
+  failureUnknown: "UNKNOWN",
+  failureMissing: "Not known yet: {what}",
+  failureSafeDefault: "Until then: {default}",
 } as const;
 
 export type Key = keyof typeof en;

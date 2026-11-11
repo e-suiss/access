@@ -178,6 +178,14 @@ const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
   commitOffboarding: ["idp.realm", "offboarding"],
   // V10, OP-157 m.4 (b): a reviewer's keep, signed over its keep digest
   keepReviewItem: ["idp.review", "keep"],
+  // OP-158 m.4 (a)
+  rehomeRealm: ["idp.realm", "rehome"],
+  putResidency: ["idp.realm", "residency"],
+  putDrProfile: ["idp.realm", "dr_profile"],
+  putRateLimit: ["idp.realm", "rate_limit"],
+  putCryptoProfile: ["idp.realm", "crypto_profile"],
+  putHashProfile: ["idp.realm", "hash_profile"],
+  putAuditTier: ["idp.realm", "audit_tier"],
 };
 
 export interface Write {

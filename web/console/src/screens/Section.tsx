@@ -42,6 +42,9 @@ export const SCREEN_TITLE: Readonly<Record<Screen, Key>> = {
   breakglass: "screenBreakglass",
   reviews: "screenReviews",
   support: "screenSupport",
+  placement: "screenPlacement",
+  durability: "screenDurability",
+  ratelimits: "screenRateLimits",
   "sign-in": "screenSignIn",
   schemas: "screenSchemas",
   integrations: "screenIntegrations",
@@ -53,6 +56,7 @@ export const SCREEN_TITLE: Readonly<Record<Screen, Key>> = {
   unknown: "screenUnknown",
   containment: "screenContainment",
   export: "screenExport",
+  recovery: "screenRecovery",
 };
 
 const SECTION_TITLE: Readonly<Record<Section, Key>> = {
@@ -107,6 +111,12 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
       return <Reviews ctx={ctx} />;
     case "support":
       return <Planned />;
+    case "placement":
+      return <Planned />;
+    case "durability":
+      return <Planned />;
+    case "ratelimits":
+      return <Planned />;
     case "sign-in":
       return <SignInSettings ctx={ctx} />;
     case "schemas":
@@ -130,6 +140,9 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
 
     case "export":
       return <Au.Export ctx={ctx} />;
+
+    case "recovery":
+      return <Planned />;
   }
 }
 

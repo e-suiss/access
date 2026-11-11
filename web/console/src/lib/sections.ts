@@ -31,10 +31,13 @@ export const SCREENS = {
     "breakglass",
     "reviews",
     "support",
+    "placement",
+    "durability",
+    "ratelimits",
     "sign-in",
   ],
   developer: ["schemas", "integrations", "lab", "logs"],
-  audit: ["records", "replay", "revocation", "unknown", "containment", "export"],
+  audit: ["records", "replay", "revocation", "unknown", "containment", "export", "recovery"],
 } as const satisfies Readonly<Record<Section, readonly string[]>>;
 
 export type Screen = (typeof SCREENS)[Section][number];
@@ -106,6 +109,12 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
     idp("support", "case_system_retire"),
     idp("support", "artifact_policy"),
   ]),
+  // OP-158 m.4 (a), m.3 (o)
+  placement: planned([idp("realm", "residency"), idp("realm", "rehome")]),
+  // OP-158 m.4 (a), m.3 (n), (p), (r)
+  durability: planned([idp("realm", "dr_profile"), idp("realm", "dr_profile_close")]),
+  // OP-158 m.4 (a), m.3 (v)
+  ratelimits: planned([idp("realm", "rate_limit")]),
   "sign-in": [
     idp("realm", "signin_policy"),
     idp("realm", "branding"),
@@ -126,6 +135,8 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
   // §8.6, Ek B 3921
   containment: [meta("instance_terminate"), meta("grant_revoke")],
   export: [AUDIT],
+  // OP-158 m.4 (a), m.3 (m)
+  recovery: planned([meta("domain_recover"), meta("domain_handover")]),
 };
 
 /** The intent `probe` asks about in `realm`. */

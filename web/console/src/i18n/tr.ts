@@ -1004,4 +1004,55 @@ export const tr: Record<Key, string> = {
     "Bu kişiye doğrudan verilen {n} yetkilendirme rolü bitse de kalır. Her biri için karar verin.",
   offboardingElsewhere:
     "Rolü değiştirmek ya da domain'i başka bir Tarafa bırakmak için önce Roller ya da Domain'ler ekranını kullanın, sonra yeniden önizleyin.",
+  // OP-158 m.4 (a): Aşama 13 ekranları
+  screenPlacement: "Yerleşim",
+  placementIntro:
+    "Bu realm ve alanının nereden sunulduğu. Yerleşim yalnız istekleri yönlendirir; kimin ne yapabileceğine hiç karar vermez.",
+  placementCell: "Hücre",
+  placementResidency: "Veriler {region} içinde kalır ({class})",
+  placementRehome: "Başka bir yönetişim alanına taşıyın",
+  placementRehomeBoth:
+    "Taşıma hem şimdiki hem yeni yönetişim alanında bir onay ister. İkisi de kaydedilene kadar realm olduğu yerde kalır.",
+  placementDedicated: "Ayrılmış hücre",
+  screenDurability: "Dayanıklılık",
+  durabilityIntro:
+    "Değişikliklerin ne kadar güvenle saklandığı: küme içindeki kopyalar, sağlayıcı dışındaki kopyalar ve bir felakette neyin kaybolabileceği.",
+  durabilityReplicated:
+    "Çoğaltılmış: bir makine bozulduğunda onaylanmış hiçbir değişiklik kaybolmaz.",
+  durabilitySingleNode: "Tek düğüm: onaylanmış bir değişiklik makineyle birlikte kaybolabilir.",
+  durabilityDr: "Felaket kurtarma: {class}; en çok {rpo} değişiklik kaybolabilir",
+  durabilityDrSync: "Eşzamanlı: onaylanmış hiçbir değişiklik kaybolmaz",
+  durabilityWitnesses: "Tanıklar",
+  durabilityWitnessIndependent: "Sağlayıcıdan bağımsız",
+  durabilityWitnessNotIndependent: "Sağlayıcı tarafından işletiliyor",
+  durabilityReplicas: "Kopyalar",
+  durabilityNoWitness:
+    "Bağımsız tanık ve kopya beyan edilmedi; bu yüzden geri almalar hiçbir zaman doğrulanmış gösterilmez.",
+  recoveryNotAvailable: "Kurtarma kullanılamıyor",
+  recoveryNotAvailableWhy:
+    "Kurtarmayı kurmak için sağlayıcı dışında yeterli donanıma bağlı anahtar yok. Kurmak için güvenlik anahtarı ekleyin.",
+  screenRateLimits: "Hız sınırları",
+  rateLimitsIntro:
+    "Her sınırın ne kadarının kullanıldığı. Daraltan işlemler, dışa aktarma, devir ve kurtarma hiçbir zaman sınırlanmaz.",
+  rateLimitsBucket: "Kova",
+  rateLimitsNow: "Şimdi",
+  rateLimitsAverage24h: "24 sa ortalama",
+  rateLimitsAverage1h: "1 sa ortalama",
+  rateLimitsTopConsumers: "En çok tüketen 10",
+  rateLimitsEvents: "Olaylar",
+  rateLimitsThreshold: "Sınırın %{percent} üstünde",
+  screenRecovery: "Kurtarma ve devir",
+  recoveryIntro:
+    "Bu alanın başka bir sağlayıcıya devirleri ve zorunlu kurtarmaları, her birinin başladığı kayıt konumuyla.",
+  recoveryRecoveredAt: "Önceki sağlayıcıdan {position} kayıt konumunda kurtarıldı",
+  recoveryChangesLost:
+    "{time} sonrasındaki değişiklikler kaybolmuş olabilir. {time} sonrasında bir şeyi geri aldıysanız yeniden geri alın",
+  recoveryHandoverAt: "{position} kayıt konumunda {provider} sağlayıcısına taşındı",
+  recoveryQuarantine: "Karantina: {pattern}",
+  recoveryDecommission:
+    "Bu alan {date} tarihinde kapanıyor. Ondan önce dışa aktarın ya da taşıyın.",
+  failureOwner: "Sorumlu: {owner}",
+  failureUnknown: "BİLİNMİYOR",
+  failureMissing: "Henüz bilinmiyor: {what}",
+  failureSafeDefault: "O zamana kadar: {default}",
 };
