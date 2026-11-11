@@ -21,12 +21,13 @@ suiss-sandbox = { workspace = true }
 figment = { workspace = true, features = ["env", "toml"] }
 serde = { workspace = true, features = ["derive", "std"] }
 thiserror = { workspace = true, features = ["std"] }
-tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "time"] }
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
 suiss-crypto = { workspace = true, features = ["pkcs11", "testing"] }
 toml = { workspace = true, features = ["std", "parse", "serde"] }
+tokio = { workspace = true, features = ["macros", "net", "rt", "time"] }
 
 [lints]
 workspace = true

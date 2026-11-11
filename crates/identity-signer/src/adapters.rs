@@ -385,17 +385,58 @@ where
     F: KeyFactory + Send + 'static,
     V: Vault + Send + 'static,
 {
+    serve_until(listener, service, allowed, clock, std::future::pending()).await
+}
+
+/// Longest wait for the requests in flight once the signer stops accepting (OP-94).
+pub const DRAIN: Duration = Duration::from_secs(10);
+
+/// [`serve`] until `stop` resolves; then it stops accepting, lets the requests in flight
+/// finish for at most [`DRAIN`] and returns, so the caller can drop the keys and close the
+/// token in order (OP-94, OP-158 m.3 (y)).
+///
+/// # Errors
+/// The listener fails.
+pub async fn serve_until<F, V, S>(
+    listener: UnixListener,
+    service: Arc<Mutex<Service<F, V>>>,
+    allowed: Vec<u32>,
+    clock: fn() -> u64,
+    stop: S,
+) -> Result<(), std::io::Error>
+where
+    F: KeyFactory + Send + 'static,
+    V: Vault + Send + 'static,
+    S: std::future::Future<Output = ()>,
+{
+    let mut inflight = tokio::task::JoinSet::new();
+    let mut stop = std::pin::pin!(stop);
     loop {
-        let (mut stream, _) = listener.accept().await?;
-        let admitted = stream.peer_cred().is_ok_and(|c| allowed.contains(&c.uid()));
-        if !admitted {
-            continue;
+        tokio::select! {
+            () = &mut stop => break,
+            Some(_) = inflight.join_next(), if !inflight.is_empty() => {}
+            accepted = listener.accept() => {
+                let (mut stream, _) = accepted?;
+                let admitted = stream.peer_cred().is_ok_and(|c| allowed.contains(&c.uid()));
+                if !admitted {
+                    continue;
+                }
+                let service = Arc::clone(&service);
+                inflight.spawn(async move {
+                    let _ = answer(&mut stream, &service, clock, READ_TIMEOUT).await;
+                });
+            }
         }
-        let service = Arc::clone(&service);
-        tokio::spawn(async move {
-            let _ = answer(&mut stream, &service, clock, READ_TIMEOUT).await;
-        });
     }
+    drop(listener);
+    let drained = tokio::time::timeout(DRAIN, async {
+        while inflight.join_next().await.is_some() {}
+    })
+    .await;
+    if drained.is_err() {
+        inflight.shutdown().await;
+    }
+    Ok(())
 }
 
 /// Sends one request to the identity signer at `path` (CMP-15.x to CMP-22b).

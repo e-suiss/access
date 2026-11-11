@@ -194,3 +194,205 @@ fn each_test_process_has_its_own_token_store() {
     let tokens = std::fs::read_to_string(&conf).unwrap();
     assert!(tokens.contains(&dir.join("tokens").display().to_string()));
 }
+
+/// Fresh tokens of this process under `names`, made before the module is first initialised in
+/// it (`SoftHSM` lists the tokens it finds then), for tests that need their own login state.
+fn own_tokens(names: &[&str]) {
+    for name in names {
+        let label = format!("{name}-{}", std::process::id());
+        let out =
+            super::token_tests::init_softhsm_token(None, &label, PIN, "5678-test-only").unwrap();
+        assert!(out.status.success(), "{out:?}");
+    }
+}
+
+/// [`own_tokens`] for one token, opened.
+fn own_store(name: &str) -> KeyStore {
+    own_tokens(&[name]);
+    own_reopen(name)
+}
+
+/// Runs the ignored test `name` in a child test process and returns how it exited.
+fn in_child(name: &str) -> std::process::ExitStatus {
+    let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", name, "--ignored", "--nocapture"])
+        .env("SUISS_PKCS11_CHILD", "1")
+        .stdout(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let started = std::time::Instant::now();
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            return status;
+        }
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(60),
+            "{name} did not exit"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+fn exercise(s: &KeyStore) -> (HsmKek, HsmSigner) {
+    let kek = s.generate_kek("kek-shutdown").unwrap();
+    let dek = Dek::generate().unwrap();
+    assert!(kek.unwrap(&kek.wrap(&dek).unwrap()).is_ok());
+    let signer = s.generate_p256("sig-shutdown").unwrap();
+    assert!(signer.sign(b"in flight").is_ok());
+    (kek, signer)
+}
+
+#[test]
+#[ignore = "child of the_shutdown_order_exits_cleanly"]
+fn child_orderly_shutdown() {
+    if std::env::var_os("SUISS_PKCS11_CHILD").is_none() {
+        return;
+    }
+    let s = own_store("shutdown");
+    let (kek, signer) = exercise(&s);
+    assert_eq!(s.open_handles(), 2);
+    drop(signer);
+    let s = match s.finalize() {
+        Err(HsmError::Busy(1)) => own_reopen("shutdown"),
+        other => panic!("{other:?}"),
+    };
+    drop(kek);
+    assert_eq!(s.open_handles(), 0);
+    s.finalize().unwrap();
+}
+
+fn own_reopen(name: &str) -> KeyStore {
+    KeyStore::open(
+        &module(),
+        &format!("{name}-{}", std::process::id()),
+        &Secret::new(String::from(PIN)),
+    )
+    .unwrap()
+}
+
+#[test]
+#[ignore = "child of a_store_dropped_with_open_sessions_exits_cleanly"]
+fn child_dropped_with_sessions() {
+    if std::env::var_os("SUISS_PKCS11_CHILD").is_none() {
+        return;
+    }
+    let s = own_store("dropped");
+    let handles = exercise(&s);
+    drop(s);
+    drop(handles);
+}
+
+// OP-94, OP-158
+#[test]
+fn the_shutdown_order_exits_cleanly() {
+    let status = in_child("pkcs11::tests::child_orderly_shutdown");
+    assert!(status.success(), "{status:?}");
+}
+
+// OP-94
+#[test]
+fn a_store_dropped_with_open_sessions_exits_cleanly() {
+    let status = in_child("pkcs11::tests::child_dropped_with_sessions");
+    assert!(status.success(), "{status:?}");
+}
+
+// OP-138, OP-158
+#[test]
+fn a_kek_rotation_rewraps_inside_the_token() {
+    let s = store();
+    let (old_value, new_value) = (random_key(), random_key());
+    let old = s.import_kek("kek-rot-1", &Secret::new(old_value)).unwrap();
+    let new = s.import_kek("kek-rot-2", &Secret::new(new_value)).unwrap();
+    let dek = Dek::generate().unwrap();
+    let wrapped = old.wrap(&dek).unwrap();
+    let moved = old.rewrap(&wrapped, &new).unwrap();
+    let soft = crate::envelope::rewrap(
+        &SoftKek::new("kek-rot-1", old_value),
+        &SoftKek::new("kek-rot-2", new_value),
+        &wrapped,
+    )
+    .unwrap();
+    assert_eq!(moved, soft);
+    assert!(new.unwrap(&moved).unwrap().secret().ct_eq(dek.secret()));
+    assert!(old.unwrap(&moved).is_err());
+    assert!(new.rewrap(&wrapped, &old).is_err());
+}
+
+// CR-30, OP-158
+#[test]
+fn a_binding_key_clones_to_the_dr_token() {
+    own_tokens(&["primary0", "dr0", "other0", "primary1", "dr1", "other1"]);
+    for (n, ed25519) in [(0, true), (1, false)] {
+        let primary = own_reopen(&format!("primary{n}"));
+        let dr = own_reopen(&format!("dr{n}"));
+        let value = random_key();
+        let so = Secret::new(String::from("5678-test-only"));
+        for t in [&primary, &dr] {
+            t.install_clone_key(&so, "clone", &Secret::new(value))
+                .unwrap();
+        }
+        let binding = primary.generate_cloneable("binding", ed25519).unwrap();
+        let backup = primary.export_clone("binding", "clone").unwrap();
+        assert_eq!(backup.public, binding.public_key());
+        let clone = dr.import_clone("binding", "clone", &backup).unwrap();
+        assert_eq!(clone.public_key(), binding.public_key());
+        let sig = clone.sign(b"metadata").unwrap();
+        let ok = match binding.public_key() {
+            PublicKey::Ed25519(p) => crate::sig::ed25519(&PureBackend, &p, b"metadata", &sig),
+            PublicKey::P256(p) => crate::sig::p256(&PureBackend, &p, b"metadata", &sig, true),
+            other @ PublicKey::MlDsa(..) => panic!("{other:?}"),
+        };
+        assert!(ok.is_ok());
+        assert!(matches!(
+            dr.import_clone("binding", "clone", &backup),
+            Err(HsmError::Key(_))
+        ));
+        primary.generate_kek("plain").unwrap();
+        assert!(matches!(
+            primary.export_clone("binding", "plain"),
+            Err(HsmError::Operation(_))
+        ));
+        primary.generate_ed25519("fixed").unwrap();
+        assert!(matches!(
+            primary.export_clone("fixed", "clone"),
+            Err(HsmError::Operation(_))
+        ));
+        let other = own_reopen(&format!("other{n}"));
+        let wrong = random_key();
+        other
+            .install_clone_key(&so, "clone", &Secret::new(wrong))
+            .unwrap();
+        assert!(other.import_clone("binding", "clone", &backup).is_err());
+        drop((binding, clone));
+        for t in [primary, dr, other] {
+            drop(t);
+        }
+    }
+}
+
+// CR-30
+#[test]
+fn the_clone_key_needs_the_security_officer_and_idle_handles() {
+    let s = own_store("so");
+    let value = Secret::new(random_key());
+    assert!(matches!(
+        s.install_clone_key(&Secret::new(String::from(PIN)), "clone", &value),
+        Err(HsmError::Session(_))
+    ));
+    let held = s.generate_kek("held").unwrap();
+    assert!(matches!(
+        s.install_clone_key(
+            &Secret::new(String::from("5678-test-only")),
+            "clone",
+            &value
+        ),
+        Err(HsmError::Busy(1))
+    ));
+    drop(held);
+}
+
+fn random_key() -> [u8; 32] {
+    aws_lc_rs::rand::generate(&aws_lc_rs::rand::SystemRandom::new())
+        .unwrap()
+        .expose()
+}

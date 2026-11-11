@@ -10,7 +10,7 @@ use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use access_authority_signer::adapters::{DirVault, HsmBindings, SealedFactory, serve};
+use access_authority_signer::adapters::{DirVault, HsmBindings, SealedFactory, serve_until};
 use access_authority_signer::ceremony::{Gate, Quorate};
 use access_authority_signer::service::Service;
 use access_crypto::secret_file::SecretFile;
@@ -35,6 +35,64 @@ fn open_hsm(hsm: &config::Hsm) -> Result<(KeyStore, suiss_crypto::pkcs11::HsmKek
     let store = KeyStore::open(&hsm.module, &hsm.token, pin.value()).map_err(|e| e.to_string())?;
     let kek = store.kek(&hsm.kek).map_err(|e| e.to_string())?;
     Ok((store, kek))
+}
+
+/// The async runtime with the stop signal registered in it, before seccomp phase 2.
+fn runtime() -> Option<(
+    tokio::runtime::Runtime,
+    impl std::future::Future<Output = ()>,
+)> {
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            tracing::error!(%error, "cannot start the async runtime");
+            return None;
+        }
+    };
+    let stop = {
+        let _entered = runtime.enter();
+        match stop_signal() {
+            Ok(stop) => stop,
+            Err(error) => {
+                tracing::error!(%error, "cannot watch for the stop signal");
+                return None;
+            }
+        }
+    };
+    Some((runtime, stop))
+}
+
+/// `SIGTERM` or `SIGINT`, registered before seccomp phase 2 (OP-94).
+fn stop_signal() -> std::io::Result<impl std::future::Future<Output = ()>> {
+    use tokio::signal::unix::{SignalKind, signal};
+    let mut term = signal(SignalKind::terminate())?;
+    let mut interrupt = signal(SignalKind::interrupt())?;
+    Ok(async move {
+        tokio::select! {
+            _ = term.recv() => {}
+            _ = interrupt.recv() => {}
+        }
+    })
+}
+
+/// OP-94, OP-158 m.3 (y): the last steps of the shutdown, once the socket stopped accepting
+/// and the requests in flight finished: drop the service, which drops the key store and every
+/// key handle and closes their sessions, then `C_Finalize`.
+fn close_token(service: Arc<Mutex<Signer>>, finalizer: suiss_crypto::pkcs11::Finalizer) -> bool {
+    drop(service);
+    match finalizer.finalize() {
+        Ok(()) => {
+            tracing::info!("signer stopped; HSM sessions closed and the module finalized");
+            true
+        }
+        Err(error) => {
+            tracing::error!(%error, code = error.code(), "HSM not finalized at shutdown");
+            false
+        }
+    }
 }
 
 /// SA-22, CR-21 m.2: no network, only the vault and the token's files.
@@ -281,10 +339,14 @@ async fn schedule(
     every: Duration,
     (transcript, pin, gate): (std::path::PathBuf, [u8; 32], Gate),
     mut head: [u8; 32],
+    mut halted: tokio::sync::watch::Receiver<bool>,
 ) {
     let mut interval = tokio::time::interval(every);
     loop {
-        interval.tick().await;
+        tokio::select! {
+            _ = interval.tick() => {}
+            _ = halted.changed() => break,
+        }
         let service = Arc::clone(&service);
         let (transcript, gate) = (transcript.clone(), gate.clone());
         let before = head;
@@ -384,20 +446,14 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let runtime = match tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-    {
-        Ok(runtime) => runtime,
-        Err(error) => {
-            tracing::error!(%error, "cannot start the async runtime");
-            return ExitCode::FAILURE;
-        }
+    let Some((runtime, stop)) = runtime() else {
+        return ExitCode::FAILURE;
     };
     if let Err(error) = locked.narrow() {
         tracing::error!(%error, "seccomp phase 2 failed; refusing to continue");
         return ExitCode::FAILURE;
     }
+    let finalizer = store.finalizer();
     let service = match start(&config, store, kek, gate.clone()) {
         Ok(service) => Arc::new(Mutex::new(service)),
         Err(error) => {
@@ -406,19 +462,28 @@ fn main() -> ExitCode {
         }
     };
     let every = Duration::from_secs(config.tick_seconds);
+    let (stopped, halted) = tokio::sync::watch::channel(false);
     let rounds = schedule(
         Arc::clone(&service),
         every,
         (ceremony.transcript.clone(), pin, gate),
         head,
+        halted,
     );
+    let serving = Arc::clone(&service);
     let result = runtime.block_on(async move {
-        tokio::spawn(rounds);
+        let rounds = tokio::spawn(rounds);
         let listener = tokio::net::UnixListener::from_std(listener)?;
-        serve(listener, service, config.callers.clone(), now_ms).await
+        let served = serve_until(listener, serving, config.callers.clone(), now_ms, stop).await;
+        let _ = stopped.send(true);
+        let _ = rounds.await;
+        served
     });
+    drop(runtime);
+    let closed = close_token(service, finalizer);
     match result {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(()) if closed => ExitCode::SUCCESS,
+        Ok(()) => ExitCode::FAILURE,
         Err(error) => {
             tracing::error!(%error, "signer stopped with an error");
             ExitCode::FAILURE

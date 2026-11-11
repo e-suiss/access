@@ -125,3 +125,78 @@ async fn a_silent_caller_times_out() {
         Err(std::io::ErrorKind::TimedOut)
     );
 }
+
+/// A fresh `SoftHSM` token of this test process with a KEK (OP-69).
+fn hsm_store() -> suiss_crypto::pkcs11::KeyStore {
+    let label = format!("shutdown-{}", std::process::id());
+    let out = suiss_crypto::pkcs11::token_tests::init_softhsm_token(
+        None,
+        &label,
+        "1234-test-only",
+        "5678-test-only",
+    )
+    .unwrap();
+    assert!(out.status.success(), "{out:?}");
+    let module = [
+        std::env::var("SUISS_PKCS11_MODULE").unwrap_or_default(),
+        String::from("/opt/homebrew/lib/softhsm/libsofthsm2.so"),
+        String::from("/usr/lib/softhsm/libsofthsm2.so"),
+        String::from("/usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so"),
+        String::from("/usr/lib/aarch64-linux-gnu/softhsm/libsofthsm2.so"),
+    ]
+    .iter()
+    .map(PathBuf::from)
+    .find(|p| p.is_file())
+    .unwrap();
+    suiss_crypto::pkcs11::KeyStore::open(
+        &module,
+        &label,
+        &Secret::new(String::from("1234-test-only")),
+    )
+    .unwrap()
+}
+
+// OP-94, OP-158
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stopped_signer_closes_its_token_in_order() {
+    let dir = temp("shutdown");
+    let store = hsm_store();
+    let kek = store.generate_kek("access/identity/kek").unwrap();
+    let service =
+        Service::start(SealedFactory::new(kek), DirVault::new(&dir), Policy::REALM).unwrap();
+    let service = Arc::new(Mutex::new(service));
+    let path = dir.join("s.sock");
+    let listener = UnixListener::bind(&path).unwrap();
+    let uid = std::os::unix::fs::MetadataExt::uid(&std::fs::metadata(&dir).unwrap());
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    let serving = tokio::spawn(serve_until(
+        listener,
+        Arc::clone(&service),
+        vec![uid],
+        now_ms,
+        async move {
+            let _ = stopped.await;
+        },
+    ));
+    let open = Request::Open {
+        realm: Realm([6; 16]),
+        alg: JwsAlg::Es256,
+    };
+    assert_eq!(call(&path, &open).await.unwrap(), Response::Opened);
+    assert_eq!(store.open_handles(), 1);
+    stop.send(()).unwrap();
+    tokio::time::timeout(DRAIN, serving)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert!(call(&path, &Request::Ping).await.is_err());
+    let finalizer = store.finalizer();
+    assert!(matches!(
+        finalizer.finalize(),
+        Err(suiss_crypto::pkcs11::HsmError::Busy(2))
+    ));
+    drop(service);
+    assert_eq!(store.open_handles(), 0);
+    store.finalize().unwrap();
+}

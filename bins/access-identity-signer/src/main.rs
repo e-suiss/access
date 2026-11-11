@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use access_crypto::secret_file::SecretFile;
-use access_identity_signer::adapters::{DirVault, SealedFactory, draw, now_ms, serve};
+use access_identity_signer::adapters::{DirVault, SealedFactory, draw, now_ms, serve_until};
 use access_identity_signer::kat::SelfTestError;
 use access_identity_signer::service::Service;
 use config::Config;
@@ -18,11 +18,43 @@ use suiss_crypto::pkcs11::{HsmError, KeyStore};
 use suiss_crypto::rotation::Policy;
 use suiss_sandbox::{LandlockAbi, Lockdown, Profile};
 
-/// OP-129 m.3: the PIN and the token are opened before the lockdown.
-fn open_kek(hsm: &config::Hsm) -> Result<suiss_crypto::pkcs11::HsmKek, String> {
+/// OP-129 m.3: the PIN and the token are opened before the lockdown. The store is kept for
+/// the orderly shutdown (OP-94).
+fn open_kek(hsm: &config::Hsm) -> Result<(KeyStore, suiss_crypto::pkcs11::HsmKek), String> {
     let pin = SecretFile::load(&hsm.pin_file).map_err(|e| e.to_string())?;
     let store = KeyStore::open(&hsm.module, &hsm.token, pin.value()).map_err(|e| e.to_string())?;
-    store.kek(&hsm.kek).map_err(|e| e.to_string())
+    let kek = store.kek(&hsm.kek).map_err(|e| e.to_string())?;
+    Ok((store, kek))
+}
+
+/// `SIGTERM` or `SIGINT`, registered before seccomp phase 2 (OP-94).
+fn stop_signal() -> std::io::Result<impl std::future::Future<Output = ()>> {
+    use tokio::signal::unix::{SignalKind, signal};
+    let mut term = signal(SignalKind::terminate())?;
+    let mut interrupt = signal(SignalKind::interrupt())?;
+    Ok(async move {
+        tokio::select! {
+            _ = term.recv() => {}
+            _ = interrupt.recv() => {}
+        }
+    })
+}
+
+/// OP-94, OP-158 m.3 (y): the last steps of the shutdown, once the socket stopped accepting
+/// and the requests in flight finished: drop the service, which drops every key handle and
+/// closes its session, then `C_Finalize`.
+fn close_token(service: Arc<Mutex<Signer>>, store: KeyStore) -> bool {
+    drop(service);
+    match store.finalize() {
+        Ok(()) => {
+            tracing::info!("identity signer stopped; HSM sessions closed and the module finalized");
+            true
+        }
+        Err(error) => {
+            tracing::error!(%error, code = error.code(), "HSM not finalized at shutdown");
+            false
+        }
+    }
 }
 
 /// SA-22, CR-21 m.2: no network, only the vault and the token's files.
@@ -233,8 +265,8 @@ fn main() -> ExitCode {
     if provision {
         return init(&config, hsm);
     }
-    let kek = match open_kek(hsm) {
-        Ok(kek) => kek,
+    let (store, kek) = match open_kek(hsm) {
+        Ok(opened) => opened,
         Err(error) => {
             tracing::error!(%error, "KEK unusable; refusing to start (CR-21)");
             return ExitCode::FAILURE;
@@ -265,6 +297,16 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    let stop = {
+        let _entered = runtime.enter();
+        match stop_signal() {
+            Ok(stop) => stop,
+            Err(error) => {
+                tracing::error!(%error, "cannot watch for the stop signal");
+                return ExitCode::FAILURE;
+            }
+        }
+    };
     if let Err(error) = locked.narrow() {
         tracing::error!(%error, "seccomp phase 2 failed; refusing to continue");
         return ExitCode::FAILURE;
@@ -273,36 +315,55 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
     let service = Arc::new(Mutex::new(service));
-    let ticking = Arc::clone(&service);
-    let every = Duration::from_secs(config.tick_seconds);
-    let result = runtime.block_on(async move {
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(every);
-            loop {
-                interval.tick().await;
-                let service = Arc::clone(&ticking);
-                // CR-28
-                let report = tokio::task::spawn_blocking(move || {
-                    service
-                        .lock()
-                        .map(|mut s| s.round(now_ms(), draw()))
-                        .unwrap_or_default()
-                })
-                .await
-                .unwrap_or_default();
-                audit(&report);
-            }
-        });
-        let listener = tokio::net::UnixListener::from_std(listener)?;
-        serve(listener, service, config.callers.clone(), now_ms).await
-    });
+    let result = runtime.block_on(run(&config, Arc::clone(&service), listener, stop));
+    drop(runtime);
+    let closed = close_token(service, store);
     match result {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(()) if closed => ExitCode::SUCCESS,
+        Ok(()) => ExitCode::FAILURE,
         Err(error) => {
             tracing::error!(%error, "identity signer stopped with an error");
             ExitCode::FAILURE
         }
     }
+}
+
+/// CR-28: the key schedule rounds and the socket until `stop`; the rounds end after the one
+/// in progress.
+async fn run(
+    config: &Config,
+    service: Arc<Mutex<Signer>>,
+    listener: std::os::unix::net::UnixListener,
+    stop: impl std::future::Future<Output = ()>,
+) -> std::io::Result<()> {
+    let ticking = Arc::clone(&service);
+    let every = Duration::from_secs(config.tick_seconds);
+    let (stopped, mut halted) = tokio::sync::watch::channel(false);
+    let rounds = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(every);
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {}
+                _ = halted.changed() => break,
+            }
+            let service = Arc::clone(&ticking);
+            // CR-28
+            let report = tokio::task::spawn_blocking(move || {
+                service
+                    .lock()
+                    .map(|mut s| s.round(now_ms(), draw()))
+                    .unwrap_or_default()
+            })
+            .await
+            .unwrap_or_default();
+            audit(&report);
+        }
+    });
+    let listener = tokio::net::UnixListener::from_std(listener)?;
+    let served = serve_until(listener, service, config.callers.clone(), now_ms, stop).await;
+    let _ = stopped.send(true);
+    let _ = rounds.await;
+    served
 }
 
 #[cfg(test)]

@@ -47,6 +47,9 @@ pub enum HsmError {
     /// A shared session's lock was poisoned.
     #[error("session lock poisoned")]
     Poisoned,
+    /// Key handles still hold sessions open: drop them before finalizing (OP-94).
+    #[error("{0} key handles still open")]
+    Busy(usize),
 }
 
 impl HsmError {
@@ -56,7 +59,7 @@ impl HsmError {
         match self {
             Self::Module(_) => "hsm-module",
             Self::Token(_) => "hsm-token",
-            Self::Session(_) | Self::Poisoned => "hsm-session",
+            Self::Session(_) | Self::Poisoned | Self::Busy(_) => "hsm-session",
             Self::Key(_) => "hsm-key",
             Self::Operation(_) => "hsm-operation",
             Self::Encoding => "hsm-encoding",
@@ -64,11 +67,43 @@ impl HsmError {
     }
 }
 
-/// A logged-in PKCS#11 token.
+/// Every module a store opened stays loaded until the process exits: unloading a module that
+/// used OpenSSL (`SoftHSM`) leaves OpenSSL's exit handler pointing at unmapped code, and the
+/// process then crashes at exit (OP-94).
+static RESIDENT: Mutex<Vec<Pkcs11>> = Mutex::new(Vec::new());
+
+/// Finalizes a module once its store and every key handle are dropped (OP-94).
+pub struct Finalizer {
+    module: Pkcs11,
+    lease: std::sync::Weak<()>,
+}
+
+impl Finalizer {
+    /// `C_Finalize`, when nothing of the store is alive any more.
+    ///
+    /// # Errors
+    /// [`HsmError::Busy`] while the store or a handle is alive (nothing is finalized);
+    /// [`HsmError::Module`] when the token refuses.
+    pub fn finalize(self) -> Result<(), HsmError> {
+        let open = self.lease.strong_count();
+        if open > 0 {
+            return Err(HsmError::Busy(open));
+        }
+        match self.module.finalize() {
+            Ok(()) | Err(CkError::Pkcs11(RvError::CryptokiNotInitialized, _)) => Ok(()),
+            Err(e) => Err(HsmError::Module(e)),
+        }
+    }
+}
+
+/// A logged-in PKCS#11 token. Each key handle it gives out holds a session and a lease; the
+/// orderly shutdown (OP-158 m.3 (y)) drops every handle, which closes its session, then calls
+/// [`KeyStore::finalize`].
 pub struct KeyStore {
     module: Arc<Pkcs11>,
     slot: Slot,
     pin: AuthPin,
+    lease: Arc<()>,
 }
 
 impl KeyStore {
@@ -90,13 +125,46 @@ impl KeyStore {
                     .is_ok_and(|i| i.label().trim_end() == token)
             })
             .ok_or_else(|| HsmError::Token(token.to_owned()))?;
+        if let Ok(mut resident) = RESIDENT.lock() {
+            resident.push(ctx.clone());
+        }
         let store = Self {
             module: Arc::new(ctx),
             slot,
             pin: AuthPin::from(pin.expose().clone()),
+            lease: Arc::new(()),
         };
         drop(store.session()?);
         Ok(store)
+    }
+
+    /// Key handles of this store that are still alive, each holding a session.
+    #[must_use]
+    pub fn open_handles(&self) -> usize {
+        Arc::strong_count(&self.lease).saturating_sub(1)
+    }
+
+    /// The last step of an orderly shutdown (OP-94, OP-158 m.3 (y)): with every key handle
+    /// dropped, and so every session closed, `C_Finalize`. The module stays loaded until exit.
+    /// A module shared with another store of the process is finalized for both.
+    ///
+    /// # Errors
+    /// [`HsmError::Busy`] while handles are alive (nothing is finalized);
+    /// [`HsmError::Module`] when the token refuses.
+    pub fn finalize(self) -> Result<(), HsmError> {
+        let finalizer = self.finalizer();
+        drop(self);
+        finalizer.finalize()
+    }
+
+    /// What finalizes this store's module once the store and every handle are gone, for a
+    /// caller that hands the store itself to a key adapter.
+    #[must_use]
+    pub fn finalizer(&self) -> Finalizer {
+        Finalizer {
+            module: Pkcs11::clone(&self.module),
+            lease: Arc::downgrade(&self.lease),
+        }
     }
 
     fn session(&self) -> Result<Session, HsmError> {
@@ -157,6 +225,163 @@ impl KeyStore {
         self.signer(label)
     }
 
+    /// Installs the clone key of a DR pair of tokens (CR-30, OP-158 m.3 (y)): an AES-256 key
+    /// the token marks trusted, so it is the only kind of key a cloneable key may be wrapped
+    /// under. The same ceremony value goes into both tokens; it cannot be read back. Needs the
+    /// security officer's PIN and no open key handle.
+    ///
+    /// # Errors
+    /// [`HsmError::Busy`] while handles are alive; [`HsmError`] otherwise, also when a key
+    /// with this label exists.
+    pub fn install_clone_key(
+        &self,
+        so_pin: &Secret<String>,
+        label: &str,
+        value: &Secret<[u8; 32]>,
+    ) -> Result<(), HsmError> {
+        let open = self.open_handles();
+        if open > 0 {
+            return Err(HsmError::Busy(open));
+        }
+        let session = self
+            .module
+            .open_rw_session(self.slot)
+            .map_err(HsmError::Session)?;
+        session
+            .login(UserType::So, Some(&AuthPin::from(so_pin.expose().clone())))
+            .map_err(HsmError::Session)?;
+        if Self::one(&session, ObjectClass::SECRET_KEY, label).is_ok() {
+            return Err(HsmError::Key(label.to_owned()));
+        }
+        session
+            .create_object(&[
+                Attribute::Class(ObjectClass::SECRET_KEY),
+                Attribute::KeyType(KeyType::AES),
+                Attribute::Token(true),
+                Attribute::Private(false),
+                Attribute::Sensitive(true),
+                Attribute::Extractable(false),
+                Attribute::Trusted(true),
+                Attribute::Wrap(true),
+                Attribute::Unwrap(true),
+                Attribute::Label(label.as_bytes().to_vec()),
+                Attribute::Value(value.expose().to_vec()),
+            ])
+            .map_err(HsmError::Operation)?;
+        let logged_out = session.logout().map_err(HsmError::Session);
+        drop(session);
+        logged_out
+    }
+
+    /// Generates a signing key that only a trusted clone key may wrap (CR-30): sensitive, and
+    /// extractable solely as a wrapped backup for the DR token.
+    ///
+    /// # Errors
+    /// [`HsmError`], also when a key with this label exists.
+    pub fn generate_cloneable(&self, label: &str, ed25519: bool) -> Result<HsmSigner, HsmError> {
+        let session = self.session()?;
+        if Self::one(&session, ObjectClass::PRIVATE_KEY, label).is_ok() {
+            return Err(HsmError::Key(label.to_owned()));
+        }
+        let (mechanism, params) = if ed25519 {
+            (Mechanism::EccEdwardsKeyPairGen, ED25519_PARAMS)
+        } else {
+            (Mechanism::EccKeyPairGen, P256_PARAMS)
+        };
+        let id = label.as_bytes().to_vec();
+        session
+            .generate_key_pair(
+                &mechanism,
+                &[
+                    Attribute::Token(true),
+                    Attribute::Verify(true),
+                    Attribute::EcParams(params.to_vec()),
+                    Attribute::Label(id.clone()),
+                ],
+                &cloneable_template(id),
+            )
+            .map_err(HsmError::Operation)?;
+        drop(session);
+        self.signer(label)
+    }
+
+    /// The private key labelled `label` wrapped under the trusted clone key `clone_key` (AES
+    /// Key Wrap with Padding, RFC 5649), with its public key: the backup that only a token
+    /// holding the same clone key opens (CR-30).
+    ///
+    /// # Errors
+    /// [`HsmError::Operation`] when the key is not cloneable or the clone key is not trusted;
+    /// [`HsmError`] otherwise.
+    pub fn export_clone(&self, label: &str, clone_key: &str) -> Result<WrappedBackup, HsmError> {
+        let session = self.session()?;
+        let private = Self::one(&session, ObjectClass::PRIVATE_KEY, label)?;
+        let wrapping = Self::one(&session, ObjectClass::SECRET_KEY, clone_key)?;
+        let wrapped = session
+            .wrap_key(&Mechanism::AesKeyWrapPad, wrapping, private)
+            .map_err(HsmError::Operation)?;
+        drop(session);
+        let public = self.signer(label)?.public_key();
+        Ok(WrappedBackup { wrapped, public })
+    }
+
+    /// Unwraps a [`KeyStore::export_clone`] backup into this token under `label`, as cloneable
+    /// as the original, and returns its signer (CR-30).
+    ///
+    /// # Errors
+    /// [`HsmError::Operation`] for another clone key or a corrupt backup;
+    /// [`HsmError::Key`] when a key with this label exists; [`HsmError::Encoding`] when the
+    /// unwrapped key does not match the backup's public key.
+    pub fn import_clone(
+        &self,
+        label: &str,
+        clone_key: &str,
+        backup: &WrappedBackup,
+    ) -> Result<HsmSigner, HsmError> {
+        let session = self.session()?;
+        if Self::one(&session, ObjectClass::PRIVATE_KEY, label).is_ok() {
+            return Err(HsmError::Key(label.to_owned()));
+        }
+        let wrapping = Self::one(&session, ObjectClass::SECRET_KEY, clone_key)?;
+        let id = label.as_bytes().to_vec();
+        let (kind, params, point) = match &backup.public {
+            PublicKey::Ed25519(p) => (KeyType::EC_EDWARDS, ED25519_PARAMS, p.to_vec()),
+            PublicKey::P256(p) => (KeyType::EC, P256_PARAMS, p.clone()),
+            PublicKey::MlDsa(..) => return Err(HsmError::Encoding),
+        };
+        let mut template = cloneable_template(id.clone());
+        template.extend([
+            Attribute::Class(ObjectClass::PRIVATE_KEY),
+            Attribute::KeyType(kind),
+        ]);
+        let private = session
+            .unwrap_key(
+                &Mechanism::AesKeyWrapPad,
+                wrapping,
+                &backup.wrapped,
+                &template,
+            )
+            .map_err(HsmError::Operation)?;
+        let public = session.create_object(&[
+            Attribute::Class(ObjectClass::PUBLIC_KEY),
+            Attribute::KeyType(kind),
+            Attribute::Token(true),
+            Attribute::Verify(true),
+            Attribute::EcParams(params.to_vec()),
+            Attribute::EcPoint(octets(&point)),
+            Attribute::Label(id),
+        ]);
+        if let Err(e) = public {
+            let _ = session.destroy_object(private);
+            return Err(HsmError::Operation(e));
+        }
+        drop(session);
+        let signer = self.signer(label)?;
+        if signer.public_key() != backup.public || !signer.pairs() {
+            return Err(HsmError::Encoding);
+        }
+        Ok(signer)
+    }
+
     /// Generates an Ed25519 signing key inside the token.
     ///
     /// # Errors
@@ -206,6 +431,7 @@ impl KeyStore {
             session,
             private,
             key,
+            _lease: Arc::clone(&self.lease),
         })
     }
 
@@ -236,6 +462,7 @@ impl KeyStore {
             id: label.to_owned(),
             session,
             key,
+            _lease: Arc::clone(&self.lease),
         })
     }
 
@@ -302,6 +529,7 @@ impl KeyStore {
         Ok(HsmMac {
             session: Mutex::new(session),
             key,
+            _lease: Arc::clone(&self.lease),
         })
     }
 
@@ -343,6 +571,7 @@ impl KeyStore {
         Ok(HsmAead {
             session: Mutex::new(session),
             key,
+            _lease: Arc::clone(&self.lease),
         })
     }
 
@@ -404,6 +633,35 @@ fn kek_template(label: &str, value: Option<Vec<u8>>) -> Vec<Attribute> {
     t
 }
 
+fn cloneable_template(label: Vec<u8>) -> Vec<Attribute> {
+    vec![
+        Attribute::Token(true),
+        Attribute::Private(true),
+        Attribute::Sensitive(true),
+        Attribute::Extractable(true),
+        Attribute::WrapWithTrusted(true),
+        Attribute::Sign(true),
+        Attribute::Label(label),
+    ]
+}
+
+fn octets(point: &[u8]) -> Vec<u8> {
+    let mut der = Vec::new();
+    der.push(0x04);
+    der.push(u8::try_from(point.len()).unwrap_or(0));
+    der.extend_from_slice(point);
+    der
+}
+
+/// A cloneable key wrapped for the DR token, with its public key (CR-30).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WrappedBackup {
+    /// The private key under the clone key, RFC 5649.
+    pub wrapped: Vec<u8>,
+    /// Its public key.
+    pub public: PublicKey,
+}
+
 fn unwrap_octets(der: &[u8]) -> &[u8] {
     match der {
         [0x04, len, rest @ ..] if usize::from(*len) == rest.len() => rest,
@@ -416,6 +674,23 @@ pub struct HsmSigner {
     session: Session,
     private: ObjectHandle,
     key: PublicKey,
+    _lease: Arc<()>,
+}
+
+impl HsmSigner {
+    /// Whether a fresh signature verifies under the key's public key.
+    fn pairs(&self) -> bool {
+        let message = b"suiss/pkcs11/pairwise";
+        self.sign(message).is_ok_and(|sig| match &self.key {
+            PublicKey::Ed25519(p) => {
+                crate::sig::ed25519(&crate::aws::AwsLcBackend, p, message, &sig).is_ok()
+            }
+            PublicKey::P256(p) => {
+                crate::sig::p256(&crate::aws::AwsLcBackend, p, message, &sig, true).is_ok()
+            }
+            PublicKey::MlDsa(..) => false,
+        })
+    }
 }
 
 impl Signer for HsmSigner {
@@ -461,6 +736,7 @@ impl Signer for HsmSigner {
 pub struct HsmMac {
     session: Mutex<Session>,
     key: ObjectHandle,
+    _lease: Arc<()>,
 }
 
 impl HsmMac {
@@ -484,6 +760,7 @@ impl HsmMac {
 pub struct HsmAead {
     session: Mutex<Session>,
     key: ObjectHandle,
+    _lease: Arc<()>,
 }
 
 /// Length of the random AES-GCM nonce.
@@ -540,9 +817,38 @@ pub struct HsmKek {
     id: String,
     session: Session,
     key: ObjectHandle,
+    _lease: Arc<()>,
 }
 
 impl HsmKek {
+    /// Re-wraps a DEK from this KEK to `to` inside the token (OP-138, OP-158 m.3 (y)): the DEK
+    /// is unwrapped into a sensitive session object that only `to` wraps again, so its value
+    /// never leaves the token. `to` must be a KEK of the same token.
+    ///
+    /// # Errors
+    /// [`EnvelopeError::Wrap`] for a wrong KEK, a corrupt wrapped key or a KEK of another
+    /// token.
+    pub fn rewrap(&self, wrapped: &[u8], to: &Self) -> Result<Vec<u8>, EnvelopeError> {
+        let template = [
+            Attribute::Class(ObjectClass::SECRET_KEY),
+            Attribute::KeyType(KeyType::AES),
+            Attribute::Token(false),
+            Attribute::Sensitive(true),
+            Attribute::Extractable(true),
+        ];
+        let object = self
+            .session
+            .unwrap_key(&Mechanism::AesKeyWrap, self.key, wrapped, &template)
+            .map_err(|_| EnvelopeError::Wrap)?;
+        let rewrapped = self
+            .session
+            .wrap_key(&Mechanism::AesKeyWrap, to.key, object);
+        let destroyed = self.session.destroy_object(object);
+        let rewrapped = rewrapped.map_err(|_| EnvelopeError::Wrap)?;
+        destroyed.map_err(|_| EnvelopeError::Wrap)?;
+        Ok(rewrapped)
+    }
+
     fn dek_template(value: Option<Vec<u8>>) -> Vec<Attribute> {
         let mut t = vec![
             Attribute::Class(ObjectClass::SECRET_KEY),
