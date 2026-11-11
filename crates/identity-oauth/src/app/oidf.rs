@@ -13,19 +13,12 @@ use crate::ports::{Directory, Keys, RealmEntry, Unavailable};
 /// How long an entity configuration is valid (PD, 24 hours).
 pub const CONFIGURATION_TTL_MS: u64 = 24 * 3_600_000;
 
-/// The endpoints of the intermediate or trust anchor role, below the issuer.
-pub const AUTHORITY_ENDPOINTS: [(&str, &str); 4] = [
+/// The endpoints of the intermediate or trust anchor role, below the issuer; only those served
+/// are declared (OP-146 m.8 (d)).
+pub const AUTHORITY_ENDPOINTS: [(&str, &str); 2] = [
     ("federation_fetch_endpoint", "/federation/fetch"),
     ("federation_list_endpoint", "/federation/list"),
-    ("federation_resolve_endpoint", "/federation/resolve"),
-    (
-        "federation_trust_mark_status_endpoint",
-        "/federation/trust_mark_status",
-    ),
 ];
-
-/// The explicit registration endpoint, below the issuer.
-pub const REGISTRATION_PATH: &str = "/federation/register";
 
 /// Largest JSON document read back from the signer or the metadata builder.
 const MAX_DOC: usize = 1 << 20;
@@ -104,19 +97,12 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
         let Ok(Json::Object(mut op)) = json::parse(op.as_bytes(), MAX_DOC) else {
             return Err(Unavailable);
         };
+        // OP-146 m.8 (d)
         if fed.registration_open {
             member(
                 &mut op,
                 "client_registration_types_supported",
-                Json::Array(vec![
-                    Json::Str(String::from("automatic")),
-                    Json::Str(String::from("explicit")),
-                ]),
-            );
-            member(
-                &mut op,
-                "federation_registration_endpoint",
-                Json::Str(realm.issuer.endpoint(REGISTRATION_PATH)),
+                Json::Array(vec![Json::Str(String::from("automatic"))]),
             );
         }
         let mut entity = Vec::new();

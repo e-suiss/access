@@ -412,7 +412,16 @@ mod admin {
         let ec =
             access_identity_oidf::statement::verify_configuration(&jwt, &issuer, real_now).unwrap();
         let op = ec.metadata_of("openid_provider").unwrap();
-        assert!(op.get("federation_registration_endpoint").is_some());
+        assert_eq!(
+            op.get("client_registration_types_supported"),
+            Some(&access_kernel::json::Json::Array(vec![
+                access_kernel::json::Json::Str(String::from("automatic"))
+            ]))
+        );
+        assert!(
+            op.get("federation_registration_endpoint").is_none(),
+            "no explicit registration endpoint is served"
+        );
         // IDP-19, §10.7.1 rule 1, Ek B 4749, 5000
         let base = path.trim_end_matches("/.well-known/openid-federation");
         let list = format!("{base}/federation/list");
@@ -453,6 +462,13 @@ mod admin {
             access_identity_oidf::statement::verify_configuration(&jwt, &issuer, real_now).unwrap();
         let entity = ec.metadata_of("federation_entity").unwrap();
         assert!(entity.get("federation_fetch_endpoint").is_some());
+        assert!(
+            entity.get("federation_resolve_endpoint").is_none()
+                && entity
+                    .get("federation_trust_mark_status_endpoint")
+                    .is_none(),
+            "only served endpoints are declared"
+        );
         // OP-155 m.3 (j)
         let unknown = format!("{base}/federation/fetch?sub=https%3A%2F%2Fother.example");
         let itself = format!(
