@@ -256,7 +256,7 @@ fn idp_actions_carry_their_consequence_tiers() {
         (IdpAction::RealmSecurityNoticesClose, Tier::Ct1),
         (IdpAction::RelayResend, Tier::Ct1),
         // OP-157 m.3 (a)
-        (IdpAction::AccountCredentialChange, Tier::Ct3),
+        (IdpAction::AccountSigninMethodChange, Tier::Ct3),
         (IdpAction::AccountMfaChange, Tier::Ct3),
         (IdpAction::AccountPhoneChange, Tier::Ct3),
         (IdpAction::AccountPayment, Tier::Ct3),

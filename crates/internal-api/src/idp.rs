@@ -446,9 +446,9 @@ pub enum IdpAction {
     /// Resends an undelivered Relay message as a new outbox row citing the original; a message
     /// whose sealed content was crypto-shredded cannot be resent (OP-156 m.3 (c)): CT1.
     RelayResend,
-    /// Changes a sign-in credential of the account; on the support protected list (§8.16 #3, OP-157
+    /// Changes the account's sign-in methods; on the support protected list (§8.16 #3, OP-157
     /// m.3 (a)): reserved, CT3.
-    AccountCredentialChange,
+    AccountSigninMethodChange,
     /// Changes the account's second factors; on the support protected list: reserved, CT3.
     AccountMfaChange,
     /// Changes the account's phone number; on the support protected list: reserved, CT3.
@@ -680,7 +680,7 @@ impl IdpAction {
         Self::RealmSecurityNotices,
         Self::RealmSecurityNoticesClose,
         Self::RelayResend,
-        Self::AccountCredentialChange,
+        Self::AccountSigninMethodChange,
         Self::AccountMfaChange,
         Self::AccountPhoneChange,
         Self::AccountPayment,
@@ -715,7 +715,7 @@ impl IdpAction {
     )]
     pub const fn since(self) -> u64 {
         match self {
-            Self::AccountCredentialChange
+            Self::AccountSigninMethodChange
             | Self::AccountMfaChange
             | Self::AccountPhoneChange
             | Self::AccountPayment
@@ -1065,7 +1065,7 @@ impl IdpAction {
             | Self::AccountBind
             | Self::AccountImport
             | Self::AccountGuardianshipRecord
-            | Self::AccountCredentialChange
+            | Self::AccountSigninMethodChange
             | Self::AccountMfaChange
             | Self::AccountPhoneChange
             | Self::AccountPayment
@@ -1257,7 +1257,7 @@ impl IdpAction {
             Self::RealmSecurityNotices => "security_notices",
             Self::RealmSecurityNoticesClose => "security_notices_close",
             Self::RelayResend => "resend",
-            Self::AccountCredentialChange => "credential_change",
+            Self::AccountSigninMethodChange => "signin_method_change",
             Self::AccountMfaChange => "mfa_change",
             Self::AccountPhoneChange => "phone_change",
             Self::AccountPayment => "payment",
@@ -1395,7 +1395,7 @@ impl IdpAction {
                 | Self::DomainIssuerBind
                 | Self::SshCaEmergency
                 | Self::LinuxBreakGlassPolicy
-                | Self::AccountCredentialChange
+                | Self::AccountSigninMethodChange
                 | Self::AccountMfaChange
                 | Self::AccountPhoneChange
                 | Self::AccountPayment

@@ -395,6 +395,16 @@ fn an_administrator_never_sets_a_users_credential() {
             IdpAction::AccountBind,
             IdpAction::AccountImport,
             IdpAction::AccountGuardianshipRecord,
+            IdpAction::AccountSigninMethodChange,
+            IdpAction::AccountMfaChange,
+            IdpAction::AccountPhoneChange,
+            IdpAction::AccountPayment,
+            IdpAction::AccountRoleElevate,
+            IdpAction::AccountInvite,
+            IdpAction::AccountApiKeyCreate,
+            IdpAction::AccountTokenLongLived,
+            IdpAction::AccountArtifactUpload,
+            IdpAction::AccountArtifactRead,
         ]
     );
     for a in IdpAction::ALL {
