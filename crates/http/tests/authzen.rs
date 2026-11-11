@@ -140,6 +140,7 @@ impl Pdp for Scripted {
             rebuilt: Outcome::Deny,
             matches: false,
             differing: vec![String::from("outcome")],
+            finding: Some(access_authority_core::app::lab::EVALUATOR_MISMATCH),
         }))
     }
 }

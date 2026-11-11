@@ -106,7 +106,13 @@ pub struct Replay {
     pub matches: bool,
     /// The decision fields that differ (`outcome`, `blockers`, `unmet`, `relied_on`).
     pub differing: Vec<String>,
+    /// [`EVALUATOR_MISMATCH`] when the decision does not replay (INV-27, §8.17.10.4).
+    pub finding: Option<&'static str>,
 }
+
+/// The finding of a recorded decision that does not replay: the evaluator that recorded it and
+/// this one disagree (INV-27, §8.17.10.4).
+pub const EVALUATOR_MISMATCH: &str = "evaluator-mismatch";
 
 /// One intent of a simulation sample.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -311,12 +317,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 differing.push(String::from(f));
             }
         }
+        let matches = differing.is_empty() && recorded == rebuilt.outcome;
         Ok(Replay {
             record,
             recorded,
             rebuilt: rebuilt.outcome,
-            matches: differing.is_empty() && recorded == rebuilt.outcome,
+            matches,
             differing,
+            finding: (!matches).then_some(EVALUATOR_MISMATCH),
         })
     }
 

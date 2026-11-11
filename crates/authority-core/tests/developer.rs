@@ -946,6 +946,7 @@ async fn a_recorded_decision_replays_to_a_match() {
     assert!(replay.matches, "{replay:?}");
     assert_eq!(replay.recorded, Outcome::Allow);
     assert!(replay.differing.is_empty());
+    assert_eq!(replay.finding, None);
     assert!(matches!(
         core.lab_replay(
             &incoming(shop_request(d, 11, Mode::Commit, holding), ALICE_KEY),

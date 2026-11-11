@@ -70,20 +70,20 @@ fn item(kind: RecordKind, fields: Vec<(&str, Value)>, nonce: Option<NonceUse>) -
     }
 }
 
-/// The first committed opening record of the domain: its actor.
+/// The actor of the domain's latest opening record: the root's Instance.
 async fn an_actor(p: &Pdp) -> Value {
     let id = DomainId::from_bytes(p.domain.0);
     let head = p.w.domains.head(p.domain).await.unwrap().0;
-    for r in access_store::authority::read_log(&p.w.db.app, &id, 0, head)
+    access_store::authority::read_log(&p.w.db.app, &id, 0, head)
         .await
         .unwrap()
-    {
-        let e = RecordEnvelope::from_bytes(&r.envelope).unwrap();
-        if e.header.kind == RecordKind::Opening {
-            return e.fields["actor"].value.clone();
-        }
-    }
-    panic!("no opening");
+        .into_iter()
+        .filter_map(|r| {
+            let e = RecordEnvelope::from_bytes(&r.envelope).unwrap();
+            (e.header.kind == RecordKind::Opening).then(|| e.fields["actor"].value.clone())
+        })
+        .last()
+        .unwrap()
 }
 
 /// A faulty evaluator: commits, with the sequencer directly, an ALLOW on a holding of a Grant
@@ -95,6 +95,22 @@ pub(super) async fn faulty_allow(p: &Pdp) -> u64 {
 
 /// [`faulty_allow`] with the effects `effects` gives for the decision's position.
 async fn faulty(p: &Pdp, effects: impl FnOnce(u64) -> Vec<Value>) -> u64 {
+    let nonce = access_crypto::random::bytes::<16>().unwrap().to_vec();
+    let intent = Digest(access_crypto::random::bytes::<32>().unwrap());
+    let basis = ExerciseBasis::Holding(HoldingRef {
+        grant: Id(access_crypto::random::bytes::<16>().unwrap()),
+        holder: p.party,
+        since: 1,
+    });
+    faulty_as(p, (nonce, intent, basis), effects).await
+}
+
+/// An ALLOW a faulty evaluator records for the request `(nonce, intent, basis)` of the root.
+async fn faulty_as(
+    p: &Pdp,
+    (nonce, intent, basis): (Vec<u8>, Digest, ExerciseBasis),
+    effects: impl FnOnce(u64) -> Vec<Value>,
+) -> u64 {
     let actor = an_actor(p).await;
     p.w.domains.release().await;
     let id = DomainId::from_bytes(p.domain.0);
@@ -111,13 +127,6 @@ async fn faulty(p: &Pdp, effects: impl FnOnce(u64) -> Vec<Value>) -> u64 {
     );
     let key = EventKey::new(Secret::new(access_crypto::random::bytes::<32>().unwrap()));
     let mut leader = Leader::acquire(log, p.domain, key).await.unwrap();
-    let nonce = access_crypto::random::bytes::<16>().unwrap().to_vec();
-    let intent = Digest(access_crypto::random::bytes::<32>().unwrap());
-    let basis = ExerciseBasis::Holding(HoldingRef {
-        grant: Id(access_crypto::random::bytes::<16>().unwrap()),
-        holder: p.party,
-        since: 1,
-    });
     let opening = item(
         RecordKind::Opening,
         vec![
@@ -836,5 +845,62 @@ async fn the_replica_operators_own_build_replays_its_copy_and_declares_what_does
         1
     );
     let _ = std::fs::remove_dir_all(&root);
+    p.w.domains.release().await;
+}
+
+// INV-27, X25, §8.17.10.4, OP-158 m.3 (h), Ek B 5807
+#[tokio::test(flavor = "multi_thread")]
+async fn the_decision_lab_replays_a_recorded_decision_and_a_mismatch_is_an_evaluator_finding() {
+    let label = "w4-lab";
+    let p = pdp(label).await;
+    let honest = p.allowed(Mode::Commit).await;
+    let a = p.post("/access/v1/evaluation", &honest).await;
+    assert_eq!(a.status, StatusCode::OK);
+    let decoded = |body: &serde_json::Value| {
+        access_http::adp::domain::decode(body.to_string().as_bytes(), 1 << 20).unwrap()
+    };
+    let incoming = |d: access_http::adp::domain::Decoded| access_authority_core::app::Incoming {
+        request: d.request,
+        ais: d.ais,
+        pep: String::from(super::super::authzen::PEP),
+        requester: None,
+        explain: false,
+        status: None,
+        context: None,
+    };
+    let id = DomainId::from_bytes(p.domain.0);
+    let nonce_of = |b: &serde_json::Value| {
+        access_kernel::json::b64url_decode(b["context"]["nonce"].as_str().unwrap()).unwrap()
+    };
+    let record = access_store::authority::find_nonce(&p.w.db.app, &id, &nonce_of(&honest))
+        .await
+        .unwrap()
+        .unwrap()
+        .decision_pos;
+    let replay =
+        p.w.domains
+            .lab_replay(&incoming(decoded(&honest)), record)
+            .await
+            .unwrap();
+    assert!(replay.matches && replay.finding.is_none(), "{replay:?}");
+    // a request the audit Grant does not cover, recorded as an ALLOW by a faulty evaluator
+    let body = p.denied(Mode::Commit).await;
+    let d = decoded(&body);
+    let intent = access_kernel::intent::intent_digest(&d.request.intent).unwrap();
+    let pos = faulty_as(&p, (nonce_of(&body), intent, d.request.basis), |_| {
+        Vec::new()
+    })
+    .await;
+    let replay =
+        p.w.domains
+            .lab_replay(&incoming(decoded(&body)), pos)
+            .await
+            .unwrap();
+    assert!(!replay.matches, "{replay:?}");
+    assert_eq!(
+        replay.finding,
+        Some(access_authority_core::app::lab::EVALUATOR_MISMATCH)
+    );
+    assert!(replay.differing.contains(&String::from("outcome")));
     p.w.domains.release().await;
 }

@@ -324,7 +324,7 @@ impl<P: Pdp> Service<P> {
         if let Ok(r) = self.pdp.lab_replay(inc.clone(), record).await {
             out.insert(
                 String::from("replay"),
-                serde_json::json!({ "match": r.matches, "differing": r.differing }),
+                serde_json::json!({ "match": r.matches, "differing": r.differing, "finding": r.finding }),
             );
         }
         out
