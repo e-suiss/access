@@ -10,7 +10,7 @@ use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use sqlx::{AssertSqlSafe, Connection, Executor, PgConnection, PgPool};
 
 /// Password of the test login roles; the test cluster is local or CI-only.
-const TEST_PASSWORD: &str = "test-only-not-a-secret";
+pub const TEST_PASSWORD: &str = "test-only-not-a-secret";
 
 /// Why a test database could not be prepared.
 #[derive(Debug, thiserror::Error)]
@@ -262,7 +262,14 @@ async fn pool(admin: &PgConnectOptions, db: &str, login: &str) -> Result<PgPool,
 /// # Errors
 /// [`TestDbError`] when `DATABASE_URL` is missing or the cluster refuses.
 pub async fn fresh() -> Result<TestDb, TestDbError> {
-    let admin = admin_options()?;
+    fresh_on(admin_options()?).await
+}
+
+/// [`fresh`] on the cluster `admin` reaches, such as a replicated test cell (OP-158 m.3 (n)).
+///
+/// # Errors
+/// [`TestDbError`] when the cluster refuses.
+pub async fn fresh_on(admin: PgConnectOptions) -> Result<TestDb, TestDbError> {
     let template = template_name();
     ensure_template(&admin, &template).await?;
     let name = unique_name();
@@ -276,17 +283,60 @@ pub async fn fresh() -> Result<TestDb, TestDbError> {
     )
     .await?;
     c.close().await.at("close")?;
+    attach(admin, &name).await
+}
+
+/// [`fresh_on`] on the cluster of the superuser URL `url`.
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn fresh_at(url: &str) -> Result<TestDb, TestDbError> {
+    fresh_on(PgConnectOptions::from_str(url).at("cluster URL")?).await
+}
+
+/// [`attach`] on the cluster of the superuser URL `url`.
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn attach_at(url: &str, name: &str) -> Result<TestDb, TestDbError> {
+    attach(PgConnectOptions::from_str(url).at("cluster URL")?, name).await
+}
+
+/// A superuser connection's single-row text answer to `sql` on `db`: the cluster checks of the
+/// failover tests (OP-158 m.3 (n)).
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn admin_text(db: &TestDb, sql: &str) -> Result<Option<String>, TestDbError> {
+    let mut c = PgConnection::connect_with(&db.admin)
+        .await
+        .at("connect as administrator")?;
+    let v: Option<String> = sqlx::query_scalar(AssertSqlSafe(sql.to_owned()))
+        .fetch_optional(&mut c)
+        .await
+        .at("administrator statement")?
+        .flatten();
+    c.close().await.at("close")?;
+    Ok(v)
+}
+
+/// The role pools of the existing database `name` on the cluster `admin` reaches: the same
+/// database seen on a promoted standby or a point-in-time restore (OP-158 m.3 (n), (r)).
+///
+/// # Errors
+/// [`TestDbError`] when the cluster refuses.
+pub async fn attach(admin: PgConnectOptions, name: &str) -> Result<TestDb, TestDbError> {
     Ok(TestDb {
-        app: pool(&admin, &name, "access_test_app").await?,
-        sequencer: pool(&admin, &name, "access_test_sequencer").await?,
-        owner: pool(&admin, &name, "access_test_migrator").await?,
-        reader: pool(&admin, &name, "access_test_reader").await?,
-        router: pool(&admin, &name, "access_test_router").await?,
-        checkpointer: pool(&admin, &name, "access_test_checkpointer").await?,
-        archive: pool(&admin, &name, "access_test_archive").await?,
-        deriver: pool(&admin, &name, "access_test_deriver").await?,
-        admin: admin.database(&name),
-        name,
+        app: pool(&admin, name, "access_test_app").await?,
+        sequencer: pool(&admin, name, "access_test_sequencer").await?,
+        owner: pool(&admin, name, "access_test_migrator").await?,
+        reader: pool(&admin, name, "access_test_reader").await?,
+        router: pool(&admin, name, "access_test_router").await?,
+        checkpointer: pool(&admin, name, "access_test_checkpointer").await?,
+        archive: pool(&admin, name, "access_test_archive").await?,
+        deriver: pool(&admin, name, "access_test_deriver").await?,
+        admin: admin.database(name),
+        name: name.to_owned(),
     })
 }
 

@@ -99,6 +99,13 @@ pub(crate) struct Database {
     /// The server's management pool size (OP-158 m.3 (v)), unused here.
     #[serde(default, rename = "admin_pool")]
     _admin_pool: Option<u32>,
+    /// The server's failover hosts, replica lag and topology (OP-158 m.3 (n)), unused here.
+    #[serde(default, rename = "hosts")]
+    _hosts: Option<serde::de::IgnoredAny>,
+    #[serde(default, rename = "replica_max_lag_ms")]
+    _replica_max_lag_ms: Option<u64>,
+    #[serde(default, rename = "topology")]
+    _topology: Option<serde::de::IgnoredAny>,
 }
 
 /// Why the configuration cannot be used.

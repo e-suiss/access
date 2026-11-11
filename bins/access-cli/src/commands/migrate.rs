@@ -80,7 +80,7 @@ async fn apply(config: &Path) -> Result<Vec<Applied>, Failure> {
         .await
         .map_err(|e| Failure::Database(format!("{}: {e}", role.user)))?;
     // OP-52
-    check_server(&migrator, 1, true, durability(db.durability))
+    check_server(&migrator, 1, true, durability(db.durability), None)
         .await
         .map_err(|e| Failure::Database(e.to_string()))?;
     migrate_listed(&migrator)

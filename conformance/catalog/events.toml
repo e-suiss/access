@@ -1063,3 +1063,20 @@ severity = "info"
 since = "unreleased"
 fields = ["scenario", "total"]
 ocsf = "application_lifecycle"
+
+# OP-158 m.4 (b) (W7): the pools following the writable host and the read replica's lag rule
+[[event]]
+name = "db.failover.followed"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["outcome"]
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "replica.reads.lagging"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["outcome"]
+ocsf = "detection_finding"
