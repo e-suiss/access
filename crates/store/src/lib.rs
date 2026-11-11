@@ -117,6 +117,8 @@ pub mod divergence;
 pub mod cells;
 // OP-158 m.3 (n)
 pub mod replica_reads;
+// OP-158 m.3 (l)
+pub mod handover;
 
 #[cfg(feature = "testing")]
 pub mod testing;
