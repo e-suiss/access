@@ -61,6 +61,8 @@ mod federation;
 mod governance;
 mod hr;
 mod iys;
+// OP-157 m.3 (v)
+mod jml;
 mod orgs;
 mod platform;
 mod profiles;
@@ -121,18 +123,19 @@ impl Keys for AnyKeys {
     }
 }
 
+/// The plane's trusted time: `NOW` unless the test moves its own World's clock forward.
 #[derive(Clone)]
-struct Fixed;
+struct Fixed(Arc<std::sync::atomic::AtomicU64>);
 
 impl Clock for Fixed {
     fn now(&mut self) -> impl Future<Output = Result<u64, SequencerError>> + Send {
-        std::future::ready(Ok(NOW))
+        std::future::ready(Ok(self.0.load(std::sync::atomic::Ordering::SeqCst)))
     }
 }
 
 type TestPlane = Plane<AnyKeys, ActorBindings, OsSalts, Fixed>;
 
-fn plane(db: &TestDb) -> TestPlane {
+fn plane(db: &TestDb, clock: &Fixed) -> TestPlane {
     let actors = ActorBindings::default();
     let domains = Arc::new(Domains::new(Setup {
         sequencer: db.sequencer.clone(),
@@ -142,13 +145,13 @@ fn plane(db: &TestDb) -> TestPlane {
         ttl: Duration::from_secs(10),
         binding: actors.clone(),
         salts: OsSalts,
-        clock: Fixed,
+        clock: clock.clone(),
         deriver: db.deriver.clone(),
         signer: None,
         api_base: String::from("https://access.test"),
         analysis: std::sync::Arc::new(access_authority_core::ports::NoAnalysis),
     }));
-    Plane::new(domains, db.app.clone(), Fixed, actors)
+    Plane::new(domains, db.app.clone(), clock.clone(), actors)
 }
 
 /// Realm key sets and Claim issuer keys, in memory.
@@ -386,6 +389,7 @@ impl access_identity_events::adapters::RealmKek for TestKek {
 struct World {
     db: TestDb,
     plane: TestPlane,
+    clock: Fixed,
     ids: IdKey,
     base: RealmBase,
     keys: Opened,
@@ -395,10 +399,12 @@ struct World {
 impl World {
     async fn new() -> Self {
         let db = fresh().await.unwrap();
-        let plane = plane(&db);
+        let clock = Fixed(Arc::new(std::sync::atomic::AtomicU64::new(NOW)));
+        let plane = plane(&db, &clock);
         Self {
             db,
             plane,
+            clock,
             ids: IdKey::new(Secret::new([8; 32])),
             base: RealmBase::parse("https://id.test").unwrap(),
             keys: Opened::default(),

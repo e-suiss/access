@@ -29,7 +29,7 @@ use crate::ingest::PgSubmissions;
 const DAY: u64 = 86_400_000;
 
 /// Claim Ingest's clock, moved by the test the way days pass.
-struct Moving(Arc<AtomicU64>);
+pub(super) struct Moving(pub(super) Arc<AtomicU64>);
 
 impl access_authority_ingest::ports::Clock for Moving {
     fn now(&self) -> impl Future<Output = Result<u64, Unavailable>> + Send {
@@ -37,7 +37,7 @@ impl access_authority_ingest::ports::Clock for Moving {
     }
 }
 
-struct TestVaults<'a>(&'a Opened);
+pub(super) struct TestVaults<'a>(pub(super) &'a Opened);
 
 impl Vaults for TestVaults<'_> {
     fn vault(&self, realm: RealmId) -> Option<access_identity_account::app::vault::Vault> {
@@ -69,7 +69,7 @@ fn meta_intent(payload: &Payload) -> IntentEnvelope {
     }
 }
 
-async fn establish(w: &World, d: Digest, nonce: u8, content: Value) -> Verdict {
+pub(super) async fn establish(w: &World, d: Digest, nonce: u8, content: Value) -> Verdict {
     let payload = Payload::AcceptanceEstablish(content);
     let intent = meta_intent(&payload);
     let basis = ExerciseBasis::Anchor(meta::meta_anchor(&d));
@@ -97,7 +97,7 @@ async fn establish(w: &World, d: Digest, nonce: u8, content: Value) -> Verdict {
 }
 
 /// The domain's `subject-selection` Acceptance of the HR source's issuer (TN-95, INV-16).
-fn selection(issuer: [u8; 16]) -> Value {
+pub(super) fn selection(issuer: [u8; 16]) -> Value {
     Value::Map(vec![
         (Value::text("issuer"), Id(issuer).to_value()),
         (
@@ -123,7 +123,7 @@ fn selection(issuer: [u8; 16]) -> Value {
     ])
 }
 
-fn import_body(content: &str, records: u64) -> serde_json::Value {
+pub(super) fn import_body(content: &str, records: u64) -> serde_json::Value {
     serde_json::json!({
         "file": b64url_encode(&records::file_digest(content)),
         "records": records,
@@ -131,7 +131,13 @@ fn import_body(content: &str, records: u64) -> serde_json::Value {
     })
 }
 
-async fn import(w: &World, at: (TenantId, RealmId), d: Digest, content: &str, nonce: u8) {
+pub(super) async fn import(
+    w: &World,
+    at: (TenantId, RealmId),
+    d: Digest,
+    content: &str,
+    nonce: u8,
+) {
     let n = u64::try_from(records::parse_jsonl(content).unwrap().len()).unwrap();
     let change =
         HrChange::import("workday", records::Format::Jsonl, &import_body(content, n)).unwrap();
@@ -146,7 +152,11 @@ async fn import(w: &World, at: (TenantId, RealmId), d: Digest, content: &str, no
     );
 }
 
-async fn status_of(w: &World, (t, r): (TenantId, RealmId), subject: [u8; 16]) -> (String, i64) {
+pub(super) async fn status_of(
+    w: &World,
+    (t, r): (TenantId, RealmId),
+    subject: [u8; 16],
+) -> (String, i64) {
     let mut tx = TenantTx::begin(&w.db.app, t, r).await.unwrap();
     let row = tx.subject(subject, false).await.unwrap().unwrap();
     tx.commit().await.unwrap();
@@ -187,7 +197,7 @@ async fn admitted(
 /// Every identity outbox kind of the test's database once `want` is among them. The outbox
 /// watermark is cluster-wide, so another test's open transaction delays an event, never loses
 /// it.
-async fn kinds(w: &World, want: &str) -> Vec<String> {
+pub(super) async fn kinds(w: &World, want: &str) -> Vec<String> {
     let deadline = std::time::Instant::now() + Duration::from_secs(20);
     loop {
         let mut out = Vec::new();

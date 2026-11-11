@@ -283,7 +283,7 @@ fn carries_out(
     (party, anchor): (&str, Option<&str>),
 ) -> Result<(), &'static Code> {
     let refuse = &codes::realm::JOB_OPERATION_NOT_ALLOWED;
-    let (last, rest) = ops.split_last().ok_or(missing())?;
+    let (last, rest) = ops.split_last().ok_or_else(missing)?;
     let departs = match (c.self_anchor.as_str(), &last.request.payload) {
         ("retire", Some(Payload::PartyDepart { party: p, .. })) => {
             last.operation == "departParty" && b64(p) == party && last.key == party
