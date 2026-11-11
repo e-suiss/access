@@ -315,6 +315,7 @@ dependencies = [
  "hyper-util",
  "proptest",
  "rcgen",
+ "rustix",
  "rustls",
  "rustls-pki-types",
  "rustls-webpki",

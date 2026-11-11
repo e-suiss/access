@@ -71,6 +71,8 @@ rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
 rustls = { workspace = true, features = ["aws_lc_rs", "std", "tls12"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "io-util"] }
 zeroize = { workspace = true, features = ["alloc", "std"] }
+# OP-32, OP-158 m.3 (z): the login CPU ratio's process CPU time
+rustix = { workspace = true, features = ["std", "time"] }
 
 [lints]
 workspace = true

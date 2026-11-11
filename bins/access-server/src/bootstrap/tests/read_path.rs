@@ -2,6 +2,12 @@
 //! G51, TI-RT3, OP-158 m.3 (u), m.5): the advisory cache, the `as_of` window, the watch stream and
 //! the nonce archive.
 
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    reason = "measurement figures in test code"
+)]
+
 use access_authority_core::CoreError;
 use access_authority_core::app::cache::AS_OF_WINDOW_MS;
 use access_authority_core::keys::AsOf;
@@ -316,7 +322,7 @@ fn environment() -> Json {
         "os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
         "cpu": cpu,
-        "cores": std::thread::available_parallelism().map(std::num::NonZero::get).unwrap_or(0),
+        "cores": std::thread::available_parallelism().map_or(0, std::num::NonZero::get),
         "path": "in-process: real ADP router, sequencer, PostgreSQL 18 (one local server, no standby), SoftHSM, authority signer",
         "profile": if cfg!(debug_assertions) { "debug" } else { "release" },
     })

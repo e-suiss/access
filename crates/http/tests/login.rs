@@ -482,6 +482,7 @@ struct Env {
     outbox: Outbox,
     app: Router,
     hasher: Arc<Hasher>,
+    login_hash_cpu: Arc<dyn Fn() -> u64 + Send + Sync>,
     peers: AtomicU64,
     signer: ArtifactKey,
     surface: Surface,
@@ -624,6 +625,10 @@ async fn env_legacy(
         signup,
     });
     let assets = Assets::load(&fixture()).unwrap();
+    let login_hash_cpu: Arc<dyn Fn() -> u64 + Send + Sync> = {
+        let h = hosted.clone();
+        Arc::new(move || h.hasher.metrics().hash_cpu_ns())
+    };
     let signer = ArtifactKey(Arc::new(SoftSigner::generate_ed25519().unwrap().0));
     let surface = Surface::default();
     surface.tier.store(1, Ordering::SeqCst);
@@ -671,6 +676,7 @@ async fn env_legacy(
         outbox,
         app,
         hasher: Arc::new(Hasher::new(config)),
+        login_hash_cpu,
         peers: AtomicU64::new(0),
         signer,
         surface,
@@ -5017,4 +5023,68 @@ async fn n5_consent_and_approval_pages_cannot_be_framed() {
         .await;
     assert!(!cross.headers.contains_key("access-control-allow-origin"));
     assert_eq!(cross.status, StatusCode::FORBIDDEN);
+}
+
+fn process_cpu_ns() -> u64 {
+    let t = rustix::time::clock_gettime(rustix::time::ClockId::ProcessCPUTime);
+    u64::try_from(t.tv_sec).unwrap() * 1_000_000_000 + u64::try_from(t.tv_nsec).unwrap()
+}
+
+// OP-32, MKT-8, §17.5.1, §4.10, OP-158 m.3 (z), Ek B 5901, 6041
+#[tokio::test(flavor = "multi_thread")]
+async fn measured_password_sign_in_rate_and_cpu_ratio_with_its_environment() {
+    let e = env(9, "lg-measure", AuthPolicy::DEFAULT).await;
+    let n = 12_usize;
+    for i in 0..n {
+        e.account(&format!("m{i}@example.com")).await;
+    }
+    let hashed = (e.login_hash_cpu)();
+    let cpu = process_cpu_ns();
+    let started = std::time::Instant::now();
+    let mut micros = Vec::with_capacity(n);
+    for i in 0..n {
+        let mut b = e.browser(&format!("m{i}"));
+        let t = std::time::Instant::now();
+        let done = b.sign_in(&format!("m{i}@example.com")).await;
+        micros.push(u64::try_from(t.elapsed().as_micros()).unwrap());
+        assert_ne!(done.step(), "authenticate", "{}", done.json());
+    }
+    let wall = started.elapsed().as_secs_f64();
+    let hash_ns = (e.login_hash_cpu)() - hashed;
+    let total_ns = process_cpu_ns() - cpu;
+    micros.sort_unstable();
+    let ratio = access_identity_account::app::hasher::cpu_ratio_permille(
+        access_identity_account::app::hasher::CpuWindow {
+            process_ns: 0,
+            hash_ns: 0,
+        },
+        access_identity_account::app::hasher::CpuWindow {
+            process_ns: total_ns,
+            hash_ns,
+        },
+    );
+    #[allow(clippy::cast_precision_loss, reason = "a rate for the report")]
+    let per_second = n as f64 / wall;
+    let report = json!({
+        "logins": n,
+        "logins_per_s": per_second,
+        "p50_us": micros[n / 2],
+        "max_us": micros[n - 1],
+        "cpu_ratio_permille": ratio,
+        "target_cpu_ratio_permille": 1_100,
+        "argon2": "CANONICAL, 4 permits",
+        "environment": {
+            "os": std::env::consts::OS,
+            "arch": std::env::consts::ARCH,
+            "cores": std::thread::available_parallelism().map_or(0, std::num::NonZero::get),
+            "path": "in-process: real login router, PostgreSQL 18 (one local server), the test process's CPU",
+            "profile": if cfg!(debug_assertions) { "debug" } else { "release" },
+        },
+    });
+    std::io::Write::write_all(
+        &mut std::io::stdout(),
+        format!("measure {report}\n").as_bytes(),
+    )
+    .unwrap();
+    assert!(ratio.is_some(), "{report}");
 }
