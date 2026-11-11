@@ -2514,6 +2514,393 @@
         }
       }
     },
+    "/access/v1/domains/{domain}/mirror": {
+      "get": {
+        "operationId": "getMirror",
+        "summary": "The Replica Mirror from `from` (a tree size): a resumable, long-polled CBOR sequence of records, bodies and checkpoints (mirror.cddl) for a Party holding the domain's access.audit.export Grant; replicas answer signed replica_ack frames (T21, TI-13, OP-158 m.3 (f)).",
+        "x-suiss-status": "planned",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/domains/{domain}/exports": {
+      "post": {
+        "operationId": "startExport",
+        "summary": "Starts a Record Export: the body is the access.audit.export Exercise with its AIS; the package streams as a CBOR sequence (export.cddl) in chunks of at most 10 000 records, and billing, quota or plan never close it (AP-14, OP-158 m.3 (g)).",
+        "x-suiss-status": "planned",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/domains/{domain}/exports/{export}": {
+      "get": {
+        "operationId": "getExport",
+        "summary": "A started export's stream, resumable from its last position (OP-158 m.3 (g)).",
+        "x-suiss-status": "planned",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "export",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/domains/{domain}/watch": {
+      "get": {
+        "operationId": "watchDomain",
+        "summary": "Changes from `from` (a record position) by long polling, each with witnessed_through; advisory, never a source of ALLOW (OP-158 m.3 (u)).",
+        "x-suiss-status": "planned",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/domains/{domain}/checkpoints": {
+      "get": {
+        "operationId": "listCheckpoints",
+        "summary": "The domain's published checkpoints (C2SP signed notes) with their witness cosignatures, newest first (§16.6, OP-158 m.3 (c), (d)).",
+        "x-suiss-status": "planned",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/domains/{domain}/checkpoints/{size}/inclusion/{position}": {
+      "get": {
+        "operationId": "getInclusionBundle",
+        "summary": "The inclusion bundle of the record at `position` in the checkpoint of `size`: the exact record, the inclusion proof, the cosigned checkpoint and, after a handover, the consistency path (inclusion-bundle.cddl, P18, SEC25).",
+        "x-suiss-status": "planned",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "size",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "position",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/domains/{domain}/divergence": {
+      "post": {
+        "operationId": "declareDivergence",
+        "summary": "Records a signed divergence set (recovery.cddl) as a divergence_notice Claim for the domain's root and Security Party; it never stops an exit and writes no restriction (G32, G33, OP-158 m.3 (i)).",
+        "x-suiss-status": "planned",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/access/v1/eligibility:set": {
       "post": {
         "operationId": "eligibleSet",

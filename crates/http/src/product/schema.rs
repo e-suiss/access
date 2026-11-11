@@ -166,6 +166,7 @@ mod platform;
 mod records;
 mod ssf;
 mod stage11;
+mod stage13;
 mod stage6;
 
 fn components() -> Value {
@@ -449,6 +450,10 @@ fn declarations(paths: &mut serde_json::Map<String, Value>) {
 
 /// The `OpenAPI` document of the product client contract.
 #[must_use]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one call per contract section, in contract order"
+)]
 pub fn openapi() -> Value {
     let common = [
         ("400", "The request is refused; nothing is read."),
@@ -531,6 +536,7 @@ pub fn openapi() -> Value {
     ssf::paths(&mut paths);
     developer::paths(&mut paths);
     stage11::paths(&mut paths);
+    stage13::paths(&mut paths);
     eligibility::paths(&mut paths, &common);
     iys::paths(&mut paths);
     json!({

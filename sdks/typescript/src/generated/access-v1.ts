@@ -518,6 +518,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/access/v1/domains/{domain}/mirror": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The Replica Mirror from `from` (a tree size): a resumable, long-polled CBOR sequence of records, bodies and checkpoints (mirror.cddl) for a Party holding the domain's access.audit.export Grant; replicas answer signed replica_ack frames (T21, TI-13, OP-158 m.3 (f)). */
+        get: operations["getMirror"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access/v1/domains/{domain}/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Starts a Record Export: the body is the access.audit.export Exercise with its AIS; the package streams as a CBOR sequence (export.cddl) in chunks of at most 10 000 records, and billing, quota or plan never close it (AP-14, OP-158 m.3 (g)). */
+        post: operations["startExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access/v1/domains/{domain}/exports/{export}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A started export's stream, resumable from its last position (OP-158 m.3 (g)). */
+        get: operations["getExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access/v1/domains/{domain}/watch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Changes from `from` (a record position) by long polling, each with witnessed_through; advisory, never a source of ALLOW (OP-158 m.3 (u)). */
+        get: operations["watchDomain"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access/v1/domains/{domain}/checkpoints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The domain's published checkpoints (C2SP signed notes) with their witness cosignatures, newest first (§16.6, OP-158 m.3 (c), (d)). */
+        get: operations["listCheckpoints"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access/v1/domains/{domain}/checkpoints/{size}/inclusion/{position}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The inclusion bundle of the record at `position` in the checkpoint of `size`: the exact record, the inclusion proof, the cosigned checkpoint and, after a handover, the consistency path (inclusion-bundle.cddl, P18, SEC25). */
+        get: operations["getInclusionBundle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access/v1/domains/{domain}/divergence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Records a signed divergence set (recovery.cddl) as a divergence_notice Claim for the domain's root and Security Party; it never stops an exit and writes no restriction (G32, G33, OP-158 m.3 (i)). */
+        post: operations["declareDivergence"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/access/v1/eligibility:set": {
         parameters: {
             query?: never;
@@ -4144,6 +4263,289 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RelayStatus"];
+                };
+            };
+            /** @description Temporarily unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getMirror: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request is refused; nothing is read. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)). */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporarily unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    startExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request is refused; nothing is read. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)). */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporarily unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: string;
+                export: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request is refused; nothing is read. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)). */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporarily unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    watchDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request is refused; nothing is read. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)). */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporarily unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listCheckpoints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request is refused; nothing is read. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)). */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporarily unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getInclusionBundle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: string;
+                size: string;
+                position: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request is refused; nothing is read. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)). */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporarily unavailable; retry. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    declareDivergence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                domain: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request is refused; nothing is read. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description not-yet-served: the route is declared and its lane does not serve it yet; nothing was read or changed (OP-158 m.4 (a)). */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Temporarily unavailable; retry. */
