@@ -8,6 +8,10 @@ use suiss_crypto::note::{Checkpoint, NoteError};
 
 use crate::sequencer::Head;
 
+pub mod cadence;
+pub mod proof;
+pub mod witness;
+
 /// The `tlog-checkpoint` of the log at `head`. `extensions` are the product's extra lines,
 /// e.g. Access's `recorded_at` and spec-version digest (§16.4.4 m.18).
 ///

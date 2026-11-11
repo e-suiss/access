@@ -58,3 +58,124 @@ fn mirror_before_witness() {
     assert_eq!(p.witnessed_size(), 12);
     assert_eq!(Publication::resume(5, 4, 5), Err(OrderError::NotMirrored));
 }
+
+fn leaves(n: u64) -> alloc::vec::Vec<crate::Hash> {
+    (0..n).map(|i| leaf_hash(&i.to_be_bytes())).collect()
+}
+
+fn tree_root(l: &[crate::Hash]) -> crate::Hash {
+    let mut f = Frontier::default();
+    for h in l {
+        f.push(*h).unwrap();
+    }
+    f.root()
+}
+
+// T19, CMP-6, RFC 9162 §2.1.3.1
+#[test]
+fn inclusion_paths_verify_for_every_leaf() {
+    use suiss_crypto::digest::verify_inclusion;
+    for n in 1..=33_u64 {
+        let l = leaves(n);
+        let root = tree_root(&l);
+        for i in 0..n {
+            let p = proof::inclusion(l.as_slice(), i, n).unwrap();
+            verify_inclusion(i, n, &l[usize::try_from(i).unwrap()], &p, &root).unwrap();
+        }
+        assert_eq!(
+            proof::inclusion(l.as_slice(), n, n),
+            Err(proof::BuildError::Range)
+        );
+    }
+}
+
+// CMP-6, T17, RFC 9162 §2.1.4.1
+#[test]
+fn consistency_proofs_verify_for_every_pair() {
+    use suiss_crypto::digest::verify_consistency;
+    let all = leaves(40);
+    for n in 1..=40_usize {
+        let second = tree_root(&all[..n]);
+        for m in 0..=n {
+            let first = tree_root(&all[..m]);
+            let p = proof::consistency(&all[..n], m as u64, n as u64).unwrap();
+            verify_consistency(m as u64, n as u64, &first, &second, &p).unwrap();
+        }
+    }
+}
+
+// T16, OP-38, OP-158 m.3 (c)
+#[test]
+fn the_cadence_is_interval_or_records_and_coalesces_requests() {
+    use cadence::{Cadence, Due};
+    let mut c = Cadence::new(60_000, 1_000);
+    assert_eq!(c.due(1, 0), Some(Due::First));
+    c.issued(1, 0);
+    assert_eq!(c.due(1, 59_999), None);
+    assert_eq!(c.due(1, 60_000), Some(Due::Heartbeat));
+    assert_eq!(c.due(2, 60_000), Some(Due::Interval));
+    assert_eq!(c.due(1_001, 10), Some(Due::Records));
+    c.want(5);
+    c.want(9);
+    c.want(7);
+    assert_eq!(c.due(8, 10), None);
+    assert_eq!(c.due(9, 10), Some(Due::OutOfCycle));
+    c.issued(12, 10);
+    assert_eq!(c.due(12, 20), None);
+    c.want(12);
+    assert_eq!(c.due(12, 20), None);
+    assert_eq!(c.last(), Some((12, 10)));
+}
+
+fn body(size: u64, root: crate::Hash) -> Checkpoint {
+    Checkpoint {
+        origin: String::from("example.com/log"),
+        size,
+        root,
+        extensions: vec![],
+    }
+}
+
+// CMP-6, T17, U11, OP-158 m.3 (d)
+#[test]
+fn a_witness_cosigns_only_consistent_extensions_of_its_base() {
+    use witness::{LogState, Refusal};
+    let l = leaves(10);
+    let mut w = LogState::default();
+    let c4 = body(4, tree_root(&l[..4]));
+    assert_eq!(w.check(3, &[], &c4), Err(Refusal::Conflict(0)));
+    w.check(0, &[], &c4).unwrap();
+    w.cosigned(&c4).unwrap();
+    let c7 = body(7, tree_root(&l[..7]));
+    let p = proof::consistency(l.as_slice(), 4, 7).unwrap();
+    assert_eq!(w.check(0, &p, &c7), Err(Refusal::Conflict(4)));
+    w.check(4, &p, &c7).unwrap();
+    let forked = body(7, tree_root(&leaves(7)[..6]));
+    assert!(matches!(
+        w.check(4, &p, &forked),
+        Err(Refusal::Inconsistent(_))
+    ));
+    w.cosigned(&c7).unwrap();
+    assert_eq!(w.check(7, &[], &c7), Ok(()));
+    assert_eq!(
+        w.check(7, &[], &body(7, [9; 32])),
+        Err(Refusal::Equivocation)
+    );
+    assert_eq!(w.check(7, &[], &c4), Err(Refusal::Backwards));
+    w.fence_at(8);
+    let c9 = body(9, tree_root(&l[..9]));
+    let p9 = proof::consistency(l.as_slice(), 7, 9).unwrap();
+    assert_eq!(w.check(7, &p9, &c9), Err(Refusal::Fenced(8)));
+    w.rebind();
+    w.check(7, &p9, &c9).unwrap();
+}
+
+// U9, HL-7
+#[test]
+fn same_size_other_root_is_equivocation() {
+    use witness::equivocates;
+    let a = body(5, [1; 32]);
+    assert!(equivocates(&a, &body(5, [2; 32])));
+    assert!(!equivocates(&a, &body(6, [2; 32])));
+    assert!(!equivocates(&a, &a.clone()));
+}
