@@ -97,6 +97,7 @@ fn template(domain: u8) -> Template {
         caps: None,
         hybrid: None,
         discovery: None,
+        declared: access_authority_signer::domain::declared_default(),
     }
 }
 
