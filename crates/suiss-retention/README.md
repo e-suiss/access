@@ -6,6 +6,8 @@ The retention contract every Suiss product shares: the retention classes, how lo
 - **Schedules.** A `Schedule` gives a tenant's class its legal basis, a period or "until an event" (such as the end of the tenant contract), the event the period counts from, an optional cap and the policy version.
 - **Holds.** A `Hold` covers a subject, a set of classes or the whole tenant, from when it is placed until it is lifted. While it is active nothing it covers is destroyed, even past the period and the cap. A hold for a suspicious-activity report never prints its scope.
 - **One decision.** `may_destroy` answers `Destroy`, `Retain` or `Defer`, each with a reason. It says `Destroy` only when the period has run, no active hold covers the record and the policy snapshot is less than 24 hours old. Anything it cannot tell defers. Months and years follow the UTC calendar and always end on the later reading, so nothing goes early.
+- **Suiss One.** `Schedule::one_default` gives the One classes' defaults; `OneData` maps task records, effect evidence, browser snapshots and consent records to their classes, and `export_class` picks an export package's most restrictive source class.
+- **User-keyed data.** `user_keyed` checks the KEK recovery paths a person sets up (at least two, none weaker than what they protect), says plainly when no path is left, and plans an erasure of one record, one class or the whole account: every wrapped copy on the server, in the recovery vault and in TEE jobs goes at once, a disconnected device's copy goes when it reconnects, and a hold suspends destruction without making anything readable.
 - **`no_std`.** Builds for `wasm32-unknown-unknown` and `thumbv7em-none-eabihf`.
 
 ## Use

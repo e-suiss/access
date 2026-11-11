@@ -43,3 +43,18 @@ id! {
     /// A litigation, regulator or law-enforcement hold.
     HoldId
 }
+
+id! {
+    /// One of the person's devices holding a copy of a user-keyed key (E52).
+    DeviceId
+}
+
+id! {
+    /// A user-keyed record's own key (E66).
+    RecordKeyId
+}
+
+id! {
+    /// A job in an attested TEE holding a wrapped copy under a cloud key permission (E59).
+    JobId
+}
