@@ -516,6 +516,160 @@ async fn an_ownership_change_moves_no_root_by_itself() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
+/// `legal_genesis` with a `shop/xfer` Anchor of ROOT and, written with it, CAROL's Grant to
+/// transfer that Anchor while she holds an `ownership_changed` Claim; the Anchor's and the
+/// Grant's Genesis indexes.
+fn transfer_genesis() -> (BTreeMap<String, Opened>, u64, u64) {
+    let (mut g, _) = legal_genesis();
+    let acceptance = match g.get("acceptances").map(|o| &o.value) {
+        Some(Value::Array(all)) => all
+            .iter()
+            .find(|a| {
+                a.get("classes").is_some_and(
+                    |c| matches!(c, Value::Array(c) if c.contains(&Value::text(OWNERSHIP_CHANGED))),
+                )
+            })
+            .map(access_kernel::claim::acceptance_digest)
+            .unwrap(),
+        _ => panic!("genesis has acceptances"),
+    };
+    let xfer = selector_at("shop", "xfer");
+    let Some(Value::Array(mut anchors)) = g.get("anchors").map(|o| o.value.clone()) else {
+        panic!("genesis has anchors");
+    };
+    let anchor = Value::Map(vec![
+        (
+            Value::text("scope"),
+            Value::Map(vec![(Value::text("resource"), xfer.to_value())]),
+        ),
+        (Value::text("root"), sole(ROOT)),
+    ]);
+    anchors.push(anchor.clone());
+    anchors.sort_by_key(|v| dcbor::encode(v, Limits::CEILING).unwrap());
+    let index = u64::try_from(anchors.iter().position(|a| *a == anchor).unwrap())
+        .unwrap()
+        .checked_add(1)
+        .unwrap();
+    g.insert(
+        "anchors".to_owned(),
+        Opened {
+            value: Value::Array(anchors),
+            salt: [3; 32],
+        },
+    );
+    let mut held = authority(vec![meta::core_action("anchor_transfer")], xfer);
+    held.constraints.conditions =
+        BTreeSet::from([access_authority_core::app::templates::transfer::condition(
+            CAROL, acceptance,
+        )]);
+    let Some(Value::Array(mut grants)) = g.get("grants").map(|o| o.value.clone()) else {
+        panic!("genesis has grants");
+    };
+    let grant = Value::Map(vec![
+        (Value::text("anchor"), Value::Unsigned(index)),
+        (
+            Value::text("holder"),
+            SubjectSelector::Party(CAROL).to_value(),
+        ),
+        (Value::text("authority"), held.to_value()),
+        (
+            Value::text("agency"),
+            Value::Array(vec![meta::capacity_value(Capacity::Own)]),
+        ),
+    ]);
+    grants.push(grant.clone());
+    grants.sort_by_key(|v| dcbor::encode(v, Limits::CEILING).unwrap());
+    let seq = u64::try_from(grants.iter().position(|v| *v == grant).unwrap()).unwrap();
+    g.insert(
+        "grants".to_owned(),
+        Opened {
+            value: Value::Array(grants),
+            salt: [3; 32],
+        },
+    );
+    (g, index, seq)
+}
+
+fn selector_at(namespace: &str, first: &str) -> ResourceSelector {
+    ResourceSelector::Structural(Structural {
+        namespace: namespace.to_owned(),
+        prefix: vec![first.to_owned()],
+        kind: None,
+        attrs: BTreeMap::new(),
+    })
+}
+
+// CI-13, §7.9.9.2, OP-157 m.13 (b), OP-158 m.3 (b), L0-META-20a, Ek B 5669
+#[tokio::test]
+#[allow(clippy::too_many_lines, reason = "one scripted run")]
+async fn a_conditional_transfer_grant_moves_the_root_once_ownership_changed() {
+    let db = fresh().await.unwrap();
+    let (g, index, seq) = transfer_genesis();
+    let (mut core, d) = core_of(&db, g).await;
+    let x = meta::object_id(&d, kind::ANCHOR, index);
+    let grant = meta::object_id(&d, kind::GRANT, seq);
+    let holding = ExerciseBasis::Holding(HoldingRef {
+        grant,
+        holder: CAROL,
+        since: 0,
+    });
+    let take = |nonce, root| {
+        meta_request(
+            d,
+            nonce,
+            holding,
+            Payload::AnchorTransfer {
+                anchor: x,
+                root,
+                disposition: BTreeMap::from([(grant, meta::Disposition::Revoke)]),
+            },
+        )
+    };
+
+    let early = send(&mut core, take(32, Root::Sole(CAROL)), CAROL_KEY)
+        .await
+        .unwrap();
+    assert_eq!(early.decision.outcome, Outcome::Deny, "{early:?}");
+    assert_eq!(early.decision.blockers[0].class, BlockerClass::Ended);
+
+    let change = OwnershipChanged {
+        anchor: x,
+        from: ROOT,
+        to: CAROL,
+        effective_at: NOW - 5_000,
+    };
+    record_claim(
+        &mut core,
+        d,
+        33,
+        seam_claim(d, CAROL, OWNERSHIP_CHANGED, change.value_digest()),
+    )
+    .await;
+    let elsewhere = send(&mut core, take(34, Root::Sole(ALICE)), CAROL_KEY)
+        .await
+        .unwrap();
+    assert_eq!(elsewhere.decision.outcome, Outcome::Deny, "{elsewhere:?}");
+    let by_other = send(&mut core, take(38, Root::Sole(ALICE)), ALICE_KEY)
+        .await
+        .unwrap();
+    assert_eq!(by_other.decision.outcome, Outcome::Deny, "{by_other:?}");
+    let moved = send(&mut core, take(35, Root::Sole(CAROL)), CAROL_KEY)
+        .await
+        .unwrap();
+    allowed(&moved);
+
+    let read_x = |nonce| {
+        let mut r = shop_request(d, nonce, Mode::Check, ExerciseBasis::Anchor(x));
+        r.intent.resources[0].path = vec!["xfer".to_owned(), "item-1".to_owned()];
+        r
+    };
+    let old_root = send(&mut core, read_x(36), ROOT_KEY).await.unwrap();
+    assert_ne!(old_root.decision.outcome, Outcome::Allow, "{old_root:?}");
+    let new_root = send(&mut core, read_x(37), CAROL_KEY).await.unwrap();
+    allowed(&new_root);
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
 /// Genesis whose meta-anchor ROOT and SECURITY root jointly, either acting alone (k = 1), and
 /// where ALICE holds a Grant to read the shop, at the index returned.
 fn joint_genesis() -> (BTreeMap<String, Opened>, u64) {

@@ -2850,12 +2850,16 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             root: r,
             disposition,
         } => {
-            if anchor_of_basis(ctx)? != *anchor {
-                return Err(MetaError::Basis);
-            }
-            let (mut a, mut req) = root_power(view, anchor, &actor)?;
+            let (mut a, req) = match ctx.basis {
+                ExerciseBasis::Anchor(b) if b == *anchor => {
+                    let (a, mut req) = root_power(view, anchor, &actor)?;
+                    req.extend(accepting(&a.root, r));
+                    (a, req)
+                }
+                ExerciseBasis::Holding(h) => conditional_transfer(ctx, view, anchor, r, &h)?,
+                _ => return Err(MetaError::Basis),
+            };
             dispose(view, &mut out, anchor, disposition, ctx.pos, true)?;
-            req.extend(accepting(&a.root, r));
             a.root = r.clone();
             // L0-META-6
             a.since = ctx.pos;
@@ -3890,6 +3894,60 @@ fn select(
         out.effects.push((k, Some(ids_value(&set_of))));
     }
     Ok(())
+}
+
+/// A transfer of `anchor` to the holder of a conditional Grant its root wrote for it: the Grant
+/// derives from `anchor` itself, names `anchor_transfer`, carries a `ClaimHeld` while-condition
+/// and is in its validity now, and the new root is the holder alone, whose own AIS is its
+/// consent. The requirements are `anchor`'s root terms and the Grant's own; the caller checks
+/// the condition holds (OP-157 m.13 (b), OP-158 m.3 (b), L0-META-20a).
+fn conditional_transfer(
+    ctx: &Context<'_>,
+    view: &dyn View,
+    anchor: &Id,
+    new_root: &Root,
+    h: &HoldingRef,
+) -> Result<(AnchorState, BTreeSet<RequirementTerm>), MetaError> {
+    if h.holder != ctx.actor.party || ctx.capacity != Capacity::Own {
+        return Err(MetaError::Basis);
+    }
+    let g: GrantState = read(view, kind::GRANT, &h.grant)?;
+    let g = live(g.ended, g)?;
+    let authority = &g.content.authority;
+    let conditional = authority
+        .constraints
+        .conditions
+        .iter()
+        .any(|c| matches!(c, crate::model::WhileCondition::ClaimHeld { .. }));
+    if !holds(&g, &ctx.actor.party)
+        || h.since != g.since
+        || g.content.basis != GrantBasis::Anchor(*anchor)
+        || !conditional
+        || !authority
+            .authority
+            .actions
+            .exact
+            .contains(&core_action("anchor_transfer"))
+    {
+        return Err(MetaError::NotAuthorized);
+    }
+    if !window_in(
+        &Window {
+            from: ctx.now,
+            until: ctx.now,
+        },
+        &authority.constraints.validity,
+    ) {
+        return Err(MetaError::Ended);
+    }
+    if *new_root != Root::Sole(ctx.actor.party) {
+        return Err(MetaError::NotWithin);
+    }
+    let a: AnchorState = read(view, kind::ANCHOR, anchor)?;
+    let a = live(a.ended, a)?;
+    let mut req = a.root_terms.clone();
+    req.extend(authority.requirements.iter().cloned());
+    Ok((a, req))
 }
 
 /// The root requirements of a self-anchor whose root sets a policy on that self-anchor: the

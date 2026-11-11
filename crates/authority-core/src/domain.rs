@@ -547,6 +547,28 @@ fn projected_lapse(
     })
 }
 
+/// `ended/lapsed` when a conditional `anchor_transfer` Grant's while-conditions do not hold now
+/// (OP-157 m.13 (b), OP-158 m.3 (b), L0-META-20a).
+fn transfer_lapse(
+    view: &Snapshot,
+    payload: &Payload,
+    basis: ExerciseBasis,
+    actor: &Actor,
+    now: u64,
+) -> Option<&'static str> {
+    let (Payload::AnchorTransfer { .. }, ExerciseBasis::Holding(h)) = (payload, basis) else {
+        return None;
+    };
+    let g = read::<GrantState>(view, kind::GRANT, &h.grant)?;
+    (!conditions_hold(
+        view,
+        &g.content.authority.constraints.conditions,
+        Some(actor),
+        now,
+    ))
+    .then_some("ended/lapsed")
+}
+
 /// The live `schema-definition` Acceptances of `namespace`: their SPPs (OP-141 m.35 (e)).
 fn live_spps(view: &Snapshot, namespace: &str, now: u64) -> Vec<Spp> {
     let ids = match view.get(&access_kernel::schema::schemas_key(namespace)) {
@@ -1844,7 +1866,8 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 let support =
                     crate::app::templates::support::admissible(snapshot, payload, req.basis, now);
                 // EI-5, OP-157 m.11, m.19 (c)
-                let lapsed = projected_lapse(snapshot, payload, req.basis, now);
+                let lapsed = projected_lapse(snapshot, payload, req.basis, now)
+                    .or_else(|| transfer_lapse(snapshot, payload, req.basis, &actor, now));
                 let missing_scans = snapshot.missing_scans();
                 if !missing_scans.is_empty() {
                     return Pass::NeedScans(missing_scans);

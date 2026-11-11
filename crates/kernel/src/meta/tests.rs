@@ -2608,6 +2608,7 @@ fn meta_vectors_match() {
         );
     }
     self_anchor_steps(&mut r);
+    transfer_steps(&mut r);
     let json = format!(
         "{{\n \"rule\": \"OP-141\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"meta.apply\",\n {},\n \"cases\": [\n{}\n ]\n}}\n",
         field(&["L0-META-1", "L0-META-2"]),
@@ -2686,7 +2687,7 @@ fn self_anchor_steps(r: &mut Recorder) {
             None,
         ),
         (
-            "self-anchor-defaults-refused",
+            "policy-defaults-on-self-anchor-refused",
             DAN,
             on(mine(), forbid),
             None,
@@ -2723,6 +2724,106 @@ fn self_anchor_steps(r: &mut Recorder) {
                 content,
                 defaults,
             },
+        );
+    }
+}
+
+/// A conditional `anchor_transfer` Grant its root wrote, used by its holder (OP-157 m.13 (b),
+/// OP-158 m.3 (b), Ek B 5669).
+#[allow(clippy::too_many_lines, reason = "one scripted run")]
+fn transfer_steps(r: &mut Recorder) {
+    let created = r
+        .step(
+            "transfer-anchor-create",
+            &["L0-META-20"],
+            (ROOT, ROOT),
+            ExerciseBasis::Anchor(meta_anchor(&DOMAIN)),
+            &Payload::AnchorCreate {
+                scope: AnchorScope::Resource(shop(&["xfer"])),
+                root: Root::Sole(ROOT),
+                root_terms: BTreeSet::new(),
+            },
+        )
+        .unwrap();
+    let x = object_id(&created, kind::ANCHOR, 0);
+    let condition = crate::model::WhileCondition::ClaimHeld {
+        class: String::from("ownership_changed"),
+        subject: SubjectSelector::Party(CAROL),
+        acceptance: Digest([0x33; 32]),
+    };
+    let transfer_authority = |conditional: bool| {
+        let mut a = authority(&["xfer"], 0, 1_000_000);
+        a.authority.actions.exact = BTreeSet::from([core_action("anchor_transfer")]);
+        if conditional {
+            a.constraints.conditions = BTreeSet::from([condition.clone()]);
+        }
+        a
+    };
+    let mut held = Vec::new();
+    for (id, conditional) in [
+        ("transfer-grant-conditional", true),
+        ("transfer-grant-unconditional", false),
+    ] {
+        let ex = r
+            .step(
+                id,
+                &["L0-META-20a", "L0-META-25"],
+                (ROOT, ROOT),
+                ExerciseBasis::Anchor(x),
+                &Payload::GrantIssue(GrantContent {
+                    basis: GrantBasis::Anchor(x),
+                    holder: SubjectSelector::Party(CAROL),
+                    authority: transfer_authority(conditional),
+                    agency: BTreeSet::from([Capacity::Own]),
+                    named: None,
+                }),
+            )
+            .unwrap();
+        let g = object_id(&ex, kind::GRANT, 0);
+        held.push((
+            g,
+            HoldingRef {
+                grant: g,
+                holder: CAROL,
+                since: r.run.grant(&g).since,
+            },
+        ));
+    }
+    let [(cond, cond_h), (plain, plain_h)] = [held[0], held[1]];
+    let disposition = BTreeMap::from([(cond, Disposition::Keep), (plain, Disposition::Revoke)]);
+    let transfer = |anchor: Id, root: Root| Payload::AnchorTransfer {
+        anchor,
+        root,
+        disposition: disposition.clone(),
+    };
+    for (id, basis, payload) in [
+        (
+            "transfer-unconditional-grant-refused",
+            plain_h,
+            transfer(x, Root::Sole(CAROL)),
+        ),
+        (
+            "transfer-to-someone-else-refused",
+            cond_h,
+            transfer(x, Root::Sole(BOB)),
+        ),
+        (
+            "transfer-other-anchor-refused",
+            cond_h,
+            transfer(shop_anchor(), Root::Sole(CAROL)),
+        ),
+        (
+            "transfer-by-conditional-grant",
+            cond_h,
+            transfer(x, Root::Sole(CAROL)),
+        ),
+    ] {
+        r.step(
+            id,
+            &["L0-META-20a", "L0-META-21"],
+            (CAROL, CAROL),
+            ExerciseBasis::Holding(basis),
+            &payload,
         );
     }
 }

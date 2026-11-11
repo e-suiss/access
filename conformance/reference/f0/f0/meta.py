@@ -593,14 +593,46 @@ class Apply:
 
     def anchor_transfer(self, body):
         # L0-META-20, L0-META-21
-        anchor_id, anchor = self.basis_anchor(body["anchor"])
-        self.require_root(anchor)
+        if "holding" in self.basis:
+            anchor_id, anchor = self.conditional_transfer(body)
+        else:
+            anchor_id, anchor = self.basis_anchor(body["anchor"])
+            self.require_root(anchor)
         revoked = self.dispose(anchor_id, body["disposition"], keep_allowed=True)
         self.revoke_grants(revoked)
-        self.add_accept_root(anchor["root"], body["root"])
+        if "holding" not in self.basis:
+            self.add_accept_root(anchor["root"], body["root"])
         value = dict(anchor, root=body["root"], since=self.pos)
         self.write("anchor", anchor_id, value)
         return True
+
+    def conditional_transfer(self, body):
+        # L0-META-20a: a conditional anchor_transfer Grant the Anchor's root wrote
+        grant_id, holder, since = self.basis["holding"]
+        if holder != self.party or self.capacity != "own":
+            refuse("meta-basis")
+        grant = self.live("grant", grant_id)
+        authority = grant["content"]["authority"]
+        conditions = authority["constraints"].get("while", [])
+        actions = authority["authority"]["actions"].get("exact", [])
+        if (not self.holds(grant) or grant["since"] != since
+                or not same(grant["content"]["basis"], {"anchor": body["anchor"]})
+                or not any("claim_held" in c for c in conditions)
+                or not any(same(a, core_action("anchor_transfer")) for a in actions)):
+            refuse("meta-not-authorized")
+        validity = authority["constraints"]["validity"]
+        if not validity[0] <= self.now <= validity[1]:
+            refuse("meta-ended")
+        if not same(body["root"], {"sole": self.party}):
+            refuse("meta-not-within")
+        anchor = self.read("anchor", body["anchor"])
+        if anchor is None:
+            refuse("meta-unknown")
+        if "ended" in anchor:
+            refuse("meta-ended")
+        self.requirements.extend(anchor.get("root_terms", []))
+        self.requirements.extend(authority.get("requirements", []))
+        return body["anchor"], anchor
 
     def anchor_amend(self, body):
         # L0-META-20, L0-META-28
@@ -1248,6 +1280,13 @@ def acceptance_narrows(new, old):
         if new["quota"]["count"] > old["quota"]["count"] or new["quota"]["window_s"] < old["quota"]["window_s"]:
             return False
     return True
+
+
+def core_action(name):
+    # L0-META-1
+    schema = {"name": name, "major": 1, "effect_class": "reversible"}
+    digest = hashlib.sha256(b"access/action-schema/v1\x00" + encode(schema)).digest()
+    return {"namespace": "access", "name": name, "major": 1, "schema": [HASH_ALG_SHA256, digest]}
 
 
 # ---------------------------------------------------------------- entry point
