@@ -224,10 +224,10 @@ fn catalog_8_writes_compile_into_their_changes_and_are_not_yet_served() {
     ] {
         let change = compile(op, None, &body, &ids).unwrap_or_else(|e| panic!("{op:?}: {e}"));
         assert_eq!(change.action().label(), action, "{op:?}");
-        // OP-158 m.3 (w), (y)
+        // OP-158 m.3 (v), (w), (y)
         let served = matches!(
             op,
-            Op::PutAuditTier | Op::PutCryptoProfile | Op::PutHashProfile
+            Op::PutAuditTier | Op::PutCryptoProfile | Op::PutHashProfile | Op::PutRateLimit
         );
         assert_eq!(
             change.check(&declared),

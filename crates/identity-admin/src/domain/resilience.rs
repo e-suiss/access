@@ -180,10 +180,13 @@ impl DrProfile {
     }
 }
 
+/// The highest `rate_limit_rps` a realm can set (OP-158 m.3 (v)).
+pub const MAX_RPS: u32 = 1_000_000;
+
 /// `idp.realm.rate_limit` (OP-35, OP-158 m.3 (a), (v)): the realm's `rate_limit_rps`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RateLimit {
-    /// Requests per second; above zero.
+    /// Requests per second; 1 to [`MAX_RPS`].
     pub rps: u32,
 }
 
@@ -196,7 +199,7 @@ impl RateLimit {
         let m = own(body)?;
         only(m, &["rps"])?;
         let rps = u32::try_from(number(m, "rps")?).map_err(|_| Invalid::Body)?;
-        if rps == 0 {
+        if !(1..=MAX_RPS).contains(&rps) {
             return Err(Invalid::Body);
         }
         Ok(Self { rps })

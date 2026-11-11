@@ -42,6 +42,8 @@ mod platform;
 mod product;
 mod proxy;
 mod publication;
+// OP-158 m.3 (v)
+mod quota;
 mod relay;
 mod reshred;
 mod retention;
@@ -1922,6 +1924,12 @@ async fn serve(
         (hooks.clone(), risk_services),
     )?;
     let tenants_pool = router_pool.clone();
+    // OP-35, OP-158 m.3 (v)
+    let realm_quotas = Arc::new(quota::PgRequestQuotas::new(
+        router_pool.clone(),
+        app.clone(),
+        now_ms,
+    ));
     let sandbox_pool = router_pool.clone();
     let (edge_router, edge_app) = (router_pool.clone(), app.clone());
     let (proxy_router, proxy_app) = (router_pool.clone(), app.clone());
@@ -2264,7 +2272,10 @@ async fn serve(
             .merge(products)
             .merge(platform)
             .merge(realms)
-            .merge(sign_in.merge(me).merge(certificate_login))
+            .merge(access_http::quota::meter(
+                sign_in.merge(me).merge(certificate_login),
+                realm_quotas.clone(),
+            ))
             .merge(ldap_credentials)
             .merge(push)
             .merge(payment)
@@ -2273,10 +2284,13 @@ async fn serve(
             .merge(support)
             .merge(handles)
             .merge(sso_setup)
-            .merge(account_pages)
-            .merge(authorize)
+            .merge(access_http::quota::meter(
+                account_pages,
+                realm_quotas.clone(),
+            ))
+            .merge(access_http::quota::meter(authorize, realm_quotas.clone()))
             .merge(edge_calls)
-            .merge(scim_calls)
+            .merge(access_http::quota::meter(scim_calls, realm_quotas))
             .merge(declared(&Declarations::of(config.provider)))
             .merge(access_http::stage11::router())
             .merge(access_http::stage12::router())

@@ -33,6 +33,8 @@ pub mod stage13;
 pub mod status;
 pub mod tls;
 pub mod transparency;
+// OP-158 m.3 (v)
+pub mod quota;
 
 use std::time::Duration;
 

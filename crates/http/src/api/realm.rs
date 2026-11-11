@@ -1838,7 +1838,7 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         // OP-158 m.4 (a)
         "getPlacement" => (ResourceKind::Placement, Shape::Planned("Declared")),
         "getDurability" => (ResourceKind::Durability, Shape::Planned("Declared")),
-        "putResidency" | "putDrProfile" | "putRateLimit" => {
+        "putResidency" | "putDrProfile" => {
             (Settings, Shape::Planned("WriteResult"))
         }
         // OP-157 m.4 (a)
@@ -1851,6 +1851,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "listSupportGrants" => (ResourceKind::SupportGrants, Shape::Planned("Page")),
         // OP-157 m.3 (m)
         "putApprovalInline" | "putApprovalBatch" | "putAuditTier" => (Settings, w(true)),
+        // OP-158 m.3 (v)
+        "putRateLimit" => (Settings, w(true)),
         // OP-157 m.3 (h)
         "listBreakglassAccounts" => (ResourceKind::BreakglassAccounts, Shape::List(&[])),
         "markBreakglassAccount" => (ResourceKind::BreakglassAccounts, CREATE),

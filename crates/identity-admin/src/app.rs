@@ -830,12 +830,12 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::ApprovalInline(_)
             | Change::ApprovalBatch(_)
             | Change::AuditTier(_)
-            | Change::CryptoProfile(_) => {}
+            | Change::CryptoProfile(_)
+            | Change::RateLimit(_) => {}
             // OP-158 m.4 (a)
             Change::Rehome(_)
             | Change::Residency(_)
-            | Change::DrProfile(_)
-            | Change::RateLimit(_) => return Err(Invalid::NotYetServed.into()),
+            | Change::DrProfile(_) => return Err(Invalid::NotYetServed.into()),
             // OP-33, OP-158 m.3 (a), m.6 (b)
             Change::HashProfileSet(p) => {
                 let now = t.realm_crypto().await?;
@@ -1659,8 +1659,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-158 m.4 (a)
             Change::Rehome(_)
             | Change::Residency(_)
-            | Change::DrProfile(_)
-            | Change::RateLimit(_) => return Err(Invalid::NotYetServed.into()),
+            | Change::DrProfile(_) => return Err(Invalid::NotYetServed.into()),
             // CR-15, CR-36, OP-158 m.3 (y)
             Change::CryptoProfile(c) => {
                 t.put_realm_crypto(bound, Some(c.fips), None).await?;
@@ -1679,6 +1678,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     target: x.target.clone(),
                 });
                 access_store::audit_tier::put_realm_tier(t, bound, row.as_ref()).await?;
+                true
+            }
+            // OP-35, OP-158 m.3 (v)
+            Change::RateLimit(limit) => {
+                access_store::quota::put_rate_limit(t, bound, limit.rps).await?;
                 true
             }
             // OP-157 m.3 (e)
