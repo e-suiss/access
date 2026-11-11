@@ -169,7 +169,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded, and an approval is refused with approval-inline-assertion-required because a device key is no phishing-resistant assertion (§10.2, §10.3.1); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m), §13.7.3, SEC26). */
+        /** An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key; a refusal is recorded; an approval carries the approver's passkey assertion over H(AAS) for the realm's RP ID, verified like a sign-in, and is recorded as a contribution; without one it is refused with approval-inline-assertion-required (§10.2, §10.3.1); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m), m.17, §13.7.3, SEC26). */
         post: operations["answerInlineApproval"];
         delete?: never;
         options?: never;
@@ -472,6 +472,19 @@ export interface components {
             answer: string;
             /** @description ES256 raw r‖s by the approver device key. */
             signature: string;
+            assertion?: components["schemas"]["InlineAssertion"];
+        };
+        InlineAssertion: {
+            /** @description rawId of the approver's registered passkey in the realm. */
+            credential_id: string;
+            /** @description response.authenticatorData; its RP ID hash is the realm's RP ID and UP is set. */
+            authenticator_data: string;
+            /** @description response.clientDataJSON; type webauthn.get, challenge H(AAS). */
+            client_data_json: string;
+            /** @description response.signature. */
+            signature: string;
+            /** @description response.userHandle, when the platform returned one. */
+            user_handle?: string;
         };
         ApprovalStart: {
             request: string;
@@ -1105,14 +1118,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The refusal was recorded. */
+            /** @description The refusal was recorded, or the approval was recorded as a contribution: decision, and for an approval exercise, render_digest and claim. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description approver-unknown: not an activated approver key, or a signature that does not verify. */
+            /** @description approver-unknown: not an activated approver key, or a signature that does not verify; assertion-rejected: the passkey assertion is not the approver's, or its RP ID, challenge, user presence or required user verification does not verify. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -1130,7 +1143,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description approval-inline-off: the channel is closed or the request is above CT1; approval-inline-assertion-required: the answer is valid but carries no phishing-resistant assertion; or the render or the request changed. */
+            /** @description approval-inline-off: the channel is closed or the request is above CT1; approval-inline-assertion-required: the answer is valid but carries no passkey assertion; or the render or the request changed. */
             409: {
                 headers: {
                     [name: string]: unknown;

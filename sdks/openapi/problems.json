@@ -1247,7 +1247,7 @@
       "type": "urn:suiss:access:problem:approval-inline-assertion-required",
       "status": 409,
       "title": "Conflict",
-      "description": "A device key's signature over H(AAS) is not a phishing-resistant assertion, so the approval was not recorded; approve on the Approval Surface (§10.2, §10.3.1, OP-157 m.3 (m))."
+      "description": "The approval carries no passkey assertion over H(AAS); a device key's signature alone is not phishing resistant, so nothing was recorded; send the approver's passkey assertion with it, or approve on the Approval Surface (§10.2, §10.3.1, OP-157 m.17)."
     }
   ]
 }
