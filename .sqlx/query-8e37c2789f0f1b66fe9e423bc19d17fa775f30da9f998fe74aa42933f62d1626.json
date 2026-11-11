@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.user_keyed_erasures\n                SET state = $4, waiting = $5,\n                    closed_at = CASE WHEN $4 = 'applied' THEN clock_timestamp() END\n              WHERE tenant_id = $1 AND realm_id = $2 AND erasure_id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8e37c2789f0f1b66fe9e423bc19d17fa775f30da9f998fe74aa42933f62d1626"
+}

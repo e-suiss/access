@@ -94,6 +94,7 @@ pub mod support_access;
 pub mod tenancy;
 pub mod throttle;
 pub mod upstream;
+pub mod user_keyed;
 pub mod vault;
 pub mod workloads;
 // OP-157 m.3 (v)

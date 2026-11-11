@@ -1,0 +1,85 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT class, record_key, holder, holder_id, wrapped,\n                      destroyed_at IS NOT NULL AS \"destroyed!\"\n                 FROM access.user_keyed_copies\n                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3\n                ORDER BY class, record_key, holder, holder_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "class",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.user_keyed_copies",
+            "name": "class"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "record_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.user_keyed_copies",
+            "name": "record_key"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "holder",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.user_keyed_copies",
+            "name": "holder"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "holder_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.user_keyed_copies",
+            "name": "holder_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "wrapped",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.user_keyed_copies",
+            "name": "wrapped"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "destroyed!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "4fa5d1b5f078b903a0b39df946c81dad61dac81b8968eafcdf4772010a41a761"
+}

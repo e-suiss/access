@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT erasure_id, target, state, waiting FROM access.user_keyed_erasures\n              WHERE tenant_id = $1 AND realm_id = $2 AND erasure_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "erasure_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.user_keyed_erasures",
+            "name": "erasure_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "target",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.user_keyed_erasures",
+            "name": "target"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.user_keyed_erasures",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "waiting",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.user_keyed_erasures",
+            "name": "waiting"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "eb67a7d090924137d6bc806b1423df5fed3446a7bf10be205fc7246571c0ddb3"
+}

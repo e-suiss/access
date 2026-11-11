@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.user_keyed_erasures\n               (tenant_id, realm_id, subject_id, target, class, record_key, state, waiting, closed_at)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $7 = 'applied' THEN clock_timestamp() END)\n             RETURNING erasure_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "erasure_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.user_keyed_erasures",
+            "name": "erasure_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "32c72c1c9633d25eeefd9dadbe1a0b70016519342e52a10c7a249509dd176e7f"
+}

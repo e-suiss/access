@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.user_keyed_copies SET wrapped = NULL, destroyed_at = clock_timestamp()\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND class = $4\n                AND record_key = $5 AND holder = $6 AND holder_id = $7 AND destroyed_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0e6bd359d390a0a1397bd2c6e4b1aaf6b8cda80454f28e8015cde0bc8b5b4a98"
+}
