@@ -4,7 +4,8 @@
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
 use access_kernel::verify::key_scope::{
-    Declarations, Hybrid, KeyUsage, Mmd, Replica, SpecVersions, VerifierCaps, Witness,
+    Declarations, DrClass, Durability, Hybrid, KeyUsage, Mmd, Replica, Residency, SpecVersions,
+    VerifierCaps, Witness,
 };
 use suiss_crypto::cose::Algorithm;
 use suiss_crypto::dcbor::{self, Limits, Value};
@@ -295,6 +296,31 @@ fn declared_value(d: &Declarations) -> Value {
     if let Some(t) = &d.ceremony_transcript {
         entries.push(("ceremony_transcript", t.to_value()));
     }
+    // HL-40, OP-158 m.3 (o), (p), m.4 (b) (W9)
+    if let Some(durability) = d.durability {
+        entries.push((
+            "durability",
+            Value::text(match durability {
+                Durability::SingleNode => "single-node",
+                Durability::Replicated => "replicated",
+            }),
+        ));
+    }
+    if let Some(r) = &d.residency {
+        entries.push((
+            "residency",
+            map(vec![
+                ("region", Value::text(&r.region)),
+                (
+                    "class",
+                    Value::text(match r.class {
+                        DrClass::MultiRegionSync => "multi-region-sync",
+                        DrClass::Regional => "regional",
+                    }),
+                ),
+            ]),
+        ));
+    }
     if let Some(m) = d.mmd {
         entries.push((
             "mmd",
@@ -357,6 +383,21 @@ fn declared_of(v: Option<&Value>) -> Result<Declarations, FrameError> {
     }
     if let Some(t) = v.get("ceremony_transcript") {
         d.ceremony_transcript = Some(digest(Some(t))?);
+    }
+    // HL-40, OP-158 m.3 (o), (p), m.4 (b) (W9)
+    d.durability = match v.get("durability") {
+        None => None,
+        Some(Value::Text(t)) if t == "single-node" => Some(Durability::SingleNode),
+        Some(Value::Text(t)) if t == "replicated" => Some(Durability::Replicated),
+        Some(_) => return Err(FrameError::Malformed),
+    };
+    if let Some(r) = v.get("residency") {
+        let class = match r.get("class") {
+            Some(Value::Text(t)) if t == "regional" => DrClass::Regional,
+            Some(Value::Text(t)) if t == "multi-region-sync" => DrClass::MultiRegionSync,
+            _ => return Err(FrameError::Malformed),
+        };
+        d.residency = Some(Residency::new(text_of(r.get("region"))?, class));
     }
     if let Some(m) = v.get("mmd") {
         d.mmd = Some(Mmd::new(

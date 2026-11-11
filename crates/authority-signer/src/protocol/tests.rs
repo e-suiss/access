@@ -94,6 +94,19 @@ fn messages_round_trip() {
             domain: Digest([7; 32]),
             keys: vec![superseded()],
         },
+        // HL-40, OP-158 m.3 (o), (p)
+        Request::Declare {
+            domain: Digest([7; 32]),
+            declared: Box::new({
+                let mut d = crate::domain::declared_default();
+                d.durability = Some(access_kernel::verify::key_scope::Durability::SingleNode);
+                d.residency = Some(access_kernel::verify::key_scope::Residency::new(
+                    String::from("eu-central"),
+                    access_kernel::verify::key_scope::DrClass::MultiRegionSync,
+                ));
+                d
+            }),
+        },
     ];
     for r in requests {
         let f = encode_request(&r).unwrap();
