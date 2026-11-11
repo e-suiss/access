@@ -41,10 +41,16 @@ pub(super) struct Pdp {
 /// The realm `authzen`, created by the admin path with the bootstrap root as founder, the root
 /// onboarded and holding a Grant to read the audit stream; the ADP router hardened as served.
 pub(super) async fn pdp(label: &str) -> Pdp {
+    pdp_timed(label, None).await
+}
+
+/// [`pdp`] whose realm has the CT3 time-lock `ct3_delay_s`; a test domain's is zero
+/// (OP-153 m.7 (a)).
+pub(super) async fn pdp_timed(label: &str, ct3_delay_s: Option<u64>) -> Pdp {
     let (w, signer) = World::open(label, true).await;
     let signer = signer.unwrap();
     schedule(&signer);
-    let (tenant, created) = w.admin_realm(SLUG).await;
+    let (tenant, created) = w.admin_realm_timed(SLUG, ct3_delay_s).await;
     let root = root_key(&w.keys).unwrap();
     let party = root_party(&root.public_key());
     let declared = DeclaredTargets::default();

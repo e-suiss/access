@@ -222,6 +222,34 @@ impl World {
         (world, service)
     }
 
+    /// A second install in this process (OP-158 m.3 (l)): its own database, its own SoftHSM
+    /// token `token` made before this process first opened the module (the module lists the
+    /// tokens once), and its own authority signer.
+    async fn open_install(name: &str, token: (PathBuf, String)) -> (Self, AuthoritySigner) {
+        let db = fresh().await.unwrap();
+        let (module, label) = token;
+        let pin = Secret::new(String::from(PIN));
+        let open = || KeyStore::open(&module, &label, &pin).unwrap();
+        let (path, service) = authority_signer(name, open());
+        let (domains, plane) = process_rung(&db, open(), "second-install", Some(path), None);
+        let keys = Arc::new(open());
+        Box::leak(Box::new(keys.clone()));
+        let identity_signer = identity_signer(name);
+        let keyring = RealmKeyring::new(SignerKeys::new(identity_signer.clone()), keys.clone());
+        let world = Self {
+            db,
+            plane,
+            domains,
+            keys,
+            keyring,
+            base: RealmBase::parse("https://access.test").unwrap(),
+            module,
+            label,
+            identity_signer,
+        };
+        (world, service)
+    }
+
     /// Another process over the same database and token, as `serve` beside a one-shot job.
     fn other_process(&self, holder: &str) -> (Arc<TestDomains>, TestPlane) {
         let pin = Secret::new(String::from(PIN));
@@ -234,6 +262,15 @@ impl World {
     async fn admin_realm(
         &self,
         slug: &str,
+    ) -> (TenantId, access_identity_admin::app::CreatedRealm) {
+        self.admin_realm_timed(slug, None).await
+    }
+
+    /// [`World::admin_realm`] with the CT3 time-lock `ct3_delay_s` (OP-141 m.34 (d)).
+    async fn admin_realm_timed(
+        &self,
+        slug: &str,
+        ct3_delay_s: Option<u64>,
     ) -> (TenantId, access_identity_admin::app::CreatedRealm) {
         let ids = cell_ids(&self.db.app, &self.keys).await.unwrap();
         let declared = DeclaredTargets::default();
@@ -257,7 +294,7 @@ impl World {
                 style: IssuerStyle::Path,
                 placement: PLACEMENT,
                 root: Root::Sole(root),
-                ct3_delay_s: None,
+                ct3_delay_s,
                 causal_binding: false,
                 schemas: Vec::new(),
                 acceptances: Vec::new(),
