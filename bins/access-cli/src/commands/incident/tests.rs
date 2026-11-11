@@ -124,7 +124,7 @@ async fn a_containment_declares_once_and_writes_its_steps_and_the_open_window() 
     assert_eq!(known["window"]["assumed"], false);
 }
 
-// SI-4, fail-closed
+// SI-4, TI-9
 #[tokio::test]
 async fn a_refused_or_quarantined_declaration_contains_nothing() {
     let refused = Ingest::new(400, json!({ "code": "claim-issuer" }));
