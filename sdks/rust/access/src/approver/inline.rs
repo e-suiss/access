@@ -1,9 +1,18 @@
-//! CT1 approval inside the approver notification (OP-157 m.3 (m), §13.7.3, SEC26,
+//! CT1 approval inside the approver notification (OP-157 m.3 (m), m.17, §13.7.3, SEC26,
 //! `approval-inline.cddl`). The app parses the `approval_inline` body, rebuilds the canonical
-//! render with the Kernel, compares its digest and shows the render; only then does its key sign
-//! H(AAS). A body whose render digest is not the Kernel's own is refused here, on the device.
-//! Refusing from the notification works. Approving is refused by Access for now, with
-//! `approval-inline-assertion-required`: send the person to the Approval Surface.
+//! render with the Kernel, compares its digest and shows the render. A body whose render digest is
+//! not the Kernel's own is refused here, on the device.
+//!
+//! - **Refuse**: [`deny_to_be_signed`] is what the device key signs, [`answer_body`] sends it.
+//! - **Approve**: build the statement with [`statement`], then ask the platform passkey API
+//!   (`ASAuthorizationPlatformPublicKeyCredentialProvider`, Android Credential Manager,
+//!   `navigator.credentials.get`) for an assertion with the realm's RP ID and
+//!   [`passkey_challenge`] as its challenge. This module never makes the assertion: it carries
+//!   what the platform returned as a [`PasskeyAssertion`]. The device key signs
+//!   [`approve_to_be_signed`], and [`approve_body`] sends both. Access verifies the assertion
+//!   against the approver's registered passkey in the realm as it verifies a sign-in (user
+//!   presence always, user verification when an open term asks for it), and only that makes the
+//!   approval phishing resistant; a device key's signature alone is never a contribution.
 //!
 //! ```
 //! use access_sdk::approver::inline::{InlineRequest, NotInline};
@@ -122,10 +131,10 @@ pub struct StatementFacts {
     pub expires_at: u64,
 }
 
-/// The statement of an approval given on this device: a phone surface, a person's presence as
-/// its evidence and the material fields of the verified `render`. A device key is not a
-/// phishing-resistant authenticator (§10.3.1), so Access checks this statement and answers
-/// `approval-inline-assertion-required`; a refusal counts.
+/// The statement of an approval given on this device: a phone surface, a phishing-resistant
+/// passkey assertion as its evidence and the material fields of the verified `render`. The
+/// evidence is only a ceiling: Access lowers it to what the verified assertion established
+/// (§10.3.1, E49).
 #[must_use]
 pub fn statement(request: &InlineRequest, render: &Render, facts: StatementFacts) -> ApprovalAct {
     ApprovalAct {
@@ -140,7 +149,7 @@ pub fn statement(request: &InlineRequest, render: &Render, facts: StatementFacts
         surface_profile: String::from(SURFACE_PROFILE),
         surface_version: SURFACE_VERSION,
         surface_class: Some(SurfaceClass::Phone),
-        evidence: Some(EvidenceLevel::Presence),
+        evidence: Some(EvidenceLevel::PhishingResistant),
         render_digest: request.render_digest,
         material_fields: render::material_fields(render),
         issued_at: facts.issued_at,
@@ -154,6 +163,30 @@ pub fn statement(request: &InlineRequest, render: &Render, facts: StatementFacts
 /// [`NotInline`]: the statement can't be encoded.
 pub fn statement_digest(act: &ApprovalAct) -> Result<Digest, NotInline> {
     aas::digest(act).map_err(|_| NotInline)
+}
+
+/// The challenge to ask the platform passkey API for: the 32 bytes of H(AAS) (verifier name
+/// binding, §10.3.1). Use the realm's RP ID with it.
+///
+/// # Errors
+/// [`NotInline`]: the statement can't be encoded.
+pub fn passkey_challenge(act: &ApprovalAct) -> Result<[u8; 32], NotInline> {
+    statement_digest(act).map(|d| d.0)
+}
+
+/// The assertion the platform passkey API returned, as raw bytes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PasskeyAssertion {
+    /// `rawId`: the approver's registered passkey.
+    pub credential_id: Vec<u8>,
+    /// `response.authenticatorData`.
+    pub authenticator_data: Vec<u8>,
+    /// `response.clientDataJSON`.
+    pub client_data_json: Vec<u8>,
+    /// `response.signature`.
+    pub signature: Vec<u8>,
+    /// `response.userHandle`, when the platform returned one.
+    pub user_handle: Option<Vec<u8>>,
 }
 
 fn answer(
@@ -205,12 +238,38 @@ pub fn deny_to_be_signed(request: &InlineRequest, device_key: &[u8; 32]) -> Vec<
     )
 }
 
-/// The JSON body of `POST /v1/approve/inline`: the signed bytes and the raw `r ‖ s` signature.
+/// The JSON body of `POST /v1/approve/inline` that refuses: the signed bytes and the raw
+/// `r ‖ s` signature. Access answers an approval sent this way with
+/// `approval-inline-assertion-required`.
 #[must_use]
 pub fn answer_body(to_be_signed: &[u8], signature: &[u8; 64]) -> String {
     format!(
         r#"{{"answer":"{}","signature":"{}"}}"#,
         b64url_encode(to_be_signed),
         b64url_encode(signature)
+    )
+}
+
+/// The JSON body of `POST /v1/approve/inline` that approves: the signed bytes, the raw
+/// `r ‖ s` signature and the passkey `assertion` over [`passkey_challenge`].
+#[must_use]
+pub fn approve_body(
+    to_be_signed: &[u8],
+    signature: &[u8; 64],
+    assertion: &PasskeyAssertion,
+) -> String {
+    let user_handle = assertion
+        .user_handle
+        .as_deref()
+        .map(|h| format!(r#","user_handle":"{}""#, b64url_encode(h)))
+        .unwrap_or_default();
+    format!(
+        r#"{{"answer":"{}","signature":"{}","assertion":{{"credential_id":"{}","authenticator_data":"{}","client_data_json":"{}","signature":"{}"{user_handle}}}}}"#,
+        b64url_encode(to_be_signed),
+        b64url_encode(signature),
+        b64url_encode(&assertion.credential_id),
+        b64url_encode(&assertion.authenticator_data),
+        b64url_encode(&assertion.client_data_json),
+        b64url_encode(&assertion.signature),
     )
 }

@@ -138,6 +138,79 @@ fn an_inline_body_with_another_render_digest_is_refused_on_the_device() {
     let _ = approve_to_be_signed;
 }
 
+// §10.3.1, OP-157 m.17
+#[test]
+fn an_inline_approval_carries_the_platform_assertion_over_h_aas() {
+    use access_kernel::aas::EvidenceLevel;
+    use access_kernel::combinator::Capacity;
+    use access_kernel::digest::Digest;
+    use access_kernel::model::Id;
+    use access_kernel::render::{self, Field, Render};
+
+    use super::inline::{
+        InlineRequest, PasskeyAssertion, StatementFacts, approve_body, passkey_challenge,
+        statement, statement_digest,
+    };
+
+    let shown = Render {
+        schema: Digest([1; 32]),
+        intent: Digest([2; 32]),
+        locale: "en".into(),
+        template: None,
+        fields: alloc::vec![Field {
+            name: "action".into(),
+            text: "Close the ledger".into(),
+            material: true,
+        }],
+        reversibility: None,
+    };
+    let request = InlineRequest {
+        intent: shown.intent,
+        render: render::encode(&shown).unwrap(),
+        render_digest: render::digest(&shown).unwrap(),
+        expires_at_ms: 9,
+    };
+    let act = statement(
+        &request,
+        &shown,
+        StatementFacts {
+            class: "approve".into(),
+            instance: Id([3; 16]),
+            party: Id([4; 16]),
+            capacity: Capacity::Own,
+            domain: Digest([5; 32]),
+            nonce: alloc::vec![6; 16],
+            issued_at: 1,
+            expires_at: 2,
+        },
+    );
+    assert_eq!(act.evidence, Some(EvidenceLevel::PhishingResistant));
+    assert_eq!(
+        passkey_challenge(&act).unwrap(),
+        statement_digest(&act).unwrap().0
+    );
+
+    let mut assertion = PasskeyAssertion {
+        credential_id: alloc::vec![1],
+        authenticator_data: alloc::vec![2],
+        client_data_json: alloc::vec![3],
+        signature: alloc::vec![4],
+        user_handle: None,
+    };
+    assert_eq!(
+        approve_body(&[7], &[8; 64], &assertion),
+        alloc::format!(
+            r#"{{"answer":"Bw","signature":"{}","assertion":{{"credential_id":"AQ","authenticator_data":"Ag","client_data_json":"Aw","signature":"BA"}}}}"#,
+            access_kernel::json::b64url_encode(&[8; 64])
+        )
+    );
+    assertion.user_handle = Some(alloc::vec![5]);
+    assert!(
+        approve_body(&[7], &[8; 64], &assertion)
+            .ends_with(r#""signature":"BA","user_handle":"BQ"}}"#)
+    );
+}
+
 fn hex(bytes: &[u8]) -> alloc::string::String {
     let mut out = alloc::string::String::new();
     for b in bytes {
