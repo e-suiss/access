@@ -1,7 +1,8 @@
 //! `forbidden-ui-terms` (X24, XI-13, §8.11, OP-151 m.3 (r)): the words a user of Access must
 //! never read: "mandate", "pause", "transfer", "verified", "trusted", "full access", "forever",
 //! "undo", and "session" for an Instance; nor "fail open", "test mode", "log in as" or
-//! impersonation (MD-9, TI-9). The string literals and JSX text of `web/*/src` and
+//! impersonation (MD-9, TI-9); nor an approver, approval, person or device called
+//! "independent" (§8.17.6.3, OP-157 m.3 (l)). The string literals and JSX text of `web/*/src` and
 //! `sdks/typescript/src` are scanned, tests excepted, and so are the message values of the
 //! `locales/*/*.ftl` catalogues the hosted pages render; product claims are `forbidden-claims.toml`'s. Protocol phrases that must keep a
 //! protocol's own words are allowed only through `conformance/catalog/ui-terms.toml`. The string
@@ -52,6 +53,16 @@ const PHRASES: &[&[&str]] = &[
     &["instance", "session"],
     &["sessions", "instances"],
     &["instance", "sessions"],
+    // §8.17.6.3, OP-157 m.3 (l)
+    &["independent", "approver"],
+    &["independent", "approvers"],
+    &["independent", "approval"],
+    &["independent", "approvals"],
+    &["independently", "approved"],
+    &["independent", "person"],
+    &["independent", "people"],
+    &["independent", "device"],
+    &["independent", "devices"],
 ];
 
 /// Word prefixes that are never shown (MD-9: no impersonation of any form).
@@ -436,6 +447,8 @@ mod tests {
             ("Your session instance", "session instance"),
             ("Log in as Ada", "log in as"),
             ("Impersonate user", "impersonat"),
+            ("Needs 2 independent approvals", "independent approvals"),
+            ("Independently approved", "independently approved"),
             ("Enable test mode", "test mode"),
             ("fail open", "fail open"),
         ] {
