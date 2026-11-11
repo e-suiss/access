@@ -53,8 +53,9 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         &self,
         domain: Digest,
         event_type: &'static str,
-        (target, reason): (&str, &str),
+        (target, reason, run): (&str, &str, &[u8; 16]),
     ) -> Result<(), CoreError> {
+        let correlation = access_kernel::json::b64url_encode(run);
         let id = DomainId::from_bytes(domain.0);
         let tenant = access_store::authority::domain_tenant(&self.setup.app, &id)
             .await
@@ -72,7 +73,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                 actor: "provider",
                 target,
                 reason,
-                correlation: "",
+                correlation: &correlation,
             },
         )
         .await
@@ -187,8 +188,12 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             Role::Reanchor => "reanchor",
             _ => "outgoing",
         };
-        self.audit_handover(domain, AUDIT_EVENT_FROZEN, (&format!("k:{k}"), role_word))
-            .await?;
+        self.audit_handover(
+            domain,
+            AUDIT_EVENT_FROZEN,
+            (&format!("k:{k}"), role_word, &run),
+        )
+        .await?;
         Ok(Frozen { run, k, at })
     }
 
@@ -389,7 +394,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         self.audit_handover(
             domain,
             AUDIT_EVENT_HANDOVER,
-            (&format!("h:{h}"), "reanchor"),
+            (&format!("h:{h}"), "reanchor", &run),
         )
         .await?;
         Ok(after)
@@ -492,7 +497,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         self.audit_handover(
             domain,
             AUDIT_EVENT_HANDOVER,
-            (&format!("h:{}", t.h), "incoming"),
+            (&format!("h:{}", t.h), "incoming", &t.adoption.run),
         )
         .await
     }
