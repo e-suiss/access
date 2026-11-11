@@ -129,10 +129,7 @@ pub async fn notices(pool: &PgPool, domain: &DomainId) -> Result<Vec<Notice>, St
                 items: u32::try_from(r.items).map_err(|_| StoreError::Corrupt)?,
                 first_position: unsigned(r.first_position)?,
                 set: r.set_bytes,
-                digest: r
-                    .set_digest
-                    .try_into()
-                    .map_err(|_| StoreError::Corrupt)?,
+                digest: r.set_digest.try_into().map_err(|_| StoreError::Corrupt)?,
                 resolved: r.resolved,
                 relayed: r.relayed,
             })
@@ -309,10 +306,7 @@ pub async fn snapshot_before(
         Ok(Snapshot {
             pos: unsigned(r.pos)?,
             root: r.root.try_into().map_err(|_| StoreError::Corrupt)?,
-            state_digest: r
-                .state_digest
-                .try_into()
-                .map_err(|_| StoreError::Corrupt)?,
+            state_digest: r.state_digest.try_into().map_err(|_| StoreError::Corrupt)?,
             state: r.state,
             note: r.note,
         })
