@@ -5,6 +5,7 @@
 pub(crate) mod admin;
 pub(crate) mod apply;
 pub(crate) mod diff;
+pub(crate) mod domain;
 pub(crate) mod export;
 pub(crate) mod incident;
 pub(crate) mod migrate;

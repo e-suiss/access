@@ -88,6 +88,8 @@ dependencies = [
 name = "access-cli"
 version = "0.5.0"
 dependencies = [
+ "access-authority-core",
+ "access-authority-sequencer",
  "access-crypto",
  "access-identity-admin",
  "access-identity-oauth",

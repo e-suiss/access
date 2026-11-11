@@ -13,6 +13,9 @@ name = "access-cli"
 path = "src/main.rs"
 
 [dependencies]
+# OP-158 m.3 (m): `domain recover` plans with the open recovery rules and reads export packages
+access-authority-core = { path = "../../crates/authority-core" }
+access-authority-sequencer = { path = "../../crates/authority-sequencer" }
 access-crypto = { workspace = true }
 access-identity-oauth = { workspace = true }
 access-identity-risk = { workspace = true }

@@ -66,6 +66,8 @@ enum Command {
     /// Declares a Party compromised and writes the containment steps and the window still open
     /// (§12.2.4, OP-157 m.3 (i)).
     Incident(commands::incident::IncidentArgs),
+    /// Plans a forced recovery and lists what its lost suffix may hold (§13.6, §16.6).
+    Domain(commands::domain::DomainArgs),
 }
 
 fn main() -> ExitCode {
@@ -104,6 +106,7 @@ fn main() -> ExitCode {
                     Command::Relay(a) => Box::pin(commands::relay::run(a)).await,
                     Command::Ssh(a) => Box::pin(commands::ssh::run(a)).await,
                     Command::Incident(a) => Box::pin(commands::incident::run(&cli.config, a)).await,
+                    Command::Domain(a) => Box::pin(commands::domain::run(a)).await,
                     Command::Migrate(a) => commands::migrate::run(&cli.config, &a),
                     Command::Replay(a) => commands::replay::run(&a),
                 }
