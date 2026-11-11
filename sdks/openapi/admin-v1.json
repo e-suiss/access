@@ -21788,6 +21788,38 @@
           }
         }
       },
+      "CaseSystem": {
+        "type": "object",
+        "description": "A support case system: name, issuer, provider and format (OP-157 m.3 (e)); its lane names its members when it serves it."
+      },
+      "SupportGrant": {
+        "type": "object",
+        "description": "A support Grant: operator, subject, case, scope and end (OP-157 m.3 (c)); its lane names its members when it serves it."
+      },
+      "BreakglassAccount": {
+        "type": "object",
+        "description": "A break-glass marked account; the mark carries no authority (INV-28, OP-157 m.3 (h)); its lane names its members when it serves it."
+      },
+      "BreakglassDrill": {
+        "type": "object",
+        "description": "A break-glass drill, a real Exercise with PurposeRef drill (OP-157 m.3 (h)); its lane names its members when it serves it."
+      },
+      "BreakglassReview": {
+        "type": "object",
+        "description": "One break-glass use and its review by another Party (OP-157 m.3 (h)); its lane names its members when it serves it."
+      },
+      "Review": {
+        "type": "object",
+        "description": "An access review campaign, a view and never a queue (IDP-39 (3), OP-157 m.3 (w)); its lane names its members when it serves it."
+      },
+      "ReviewItem": {
+        "type": "object",
+        "description": "One Grant of a campaign, as the reviewer may see it (OP-157 m.3 (w)); its lane names its members when it serves it."
+      },
+      "OffboardingPreview": {
+        "type": "object",
+        "description": "What offboarding a Party would do, channel by channel, with no defaults (OP-157 m.3 (v)); its lane names its members when it serves it."
+      },
       "Declared": {
         "type": "object",
         "description": "A resource whose route is declared and not served yet; its lane names its members when it serves it (OP-155 m.4)."

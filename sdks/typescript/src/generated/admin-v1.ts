@@ -3524,6 +3524,22 @@ export interface components {
             pending_invitations?: number;
             totals?: Record<string, never>;
         };
+        /** @description A support case system: name, issuer, provider and format (OP-157 m.3 (e)); its lane names its members when it serves it. */
+        CaseSystem: Record<string, never>;
+        /** @description A support Grant: operator, subject, case, scope and end (OP-157 m.3 (c)); its lane names its members when it serves it. */
+        SupportGrant: Record<string, never>;
+        /** @description A break-glass marked account; the mark carries no authority (INV-28, OP-157 m.3 (h)); its lane names its members when it serves it. */
+        BreakglassAccount: Record<string, never>;
+        /** @description A break-glass drill, a real Exercise with PurposeRef drill (OP-157 m.3 (h)); its lane names its members when it serves it. */
+        BreakglassDrill: Record<string, never>;
+        /** @description One break-glass use and its review by another Party (OP-157 m.3 (h)); its lane names its members when it serves it. */
+        BreakglassReview: Record<string, never>;
+        /** @description An access review campaign, a view and never a queue (IDP-39 (3), OP-157 m.3 (w)); its lane names its members when it serves it. */
+        Review: Record<string, never>;
+        /** @description One Grant of a campaign, as the reviewer may see it (OP-157 m.3 (w)); its lane names its members when it serves it. */
+        ReviewItem: Record<string, never>;
+        /** @description What offboarding a Party would do, channel by channel, with no defaults (OP-157 m.3 (v)); its lane names its members when it serves it. */
+        OffboardingPreview: Record<string, never>;
         /** @description A resource whose route is declared and not served yet; its lane names its members when it serves it (OP-155 m.4). */
         Declared: Record<string, never>;
         /** @description One page; the next is in the `Link` header (OP-65). Only what the realm may see is listed (TN-113). */
