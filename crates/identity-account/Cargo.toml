@@ -13,6 +13,7 @@ publish = false
 testing = ["access-crypto/testing", "dep:rcgen"]
 
 [dependencies]
+rustix = { workspace = true, features = ["std", "time"] }
 access-crypto = { workspace = true }
 access-identity-hooks = { workspace = true }
 access-internal-api = { workspace = true }
@@ -37,6 +38,7 @@ httparse = { workspace = true, features = ["std"] }
 rcgen = { workspace = true, features = ["aws_lc_rs", "pem"], optional = true }
 
 [dev-dependencies]
+divan = { workspace = true }
 access-crypto = { workspace = true, features = ["testing"] }
 access-identity-account = { path = ".", features = ["testing"] }
 access-store = { workspace = true, features = ["testing"] }
@@ -45,3 +47,12 @@ rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
 
 [lints]
 workspace = true
+
+# OP-72
+[[bench]]
+name = "argon2"
+harness = false
+
+# OP-146 m.4 (f), OP-158
+[[example]]
+name = "calibrate"

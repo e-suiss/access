@@ -57,6 +57,37 @@ pub struct HashMetrics {
     shed: AtomicU64,
     hashes: AtomicU64,
     waiting: AtomicU64,
+    hash_cpu_ns: AtomicU64,
+    window: std::sync::Mutex<Option<CpuWindow>>,
+}
+
+/// Where the last CPU ratio window started (§17.5.1, OP-32).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CpuWindow {
+    /// Process CPU time, nanoseconds.
+    pub process_ns: u64,
+    /// CPU time spent hashing, nanoseconds.
+    pub hash_ns: u64,
+}
+
+/// How long one CPU ratio window lasts (§17.5.1; PD).
+pub const CPU_WINDOW_NS: u64 = 10_000_000_000;
+
+fn cpu_ns(clock: rustix::time::ClockId) -> u64 {
+    let t = rustix::time::clock_gettime(clock);
+    u64::try_from(t.tv_sec)
+        .unwrap_or(0)
+        .saturating_mul(1_000_000_000)
+        .saturating_add(u64::try_from(t.tv_nsec).unwrap_or(0))
+}
+
+/// §17.5.1, OP-32: the process's CPU time over the CPU spent hashing between `from` and `to`,
+/// in thousandths; `None` when nothing was hashed in between.
+#[must_use]
+pub fn cpu_ratio_permille(from: CpuWindow, to: CpuWindow) -> Option<u64> {
+    let hashed = to.hash_ns.checked_sub(from.hash_ns).filter(|h| *h > 0)?;
+    let total = to.process_ns.saturating_sub(from.process_ns);
+    total.saturating_mul(1000).checked_div(hashed)
 }
 
 impl HashMetrics {
@@ -82,6 +113,38 @@ impl HashMetrics {
     #[must_use]
     pub fn waiting(&self) -> u64 {
         self.waiting.load(Ordering::Relaxed)
+    }
+
+    /// CPU time spent hashing so far, nanoseconds.
+    #[must_use]
+    pub fn hash_cpu_ns(&self) -> u64 {
+        self.hash_cpu_ns.load(Ordering::Relaxed)
+    }
+
+    /// Takes in one hash's CPU time and, once a window has passed, reports
+    /// `access_login_cpu_ratio_permille` (§17.5.1, OP-32; target below 1 100).
+    fn hashed(&self, cpu: u64) {
+        let hash_ns = self
+            .hash_cpu_ns
+            .fetch_add(cpu, Ordering::Relaxed)
+            .saturating_add(cpu);
+        let now = CpuWindow {
+            process_ns: cpu_ns(rustix::time::ClockId::ProcessCPUTime),
+            hash_ns,
+        };
+        let Ok(mut window) = self.window.lock() else {
+            return;
+        };
+        match *window {
+            Some(from) if now.process_ns.saturating_sub(from.process_ns) >= CPU_WINDOW_NS => {
+                if let Some(ratio) = cpu_ratio_permille(from, now) {
+                    access_telemetry::signals::LOGIN_CPU_RATIO.set_u64(ratio, []);
+                }
+                *window = Some(now);
+            }
+            Some(_) => {}
+            None => *window = Some(now),
+        }
     }
 
     fn queue(&self, joined: bool) {
@@ -192,14 +255,18 @@ impl Hasher {
         work: impl FnOnce() -> Result<T, HashFailure> + Send + 'static,
     ) -> Result<T, AccountError> {
         let permit = self.permits(weight).await?;
-        let out = tokio::task::spawn_blocking(move || {
+        let (out, cpu) = tokio::task::spawn_blocking(move || {
             let held = permit;
+            let started = cpu_ns(rustix::time::ClockId::ThreadCPUTime);
             let out = work();
+            let cpu = cpu_ns(rustix::time::ClockId::ThreadCPUTime).saturating_sub(started);
             drop(held);
-            out
+            (out, cpu)
         })
         .await
-        .map_err(|_| AccountError::Hash(HashFailure::Compute))??;
+        .map_err(|_| AccountError::Hash(HashFailure::Compute))?;
+        let out = out?;
+        self.metrics.hashed(cpu);
         self.metrics.hashes.fetch_add(1, Ordering::Relaxed);
         Ok(out)
     }
@@ -366,5 +433,41 @@ mod profile_tests {
             .unwrap();
         assert!(v.matched && v.rehash);
         assert_eq!(h.metrics().hashes(), 3);
+    }
+}
+
+#[cfg(test)]
+mod cpu_tests {
+    #![allow(clippy::unwrap_used, reason = "test code")]
+
+    use super::*;
+
+    // §17.5.1, OP-32
+    #[test]
+    fn the_ratio_is_process_cpu_over_hash_cpu() {
+        let from = CpuWindow {
+            process_ns: 1_000,
+            hash_ns: 500,
+        };
+        let to = CpuWindow {
+            process_ns: 12_000,
+            hash_ns: 10_500,
+        };
+        assert_eq!(cpu_ratio_permille(from, to), Some(1_100));
+        assert_eq!(cpu_ratio_permille(to, to), None);
+    }
+
+    // §17.5.1, OP-32
+    #[tokio::test]
+    async fn hashing_counts_its_cpu_time() {
+        let h = Hasher::new(HasherConfig::sized(Argon2Params::CANONICAL, 1, None));
+        let pw = Password::new("correct horse battery").unwrap();
+        let salt = access_crypto::random::bytes::<16>().unwrap();
+        h.hash(&pw, salt).await.unwrap();
+        assert!(
+            h.metrics().hash_cpu_ns() > 1_000_000,
+            "{}",
+            h.metrics().hash_cpu_ns()
+        );
     }
 }

@@ -284,3 +284,11 @@ pub static SECRET_MEMORY_BACKEND: Gauge<1> = Gauge::new(
     "Secret memory backend of a signer process (CR-34)",
     [Label::Kind],
 );
+
+/// §17.5.1, OP-32: a login process's CPU time over the CPU it spent hashing passwords, in
+/// thousandths, over the last window (target below 1 100).
+pub static LOGIN_CPU_RATIO: Gauge<0> = Gauge::new(
+    "access_login_cpu_ratio_permille",
+    "Process CPU over password hash CPU, thousandths (OP-32)",
+    [],
+);

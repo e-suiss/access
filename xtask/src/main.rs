@@ -84,6 +84,7 @@ fn usage() -> ExitCode {
     eprintln!("  catalog            regenerate catalogs from the local spec (OP-81)");
     eprintln!("  interop-table      regenerate conformance/interop/COMPATIBILITY.md from lab.toml");
     eprintln!("  seam-dependencies  regenerate conformance/seams/DEPENDENCIES.md (PI-14)");
+    eprintln!("  calibrate          measure password hashing on this host (OP-146 m.4 (f))");
     ExitCode::FAILURE
 }
 
@@ -119,6 +120,37 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("calibrate") => calibrate(&root),
         _ => usage(),
+    }
+}
+
+/// OP-146 m.4 (f), OP-158 m.3 (y): runs the calibration example in release mode on this host
+/// and passes its JSON report through.
+fn calibrate(root: &Path) -> ExitCode {
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let status = std::process::Command::new(cargo)
+        .current_dir(root)
+        .args([
+            "run",
+            "--quiet",
+            "--release",
+            "--locked",
+            "-p",
+            "access-identity-account",
+            "--example",
+            "calibrate",
+        ])
+        .status();
+    match status {
+        Ok(s) if s.success() => ExitCode::SUCCESS,
+        Ok(s) => {
+            eprintln!("calibrate: {s}");
+            ExitCode::FAILURE
+        }
+        Err(error) => {
+            eprintln!("calibrate: {error}");
+            ExitCode::FAILURE
+        }
     }
 }
