@@ -1,0 +1,113 @@
+# The attention table (§8.6, X23, OP-157 m.3 (m)): what happens by itself, what waits for a person
+# and what is never automatic. `cargo xtask check` (attention-model) rejects a timer or job that
+# writes an action a `never` row names; the table itself is binding, Work reads the same rows.
+
+[[row]]
+id = "autonomy-allow"
+event = "A request inside the autonomy of an exercisable Grant"
+automatic = "yes"
+owner = "Access + Work"
+
+[[row]]
+id = "approval-requirement"
+event = "A requirement that needs a human contribution"
+automatic = "no"
+attention = "Needs Attention -> S3"
+owner = "Work + Access"
+never_payloads = ["Contribute"]
+
+[[row]]
+id = "step-up"
+event = "Authentication step-up"
+automatic = "no"
+attention = "inline, at the act"
+owner = "Identity plane"
+
+[[row]]
+id = "login-push"
+event = "A login push approval"
+automatic = "no"
+attention = "push, with number matching"
+owner = "Identity plane"
+
+[[row]]
+id = "support-access"
+event = "A support access request"
+automatic = "never"
+attention = "S1 or the break-glass Grant's requirements"
+owner = "Access"
+never_payloads = ["GrantIssue", "GrantAmend"]
+
+[[row]]
+id = "grant-expansion"
+event = "Grant issue, widening, delegability, extension"
+automatic = "never"
+attention = "S1"
+owner = "Access"
+never_payloads = ["GrantIssue", "GrantAmend"]
+
+[[row]]
+id = "role-transition"
+event = "Template or role version transition"
+automatic = "never"
+attention = "S7 change impact"
+owner = "Access"
+never_payloads = ["AuthoritySetDefine"]
+
+[[row]]
+id = "acceptance"
+event = "Acceptance establish or expand"
+automatic = "never"
+attention = "S7"
+owner = "Access"
+never_payloads = ["AcceptanceEstablish", "AcceptanceAmend"]
+
+[[row]]
+id = "restriction-lift"
+event = "Restriction removal or policy loosening"
+automatic = "never"
+attention = "S4/S7"
+owner = "Access"
+never_payloads = ["PolicySet"]
+
+[[row]]
+id = "mandate-rebind"
+event = "Mandate rebind (widen)"
+automatic = "never"
+attention = "the holder's own Instance"
+owner = "Access"
+never_payloads = ["MandateRebind", "MandateBind"]
+
+[[row]]
+id = "disposition"
+event = "Departure or root transfer disposition"
+automatic = "never"
+attention = "S7 Offboarding / Domain"
+owner = "Access"
+never_payloads = ["PartyDepart", "AnchorTransfer"]
+
+[[row]]
+id = "renewal"
+event = "Delegation renewal"
+automatic = "never"
+attention = "Inventory / Briefing"
+owner = "Access"
+never_payloads = ["GrantAmend"]
+
+[[row]]
+id = "expiry"
+event = "Expiry"
+automatic = "yes"
+owner = "Access"
+
+[[row]]
+id = "commitment-end"
+event = "A commitment-scoped ending"
+automatic = "yes"
+owner = "Work -> Access"
+
+[[row]]
+id = "hr-change"
+event = "HR changes a selection"
+automatic = "yes"
+owner = "HR -> Access"
