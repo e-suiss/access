@@ -1,0 +1,16 @@
+[package]
+name = "access-breakglass"
+description = "Access operator break-glass tool (OP-46, CMP-25): offline M-of-N verification and signed directives, with no database."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+# OP-157 m.3 (j): access-crypto and the standard library only; `breakglass-isolation` checks it
+[dependencies]
+access-crypto = { workspace = true }
+
+[lints]
+workspace = true
