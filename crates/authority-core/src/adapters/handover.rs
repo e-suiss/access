@@ -26,6 +26,13 @@ use crate::app::handover::{FROZEN, NOT_CONFORMANT, Statement, TakeOver, conforma
 use crate::domain::ProofRef;
 use crate::ports::{Binding, Keys, Salts};
 
+/// The domain was frozen for a handover or a re-anchor (HO-1, RB-1).
+pub(crate) const AUDIT_EVENT_FROZEN: &str = "domain.frozen";
+
+/// The domain was taken over at `h + 1`, or its re-anchor's new binding signs from there
+/// (HO-8, RB-6).
+pub(crate) const AUDIT_EVENT_HANDOVER: &str = "domain.handover";
+
 /// A frozen domain (HO-1, HO-2).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Frozen {
@@ -42,6 +49,36 @@ fn store(e: access_store::StoreError) -> CoreError {
 }
 
 impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K, B, S, C> {
+    async fn audit_handover(
+        &self,
+        domain: Digest,
+        event_type: &'static str,
+        (target, reason): (&str, &str),
+    ) -> Result<(), CoreError> {
+        let id = DomainId::from_bytes(domain.0);
+        let tenant = access_store::authority::domain_tenant(&self.setup.app, &id)
+            .await
+            .map_err(store)?;
+        let now = access_store::authority::server_time(&self.setup.app)
+            .await
+            .map_err(store)?;
+        access_store::operational::record_operational(
+            &self.setup.app,
+            &access_store::operational::OperationalEvent {
+                occurred_at_ms: now,
+                tenant,
+                domain: tenant.map(|_| domain.0),
+                event_type,
+                actor: "provider",
+                target,
+                reason,
+                correlation: "",
+            },
+        )
+        .await
+        .map_err(|_| CoreError::Unavailable("audit"))
+    }
+
     async fn sign(&self, request: &SignRequest) -> Result<SignResponse, CoreError> {
         let path = self
             .setup
@@ -147,6 +184,12 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             Err(access_store::StoreError::HeadMoved) => return Err(CoreError::Refused(FROZEN)),
             Err(e) => return Err(store(e)),
         };
+        let role_word = match role {
+            Role::Reanchor => "reanchor",
+            _ => "outgoing",
+        };
+        self.audit_handover(domain, AUDIT_EVENT_FROZEN, (&format!("k:{k}"), role_word))
+            .await?;
         Ok(Frozen { run, k, at })
     }
 
@@ -200,7 +243,10 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             return Err(CoreError::Refused(FROZEN));
         };
         let k = run.k;
-        if head.checked_add(1) != Some(k)
+        // SEC26: a CT3 time-lock may make the batch two attempts of one nonce; the statements
+        // are recorded by the first, at k and k + 1
+        let first = head.checked_add(1) == Some(k);
+        if head.checked_add(1) < Some(k)
             || h.cited.size != k
             || h.reanchor != (run.role == Role::Reanchor)
         {
@@ -270,6 +316,9 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         if c.conformance != conformance_digest() {
             return Err(CoreError::Refused(NOT_CONFORMANT));
         }
+        if !first {
+            return Ok(Vec::new());
+        }
         Ok(vec![
             Statement::of(NO_WRITE, no_write).ok_or(CoreError::Protocol("proof"))?,
             Statement::of(CONTINUATION, continuation).ok_or(CoreError::Protocol("proof"))?,
@@ -325,6 +374,8 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             .await
             .map_err(store)?;
         self.release().await;
+        self.audit_handover(domain, AUDIT_EVENT_HANDOVER, (&format!("h:{h}"), "reanchor"))
+            .await?;
         Ok(after)
     }
 
@@ -419,9 +470,15 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             })
             .await?
         {
-            SignResponse::Opened => Ok(()),
-            _ => Err(CoreError::Unavailable("signer-binding")),
+            SignResponse::Opened => {}
+            _ => return Err(CoreError::Unavailable("signer-binding")),
         }
+        self.audit_handover(
+            domain,
+            AUDIT_EVENT_HANDOVER,
+            (&format!("h:{}", t.h), "incoming"),
+        )
+        .await
     }
 }
 

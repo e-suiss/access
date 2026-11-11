@@ -85,8 +85,6 @@ const UNPRODUCED: &[&str] = &[
     "policy.default_changed",
     // OP-158 m.4 (a)
     "divergence.quarantined",
-    "domain.frozen",
-    "domain.handover",
     "domain.recovered",
     "realm.rehomed",
     "upgrade.activated",

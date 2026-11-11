@@ -21,6 +21,19 @@ fn template() -> Template {
 }
 
 // OP-143 m.4
+fn superseded() -> access_kernel::verify::key_scope::BindingKey {
+    let (k, _) = suiss_crypto::signer::SoftSigner::generate_ed25519().unwrap();
+    let mut b = crate::domain::binding(
+        suiss_crypto::cose::Algorithm::Ed25519,
+        suiss_crypto::signer::Signer::public_key(&k),
+    );
+    b.superseded = Some(access_kernel::verify::key_scope::Superseded {
+        at: Digest([1; 32]),
+        cited: Digest([2; 32]),
+    });
+    b
+}
+
 #[test]
 fn messages_round_trip() {
     let requests = [
@@ -60,6 +73,27 @@ fn messages_round_trip() {
                 d
             }),
         },
+        // OP-158 m.3 (l)
+        Request::Binding {
+            domain: Digest([7; 32]),
+            next: true,
+        },
+        Request::Statement {
+            domain: Digest([7; 32]),
+            next: false,
+            content_type: String::from(crate::handover::NO_WRITE),
+            payload: vec![0xa0],
+        },
+        Request::Rebind {
+            domain: Digest([7; 32]),
+            at: Digest([1; 32]),
+            cited: Digest([2; 32]),
+            transcript: Digest([3; 32]),
+        },
+        Request::Supersede {
+            domain: Digest([7; 32]),
+            keys: vec![superseded()],
+        },
     ];
     for r in requests {
         let f = encode_request(&r).unwrap();
@@ -82,6 +116,8 @@ fn messages_round_trip() {
             jws: String::from("a.b.c"),
             excerpt: vec![6],
         },
+        Response::Binding(superseded()),
+        Response::Statement(vec![7]),
         Response::Error(String::from("signer-no-key")),
     ];
     for r in responses {

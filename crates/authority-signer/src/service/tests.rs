@@ -49,6 +49,179 @@ impl Bindings for Binding {
     }
 }
 
+/// Binding generations kept in memory, the first being generation 0.
+#[derive(Clone, Default)]
+struct Generations(std::rc::Rc<std::cell::RefCell<BTreeMap<u64, Secret<Vec<u8>>>>>);
+
+impl Bindings for Generations {
+    fn binding(&mut self, d: &Digest) -> Result<Box<dyn Signer + Send>, SignError> {
+        self.generation(d, 0)
+    }
+
+    fn generation(&mut self, _: &Digest, g: u64) -> Result<Box<dyn Signer + Send>, SignError> {
+        let doc = self
+            .0
+            .borrow_mut()
+            .entry(g)
+            .or_insert_with(|| SoftSigner::generate_ed25519().unwrap().1)
+            .clone();
+        Ok(Box::new(SoftSigner::ed25519_from_pkcs8(&doc)?))
+    }
+}
+
+fn metadata_of(s: &mut Service<Soft, Generations, Mem>) -> access_kernel::verify::key_scope::DomainMetadata {
+    let Response::Metadata(m) = s.handle(Request::Metadata(Digest([7; 32])), 0) else {
+        panic!("metadata");
+    };
+    let msg = suiss_crypto::cose::parse_sign1(&m).unwrap();
+    access_kernel::verify::key_scope::DomainMetadata::from_bytes(&msg.payload.unwrap()).unwrap()
+}
+
+// OP-60, §16.6.1 RB-2, RB-4, RB-6, OP-158 m.3 (l)
+#[test]
+fn a_re_anchor_moves_to_the_next_generation_and_keeps_the_old_binding_superseded() {
+    let vault = Mem::default();
+    let gens = Generations::default();
+    let mut s = Service::start(Soft, gens.clone(), vault.clone(), Policy::AUTHORITY, 0).unwrap();
+    assert_eq!(
+        s.handle(Request::Open(Box::new(template())), 0),
+        Response::Opened
+    );
+    let d = Digest([7; 32]);
+    let Response::Binding(current) = s.handle(Request::Binding { domain: d, next: false }, 0)
+    else {
+        panic!("binding");
+    };
+    let Response::Binding(next) = s.handle(Request::Binding { domain: d, next: true }, 0) else {
+        panic!("next binding");
+    };
+    assert_ne!(current.kid, next.kid);
+    // RB-4: each statement under its own binding; nothing else is binding-signed on request
+    let statement = |next| Request::Statement {
+        domain: d,
+        next,
+        content_type: String::from(crate::handover::NO_WRITE),
+        payload: vec![0xa0],
+    };
+    let Response::Statement(old_signed) = s.handle(statement(false), 0) else {
+        panic!("statement");
+    };
+    let Response::Statement(new_signed) = s.handle(statement(true), 0) else {
+        panic!("statement");
+    };
+    for (signed, key) in [(&old_signed, &current), (&new_signed, &next)] {
+        assert!(
+            crate::handover::verify(
+                &PureBackend,
+                signed,
+                std::slice::from_ref(key),
+                crate::handover::NO_WRITE
+            )
+            .is_ok()
+        );
+    }
+    assert_eq!(
+        s.handle(
+            Request::Statement {
+                domain: d,
+                next: false,
+                content_type: String::from("application/access-receipt+cbor"),
+                payload: vec![0xa0],
+            },
+            0
+        ),
+        Response::Error(String::from("signer-usage"))
+    );
+    // RB-6
+    assert_eq!(
+        s.handle(
+            Request::Rebind {
+                domain: d,
+                at: Digest([1; 32]),
+                cited: Digest([2; 32]),
+                transcript: Digest([3; 32]),
+            },
+            0
+        ),
+        Response::Opened
+    );
+    let m = metadata_of(&mut s);
+    assert!(m.binding[&next.kid].superseded.is_none());
+    assert_eq!(
+        m.binding[&current.kid].superseded,
+        Some(access_kernel::verify::key_scope::Superseded {
+            at: Digest([1; 32]),
+            cited: Digest([2; 32]),
+        })
+    );
+    assert_eq!(m.declared.ceremony_transcript, Some(Digest([3; 32])));
+    let Response::Signed { excerpt, .. } = s.handle(sign(0), 0) else {
+        panic!("signed");
+    };
+    let mut keys = KeySet::default();
+    keys.allowed.insert(Algorithm::Ed25519);
+    keys.insert(next.kid, next.key.clone()).unwrap();
+    assert!(
+        verify_sign1(
+            &PureBackend,
+            &excerpt,
+            &keys,
+            access_kernel::verify::key_scope::EXCERPT_CONTENT_TYPE
+        )
+        .is_ok()
+    );
+    // the vault keeps the generation and the superseded binding across a restart
+    drop(s);
+    let mut s = Service::start(Soft, gens, vault, Policy::AUTHORITY, 0).unwrap();
+    let m = metadata_of(&mut s);
+    assert!(m.binding[&next.kid].superseded.is_none());
+    assert!(m.binding[&current.kid].superseded.is_some());
+}
+
+// HO-8
+#[test]
+fn an_incoming_install_publishes_the_outgoing_bindings_only_as_superseded() {
+    let mut s = Service::start(
+        Soft,
+        Generations::default(),
+        Mem::default(),
+        Policy::AUTHORITY,
+        0,
+    )
+    .unwrap();
+    s.handle(Request::Open(Box::new(template())), 0);
+    let d = Digest([7; 32]);
+    let (k, _) = SoftSigner::generate_ed25519().unwrap();
+    let mut old = crate::domain::binding(Algorithm::Ed25519, k.public_key());
+    assert_eq!(
+        s.handle(
+            Request::Supersede {
+                domain: d,
+                keys: vec![old.clone()],
+            },
+            0
+        ),
+        Response::Error(String::from("signer-usage"))
+    );
+    old.superseded = Some(access_kernel::verify::key_scope::Superseded {
+        at: Digest([4; 32]),
+        cited: Digest([5; 32]),
+    });
+    assert_eq!(
+        s.handle(
+            Request::Supersede {
+                domain: d,
+                keys: vec![old.clone()],
+            },
+            0
+        ),
+        Response::Opened
+    );
+    let m = metadata_of(&mut s);
+    assert_eq!(m.binding[&old.kid].superseded, old.superseded);
+    assert_eq!(m.binding.values().filter(|b| b.superseded.is_none()).count(), 1);
+}
+
 #[derive(Clone, Default)]
 struct Mem(std::rc::Rc<std::cell::RefCell<BTreeMap<Digest, Vec<u8>>>>);
 

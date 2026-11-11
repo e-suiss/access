@@ -122,3 +122,67 @@ pub(crate) fn binding_change(
     }
     Ok(out)
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, reason = "test code")]
+mod tests {
+    use access_kernel::codec::Canonical as _;
+    use access_kernel::record::{Header, Opened, RecordEnvelope, RecordKind};
+    use suiss_crypto::dcbor::Value;
+    use suiss_ledger::checkpoint::witness::BindingChange;
+
+    use super::*;
+
+    fn cp(size: u64, root: [u8; 32]) -> Checkpoint {
+        Checkpoint {
+            origin: String::from("o"),
+            size,
+            root,
+            extensions: Vec::new(),
+        }
+    }
+
+    // U11, §16.6 HO-7, OP-158 m.3 (l)
+    #[test]
+    fn only_a_handover_record_the_checkpoint_ends_with_moves_the_binding() {
+        let genesis = RecordEnvelope {
+            header: Header {
+                domain: None,
+                pos: 0,
+                kind: RecordKind::Genesis,
+                recorded_at: 1,
+                prev: None,
+            },
+            fields: std::collections::BTreeMap::from([(
+                String::from("versions"),
+                Opened {
+                    value: Value::Map(Vec::new()),
+                    salt: [3; 32],
+                },
+            )]),
+        };
+        let domain = genesis.domain().unwrap();
+        let leaf = genesis.leaf_hash().unwrap();
+        let change = BindingChange {
+            position: 0,
+            record: genesis.to_bytes().unwrap(),
+            inclusion: Vec::new(),
+        };
+        assert_eq!(
+            binding_change(&domain, &cp(1, leaf), &change),
+            Err(Refused::Key)
+        );
+        assert_eq!(
+            binding_change(&domain, &cp(2, leaf), &change),
+            Err(Refused::Key)
+        );
+        let garbage = BindingChange {
+            record: vec![0xa0],
+            ..change
+        };
+        assert_eq!(
+            binding_change(&domain, &cp(1, leaf), &garbage),
+            Err(Refused::Malformed)
+        );
+    }
+}
