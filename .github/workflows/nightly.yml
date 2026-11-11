@@ -341,6 +341,14 @@ jobs:
             echo
           } > bench-results/wallclock.txt
           just bench | tee -a bench-results/wallclock.txt
+      # OP-32, OP-61, OP-158 m.3 (z): the real-path commit and check figures and the load harness
+      - name: Read path and commit measurements
+        env:
+          ACCESS_LOAD_HOST: bench-runner
+        run: |
+          just measure | tee bench-results/read-path.txt
+          cp "${CARGO_TARGET_DIR:-target}/measure/read_path.json" bench-results/read-path.json
+          cargo run --locked --release -p access-load -- list > bench-results/load-scenarios.txt
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bench-wallclock-${{ github.run_id }}

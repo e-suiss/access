@@ -26,10 +26,7 @@ pub const DEFAULT_WAIT_MS: u64 = 10_000;
 /// The name of the refused parameter.
 pub fn query(query: Option<&str>) -> Result<(u64, Duration), &'static str> {
     let params = Params::parse(query.unwrap_or_default()).map_err(|_| "query")?;
-    let from = params
-        .get("from")
-        .and_then(canonical_u64)
-        .ok_or("from")?;
+    let from = params.get("from").and_then(canonical_u64).ok_or("from")?;
     let wait = match params.get("wait") {
         None => DEFAULT_WAIT_MS,
         Some(v) => canonical_u64(v).ok_or("wait")?,

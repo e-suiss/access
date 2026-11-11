@@ -441,6 +441,13 @@ jobs:
           else
             echo "HAVE_BASELINE=false" >> "$GITHUB_ENV"
           fi
+          # OP-158 m.3 (z): the advisory bench has a baseline only once the base has it
+          if [[ -f crates/authority-core/benches/advisory_instructions.rs ]]; then
+            just bench-advisory-instructions --save-baseline=base
+            echo "HAVE_ADVISORY_BASELINE=true" >> "$GITHUB_ENV"
+          else
+            echo "HAVE_ADVISORY_BASELINE=false" >> "$GITHUB_ENV"
+          fi
           # AG-22: the agent token bench has a baseline only once the base has it
           if [[ -f crates/kernel/benches/agent_tokens.rs ]]; then
             echo "HAVE_AGENT_BASELINE=true" >> "$GITHUB_ENV"
@@ -456,6 +463,14 @@ jobs:
             just bench-instructions-one kernel_instructions
           fi
       # AG-22, §11.9.4: the pure cost of an agent's 15-minute token refresh
+      # OP-72, P46, OP-158 m.3 (z): the advisory cache key and closure bitmap
+      - name: Advisory regression gate (fails above 5 %)
+        run: |
+          if [[ "$HAVE_BASELINE" == true && "${HAVE_ADVISORY_BASELINE:-false}" == true ]]; then
+            just bench-advisory-instructions --baseline=base --callgrind-limits='ir=5%'
+          else
+            just bench-advisory-instructions
+          fi
       - name: Agent token regression gate (fails above 5 %)
         run: |
           if [[ "$HAVE_BASELINE" == true && "$HAVE_AGENT_BASELINE" == true ]]; then

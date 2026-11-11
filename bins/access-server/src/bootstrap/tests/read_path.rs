@@ -280,3 +280,129 @@ async fn an_archived_nonce_stays_in_the_lookup_and_is_never_opened_again() {
     );
     p.w.domains.release().await;
 }
+
+fn percentile(sorted: &[u64], milli: u64) -> u64 {
+    let n = sorted.len() as u64;
+    let rank = (milli * n).div_ceil(100_000).clamp(1, n.max(1));
+    sorted.get((rank - 1) as usize).copied().unwrap_or(0)
+}
+
+fn summary(mut micros: Vec<u64>) -> Json {
+    micros.sort_unstable();
+    serde_json::json!({
+        "n": micros.len(),
+        "p50_us": percentile(&micros, 50_000),
+        "p99_us": percentile(&micros, 99_000),
+        "max_us": micros.last().copied().unwrap_or(0),
+    })
+}
+
+fn environment() -> Json {
+    let cpu = std::process::Command::new("sysctl")
+        .args(["-n", "machdep.cpu.brand_string"])
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            std::fs::read_to_string("/proc/cpuinfo").ok().and_then(|i| {
+                i.lines()
+                    .find_map(|l| l.strip_prefix("model name"))
+                    .and_then(|l| l.split_once(':'))
+                    .map(|(_, v)| v.trim().to_owned())
+            })
+        });
+    serde_json::json!({
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "cpu": cpu,
+        "cores": std::thread::available_parallelism().map(std::num::NonZero::get).unwrap_or(0),
+        "path": "in-process: real ADP router, sequencer, PostgreSQL 18 (one local server, no standby), SoftHSM, authority signer",
+        "profile": if cfg!(debug_assertions) { "debug" } else { "release" },
+    })
+}
+
+// OP-32, OP-61, OP-72, P46, §9.7A.6, §17.5.1, Ek B 5685, 5707, 5774, 5775
+#[tokio::test(flavor = "multi_thread")]
+async fn measured_commit_and_check_latency_on_the_real_path_with_its_environment() {
+    let p = pdp("rp-measure").await;
+    let n: usize = 40;
+    let checks: usize = 25;
+    let mut commits = Vec::with_capacity(n);
+    for _ in 0..n {
+        let body = p.allowed(Mode::Commit).await;
+        let t = std::time::Instant::now();
+        let a = p.post("/access/v1/evaluation", &body).await;
+        commits.push(t.elapsed().as_micros() as u64);
+        assert_eq!(a.status, StatusCode::OK);
+    }
+    let mut misses = Vec::with_capacity(checks);
+    let mut hits = Vec::with_capacity(checks);
+    for _ in 0..checks {
+        let body = p.allowed(Mode::Check).await;
+        let t = std::time::Instant::now();
+        assert_eq!(
+            p.post("/access/v1/evaluation", &body).await.status,
+            StatusCode::OK
+        );
+        misses.push(t.elapsed().as_micros() as u64);
+        let t = std::time::Instant::now();
+        assert_eq!(
+            p.post("/access/v1/evaluation", &body).await.status,
+            StatusCode::OK
+        );
+        hits.push(t.elapsed().as_micros() as u64);
+    }
+    let bodies: Vec<Json> = {
+        let mut v = Vec::with_capacity(n);
+        for _ in 0..n {
+            v.push(p.allowed(Mode::Commit).await);
+        }
+        v
+    };
+    let started = std::time::Instant::now();
+    let mut tasks = Vec::with_capacity(n);
+    for body in bodies {
+        let adp = p.adp.clone();
+        tasks.push(tokio::spawn(async move {
+            let mut req = axum::http::Request::post("/access/v1/evaluation")
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(body.to_string()))
+                .unwrap();
+            req.extensions_mut()
+                .insert(access_http::adp::adapters::Pep(String::from(PEP)));
+            tower::ServiceExt::oneshot(adp, req).await.unwrap().status()
+        }));
+    }
+    for t in tasks {
+        assert_eq!(t.await.unwrap(), StatusCode::OK);
+    }
+    let per_second = n as f64 / started.elapsed().as_secs_f64();
+    let report = serde_json::json!({
+        "note": "one actor Instance: its commit burst (100) and check limit (60/min) bound the sample; the concurrent figure is a burst on one domain",
+        "commit": summary(commits),
+        "commit_concurrent_per_s": per_second,
+        "check_miss": summary(misses),
+        "check_hit": summary(hits),
+        "targets": {
+            "commit_p99_us": 30_000,
+            "commit_per_s_per_domain": 2_000,
+            "check_hit_p99_us": 100,
+            "check_miss_p99_us": 5_000,
+        },
+        "environment": environment(),
+    });
+    let dir = std::path::PathBuf::from(
+        std::env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| String::from("target")),
+    )
+    .join("measure");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("read_path.json"), report.to_string()).unwrap();
+    std::io::Write::write_all(
+        &mut std::io::stdout(),
+        format!("measure {report}\n").as_bytes(),
+    )
+    .unwrap();
+    assert_eq!(report["check_hit"]["n"].as_u64(), Some(checks as u64));
+    p.w.domains.release().await;
+}

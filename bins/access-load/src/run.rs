@@ -191,6 +191,15 @@ async fn drive(options: &Options, prepared: Vec<Prepared>) -> serde_json::Value 
     }
     let elapsed = wall.elapsed().as_secs_f64();
     let t = tally.lock().await;
+    report(options, &t, (total, late), elapsed)
+}
+
+fn report(
+    options: &Options,
+    t: &Tally,
+    (total, late): (u64, u64),
+    elapsed: f64,
+) -> serde_json::Value {
     let answered = u64::try_from(t.latencies.len()).unwrap_or(u64::MAX);
     let ok: u64 = t
         .statuses
@@ -217,6 +226,12 @@ async fn drive(options: &Options, prepared: Vec<Prepared>) -> serde_json::Value 
         "errors": t.errors.iter().map(|(k, v)| ((*k).to_owned(), serde_json::Value::from(*v))).collect::<serde_json::Map<_, _>>(),
         "late_starts": late,
         "latency_us": t.latencies.summary(),
+        "budget_p99_us": options.scenario.budget_p99_us,
+        "within_budget": options
+            .scenario
+            .budget_p99_us
+            .zip(t.latencies.percentile(99_000))
+            .map(|(budget, p99)| p99 <= budget),
         "throughput_per_s": throughput,
         "elapsed_s": elapsed,
         "environment": crate::environment::capture(),

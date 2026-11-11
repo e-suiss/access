@@ -626,6 +626,15 @@ audit:
 # OP-72, OP-84
 bench *args:
     cargo bench --locked -p esuiss-access-kernel --bench kernel_wallclock -- {{args}}
+    cargo bench --locked -p access-authority-core --bench advisory_wallclock -- {{args}}
+
+# OP-72, OP-158 m.3 (z): the advisory hot path's instruction counts (the PR gate)
+bench-advisory-instructions *args:
+    cargo bench --locked -p access-authority-core --bench advisory_instructions -- {{args}}
+
+# OP-32, OP-61, OP-158 m.3 (z): commit and advisory check latency on the real path, with the environment
+measure:
+    DATABASE_URL="${DATABASE_URL:-$(scripts/pg-local.sh up)}" SOFTHSM2_CONF="$(scripts/softhsm-local.sh)" cargo nextest run --locked --release -p access-server -E 'test(measured_commit)' --no-capture
 
 # OP-72, AG-22: the Kernel's hot paths and an agent token refresh
 bench-instructions *args:

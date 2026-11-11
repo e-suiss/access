@@ -34,6 +34,18 @@ suiss-crypto = { workspace = true, features = ["pkcs11", "aead", "testing"] }
 access-store = { workspace = true, features = ["testing"] }
 ed25519-dalek = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
+# OP-72, OP-158 m.3 (z)
+divan = { workspace = true }
+gungraun = { workspace = true, features = ["default"] }
+
+# OP-72, OP-158 m.3 (z)
+[[bench]]
+name = "advisory_wallclock"
+harness = false
+
+[[bench]]
+name = "advisory_instructions"
+harness = false
 
 [lints]
 workspace = true
