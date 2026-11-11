@@ -211,6 +211,16 @@ impl<C: Clock + Send + Sync> Fanout<C> {
                 && let Some(subject) = idp::party_subject(&mut t, party).await.map_err(down)?
             {
                 t.end_sessions(subject).await.map_err(down)?;
+                // TN-48, §12.2.4, OP-157 m.3 (i)
+                let target = access_kernel::json::b64url_encode(party);
+                t.audit(&access_store::audit::AuditEvent {
+                    event_type: "incident.contained",
+                    actor: "authority",
+                    target: &target,
+                    correlation: "-",
+                })
+                .await
+                .map_err(down)?;
                 // TN-41, MD-7
                 let at = t.server_time().await.map_err(down)?;
                 let id = access_identity_account::app::signal::fresh_id().map_err(down)?;

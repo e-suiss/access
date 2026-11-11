@@ -91,7 +91,6 @@ const UNPRODUCED: &[&str] = &[
     "approval.batch",
     "mapping.pinned",
     "policy.default_changed",
-    "incident.contained",
 ];
 
 // OP-41, OP-47, §17.8.1

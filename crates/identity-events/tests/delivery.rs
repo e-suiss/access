@@ -558,6 +558,21 @@ async fn a_party_compromise_raises_its_subjects_session_epoch() {
         assert!(std::time::Instant::now() < deadline, "epoch not raised");
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+    // TN-48, §12.2.4, OP-157 m.3 (i), Ek B 5582
+    let mut t = TenantTx::begin(&w.db.app, w.tenant, w.realm).await.unwrap();
+    let contained = t
+        .list_audit(100)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|r| r.event_type == "incident.contained")
+        .collect::<Vec<_>>();
+    t.commit().await.unwrap();
+    assert_eq!(contained.len(), 1, "{contained:?}");
+    assert_eq!(
+        contained[0].target,
+        access_kernel::json::b64url_encode(&[2; 16])
+    );
 }
 
 #[tokio::test]
