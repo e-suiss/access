@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 access-authority-signer = { path = "../../crates/authority-signer" }
 access-crypto = { workspace = true }
+access-kernel = { workspace = true }
 access-telemetry = { workspace = true }
 suiss-crypto = { workspace = true, features = ["pkcs11"] }
 suiss-sandbox = { workspace = true }
@@ -19,6 +20,7 @@ serde = { workspace = true, features = ["derive", "std"] }
 thiserror = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "time"] }
 tracing = { workspace = true, features = ["std"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 access-kernel = { workspace = true }

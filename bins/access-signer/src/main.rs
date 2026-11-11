@@ -3,6 +3,7 @@
 
 mod ceremony;
 mod config;
+mod hsm_log;
 
 use std::ffi::OsString;
 use std::process::ExitCode;
@@ -14,7 +15,7 @@ use access_authority_signer::ceremony::{Gate, Quorate};
 use access_authority_signer::service::Service;
 use access_crypto::secret_file::SecretFile;
 use config::Config;
-use suiss_crypto::pkcs11::{HsmError, KeyStore};
+use suiss_crypto::pkcs11::{HsmError, HsmKek, KeyStore};
 use suiss_crypto::rotation::Policy;
 use suiss_sandbox::{LandlockAbi, Lockdown, Profile};
 
@@ -267,7 +268,11 @@ fn unsafe_host() -> bool {
         .is_err()
 }
 
-type Signer = Service<SealedFactory<suiss_crypto::pkcs11::HsmKek>, Quorate<HsmBindings>, DirVault>;
+type Signer = Service<
+    SealedFactory<hsm_log::JournaledKek<HsmKek>>,
+    Quorate<hsm_log::JournaledBindings<HsmBindings>>,
+    DirVault,
+>;
 
 /// CR-23, CR-28, CR-29: every `every`, re-reads the transcript and runs the key schedule on the
 /// blocking pool.
@@ -297,6 +302,34 @@ async fn schedule(
         head = seen;
         audit(&report);
     }
+}
+
+/// The service over the vault, its HSM operations journaled (CR-23, SEC19, OP-157 m.3 (k)).
+fn start(config: &Config, store: KeyStore, kek: HsmKek, gate: Gate) -> Result<Signer, String> {
+    let callers = config
+        .callers
+        .iter()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join("+");
+    let journal = Arc::new(
+        hsm_log::Journal::open(
+            &config.vault.join("hsm-usage.log"),
+            &format!("uid:{callers}"),
+        )
+        .map_err(|e| e.to_string())?,
+    );
+    Service::start(
+        SealedFactory::new(hsm_log::JournaledKek::new(kek, Arc::clone(&journal))),
+        Quorate::new(
+            hsm_log::JournaledBindings::new(HsmBindings::new(store), journal),
+            gate,
+        ),
+        DirVault::new(&config.vault),
+        Policy::AUTHORITY,
+        now_ms(),
+    )
+    .map_err(|e| format!("vault unreadable (CR-23): {e}"))
 }
 
 fn main() -> ExitCode {
@@ -365,16 +398,10 @@ fn main() -> ExitCode {
         tracing::error!(%error, "seccomp phase 2 failed; refusing to continue");
         return ExitCode::FAILURE;
     }
-    let service = match Service::start(
-        SealedFactory::new(kek),
-        Quorate::new(HsmBindings::new(store), gate.clone()),
-        DirVault::new(&config.vault),
-        Policy::AUTHORITY,
-        now_ms(),
-    ) {
+    let service = match start(&config, store, kek, gate.clone()) {
         Ok(service) => Arc::new(Mutex::new(service)),
         Err(error) => {
-            tracing::error!(%error, "vault unreadable; refusing to start (CR-23)");
+            tracing::error!(%error, "refusing to start");
             return ExitCode::FAILURE;
         }
     };
