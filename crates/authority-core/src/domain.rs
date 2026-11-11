@@ -865,6 +865,34 @@ fn top_anchor(view: &dyn View, basis: &ExerciseBasis) -> Option<access_kernel::m
     None
 }
 
+/// The Grants of `basis`'s lineage and the Anchor it rests on, as far as they are stored
+/// (TI-RT1, OP-158 m.3 (i)).
+fn lineage_ids(view: &dyn View, basis: &ExerciseBasis) -> BTreeSet<access_kernel::model::Id> {
+    let mut out = BTreeSet::new();
+    let mut at = match basis {
+        ExerciseBasis::Anchor(a) => {
+            out.insert(*a);
+            return out;
+        }
+        ExerciseBasis::Holding(h) => h.grant,
+        ExerciseBasis::Public(g) => *g,
+    };
+    for _ in 0..meta::MAX_LINEAGE {
+        out.insert(at);
+        let Some(g) = read::<GrantState>(view, kind::GRANT, &at) else {
+            break;
+        };
+        match g.content.basis {
+            GrantBasis::Anchor(a) => {
+                out.insert(a);
+                break;
+            }
+            GrantBasis::Holding(h) => at = h.grant,
+        }
+    }
+    out
+}
+
 /// Whether `req` uses a break-glass Grant, and the self-anchor its basis rests on, if it rests
 /// on one (OP-157 m.3 (h)).
 fn breakglass_facts(view: &dyn View, req: &Request) -> (bool, Option<access_kernel::model::Id>) {
@@ -2166,6 +2194,8 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
     );
     // G29, TN-93, TN-71
     let (breakglass, self_anchor) = breakglass_facts(snapshot, req);
+    // TI-RT1, OP-158 m.3 (i)
+    let lineage = lineage_ids(snapshot, &req.basis);
     let missing = snapshot.missing();
     if !missing.is_empty() {
         return Pass::Need(missing);
@@ -2178,6 +2208,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         derived,
         breakglass,
         self_anchor,
+        basis: lineage,
     };
     let mut restrictions = match crate::restrict::results_with(
         &applicable,

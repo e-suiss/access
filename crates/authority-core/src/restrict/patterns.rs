@@ -358,6 +358,119 @@ pub fn mapping_probation() -> Option<Value> {
     .ok()
 }
 
+/// What divergent records widened (TI-RT1): the Grants and Anchors an Exercise's basis may rest
+/// on, the Parties and the Instances they created or changed.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Widened {
+    /// Grants and Anchors.
+    pub bases: BTreeSet<access_kernel::model::Id>,
+    /// Parties.
+    pub parties: BTreeSet<access_kernel::model::Id>,
+    /// Instances, including those a Mandate binds.
+    pub instances: BTreeSet<access_kernel::model::Id>,
+}
+
+/// Most ids one divergence quarantine names, within the policy cost ceiling (OP-104 m.3).
+pub const MAX_QUARANTINED: usize = 32;
+
+impl Widened {
+    /// Adds what one record's `effects` set: a removed key narrows and stays as recorded.
+    pub fn add(&mut self, effects: &[access_kernel::fold::Effect]) {
+        use access_kernel::meta::kind;
+        for (key, value) in effects {
+            let Some(value) = value else { continue };
+            let Ok(Value::Array(parts)) = dcbor::decode(key, Limits::CEILING) else {
+                continue;
+            };
+            let (Some(Value::Text(k)), Some(id)) = (parts.first(), parts.get(1)) else {
+                continue;
+            };
+            let Ok(id) = access_kernel::model::Id::from_value(id) else {
+                continue;
+            };
+            match k.as_str() {
+                kind::GRANT | kind::ANCHOR => {
+                    self.bases.insert(id);
+                }
+                kind::PARTY => {
+                    self.parties.insert(id);
+                }
+                kind::INSTANCE => {
+                    self.instances.insert(id);
+                }
+                kind::MANDATE => {
+                    if let Ok(m) = access_kernel::meta::MandateState::from_value(value) {
+                        self.instances.insert(m.instance);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.bases
+            .len()
+            .saturating_add(self.parties.len())
+            .saturating_add(self.instances.len())
+    }
+}
+
+/// V13: the divergence quarantine (TI-RT1, RT3, SEC22 R1, OP-158 m.3 (b), (i)), the ready
+/// `policy.set` content the root or the Security Party installs after a declared divergence: a
+/// blocking forbid on every Exercise whose basis rests on a Grant or Anchor the divergent
+/// records widened, or whose actor is a Party or Instance they created or changed. Their
+/// narrowing effects stay as recorded. The provider writes none; lifting it retires the
+/// policy, which widens and is CT3. `None` when nothing was widened or too much is named.
+#[must_use]
+pub fn divergence_quarantine(w: &Widened) -> Option<Value> {
+    if w.len() == 0 || w.len() > MAX_QUARANTINED {
+        return None;
+    }
+    let names = |ids: &BTreeSet<access_kernel::model::Id>| -> Vec<String> {
+        ids.iter().map(|i| format!("\"{}\"", hex(i))).collect()
+    };
+    let mut any = Vec::new();
+    if !w.bases.is_empty() {
+        any.extend(
+            names(&w.bases)
+                .into_iter()
+                .map(|n| format!("context.basis.contains({n})")),
+        );
+    }
+    if !w.parties.is_empty() {
+        any.push(format!(
+            "(principal is Instance && [{}].contains(principal.party))",
+            names(&w.parties).join(", ")
+        ));
+    }
+    if !w.instances.is_empty() {
+        let ids: Vec<String> = w
+            .instances
+            .iter()
+            .map(|i| format!("Instance::\"{}\"", hex(i)))
+            .collect();
+        any.push(format!("[{}].contains(principal)", ids.join(", ")));
+    }
+    let source = format!(
+        "@id(\"{QUARANTINE_DIVERGENCE}\") forbid(principal, action, resource) when {{ {} }};",
+        any.join(" || ")
+    );
+    let content = Value::Map(vec![
+        (Value::text("schema"), Value::text(RESTRICTION_SCHEMA)),
+        (Value::text("source"), Value::text(&source)),
+        (Value::text("target"), Value::text("domain")),
+    ]);
+    dcbor::decode(
+        &dcbor::encode(&content, Limits::CEILING).ok()?,
+        Limits::CEILING,
+    )
+    .ok()
+}
+
+/// The `@id` of the divergence quarantine's statement.
+pub const QUARANTINE_DIVERGENCE: &str = "quarantine-divergence";
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -512,5 +625,43 @@ mod tests {
         };
         assert!(source.contains("context.derived.mapping_pin_age_s >= 0"));
         assert!(source.contains("context.tier >= 2"));
+    }
+
+    // TI-RT1, RT3, OP-158 m.3 (i), Ek B 5878, 5943, 6027
+    #[test]
+    fn the_divergence_quarantine_compiles_and_only_blocks_what_was_widened() {
+        use access_kernel::meta::kind;
+        let g = access_kernel::model::Id([0xab; 16]);
+        let p = access_kernel::model::Id([0xcd; 16]);
+        let mut w = Widened::default();
+        assert!(divergence_quarantine(&w).is_none());
+        w.add(&[
+            (
+                access_kernel::meta::key(kind::GRANT, &g),
+                Some(Value::Unsigned(1)),
+            ),
+            (
+                access_kernel::meta::key(kind::PARTY, &p),
+                Some(Value::Unsigned(1)),
+            ),
+            (
+                access_kernel::meta::key(kind::GRANT, &access_kernel::model::Id([1; 16])),
+                None,
+            ),
+        ]);
+        assert_eq!((w.bases.len(), w.parties.len()), (1, 1));
+        let c = divergence_quarantine(&w).unwrap();
+        assert!(
+            super::super::compile(&c).is_ok(),
+            "{:?}",
+            super::super::compile(&c).err()
+        );
+        let Some(Value::Text(source)) = c.get("source") else {
+            panic!("source");
+        };
+        assert!(source.starts_with("@id(\"quarantine-divergence\") forbid"));
+        assert!(source.contains(&"ab".repeat(16)) && source.contains(&"cd".repeat(16)));
+        assert!(!source.contains(&"01".repeat(16)));
+        assert!(c.get("requirements").is_none() && !source.contains("@breakglass_exempt"));
     }
 }

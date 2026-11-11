@@ -8,6 +8,7 @@ pub mod api;
 pub mod audit;
 pub mod console;
 pub mod declarations;
+pub mod divergence;
 pub mod edge;
 pub mod ingest;
 pub mod internal;

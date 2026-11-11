@@ -44,6 +44,8 @@ access-store = { workspace = true }
 # OP-105, OP-157 m.3 (n)
 restriction-analysis = { package = "esuiss-restriction-analysis", path = "../../crates/restriction-analysis" }
 suiss-crypto = { workspace = true, features = ["pkcs11", "signer"] }
+# OP-158 m.3 (i): the provider replays its own records with the open evaluator
+access-verifier = { workspace = true }
 suiss-sandbox = { workspace = true }
 suiss-ledger = { workspace = true, features = ["doorbell"] }
 access-telemetry = { workspace = true }

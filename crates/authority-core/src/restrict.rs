@@ -34,6 +34,7 @@ action "exercise" appliesTo {
     risk: String,
     posture: String,
     labels: Set<String>,
+    basis: Set<String>,
     derived: {
       party_consumption: Long,
       open_require_action: Long,
@@ -69,6 +70,10 @@ pub struct Facts {
     /// The self-anchor the request's basis rests on: a `@breakglass_exempt` in a policy on it
     /// does not count, so the subject's own restriction stops break-glass too (TN-71 #8).
     pub self_anchor: Option<Id>,
+    /// The Grants of the basis's lineage and the Anchor it rests on; the restriction context
+    /// names them `basis`, so a divergence quarantine denies what a divergent record widened
+    /// (TI-RT1, OP-158 m.3 (i)).
+    pub basis: BTreeSet<Id>,
 }
 
 impl Facts {
@@ -164,6 +169,13 @@ impl Cache {
     }
 }
 
+fn hex_id(id: &Id) -> String {
+    id.0.iter().fold(String::with_capacity(32), |mut out, b| {
+        let _ = std::fmt::Write::write_fmt(&mut out, format_args!("{b:02x}"));
+        out
+    })
+}
+
 fn quoted(s: &str) -> String {
     serde_json::Value::from(s).to_string()
 }
@@ -195,6 +207,7 @@ fn context(
         "risk": facts.signals.risk.map_or("none", access_internal_api::signals::RiskLevel::name),
         "posture": facts.signals.posture.name(),
         "labels": facts.signals.labels,
+        "basis": facts.basis.iter().map(hex_id).collect::<Vec<_>>(),
         "derived": facts.derived.json(),
     })
     .to_string()

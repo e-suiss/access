@@ -162,6 +162,7 @@ pub struct Replay {
     openings: BTreeMap<Vec<u8>, Value>,
     coverage: Coverage,
     items: Vec<Item>,
+    resumed: bool,
 }
 
 fn field<'a>(r: &'a RecordEnvelope, name: &str) -> Option<&'a Value> {
@@ -224,6 +225,7 @@ fn replay_decision(
     r: &RecordEnvelope,
     recorded: Word,
     basis: Option<&Value>,
+    resumed: bool,
 ) -> Result<(), Reason> {
     let pos = r.header.pos;
     let sb = field(r, "state_basis").ok_or(Reason::Position)?;
@@ -258,6 +260,9 @@ fn replay_decision(
             }
         }
     }
+    if basis.is_none() && resumed {
+        return Ok(());
+    }
     let basis = basis
         .and_then(|b| meta::exercise_basis(b).ok())
         .ok_or(Reason::Basis)?;
@@ -273,6 +278,20 @@ impl Replay {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A replay that continues from `state`, the fold of `domain` up to `next − 1` (a verified
+    /// snapshot, TI-RT4). Openings before `next` are not known: a decision whose opening came
+    /// before is re-evaluated without its basis rule.
+    #[must_use]
+    pub fn resume(domain: Digest, state: State, next: u64) -> Self {
+        Self {
+            domain: Some(domain),
+            state: Some(state),
+            next: Some(next),
+            resumed: true,
+            ..Self::default()
+        }
     }
 
     /// The `DomainID`, once Genesis was seen.
@@ -373,7 +392,7 @@ impl Replay {
                     Some(Value::Bytes(n)) => self.openings.get(n),
                     _ => None,
                 };
-                if let Err(reason) = replay_decision(&state, &r, recorded, basis) {
+                if let Err(reason) = replay_decision(&state, &r, recorded, basis, self.resumed) {
                     self.diverged(&r, Kind::ReEvaluation, reason);
                 }
             }

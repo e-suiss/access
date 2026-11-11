@@ -63,6 +63,8 @@ mod upstream;
 mod kek_rotation;
 // OP-158 m.3 (y)
 mod mds;
+// OP-158 m.3 (i)
+mod divergence;
 
 use std::ffi::OsString;
 use std::fmt::Write as _;
@@ -2050,6 +2052,14 @@ async fn serve(
         },
         move || led.led(),
     );
+    // RT9, TI-16, TI-RT1, OP-158 m.3 (i)
+    let replaying = tokio::spawn(divergence::run(
+        domains.clone(),
+        product_app.clone(),
+        access_authority_sequencer::adapters::SocketSigner::new(
+            config.signer.clone().ok_or("no signer")?,
+        ),
+    ));
     // TI-RT2, OP-158 m.3 (k)
     let roughtime_servers = config.transparency.roughtime().map_err(|e| e.to_string())?;
     let sampling_time = tokio::spawn(async move {
@@ -2112,6 +2122,11 @@ async fn serve(
         domains.clone(),
         limits.max_body_bytes,
     ));
+    // G32, OP-158 m.3 (h)
+    let adp = adp.merge(access_http::divergence::router(divergence::Declarations {
+        domains: domains.clone(),
+        app: product_app.clone(),
+    }));
     // OP-156 m.3 (o)
     let ssh_ca = access_http::ssh::router(
         pep_tokens.clone(),
@@ -2333,6 +2348,7 @@ async fn serve(
         d.stop().await;
     }
     checkpointing.stop();
+    replaying.abort();
     if let Some(d) = directing {
         d.abort();
     }

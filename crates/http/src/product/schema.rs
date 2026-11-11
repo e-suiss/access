@@ -162,6 +162,7 @@ fn party_components() -> Value {
 }
 
 mod developer;
+mod divergence;
 mod eligibility;
 mod iys;
 mod mirror;
@@ -540,6 +541,7 @@ pub fn openapi() -> Value {
     ssf::paths(&mut paths);
     developer::paths(&mut paths);
     mirror::paths(&mut paths);
+    divergence::paths(&mut paths);
     stage11::paths(&mut paths);
     stage13::paths(&mut paths);
     transparency::paths(&mut paths);

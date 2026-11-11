@@ -698,6 +698,10 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         }
         let s = &self.setup;
         let id = DomainId::from_bytes(domain.0);
+        // RT9, TI-16, OP-158 m.3 (i)
+        if access_store::divergence::fold_open(&s.app, &id).await? {
+            return Err(CoreError::Unavailable("fold-diverged"));
+        }
         let tenant = domain_tenant(&s.sequencer, &id)
             .await?
             .ok_or(CoreError::Unavailable("unknown-domain"))?;
@@ -1869,6 +1873,18 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
     #[must_use]
     pub fn standing_down(&self) -> bool {
         self.standing_down.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Stops leading `domain` after a fold difference (RT9, OP-158 m.3 (i)): its lease is given
+    /// up and [`Self::lead`] refuses it until the state is rebuilt from the log.
+    pub async fn halt(&self, domain: Digest) {
+        let slot = self.led.lock().ok().and_then(|m| m.get(&domain).cloned());
+        if let Some(slot) = slot
+            && let Some(led) = slot.lock().await.take()
+        {
+            epoch_changed("fold_diverged");
+            let _ = led.core.release().await;
+        }
     }
 
     /// Releases every held lease, for a planned shutdown (OP-31).

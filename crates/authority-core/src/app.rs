@@ -2288,6 +2288,10 @@ pub mod cache;
 pub mod watch;
 // OP-158 m.4 (b)
 pub mod federation;
+// OP-158 m.4 (f)
+pub mod divergence;
+// OP-158 m.4 (f)
+pub mod snapshot;
 
 pub use ingest::{Ingested, Lane, Lanes, Turn, lane_of};
 pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};
