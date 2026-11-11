@@ -33,3 +33,17 @@ async fn an_object_is_written_once_and_never_overwritten() {
         .count();
     assert_eq!(entries, 1);
 }
+
+// OP-42
+#[tokio::test]
+async fn listing_a_prefix_gives_its_keys_only() {
+    let cold = dir();
+    cold.put("shred-journal/a/b/1.json", b"x").await.unwrap();
+    cold.put("shred-journal/a/c/2.json", b"y").await.unwrap();
+    cold.put("tiles/x", b"z").await.unwrap();
+    assert_eq!(
+        cold.list("shred-journal").await.unwrap(),
+        vec!["shred-journal/a/b/1.json", "shred-journal/a/c/2.json"]
+    );
+    assert_eq!(cold.list("absent").await.unwrap(), Vec::<String>::new());
+}

@@ -103,6 +103,8 @@ pub(crate) async fn retain_realm(
         .tombstoned
         .saturating_add(tombstone_due(&db, &realm, &JOB).await?);
     let d = destroy_due(&db, &realm, &JOB).await?;
+    // OP-42
+    crate::reshred::journal(route, &d.subjects).await;
     out.destroyed = out.destroyed.saturating_add(d.destroyed);
     out.kept = out.kept.saturating_add(d.kept);
     Ok(())

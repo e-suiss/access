@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT coalesce(max(generation) FILTER (WHERE kind = 'restore'), 0) AS \"restore!\",\n                  coalesce(max(generation) FILTER (WHERE kind = 'reshred'), 0) AS \"reshred!\"\n             FROM access_ops.restore_generations",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "restore!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "reshred!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "149381028145b3931939312e1f9fde4699f393cf34ddec67223bd5bc84876117"
+}

@@ -43,6 +43,7 @@ mod product;
 mod proxy;
 mod publication;
 mod relay;
+mod reshred;
 mod retention;
 mod reviews;
 mod risk;
@@ -176,6 +177,9 @@ enum Command {
     /// `import-accounts <realm slug> <file.jsonl>`: accounts from another identity provider
     /// (§12.3.7, TN-85).
     Import(String, PathBuf),
+    /// `reshred`: apply the shred journal again after a restore, then let the server open
+    /// (OP-42, OP-57).
+    Reshred,
 }
 
 /// A one-shot job over the bootstrap plan.
@@ -199,6 +203,7 @@ fn command(args: &[OsString]) -> Option<Command> {
     match args {
         [] => Some(Command::Serve),
         [c] if c == "migrate" => Some(Command::Migrate),
+        [c] if c == "reshred" => Some(Command::Reshred),
         [c, plan] if c == "bootstrap" => Some(Command::Local(PathBuf::from(plan), Job::Bootstrap)),
         [c, plan, product, name] if c == "client-update" => Some(Command::Local(
             PathBuf::from(plan),
@@ -228,7 +233,7 @@ fn main() -> ExitCode {
             eprintln!(
                 "usage: access-server [migrate | bootstrap <plan.toml> | client-update <plan.toml> \
                  <product> <display name> | client-retire <plan.toml> <product> | \
-                 import-accounts <realm> <file.jsonl>]"
+                 import-accounts <realm> <file.jsonl> | reshred]"
             );
         }
         return ExitCode::FAILURE;
@@ -251,7 +256,7 @@ fn main() -> ExitCode {
             .config(&config.log, "access-server", env!("CARGO_PKG_VERSION"));
     let logged = match command {
         Command::Serve => access_telemetry::install(&settings, std::io::stdout),
-        Command::Migrate | Command::Local(..) | Command::Import(..) => {
+        Command::Migrate | Command::Local(..) | Command::Import(..) | Command::Reshred => {
             settings.otlp_endpoint = None;
             access_telemetry::install(&settings, std::io::stderr)
         }
@@ -276,6 +281,41 @@ fn main() -> ExitCode {
         Command::Migrate => migrate_main(&config),
         Command::Local(plan, job) => local_main(&config, &plan, job),
         Command::Import(slug, file) => import_main(&config, &slug, &file),
+        Command::Reshred => reshred_main(&config),
+    }
+}
+
+/// `reshred`: applies the shred journal in the cold tier again and records the re-shred of the
+/// pending restore, printing what it did as JSON (OP-42, OP-57 item 7).
+fn reshred_main(config: &Config) -> ExitCode {
+    let run = || -> Result<String, String> {
+        let cold = config
+            .audit_cold
+            .as_ref()
+            .map(|c| access_identity_export::adapters::cold_file::FileCold {
+                root: c.dir.clone(),
+            })
+            .ok_or("no cold tier configured: the shred journal is there")?;
+        let prepared = prepare(config, tls_config(config)?)?;
+        let runtime = locked(config)?;
+        let report = runtime.block_on(async {
+            let all = pools(config, &prepared).await?;
+            reshred::reshred(&all.app, &cold).await
+        })?;
+        serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
+    };
+    match run() {
+        Ok(json) => {
+            #[allow(clippy::print_stdout)]
+            {
+                println!("{json}");
+            }
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            tracing::error!(%error, "the re-shred failed; the server stays closed");
+            ExitCode::FAILURE
+        }
     }
 }
 
@@ -1708,6 +1748,16 @@ async fn serve(
     let keks = login::RealmKeks::new(prepared.login_keys);
     // OP-137, OP-149 m.15 (i), m.22 (g)
     ids::open_root(&all.app, &prepared.identity_keys).await?;
+    // OP-42, OP-57 item 7
+    reshred::use_cold(config.audit_cold.as_ref().map(|c| c.dir.clone()));
+    let cold =
+        config
+            .audit_cold
+            .as_ref()
+            .map(|c| access_identity_export::adapters::cold_file::FileCold {
+                root: c.dir.clone(),
+            });
+    reshred::gate(&all.app, cold.as_ref()).await?;
     // TN-46, OP-151 m.1 (b), m.3 (o)
     let (risk_services, mmdb) = risk::services(
         config,

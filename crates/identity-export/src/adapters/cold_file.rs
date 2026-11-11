@@ -60,6 +60,40 @@ fn hex(bytes: &[u8]) -> String {
     })
 }
 
+impl FileCold {
+    /// Every key under `prefix` (a directory key), sorted; temporary files are not keys.
+    ///
+    /// # Errors
+    /// [`AuditError::Cold`].
+    pub async fn list(&self, prefix: &str) -> Result<Vec<String>, AuditError> {
+        let mut out = Vec::new();
+        let mut dirs = vec![prefix.trim_end_matches('/').to_owned()];
+        while let Some(dir) = dirs.pop() {
+            let path = self.path(&dir)?;
+            let mut entries = match tokio::fs::read_dir(&path).await {
+                Ok(e) => e,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(io(&e)),
+            };
+            while let Some(entry) = entries.next_entry().await.map_err(|e| io(&e))? {
+                let name = entry.file_name();
+                let Some(name) = name.to_str() else { continue };
+                if name.starts_with('.') {
+                    continue;
+                }
+                let key = format!("{dir}/{name}");
+                if entry.file_type().await.map_err(|e| io(&e))?.is_dir() {
+                    dirs.push(key);
+                } else {
+                    out.push(key);
+                }
+            }
+        }
+        out.sort();
+        Ok(out)
+    }
+}
+
 impl ColdStore for FileCold {
     async fn put(&self, key: &str, bytes: &[u8]) -> Result<(), AuditError> {
         let path = self.path(key)?;

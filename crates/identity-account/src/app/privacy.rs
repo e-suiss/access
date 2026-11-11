@@ -745,12 +745,14 @@ pub async fn tombstone_due(
 }
 
 /// What one destruction pass did.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Destroyed {
     /// Subjects whose keys were destroyed.
     pub destroyed: u32,
     /// Subjects a hold or an unknown state kept.
     pub kept: u32,
+    /// The subjects destroyed, for the shred list a restore applies again (OP-42).
+    pub subjects: Vec<[u8; 16]>,
 }
 
 fn hold_of(tenant: [u8; 16], realm: &Realm<'_>, h: &HoldRow) -> Option<Hold> {
@@ -929,6 +931,7 @@ pub async fn destroy_due(
             )
             .await?;
             out.destroyed = out.destroyed.saturating_add(1);
+            out.subjects.push(d.subject);
         }
     }
     tx.commit().await?;

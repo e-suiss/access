@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access_ops.restore_generations (kind, generation)\n           SELECT 'restore', coalesce(max(generation), 0) + 1\n             FROM access_ops.restore_generations WHERE kind = 'restore'\n           RETURNING generation",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "generation",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.restore_generations",
+            "name": "generation"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5f2d757039797aa54926ed7ad27458e59812c7687a9e32f09ebec2723675ad13"
+}

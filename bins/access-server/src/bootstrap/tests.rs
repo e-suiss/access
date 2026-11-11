@@ -2603,3 +2603,5 @@ mod fixtures;
 // OP-158 m.4 (a)
 mod durability;
 mod faults;
+// OP-158 m.4 (b) (W12)
+mod reshred;

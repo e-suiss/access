@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_subjects SET status = $5\n                  WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ba5a60616d01378f062682d4eb8c79bb07ba97f815b8f1f44e5f541d29a31052"
+}

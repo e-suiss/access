@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access_ops.restore_generations (kind, generation) VALUES ('reshred', $1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f5b17407c44fd656c461e05c563e7d66ad2905a9552da4fa39b86d1760ae162c"
+}

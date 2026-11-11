@@ -755,3 +755,137 @@ pub async fn age_audit_checkpoints(db: &TestDb, years: i32) -> Result<(), TestDb
     )
     .await
 }
+
+/// What a backup taken before a destruction holds of one subject: its status and wrapped keys.
+#[derive(Clone, Debug)]
+pub struct SubjectBackup {
+    tenant: sqlx::types::Uuid,
+    realm: sqlx::types::Uuid,
+    subject: sqlx::types::Uuid,
+    status: String,
+    own: Option<Vec<u8>>,
+    classes: Vec<(String, Option<Vec<u8>>)>,
+}
+
+/// Reads `subject`'s status and wrapped keys as a backup would hold them (OP-42).
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn backup_subject(
+    db: &TestDb,
+    tenant: [u8; 16],
+    realm: [u8; 16],
+    subject: [u8; 16],
+) -> Result<SubjectBackup, TestDbError> {
+    use sqlx::Row as _;
+    let (t, r, s) = (
+        sqlx::types::Uuid::from_bytes(tenant),
+        sqlx::types::Uuid::from_bytes(realm),
+        sqlx::types::Uuid::from_bytes(subject),
+    );
+    let mut c = admin_connection(db).await?;
+    let row = sqlx::query(
+        "SELECT status, wrapped_dek FROM access.identity_subjects
+          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3",
+    )
+    .bind(t)
+    .bind(r)
+    .bind(s)
+    .fetch_one(&mut c)
+    .await
+    .at("backup subject")?;
+    let classes = sqlx::query(
+        "SELECT class, wrapped_dek FROM access.identity_subject_keys
+          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 ORDER BY class",
+    )
+    .bind(t)
+    .bind(r)
+    .bind(s)
+    .fetch_all(&mut c)
+    .await
+    .at("backup subject keys")?
+    .iter()
+    .map(|k| (k.get::<String, _>(0), k.get::<Option<Vec<u8>>, _>(1)))
+    .collect();
+    Ok(SubjectBackup {
+        tenant: t,
+        realm: r,
+        subject: s,
+        status: row.get(0),
+        own: row.get(1),
+        classes,
+    })
+}
+
+/// Puts `backup` back, as restoring a backup taken before the destruction would: the
+/// administrator lifts the tables' transition triggers for it.
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn restore_subject(db: &TestDb, backup: &SubjectBackup) -> Result<(), TestDbError> {
+    let mut c = admin_connection(db).await?;
+    for t in [
+        "ALTER TABLE access.identity_subjects DISABLE TRIGGER subject_transition",
+        "ALTER TABLE access.identity_subject_keys DISABLE TRIGGER subject_key_transition",
+    ] {
+        exec(&mut c, String::from(t), "lift trigger").await?;
+    }
+    sqlx::query(
+        "UPDATE access.identity_subjects SET status = $4, wrapped_dek = $5,
+                shredded_at = CASE WHEN $5::bytea IS NULL THEN shredded_at END
+          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3",
+    )
+    .bind(backup.tenant)
+    .bind(backup.realm)
+    .bind(backup.subject)
+    .bind(&backup.status)
+    .bind(&backup.own)
+    .execute(&mut c)
+    .await
+    .at("restore subject")?;
+    for (class, wrapped) in &backup.classes {
+        sqlx::query(
+            "UPDATE access.identity_subject_keys SET wrapped_dek = $5,
+                    shredded_at = CASE WHEN $5::bytea IS NULL THEN shredded_at END
+              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND class = $4",
+        )
+        .bind(backup.tenant)
+        .bind(backup.realm)
+        .bind(backup.subject)
+        .bind(class)
+        .bind(wrapped)
+        .execute(&mut c)
+        .await
+        .at("restore subject key")?;
+    }
+    for t in [
+        "ALTER TABLE access.identity_subjects ENABLE TRIGGER subject_transition",
+        "ALTER TABLE access.identity_subject_keys ENABLE TRIGGER subject_key_transition",
+    ] {
+        exec(&mut c, String::from(t), "restore trigger").await?;
+    }
+    Ok(())
+}
+
+/// The plain SQL dump of the test database `name`, as `pg_dump` writes a backup of it (CR-35).
+/// It blocks; call it off the runtime.
+///
+/// # Errors
+/// [`TestDbError`] when `pg_dump` cannot run or fails.
+pub fn dump(name: &str) -> Result<String, TestDbError> {
+    let url = std::env::var("DATABASE_URL").map_err(|_| TestDbError::NoDatabaseUrl)?;
+    let base = url.rsplit_once('/').map_or(url.as_str(), |(b, _)| b);
+    let out = std::process::Command::new("pg_dump")
+        .arg("--no-owner")
+        .arg("--no-privileges")
+        .arg(format!("{base}/{name}"))
+        .output()
+        .map_err(|e| TestDbError::Db("pg_dump", sqlx::Error::Io(e)))?;
+    if !out.status.success() {
+        return Err(TestDbError::Db(
+            "pg_dump",
+            sqlx::Error::Protocol(String::from_utf8_lossy(&out.stderr).into_owned()),
+        ));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
