@@ -91,9 +91,18 @@ pub async fn take_commit(
     }
 }
 
+/// What one identity request drew.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RequestTaken {
+    /// The refusing counter; `None` when admitted.
+    pub refused: Option<RequestRefusal>,
+    /// The highest share of a burst in use after the draw, percent; 100 when refused.
+    pub used_percent: u8,
+}
+
 /// Draws one identity request of `realm` at `now_ms` from its tenant's request quota and the
 /// realm's `rate_limit_rps` (`default_rps` until one is set); bursts are `burst_s` seconds of
-/// each rate. `None` when admitted.
+/// each rate.
 ///
 /// # Errors
 /// [`StoreError`]; the caller refuses the request.
@@ -103,10 +112,10 @@ pub async fn take_request(
     now_ms: u64,
     (default_rps, tenant_rps): (u32, u32),
     burst_s: u32,
-) -> Result<Option<RequestRefusal>, StoreError> {
+) -> Result<RequestTaken, StoreError> {
     let int = |v: u32| i32::try_from(v).map_err(|_| StoreError::Range);
-    let refused = sqlx::query_scalar!(
-        "SELECT access.realm_quota($1, $2, $3, $4, $5, $6)",
+    let r = sqlx::query!(
+        "SELECT refused, used FROM access.realm_quota($1, $2, $3, $4, $5, $6)",
         Uuid::from_bytes(*tenant.as_bytes()),
         Uuid::from_bytes(*realm.as_bytes()),
         micros(now_ms)?,
@@ -116,12 +125,17 @@ pub async fn take_request(
     )
     .fetch_one(pool)
     .await?;
-    match refused.as_deref() {
-        None => Ok(None),
-        Some("tenant") => Ok(Some(RequestRefusal::Tenant)),
-        Some("realm") => Ok(Some(RequestRefusal::Realm)),
-        Some(_) => Err(StoreError::Corrupt),
-    }
+    let refused = match r.refused.as_deref() {
+        None => None,
+        Some("tenant") => Some(RequestRefusal::Tenant),
+        Some("realm") => Some(RequestRefusal::Realm),
+        Some(_) => return Err(StoreError::Corrupt),
+    };
+    let used = r.used.ok_or(StoreError::Corrupt)?;
+    Ok(RequestTaken {
+        refused,
+        used_percent: u8::try_from(used.clamp(0, 100)).map_err(|_| StoreError::Corrupt)?,
+    })
 }
 
 /// Writes the next version of the realm's `rate_limit_rps` (`idp.realm.rate_limit`).

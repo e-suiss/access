@@ -3260,6 +3260,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/realms/{slug}/rate-limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The realm's rate limits and their use: each bucket's share in use now and over 1 h and 24 h, the 10 heaviest consumers as digests, refusals by type and the warning threshold; never labelled by the request (§12.5.4, TN-127, OP-158 m.3 (v)). */
+        get: operations["getRateLimits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/platform/intents": {
         parameters: {
             query?: never;
@@ -3783,6 +3800,38 @@ export interface components {
         Placement: Record<string, never>;
         /** @description The realm's durability profile, DR class, RPO and its domain's witnesses and replicas (HL-40, OP-158 m.3 (n), (p)); its lane names its members when it serves it. */
         Durability: Record<string, never>;
+        /** @description The realm's rate limits and this node's view of their use (§12.5.4, TN-127, OP-158 m.3 (v)): nothing in it is labelled by a request value. */
+        RateLimits: {
+            realm: string;
+            /** @description The realm's identity requests per second (idp.realm.rate_limit). */
+            rate_limit_rps: number;
+            /** @description Whether the product default is in force. */
+            default: boolean;
+            /** @description The tenant's identity requests per second across its realms. */
+            tenant_rps: number;
+            /** @description Seconds of each rate a burst may take at once. */
+            burst_s: number;
+            usage: {
+                buckets: {
+                    name: string;
+                    now_percent: number;
+                    average_1h_percent: number;
+                    average_24h_percent: number;
+                    above_threshold: boolean;
+                }[];
+                top_consumers: {
+                    /** @description A digest prefix, never an identifier. */
+                    consumer: string;
+                    requests: number;
+                }[];
+                events: {
+                    kind: string;
+                    last_hour: number;
+                    last_day: number;
+                }[];
+                threshold_percent: number;
+            };
+        };
         /** @description A resource whose route is declared and not served yet; its lane names its members when it serves it (OP-155 m.4). */
         Declared: Record<string, never>;
         /** @description One page; the next is in the `Link` header (OP-65). Only what the realm may see is listed (TN-113). */
@@ -14179,6 +14228,39 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getRateLimits: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RateLimits"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
             503: components["responses"]["Unavailable"];
         };

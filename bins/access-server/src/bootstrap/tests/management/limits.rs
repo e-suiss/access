@@ -83,6 +83,35 @@ async fn a_realm_rate_limit_is_committed_and_bounds_its_identity_routes() {
         assert_ne!(s, StatusCode::TOO_MANY_REQUESTS, "logout never draws");
     }
 
+    // §12.5.4, TN-127
+    let (status, view, _) = c.rest_read("/admin/v1/realms/acme/rate-limits").await;
+    assert_eq!(status, StatusCode::OK, "{view}");
+    assert_eq!(
+        (view["rate_limit_rps"].as_u64(), view["default"].as_bool()),
+        (Some(1), Some(false))
+    );
+    let buckets = view["usage"]["buckets"].as_array().unwrap();
+    let realm = buckets
+        .iter()
+        .find(|b| b["name"] == access_http::quota::BUCKET)
+        .unwrap();
+    assert_eq!(realm["now_percent"], 100);
+    assert_eq!(realm["above_threshold"], true);
+    assert!(
+        view["usage"]["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|e| { e["kind"] == "quota-exceeded" && e["last_hour"].as_u64() >= Some(1) })
+    );
+    assert!(
+        !view["usage"]["top_consumers"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(view["usage"]["threshold_percent"], 80);
+
     let zero = c
         .put_setting(
             "rate-limit",

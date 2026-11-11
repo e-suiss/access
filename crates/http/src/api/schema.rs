@@ -512,6 +512,53 @@ fn schemas() -> Value {
             "type": "object",
             "description": "The realm's durability profile, DR class, RPO and its domain's witnesses and replicas (HL-40, OP-158 m.3 (n), (p)); its lane names its members when it serves it.",
         },
+        "RateLimits": {
+            "type": "object",
+            "description": "The realm's rate limits and this node's view of their use (§12.5.4, TN-127, OP-158 m.3 (v)): nothing in it is labelled by a request value.",
+            "required": ["realm", "rate_limit_rps", "default", "tenant_rps", "burst_s", "usage"],
+            "properties": {
+                "realm": { "type": "string" },
+                "rate_limit_rps": { "type": "integer", "minimum": 1, "description": "The realm's identity requests per second (idp.realm.rate_limit)." },
+                "default": { "type": "boolean", "description": "Whether the product default is in force." },
+                "tenant_rps": { "type": "integer", "minimum": 1, "description": "The tenant's identity requests per second across its realms." },
+                "burst_s": { "type": "integer", "minimum": 1, "description": "Seconds of each rate a burst may take at once." },
+                "usage": {
+                    "type": "object",
+                    "required": ["buckets", "top_consumers", "events", "threshold_percent"],
+                    "properties": {
+                        "buckets": { "type": "array", "items": {
+                            "type": "object",
+                            "required": ["name", "now_percent", "average_1h_percent", "average_24h_percent", "above_threshold"],
+                            "properties": {
+                                "name": { "type": "string" },
+                                "now_percent": { "type": "integer", "minimum": 0, "maximum": 100 },
+                                "average_1h_percent": { "type": "integer", "minimum": 0, "maximum": 100 },
+                                "average_24h_percent": { "type": "integer", "minimum": 0, "maximum": 100 },
+                                "above_threshold": { "type": "boolean" },
+                            },
+                        } },
+                        "top_consumers": { "type": "array", "maxItems": 10, "items": {
+                            "type": "object",
+                            "required": ["consumer", "requests"],
+                            "properties": {
+                                "consumer": { "type": "string", "pattern": "^[0-9a-f]{16}$", "description": "A digest prefix, never an identifier." },
+                                "requests": { "type": "integer", "minimum": 0 },
+                            },
+                        } },
+                        "events": { "type": "array", "items": {
+                            "type": "object",
+                            "required": ["kind", "last_hour", "last_day"],
+                            "properties": {
+                                "kind": { "type": "string" },
+                                "last_hour": { "type": "integer", "minimum": 0 },
+                                "last_day": { "type": "integer", "minimum": 0 },
+                            },
+                        } },
+                        "threshold_percent": { "type": "integer", "minimum": 0, "maximum": 100 },
+                    },
+                },
+            },
+        },
         "Declared": {
             "type": "object",
             "description": "A resource whose route is declared and not served yet; its lane names its members when it serves it (OP-155 m.4).",
@@ -842,6 +889,7 @@ fn body_of(row: &Route) -> &'static str {
             // OP-158 m.4 (a)
             ResourceKind::Placement => "Placement",
             ResourceKind::Durability => "Durability",
+            ResourceKind::RateLimits => "RateLimits",
         },
         _ => "ExerciseRef",
     }

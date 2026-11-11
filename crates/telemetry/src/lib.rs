@@ -10,6 +10,8 @@ mod export;
 mod log;
 pub mod metrics;
 pub mod oracle;
+// OP-158 m.3 (v)
+pub mod rate_board;
 mod settings;
 pub mod signals;
 pub mod trace;

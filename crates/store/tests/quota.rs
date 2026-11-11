@@ -160,14 +160,20 @@ async fn a_realm_request_quota_follows_its_rate_limit() {
     let busy = realm(&db, t, &d, "busy").await;
     let calm = realm(&db, t, &d, "calm").await;
     let take = |r| take_request(&db.app, (t, r), NOW, (2, 1_000), 1);
-    assert_eq!(take(busy).await.unwrap(), None);
-    assert_eq!(take(busy).await.unwrap(), None);
-    assert_eq!(take(busy).await.unwrap(), Some(RequestRefusal::Realm));
-    assert_eq!(take(calm).await.unwrap(), None);
+    let first = take(busy).await.unwrap();
+    assert_eq!((first.refused, first.used_percent), (None, 50));
+    assert_eq!(take(busy).await.unwrap().refused, None);
+    let over = take(busy).await.unwrap();
+    assert_eq!(
+        (over.refused, over.used_percent),
+        (Some(RequestRefusal::Realm), 100)
+    );
+    assert_eq!(take(calm).await.unwrap().refused, None);
     assert_eq!(
         take_request(&db.app, (t, calm), NOW, (100, 1), 1)
             .await
-            .unwrap(),
+            .unwrap()
+            .refused,
         Some(RequestRefusal::Tenant)
     );
 }

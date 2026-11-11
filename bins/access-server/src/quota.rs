@@ -2,7 +2,9 @@
 //! issuer's slug) selects the realm as the routes do, and the request draws from the realm's
 //! `rate_limit_rps` and its tenant's request quota in layer B.
 
-use access_http::quota::{BURST_S, DEFAULT_RPS, RequestQuotas, TENANT_RPS, Taken, Unavailable};
+use access_http::quota::{
+    BURST_S, DEFAULT_RPS, Drawn, RequestQuotas, TENANT_RPS, Taken, Unavailable,
+};
 use access_identity_oauth::adapters::PgDirectory;
 use access_store::Pool;
 use access_store::quota::{RequestRefusal, take_request};
@@ -34,7 +36,7 @@ impl RequestQuotas for PgRequestQuotas {
             return Ok(Taken::NoRealm);
         };
         // MD-8
-        match take_request(
+        let taken = take_request(
             &self.app,
             (realm.tenant, realm.realm),
             (self.clock)(),
@@ -42,11 +44,15 @@ impl RequestQuotas for PgRequestQuotas {
             BURST_S,
         )
         .await
-        {
-            Ok(None) => Ok(Taken::Admitted),
-            Ok(Some(RequestRefusal::Realm)) => Ok(Taken::Refused("realm")),
-            Ok(Some(RequestRefusal::Tenant)) => Ok(Taken::Refused("tenant")),
-            Err(_) => Err(Unavailable),
-        }
+        .map_err(|_| Unavailable)?;
+        let drawn = Drawn {
+            realm: realm.slug,
+            used_percent: taken.used_percent,
+        };
+        Ok(match taken.refused {
+            None => Taken::Admitted(drawn),
+            Some(RequestRefusal::Realm) => Taken::Refused("realm", drawn),
+            Some(RequestRefusal::Tenant) => Taken::Refused("tenant", drawn),
+        })
     }
 }

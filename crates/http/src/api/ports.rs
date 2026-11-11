@@ -237,6 +237,8 @@ pub enum ResourceKind {
     Placement,
     /// The realm's durability and DR declaration, one resource (OP-158 m.3 (n), (p)).
     Durability,
+    /// The realm's rate limits and their use now, one resource (§12.5.4, OP-158 m.3 (v)).
+    RateLimits,
 }
 
 impl ResourceKind {
@@ -282,6 +284,7 @@ impl ResourceKind {
             Self::OffboardingPreviews => "offboarding-previews",
             Self::Placement => "placement",
             Self::Durability => "durability",
+            Self::RateLimits => "rate-limits",
         }
     }
 }

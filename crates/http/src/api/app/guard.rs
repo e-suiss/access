@@ -190,6 +190,30 @@ fn values<'a>(headers: &'a HeaderMap, name: &HeaderName) -> Option<Vec<&'a str>>
         .collect()
 }
 
+/// What one bucket's answer shows on the rate limit dashboard (§12.5.4, TN-127).
+fn board(key: &BucketKey, quota: Quota, take: Take, now: u64) {
+    let burst = u64::from(quota.burst.max(1));
+    let used = if take.allowed {
+        burst
+            .saturating_sub(u64::from(take.remaining))
+            .saturating_mul(100)
+            .checked_div(burst)
+            .unwrap_or(100)
+    } else {
+        100
+    };
+    access_telemetry::rate_board::RATE_BOARD.record(
+        access_telemetry::rate_board::Seen {
+            scope: &key.scope,
+            bucket: quota.name,
+            percent: u8::try_from(used).unwrap_or(100),
+            consumer: key.caller,
+            refused: (!take.allowed).then_some("rate-limited"),
+        },
+        now,
+    );
+}
+
 async fn guard<E: Env>(State(g): State<Guarded<E>>, request: Request, next: Next) -> Response {
     let mut limits = Limits::default();
     let response = run(&g, request, next, &mut limits).await;
@@ -234,6 +258,7 @@ async fn run<E: Env>(
         caller: None,
     };
     let take = limiter.take(&key, quota, now);
+    board(&key, quota, take, now);
     if !take.allowed {
         return throttled(surface, "group", Some(quota), take.reset_s);
     }
@@ -330,6 +355,7 @@ async fn run<E: Env>(
         caller: Some(caller_key),
     };
     let actor_take = limiter.take(&actor, actor_quota, now);
+    board(&actor, actor_quota, actor_take, now);
     if !actor_take.allowed {
         return throttled(surface, "actor", Some(actor_quota), actor_take.reset_s);
     }

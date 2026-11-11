@@ -14,12 +14,7 @@ use axum::response::{IntoResponse, Response};
 
 use crate::problem::Problem;
 
-/// The realm `rate_limit_rps` until `idp.realm.rate_limit` sets one (OP-35, PD).
-pub const DEFAULT_RPS: u32 = 200;
-/// A tenant's identity requests per second across its realms (TN-24, PD).
-pub const TENANT_RPS: u32 = 1_000;
-/// Seconds of each rate a burst may take at once (PD).
-pub const BURST_S: u32 = 2;
+pub use access_identity_admin::domain::resilience::{BURST_S, DEFAULT_RPS, TENANT_RPS};
 
 /// Path segments that end a session or revoke a token: narrowing, never counted (B3, B19).
 pub const NARROWING: [&str; 8] = [
@@ -33,15 +28,27 @@ pub const NARROWING: [&str; 8] = [
     "backchannel-logout",
 ];
 
+/// The bucket the realm request quota shows on the dashboard (§12.5.4).
+pub const BUCKET: &str = "realm-request";
+
+/// What a request drew from its realm.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Drawn {
+    /// The realm's slug.
+    pub realm: String,
+    /// The highest share of a burst in use after the draw, percent.
+    pub used_percent: u8,
+}
+
 /// What a counter says about one request.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Taken {
     /// Admitted.
-    Admitted,
+    Admitted(Drawn),
     /// The host names no realm here; the route answers it.
     NoRealm,
     /// Over the quota of the named counter: `tenant` or `realm`.
-    Refused(&'static str),
+    Refused(&'static str, Drawn),
 }
 
 /// The counter could not answer; the request is refused, never admitted (MD-8).
@@ -107,9 +114,32 @@ pub async fn metered<Q: RequestQuotas>(
         return next.run(request).await;
     };
     let slug = slug_of(&path).map(str::to_owned);
+    let consumer = request
+        .extensions()
+        .get::<crate::login::Peer>()
+        .map(|crate::login::Peer(ip)| suiss_crypto::digest::sha256(ip.to_string().as_bytes()));
+    let seen = |d: &Drawn, refused| {
+        access_telemetry::rate_board::RATE_BOARD.record(
+            access_telemetry::rate_board::Seen {
+                scope: &format!("realm:{}", d.realm),
+                bucket: BUCKET,
+                percent: d.used_percent,
+                consumer,
+                refused,
+            },
+            now_ms(),
+        );
+    };
     match quotas.take(&authority, slug.as_deref()).await {
-        Ok(Taken::Admitted | Taken::NoRealm) => next.run(request).await,
-        Ok(Taken::Refused(counter)) => quota_exceeded(counter),
+        Ok(Taken::Admitted(d)) => {
+            seen(&d, None);
+            next.run(request).await
+        }
+        Ok(Taken::NoRealm) => next.run(request).await,
+        Ok(Taken::Refused(counter, d)) => {
+            seen(&d, Some("quota-exceeded"));
+            quota_exceeded(counter)
+        }
         Err(Unavailable) => Problem::new(
             StatusCode::SERVICE_UNAVAILABLE,
             "unavailable",
@@ -118,6 +148,12 @@ pub async fn metered<Q: RequestQuotas>(
         .with_reason(Some("quota"))
         .into_response(),
     }
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
 }
 
 /// `routes` behind the realm request quota of `quotas`.

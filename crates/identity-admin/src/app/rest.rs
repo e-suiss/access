@@ -2708,6 +2708,8 @@ pub enum Kind {
     Placement,
     /// The realm's durability, DR and residency declaration (OP-158 m.3 (n), (p)).
     Durability,
+    /// The realm's rate limits (§12.5.4, OP-158 m.3 (v)).
+    RateLimits,
 }
 
 /// How many days the analytics read covers, today included (PD).
@@ -3474,6 +3476,22 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 | Kind::Durability,
                 _,
             ) => Read::default(),
+            // §12.5.4, OP-35, OP-158 m.3 (v)
+            (Kind::RateLimits, _) => {
+                let set = access_store::quota::rate_limit(t).await?;
+                Read {
+                    items: vec![(
+                        json!({
+                            "rate_limit_rps": set.unwrap_or(crate::domain::resilience::DEFAULT_RPS),
+                            "default": set.is_none(),
+                            "tenant_rps": crate::domain::resilience::TENANT_RPS,
+                            "burst_s": crate::domain::resilience::BURST_S,
+                        }),
+                        0,
+                    )],
+                    last: None,
+                }
+            }
             (Kind::Settings, _) => {
                 let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
                 let p = resources::policies(t).await?;

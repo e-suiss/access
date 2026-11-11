@@ -183,6 +183,13 @@ impl DrProfile {
 /// The highest `rate_limit_rps` a realm can set (OP-158 m.3 (v)).
 pub const MAX_RPS: u32 = 1_000_000;
 
+/// The realm `rate_limit_rps` until `idp.realm.rate_limit` sets one (OP-35, PD).
+pub const DEFAULT_RPS: u32 = 200;
+/// A tenant's identity requests per second across its realms (TN-24, PD).
+pub const TENANT_RPS: u32 = 1_000;
+/// Seconds of each rate a burst may take at once (PD).
+pub const BURST_S: u32 = 2;
+
 /// `idp.realm.rate_limit` (OP-35, OP-158 m.3 (a), (v)): the realm's `rate_limit_rps`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RateLimit {

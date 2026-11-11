@@ -27,14 +27,15 @@ CREATE TRIGGER append_only_truncate BEFORE TRUNCATE ON access.quota_counters
 
 -- Takes one unit of p_class from each counter, all or none. Counter i is (p_dims[i],
 -- p_subjects[i]) with p_interval[i] microseconds between units and p_burst[i] units at once;
--- p_now is in microseconds. Returns 0 when every counter admitted, else the 1-based index of the
--- first that refused, and nothing is drawn then. A clock that stepped back finds a counter more
+-- p_now is in microseconds. Returns {0, used} when every counter admitted, where used is the
+-- highest share of a burst in use after the draw in percent, else {i, 100} with i the 1-based
+-- index of the first counter that refused, and nothing is drawn then. A clock that stepped back finds a counter more
 -- than one burst ahead and pulls it back to one burst, so the refusal lasts one burst window. Callers pass the tenant counter
 -- first, so two calls lock rows in the same order.
 CREATE FUNCTION access.quota_take(
   p_tenant uuid, p_class text, p_dims text[], p_subjects bytea[], p_now bigint, p_interval bigint[],
   p_burst bigint[]
-) RETURNS integer
+) RETURNS integer[]
   LANGUAGE plpgsql SECURITY DEFINER
   SET search_path = pg_catalog
   AS $$
@@ -42,6 +43,7 @@ DECLARE
   n integer := coalesce(array_length(p_dims, 1), 0);
   tat bigint;
   cap bigint;
+  used integer := 0;
   next bigint[] := '{}';
 BEGIN
   IF n = 0 OR array_length(p_subjects, 1) <> n OR array_length(p_interval, 1) <> n
@@ -70,15 +72,16 @@ BEGIN
   END LOOP;
   FOR i IN 1..n LOOP
     IF next[i] - p_now > p_interval[i] * p_burst[i] THEN
-      RETURN i;
+      RETURN ARRAY[i, 100];
     END IF;
+    used := greatest(used, ((next[i] - p_now) * 100 / (p_interval[i] * p_burst[i]))::integer);
   END LOOP;
   FOR i IN 1..n LOOP
     UPDATE access.quota_counters c SET tat_us = next[i]
      WHERE c.tenant_id = p_tenant AND c.dimension = p_dims[i] AND c.class = p_class
        AND c.subject = p_subjects[i];
   END LOOP;
-  RETURN 0;
+  RETURN ARRAY[0, used];
 END
 $$;
 
@@ -94,7 +97,7 @@ CREATE FUNCTION access.commit_quota(
 DECLARE
   tenant uuid;
   held boolean;
-  refused integer;
+  refused integer[];
 BEGIN
   SELECT d.tenant_id INTO tenant FROM access.authority_domain d WHERE d.domain_id = p_domain;
   IF tenant IS NULL THEN
@@ -108,7 +111,7 @@ BEGIN
                                ARRAY[uuid_send(tenant), p_domain], p_now,
                                ARRAY[p_tenant_limit[1], p_domain_limit[1]],
                                ARRAY[p_tenant_limit[2], p_domain_limit[2]]);
-  RETURN CASE refused WHEN 0 THEN NULL WHEN 1 THEN 'tenant' ELSE 'domain' END;
+  RETURN CASE refused[1] WHEN 0 THEN NULL WHEN 1 THEN 'tenant' ELSE 'domain' END;
 END
 $$;
 

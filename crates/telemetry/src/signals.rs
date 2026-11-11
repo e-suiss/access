@@ -291,6 +291,8 @@ pub static LOGIN_CPU_RATIO: Gauge<0> = Gauge::new(
     "access_login_cpu_ratio_permille",
     "Process CPU over password hash CPU, thousandths (OP-32)",
     [],
+);
+
 /// §17.8.2 "Havuz kuyruk derinliği", OP-53, OP-158 m.3 (v): requests waiting in the
 /// application for the `critical`, `admin` or `sequencer` pool; the back-pressure point.
 pub static POOL_QUEUE_DEPTH: Gauge<1> = Gauge::new(

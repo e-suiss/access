@@ -843,7 +843,7 @@ const STAGE12: [Route; 22] = [
 
 /// The Stage 13 realm routes, declared before their lanes serve them (OP-158 m.4 (a)): each
 /// answers `501 not-yet-served` behind its permission until its lane fills the handler.
-const STAGE13: [Route; 8] = [
+const STAGE13: [Route; 9] = [
     read(
         "/admin/v1/realms/{slug}/placement",
         "getPlacement",
@@ -889,6 +889,12 @@ const STAGE13: [Route; 8] = [
         "/admin/v1/realms/{slug}/settings/audit-tier",
         "putAuditTier",
         "Sets the cold audit tier {hot_days, target} (idp.realm.audit_tier) or closes it with {} (audit_tier_close); a hot window under 30 days answers 422 audit-tier-too-short (OP-158 m.3 (w)).",
+    ),
+    // OP-158 m.4 (b) (W11)
+    read(
+        "/admin/v1/realms/{slug}/rate-limits",
+        "getRateLimits",
+        "The realm's rate limits and their use: each bucket's share in use now and over 1 h and 24 h, the 10 heaviest consumers as digests, refusals by type and the warning threshold; never labelled by the request (§12.5.4, TN-127, OP-158 m.3 (v)).",
     ),
 ];
 
@@ -1838,6 +1844,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         // OP-158 m.4 (a)
         "getPlacement" => (ResourceKind::Placement, Shape::Planned("Declared")),
         "getDurability" => (ResourceKind::Durability, Shape::Planned("Declared")),
+        // OP-158 m.4 (b) (W11)
+        "getRateLimits" => (ResourceKind::RateLimits, Shape::Get),
         "putResidency" | "putDrProfile" => {
             (Settings, Shape::Planned("WriteResult"))
         }

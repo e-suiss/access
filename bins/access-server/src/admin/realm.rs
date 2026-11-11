@@ -125,6 +125,7 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::OffboardingPreviews => Kind::OffboardingPreviews,
         ResourceKind::Placement => Kind::Placement,
         ResourceKind::Durability => Kind::Durability,
+        ResourceKind::RateLimits => Kind::RateLimits,
     }
 }
 
@@ -657,6 +658,16 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             )
             .await;
         let geo = (q.kind == ResourceKind::Signals).then(|| geoip(&self.geo.status()));
+        // §12.5.4, TN-127, OP-158 m.3 (v)
+        let usage = (q.kind == ResourceKind::RateLimits).then(|| {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
+            serde_json::to_value(
+                access_telemetry::rate_board::RATE_BOARD.view(&format!("realm:{}", q.slug), now),
+            )
+            .unwrap_or(Value::Null)
+        });
         match read {
             Ok(r) => Ok(Some(Listing {
                 items: r
@@ -665,6 +676,10 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                     .map(|(mut body, version)| {
                         if let (Some(g), Some(o)) = (geo, body.as_object_mut()) {
                             o.insert(String::from("geoip"), Value::String(String::from(g)));
+                        }
+                        if let (Some(u), Some(o)) = (&usage, body.as_object_mut()) {
+                            o.insert(String::from("realm"), Value::String(q.slug.clone()));
+                            o.insert(String::from("usage"), u.clone());
                         }
                         Item { body, version }
                     })

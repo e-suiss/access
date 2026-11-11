@@ -1,12 +1,18 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT access.realm_quota($1, $2, $3, $4, $5, $6)",
+  "query": "SELECT refused, used FROM access.realm_quota($1, $2, $3, $4, $5, $6)",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "realm_quota",
+        "name": "refused",
         "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "used",
+        "type_info": "Int4",
         "origin": "Expression"
       }
     ],
@@ -21,8 +27,9 @@
       ]
     },
     "nullable": [
+      null,
       null
     ]
   },
-  "hash": "78aea3e2e155bda0e0e967d85b11e12613a194a7b056c1fa15b1bbe48ae2f42d"
+  "hash": "b2bac75549a96d38d77657008a8f2c8e1ea2c3a7b9155fbefdb2b7170361d54f"
 }
