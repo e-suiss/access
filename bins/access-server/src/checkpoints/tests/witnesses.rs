@@ -642,7 +642,10 @@ fn verify(args: &[&str]) -> (bool, String) {
 // T19, §17.6.1 rule 5, U21, U49, TI-RT5, P18, U9, HL-7; Ek B 5779, 5829, 5834, 5846, 5849,
 // 5893, 5945, 6074
 #[tokio::test(flavor = "multi_thread")]
-#[allow(clippy::too_many_lines, reason = "one walkthrough of the bundle and its checks")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one walkthrough of the bundle and its checks"
+)]
 async fn a_witnessed_bundle_opens_only_artifacts_and_dates_the_record() {
     let db = fresh().await.unwrap();
     let mut log = Log::create(&db).await;
