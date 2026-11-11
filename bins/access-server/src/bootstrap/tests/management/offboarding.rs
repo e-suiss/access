@@ -337,7 +337,7 @@ async fn offboarding_asks_for_every_channel_and_reads_offboarded_only_after_the_
         listed("holdings", "grant"),
         BTreeSet::from([b64url_encode(&rule.0)])
     );
-    // §8.17.9.6: no channel has a default
+    // §8.17.9.6
     assert_eq!(
         p["channels"]["grants"][0]["choices"],
         serde_json::json!(["keep", "revoke"])
@@ -432,7 +432,7 @@ async fn offboarding_asks_for_every_channel_and_reads_offboarded_only_after_the_
     )
     .await;
     assert_eq!(r.status, StatusCode::UNPROCESSABLE_ENTITY, "{}", r.body);
-    // E6: a revoke chosen without its Exercise carries nothing out
+    // E6
     let r = commit(
         &c,
         &party,
@@ -471,7 +471,7 @@ async fn offboarding_asks_for_every_channel_and_reads_offboarded_only_after_the_
         after.body
     );
     assert_eq!(after.body["channels"]["instances"], serde_json::json!([]));
-    // OP-73: a departed Party is never offboarded twice
+    // OP-73
     let again = commit(&c, &party, &body).await;
     assert_eq!(again.status, StatusCode::CONFLICT, "{}", again.body);
 }

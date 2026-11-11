@@ -284,9 +284,9 @@ function Departure({ p, ctx }: { readonly p: Preview; readonly ctx: Ctx }): Reac
     all(ch.holdings, (i) => ch.holdings[i]?.grant ?? "", holdings) &&
     anchor !== undefined &&
     reentry !== undefined;
-  // §8.17.9.6: a role change and a hand-over are made in Roles and Domains, then previewed again
+  // §8.17.9.6
   const elsewhere =
-    anchor === "transfer" ||
+    (anchor !== undefined && anchor !== "retire") ||
     Object.values(holdings).some((c) => c === "exclude" || c === "restrict");
   const offboarded =
     p.status === "offboarded" ||

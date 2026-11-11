@@ -78,8 +78,9 @@ fn channel(v: Option<&Value>) -> Result<BTreeMap<String, String>, &'static Code>
 }
 
 fn offered(preview: &Value, ch: &str) -> Vec<String> {
-    preview["channels"][ch]["choices"]
-        .as_array()
+    preview
+        .pointer(&format!("/channels/{ch}/choices"))
+        .and_then(Value::as_array)
         .map(|a| {
             a.iter()
                 .filter_map(Value::as_str)
@@ -91,8 +92,9 @@ fn offered(preview: &Value, ch: &str) -> Vec<String> {
 
 /// Each member of a listed channel with the choices the preview offers for it.
 fn members(preview: &Value, ch: &str, id: &str) -> BTreeMap<String, Vec<String>> {
-    preview["channels"][ch]
-        .as_array()
+    preview
+        .pointer(&format!("/channels/{ch}"))
+        .and_then(Value::as_array)
         .map(|a| {
             a.iter()
                 .filter_map(|m| {
@@ -197,7 +199,7 @@ impl Choices {
 /// One operation as submitted: its own AIS and its decoded meta-action commit.
 #[derive(Clone, Debug)]
 struct Operation {
-    operation: String,
+    name: String,
     key: String,
     ais: Vec<u8>,
     request: access_authority_core::domain::Request,
@@ -247,7 +249,7 @@ fn operation(v: Value) -> Result<Operation, &'static Code> {
         return Err(&codes::realm::JOB_OPERATION_NOT_ALLOWED);
     }
     Ok(Operation {
-        operation,
+        name: operation,
         key,
         ais,
         request,
@@ -286,12 +288,10 @@ fn carries_out(
     let (last, rest) = ops.split_last().ok_or_else(missing)?;
     let departs = match (c.self_anchor.as_str(), &last.request.payload) {
         ("retire", Some(Payload::PartyDepart { party: p, .. })) => {
-            last.operation == "departParty" && b64(p) == party && last.key == party
+            last.name == "departParty" && b64(p) == party && last.key == party
         }
         ("transfer", Some(Payload::AnchorTransfer { anchor: a, .. })) => {
-            last.operation == "transferAnchor"
-                && anchor == Some(b64(a).as_str())
-                && last.key == party
+            last.name == "transferAnchor" && anchor == Some(b64(a).as_str()) && last.key == party
         }
         _ => false,
     };
@@ -310,7 +310,7 @@ fn carries_out(
             }
             _ => return Err(refuse),
         };
-        if o.operation != op || o.key != id || !seen.insert(id) {
+        if o.name != op || o.key != id || !seen.insert(id) {
             return Err(refuse);
         }
     }
@@ -342,7 +342,7 @@ fn digest(party: &str, c: &Choices, ops: &[Operation]) -> Result<[u8; 32], &'sta
         .iter()
         .map(|o| {
             Cbor::Array(vec![
-                Cbor::text(&o.operation),
+                Cbor::text(&o.name),
                 Cbor::text(&o.key),
                 Cbor::Bytes(
                     context_digest("access/offboarding-item/v1", &o.ais)
@@ -388,14 +388,18 @@ async fn checked<E: Env>(
     }
     let p = preview(ctx, party).await?;
     // §8.17.9.6
-    if p["departed_position"].is_string() {
+    if p.get("departed_position").is_some_and(Value::is_string) {
         return Err(&codes::realm::CONFLICT);
     }
     let c = Choices::parse(choices.as_ref(), &p)?;
     carries_out(
         &c,
         &ops,
-        (party, p["channels"]["self_anchor"]["anchor"].as_str()),
+        (
+            party,
+            p.pointer("/channels/self_anchor/anchor")
+                .and_then(Value::as_str),
+        ),
     )?;
     Ok((c, ops))
 }
@@ -517,7 +521,7 @@ pub(super) async fn commit<E: Env>(
                 ..
             } => {
                 exercises.push(json!({
-                    "operation": o.operation,
+                    "operation": o.name,
                     "key": o.key,
                     "exercise_id": b64url_encode(&exercise_id.0),
                     "position": position.to_string(),

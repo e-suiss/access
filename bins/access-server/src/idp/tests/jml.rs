@@ -177,8 +177,7 @@ async fn episode(w: &World, d: Digest, grant: Id, at: u64) -> Option<u64> {
         .map(|h| h.since)
 }
 
-// OP-157 m.3 (v), IDP-35, C13, TN-75, TN-109, INV-31, AG-41, XI-15, OP-153 m.3 (gg),
-// Ek B 5446, 5447, 5484, 5570, 5571, 5573
+// OP-157 m.3 (v), IDP-35, C13, TN-75, TN-109, INV-31, AG-41, XI-15, OP-153 m.3 (gg)
 #[tokio::test]
 async fn a_joiner_mover_and_leaver_move_through_rule_shaped_authority_and_offboarding() {
     let w = World::new().await;
@@ -242,7 +241,7 @@ async fn a_joiner_mover_and_leaver_move_through_rule_shaped_authority_and_offboa
         })
     };
 
-    // §2.4, IDP-35 (2): the joiner
+    // §2.4, IDP-35 (2)
     let joiner = concat!(
         r#"{"employee_id":"E1","email":"ada@acme.example","department":"Finance","#,
         r#""start_date":"1970-01-01"}"#,
@@ -300,7 +299,7 @@ async fn a_joiner_mover_and_leaver_move_through_rule_shaped_authority_and_offboa
         .unwrap(),
     );
 
-    // INV-31, C14: a pin names a holding by name; a rule-shaped episode is never pinned
+    // INV-31, C14
     let pinned = |pin| Payload::MandateBind {
         instance: alice.instance,
         envelope: MandateEnvelope {
@@ -313,25 +312,25 @@ async fn a_joiner_mover_and_leaver_move_through_rule_shaped_authority_and_offboa
     };
     let public = access_internal_api::instances::bootstrap_basis(&d);
 
-    // §12.3.5 (2), TN-75, Ek B 5447, 5571: the mover
-    let mover = concat!(
+    // §12.3.5 (2), TN-75, Ek B 5447, 5571
+    let move_record = concat!(
         r#"{"employee_id":"E1","email":"ada@acme.example","department":"R&D","#,
         r#""start_date":"1970-01-01"}"#,
     );
-    import(&w, at, d, mover, 0x55).await;
+    import(&w, at, d, move_record, 0x55).await;
     job.run_once(NOW).await.unwrap();
-    let moved = NOW + 1;
-    w.clock.0.store(moved, Ordering::SeqCst);
-    clock.store(moved, Ordering::SeqCst);
+    let stepped = NOW + 1;
+    w.clock.0.store(stepped, Ordering::SeqCst);
+    clock.store(stepped, Ordering::SeqCst);
     assert_eq!(
-        episode(&w, d, finance, moved).await,
+        episode(&w, d, finance, stepped).await,
         None,
         "the episode closed"
     );
     let c = w
         .plane
         .domains
-        .offboarding(d, ALICE, moved)
+        .offboarding(d, ALICE, stepped)
         .await
         .unwrap()
         .unwrap();
@@ -348,7 +347,7 @@ async fn a_joiner_mover_and_leaver_move_through_rule_shaped_authority_and_offboa
         .unwrap(),
         Applied::NotAllowed { .. }
     ));
-    // §8.17.9.6: "E's Finance role ended (HR, …)", and nothing given by name is touched
+    // §8.17.9.6
     let party = b64url_encode(&ALICE.0);
     let view = w
         .admin()
@@ -369,11 +368,15 @@ async fn a_joiner_mover_and_leaver_move_through_rule_shaped_authority_and_offboa
     assert_eq!(role["selects"][0]["value"], "Finance");
     assert!(role["at"].is_string(), "{p}");
 
-    // TN-109, INV-31, XI-15: the rejoin waits out the cooling and is a new episode
+    // TN-109, INV-31, XI-15
     import(&w, at, d, joiner, 0x56).await;
-    job.run_once(moved).await.unwrap();
-    assert_eq!(episode(&w, d, finance, moved).await, None, "still cooling");
-    let later = moved + records::COOLING_MS;
+    job.run_once(stepped).await.unwrap();
+    assert_eq!(
+        episode(&w, d, finance, stepped).await,
+        None,
+        "still cooling"
+    );
+    let later = stepped + records::COOLING_MS;
     w.clock.0.store(later, Ordering::SeqCst);
     clock.store(later, Ordering::SeqCst);
     job.run_once(later).await.unwrap();
@@ -400,8 +403,7 @@ async fn a_joiner_mover_and_leaver_move_through_rule_shaped_authority_and_offboa
         .await
         .unwrap(),
     );
-    // INV-31, C14, §7.9.13 row 15: a Mandate pin names a holding by name only, so neither the
-    // old episode nor the new one is ever pinned; nothing carries over and binding is explicit
+    // INV-31, C14, §7.9.13 row 15
     for (nonce, since) in [(0x64, first), (0x65, again)] {
         let pin = HoldingRef {
             grant: finance,
@@ -436,7 +438,7 @@ async fn a_joiner_mover_and_leaver_move_through_rule_shaped_authority_and_offboa
     tx.commit().await.unwrap();
     let (_, epoch) = status_of(&w, at, ada).await;
 
-    // IDP-35 (4), TN-H5, Ek B 5446: the leaver, without waiting for the job
+    // IDP-35 (4), TN-H5, Ek B 5446
     let leaver = concat!(
         r#"{"employee_id":"E1","email":"ada@acme.example","department":"Finance","#,
         r#""start_date":"1970-01-01","employment_status":"terminated"}"#,
@@ -458,7 +460,7 @@ async fn a_joiner_mover_and_leaver_move_through_rule_shaped_authority_and_offboa
         "nothing of the record is deleted"
     );
     tx.commit().await.unwrap();
-    // INV-2: a suspended account's Party no longer acts through the identity plane
+    // INV-2
     assert!(
         exercise(
             &w,
@@ -469,7 +471,7 @@ async fn a_joiner_mover_and_leaver_move_through_rule_shaped_authority_and_offboa
         .is_err()
     );
 
-    // §8.17.9.6, OP-157 m.3 (v): the departure, re-entry blocked
+    // §8.17.9.6, OP-157 m.3 (v)
     let departure = Departure {
         party: ALICE.0,
         choices: String::from(r#"{"reentry":"blocked","self_anchor":"retire"}"#),

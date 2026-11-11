@@ -56,7 +56,7 @@ fn ids(v: &[Id]) -> Vec<String> {
 /// by issuer and its recorded departure.
 fn view(
     party: [u8; 16],
-    account: Option<String>,
+    account: Option<&str>,
     d: &Departing,
     sources: &[(String, [u8; 16])],
     recorded: Option<&access_store::offboarding::OffboardingRow>,
@@ -179,7 +179,13 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             .map(|s| (s.name, s.issuer))
             .collect();
         let recorded = t.offboarding(party).await?;
-        Ok(Some(view(party, account, &d, &sources, recorded.as_ref())))
+        Ok(Some(view(
+            party,
+            account.as_deref(),
+            &d,
+            &sources,
+            recorded.as_ref(),
+        )))
     }
 
     /// Commits the departure Exercise of an offboarding with the caller's AIS and, once it is
