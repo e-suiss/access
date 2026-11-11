@@ -78,11 +78,11 @@ async fn an_actor(p: &Pdp) -> Value {
         .await
         .unwrap()
         .into_iter()
-        .filter_map(|r| {
+        .rev()
+        .find_map(|r| {
             let e = RecordEnvelope::from_bytes(&r.envelope).unwrap();
             (e.header.kind == RecordKind::Opening).then(|| e.fields["actor"].value.clone())
         })
-        .last()
         .unwrap()
 }
 
@@ -483,6 +483,58 @@ async fn a_fold_difference_stops_commits_until_the_log_rebuilds_the_live_state()
         .post("/access/v1/evaluation", &p.allowed(Mode::Commit).await)
         .await;
     assert_eq!(again.status, StatusCode::OK, "{:?}", again.json());
+    // TI-RT11, FA-14
+    p.w.domains.release().await;
+    checkpoint(&p, label).await;
+    access_authority_core::app::divergence::commitments(
+        &p.w.db.app,
+        p.domain,
+        p.w.domains.head(p.domain).await.unwrap().0,
+    )
+    .await
+    .unwrap();
+    p.w.domains.release().await;
+    let size = access_store::authority::read_head(&p.w.db.app, &DomainId::from_bytes(p.domain.0))
+        .await
+        .unwrap()
+        .pos
+        + 1;
+    let mut forged =
+        access_store::authority_checkpoint::latest(&p.w.db.app, &DomainId::from_bytes(p.domain.0))
+            .await
+            .unwrap()
+            .unwrap();
+    forged.size = size;
+    forged.root = access_crypto::random::bytes::<32>().unwrap();
+    forged.issued_at += 1;
+    access_store::authority_checkpoint::append(
+        &p.w.db.sequencer,
+        &DomainId::from_bytes(p.domain.0),
+        &forged,
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        access_authority_core::app::divergence::commitments(&p.w.db.app, p.domain, size - 1).await,
+        Err(access_authority_core::CoreError::Protocol("commitment"))
+    ));
+    corrupt(&p, &key).await;
+    assert!(matches!(
+        access_authority_core::app::divergence::rebuild(&p.w.db.app, &p.w.db.sequencer, p.domain)
+            .await,
+        Err(access_authority_core::CoreError::Protocol("commitment"))
+    ));
+    let mut fresh = std::collections::HashMap::new();
+    let refused = crate::divergence::step(
+        &p.w.domains,
+        (&p.w.db.app, &signer),
+        &mut fresh,
+        p.domain,
+        now,
+    )
+    .await
+    .unwrap();
+    assert!(refused.fold, "{refused:?}");
     p.w.domains.release().await;
 }
 

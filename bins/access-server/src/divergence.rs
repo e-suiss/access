@@ -52,6 +52,7 @@ pub(crate) struct Replayer {
     next: u64,
     declared: usize,
     snapshot: u64,
+    previous: Option<access_kernel::record::LeafCore>,
 }
 
 async fn start(app: &Pool, domain: Digest, head: u64) -> Result<Replayer, String> {
@@ -66,11 +67,46 @@ async fn start(app: &Pool, domain: Digest, head: u64) -> Result<Replayer, String
         }
         None => (Replay::new(), 0, 0),
     };
+    let previous = match next.checked_sub(1) {
+        Some(last) => {
+            access_store::authority::read_log(app, &DomainId::from_bytes(domain.0), last, last)
+                .await
+                .map_err(|e| e.to_string())?
+                .first()
+                .and_then(|r| RecordEnvelope::from_bytes(&r.envelope).ok())
+                .and_then(|e| e.leaf_core().ok())
+        }
+        None => None,
+    };
     Ok(Replayer {
         replay,
         next,
         declared: 0,
         snapshot,
+        previous,
+    })
+}
+
+/// Stops `domain`'s commits on a stored log that does not match its commitments.
+async fn stop(
+    domains: &crate::ServerDomains,
+    app: &Pool,
+    (domain, head): (Digest, u64),
+    now: u64,
+    why: &str,
+) -> Result<Stepped, String> {
+    tracing::error!(%why, "the stored log does not match its commitments (FA-14)");
+    let diff = divergence::Diff {
+        head,
+        differing: Vec::new(),
+    };
+    divergence::declare_fold(app, domain, &diff, now)
+        .await
+        .map_err(|x| x.to_string())?;
+    domains.halt(domain).await;
+    Ok(Stepped {
+        fold: true,
+        ..Stepped::default()
     })
 }
 
@@ -91,12 +127,16 @@ pub(crate) async fn step<S: NoteSigner + Sync>(
         .await
         .map_err(e)?
         .pos;
-    let r = match replayers.remove(&domain) {
-        Some(r) => r,
-        None => start(app, domain, head).await?,
-    };
-    let mut r = r;
     let mut out = Stepped::default();
+    let mut r = if let Some(r) = replayers.remove(&domain) {
+        r
+    } else {
+        // FA-14, TI-RT11
+        if let Err(e) = divergence::commitments(app, domain, head).await {
+            return stop(domains, app, (domain, head), now, &e.to_string()).await;
+        }
+        start(app, domain, head).await?
+    };
     let from = r.next;
     while r.next <= head {
         let to = r.next.saturating_add(STEP).saturating_sub(1).min(head);
@@ -105,6 +145,16 @@ pub(crate) async fn step<S: NoteSigner + Sync>(
             .map_err(e)?
         {
             let env = RecordEnvelope::from_bytes(&row.envelope).map_err(|x| x.to_string())?;
+            // FA-14
+            let core = env.leaf_core().map_err(|x| x.to_string())?;
+            let linked = r
+                .previous
+                .as_ref()
+                .is_none_or(|prev| access_kernel::record::check_link(prev, &core, &domain).is_ok());
+            if core.leaf_hash().ok() != Some(row.leaf_hash) || !linked {
+                return stop(domains, app, (domain, head), now, "commitment").await;
+            }
+            r.previous = Some(core);
             let d = env.disclose(|_| true).map_err(|x| x.to_string())?;
             r.replay.push(&d, true).map_err(|x| x.to_string())?;
             out.replayed = out.replayed.saturating_add(1);

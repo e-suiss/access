@@ -274,16 +274,70 @@ pub async fn halted(app: &Pool, domain: Digest) -> Result<bool, CoreError> {
     Ok(divergence::fold_open(app, &DomainId::from_bytes(domain.0)).await?)
 }
 
-/// Rebuilds `domain`'s live state from the fold of its log from Genesis, which wins (TI-1,
-/// TI-RT1, G33), and resolves its fold notices: commits may start again. The log is not
-/// touched. No leader may hold the domain. How many rows changed.
+/// Checks `domain`'s stored log against its commitments up to `head` (FA-14, TI-RT11): every
+/// record's leaf is the stored leaf hash and chains to the one before, and the Merkle root of
+/// the records is the root of every checkpoint the domain signed over them. A log that passes
+/// is a copy the commitments vouch for, whether it is the live one or one restored from a
+/// backup.
 ///
 /// # Errors
-/// [`CoreError`].
+/// [`CoreError::Protocol`] `commitment` for the first that differs; [`CoreError::Store`].
+pub async fn commitments(app: &Pool, domain: Digest, head: u64) -> Result<(), CoreError> {
+    let id = DomainId::from_bytes(domain.0);
+    let size = head.saturating_add(1);
+    let signed: std::collections::BTreeMap<u64, [u8; 32]> =
+        access_store::mirror::checkpoints(app, &id, 0, size)
+            .await?
+            .into_iter()
+            .map(|c| (c.size, c.root))
+            .collect();
+    let bad = || CoreError::Protocol("commitment");
+    let mut tree = suiss_ledger::merkle::Frontier::default();
+    let mut previous: Option<access_kernel::record::LeafCore> = None;
+    let mut at = 0u64;
+    while at <= head {
+        let to = at.saturating_add(STEP).saturating_sub(1).min(head);
+        for r in access_store::authority::read_log(app, &id, at, to).await? {
+            let e = RecordEnvelope::from_bytes(&r.envelope).map_err(|_| bad())?;
+            let core = e.leaf_core().map_err(|_| bad())?;
+            let leaf = core.leaf_hash().map_err(|_| bad())?;
+            if leaf != r.leaf_hash || e.header.pos != tree.size() {
+                return Err(bad());
+            }
+            if let Some(prev) = &previous {
+                access_kernel::record::check_link(prev, &core, &domain).map_err(|_| bad())?;
+            }
+            tree.push(leaf).map_err(|_| bad())?;
+            if signed
+                .get(&tree.size())
+                .is_some_and(|root| *root != tree.root())
+            {
+                return Err(bad());
+            }
+            previous = Some(core);
+        }
+        at = to.saturating_add(1);
+    }
+    if tree.size() == size {
+        Ok(())
+    } else {
+        Err(bad())
+    }
+}
+
+/// Rebuilds `domain`'s live state from the fold of its log from Genesis, which wins (TI-1,
+/// TI-RT1, G33), and resolves its fold notices: commits may start again. The log is checked
+/// against its commitments first and is not touched (TI-RT11). No leader may hold the domain.
+/// How many rows changed.
+///
+/// # Errors
+/// [`CoreError`]; [`CoreError::Protocol`] `commitment` when the log does not match its
+/// commitments: the domain stays stopped until a copy that matches is restored.
 pub async fn rebuild(app: &Pool, sequencer: &Pool, domain: Digest) -> Result<u64, CoreError> {
     let id = DomainId::from_bytes(domain.0);
     let tenant = tenant_of(access_store::authority::domain_tenant(app, &id).await?)?;
     let head = access_store::authority::read_head(app, &id).await?.pos;
+    commitments(app, domain, head).await?;
     let folded = fold_to(app, domain, None, 0, head).await?;
     let rows = folded
         .iter()
