@@ -559,6 +559,16 @@ pub const CODES: &[Code] = &[
     codes::durability::QUOTA_EXCEEDED,
 ];
 
+/// The catalogued problem of `code` (OP-158 m.3 (aa)); a code not in [`CODES`] is a 400
+/// protocol error under its own name.
+#[must_use]
+pub fn catalogued(code: &'static str) -> Problem {
+    CODES.iter().find(|c| c.code == code).map_or_else(
+        || Problem::new(StatusCode::BAD_REQUEST, code, "Protocol Error"),
+        Code::problem,
+    )
+}
+
 /// The type URI of `code`.
 #[must_use]
 pub fn type_uri(code: &str) -> String {

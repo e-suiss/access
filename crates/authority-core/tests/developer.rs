@@ -2116,3 +2116,94 @@ async fn a_delegation_idle_for_90_days_is_marked_until_it_is_used() {
         "used inside the window"
     );
 }
+
+// §9.7A.1, §9.7A.5, CMP-9, G51, U61, OP-158 m.3 (u), Ek B 6126, 6133, 6122
+#[tokio::test]
+async fn the_group_closure_names_candidates_and_its_quotas_refuse() {
+    use access_authority_core::index::{self, Candidate, quota};
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, staffed(1_000), 1_000)
+        .await
+        .unwrap();
+    let log = PgLog::new(db.sequencer.clone(), d, TENANT, "t".to_owned(), TTL);
+    let leader = Leader::acquire(log, d, EventKey::new(Secret::new([5; 32])))
+        .await
+        .unwrap();
+    let id = DomainId::from_bytes(d.0);
+    let reader = PgReader::new(db.app.clone(), id);
+    let mut core: Core = Authority::new(leader, reader, binding(), Counter(0), d);
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    prove_staff(&mut core, d, 22, staff_claim(d, true, None)).await;
+    let staff = vec![String::from("staff")];
+
+    // G51
+    assert_eq!(
+        index::candidate(&db.app, &id, &staff, &ROOT, core.head())
+            .await
+            .unwrap(),
+        Candidate::Behind
+    );
+    access_authority_core::adapters::derive(&db.deriver, d)
+        .await
+        .unwrap();
+    let head = core.head();
+    assert_eq!(
+        index::candidate(&db.app, &id, &staff, &ROOT, head)
+            .await
+            .unwrap(),
+        Candidate::Maybe
+    );
+    assert_eq!(
+        index::candidate(&db.app, &id, &staff, &ALICE, head)
+            .await
+            .unwrap(),
+        Candidate::No,
+        "never named by a membership key"
+    );
+    let members = index::members(&db.app, &id, &staff, head)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(members.len(), 1);
+    let unknown = vec![String::from("staff"), String::from("contractor")];
+    assert!(
+        index::members(&db.app, &id, &unknown, head)
+            .await
+            .unwrap()
+            .unwrap()
+            .is_empty()
+    );
+
+    // §9.7A.5
+    let wide: Vec<String> = (0..=quota::WIDTH).map(|i| format!("c{i}")).collect();
+    assert!(matches!(
+        index::candidate(&db.app, &id, &wide, &ROOT, head).await,
+        Err(CoreError::Refused("index-quota-exceeded"))
+    ));
+
+    // §9.7A.5
+    let mut many = index::Pending::default();
+    for i in 0..quota::TYPES_PER_STORE {
+        many.members
+            .entry(format!("t{i:03}"))
+            .or_default()
+            .insert(ROOT.0);
+    }
+    let next = head;
+    index::apply(&db.deriver, &id, (head, next), &many)
+        .await
+        .unwrap();
+    let over = vec![String::from("t199")];
+    assert!(matches!(
+        index::candidate(&db.app, &id, &over, &ROOT, next).await,
+        Err(CoreError::Refused("index-quota-exceeded"))
+    ));
+    let kept = vec![String::from("t000")];
+    assert_eq!(
+        index::candidate(&db.app, &id, &kept, &ROOT, next)
+            .await
+            .unwrap(),
+        Candidate::Maybe
+    );
+}

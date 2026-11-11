@@ -1,18 +1,17 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT min(decision_pos) FROM access.authority_nonce WHERE domain_id = $1 AND nonce = $2",
+  "query": "SELECT max(size) FROM access.witness_cosign WHERE domain_id = $1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "min",
+        "name": "max",
         "type_info": "Int8",
         "origin": "Expression"
       }
     ],
     "parameters": {
       "Left": [
-        "Bytea",
         "Bytea"
       ]
     },
@@ -20,5 +19,5 @@
       null
     ]
   },
-  "hash": "25edf342888b35c42679038d2f121e35e0e1fd2795de88d807d3de419b89f480"
+  "hash": "6a4094643a68ddcce208563ec61e46715279f8b810e2983821648eb233aa7629"
 }

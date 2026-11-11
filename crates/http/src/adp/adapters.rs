@@ -85,6 +85,7 @@ pub fn router<P: Pdp + 'static>(service: Service<P>, discovery: Discovery) -> Ro
             crate::adp::publication::STATUS_PATH,
             post(publication_status::<P>),
         )
+        .route(crate::adp::watch::PATH, get(watch::<P>))
         .route(
             "/.well-known/authzen-configuration",
             get(configuration::<P>),
@@ -218,7 +219,9 @@ async fn publication_status<P: Pdp>(
 pub(crate) fn respond(reply: Reply, headers: &HeaderMap) -> Response {
     // §17.8.2, RR-8
     match &reply {
-        Reply::Protocol(code, _) => drop(PROTOCOL_REJECTIONS.incr(["adp", code])),
+        Reply::Protocol(code, _) | Reply::Refused(code) => {
+            let _ = PROTOCOL_REJECTIONS.incr(["adp", code]);
+        }
         Reply::Limited => drop(PROTOCOL_REJECTIONS.incr(["adp", "rate-limited"])),
         Reply::Quota(_) => drop(PROTOCOL_REJECTIONS.incr(["adp", "quota-exceeded"])),
         _ => {}
@@ -283,6 +286,8 @@ pub(crate) fn respond(reply: Reply, headers: &HeaderMap) -> Response {
                 .insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
             r
         }
+        // OP-158 m.3 (u)
+        Reply::Refused(code) => crate::problem::catalogued(code).into_response(),
     };
     // L1-ADP-4
     if let Some(id) = headers.get(&REQUEST_ID) {
@@ -324,6 +329,33 @@ fn json(body: serde_json::Map<String, serde_json::Value>) -> Response {
         serde_json::Value::Object(body).to_string(),
     )
         .into_response()
+}
+
+/// OP-158 m.3 (u): the watch stream, for an authenticated PEP only.
+async fn watch<P: Pdp>(
+    State(shared): State<Arc<Shared<P>>>,
+    Path(domain): Path<String>,
+    pep: Option<axum::Extension<Pep>>,
+    uri: axum::http::Uri,
+    headers: HeaderMap,
+) -> Response {
+    if pep.is_none() {
+        return respond(Reply::Unauthenticated, &headers);
+    }
+    let Some(domain) = domain_id(&domain) else {
+        return crate::adp::watch::bad("domain");
+    };
+    let (from, wait) = match crate::adp::watch::query(uri.query()) {
+        Ok(q) => q,
+        Err(name) => return crate::adp::watch::bad(name),
+    };
+    match shared.service.pdp().watch(domain, from, wait).await {
+        Ok(w) => crate::adp::watch::respond(&w),
+        Err(e) => respond(
+            crate::adp::app::failed(e, crate::adp::domain::Body::Context),
+            &headers,
+        ),
+    }
 }
 
 async fn configuration<P: Pdp>(State(shared): State<Arc<Shared<P>>>) -> Response {
@@ -482,5 +514,14 @@ where
         domains: Vec<Digest>,
     ) -> Result<Option<access_authority_core::app::publishing::Status>, CoreError> {
         Domains::own_publication_status(self, &inc, &namespace, &fingerprint, &domains).await
+    }
+
+    async fn watch(
+        &self,
+        domain: Digest,
+        from: u64,
+        wait: std::time::Duration,
+    ) -> Result<access_authority_core::app::watch::Watched, CoreError> {
+        Domains::watch(self, domain, from, wait).await
     }
 }

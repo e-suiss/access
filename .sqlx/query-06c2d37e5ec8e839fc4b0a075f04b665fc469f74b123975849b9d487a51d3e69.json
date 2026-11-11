@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access_derived.party_ordinal (domain_id, party_id, ordinal) VALUES ($1, $2, $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "06c2d37e5ec8e839fc4b0a075f04b665fc469f74b123975849b9d487a51d3e69"
+}

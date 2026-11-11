@@ -889,3 +889,37 @@ pub fn dump(name: &str) -> Result<String, TestDbError> {
     }
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
+
+/// Copies the hot nonce row of `nonce` in `domain` into the nonce archive under `archived`, a
+/// nonce the hot rows do not hold, as the archive of a nonce past the hot horizon would hold it
+/// (TI-RT3, OP-158 m.3 (u)).
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn archive_only_nonce(
+    db: &TestDb,
+    domain: [u8; 32],
+    nonce: &[u8],
+    archived: &[u8],
+) -> Result<(), TestDbError> {
+    let mut c = admin_connection(db).await?;
+    let done = sqlx::query(
+        "INSERT INTO access.authority_nonce_archive
+           (domain_id, tenant_id, nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier)
+         SELECT domain_id, tenant_id, $3, actor, intent_digest, decision_pos, outcome, render_digest, tier
+           FROM access.authority_nonce WHERE domain_id = $1 AND nonce = $2",
+    )
+    .bind(domain.as_slice())
+    .bind(nonce)
+    .bind(archived)
+    .execute(&mut c)
+    .await
+    .at("archive only nonce")?;
+    if done.rows_affected() == 0 {
+        return Err(TestDbError::Db(
+            "archive only nonce",
+            sqlx::Error::RowNotFound,
+        ));
+    }
+    Ok(())
+}

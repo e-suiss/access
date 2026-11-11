@@ -12,3 +12,5 @@ pub mod ports;
 pub mod publication;
 pub mod report;
 pub mod sandbox;
+// OP-158 m.4 (b)
+pub mod watch;

@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT class, members, pos FROM access_derived.group_closure\n          WHERE domain_id = $1 AND class = ANY($2)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "class",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_derived.group_closure",
+            "name": "class"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "members",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_derived.group_closure",
+            "name": "members"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_derived.group_closure",
+            "name": "pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "38a30a4364283bea1ee808d59af57e2a127f6df14afbc914cbce56712576ccc8"
+}

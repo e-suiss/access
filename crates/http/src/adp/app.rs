@@ -31,6 +31,9 @@ pub enum Reply {
     /// 429: over a tenant or domain quota, or on billing hold, with the refusing counter (T27,
     /// OP-158 m.3 (v)); nothing is recorded.
     Quota(&'static str),
+    /// A catalogued read-path refusal: `as-of-expired` (409) or `index-quota-exceeded` (422)
+    /// (§9.7A.2, §9.7A.5, OP-158 m.3 (u)).
+    Refused(&'static str),
 }
 
 /// The ADP service of one deployment.
@@ -111,7 +114,9 @@ impl<P: Pdp> Service<P> {
             }
             let value = match reply {
                 Reply::Decision(v) => v,
-                Reply::Protocol(code, _) => serde_json::json!({ "error": code }),
+                Reply::Protocol(code, _) | Reply::Refused(code) => {
+                    serde_json::json!({ "error": code })
+                }
                 Reply::Conflict => serde_json::json!({ "error": "nonce-conflict" }),
                 Reply::Unavailable(_) | Reply::Limited | Reply::Quota(_) => {
                     serde_json::json!({ "error": "unavailable" })
@@ -387,6 +392,7 @@ pub(crate) fn failed(e: CoreError, body: Body) -> Reply {
         CoreError::Limited => Reply::Limited,
         // OP-158 m.3 (v)
         CoreError::Quota(refusal) => Reply::Quota(refusal.reason()),
+        CoreError::Refused(code) => Reply::Refused(code),
         CoreError::Sequencer(_) | CoreError::Store(_) | CoreError::Unavailable(_) => {
             Reply::Unavailable(unavailable_reason(&e))
         }

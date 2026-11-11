@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.authority_nonce_archive\n           (domain_id, tenant_id, nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier)\n         SELECT domain_id, tenant_id, nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier\n           FROM access.authority_nonce WHERE domain_id = $1 AND decision_pos <= $2\n         ON CONFLICT (domain_id, nonce, decision_pos) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2e131521217cfa46eca88d73d4f1150b6f73baa6fdbe71bae54138c06d8ce8ed"
+}

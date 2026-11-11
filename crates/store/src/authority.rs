@@ -876,8 +876,13 @@ pub async fn nonce_opened(
     nonce: &[u8],
 ) -> Result<Option<u64>, StoreError> {
     let mut t = DomainTx::begin(pool, domain).await?;
+    // TI-RT3
     let pos = sqlx::query_scalar!(
-        "SELECT min(decision_pos) FROM access.authority_nonce WHERE domain_id = $1 AND nonce = $2",
+        "SELECT min(p) FROM (
+           SELECT decision_pos AS p FROM access.authority_nonce WHERE domain_id = $1 AND nonce = $2
+           UNION ALL
+           SELECT decision_pos FROM access.authority_nonce_archive WHERE domain_id = $1 AND nonce = $2
+         ) n",
         domain.as_bytes().as_slice(),
         nonce,
     )
@@ -897,10 +902,16 @@ pub async fn find_nonce(
     nonce: &[u8],
 ) -> Result<Option<NonceRow>, StoreError> {
     let mut t = DomainTx::begin(pool, domain).await?;
+    // TI-RT3
     let row = sqlx::query!(
-        "SELECT nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier
-           FROM access.authority_nonce
-          WHERE domain_id = $1 AND nonce = $2 ORDER BY decision_pos DESC LIMIT 1",
+        r#"SELECT nonce AS "nonce!", actor AS "actor!", intent_digest AS "intent_digest!",
+                decision_pos AS "decision_pos!", outcome AS "outcome!", render_digest, tier
+           FROM (SELECT nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier
+                   FROM access.authority_nonce WHERE domain_id = $1 AND nonce = $2
+                 UNION ALL
+                 SELECT nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier
+                   FROM access.authority_nonce_archive WHERE domain_id = $1 AND nonce = $2) n
+          ORDER BY decision_pos DESC LIMIT 1"#,
         domain.as_bytes().as_slice(),
         nonce,
     )
@@ -921,6 +932,51 @@ pub async fn find_nonce(
     .transpose()
 }
 
+/// Copies the nonce rows of `domain` decided at or before `upto` into the append-only archive,
+/// as the archive role; rows already there are kept. Returns how many were copied. Every nonce
+/// lookup reads the hot rows and the archive together (TI-RT3, OP-73).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn archive_nonces(
+    archive: &PgPool,
+    domain: &DomainId,
+    upto: u64,
+) -> Result<u64, StoreError> {
+    let mut t = DomainTx::begin(archive, domain).await?;
+    let n = sqlx::query!(
+        "INSERT INTO access.authority_nonce_archive
+           (domain_id, tenant_id, nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier)
+         SELECT domain_id, tenant_id, nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier
+           FROM access.authority_nonce WHERE domain_id = $1 AND decision_pos <= $2
+         ON CONFLICT (domain_id, nonce, decision_pos) DO NOTHING",
+        domain.as_bytes().as_slice(),
+        i64::try_from(upto).map_err(|_| StoreError::Range)?,
+    )
+    .execute(&mut *t.tx)
+    .await?
+    .rows_affected();
+    t.commit().await?;
+    Ok(n)
+}
+
+/// The largest tree size of `domain` a witness has cosigned; 0 before the first (§16.6,
+/// OP-158 m.3 (u)).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn witnessed_through(pool: &PgPool, domain: &DomainId) -> Result<u64, StoreError> {
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let size = sqlx::query_scalar!(
+        "SELECT max(size) FROM access.witness_cosign WHERE domain_id = $1",
+        domain.as_bytes().as_slice(),
+    )
+    .fetch_one(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    size.map_or(Ok(0), unsigned)
+}
+
 /// The latest outcome of each nonce of `domain` that starts with `prefix`, at most 16: the
 /// attempts of one deterministic, time-locked meta-Exercise (OP-151 m.18 (g)).
 ///
@@ -932,12 +988,19 @@ pub async fn nonces_with_prefix(
     prefix: &[u8],
 ) -> Result<Vec<NonceRow>, StoreError> {
     let mut t = DomainTx::begin(pool, domain).await?;
+    // TI-RT3
     let rows = sqlx::query!(
-        "SELECT DISTINCT ON (nonce) nonce, actor, intent_digest, decision_pos, outcome,
-                render_digest, tier
-           FROM access.authority_nonce
-          WHERE domain_id = $1 AND substring(nonce FROM 1 FOR octet_length($2::bytea)) = $2
-          ORDER BY nonce, decision_pos DESC LIMIT 16",
+        r#"SELECT DISTINCT ON (nonce) nonce AS "nonce!", actor AS "actor!",
+                intent_digest AS "intent_digest!", decision_pos AS "decision_pos!",
+                outcome AS "outcome!", render_digest, tier
+           FROM (SELECT nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier
+                   FROM access.authority_nonce
+                  WHERE domain_id = $1 AND substring(nonce FROM 1 FOR octet_length($2::bytea)) = $2
+                 UNION ALL
+                 SELECT nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier
+                   FROM access.authority_nonce_archive
+                  WHERE domain_id = $1 AND substring(nonce FROM 1 FOR octet_length($2::bytea)) = $2) n
+          ORDER BY nonce, decision_pos DESC LIMIT 16"#,
         domain.as_bytes().as_slice(),
         prefix,
     )
@@ -978,10 +1041,14 @@ pub async fn find_opening(
 ) -> Result<Option<OpeningRow>, StoreError> {
     let mut t = DomainTx::begin(pool, domain).await?;
     let row = sqlx::query!(
-        r#"SELECT render_digest AS "render_digest!", tier AS "tier!", decision_pos
-             FROM access.authority_nonce
-            WHERE domain_id = $1 AND intent_digest = $2 AND outcome = 'require_action'
-              AND render_digest IS NOT NULL AND tier IS NOT NULL
+        r#"SELECT render_digest AS "render_digest!", tier AS "tier!", decision_pos AS "decision_pos!"
+             FROM (SELECT render_digest, tier, decision_pos FROM access.authority_nonce
+                    WHERE domain_id = $1 AND intent_digest = $2 AND outcome = 'require_action'
+                      AND render_digest IS NOT NULL AND tier IS NOT NULL
+                   UNION ALL
+                   SELECT render_digest, tier, decision_pos FROM access.authority_nonce_archive
+                    WHERE domain_id = $1 AND intent_digest = $2 AND outcome = 'require_action'
+                      AND render_digest IS NOT NULL AND tier IS NOT NULL) n
             ORDER BY decision_pos DESC LIMIT 1"#,
         domain.as_bytes().as_slice(),
         intent.as_slice(),

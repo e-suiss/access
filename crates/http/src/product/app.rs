@@ -51,6 +51,8 @@ pub enum Reply {
     Unavailable(Option<&'static str>),
     /// 429.
     Limited,
+    /// A catalogued read-path refusal such as `as-of-expired` (OP-158 m.3 (u)).
+    Refused(&'static str),
 }
 
 /// What a request carries to name its caller (OP-149 m.37): the PEP the TLS layer named from
@@ -80,6 +82,7 @@ fn failed(e: &CoreError) -> Reply {
         CoreError::Protocol(code) => Reply::Bad(code),
         CoreError::AasBinding(_) => Reply::Bad("aas-binding"),
         CoreError::Limited | CoreError::Quota(_) => Reply::Limited,
+        CoreError::Refused(code) => Reply::Refused(code),
         _ => Reply::Unavailable(crate::adp::app::unavailable_reason(e)),
     }
 }

@@ -12,6 +12,8 @@ pub mod rate;
 pub mod requirements;
 pub mod restrict;
 pub mod status;
+// OP-158 m.4 (b)
+pub mod index;
 
 use access_authority_sequencer::SequencerError;
 use access_kernel::ais::AisError;
@@ -58,6 +60,10 @@ pub enum CoreError {
     /// (T27, TN-1, OP-158 m.3 (v)).
     #[error("quota exceeded: {}", .0.reason())]
     Quota(crate::app::quota::Refusal),
+    /// A read the read path refuses with a catalogued problem code (`as-of-expired`,
+    /// `index-quota-exceeded`): no answer, no record (§9.7A.2, §9.7A.5, OP-158 m.3 (u)).
+    #[error("refused: {0}")]
+    Refused(&'static str),
 }
 
 impl CoreError {
@@ -73,6 +79,7 @@ impl CoreError {
             Self::Sequencer(_) | Self::Store(_) | Self::Unavailable(_) => "unavailable",
             Self::Limited => "rate-limited",
             Self::Quota(_) => "quota-exceeded",
+            Self::Refused(code) => code,
         }
     }
 

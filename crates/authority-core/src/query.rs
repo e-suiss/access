@@ -618,6 +618,18 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             Some(SubjectSelector::Party(p)) => p == actor.party,
             Some(SubjectSelector::Public) => true,
             Some(SubjectSelector::Pred(c)) => {
+                // §9.7A.1, §9.7A.5, G51
+                let classes: Vec<String> = c.iter().map(|t| t.claim_class.clone()).collect();
+                if classes.len() > crate::index::quota::WIDTH {
+                    return Err(CoreError::Refused(crate::index::quota::EXCEEDED));
+                }
+                let candidate = self
+                    .reader
+                    .closure_candidate(&classes, &actor.party, self.head())
+                    .await?;
+                if candidate == crate::index::Candidate::No {
+                    return Ok(false);
+                }
                 let mut snap = Snapshot::default();
                 self.episode(&mut snap, &c, &actor.party, now)
                     .await?

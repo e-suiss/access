@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT party_id, ordinal FROM access_derived.party_ordinal\n          WHERE domain_id = $1 AND party_id = ANY($2)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "party_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_derived.party_ordinal",
+            "name": "party_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "ordinal",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access_derived.party_ordinal",
+            "name": "ordinal"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "ByteaArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "1788bb484db49baf7d17571ca221d40f7021029620495d53461185c1f71344e6"
+}

@@ -338,6 +338,8 @@ fn respond(reply: Reply, headers: &HeaderMap) -> Response {
             "Too Many Requests",
         )
         .into_response(),
+        // OP-158 m.3 (u)
+        Reply::Refused(code) => crate::problem::catalogued(code).into_response(),
     };
     if let Some(id) = headers.get(&REQUEST_ID) {
         response.headers_mut().insert(REQUEST_ID, id.clone());

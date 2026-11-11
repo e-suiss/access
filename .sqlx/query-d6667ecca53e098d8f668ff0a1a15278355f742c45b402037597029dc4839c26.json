@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT min(p) FROM (\n           SELECT decision_pos AS p FROM access.authority_nonce WHERE domain_id = $1 AND nonce = $2\n           UNION ALL\n           SELECT decision_pos FROM access.authority_nonce_archive WHERE domain_id = $1 AND nonce = $2\n         ) n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "min",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d6667ecca53e098d8f668ff0a1a15278355f742c45b402037597029dc4839c26"
+}

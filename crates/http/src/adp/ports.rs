@@ -7,6 +7,7 @@ use std::sync::Arc;
 use access_authority_core::CoreError;
 use access_authority_core::app::lab::{Explanation, Replay};
 use access_authority_core::app::publishing::{Draft, PublishError, Published, Status};
+use access_authority_core::app::watch::Watched;
 use access_authority_core::app::{Incoming, Response, Scope};
 use access_authority_core::query::{Hit, Query};
 use access_kernel::digest::Digest;
@@ -109,6 +110,18 @@ pub trait Pdp: Send + Sync {
         let _ = (inc, namespace, fingerprint, domains);
         std::future::ready(Err(CoreError::Protocol("publication")))
     }
+
+    /// The records of `domain` after `from`, waiting up to `wait` (OP-158 m.3 (u)); none by
+    /// default.
+    fn watch(
+        &self,
+        domain: Digest,
+        from: u64,
+        wait: std::time::Duration,
+    ) -> impl Future<Output = Result<Watched, CoreError>> + Send {
+        let _ = (domain, from, wait);
+        std::future::ready(Err(CoreError::Protocol("watch")))
+    }
 }
 
 /// A publish answer: kept (and whether newly), or refused before anything was kept.
@@ -189,5 +202,14 @@ impl<P: Pdp> Pdp for Arc<P> {
         domains: Vec<Digest>,
     ) -> impl Future<Output = Result<Option<Status>, CoreError>> + Send {
         (**self).publication_status(inc, namespace, fingerprint, domains)
+    }
+
+    fn watch(
+        &self,
+        domain: Digest,
+        from: u64,
+        wait: std::time::Duration,
+    ) -> impl Future<Output = Result<Watched, CoreError>> + Send {
+        (**self).watch(domain, from, wait)
     }
 }

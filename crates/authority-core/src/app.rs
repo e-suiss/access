@@ -2282,6 +2282,10 @@ pub mod compat;
 pub mod review;
 // OP-158 m.4 (f)
 pub mod quota;
+// OP-158 m.4 (b)
+pub mod cache;
+// OP-158 m.4 (b)
+pub mod watch;
 
 pub use ingest::{Ingested, Lane, Lanes, Turn, lane_of};
 pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};

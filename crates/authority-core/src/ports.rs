@@ -58,6 +58,17 @@ pub trait Reader {
         let _ = digest;
         std::future::ready(Ok(None))
     }
+    /// What the group closure index says about `party` and the conjunction `classes` at `head`
+    /// (§9.7A.1, OP-158 m.3 (u)); candidates only. Without an index the canonical state decides.
+    fn closure_candidate(
+        &self,
+        classes: &[String],
+        party: &Id,
+        head: u64,
+    ) -> impl Future<Output = Result<crate::index::Candidate, CoreError>> + Send {
+        let _ = (classes, party, head);
+        std::future::ready(Ok(crate::index::Candidate::Behind))
+    }
     /// The position of the first decision of a nonce (OP-141 m.34 (c)).
     fn nonce_opened(
         &self,

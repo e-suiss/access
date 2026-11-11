@@ -2609,3 +2609,5 @@ mod reshred;
 mod kek_rotation;
 // OP-158 m.4 (b)
 mod realm_crypto;
+// OP-158 m.4 (b)
+mod read_path;

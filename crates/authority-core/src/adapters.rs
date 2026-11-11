@@ -26,7 +26,7 @@ use access_store::authority::{
     NonceRow, ReceiptRow, Renewal, StateRow, counter, domain_tenant, find_nonce, keep_receipt,
     receipt, request_lease_handoff, state_of, state_prefix,
 };
-use access_store::derived::{GrantRow, KeyChange, advance_with, cursor, keys_of};
+use access_store::derived::{GrantRow, cursor, keys_of};
 use access_store::offline::{ContractRow, insert_contract};
 use access_store::projections::{Family, family as read_family};
 use access_store::scope::DomainId;
@@ -160,6 +160,15 @@ impl Reader for PgReader {
 
     async fn proof(&self, digest: &[u8; 32]) -> Result<Option<Vec<u8>>, CoreError> {
         Ok(access_store::claims::proof(&self.pool, &self.domain, digest).await?)
+    }
+
+    async fn closure_candidate(
+        &self,
+        classes: &[String],
+        party: &Id,
+        head: u64,
+    ) -> Result<crate::index::Candidate, CoreError> {
+        crate::index::candidate(&self.pool, &self.domain, classes, party, head).await
     }
 
     async fn live_families(&self, holder: &Id) -> Result<Vec<Digest>, CoreError> {
@@ -454,6 +463,38 @@ impl Keys for KeyStore {
 /// Kind of the consistency token (OP-141 m.22 (f)).
 const CONSISTENCY: &str = "consistency";
 
+/// The consistency token of `head` given at `now`: the position and the trusted time it was
+/// read, sealed under the domain's token key (OP-141 m.22 (f), §9.7A.2 k.3).
+fn seal_consistency(
+    tokens: &TokenKey,
+    domain: Digest,
+    head: u64,
+    now: u64,
+) -> Result<String, CoreError> {
+    let mut b = [0u8; 16];
+    let (pos, at) = b.split_at_mut(8);
+    pos.copy_from_slice(&head.to_be_bytes());
+    at.copy_from_slice(&now.to_be_bytes());
+    tokens
+        .seal(&domain.0, CONSISTENCY, &b)
+        .map_err(|_| CoreError::Unavailable("token-key"))
+}
+
+/// The position and issue time a consistency token carries.
+fn open_consistency(tokens: &TokenKey, domain: Digest, t: &str) -> Result<(u64, u64), CoreError> {
+    let b = tokens
+        .open(&domain.0, CONSISTENCY, t)
+        .ok()
+        .and_then(|b| <[u8; 16]>::try_from(b.as_slice()).ok())
+        .ok_or(CoreError::Protocol("consistency_token"))?;
+    let (pos, at) = b.split_at(8);
+    let word = |s: &[u8]| <[u8; 8]>::try_from(s).map(u64::from_be_bytes);
+    Ok((
+        word(pos).map_err(|_| CoreError::Protocol("consistency_token"))?,
+        word(at).map_err(|_| CoreError::Protocol("consistency_token"))?,
+    ))
+}
+
 /// What the domains share: the two pools, the keys, the lease holder and the ports. Each
 /// domain gets its own copy of `clock`, `binding` and `salts`.
 pub struct Setup<K, B, S, C> {
@@ -550,6 +591,8 @@ pub struct Domains<K, B: Binding, S: Salts, C> {
     /// The general ingest lane of each domain (OP-157 m.3 (p)).
     lanes: crate::app::Lanes,
     standing_down: std::sync::atomic::AtomicBool,
+    /// The advisory decision cache; the commit path never reads it (§9.7A.4, TI-5).
+    advisory: crate::app::cache::AdvisoryCache,
 }
 
 impl<K: Keys, B: Binding, S: Salts, C> Domains<K, B, S, C> {
@@ -587,7 +630,35 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             bell: None,
             lanes: crate::app::Lanes::default(),
             standing_down: std::sync::atomic::AtomicBool::new(false),
+            advisory: crate::app::cache::AdvisoryCache::new(),
         }
+    }
+
+    /// The records of `domain` after `from`, waiting up to `wait`, at the trusted time
+    /// (OP-158 m.3 (u)); read from the store, without leading the domain.
+    ///
+    /// # Errors
+    /// As [`crate::app::watch::watch`].
+    pub async fn watch(
+        &self,
+        domain: Digest,
+        from: u64,
+        wait: Duration,
+    ) -> Result<crate::app::watch::Watched, CoreError> {
+        let now = self
+            .setup
+            .clock
+            .clone()
+            .now()
+            .await
+            .map_err(|_| CoreError::Unavailable("time"))?;
+        crate::app::watch::watch(&self.setup.app, domain, from, wait, now).await
+    }
+
+    /// What the advisory cache has done (§9.7A.4).
+    #[must_use]
+    pub fn advisory_counts(&self) -> crate::app::cache::Counts {
+        self.advisory.counts()
     }
 
     /// Every domain this leads rings `bell` after a durable commit (OP-156 m.3 (j)).
@@ -1181,25 +1252,36 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             })
         });
         let inc = with_status.as_deref().unwrap_or(inc);
-        // OP-141 m.22 (f)
-        if let Some(t) = &inc.request.consistency {
-            let seen = led
-                .tokens
-                .open(&domain.0, CONSISTENCY, t)
-                .ok()
-                .and_then(|b| <[u8; 8]>::try_from(b.as_slice()).ok())
-                .map(u64::from_be_bytes)
-                .ok_or(CoreError::Protocol("consistency_token"))?;
-            if seen > led.core.head() {
-                return Err(CoreError::Unavailable("consistency"));
-            }
-        }
         // OP-129 m.1
         let now = led
             .clock
             .now()
             .await
             .map_err(|_| CoreError::Unavailable("time"))?;
+        // OP-141 m.22 (f), §9.7A.2 k.3
+        if let Some(t) = &inc.request.consistency {
+            let (seen, issued) = open_consistency(&led.tokens, domain, t)?;
+            if now.saturating_sub(issued) > crate::app::cache::AS_OF_WINDOW_MS {
+                return Err(CoreError::Refused("as-of-expired"));
+            }
+            if seen > led.core.head() {
+                return Err(CoreError::Unavailable("consistency"));
+            }
+        }
+        // §9.7A.4, U61, G51
+        let head = led.core.head();
+        let advisory = crate::app::cache::request_key(inc, subject, head);
+        if let Some(k) = &advisory
+            && let Some(mut hit) = self.advisory.get(k, now)
+        {
+            // §9.5, §9.11, OP-158 m.3 (e)
+            hit.witnessed_through =
+                Some(access_authority_sequencer::witness::board().witnessed(&domain));
+            return Ok(hit);
+        }
+        if advisory.is_none() {
+            self.advisory.advance(head);
+        }
         let mut result = match subject {
             None => led.core.exercise(inc, now).await,
             Some(s) => led.core.eligible(inc, s, now).await,
@@ -1209,11 +1291,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             // §9.5, §9.11, OP-158 m.3 (e)
             r.witnessed_through =
                 Some(access_authority_sequencer::witness::board().witnessed(&domain));
-            r.consistency = Some(
-                led.tokens
-                    .seal(&domain.0, CONSISTENCY, &led.core.head().to_be_bytes())
-                    .map_err(|_| CoreError::Unavailable("token-key"))?,
-            );
+            r.consistency = Some(seal_consistency(&led.tokens, domain, led.core.head(), now)?);
         }
         if let Ok(r) = &mut result {
             self.sign_artefacts(led, domain, r, now).await;
@@ -1248,6 +1326,12 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         }
         self.settle_projection(led, inc, family.as_ref(), &mut result)
             .await;
+        if let (Some(k), Ok(r)) = (advisory, &result)
+            && led.core.head() == head
+        {
+            let until = inc.request.intent.validity.until;
+            self.advisory.put(k, head, now, until, r);
+        }
         if matches!(result, Err(CoreError::Sequencer(_) | CoreError::Store(_))) {
             **guard = None;
         }
@@ -1497,7 +1581,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             Err(e) => return Err(e),
         }
         let head = led.core.head();
-        let pos = self.position(&id, head, as_of).await?;
+        let pos = self.position(&id, (head, now), as_of).await?;
         if cursor(&self.setup.app, &id).await? < pos {
             return Err(CoreError::Unavailable("index"));
         }
@@ -1532,10 +1616,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                 None => lookup.unknown.push(*kid),
             }
         }
-        let consistency = led
-            .tokens
-            .seal(&domain.0, CONSISTENCY, &head.to_be_bytes())
-            .map_err(|_| CoreError::Unavailable("token-key"))?;
+        let consistency = seal_consistency(&led.tokens, domain, head, now)?;
         let signed = match (sign, &self.setup.signer) {
             (true, Some(path)) => {
                 let payload = keys::payload(&lookup);
@@ -1560,12 +1641,26 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
     async fn position(
         &self,
         id: &DomainId,
-        head: u64,
+        (head, now): (u64, u64),
         as_of: keys::AsOf,
     ) -> Result<u64, CoreError> {
+        // §9.7A.2 k.3, OP-158 m.3 (u)
+        let window = crate::app::cache::AS_OF_WINDOW_MS;
+        let expired = CoreError::Refused("as-of-expired");
         Ok(match as_of {
             keys::AsOf::Head => head,
-            keys::AsOf::Position(p) if p <= head => p,
+            keys::AsOf::Position(p) if p == head => p,
+            keys::AsOf::Position(p) if p < head => {
+                let at = read_log(&self.setup.app, id, p, p)
+                    .await?
+                    .first()
+                    .map_or(0, |r| r.recorded_at);
+                if now.saturating_sub(at) > window {
+                    return Err(expired);
+                }
+                p
+            }
+            keys::AsOf::Time(t) if now.saturating_sub(t) > window => return Err(expired),
             keys::AsOf::Position(_) => return Err(CoreError::Unavailable("consistency")),
             keys::AsOf::Time(t) => position_at(&self.setup.app, id, t)
                 .await?
@@ -1603,7 +1698,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             .map_err(|_| CoreError::Unavailable("time"))?;
         let id = DomainId::from_bytes(domain.0);
         let head = led.core.head();
-        let pos = self.position(&id, head, as_of).await?;
+        let pos = self.position(&id, (head, now), as_of).await?;
         let mut lookup = parties::Lookup {
             domain,
             pos,
@@ -1628,10 +1723,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                 None => lookup.unknown.push(*party),
             }
         }
-        let consistency = led
-            .tokens
-            .seal(&domain.0, CONSISTENCY, &head.to_be_bytes())
-            .map_err(|_| CoreError::Unavailable("token-key"))?;
+        let consistency = seal_consistency(&led.tokens, domain, head, now)?;
         let signed = match (sign, &self.setup.signer) {
             (true, Some(path)) => {
                 let payload = parties::payload(&lookup);
@@ -1662,9 +1754,12 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         let Some(led) = guard.as_mut() else {
             return Err(CoreError::Unavailable("leader"));
         };
-        led.tokens
-            .seal(&domain.0, CONSISTENCY, &led.core.head().to_be_bytes())
-            .map_err(|_| CoreError::Unavailable("token-key"))
+        let now = led
+            .clock
+            .now()
+            .await
+            .map_err(|_| CoreError::Unavailable("time"))?;
+        seal_consistency(&led.tokens, domain, led.core.head(), now)
     }
 
     /// The allowed Exercise `exercise` of `domain` (OP-149 m.9): the receipt the decision
@@ -1958,23 +2053,27 @@ pub async fn derive(deriver: &Pool, domain: Digest) -> Result<u64, CoreError> {
     let mut at = cursor(deriver, &id).await?;
     while at < head {
         let to = head.min(at.saturating_add(DERIVE_STEP));
-        let mut rows: BTreeMap<[u8; 16], GrantRow> = BTreeMap::new();
-        let mut changes: Vec<KeyChange> = Vec::new();
+        let mut records = Vec::new();
         for r in read_log(deriver, &id, at.saturating_add(1), to).await? {
             let record = RecordEnvelope::from_bytes(&r.envelope)
                 .map_err(|_| CoreError::Store(StoreError::Corrupt))?;
+            let mut one = crate::index::Pending::default();
             for (key, value) in
                 fold::effects(&record).map_err(|_| CoreError::Store(StoreError::Corrupt))?
             {
                 let Ok(Value::Array(k)) = dcbor::decode(&key, Limits::CEILING) else {
                     continue;
                 };
+                // §9.7A.1, OP-158 m.3 (u)
+                if one.member(&k, value.as_ref()) {
+                    continue;
+                }
                 let (Some(Value::Text(kind)), Some(Value::Bytes(g))) = (k.first(), k.get(1)) else {
                     continue;
                 };
                 // OP-149 m.5
                 if let Some(change) = keys::change(kind, g, value.as_ref(), r.pos, r.recorded_at) {
-                    changes.push(change);
+                    one.keys.push(change);
                     continue;
                 }
                 if kind != meta::kind::GRANT {
@@ -1986,11 +2085,22 @@ pub async fn derive(deriver: &Pool, domain: Digest) -> Result<u64, CoreError> {
                 ) else {
                     continue;
                 };
-                rows.insert(g, grant_row(g, &state, r.pos));
+                one.grants.insert(g, grant_row(g, &state, r.pos));
             }
+            records.push((r.pos, one));
         }
-        let rows: Vec<GrantRow> = rows.into_values().collect();
-        advance_with(deriver, &id, at, to, &rows, &changes).await?;
+        // §9.7A.5
+        let mut from = at;
+        let mut cut = crate::index::batches(records);
+        if let Some(last) = cut.last_mut() {
+            last.0 = to;
+        } else {
+            cut.push((to, crate::index::Pending::default()));
+        }
+        for (end, pending) in cut {
+            crate::index::apply(deriver, &id, (from, end), &pending).await?;
+            from = end;
+        }
         at = to;
     }
     Ok(at)

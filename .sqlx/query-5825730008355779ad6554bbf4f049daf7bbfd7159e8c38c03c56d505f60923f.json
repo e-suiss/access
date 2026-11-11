@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ON (nonce) nonce AS \"nonce!\", actor AS \"actor!\",\n                intent_digest AS \"intent_digest!\", decision_pos AS \"decision_pos!\",\n                outcome AS \"outcome!\", render_digest, tier\n           FROM (SELECT nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier\n                   FROM access.authority_nonce\n                  WHERE domain_id = $1 AND substring(nonce FROM 1 FOR octet_length($2::bytea)) = $2\n                 UNION ALL\n                 SELECT nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier\n                   FROM access.authority_nonce_archive\n                  WHERE domain_id = $1 AND substring(nonce FROM 1 FOR octet_length($2::bytea)) = $2) n\n          ORDER BY nonce, decision_pos DESC LIMIT 16",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "nonce!",
+        "type_info": "Bytea",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "actor!",
+        "type_info": "Bytea",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "intent_digest!",
+        "type_info": "Bytea",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "decision_pos!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "outcome!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "render_digest",
+        "type_info": "Bytea",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "tier",
+        "type_info": "Int2",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "5825730008355779ad6554bbf4f049daf7bbfd7159e8c38c03c56d505f60923f"
+}

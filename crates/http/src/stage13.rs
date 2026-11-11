@@ -13,12 +13,6 @@ pub use crate::stage11::{Method, Planned};
 /// Every declared, not yet served route.
 pub const PLANNED: &[Planned] = &[
     Planned {
-        method: Method::Get,
-        path: "/access/v1/domains/{domain}/watch",
-        operation: "watchDomain",
-        summary: "Changes from `from` (a record position) by long polling, each with witnessed_through; advisory, never a source of ALLOW (OP-158 m.3 (u)).",
-    },
-    Planned {
         method: Method::Post,
         path: "/access/v1/domains/{domain}/divergence",
         operation: "declareDivergence",

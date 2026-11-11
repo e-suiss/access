@@ -119,6 +119,60 @@ pub async fn advance_with(
     rows: &[GrantRow],
     keys: &[KeyChange],
 ) -> Result<(), StoreError> {
+    advance_index(
+        deriver,
+        domain,
+        (from, to),
+        &Batch {
+            grants: rows,
+            keys,
+            ordinals: &[],
+            closure: &[],
+        },
+    )
+    .await
+}
+
+/// The most claim classes one domain's group closure index keeps (§9.7A.5, OP-158 m.3 (u)).
+pub const MAX_CLASSES: u64 = 200;
+
+/// One class of the group closure index (§9.7A.1).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClosureRow {
+    /// Claim class.
+    pub class: String,
+    /// Its members' ordinals as a portable roaring bitmap; `None` past [`MAX_CLASSES`].
+    pub members: Option<Vec<u8>>,
+    /// Position of the record that last changed it.
+    pub pos: u64,
+}
+
+/// What one advance of the derived index writes (CMP-9).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Batch<'a> {
+    /// Grant rows.
+    pub grants: &'a [GrantRow],
+    /// Key index changes, in order.
+    pub keys: &'a [KeyChange],
+    /// New Party ordinals.
+    pub ordinals: &'a [([u8; 16], u32)],
+    /// Group closure classes, as they stand after the batch.
+    pub closure: &'a [ClosureRow],
+}
+
+/// Applies `batch` and moves the cursor from `range.0` to `range.1` in one transaction; a cursor
+/// that moved meanwhile fails it (`Stale`), so what the caller read before stays the base.
+///
+/// # Errors
+/// [`StoreError::Stale`]; [`StoreError::Db`].
+pub async fn advance_index(
+    deriver: &PgPool,
+    domain: &DomainId,
+    (from, to): (u64, u64),
+    batch: &Batch<'_>,
+) -> Result<(), StoreError> {
+    let rows = batch.grants;
+    let keys = batch.keys;
     let mut t = DomainTx::begin(deriver, domain).await?;
     let id = domain.as_bytes().as_slice();
     let moved = if from == 0 {
@@ -164,7 +218,144 @@ pub async fn advance_with(
         .await?;
     }
     apply_keys(&mut t, keys).await?;
+    for (party, ordinal) in batch.ordinals {
+        sqlx::query!(
+            "INSERT INTO access_derived.party_ordinal (domain_id, party_id, ordinal) VALUES ($1, $2, $3)",
+            id,
+            party.as_slice(),
+            i32::try_from(*ordinal).map_err(|_| StoreError::Range)?,
+        )
+        .execute(&mut *t.tx)
+        .await?;
+    }
+    for c in batch.closure {
+        sqlx::query!(
+            "INSERT INTO access_derived.group_closure (domain_id, class, members, over_quota, pos)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (domain_id, class) DO UPDATE
+               SET members = EXCLUDED.members, over_quota = EXCLUDED.over_quota, pos = EXCLUDED.pos",
+            id,
+            c.class,
+            c.members.as_deref(),
+            c.members.is_none(),
+            signed(c.pos)?,
+        )
+        .execute(&mut *t.tx)
+        .await?;
+    }
     t.commit().await
+}
+
+/// The closure rows of `classes` that exist (§9.7A.1).
+///
+/// # Errors
+/// [`StoreError::Db`]; [`StoreError::Corrupt`].
+pub async fn closure_of(
+    pool: &PgPool,
+    domain: &DomainId,
+    classes: &[String],
+) -> Result<Vec<ClosureRow>, StoreError> {
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let rows = sqlx::query!(
+        "SELECT class, members, pos FROM access_derived.group_closure
+          WHERE domain_id = $1 AND class = ANY($2)",
+        domain.as_bytes().as_slice(),
+        classes,
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    rows.into_iter()
+        .map(|r| {
+            Ok(ClosureRow {
+                class: r.class,
+                members: r.members,
+                pos: unsigned(r.pos)?,
+            })
+        })
+        .collect()
+}
+
+/// How many classes the closure index of `domain` keeps, and the next free Party ordinal.
+///
+/// # Errors
+/// [`StoreError::Db`]; [`StoreError::Corrupt`].
+pub async fn closure_extent(pool: &PgPool, domain: &DomainId) -> Result<(u64, u32), StoreError> {
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let id = domain.as_bytes().as_slice();
+    let classes = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "n!" FROM access_derived.group_closure WHERE domain_id = $1"#,
+        id,
+    )
+    .fetch_one(&mut *t.tx)
+    .await?;
+    let next = sqlx::query_scalar!(
+        r#"SELECT coalesce(max(ordinal) + 1, 0) AS "n!" FROM access_derived.party_ordinal WHERE domain_id = $1"#,
+        id,
+    )
+    .fetch_one(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    Ok((
+        unsigned(classes)?,
+        u32::try_from(next).map_err(|_| StoreError::Corrupt)?,
+    ))
+}
+
+/// The ordinals of those `parties` that have one.
+///
+/// # Errors
+/// [`StoreError::Db`]; [`StoreError::Corrupt`].
+pub async fn ordinals_of(
+    pool: &PgPool,
+    domain: &DomainId,
+    parties: &[[u8; 16]],
+) -> Result<Vec<([u8; 16], u32)>, StoreError> {
+    let wanted: Vec<Vec<u8>> = parties.iter().map(|p| p.to_vec()).collect();
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let rows = sqlx::query!(
+        "SELECT party_id, ordinal FROM access_derived.party_ordinal
+          WHERE domain_id = $1 AND party_id = ANY($2)",
+        domain.as_bytes().as_slice(),
+        &wanted,
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    rows.into_iter()
+        .map(|r| {
+            Ok((
+                id16(&r.party_id)?,
+                u32::try_from(r.ordinal).map_err(|_| StoreError::Corrupt)?,
+            ))
+        })
+        .collect()
+}
+
+/// The Parties of `ordinals` (a decoded closure), in ordinal order.
+///
+/// # Errors
+/// [`StoreError::Db`]; [`StoreError::Corrupt`].
+pub async fn parties_of(
+    pool: &PgPool,
+    domain: &DomainId,
+    ordinals: &[u32],
+) -> Result<Vec<[u8; 16]>, StoreError> {
+    let wanted: Vec<i32> = ordinals
+        .iter()
+        .map(|o| i32::try_from(*o).map_err(|_| StoreError::Range))
+        .collect::<Result<_, _>>()?;
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let rows = sqlx::query_scalar!(
+        "SELECT party_id FROM access_derived.party_ordinal
+          WHERE domain_id = $1 AND ordinal = ANY($2) ORDER BY ordinal",
+        domain.as_bytes().as_slice(),
+        &wanted,
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    rows.iter().map(|p| id16(p)).collect()
 }
 
 async fn apply_keys(t: &mut DomainTx, keys: &[KeyChange]) -> Result<(), StoreError> {
