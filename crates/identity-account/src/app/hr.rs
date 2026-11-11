@@ -6,7 +6,9 @@
 //! person's profile key. Its values are stated as the source's HR Claims, the same classes the
 //! SCIM HR extension states (OP-155 m.9 (c)). A Claim selects nobody until the domain accepts the
 //! source's issuer for `subject-selection` (INV-16, TN-95): nothing here writes a Grant. A
-//! person's start and end dates are kept as dates still to apply; the HR job applies them.
+//! person's start and end dates are kept as dates still to apply; the HR job applies them. A
+//! leaver (status `terminated`, or an end date already past) is applied at once in the import's
+//! own transaction, never on the job's next run (IDP-35 (4), OP-157 m.3 (v)).
 //!
 //! A mover's changed values are taken back at once and the new ones wait 24 hours (TN-109): a
 //! new holding episode of a reserved or CT3 rule-shaped Grant never starts on the import itself.
@@ -698,6 +700,20 @@ async fn account(
     Ok((subject, true))
 }
 
+/// The employment status that makes a person a leaver (IDP-35 (4), OP-157 m.3 (v)).
+pub const TERMINATED: &str = "terminated";
+
+/// Whether `r` says the person left: their employment status is [`TERMINATED`].
+#[must_use]
+pub fn terminated(r: &Record) -> bool {
+    r.employment_status
+        .as_deref()
+        .is_some_and(|s| s.trim().eq_ignore_ascii_case(TERMINATED))
+}
+
+/// Writes the dates `after` brings: a new start date; a leaver's end at once, at the earlier of
+/// its end date and `now`, which the import applies in its own transaction; a changed or dropped
+/// future end date for the HR job.
 async fn dates(
     tx: &mut PgTx,
     (source, person, subject): (&str, &[u8; 32], [u8; 16]),
@@ -714,7 +730,12 @@ async fn dates(
             .await?;
     }
     let old_end = before.and_then(|b| b.end_ms);
-    if old_end != after.end_ms {
+    // IDP-35 (4), OP-157 m.3 (v)
+    if terminated(after) && !before.is_some_and(terminated) {
+        let at = after.end_ms.map_or(now, |e| e.min(now));
+        tx.0.put_hr_due((source, person, "end"), subject, at, "pending")
+            .await?;
+    } else if old_end != after.end_ms {
         let open = tx.0.hr_due_of(source, person, "end").await?;
         match after.end_ms {
             Some(at) => {
@@ -1038,6 +1059,23 @@ mod tests {
         assert_eq!(parse_csv(""), Err(Refused::Empty));
         let big = "x".repeat(MAX_CSV_BYTES + 1);
         assert_eq!(parse_csv(&big), Err(Refused::TooLarge));
+    }
+
+    // IDP-35 (4), OP-157 m.3 (v)
+    #[test]
+    fn a_terminated_status_makes_a_leaver_whatever_its_case() {
+        let mut r = Record {
+            employee_id: String::from("E1"),
+            email: String::from("ada@acme.example"),
+            ..Record::default()
+        };
+        assert!(!terminated(&r));
+        for s in ["terminated", " Terminated ", "TERMINATED"] {
+            r.employment_status = Some(String::from(s));
+            assert!(terminated(&r), "{s}");
+        }
+        r.employment_status = Some(String::from("on_leave"));
+        assert!(!terminated(&r));
     }
 
     // IDP-35, TN-109

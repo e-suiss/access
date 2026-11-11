@@ -8,7 +8,11 @@
 //! - on the start date a `staged` account becomes active and gets a one-use passkey setup
 //!   invitation for 7 days through Relay;
 //! - on the end date the account is suspended, its sessions end at a new `session_epoch` with
-//!   the CAEP `session-revoked`, and each agent it sponsored alone is suspended (AG-41).
+//!   the CAEP `session-revoked`, and each agent it sponsored alone is suspended (AG-41);
+//! - a leaver (status `terminated`, or an end date already past) is ended in the import's own
+//!   transaction, without waiting for the job (IDP-35 (4), OP-157 m.3 (v)). Nothing of the
+//!   person's record is deleted: the suspension's time starts the retention class's clock and
+//!   the sealed record stays until the profile key is shredded (TN-H5).
 //!
 //! Nothing here writes a Grant or any authority state: an HR Claim selects holders only through
 //! the domain's own `subject-selection` Acceptance of the source's issuer (INV-16).
@@ -206,6 +210,14 @@ pub(crate) async fn import(
             access_identity_account::AccountError::IdentifierTaken => AdminError::Conflict,
             other => AdminError::Unavailable(format!("hr import: {other}")),
         })?;
+    // IDP-35 (4), AG-41, OP-157 m.3 (v)
+    let named = Named {
+        realm: realm_id,
+        ids,
+    };
+    leavers(t, (&named, &who), &i.source, now)
+        .await
+        .map_err(|e| AdminError::Unavailable(e.0))?;
     t.1 = None;
     Ok(out)
 }
@@ -355,6 +367,82 @@ async fn ended(
         .await
         .map_err(down)?;
     Ok(true)
+}
+
+/// Records that `due` came: its newest version `applied` or `void`, the `hr.record_applied`
+/// audit row and the `hr.record_due` event, in `t` with the change it records.
+async fn dealt(
+    t: &mut PgTx,
+    (named, who): (&Named<'_>, &Actor<'_>),
+    due: &DueRow,
+    applied: bool,
+    now: u64,
+) -> Result<(), Unavailable> {
+    let change = if due.change == "start" {
+        DueChange::Start
+    } else {
+        DueChange::End
+    };
+    t.0.put_hr_due(
+        (&due.source, &due.person, &due.change),
+        due.subject,
+        due.due_ms,
+        if applied { "applied" } else { "void" },
+    )
+    .await
+    .map_err(down)?;
+    let account = named.external(due.subject).map_err(account_down)?;
+    t.audit(&access_store::audit::AuditEvent {
+        event_type: "hr.record_applied",
+        actor: who.actor,
+        target: &account,
+        correlation: who.correlation,
+    })
+    .await
+    .map_err(account_down)?;
+    let id = access_crypto::random::bytes::<32>().map_err(|_| down("random"))?;
+    let event = IdentityEvent::hr_record_due(
+        id,
+        named.realm.as_bytes(),
+        (&due.source, &account, change),
+        due.due_ms,
+        now,
+    );
+    access_identity_events::app::emit(&mut t.0, &event)
+        .await
+        .map_err(down)
+}
+
+/// Applies the end dates of `source` that came by `now` inside an import's own transaction: a
+/// leaver is suspended at once, its sessions end with the CAEP `session-revoked`, and each agent
+/// it sponsored alone is suspended (IDP-35 (4), AG-41, OP-157 m.3 (v)). Returns how many accounts
+/// were ended.
+///
+/// # Errors
+/// [`Unavailable`]; the caller rolls the import back.
+pub(crate) async fn leavers(
+    t: &mut PgTx,
+    (named, who): (&Named<'_>, &Actor<'_>),
+    source: &str,
+    now: u64,
+) -> Result<u64, Unavailable> {
+    let mut out = 0_u64;
+    for due in t.0.hr_due_now(now, BATCH).await.map_err(down)? {
+        if due.change != "end" || due.source != source {
+            continue;
+        }
+        let status = t
+            .subject(due.subject, true)
+            .await
+            .map_err(account_down)?
+            .as_ref()
+            .and_then(|r| AccountStatus::parse(&r.status))
+            .ok_or_else(|| Unavailable(String::from("hr job: subject")))?;
+        let applied = ended(t, (named, who), (named.realm, due.subject), status, now).await?;
+        dealt(t, (named, who), &due, applied, now).await?;
+        out = out.saturating_add(u64::from(applied));
+    }
+    Ok(out)
 }
 
 /// The HR job.
@@ -579,7 +667,7 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
             actor: JOB_ACTOR,
             correlation: &correlation,
         };
-        let (change, applied) = if due.change == "start" {
+        let applied = if due.change == "start" {
             let applied = live
                 && matches!(
                     status,
@@ -589,39 +677,11 @@ impl<I: ClaimIngest, V: Vaults> HrJob<'_, I, V> {
                 started(&mut t, (&named, &who), subject, status).await?;
                 self.invite(&mut t, (tenant, realm), &g, due, now).await?;
             }
-            (DueChange::Start, applied)
+            applied
         } else {
-            let applied = ended(&mut t, (&named, &who), (realm, subject), status, now).await?;
-            (DueChange::End, applied)
+            ended(&mut t, (&named, &who), (realm, subject), status, now).await?
         };
-        t.0.put_hr_due(
-            (&due.source, &due.person, &due.change),
-            subject,
-            due.due_ms,
-            if applied { "applied" } else { "void" },
-        )
-        .await
-        .map_err(down)?;
-        let account = named.external(subject).map_err(account_down)?;
-        t.audit(&access_store::audit::AuditEvent {
-            event_type: "hr.record_applied",
-            actor: JOB_ACTOR,
-            target: &account,
-            correlation: &correlation,
-        })
-        .await
-        .map_err(account_down)?;
-        let id = access_crypto::random::bytes::<32>().map_err(|_| down("random"))?;
-        let event = IdentityEvent::hr_record_due(
-            id,
-            realm.as_bytes(),
-            (&due.source, &account, change),
-            due.due_ms,
-            now,
-        );
-        access_identity_events::app::emit(&mut t.0, &event)
-            .await
-            .map_err(down)?;
+        dealt(&mut t, (&named, &who), due, applied, now).await?;
         t.0.commit().await.map_err(down)?;
         Ok(applied)
     }
