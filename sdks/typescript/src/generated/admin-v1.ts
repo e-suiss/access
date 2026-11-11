@@ -4085,7 +4085,7 @@ export interface components {
             causal_binding: boolean;
             /** @default false */
             acknowledge_no_recovery: boolean;
-            /** @description The founders' recovery keys, by thumbprint only: the keys stay on their own devices or offline, never with the provider (§13.6, SEC20). Five or more keys build a 3-of-n entry, three or four a 2-of-n one; every holder is a root Party, and a sole root cannot be recovered. Without them the Genesis says `recovery: not_available`. */
+            /** @description The founders' recovery keys, by thumbprint only: the keys stay on their own devices or offline, never with the provider (§13.6, SEC20). Five or more keys build a 3-of-n entry, three or four a 2-of-n one; every holder is a root Party; a sole root recovers with its own keys. Without them the Genesis says `recovery: not_available`. */
             recovery?: {
                 /**
                  * @default device
@@ -4136,7 +4136,7 @@ export interface components {
                 k?: number;
                 n?: number;
             };
-            /** @description Why recovery is not available: `no-recovery-keys`, `sole-root`, `too-few-recovery-keys`, `recovery-holder-not-root` or `duplicate-recovery-key`. */
+            /** @description Why recovery is not available: `no-recovery-keys`, `too-few-recovery-keys`, `recovery-holder-not-root` or `duplicate-recovery-key`. */
             recovery_reason?: string;
         };
         /** @description The `idp.platform.*` Exercise the write compiled to (TN-110), what it created, and for a realm its Genesis. */
