@@ -44,7 +44,7 @@ fn adds_meta(old: &AuthoritySet, new: &AuthoritySet) -> bool {
 /// Whether `payload` makes a new admin Grant, which the realm's flag must allow (OP-157 m.3 (t)):
 /// a Grant naming a meta-action, or an amendment adding one to `current`. A reserved break-glass
 /// Grant is its own pre-issued exception (G29), a narrowing or an unchanged admin Grant stays
-/// (narrowing does not spread back), and every other payload is out of scope.
+/// (narrowing does not spread back), and any other payload is unaffected.
 #[must_use]
 pub fn needs_open(payload: &Payload, current: Option<&GrantState>) -> bool {
     match payload {
