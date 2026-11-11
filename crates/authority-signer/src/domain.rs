@@ -76,19 +76,27 @@ pub fn declaration(record: &Key, alg: Algorithm, key: PublicKey) -> OperationalK
     }
 }
 
-/// The metadata for `operational_keys`, issued at `issued_at`.
+/// The metadata for `operational_keys`, issued at `issued_at`: the current `binding` and the
+/// `superseded` bindings of earlier handovers and re-anchors (HO-8, RB-6).
 #[must_use]
 pub fn metadata(
     template: &Template,
     binding: &BindingKey,
+    superseded: &[BindingKey],
     operational_keys: Vec<OperationalKey>,
     issued_at: u64,
 ) -> DomainMetadata {
+    let mut bindings: BTreeMap<[u8; 32], BindingKey> = superseded
+        .iter()
+        .filter(|b| b.superseded.is_some() && b.kid != binding.kid)
+        .map(|b| (b.kid, b.clone()))
+        .collect();
+    bindings.insert(binding.kid, binding.clone());
     DomainMetadata {
         domain: template.domain,
         genesis: template.genesis,
         issued_at,
-        binding: BTreeMap::from([(binding.kid, binding.clone())]),
+        binding: bindings,
         algorithms: template.algorithms.clone(),
         operational_window_max_ms: template.operational_window_max_ms,
         operational_keys,

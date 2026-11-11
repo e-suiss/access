@@ -38,6 +38,24 @@ pub trait Bindings {
         &mut self,
         domain: &access_kernel::digest::Digest,
     ) -> Result<Box<dyn Signer + Send>, SignError>;
+
+    /// Generation `generation` of `domain`'s binding key, created when missing; generation 0 is
+    /// [`Bindings::binding`]. A binding re-anchor moves the domain to the next one (OP-60,
+    /// §16.6.1 RB-2, OP-158 m.3 (l)).
+    ///
+    /// # Errors
+    /// [`SignError::Key`] when the store holds no such generation and cannot create it.
+    fn generation(
+        &mut self,
+        domain: &access_kernel::digest::Digest,
+        generation: u64,
+    ) -> Result<Box<dyn Signer + Send>, SignError> {
+        if generation == 0 {
+            self.binding(domain)
+        } else {
+            Err(SignError::Key)
+        }
+    }
 }
 
 /// Why the vault failed.

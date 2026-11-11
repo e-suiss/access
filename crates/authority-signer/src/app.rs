@@ -65,6 +65,8 @@ pub struct Keyring {
     entries: Vec<Entry>,
     metadata: Option<Vec<u8>>,
     genesis: Option<Vec<u8>>,
+    generation: u64,
+    superseded: Vec<BindingKey>,
 }
 
 /// Plan passes per round: rotate and generate, publish what was generated, activate a founding
@@ -84,6 +86,107 @@ impl Keyring {
             entries: Vec::new(),
             metadata: None,
             genesis: None,
+            generation: 0,
+            superseded: Vec::new(),
+        }
+    }
+
+    /// This keyring under binding generation `generation`, with the `superseded` bindings of
+    /// earlier handovers and re-anchors (OP-158 m.3 (l)).
+    #[must_use]
+    pub fn with_bindings(mut self, generation: u64, superseded: Vec<BindingKey>) -> Self {
+        self.generation = generation;
+        self.superseded = superseded;
+        self
+    }
+
+    /// The binding generation that signs now.
+    #[must_use]
+    pub const fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// The bindings earlier handovers and re-anchors superseded.
+    #[must_use]
+    pub fn superseded(&self) -> &[BindingKey] {
+        &self.superseded
+    }
+
+    /// Signs a handover statement with the current binding (§16.6 HO-6, RB-4).
+    ///
+    /// # Errors
+    /// [`SignerError::Usage`] for any other content type; the binding key's failure.
+    pub fn sign_statement(
+        &self,
+        content_type: &str,
+        payload: &[u8],
+    ) -> Result<Vec<u8>, SignerError> {
+        if !crate::handover::STATEMENTS.contains(&content_type) {
+            return Err(SignerError::Usage);
+        }
+        self.binding_sign(content_type, payload)
+    }
+
+    /// RB-5, RB-6: the keyring of the next binding generation `next`, signed by
+    /// `binding_signer`: this binding is superseded at `at`, the operational keys start anew
+    /// under the new binding, its Genesis statement is signed at `now` and the metadata
+    /// declares `transcript` as the re-anchor's ceremony transcript (OP-157 m.7 (i)). This
+    /// keyring's keys sign nothing more.
+    ///
+    /// # Errors
+    /// [`SignerError`] when the new binding cannot sign.
+    pub fn rebound(
+        &self,
+        binding_signer: Box<dyn Signer + Send>,
+        next: u64,
+        at: access_kernel::verify::key_scope::Superseded,
+        transcript: access_kernel::digest::Digest,
+        factory: &mut dyn KeyFactory,
+        now: u64,
+    ) -> Result<Self, SignerError> {
+        let mut template = self.template.clone();
+        template.declared.ceremony_transcript = Some(transcript);
+        let mut old = self.declared_binding.clone();
+        old.superseded = Some(at);
+        let mut superseded = self.superseded.clone();
+        superseded.push(old);
+        let mut ring = Self::new(template, binding_signer, self.policy)
+            .with_bindings(next, superseded);
+        if ring.declared_binding.kid == self.declared_binding.kid {
+            return Err(SignerError::Usage);
+        }
+        ring.genesis(now)?;
+        ring.tick(factory, now, now)?;
+        Ok(ring)
+    }
+
+    /// HO-8: publishes the outgoing provider's bindings, each superseded, beside this one and
+    /// signs the metadata again at `now`; on a failure nothing changes.
+    ///
+    /// # Errors
+    /// [`SignerError::Usage`] for a key that is not superseded or is this binding.
+    pub fn supersede(&mut self, keys: Vec<BindingKey>, now: u64) -> Result<(), SignerError> {
+        if keys
+            .iter()
+            .any(|k| k.superseded.is_none() || k.kid == self.declared_binding.kid)
+        {
+            return Err(SignerError::Usage);
+        }
+        let before = self.superseded.clone();
+        for k in keys {
+            if !self.superseded.iter().any(|s| s.kid == k.kid) {
+                self.superseded.push(k);
+            }
+        }
+        match self.sign_metadata(now) {
+            Ok(m) => {
+                self.metadata = Some(m);
+                Ok(())
+            }
+            Err(e) => {
+                self.superseded = before;
+                Err(e)
+            }
         }
     }
 
@@ -213,7 +316,13 @@ impl Keyring {
             })
             .map(|e| e.declared.clone())
             .collect();
-        let m = metadata(&self.template, &self.declared_binding, published, now);
+        let m = metadata(
+            &self.template,
+            &self.declared_binding,
+            &self.superseded,
+            published,
+            now,
+        );
         let bytes = m.to_bytes().map_err(|_| SignerError::Encode)?;
         self.binding_sign(METADATA_CONTENT_TYPE, &bytes)
     }

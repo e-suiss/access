@@ -119,6 +119,18 @@ pub fn binding_label(domain: &Digest) -> String {
     format!("access/binding/{}", hex(domain))
 }
 
+/// The HSM label of generation `generation` of a domain's binding key: generation 0 is
+/// [`binding_label`], each re-anchor's is versioned `access/binding/<domain>/<generation>`
+/// (OP-158 m.3 (l)).
+#[must_use]
+pub fn binding_label_at(domain: &Digest, generation: u64) -> String {
+    if generation == 0 {
+        binding_label(domain)
+    } else {
+        format!("access/binding/{}/{generation}", hex(domain))
+    }
+}
+
 /// Binding keys in the HSM, one per domain; a domain's first `open` creates it (CR-29).
 pub struct HsmBindings {
     store: suiss_crypto::pkcs11::KeyStore,
@@ -140,6 +152,26 @@ impl Bindings for HsmBindings {
             Err(_) => self
                 .store
                 .generate_ed25519(&label)
+                .map_err(|_| SignError::Key)?,
+        };
+        Ok(Box::new(signer))
+    }
+
+    // OP-158 m.9, CR-30
+    fn generation(
+        &mut self,
+        domain: &Digest,
+        generation: u64,
+    ) -> Result<Box<dyn Signer + Send>, SignError> {
+        if generation == 0 {
+            return self.binding(domain);
+        }
+        let label = binding_label_at(domain, generation);
+        let signer = match self.store.signer(&label) {
+            Ok(s) => s,
+            Err(_) => self
+                .store
+                .generate_cloneable(&label, true)
                 .map_err(|_| SignError::Key)?,
         };
         Ok(Box::new(signer))

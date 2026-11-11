@@ -7,6 +7,7 @@ pub mod app;
 pub mod ceremony;
 pub mod domain;
 pub mod genesis;
+pub mod handover;
 /// CR-51 m.3: the known-answer tests, shared with the identity signer (CMP-22b).
 pub use access_crypto::kat;
 pub mod ports;

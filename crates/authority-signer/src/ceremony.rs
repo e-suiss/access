@@ -901,6 +901,21 @@ impl<B: Bindings> Bindings for Quorate<B> {
             gate: self.gate.clone(),
         }))
     }
+
+    fn generation(
+        &mut self,
+        domain: &Digest,
+        generation: u64,
+    ) -> Result<Box<dyn Signer + Send>, SignError> {
+        if !self.gate.open() {
+            return Err(SignError::Key);
+        }
+        let inner = self.inner.generation(domain, generation)?;
+        Ok(Box::new(Gated {
+            inner,
+            gate: self.gate.clone(),
+        }))
+    }
 }
 
 #[cfg(test)]

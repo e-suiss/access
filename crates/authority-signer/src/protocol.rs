@@ -64,6 +64,47 @@ pub enum Request {
         /// The declarations.
         declared: Box<Declarations>,
     },
+    /// The binding key of an open domain, or with `next` the key of its next binding
+    /// generation, created in the HSM when missing (OP-60, RB-2, OP-158 m.3 (l)).
+    Binding {
+        /// Domain.
+        domain: Digest,
+        /// The next generation rather than the current one.
+        next: bool,
+    },
+    /// Signs a handover statement with the current binding, or with `next` the next
+    /// generation's (HO-6, RB-4).
+    Statement {
+        /// Domain.
+        domain: Digest,
+        /// The next generation rather than the current one.
+        next: bool,
+        /// One of the handover statement content types.
+        content_type: String,
+        /// The statement.
+        payload: Vec<u8>,
+    },
+    /// RB-5, RB-6: the domain moves to its next binding generation; the current binding is
+    /// superseded at `at` (`C_{h+1}`) citing `cited` (`C_k`), and `transcript` is the
+    /// re-anchor's ceremony transcript digest.
+    Rebind {
+        /// Domain.
+        domain: Digest,
+        /// `C_{h+1}`'s root.
+        at: Digest,
+        /// `C_k`'s root.
+        cited: Digest,
+        /// The transcript digest.
+        transcript: Digest,
+    },
+    /// HO-8: the outgoing provider's binding keys, each superseded, are published beside this
+    /// install's binding.
+    Supersede {
+        /// Domain.
+        domain: Digest,
+        /// The superseded binding keys.
+        keys: Vec<access_kernel::verify::key_scope::BindingKey>,
+    },
 }
 
 /// The signer's answer.
@@ -96,6 +137,10 @@ pub enum Response {
         /// Binding-signed excerpt of the key that signed it.
         excerpt: Vec<u8>,
     },
+    /// A binding key.
+    Binding(access_kernel::verify::key_scope::BindingKey),
+    /// A binding-signed handover statement.
+    Statement(Vec<u8>),
     /// A refusal, by stable code.
     Error(String),
 }
@@ -155,6 +200,13 @@ fn bytes(v: Option<&Value>) -> Result<Vec<u8>, FrameError> {
 fn uint(v: Option<&Value>) -> Result<u64, FrameError> {
     match v {
         Some(Value::Unsigned(n)) => Ok(*n),
+        _ => Err(FrameError::Malformed),
+    }
+}
+
+fn flag(v: Option<&Value>) -> Result<bool, FrameError> {
+    match v {
+        Some(Value::Bool(b)) => Ok(*b),
         _ => Err(FrameError::Malformed),
     }
 }
@@ -239,6 +291,10 @@ fn declared_value(d: &Declarations) -> Value {
             ),
         ));
     }
+    // OP-157 m.7 (i), OP-158 m.3 (l)
+    if let Some(t) = &d.ceremony_transcript {
+        entries.push(("ceremony_transcript", t.to_value()));
+    }
     if let Some(m) = d.mmd {
         entries.push((
             "mmd",
@@ -298,6 +354,9 @@ fn declared_of(v: Option<&Value>) -> Result<Declarations, FrameError> {
                 matches!(r.get("independent"), Some(Value::Bool(true))),
             ));
         }
+    }
+    if let Some(t) = v.get("ceremony_transcript") {
+        d.ceremony_transcript = Some(digest(Some(t))?);
     }
     if let Some(m) = v.get("mmd") {
         d.mmd = Some(Mmd::new(
@@ -396,10 +455,93 @@ impl Request {
                     ("declared", declared_value(declared)),
                 ]),
             )]),
+            Self::Binding { domain, next } => map(vec![(
+                "binding",
+                map(vec![
+                    ("domain", domain.to_value()),
+                    ("next", Value::Bool(*next)),
+                ]),
+            )]),
+            Self::Statement {
+                domain,
+                next,
+                content_type,
+                payload,
+            } => map(vec![(
+                "statement",
+                map(vec![
+                    ("domain", domain.to_value()),
+                    ("next", Value::Bool(*next)),
+                    ("content_type", Value::text(content_type)),
+                    ("payload", Value::Bytes(payload.clone())),
+                ]),
+            )]),
+            Self::Rebind {
+                domain,
+                at,
+                cited,
+                transcript,
+            } => map(vec![(
+                "rebind",
+                map(vec![
+                    ("domain", domain.to_value()),
+                    ("at", at.to_value()),
+                    ("cited", cited.to_value()),
+                    ("transcript", transcript.to_value()),
+                ]),
+            )]),
+            Self::Supersede { domain, keys } => map(vec![(
+                "supersede",
+                map(vec![
+                    ("domain", domain.to_value()),
+                    (
+                        "keys",
+                        Value::Array(keys.iter().map(Canonical::to_value).collect()),
+                    ),
+                ]),
+            )]),
         }
     }
 
     fn from_value(v: &Value) -> Result<Self, FrameError> {
+        // OP-158 m.3 (l)
+        if let Some(b) = v.get("binding") {
+            return Ok(Self::Binding {
+                domain: digest(b.get("domain"))?,
+                next: flag(b.get("next"))?,
+            });
+        }
+        if let Some(b) = v.get("statement") {
+            return Ok(Self::Statement {
+                domain: digest(b.get("domain"))?,
+                next: flag(b.get("next"))?,
+                content_type: text(b.get("content_type"))?,
+                payload: bytes(b.get("payload"))?,
+            });
+        }
+        if let Some(b) = v.get("rebind") {
+            return Ok(Self::Rebind {
+                domain: digest(b.get("domain"))?,
+                at: digest(b.get("at"))?,
+                cited: digest(b.get("cited"))?,
+                transcript: digest(b.get("transcript"))?,
+            });
+        }
+        if let Some(b) = v.get("supersede") {
+            let Some(Value::Array(keys)) = b.get("keys") else {
+                return Err(FrameError::Malformed);
+            };
+            return Ok(Self::Supersede {
+                domain: digest(b.get("domain"))?,
+                keys: keys
+                    .iter()
+                    .map(|k| {
+                        access_kernel::verify::key_scope::BindingKey::from_value(k)
+                            .map_err(|_| FrameError::Malformed)
+                    })
+                    .collect::<Result<_, _>>()?,
+            });
+        }
         if let Some(d) = v.get("declare") {
             return Ok(Self::Declare {
                 domain: digest(d.get("domain"))?,
@@ -472,6 +614,8 @@ impl Response {
                     ("excerpt", Value::Bytes(excerpt.clone())),
                 ]),
             )]),
+            Self::Binding(b) => map(vec![("binding", b.to_value())]),
+            Self::Statement(b) => map(vec![("statement", Value::Bytes(b.clone()))]),
             Self::Error(code) => map(vec![("error", Value::text(code))]),
         }
     }
@@ -503,6 +647,15 @@ impl Response {
                 jws: text(t.get("jws"))?,
                 excerpt: bytes(t.get("excerpt"))?,
             });
+        }
+        if let Some(b) = v.get("binding") {
+            return Ok(Self::Binding(
+                access_kernel::verify::key_scope::BindingKey::from_value(b)
+                    .map_err(|_| FrameError::Malformed)?,
+            ));
+        }
+        if let Some(b) = v.get("statement") {
+            return Ok(Self::Statement(bytes(Some(b))?));
         }
         Ok(Self::Error(text(v.get("error"))?))
     }

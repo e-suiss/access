@@ -50,6 +50,7 @@ pub struct Service<F, B, V> {
     bindings: B,
     vault: V,
     policy: Policy,
+    next: BTreeMap<Digest, (u64, Box<dyn suiss_crypto::signer::Signer + Send>)>,
 }
 
 const STATES: [(&str, State); 5] = [
@@ -130,22 +131,44 @@ fn saved_of(v: &Value) -> Option<Saved> {
     })
 }
 
-/// A domain's vault entry: its template (as an `open` request), its keys and its signed
-/// Genesis statement.
-fn stored(template: &Template, saved: &[Saved], genesis: Option<&[u8]>) -> Option<Vec<u8>> {
+/// A domain's vault entry: its template (as an `open` request), its keys, its signed Genesis
+/// statement, its binding generation and the bindings it superseded (OP-158 m.3 (l)).
+fn stored(template: &Template, ring: &Keyring) -> Option<Vec<u8>> {
     let open = crate::protocol::encode_request(&Request::Open(Box::new(template.clone()))).ok()?;
+    let saved = ring.saved();
     let v = map(vec![
         ("open", Some(Value::Bytes(open.get(4..)?.to_vec()))),
         (
             "keys",
             Some(Value::Array(saved.iter().map(saved_value).collect())),
         ),
-        ("genesis", genesis.map(|g| Value::Bytes(g.to_vec()))),
+        (
+            "genesis",
+            ring.genesis_signed().map(|g| Value::Bytes(g.to_vec())),
+        ),
+        (
+            "generation",
+            (ring.generation() > 0).then(|| Value::Unsigned(ring.generation())),
+        ),
+        (
+            "superseded",
+            (!ring.superseded().is_empty()).then(|| {
+                Value::Array(ring.superseded().iter().map(Canonical::to_value).collect())
+            }),
+        ),
     ]);
     dcbor::encode(&v, Limits::CEILING).ok()
 }
 
-type Restored = (Template, Vec<Saved>, Option<Vec<u8>>);
+/// The template, keys, Genesis statement, binding generation and superseded bindings a vault
+/// entry holds.
+struct Restored {
+    template: Template,
+    saved: Vec<Saved>,
+    genesis: Option<Vec<u8>>,
+    generation: u64,
+    superseded: Vec<access_kernel::verify::key_scope::BindingKey>,
+}
 
 fn restored(b: &[u8]) -> Option<Restored> {
     let v = dcbor::decode(b, Limits::CEILING).ok()?;
@@ -155,11 +178,21 @@ fn restored(b: &[u8]) -> Option<Restored> {
     let Some(Value::Array(keys)) = v.get("keys") else {
         return None;
     };
-    Some((
-        *t,
-        keys.iter().filter_map(saved_of).collect(),
-        bytes(v.get("genesis")),
-    ))
+    let superseded = match v.get("superseded") {
+        None => Vec::new(),
+        Some(Value::Array(a)) => a
+            .iter()
+            .map(|k| access_kernel::verify::key_scope::BindingKey::from_value(k).ok())
+            .collect::<Option<Vec<_>>>()?,
+        Some(_) => return None,
+    };
+    Some(Restored {
+        template: *t,
+        saved: keys.iter().filter_map(saved_of).collect(),
+        genesis: bytes(v.get("genesis")),
+        generation: uint(v.get("generation")).unwrap_or(0),
+        superseded,
+    })
 }
 
 impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
@@ -181,26 +214,31 @@ impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
             bindings,
             vault,
             policy,
+            next: BTreeMap::new(),
         };
-        for (template, saved, genesis) in all.iter().filter_map(|b| restored(b)) {
-            let Ok(binding) = s.bindings.binding(&template.domain) else {
+        for r in all.iter().filter_map(|b| restored(b)) {
+            let Ok(binding) = s.bindings.generation(&r.template.domain, r.generation) else {
                 continue;
             };
-            if let Ok(mut ring) = Keyring::restore(
-                template.clone(),
+            if let Ok(ring) = Keyring::restore(
+                r.template.clone(),
                 binding,
                 s.policy,
-                saved,
+                r.saved,
                 &mut s.factory,
                 now,
             ) {
-                match genesis {
+                let mut ring = ring.with_bindings(r.generation, r.superseded);
+                if ring.supersede(Vec::new(), now).is_err() {
+                    continue;
+                }
+                match r.genesis {
                     Some(g) => ring.keep_genesis(g),
                     None => {
                         let _ = ring.genesis(now);
                     }
                 }
-                s.rings.insert(template.domain, (template, ring));
+                s.rings.insert(r.template.domain, (r.template, ring));
             }
         }
         Ok(s)
@@ -210,8 +248,128 @@ impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
         let Some((t, ring)) = self.rings.get(domain) else {
             return false;
         };
-        stored(t, &ring.saved(), ring.genesis_signed())
-            .is_some_and(|b| self.vault.put(domain, &b).is_ok())
+        stored(t, ring).is_some_and(|b| self.vault.put(domain, &b).is_ok())
+    }
+
+    /// The next binding generation of `domain`, created in the store when missing (RB-2).
+    fn next_binding(
+        &mut self,
+        domain: &Digest,
+    ) -> Option<&(u64, Box<dyn suiss_crypto::signer::Signer + Send>)> {
+        let generation = self.rings.get(domain)?.1.generation().checked_add(1)?;
+        if self.next.get(domain).is_none_or(|(g, _)| *g != generation) {
+            let signer = self.bindings.generation(domain, generation).ok()?;
+            self.next.insert(*domain, (generation, signer));
+        }
+        self.next.get(domain)
+    }
+
+    // OP-158 m.3 (l), OP-60, §16.6 HO-6, HO-8, §16.6.1 RB-2, RB-4, RB-6
+    fn binding_request(&mut self, request: Request, now: u64) -> Response {
+        let unknown = || Response::Error(String::from("signer-unknown-domain"));
+        match request {
+            Request::Binding { domain, next } => {
+                if next {
+                    return self.next_binding(&domain).map_or_else(
+                        || Response::Error(String::from("signer-binding")),
+                        |(_, signer)| {
+                            Response::Binding(crate::domain::binding(
+                                signer.algorithm(),
+                                signer.public_key(),
+                            ))
+                        },
+                    );
+                }
+                self.rings
+                    .get(&domain)
+                    .map_or_else(unknown, |(_, r)| Response::Binding(r.binding_key().clone()))
+            }
+            Request::Statement {
+                domain,
+                next,
+                content_type,
+                payload,
+            } => {
+                if !crate::handover::STATEMENTS.contains(&content_type.as_str()) {
+                    return Response::Error(String::from("signer-usage"));
+                }
+                if !self.rings.contains_key(&domain) {
+                    return unknown();
+                }
+                if next {
+                    let Some((_, signer)) = self.next_binding(&domain) else {
+                        return Response::Error(String::from("signer-binding"));
+                    };
+                    let kid = access_kernel::verify::key_scope::thumbprint(&signer.public_key());
+                    return suiss_crypto::signer::sign_sign1(
+                        signer.as_ref(),
+                        kid,
+                        &content_type,
+                        &payload,
+                    )
+                    .map_or_else(
+                        |_| Response::Error(String::from("signer-binding")),
+                        Response::Statement,
+                    );
+                }
+                self.rings.get(&domain).map_or_else(unknown, |(_, r)| {
+                    r.sign_statement(&content_type, &payload).map_or_else(
+                        |e| Response::Error(String::from(e.code())),
+                        Response::Statement,
+                    )
+                })
+            }
+            Request::Rebind {
+                domain,
+                at,
+                cited,
+                transcript,
+            } => {
+                if self.next_binding(&domain).is_none() {
+                    return Response::Error(String::from("signer-binding"));
+                }
+                let Some((generation, signer)) = self.next.remove(&domain) else {
+                    return Response::Error(String::from("signer-binding"));
+                };
+                let Some((_, ring)) = self.rings.get(&domain) else {
+                    return unknown();
+                };
+                let superseded = access_kernel::verify::key_scope::Superseded { at, cited };
+                match ring.rebound(
+                    signer,
+                    generation,
+                    superseded,
+                    transcript,
+                    &mut self.factory,
+                    now,
+                ) {
+                    Ok(ring) => {
+                        let template = ring.template().clone();
+                        self.rings.insert(domain, (template, ring));
+                        if self.persist(&domain) {
+                            Response::Opened
+                        } else {
+                            Response::Error(String::from("signer-binding"))
+                        }
+                    }
+                    Err(e) => Response::Error(String::from(e.code())),
+                }
+            }
+            Request::Supersede { domain, keys } => {
+                let Some((_, ring)) = self.rings.get_mut(&domain) else {
+                    return unknown();
+                };
+                if let Err(e) = ring.supersede(keys, now) {
+                    return Response::Error(String::from(e.code()));
+                }
+                if self.persist(&domain) {
+                    Response::Opened
+                } else {
+                    Response::Error(String::from("signer-binding"))
+                }
+            }
+            _ => Response::Error(String::from("signer-usage")),
+        }
     }
 
     /// Runs the schedule of every domain at `now` and keeps the vault current; returns the
@@ -251,6 +409,10 @@ impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
     /// Answers one request at `now`.
     pub fn handle(&mut self, request: Request, now: u64) -> Response {
         match request {
+            r @ (Request::Binding { .. }
+            | Request::Statement { .. }
+            | Request::Rebind { .. }
+            | Request::Supersede { .. }) => self.binding_request(r, now),
             Request::Open(template) => {
                 let template = *template;
                 let domain = template.domain;
