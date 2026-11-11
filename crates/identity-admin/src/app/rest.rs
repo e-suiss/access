@@ -3402,10 +3402,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             // OP-157 m.4 (a)
             (Kind::Deliveries | Kind::SsoPreview, None)
             | (
-                Kind::SupportGrants
-                | Kind::Reviews
-                | Kind::ReviewItems
-                | Kind::OffboardingPreviews,
+                Kind::SupportGrants | Kind::Reviews | Kind::ReviewItems | Kind::OffboardingPreviews,
                 _,
             ) => Read::default(),
             (Kind::Settings, _) => {
