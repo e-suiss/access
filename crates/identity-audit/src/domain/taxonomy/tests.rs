@@ -88,13 +88,8 @@ const UNPRODUCED: &[&str] = &[
     "domain.frozen",
     "domain.handover",
     "domain.recovered",
-    "domain.sealed",
-    "domain.accepted",
     "realm.rehomed",
-    "failover.promoted",
-    "failover.unfenced_attempt",
     "upgrade.activated",
-    "drill.restore",
     "identity.degraded",
 ];
 
