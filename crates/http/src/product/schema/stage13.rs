@@ -88,7 +88,7 @@ fn watch(paths: &mut Map<String, Value>) {
                         "required": ["position", "recorded_at", "kinds"],
                         "additionalProperties": false,
                         "properties": {
-                            "position": { "type": "integer", "minimum": 1 },
+                            "position": { "type": "string", "pattern": "^[1-9][0-9]{0,19}$" },
                             "recorded_at": { "type": "integer", "minimum": 0 },
                             "kinds": { "type": "array", "items": { "type": "string" } },
                         },

@@ -190,7 +190,7 @@ async fn watch_long_polls_for_the_next_record_with_witnessed_through() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|c| c["position"].as_u64().unwrap())
+        .map(|c| c["position"].as_str().unwrap().parse().unwrap())
         .collect();
     assert_eq!(positions, vec![head - 1, head]);
     assert_eq!(back["next"], head);
@@ -215,7 +215,11 @@ async fn watch_long_polls_for_the_next_record_with_witnessed_through() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(woke["changes"][0]["position"], head + 1, "{woke}");
+    assert_eq!(
+        woke["changes"][0]["position"],
+        (head + 1).to_string(),
+        "{woke}"
+    );
     assert!(
         woke["changes"]
             .as_array()

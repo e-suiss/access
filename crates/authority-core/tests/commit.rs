@@ -894,7 +894,11 @@ async fn a_process_leads_a_domain_from_its_first_request() {
     let ais = incoming(seen.request.clone(), ROOT_KEY);
     allowed(&a.exercise(&ais).await.unwrap());
     let ahead = access_crypto::token::TokenKey::new(Secret::new([6; 32]))
-        .seal(&d.0, "consistency", &9_999_u64.to_be_bytes())
+        .seal(
+            &d.0,
+            "consistency",
+            &[9_999_u64.to_be_bytes(), NOW.to_be_bytes()].concat(),
+        )
         .unwrap();
     let mut early = ais;
     early.request.consistency = Some(ahead);

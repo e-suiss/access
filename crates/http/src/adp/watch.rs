@@ -44,7 +44,7 @@ fn canonical_u64(v: &str) -> Option<u64> {
 pub fn body(w: &Watched) -> Value {
     json!({
         "changes": w.changes.iter().map(|c| json!({
-            "position": c.position,
+            "position": c.position.to_string(),
             "recorded_at": c.recorded_at,
             "kinds": c.kinds.iter().collect::<Vec<_>>(),
         })).collect::<Vec<_>>(),
