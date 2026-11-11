@@ -40,6 +40,8 @@ export const EN: Readonly<Record<string, string>> = {
   "outcome.not_allowed": "Not allowed",
   "outcome.not_confirmed_checking": "Not confirmed — checking",
   "outcome.witness_pending": "Recorded — witness pending",
+  // OP-158 m.3 (e), §8.7, X14
+  "outcome.revoked_confirming": "Revoked — confirming (witness pending)",
   "outcome.not_recorded": "Not recorded — try again",
   "outcome.couldnt_reach": "Couldn't reach Access. Your request was not recorded.",
   "outcome.busy_retry": "Busy — retry",
@@ -170,6 +172,15 @@ export const EN: Readonly<Record<string, string>> = {
     "{ $what } · case { $case } · for { $minutes } minutes · can't change sign-in methods, payments or email · can't pass on",
   "action.give_access": "Give access",
   "support.decline": "Don't give access",
+  // OP-158 m.3 (t), XI-20, §6.4, §8.13
+  "degraded.owner": "Responsible: { $owner }",
+  "degraded.unknown": "UNKNOWN",
+  "degraded.missing": "Not known yet: { $what }",
+  "degraded.safe_default": "Until then: { $default }",
+  "owner.operator": "Operator",
+  "owner.domain": "Domain",
+  "owner.idp": "Identity provider",
+  "owner.provider": "Provider",
 };
 
 /** Looks `key` up in `catalogue`, then in English; an unknown key shows as itself. */

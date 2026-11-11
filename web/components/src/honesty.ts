@@ -20,6 +20,9 @@ export interface Attempt {
   readonly timedOut: boolean;
   /** When the signed intent stops being valid, Unix ms. */
   readonly validUntil: number;
+  /** Whether it revokes or ends something (§8.7, X14): a pending ack then reads "Revoked —
+   * confirming (witness pending)". */
+  readonly revocation?: boolean;
 }
 
 /** The text key the surface shows. */
@@ -27,6 +30,7 @@ export type Shown =
   | "outcome.submitted"
   | "outcome.confirmed"
   | "outcome.witness_pending"
+  | "outcome.revoked_confirming"
   | "outcome.not_allowed"
   | "outcome.not_confirmed_checking"
   | "outcome.not_recorded"
@@ -42,7 +46,8 @@ export function shown(a: Attempt): Shown {
   switch (a.answer.kind) {
     case "recorded":
       if (!a.answer.allowed) return "outcome.not_allowed";
-      return a.answer.witnessPending ? "outcome.witness_pending" : "outcome.confirmed";
+      if (!a.answer.witnessPending) return "outcome.confirmed";
+      return a.revocation === true ? "outcome.revoked_confirming" : "outcome.witness_pending";
     case "busy":
       return "outcome.busy_retry";
     case "no_time":
@@ -63,6 +68,7 @@ export function next(a: Attempt, now: number): Next {
   switch (shown(a)) {
     case "outcome.confirmed":
     case "outcome.witness_pending":
+    case "outcome.revoked_confirming":
     case "outcome.not_allowed":
       return "done";
     case "outcome.submitted":
@@ -78,17 +84,18 @@ export function next(a: Attempt, now: number): Next {
 }
 
 /** What an ADP evaluation answer tells about a commit: a decision with its `ExerciseID` was
- * recorded; 429 and a 503 without a time source recorded nothing; anything else is unknown. */
+ * recorded, its witness acknowledgement still pending while `ack` is `pending` (SEC23, CL-2);
+ * 429, a busy 503 and a 503 without a time source recorded nothing; anything else is unknown. */
 export function answerOf(status: number, body: unknown): Answer {
   const b = (typeof body === "object" && body !== null ? body : {}) as {
     decision?: unknown;
-    context?: { exercise?: unknown };
+    context?: { exercise?: unknown; ack?: unknown };
     reason?: unknown;
   };
   if (status === 200 && typeof b.decision === "boolean" && b.context?.exercise !== undefined) {
-    return { kind: "recorded", allowed: b.decision, witnessPending: false };
+    return { kind: "recorded", allowed: b.decision, witnessPending: b.context.ack === "pending" };
   }
-  if (status === 429) return { kind: "busy" };
+  if (status === 429 || (status === 503 && b.reason === "busy")) return { kind: "busy" };
   if (status === 503 && b.reason === "time") return { kind: "no_time" };
   return { kind: "nothing" };
 }
