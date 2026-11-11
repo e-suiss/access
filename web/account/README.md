@@ -9,6 +9,7 @@ The realm's own account pages, served by Access at `/account` on the realm's pub
 - **Merchants that can charge you** — every merchant holding a payment delegation from you, a merchant's agent shown as "AI agent · acting for _M_", the limit as Access recorded it, and **Stop charges**, which revokes the delegation. Payment agreements are Pay's and are cancelled in Pay, as a separate step.
 - **Save my card** (`/account/save-card`) — opened from a merchant's request: "Let _M_ charge your card: up to 500 TRY per order, until …, only for orders you place", read from the exact Grant the request asks for. Saving it is your own delegation to the merchant from your own account, never passed on; a request without a per-order limit or an end is refused.
 - **One-time payment** (`/account/payment`) — opened from a merchant's request: it shows "Pay 300 TRY to _M_ once" exactly as the request's bytes say and sends your own payment, never a delegation. A request that would let the merchant charge you again is refused.
+- **Support access** (`/account/support`) — a support team's request only invites you; here you read exactly what it asks ("Give _Acme Support_ access: view your account settings · case 4411 · for 60 minutes · …") and give it with this device, or don't. A view-only request can stand for 24 hours if you choose. Every access lists who holds it and until when, with **Revoke**; what they did shows in Activity under their name; **Block support access** stops new requests.
 
 ## How the Authority screens stay honest
 
