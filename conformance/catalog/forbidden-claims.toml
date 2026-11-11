@@ -1172,3 +1172,138 @@ phrases = ["one administrator can use the binding key", "single-person key cerem
 negation = true
 sources = ["CR-29", "§10.1.7"]
 honest = "The binding key is used only with a k-of-n (default 2-of-3) ceremony permit, recorded in a signed transcript."
+# OP-158 m.4 (a): one row group per Stage 13 lane; each lane refines its own rows' phrases.
+[[claim]]
+id = "w1-provider-recovers-domain"
+scope = "all"
+phrases = [
+  "the provider can recover your domain", "suiss can recover your domain", "provider-held recovery key",
+  "recovery without your keys",
+]
+negation = true
+sources = ["SEC20", "U16", "§13.6"]
+honest = "Only the domain's recovery entry, held by its own people on their own devices or offline ceremony keys, can recover a domain; the provider holds no recovery key."
+
+[[claim]]
+id = "w2-suiss-certified-witness"
+scope = "all"
+phrases = [
+  "suiss-certified witness", "suiss certified witness", "suiss is your independent witness",
+  "confirmed before witnessed",
+]
+negation = true
+sources = ["SI-12", "B13", "U9", "§16.6"]
+honest = "A witness counts as independent only when its operator is not the provider's; Suiss is not an independent witness for domains it hosts, and nothing is confirmed before a witness cosigns."
+
+[[claim]]
+id = "w3-lossless-without-replica"
+scope = "all"
+phrases = [
+  "lossless without a replica", "redaction propagates to copies", "redaction removes every copy",
+  "replicas can allow access",
+]
+negation = true
+sources = ["TI-13", "U22", "N-11", "P43", "§16.6.1"]
+honest = "Durability beyond the provider needs a domain-declared replica; redaction reaches replicas and exports as a record their operators apply, and a replica never grants access."
+
+[[claim]]
+id = "w4-replay-proves-everything"
+scope = "all"
+phrases = [
+  "replay proves every decision", "replay covers redacted records", "export can be withheld",
+]
+negation = true
+sources = ["INV-27", "PI-6", "U13", "§16.6"]
+honest = "Replay re-evaluates every recorded decision it has the inputs for; redacted records are reported as digest coverage, and a full export is always available."
+
+[[claim]]
+id = "w5-instant-handover"
+scope = "all"
+phrases = [
+  "instant handover", "handover without downtime", "zero-downtime provider switch",
+]
+negation = true
+sources = ["U27", "PI-15", "§16.6"]
+honest = "A handover freezes the domain, exports, folds and fences the old provider; writes pause for the freeze window."
+
+[[claim]]
+id = "w6-recovery-loses-nothing"
+scope = "all"
+phrases = [
+  "recovery loses nothing", "no changes are lost in recovery", "recovery restores every change",
+]
+negation = true
+sources = ["SEC21", "U10", "§13.6"]
+honest = "Forced recovery restores the domain at the last witnessed record position; later changes may be lost and are named so they can be made again."
+
+[[claim]]
+id = "w7-active-active"
+scope = "all"
+phrases = [
+  "active-active", "zero rpo with async replication", "row-level restore", "per-tenant restore",
+  "automatic cross-region failover",
+]
+negation = true
+sources = ["OP-24", "OP-57", "HL-32", "SA-47", "§17.4"]
+honest = "One sequencer leader writes each domain; synchronous standbys give RPO 0 inside a cluster, async DR is declared with its RPO, and restore is per cluster, not per row or tenant."
+
+[[claim]]
+id = "w8-always-available"
+scope = "all"
+phrases = [
+  "guaranteed uptime", "never goes down", "works even when the database is down",
+  "grace window allows access",
+]
+negation = true
+sources = ["TI-9", "SEC27", "OP-45", "§16.7"]
+honest = "When a dependency fails, Access refuses or answers 503 with Retry-After; already-issued self-contained tokens keep working within their declared lifetime."
+
+[[claim]]
+id = "w9-data-never-leaves"
+scope = "all"
+phrases = [
+  "data never leaves turkey", "certified turkish region", "dedicated hardware for every tenant",
+]
+negation = true
+sources = ["CMP-26", "OP-30", "T28", "§17.1"]
+honest = "Residency is the cell region the domain and realm declare; it is published with the DR class and the RPO."
+
+[[claim]]
+id = "w10-unmeasured-throughput"
+scope = "all"
+phrases = [
+  "unmeasured throughput", "millions of decisions per second", "unlimited scale", "cached allow",
+]
+negation = true
+sources = ["OP-32", "OP-61", "OP-72", "U61", "§9.7A"]
+honest = "Performance figures are published only with the measurement, its environment and its git version; the decision cache speeds advisory checks and is never a source of ALLOW."
+
+[[claim]]
+id = "w11-unlimited-requests"
+scope = "all"
+phrases = [
+  "unlimited requests", "no rate limits", "limits never apply to revocation",
+]
+negation = true
+sources = ["T27", "OP-35", "OP-36", "§13.7.4"]
+honest = "Limits and quotas reject widening requests per tenant, realm and domain; narrowing actions, export, handover and recovery are never counted against them."
+
+[[claim]]
+id = "w12-audit-kept-forever"
+scope = "all"
+phrases = [
+  "audit logs are kept forever", "audit logs are never archived", "we delete old audit logs",
+]
+negation = true
+sources = ["OP-37", "OP-40", "OP-73", "§17.6"]
+honest = "Audit history is queryable online for 12 months (hot PostgreSQL plus queryable cold storage) and archived after that; nothing is physically deleted."
+
+[[claim]]
+id = "w13-fips-everywhere"
+scope = "all"
+phrases = [
+  "fips certified by default", "keys never leave memory unencrypted", "suiss can read your user-keyed data",
+]
+negation = true
+sources = ["CR-15", "CR-34", "CR-36", "§10.1"]
+honest = "The FIPS profile is chosen per realm or domain; operational keys live in protected memory where the kernel supports it, and user-keyed data is sealed with keys on the user's devices."
