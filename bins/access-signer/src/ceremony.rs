@@ -49,6 +49,29 @@ pub(crate) enum CommandError {
     Random,
 }
 
+impl CommandError {
+    /// Stable reason code for the refusal event.
+    pub(crate) const fn code(&self) -> &'static str {
+        match self {
+            Self::Ceremony(e) => e.code(),
+            Self::Usage => "ceremony-usage",
+            Self::Io(..) => "ceremony-io",
+            Self::Content(..) => "ceremony-content",
+            Self::Random => "ceremony-random",
+        }
+    }
+}
+
+/// CR-29, OP-157 m.3 (x)
+pub(crate) fn refused(error: &CommandError) {
+    tracing::warn!(
+        event = "signer.ceremony.refused",
+        reason = error.code(),
+        %error,
+        "binding key ceremony refused"
+    );
+}
+
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

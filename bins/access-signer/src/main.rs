@@ -69,6 +69,7 @@ fn refresh(transcript: &std::path::Path, pin: &[u8; 32], gate: &Gate, head: &mut
         }
         Err(error) => {
             gate.close();
+            ceremony::refused(&error);
             tracing::error!(%error, "ceremony transcript does not verify; binding keys closed (CR-29)");
         }
     }
@@ -87,6 +88,7 @@ fn activated(c: &config::Ceremony) -> Option<(Gate, [u8; 32], [u8; 32])> {
     let transcript = match ceremony::pinned(&c.transcript, &pin) {
         Ok(t) => t,
         Err(error) => {
+            ceremony::refused(&error);
             tracing::error!(%error, "ceremony transcript does not verify; refusing to start (CR-29)");
             return None;
         }
@@ -116,7 +118,7 @@ fn ceremony_command(args: &[OsString]) -> ExitCode {
     match ceremony::run(args) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            tracing::error!(%error, "ceremony command refused");
+            ceremony::refused(&error);
             ExitCode::FAILURE
         }
     }

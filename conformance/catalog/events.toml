@@ -812,3 +812,20 @@ severity = "error"
 since = "unreleased"
 fields = ["reason"]
 ocsf = "application_error"
+
+# V13, OP-157 m.4 (b)
+[[event]]
+name = "signer.ceremony"
+plane = "signer"
+severity = "info"
+since = "unreleased"
+fields = ["step", "op", "seq", "head", "genesis", "approvals"]
+ocsf = "entity_management"
+
+[[event]]
+name = "signer.rotated"
+plane = "signer"
+severity = "info"
+since = "unreleased"
+fields = ["domain", "realm", "kid", "trigger"]
+ocsf = "entity_management"

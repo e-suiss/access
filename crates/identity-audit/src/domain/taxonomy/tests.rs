@@ -96,8 +96,6 @@ const UNPRODUCED: &[&str] = &[
     "operator.directive",
     "operator.db_session",
     "signer.hsm_used",
-    "signer.ceremony",
-    "signer.rotated",
     "review.kept",
     "offboarding.committed",
     "approval.inline",
