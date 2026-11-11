@@ -313,7 +313,7 @@ mod tests {
         // OP-156 m.3 (s)
         assert!(event_names(&[String::from("export.sink_failed")]).is_ok());
         // OP-157 m.3 (aa)
-        assert!(event_names(&[String::from("support.access_changed")]).is_err());
+        assert!(event_names(&[String::from("proxy.registered")]).is_err());
         // OP-157 m.3 (h)
         assert!(event_names(&[String::from("breakglass.used")]).is_ok());
     }

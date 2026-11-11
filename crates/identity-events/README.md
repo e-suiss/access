@@ -176,5 +176,5 @@ batches in a row. `hr.record_due` and `proxy.registered` are catalogued and refu
 way until the HR job and proxy registration raise them. `preference.changed` may carry an `iys` member naming
 the commercial message channels a change touched, for realms that record consent with İYS.
 
-`support.access_changed` and `breakglass.used` are catalogued and refused the same way until
-support access and break-glass raise them.
+`support.access_changed` is raised when support access to an account is given, ends or is
+revoked; `breakglass.used` when break-glass is used.

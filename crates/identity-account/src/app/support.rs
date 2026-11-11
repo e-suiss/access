@@ -459,7 +459,7 @@ pub async fn ended(
 const SWEEP: i64 = 200;
 
 /// Ends the realm's support access whose Grant reached its end by `now_ms` and shreds the
-/// support artifacts past their retention (§8.16 #5, OP-73); how many accesses ended.
+/// support artifacts past their retention (§8.16 #5, OP-73); the requests that ended now.
 ///
 /// # Errors
 /// [`NotifyError`].
@@ -469,8 +469,8 @@ pub async fn sweep(
     (entropy, clock): (&(dyn Entropy + Sync), &(dyn Clock + Sync)),
     now_ms: u64,
     fallback: &str,
-) -> Result<u32, NotifyError> {
-    let mut n = 0_u32;
+) -> Result<Vec<SupportRequestRow>, NotifyError> {
+    let mut out = Vec::new();
     for id in tx.support_grants_past(now_ms, SWEEP).await? {
         let Some(row) = tx.support_request(id).await? else {
             continue;
@@ -489,15 +489,15 @@ pub async fn sweep(
         )
         .await?
         {
-            n = n.saturating_add(1);
+            out.push(row);
         }
     }
     tx.shred_support_artifacts(now_ms).await?;
-    Ok(n)
+    Ok(out)
 }
 
 /// When the Grant `grant` was revoked by any Exercise, the support access it gave ends
-/// (SI-21); whether it was a support Grant that had not ended yet.
+/// (SI-21); the request, when it was a support Grant that had not ended yet.
 ///
 /// # Errors
 /// [`NotifyError`].
@@ -507,11 +507,11 @@ pub async fn revoked(
     (entropy, clock): (&(dyn Entropy + Sync), &(dyn Clock + Sync)),
     (grant, at_ms): ([u8; 16], u64),
     fallback: &str,
-) -> Result<bool, NotifyError> {
+) -> Result<Option<SupportRequestRow>, NotifyError> {
     let Some(row) = tx.support_request_by_grant(grant).await? else {
-        return Ok(false);
+        return Ok(None);
     };
-    ended(
+    let now = ended(
         tx,
         (kek, ids),
         (entropy, clock),
@@ -519,7 +519,8 @@ pub async fn revoked(
         (End::Revoked, at_ms),
         fallback,
     )
-    .await
+    .await?;
+    Ok(now.then_some(row))
 }
 
 #[cfg(test)]

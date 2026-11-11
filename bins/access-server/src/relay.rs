@@ -436,16 +436,22 @@ async fn support_sweep(
     slug: &str,
 ) -> Result<(), String> {
     use access_identity_account::adapters::system::SystemEntropy;
-    access_identity_account::app::support::sweep(
+    let now = access_identity_account::ports::Clock::now_ms(&SystemClock);
+    let ended = access_identity_account::app::support::sweep(
         t,
         (kek, ids),
         (&SystemEntropy, &SystemClock),
-        access_identity_account::ports::Clock::now_ms(&SystemClock),
+        now,
         slug,
     )
     .await
-    .map(drop)
-    .map_err(|x| x.to_string())
+    .map_err(|x| x.to_string())?;
+    for row in &ended {
+        access_identity_ui::app::support::announce(t, ids, row, ("ended", now))
+            .await
+            .map_err(|x| x.to_string())?;
+    }
+    Ok(())
 }
 
 /// When `ev` revokes a support Grant, the support access it gave ends and the person is told
@@ -461,7 +467,7 @@ async fn support_revoked(
     let (Kind::AuthorityRevoked, Subject::Grant(g)) = (ev.kind, ev.subject) else {
         return Ok(false);
     };
-    access_identity_account::app::support::revoked(
+    let Some(row) = access_identity_account::app::support::revoked(
         t,
         (kek, ids),
         (&SystemEntropy, &SystemClock),
@@ -469,7 +475,14 @@ async fn support_revoked(
         slug,
     )
     .await
-    .map_err(|x| x.to_string())
+    .map_err(|x| x.to_string())?
+    else {
+        return Ok(false);
+    };
+    access_identity_ui::app::support::announce(t, ids, &row, ("revoked", ev.at))
+        .await
+        .map_err(|x| x.to_string())?;
+    Ok(true)
 }
 
 /// The acting organization of a break-glass use: the Party's own organization, or the first

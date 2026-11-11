@@ -282,6 +282,42 @@ fn case_intent(
         && intent.recipient.is_none()
 }
 
+/// Raises `support.access_changed` for `row` in `tx` (OP-157 m.3 (aa)); nothing for a request
+/// that holds no Grant.
+///
+/// # Errors
+/// A store failure; the caller rolls back.
+pub async fn announce(
+    tx: &mut TenantTx,
+    ids: &access_crypto::opaque_id::IdKey,
+    row: &SupportRequestRow,
+    (change, at): (&str, u64),
+) -> Result<(), access_store::StoreError> {
+    let Some((Answer::Granted { grant, .. }, _)) = &row.answer else {
+        return Ok(());
+    };
+    let Some(realm) = tx.realm() else {
+        return Ok(());
+    };
+    let id = access_crypto::random::bytes::<32>().map_err(|_| access_store::StoreError::Range)?;
+    let account = ids
+        .encode(access_identity_account::app::SUBJECT_PREFIX, row.subject)
+        .map_err(|_| access_store::StoreError::Range)?;
+    let event = access_identity_events::domain::catalog::IdentityEvent::support_access_changed(
+        id,
+        realm.as_bytes(),
+        (
+            &account,
+            &b64url_encode(grant),
+            &row.operator_party,
+            &row.case_system,
+        ),
+        change,
+        at,
+    );
+    access_identity_events::app::emit(tx, &event).await
+}
+
 impl<K, C, M> Hosted<K, C, M>
 where
     K: Kits,
@@ -579,40 +615,51 @@ where
         let (Some(anchor), Some(acceptance)) = (facts.anchor, facts.acceptance) else {
             return Ok(None);
         };
-        let validity = Window {
-            from: now,
-            until: now.saturating_add(u64::from(row.minutes).saturating_mul(60_000)),
+        let form = |minutes: u32| -> Result<Value, Reply> {
+            let validity = Window {
+                from: now,
+                until: now.saturating_add(u64::from(minutes).saturating_mul(60_000)),
+            };
+            let payload = Payload::GrantIssue(
+                Draft {
+                    person: Id(person),
+                    anchor,
+                    operator: Id(row.operator_party),
+                    case: Digest(row.case_ref),
+                    acceptance,
+                    scope,
+                    validity,
+                }
+                .grant(),
+            );
+            let window = Window {
+                from: now.saturating_sub(60_000),
+                until: now.saturating_add(10 * 60_000),
+            };
+            let intent =
+                access_internal_api::instances::self_signed_intent(&payload, Id(person), window)
+                    .ok_or_else(unavailable)?;
+            let (Ok(p), Ok(i)) = (payload.to_bytes(), intent.to_bytes()) else {
+                return Err(unavailable());
+            };
+            Ok(json!({
+                "template": scope.template(minutes).0,
+                "payload": b64url_encode(&p),
+                "intent": b64url_encode(&i),
+                "basis": { "anchor": b64url_encode(&anchor.0) },
+                "pep": pep,
+                "until": rfc3339(validity.until),
+            }))
         };
-        let draft = Draft {
-            person: Id(person),
-            anchor,
-            operator: Id(row.operator_party),
-            case: Digest(row.case_ref),
-            acceptance,
-            scope,
-            validity,
-        };
-        let payload = Payload::GrantIssue(draft.grant());
-        let window = Window {
-            from: now.saturating_sub(60_000),
-            until: now.saturating_add(10 * 60_000),
-        };
-        let Some(intent) =
-            access_internal_api::instances::self_signed_intent(&payload, Id(person), window)
-        else {
-            return Err(unavailable());
-        };
-        let (Ok(p), Ok(i)) = (payload.to_bytes(), intent.to_bytes()) else {
-            return Err(unavailable());
-        };
-        Ok(Some(json!({
-            "template": scope.template(row.minutes).0,
-            "payload": b64url_encode(&p),
-            "intent": b64url_encode(&i),
-            "basis": { "anchor": b64url_encode(&anchor.0) },
-            "pep": pep,
-            "until": rfc3339(validity.until),
-        })))
+        let mut give = form(row.minutes)?;
+        // TN-137 (2), OP-157 m.3 (c)
+        if scope == Scope::Read
+            && row.minutes < model::STANDING_MAX_MIN
+            && let Value::Object(o) = &mut give
+        {
+            o.insert(String::from("standing"), form(model::STANDING_MAX_MIN)?);
+        }
+        Ok(Some(give))
     }
 
     /// The person's `grant.revoke` of `grant`, as their device signs it: payload, intent and
@@ -706,7 +753,8 @@ where
     }
 
     /// `POST /v1/support/requests/{request}/give` (TN-137 (1), §8.16): the person's own device's
-    /// `grant.issue` of exactly the Grant the request drafted, for no longer than it asked. It is
+    /// `grant.issue` of exactly the Grant the request drafted, for no longer than it asked, or a
+    /// day read-only if the person chose to allow that on a view request (TN-137 (2)). It is
     /// committed with the person's own assertion, then recorded, audited and announced to the
     /// person (SI-21, §8.16 #6, #7).
     #[expect(clippy::too_many_lines, reason = "one give, checked step by step")]
@@ -767,8 +815,12 @@ where
             validity: content.authority.constraints.validity,
         };
         // §8.16, XI-7
-        if !draft.signed_as(&content, row.minutes, now)
-            || parsed.basis != ExerciseBasis::Anchor(anchor)
+        let longest = if scope == Scope::Read {
+            model::STANDING_MAX_MIN
+        } else {
+            row.minutes
+        };
+        if !draft.signed_as(&content, longest, now) || parsed.basis != ExerciseBasis::Anchor(anchor)
         {
             return Reply::problem(INVALID);
         }
@@ -814,6 +866,9 @@ where
             .await
             .map_err(|_| access_store::StoreError::Corrupt)?;
             let row = t.support_request(row.id).await?;
+            if let Some(r) = &row {
+                announce(&mut t, &kit.ids, r, ("granted", now)).await?;
+            }
             t.commit().await?;
             Ok::<_, access_store::StoreError>((row, names))
         };
@@ -971,6 +1026,7 @@ where
             )
             .await
             .map_err(|_| access_store::StoreError::Corrupt)?;
+            announce(&mut t, &kit.ids, &row, ("revoked", now)).await?;
             t.commit().await?;
             Ok::<_, access_store::StoreError>(now)
         };

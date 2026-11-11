@@ -87,14 +87,8 @@ pub fn urn(name: &str) -> String {
 /// (g)), the SSH certificate authority `ssh.certificate_issued` (OP-156 m.3 (o)), the export
 /// pass `export.sink_failed` (OP-156 m.3 (s)). `org.sso_enforced` waits for
 /// `idp.org.sso_enforce` (OP-155 m.3 (i)); the other Stage 11 events wait for the HR job and
-/// `idp.proxy.register` (OP-156 m.3 (l), (q)); `support.access_changed` waits for support access
-/// (OP-157 m.3 (aa)).
-pub const UNPRODUCED: [&str; 4] = [
-    "org.sso_enforced",
-    "hr.record_due",
-    "proxy.registered",
-    "support.access_changed",
-];
+/// `idp.proxy.register` (OP-156 m.3 (l), (q)).
+pub const UNPRODUCED: [&str; 3] = ["org.sso_enforced", "hr.record_due", "proxy.registered"];
 
 /// Whether a webhook or stream may subscribe to `name`: a catalog event with a producer.
 #[must_use]
