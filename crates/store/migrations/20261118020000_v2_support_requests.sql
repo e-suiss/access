@@ -45,14 +45,15 @@ CREATE TABLE access.support_request_outcomes (
   grant_id bytea CHECK (grant_id IS NULL OR octet_length(grant_id) = 16),
   exercise bytea CHECK (exercise IS NULL OR octet_length(exercise) = 32),
   until_ms bigint CHECK (until_ms IS NULL OR until_ms >= 0),
+  position bigint CHECK (position IS NULL OR position >= 0),
   template text CHECK (template IS NULL OR template IN ('support.session', 'support.standing', 'support.artifacts')),
   at_ms bigint NOT NULL CHECK (at_ms >= 0),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (tenant_id, realm_id, request_id, state),
   FOREIGN KEY (tenant_id, realm_id, request_id)
     REFERENCES access.support_requests (tenant_id, realm_id, request_id),
-  CHECK ((state = 'granted') = (grant_id IS NOT NULL AND exercise IS NOT NULL
-                                AND until_ms IS NOT NULL AND template IS NOT NULL))
+  CHECK ((state = 'granted') = (grant_id IS NOT NULL AND exercise IS NOT NULL AND until_ms IS NOT NULL
+                                AND position IS NOT NULL AND template IS NOT NULL))
 );
 CREATE UNIQUE INDEX support_request_outcomes_answer
   ON access.support_request_outcomes (tenant_id, realm_id, request_id)

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT r.request_id, r.operator_id, r.operator_party, r.subject_id, r.subject_party,\n                      r.case_system, r.case_label, r.case_ref, r.scope, r.minutes, r.created_ms,\n                      r.expires_ms,\n                      a.state AS \"answer?\", a.grant_id AS \"grant_id?\", a.exercise AS \"exercise?\",\n                      a.until_ms AS \"until_ms?\", a.template AS \"template?\",\n                      a.at_ms AS \"answered_ms?\",\n                      e.state AS \"end_state?\", e.at_ms AS \"ended_ms?\"\n                 FROM access.support_requests r\n                 LEFT JOIN access.support_request_outcomes a\n                   ON a.tenant_id = r.tenant_id AND a.realm_id = r.realm_id\n                  AND a.request_id = r.request_id AND a.state IN ('declined', 'granted')\n                 LEFT JOIN access.support_request_outcomes e\n                   ON e.tenant_id = r.tenant_id AND e.realm_id = r.realm_id\n                  AND e.request_id = r.request_id AND e.state IN ('ended', 'revoked')\n                WHERE r.tenant_id = $1 AND r.realm_id = $2\n                  AND (CASE WHEN $3 THEN r.operator_id ELSE r.subject_id END) = $4\n                  AND (r.expires_ms >= $5 OR (a.state = 'granted' AND (e.state IS NULL OR e.at_ms >= $5)))\n                ORDER BY r.request_id DESC\n                LIMIT $6",
+  "query": "SELECT r.request_id, r.operator_id, r.operator_party, r.subject_id, r.subject_party,\n                      r.case_system, r.case_label, r.case_ref, r.scope, r.minutes, r.created_ms,\n                      r.expires_ms,\n                      a.state AS \"answer?\", a.grant_id AS \"grant_id?\", a.exercise AS \"exercise?\",\n                      a.until_ms AS \"until_ms?\", a.position AS \"position?\", a.template AS \"template?\",\n                      a.at_ms AS \"answered_ms?\",\n                      e.state AS \"end_state?\", e.at_ms AS \"ended_ms?\"\n                 FROM access.support_requests r\n                 LEFT JOIN access.support_request_outcomes a\n                   ON a.tenant_id = r.tenant_id AND a.realm_id = r.realm_id\n                  AND a.request_id = r.request_id AND a.state IN ('declined', 'granted')\n                 LEFT JOIN access.support_request_outcomes e\n                   ON e.tenant_id = r.tenant_id AND e.realm_id = r.realm_id\n                  AND e.request_id = r.request_id AND e.state IN ('ended', 'revoked')\n                WHERE r.tenant_id = $1 AND r.realm_id = $2\n                  AND (CASE WHEN $3 THEN r.operator_id ELSE r.subject_id END) = $4\n                  AND (r.expires_ms >= $5 OR (a.state = 'granted' AND (e.state IS NULL OR e.at_ms >= $5)))\n                ORDER BY r.request_id DESC\n                LIMIT $6",
   "describe": {
     "columns": [
       {
@@ -181,6 +181,17 @@
       },
       {
         "ordinal": 16,
+        "name": "position?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.support_request_outcomes",
+            "name": "position"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
         "name": "template?",
         "type_info": "Text",
         "origin": {
@@ -191,7 +202,7 @@
         }
       },
       {
-        "ordinal": 17,
+        "ordinal": 18,
         "name": "answered_ms?",
         "type_info": "Int8",
         "origin": {
@@ -202,7 +213,7 @@
         }
       },
       {
-        "ordinal": 18,
+        "ordinal": 19,
         "name": "end_state?",
         "type_info": "Text",
         "origin": {
@@ -213,7 +224,7 @@
         }
       },
       {
-        "ordinal": 19,
+        "ordinal": 20,
         "name": "ended_ms?",
         "type_info": "Int8",
         "origin": {
@@ -252,10 +263,11 @@
       true,
       true,
       true,
+      true,
       false,
       false,
       false
     ]
   },
-  "hash": "fae88330cfca3f014b1851ab53d34f5d6b690274b0ac65fe7b8552b3fa440a58"
+  "hash": "3842323b480e9e83d132e49af17ec80b3020394b2cc97d23520c7235ca1de313"
 }

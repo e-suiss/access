@@ -73,7 +73,9 @@ pub enum Answer {
         exercise: [u8; 32],
         /// Its end, Unix ms.
         until_ms: u64,
-        /// `support.session` or `support.standing`.
+        /// The position of the decision that issued it: where its holding opened.
+        position: u64,
+        /// `support.session`, `support.standing` or `support.artifacts`.
         template: String,
     },
 }
@@ -146,6 +148,7 @@ struct Raw {
     grant_id: Option<Vec<u8>>,
     exercise: Option<Vec<u8>>,
     until_ms: Option<i64>,
+    position: Option<i64>,
     template: Option<String>,
     answered_ms: Option<i64>,
     end_state: Option<String>,
@@ -161,6 +164,7 @@ impl Raw {
                     grant: id16(self.grant_id.as_deref().ok_or(StoreError::Corrupt)?)?,
                     exercise: id32(self.exercise.as_deref().ok_or(StoreError::Corrupt)?)?,
                     until_ms: ms(self.until_ms.ok_or(StoreError::Corrupt)?)?,
+                    position: ms(self.position.ok_or(StoreError::Corrupt)?)?,
                     template: self.template.ok_or(StoreError::Corrupt)?,
                 },
                 ms(at)?,
@@ -317,7 +321,7 @@ impl TenantTx {
                       r.case_system, r.case_label, r.case_ref, r.scope, r.minutes, r.created_ms,
                       r.expires_ms,
                       a.state AS "answer?", a.grant_id AS "grant_id?", a.exercise AS "exercise?",
-                      a.until_ms AS "until_ms?", a.template AS "template?",
+                      a.until_ms AS "until_ms?", a.position AS "position?", a.template AS "template?",
                       a.at_ms AS "answered_ms?",
                       e.state AS "end_state?", e.at_ms AS "ended_ms?"
                  FROM access.support_requests r
@@ -359,7 +363,7 @@ impl TenantTx {
                       r.case_system, r.case_label, r.case_ref, r.scope, r.minutes, r.created_ms,
                       r.expires_ms,
                       a.state AS "answer?", a.grant_id AS "grant_id?", a.exercise AS "exercise?",
-                      a.until_ms AS "until_ms?", a.template AS "template?",
+                      a.until_ms AS "until_ms?", a.position AS "position?", a.template AS "template?",
                       a.at_ms AS "answered_ms?",
                       e.state AS "end_state?", e.at_ms AS "ended_ms?"
                  FROM access.support_requests r
@@ -414,25 +418,27 @@ impl TenantTx {
         at_ms: u64,
     ) -> Result<bool, StoreError> {
         let (tenant, realm) = scope(self)?;
-        let (state, grant, exercise, until, template) = match answer {
-            Answer::Declined => ("declined", None, None, None, None),
+        let (state, grant, exercise, until, position, template) = match answer {
+            Answer::Declined => ("declined", None, None, None, None, None),
             Answer::Granted {
                 grant,
                 exercise,
                 until_ms,
+                position,
                 template,
             } => (
                 "granted",
                 Some(grant.to_vec()),
                 Some(exercise.to_vec()),
                 Some(signed(*until_ms)?),
+                Some(signed(*position)?),
                 Some(template.as_str()),
             ),
         };
         let done = sqlx::query!(
             "INSERT INTO access.support_request_outcomes (tenant_id, realm_id, request_id, state,
-                    grant_id, exercise, until_ms, template, at_ms)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    grant_id, exercise, until_ms, position, template, at_ms)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              ON CONFLICT DO NOTHING",
             tenant,
             realm,
@@ -441,6 +447,7 @@ impl TenantTx {
             grant,
             exercise,
             until,
+            position,
             template,
             signed(at_ms)?,
         )
