@@ -164,6 +164,12 @@ export const EN: Readonly<Record<string, string>> = {
   "approval.preview_untyped": "This field has no declared type, so it can't be shown in a preview.",
   "approval.batch_title": "Approve these { $count } requests",
   "approval.batch_item": "{ $action } · { $resource }",
+  // OP-157 m.4 (b)
+  "support.give_title": "Give { $organization } access",
+  "support.give_terms":
+    "{ $what } · case { $case } · for { $minutes } minutes · can't change sign-in methods, payments or email · can't pass on",
+  "action.give_access": "Give access",
+  "support.decline": "Don't give access",
 };
 
 /** Looks `key` up in `catalogue`, then in English; an unknown key shows as itself. */

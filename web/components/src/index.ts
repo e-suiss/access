@@ -26,3 +26,5 @@ export * as offline from "./offline/index.js";
 export * as delegationPage from "./delegation-page/index.js";
 // OP-157 m.3 (l)
 export * as approval from "./approval/index.js";
+// OP-157 m.3 (f)
+export * as support from "./support/index.js";
