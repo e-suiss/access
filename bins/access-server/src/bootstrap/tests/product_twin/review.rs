@@ -4,7 +4,7 @@
 //! nothing; a JIT activation never gets an ALLOW without its approval threshold.
 
 use access_kernel::meta::{HoldingRef, MandateEnvelope};
-use access_kernel::model::{Binding, Consumption, DelegationTerms, Independence};
+use access_kernel::model::{Binding, Consumption, DelegationTerms, Independence, WhileCondition};
 use access_product_twin::review::hygiene;
 use access_sdk::authorize::{Actor as SdkActor, ExerciseRequest, adp_body};
 use access_store::authority::read_head;
@@ -434,5 +434,169 @@ async fn a_jit_activation_gets_no_allow_without_its_approval_threshold() {
         !refused(&elsewhere, Refusal::RequireAction) && elsewhere.is_err(),
         "{elsewhere:?}"
     );
+    s.only_public();
+}
+
+/// `who`'s Instance on the seam's domain.
+async fn instance_of(s: &Seam, who: &Actor) -> Id {
+    let kid = access_kernel::verify::key_scope::thumbprint(&who.key.public_key());
+    s.w.domains
+        .lookup_keys(
+            s.domain,
+            &[kid],
+            access_authority_core::keys::AsOf::Head,
+            false,
+        )
+        .await
+        .unwrap()
+        .lookup
+        .keys
+        .into_iter()
+        .find(|k| k.kid == kid)
+        .unwrap()
+        .instance
+}
+
+/// A PAM session for a JIT test: the action, its host and the authority over it.
+struct Session {
+    open: ActionRef,
+    namespace: String,
+    host: Vec<String>,
+}
+
+impl Session {
+    fn authority(&self) -> CanonicalAuthority {
+        canonical(
+            std::slice::from_ref(&self.open),
+            structural(&self.namespace, &[self.host[0].as_str()]),
+            BTreeMap::new(),
+            BTreeSet::new(),
+            BTreeSet::new(),
+        )
+    }
+
+    fn envelope(&self) -> IntentEnvelope {
+        let path: Vec<&str> = self.host.iter().map(String::as_str).collect();
+        envelope(
+            self.open.clone(),
+            (self.namespace.as_str(), path.as_slice()),
+            BTreeMap::new(),
+        )
+    }
+
+    /// A standing Grant to `who` without a threshold: the basis and its holding.
+    async fn standing(&self, s: &Seam, who: &Actor) -> (ExerciseBasis, HoldingRef) {
+        let (grant, since) = s
+            .grant(SubjectSelector::Party(who.party), self.authority())
+            .await;
+        let pin = HoldingRef {
+            grant,
+            holder: who.party,
+            since,
+        };
+        (holding(grant, who.party, since), pin)
+    }
+
+    /// `who` binds its Instance to the session's authority pinned to `pin`, within `constraints`.
+    async fn bind(&self, s: &Seam, who: &Actor, pin: HoldingRef, constraints: ConstraintSet) {
+        let instance = instance_of(s, who).await;
+        s.own_commit(
+            who,
+            ExerciseBasis::Anchor(who.anchor),
+            Payload::MandateBind {
+                instance,
+                envelope: MandateEnvelope {
+                    authority: self.authority().authority,
+                    constraints,
+                    requirements: BTreeSet::new(),
+                    pin: Some(pin),
+                    origins: access_kernel::combinator::Origins::default(),
+                },
+            },
+        )
+        .await;
+    }
+
+    async fn ask(
+        &self,
+        s: &Seam,
+        who: &Actor,
+        basis: ExerciseBasis,
+    ) -> Result<access_sdk::authorize::Authorized<(), ()>, Denied> {
+        s.twin
+            .ask(
+                &s.domain,
+                &s.request(who, self.envelope(), basis, Vec::new()),
+            )
+            .await
+    }
+}
+
+fn within(from: u64, until: u64) -> ConstraintSet {
+    ConstraintSet {
+        validity: Window { from, until },
+        conditions: BTreeSet::new(),
+        budget: BTreeSet::new(),
+    }
+}
+
+// INV-5, C14, C27, L0-EVAL-16b, §8.17.12, OP-157 m.3 (w), m.19 (a), OP-153 m.3 (gg), Ek B 5577
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_activation_mandate_bounds_the_session_by_its_window_budget_and_conditions() {
+    let s = Seam::open("s-jit-window", "pam").await;
+    let pam = Schema::parse(&std::fs::read_to_string(pam_dir().join("pam.toml")).unwrap()).unwrap();
+    s.twin.publish_schema(&s.domain, &pam).await.unwrap();
+    s.accept_schema(&pam).await;
+    let teleport = Teleport::load();
+    let request = teleport.request();
+    let session = Session {
+        open: pam.action("open").unwrap(),
+        namespace: teleport.resource_namespace.clone(),
+        host: teleport.host(&request),
+    };
+    let now = server_time(&s.w.db.app).await.unwrap();
+
+    // INV-5, C14
+    let alice = s.actor().await;
+    let (basis, pin) = session.standing(&s, &alice).await;
+    assert!(
+        session.ask(&s, &alice, basis).await.is_ok(),
+        "the standing Grant alone acts"
+    );
+    session
+        .bind(&s, &alice, pin, within(now - 120_000, now - 60_000))
+        .await;
+    let expired = session.ask(&s, &alice, basis).await;
+    assert!(
+        refused(&expired, Refusal::Deny),
+        "an expired activation is not read as no Mandate: {expired:?}"
+    );
+
+    // C27
+    let bob = s.actor().await;
+    let (basis, pin) = session.standing(&s, &bob).await;
+    let mut once = within(now - 60_000, now + 1_800_000);
+    once.budget = BTreeSet::from([BudgetTerm {
+        dimension: BudgetDimension::Count,
+        capacity: 1,
+        window: BudgetWindow::Total,
+    }]);
+    session.bind(&s, &bob, pin, once).await;
+    assert!(session.ask(&s, &bob, basis).await.is_ok());
+    let spent = session.ask(&s, &bob, basis).await;
+    assert!(refused(&spent, Refusal::Deny), "{spent:?}");
+
+    // L0-EVAL-4
+    let carol = s.actor().await;
+    let (basis, pin) = session.standing(&s, &carol).await;
+    let mut held = within(now - 60_000, now + 1_800_000);
+    held.conditions = BTreeSet::from([WhileCondition::ClaimHeld {
+        class: String::from("pam_on_call"),
+        subject: SubjectSelector::Party(carol.party),
+        acceptance: Digest(access_crypto::random::bytes::<32>().unwrap()),
+    }]);
+    session.bind(&s, &carol, pin, held).await;
+    let lapsed = session.ask(&s, &carol, basis).await;
+    assert!(refused(&lapsed, Refusal::Deny), "{lapsed:?}");
     s.only_public();
 }

@@ -213,6 +213,9 @@ fn transfers() -> Vec<Scenario> {
     let mut narrow = authority();
     narrow.actions.exact.clear();
     w.mandate = Some(Mandate {
+        validity: None,
+        conditions_hold: true,
+        budgets: Vec::new(),
         origins: crate::combinator::Origins::default(),
         authority: narrow,
         requirements: BTreeSet::new(),
@@ -345,6 +348,9 @@ fn confusions() -> Vec<Scenario> {
     ));
     let mut w = World::new();
     w.mandate = Some(Mandate {
+        validity: None,
+        conditions_hold: true,
+        budgets: Vec::new(),
         origins: crate::combinator::Origins::default(),
         authority: authority(),
         requirements: BTreeSet::new(),

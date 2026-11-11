@@ -354,6 +354,9 @@ fn hop_scenarios() -> Vec<(&'static str, World)> {
     let mut out = Vec::new();
     let mut w = World::new();
     w.mandate = Some(Mandate {
+        validity: None,
+        conditions_hold: true,
+        budgets: Vec::new(),
         origins: crate::combinator::Origins::default(),
         authority: authority(),
         requirements: [approval(false)].into_iter().collect(),
@@ -611,12 +614,16 @@ pub(super) fn scenarios() -> Vec<(&'static str, World)> {
     out.extend(proof_scenarios());
     out.extend(fuel_scenarios());
     out.extend(agent_scenarios());
+    out.extend(mandate_scenarios());
     out
 }
 
 fn with_origins(read: &[&str], write: &[&str], named: (&str, bool)) -> World {
     let mut w = World::new();
     w.mandate = Some(Mandate {
+        validity: None,
+        conditions_hold: true,
+        budgets: Vec::new(),
         authority: authority(),
         requirements: BTreeSet::new(),
         origins: Origins {
@@ -647,6 +654,84 @@ fn screen_floor(surface: crate::aas::SurfaceClass) -> World {
         Some(crate::aas::EvidenceLevel::PhishingResistant),
     );
     proved(term, vec![p])
+}
+
+fn limited(f: impl FnOnce(&mut Mandate)) -> World {
+    let mut w = World::new();
+    let mut m = Mandate {
+        validity: None,
+        conditions_hold: true,
+        budgets: Vec::new(),
+        origins: crate::combinator::Origins::default(),
+        authority: authority(),
+        requirements: BTreeSet::new(),
+    };
+    f(&mut m);
+    w.mandate = Some(m);
+    w
+}
+
+/// INV-5, C27, OP-157 m.19 (a): a Mandate's window, while-conditions and budgets.
+fn mandate_scenarios() -> Vec<(&'static str, World)> {
+    let spent = |window| BudgetState {
+        window,
+        remaining: 0,
+        demand: 1,
+        resets_at: match window {
+            BudgetWindow::Total => None,
+            BudgetWindow::RollingSeconds(_) => Some(60_000),
+        },
+    };
+    vec![
+        (
+            "allow-mandate-within-window",
+            limited(|m| {
+                m.validity = Some(Window {
+                    from: 40_000,
+                    until: 60_000,
+                });
+            }),
+        ),
+        (
+            "deny-mandate-expired",
+            limited(|m| {
+                m.validity = Some(Window {
+                    from: 0,
+                    until: 49_999,
+                });
+            }),
+        ),
+        (
+            "deny-mandate-not-yet-valid",
+            limited(|m| {
+                m.validity = Some(Window {
+                    from: 50_001,
+                    until: 60_000,
+                });
+            }),
+        ),
+        (
+            "deny-mandate-conditions-fail",
+            limited(|m| m.conditions_hold = false),
+        ),
+        (
+            "deny-mandate-budget-total",
+            limited(|m| m.budgets = vec![spent(BudgetWindow::Total)]),
+        ),
+        (
+            "deny-mandate-budget-rolling",
+            limited(|m| m.budgets = vec![spent(BudgetWindow::RollingSeconds(60))]),
+        ),
+        (
+            "reject-mandate-rolling-budget-without-reset",
+            limited(|m| {
+                m.budgets = vec![BudgetState {
+                    resets_at: None,
+                    ..spent(BudgetWindow::RollingSeconds(60))
+                }];
+            }),
+        ),
+    ]
 }
 
 /// E54 (4), E49: origin sets and the minimum surface (OP-154 m.3 (b)).
@@ -912,6 +997,13 @@ pub(super) fn decision_rules(id: &str) -> &'static [&'static str] {
             "L0-EVAL-40",
         ],
         "deny-outside-instance-limits" => &["L0-EVAL-16", "L0-EVAL-40"],
+        "allow-mandate-within-window"
+        | "deny-mandate-expired"
+        | "deny-mandate-not-yet-valid"
+        | "deny-mandate-conditions-fail"
+        | "deny-mandate-budget-total"
+        | "deny-mandate-budget-rolling" => &["L0-EVAL-16b", "L0-EVAL-40"],
+        "reject-mandate-rolling-budget-without-reset" => &["L0-EVAL-15a", "L0-EVAL-16b"],
         "deny-restricted" => &["L0-ENC-16", "L0-EVAL-18", "L0-EVAL-40"],
         "deny-budget-rolling" | "deny-budget-total" => &["L0-EVAL-4", "L0-EVAL-15", "L0-EVAL-40"],
         "deny-expired" | "deny-not-yet-valid" => &["L0-ALG-55", "L0-EVAL-13", "L0-EVAL-40"],

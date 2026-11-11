@@ -252,6 +252,9 @@ fn blocker_table() {
     let mut m_auth = authority();
     m_auth.actions.exact.clear();
     w.mandate = Some(Mandate {
+        validity: None,
+        conditions_hold: true,
+        budgets: Vec::new(),
         origins: crate::combinator::Origins::default(),
         authority: m_auth,
         requirements: BTreeSet::new(),
@@ -579,6 +582,9 @@ fn scenarios() -> Vec<(&'static str, World)> {
     let mut narrow = authority();
     narrow.actions.exact.clear();
     w.mandate = Some(Mandate {
+        validity: None,
+        conditions_hold: true,
+        budgets: Vec::new(),
         origins: crate::combinator::Origins::default(),
         authority: narrow,
         requirements: BTreeSet::new(),
@@ -729,6 +735,9 @@ fn ordering_scenarios() -> Vec<(&'static str, World)> {
     let mut narrow = authority();
     narrow.actions.exact.clear();
     w.mandate = Some(Mandate {
+        validity: None,
+        conditions_hold: true,
+        budgets: Vec::new(),
         origins: crate::combinator::Origins::default(),
         authority: narrow,
         requirements: BTreeSet::new(),
@@ -978,6 +987,9 @@ fn assurance_scenarios() -> Vec<(&'static str, World)> {
     out.push(("require-shared-single-use-proof-canonical-order", w));
     let mut w = World::new();
     w.mandate = Some(Mandate {
+        validity: None,
+        conditions_hold: true,
+        budgets: Vec::new(),
         origins: crate::combinator::Origins::default(),
         authority: authority(),
         requirements: [{
@@ -1701,6 +1713,9 @@ fn random_world(r: &mut Rng) -> World {
             a.actions.exact.clear();
         }
         w.mandate = Some(Mandate {
+            validity: None,
+            conditions_hold: true,
+            budgets: Vec::new(),
             origins: crate::combinator::Origins::default(),
             authority: a,
             requirements: BTreeSet::new(),

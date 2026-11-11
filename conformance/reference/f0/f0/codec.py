@@ -598,6 +598,10 @@ def check_mandate(value):
     check_map(value, {"authority": check_authority_set}, {
         "requirements": check_requirement_list,
         "origins": check_origin_sets,
+        # L0-EVAL-16b
+        "validity": check_time_window,
+        "conditions_fail": check_true,
+        "budgets": check_list(check_budget_state, nonempty=True, is_set=True),
     })
 
 

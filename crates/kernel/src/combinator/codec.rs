@@ -20,7 +20,7 @@ use crate::digest::Digest;
 use crate::intent::IntentEnvelope;
 use crate::model::{
     ActionRef, AuthoritySet, BudgetWindow, CanonicalAuthority, Id, PurposeRef, RequirementTerm,
-    ResourceRef,
+    ResourceRef, Window,
 };
 use crate::requirement::{Proof, ProofBinding};
 use crate::restriction::{PolicyDeny, RestrictionOutcome};
@@ -303,6 +303,16 @@ impl Canonical for Mandate {
                 "origins",
                 (!self.origins.is_empty()).then(|| self.origins.to_value()),
             ),
+            ("validity", self.validity.as_ref().map(Canonical::to_value)),
+            (
+                "conditions_fail",
+                (!self.conditions_hold).then_some(Value::Bool(true)),
+            ),
+            (
+                "budgets",
+                (!self.budgets.is_empty())
+                    .then(|| Value::Array(self.budgets.iter().map(Canonical::to_value).collect())),
+            ),
         ])
     }
 
@@ -316,6 +326,20 @@ impl Canonical for Mandate {
                 .map(Origins::from_value)
                 .transpose()?
                 .unwrap_or_default(),
+            validity: f.opt("validity").map(Window::from_value).transpose()?,
+            conditions_hold: match f.opt("conditions_fail") {
+                None => true,
+                Some(Value::Bool(true)) => false,
+                Some(_) => return Err(ModelError::Range),
+            },
+            budgets: match f.opt("budgets") {
+                None => Vec::new(),
+                Some(Value::Array(items)) if !items.is_empty() => items
+                    .iter()
+                    .map(BudgetState::from_value)
+                    .collect::<Result<_, _>>()?,
+                Some(_) => return Err(ModelError::Range),
+            },
         };
         f.done()?;
         Ok(m)

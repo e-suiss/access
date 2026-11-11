@@ -1190,25 +1190,94 @@ fn agency(
     }
 }
 
-/// The Instance's Mandate and its id, if it has a live one; the first by id (C14).
-fn mandate(view: &dyn View, actor: Option<&Actor>) -> Option<(Id, Mandate)> {
+/// A live Mandate with its id, and the draws an allow makes on its budget terms (`None` for a
+/// negative demand).
+type Found = ((Id, Mandate), Option<Vec<DrawSpec>>);
+
+/// The Instance's Mandate and its id, if it has a live one; the first by id (C14). A Mandate
+/// outside its window, whose while-conditions fail or whose budget is spent is still that
+/// Mandate: the Kernel sees its limits at `now` and denies, never as "no Mandate" (INV-5, C27,
+/// L0-EVAL-16b). With it come the draws an allow makes on its budget terms; `None` for the
+/// draws on an intent whose demand is negative.
+fn mandate(
+    view: &Snapshot,
+    actor: Option<&Actor>,
+    intent: &IntentEnvelope,
+    now: u64,
+) -> Option<Found> {
     let actor = actor?;
     let list = view.get(&meta::key(kind::MANDATES, &actor.instance))?;
     let Value::Array(ids) = list else {
         return None;
     };
-    ids.iter().find_map(|id| {
+    let (id, m) = ids.iter().find_map(|id| {
         let id = access_kernel::model::Id::from_value(id).ok()?;
         let m: MandateState = read(view, kind::MANDATE, &id)?;
-        m.ended.is_none().then_some((
+        m.ended.is_none().then_some((id, m))
+    })?;
+    let constraints = m.envelope.constraints;
+    let conditions_hold = constraints.conditions.is_empty()
+        || conditions_hold(view, &constraints.conditions, Some(actor), now);
+    // C27
+    let mut budgets = Vec::new();
+    let mut draws = Some(Vec::new());
+    for (i, term) in constraints.budget.iter().enumerate() {
+        let Some(d) = demand(&term.dimension, intent) else {
+            draws = None;
+            continue;
+        };
+        if d == 0 {
+            continue;
+        }
+        let (key, resets_at) = budget_key(&id, i, term.window, now);
+        let used = view.counter(&key);
+        let limit = term
+            .capacity
+            .saturating_add(view.counter(&meta::released_key(&key)));
+        budgets.push(BudgetState {
+            window: term.window,
+            remaining: limit.saturating_sub(used),
+            demand: d,
+            resets_at,
+        });
+        let unit = match &term.dimension {
+            BudgetDimension::Amount(u) => Some(u.clone()),
+            BudgetDimension::Count => None,
+        };
+        if let Some(draws) = draws.as_mut() {
+            draws.push((key, limit, d, unit));
+        }
+    }
+    Some((
+        (
             id,
             Mandate {
                 origins: m.envelope.origins,
                 authority: m.envelope.authority,
                 requirements: m.envelope.requirements,
+                validity: Some(constraints.validity),
+                conditions_hold,
+                budgets,
             },
-        ))
-    })
+        ),
+        draws,
+    ))
+}
+
+/// The Mandate of [`mandate`] with its draws added to `draws`; a negative demand on its budget
+/// is an input rejection, as on a hop's (OP-141 m.26 (b)).
+fn with_mandate(
+    found: Option<Found>,
+    draws: &mut Vec<DrawSpec>,
+) -> Result<Option<(Id, Mandate)>, Rejection> {
+    match found {
+        None => Ok(None),
+        Some((_, None)) => Err(Rejection::Input),
+        Some((m, Some(d))) => {
+            draws.extend(d);
+            Ok(Some(m))
+        }
+    }
 }
 
 fn foreign_deny(class: BlockerClass, subcode: &str, resolver: Resolver) -> Decision {
@@ -1894,12 +1963,20 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                         capacities: BTreeSet::from([req.capacity]),
                     })
                 };
-                // L0-EVAL-16
-                let mandate = mandate(snapshot, Some(&actor));
+                // L0-EVAL-16, L0-EVAL-16b
+                let found = mandate(snapshot, Some(&actor), &req.intent, now);
                 let missing = snapshot.missing();
                 if !missing.is_empty() {
                     return Pass::Need(missing);
                 }
+                let missing_counters = snapshot.missing_counters();
+                if !missing_counters.is_empty() {
+                    return Pass::NeedCounters(missing_counters);
+                }
+                let mandate = match with_mandate(found, &mut draws) {
+                    Ok(m) => m,
+                    Err(r) => return Pass::Rejected(r),
+                };
                 (basis.into_iter().collect::<Vec<_>>(), mandate)
             }
         }
@@ -1954,11 +2031,20 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         if !missing_counters.is_empty() {
             return Pass::NeedCounters(missing_counters);
         }
-        let mandate = mandate(snapshot, actor.as_ref());
+        // L0-EVAL-16b
+        let found = mandate(snapshot, actor.as_ref(), &req.intent, now);
         let missing = snapshot.missing();
         if !missing.is_empty() {
             return Pass::Need(missing);
         }
+        let missing_counters = snapshot.missing_counters();
+        if !missing_counters.is_empty() {
+            return Pass::NeedCounters(missing_counters);
+        }
+        let mandate = match with_mandate(found, &mut draws) {
+            Ok(m) => m,
+            Err(r) => return Pass::Rejected(r),
+        };
         let bases = hops
             .map(|(hops, capacities)| Basis {
                 hops: hops.into_iter().map(Stored::Known).collect(),

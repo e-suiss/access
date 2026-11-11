@@ -76,7 +76,7 @@ Vectors: `decision.json`: `deny-revoked`, `deny-lapsed`.
 
 Vectors: `decision.json`: `deny-budget-rolling`, `deny-budget-total`; `cve-regressions.json`: `invitation-reused`.
 
-<a id="L0-EVAL-15a"></a>**L0-EVAL-15a. Rolling budget without reset time.** A budget state with a rolling window, `demand > remaining` and no `resets_at` makes the whole input an `input` rejection. This check is made for every basis before any evaluation starts, so in `check` mode an early ALLOW does not skip it and the result never depends on the order of the candidates.
+<a id="L0-EVAL-15a"></a>**L0-EVAL-15a. Rolling budget without reset time.** A budget state of a hop or of the mandate with a rolling window, `demand > remaining` and no `resets_at` makes the whole input an `input` rejection. This check is made for every basis before any evaluation starts, so in `check` mode an early ALLOW does not skip it and the result never depends on the order of the candidates.
 
 Vectors: `decision.json`: `reject-rolling-budget-without-reset`, `reject-check-bad-later-candidate`.
 
@@ -87,6 +87,10 @@ Vector: `decision.json`: `deny-outside-instance-limits`.
 <a id="L0-EVAL-16a"></a>**L0-EVAL-16a. Origin sets.** A typed parameter `{origin: {origin, access}}` names a web origin the intent reads (`access: "read"`) or writes (`"write"`). If the input has a `mandate`, every origin the intent names must be in the mandate's `origins.read` set when read and in its `origins.write` set when written; an absent set is empty. Otherwise the evaluation produces one `outside-instance-limits` blocker with subcode `outside-instance-limits/origin` at position `instance`. Without a mandate no origin is checked here (E54 (4)).
 
 Vectors: `decision.json`: `allow-origin-inside-mandate`, `deny-origin-outside-mandate`, `deny-origin-write-read-only`.
+
+<a id="L0-EVAL-16b"></a>**L0-EVAL-16b. Mandate limits.** A `mandate` may carry its `validity` window, `conditions_fail: true` when one of its while-conditions does not hold at decision time, and `budgets`, the states of its budget terms for this intent. These are checked like a hop's ([L0-EVAL-13](#L0-EVAL-13) to [L0-EVAL-15](#L0-EVAL-15)) with the blockers at position `instance`. A mandate outside its window has ended: it gives an `ended/expired` blocker and is never read as an absent mandate (INV-5). A failed condition gives `ended/lapsed`, and a short budget `budget-exhausted`; a rolling mandate budget without `resets_at` is rejected as in [L0-EVAL-15a](#L0-EVAL-15a). The layer that prepares the input takes the window and the conditions from the mandate's envelope at the input's `now`, and draws from the mandate's budget terms on an allow like from a hop's.
+
+Vectors: `decision.json`: `allow-mandate-within-window`, `deny-mandate-expired`, `deny-mandate-not-yet-valid`, `deny-mandate-conditions-fail`, `deny-mandate-budget-total`, `deny-mandate-budget-rolling`, `reject-mandate-rolling-budget-without-reset`.
 
 <a id="L0-EVAL-17"></a>**L0-EVAL-17. Capacity.** The declared `capacity` MUST be one of the basis's `capacities`. If it is not, the basis produces a `capacity-mismatch` blocker at hop 0.
 
@@ -213,6 +217,11 @@ Vector: `decision.json`: `check-deny-merges-blockers-only`.
 | Hop does not cover the intent, or is not understood | `no-covering-authority` | `hop(k)` | `grantor_of_hop(k)` | `route-to-coordinator` |
 | Mandate does not cover the intent | `outside-instance-limits` | `instance` | `actor-party` | `route-to-coordinator` |
 | Intent names an origin outside the mandate's sets | `outside-instance-limits`, `outside-instance-limits/origin` | `instance` | `actor-party` | `route-to-coordinator` |
+| Mandate expired | `ended`, `ended/expired` | `instance` | `actor-party` | `new-request-required` |
+| Mandate not yet started | `ended`, `ended/expired` | `instance` | `time` | `wait_until(from)` |
+| Mandate while-condition failed | `ended`, `ended/lapsed` | `instance` | `actor-party` | `new-request-required` |
+| Mandate budget short, rolling window | `budget-exhausted` | `instance` | `time` | `wait_until(resets_at)` |
+| Mandate budget short, total window | `budget-exhausted` | `instance` | `actor-party` | `route-to-coordinator` |
 | Restriction DENY | `restricted`, `restricted/policy:<ref>` | `domain-policy` | `restriction-owner` | `not-satisfiable-by-actor` |
 | Budget short, rolling window | `budget-exhausted` | `hop(k)` | `time` | `wait_until(resets_at)` |
 | Budget short, total window | `budget-exhausted` | `hop(k)` | `grantor_of_hop(k)` | `route-to-coordinator` |

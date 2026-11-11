@@ -363,6 +363,9 @@ fn world_with(check: bool) -> impl Strategy<Value = World> {
                         .map(|((c, t, a, p), n)| proof(n, *c, *t, *a, *p))
                         .collect(),
                     mandate: mandate.map(|cover| Mandate {
+                        validity: None,
+                        conditions_hold: true,
+                        budgets: Vec::new(),
                         origins: crate::combinator::Origins::default(),
                         authority: authority(cover),
                         requirements: BTreeSet::new(),

@@ -291,10 +291,14 @@ basis = {
   capacities: [+ capacity],
 }
 
+; L0-EVAL-16b: the mandate's own window, while-conditions and budgets at `now`.
 mandate = {
   authority: authority-set,
   ? requirements: [+ requirement-term],
   ? origins: origin-sets,
+  ? validity: time-window,
+  ? conditions_fail: true,
+  ? budgets: [+ budget-state],
 }
 
 ; E54 (4): the origins one task may read and write; an intent naming another origin is

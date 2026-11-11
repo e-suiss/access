@@ -11,7 +11,7 @@ use crate::codec::Stored;
 use crate::digest::Digest;
 use crate::intent::IntentEnvelope;
 use crate::model::{
-    AuthoritySet, BudgetWindow, CanonicalAuthority, Id, RequirementTerm, TrustedTime,
+    AuthoritySet, BudgetWindow, CanonicalAuthority, Id, RequirementTerm, TrustedTime, Window,
 };
 use crate::requirement::{self, HUMAN_PRESENCE, Outcome as TermOutcome, Proof, check_assurance};
 use crate::restriction::RestrictionOutcome;
@@ -150,6 +150,13 @@ pub struct Mandate {
     /// The origins the task may read and write; an intent naming any other is outside the
     /// instance limits (E54 (4)).
     pub origins: Origins,
+    /// Its validity window; outside it the Mandate has ended, never "no Mandate" (INV-5,
+    /// L0-EVAL-16b). `None` bounds nothing.
+    pub validity: Option<Window>,
+    /// Whether its while-conditions hold at decision time (L0-EVAL-4, L0-EVAL-16b).
+    pub conditions_hold: bool,
+    /// Its budget terms for this intent (C27, L0-EVAL-16b).
+    pub budgets: Vec<BudgetState>,
 }
 
 /// Subcode of an intent naming an origin outside its Mandate's sets (E54 (4)).
@@ -370,24 +377,12 @@ fn hop_blockers(
             Remediation::RouteToCoordinator,
         ));
     }
-    let validity = hop.authority.constraints.validity;
-    if input.now < validity.from {
-        out.push(blocker(
-            BlockerClass::Ended,
-            Some("ended/expired"),
-            at,
-            Resolver::Time,
-            Remediation::WaitUntil(validity.from),
-        ));
-    } else if input.now > validity.until {
-        out.push(blocker(
-            BlockerClass::Ended,
-            Some("ended/expired"),
-            at,
-            grantor,
-            Remediation::NewRequestRequired,
-        ));
-    }
+    window_blockers(
+        &hop.authority.constraints.validity,
+        input.now,
+        (at, grantor),
+        out,
+    );
     match hop.status {
         HopStatus::Active => {}
         HopStatus::Revoked => {
@@ -418,7 +413,44 @@ fn hop_blockers(
             Remediation::NewRequestRequired,
         ));
     }
-    for b in &hop.budgets {
+    budget_blockers(&hop.budgets, (at, grantor), out)
+}
+
+/// The `ended/expired` blocker of a window that does not hold `now`, at `at` (L0-EVAL-13,
+/// L0-EVAL-16b).
+fn window_blockers(
+    validity: &Window,
+    now: TrustedTime,
+    (at, owner): (Position, Resolver),
+    out: &mut Vec<Blocker>,
+) {
+    if now < validity.from {
+        out.push(blocker(
+            BlockerClass::Ended,
+            Some("ended/expired"),
+            at,
+            Resolver::Time,
+            Remediation::WaitUntil(validity.from),
+        ));
+    } else if now > validity.until {
+        out.push(blocker(
+            BlockerClass::Ended,
+            Some("ended/expired"),
+            at,
+            owner,
+            Remediation::NewRequestRequired,
+        ));
+    }
+}
+
+/// The `budget-exhausted` blockers of the budgets a demand does not fit, at `at` (L0-EVAL-15,
+/// L0-EVAL-16b).
+fn budget_blockers(
+    budgets: &[BudgetState],
+    (at, owner): (Position, Resolver),
+    out: &mut Vec<Blocker>,
+) -> Result<(), Rejection> {
+    for b in budgets {
         if b.demand > b.remaining {
             out.push(match (b.window, b.resets_at) {
                 (BudgetWindow::RollingSeconds(_), Some(t)) => blocker(
@@ -434,7 +466,7 @@ fn hop_blockers(
                     BlockerClass::BudgetExhausted,
                     None,
                     at,
-                    grantor,
+                    owner,
                     Remediation::RouteToCoordinator,
                 ),
             });
@@ -474,6 +506,21 @@ fn mandate_and_restrictions(
                 Remediation::RouteToCoordinator,
             ));
         }
+        // INV-5, C27, L0-EVAL-16b
+        let limits = (Position::Instance, Resolver::ActorParty);
+        if let Some(validity) = &m.validity {
+            window_blockers(validity, input.now, limits, blockers);
+        }
+        if !m.conditions_hold {
+            blockers.push(blocker(
+                BlockerClass::Ended,
+                Some("ended/lapsed"),
+                Position::Instance,
+                Resolver::ActorParty,
+                Remediation::NewRequestRequired,
+            ));
+        }
+        budget_blockers(&m.budgets, limits, blockers)?;
         terms.extend(
             m.requirements
                 .iter()
@@ -681,6 +728,7 @@ pub fn evaluate(input: &EvaluationInput<'_>, fuel: &mut Fuel) -> Result<Decision
         .iter()
         .flat_map(known_hops)
         .flat_map(|hop| &hop.budgets)
+        .chain(input.mandate.into_iter().flat_map(|m| &m.budgets))
         .any(unresettable)
     {
         return Err(Rejection::Input);

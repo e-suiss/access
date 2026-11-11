@@ -53,6 +53,48 @@ def origins_within(mandate, intent):
     return True
 
 
+def mandate_limit(subcode, resolver="actor-party", remediation="new-request-required"):
+    # L0-EVAL-16b
+    blocker = {
+        "class": "ended",
+        "subcode": f"ended/{subcode}",
+        "position": "instance",
+        "resolver": resolver,
+        "remediation": remediation,
+    }
+    return blocker
+
+
+def mandate_blockers(mandate, now):
+    # L0-EVAL-16b, L0-EVAL-40: a mandate's window, conditions and budgets, at `instance`
+    blockers = []
+    if "validity" in mandate:
+        start, until = mandate["validity"]
+        if now < start:
+            blockers.append(mandate_limit("expired", "time", {"wait_until": start}))
+        if now > until:
+            blockers.append(mandate_limit("expired"))
+    if mandate.get("conditions_fail") is True:
+        blockers.append(mandate_limit("lapsed"))
+    for state in mandate.get("budgets", []):
+        if state["demand"] > state["remaining"]:
+            if state["window"] == "total":
+                blockers.append({
+                    "class": "budget-exhausted",
+                    "position": "instance",
+                    "resolver": "actor-party",
+                    "remediation": "route-to-coordinator",
+                })
+            else:
+                blockers.append({
+                    "class": "budget-exhausted",
+                    "position": "instance",
+                    "resolver": "time",
+                    "remediation": {"wait_until": state["resets_at"]},
+                })
+    return blockers
+
+
 def restricted(policy):
     # OP-111 m.8, OP-108 m.7
     reference = base64.urlsafe_b64encode(policy).decode("ascii").rstrip("=")
@@ -230,6 +272,7 @@ def evaluate_with_context(basis, evaluation, fuel):
             global_blockers.append(outside_instance_limits())
         if not origins_within(mandate, evaluation["intent"]):
             global_blockers.append(origin_outside_mandate())
+        global_blockers.extend(mandate_blockers(mandate, evaluation["now"]))
         global_requirements.extend((term, "instance") for term in mandate.get("requirements", []))
     return evaluate_candidate(basis, evaluation, global_blockers, global_requirements, fuel)
 
@@ -245,12 +288,13 @@ def evaluate(evaluation, fuel_budget):
     # OP-114 m.13
     if not start <= evaluation["now"] <= until:
         raise Rejection("input", "now is outside the intent validity")
-    for basis in bases:
-        for hop in basis["hops"]:
-            for state in hop.get("budgets", []):
-                # OP-114 m.11
-                if state["window"] != "total" and state["demand"] > state["remaining"] and "resets_at" not in state:
-                    raise Rejection("input", "rolling budget without resets_at")
+    states = [state for basis in bases for hop in basis["hops"] for state in hop.get("budgets", [])]
+    # L0-EVAL-15a, L0-EVAL-16b
+    states.extend(evaluation.get("mandate", {}).get("budgets", []))
+    for state in states:
+        # OP-114 m.11
+        if state["window"] != "total" and state["demand"] > state["remaining"] and "resets_at" not in state:
+            raise Rejection("input", "rolling budget without resets_at")
     if mode == "check" and not bases:
         # OP-114 m.14
         return make_decision([no_covering_authority(0)], [], [])
