@@ -152,7 +152,7 @@ pub fn decode(msg: &[u8]) -> Result<Vec<(u32, &[u8])>, RoughtimeError> {
     if values.len() % 4 != 0 {
         return Err(RoughtimeError::Malformed);
     }
-    let mut bounds = Vec::with_capacity(n.saturating_add(1));
+    let mut bounds = Vec::new();
     bounds.push(0_usize);
     for i in 1..n {
         bounds.push(index(word(
@@ -161,7 +161,7 @@ pub fn decode(msg: &[u8]) -> Result<Vec<(u32, &[u8])>, RoughtimeError> {
         )?)?);
     }
     bounds.push(values.len());
-    let mut out = Vec::with_capacity(n);
+    let mut out = Vec::new();
     let mut previous: Option<u32> = None;
     for i in 0..n {
         let at = n
@@ -206,7 +206,7 @@ fn fixed<const N: usize>(fields: &[(u32, &[u8])], t: u32) -> Result<[u8; N], Rou
 /// [`RoughtimeError::Malformed`].
 pub fn frame(msg: &[u8]) -> Result<Vec<u8>, RoughtimeError> {
     let len = u32::try_from(msg.len()).map_err(|_| RoughtimeError::Malformed)?;
-    let mut out = Vec::with_capacity(msg.len().saturating_add(12));
+    let mut out = Vec::new();
     out.extend_from_slice(MAGIC);
     out.extend_from_slice(&len.to_le_bytes());
     out.extend_from_slice(msg);
@@ -240,7 +240,7 @@ pub fn request(nonce: &[u8; 32]) -> Result<Vec<u8>, RoughtimeError> {
     let pad = MIN_REQUEST
         .saturating_sub(12)
         .saturating_sub(unpadded.len());
-    let zeros = alloc::vec![0_u8; pad];
+    let zeros: Vec<u8> = core::iter::repeat_n(0_u8, pad).collect();
     frame(&encode(&[
         (tag::VER, &version),
         (tag::NONC, nonce),
@@ -267,7 +267,7 @@ pub fn leaf(request: &[u8]) -> [u8; 32] {
 }
 
 fn signed(context: &[u8], body: &[u8]) -> Vec<u8> {
-    let mut m = Vec::with_capacity(context.len().saturating_add(body.len()));
+    let mut m = Vec::new();
     m.extend_from_slice(context);
     m.extend_from_slice(body);
     m

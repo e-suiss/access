@@ -305,7 +305,7 @@ impl Checkpointers {
                     _ = every.tick() => {}
                     () = board().woken() => {}
                 }
-                // TI-RT2: read past the witness gate so a later cosignature can reopen it
+                // TI-RT2
                 let Ok(now) = clock.sources().await else {
                     tracing::warn!("no trusted time; domain checkpoints not signed");
                     continue;

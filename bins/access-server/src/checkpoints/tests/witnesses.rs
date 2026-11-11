@@ -370,8 +370,7 @@ async fn binding(signer: &SocketSigner, d: Digest) -> [u8; 32] {
     k
 }
 
-// CMP-6, T16, T17, SEC23, SI-12, B13, U9, HL-7, TI-RT2, OP-38, OP-158 m.3 (c), (d), (k);
-// Ek B 5839, 5840, 5842, 5843, 5844, 5845, 5893, 6082, 6106
+// CMP-6, T16, T17, SEC23, SI-12, B13, U9, HL-7, TI-RT2, OP-38, OP-158 m.3 (c), (d), (k)
 #[tokio::test(flavor = "multi_thread")]
 #[allow(
     clippy::too_many_lines,
@@ -401,7 +400,7 @@ async fn real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation() {
     let pools = (&db.app, &db.sequencer);
     let mut cadence = Cadence::default();
 
-    // T16: the first checkpoint, cosigned by both from size 0
+    // T16
     let (row, out) = domain_step(
         (&heads, &signer, &publisher),
         pools,
@@ -413,7 +412,7 @@ async fn real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation() {
     .unwrap();
     assert_eq!(row.size, 2);
     assert_eq!((out.cosigned, out.independent), (2, 1), "{out:?}");
-    // SI-12, B13, 6082: the provider operator's own witness does not count
+    // SI-12, B13
     let kept = cosigns(&db.app, &log.id, row.issued_at).await.unwrap();
     assert_eq!(kept.iter().filter(|c| c.independent).count(), 1);
     assert_eq!(witnessed_through(&db.app, &log.id).await.unwrap(), 2);
@@ -425,7 +424,7 @@ async fn real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation() {
             .count(),
         2
     );
-    // TI-RT2: records older than the cosignature leave the gate open
+    // TI-RT2
     assert_eq!(time_check(), Ok(()));
     assert!(
         domain_step(
@@ -440,7 +439,7 @@ async fn real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation() {
         "nothing due before the interval"
     );
 
-    // OP-38, SEC23: two waiting commits, one out-of-cycle checkpoint with a consistency proof
+    // OP-38, SEC23
     log.push(&db, 3, wall() - 20_000).await;
     board().want(d, 4);
     board().want(d, log.size());
@@ -457,7 +456,7 @@ async fn real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation() {
     assert_eq!(board().wanted(&d), None);
     assert_eq!(board().wait(d, 5, Duration::from_millis(10)).await, Ok(5));
 
-    // SEC23 fail closed: the independent witness is killed; the own one alone is no ack
+    // SEC23
     independent.kill();
     log.push(&db, 2, wall() - 10_000).await;
     let (row, out) = domain_step(
@@ -481,7 +480,6 @@ async fn real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation() {
         "ack pending without an independent cosignature"
     );
 
-    // the witness comes back from its own state and cosigns from its base
     let independent = independent.restart();
     publisher.targets[0] = independent.target("Example Witness Ltd");
     let (row, out) = domain_step(
@@ -501,7 +499,7 @@ async fn real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation() {
         "{chain}"
     );
 
-    // U9, HL-7: the provider shows a third witness another tree of the same size
+    // U9, HL-7
     let elsewhere = root.join("elsewhere");
     std::fs::create_dir_all(&elsewhere).unwrap();
     let third = Witness::start(&elsewhere, "w-third", "Other Witness Ltd", d, key);
@@ -534,7 +532,6 @@ async fn real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation() {
     )
     .await
     .unwrap();
-    // the honest witnesses refuse it: the own one keeps it as evidence in its chain
     let refused = access_authority_sequencer::witness::add_checkpoint(
         &publisher.targets[1],
         (7, &[]),
@@ -550,14 +547,12 @@ async fn real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation() {
         ))
     );
     assert!(own.chain(d).contains(" equivocation "));
-    // gossip: the server's monitor keeps signed evidence
     let monitored = Publisher {
         targets: vec![independent.target("Example Witness Ltd"), third_target],
         sinks: vec![],
     };
     assert!(gossip(&monitored, pools, d, wall()).await >= 1);
     assert!(equivocations(&db.app, &log.id).await.unwrap() >= 1);
-    // and the open monitor of the witness binary finds it too
     let out = Command::new(witness_bin())
         .args([
             "monitor",
@@ -572,7 +567,7 @@ async fn real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation() {
     assert_eq!(out.status.code(), Some(3), "{out:?}");
     assert!(String::from_utf8_lossy(&out.stdout).contains("equivocation size 7"));
 
-    // TI-RT2, 6106: a record newer than the witness's clock closes the commit gate
+    // TI-RT2
     log.push(&db, 1, wall() + 120_000).await;
     domain_step(
         (&heads, &signer, &publisher),
@@ -639,8 +634,7 @@ fn verify(args: &[&str]) -> (bool, String) {
     )
 }
 
-// T19, §17.6.1 rule 5, U21, U49, TI-RT5, P18, U9, HL-7; Ek B 5779, 5829, 5834, 5846, 5849,
-// 5893, 5945, 6074
+// T19, §17.6.1 rule 5, U21, U49, TI-RT5, P18, U9, HL-7
 #[tokio::test(flavor = "multi_thread")]
 #[allow(
     clippy::too_many_lines,
@@ -689,7 +683,7 @@ async fn a_witnessed_bundle_opens_only_artifacts_and_dates_the_record() {
     };
     let origin = access_authority_sequencer::checkpoint::origin(&d);
 
-    // §9.16, P32, 6074: anyone may copy the witnessed checkpoint; one witness claims nothing
+    // §9.16, P32
     let (status, body) = http(
         router(),
         &format!("/access/v1/domains/{origin}/checkpoints"),
@@ -702,7 +696,7 @@ async fn a_witnessed_bundle_opens_only_artifacts_and_dates_the_record() {
     assert_eq!(listing["claims"]["equivocation_detectable"], false);
     let note = listing["checkpoint"]["note"].as_str().unwrap().to_owned();
     let vkey = log_vkey(&origin, &row.excerpt);
-    // U49: the cosigned checkpoint verifies with the witness keys alone
+    // U49
     let note_file = root.join("checkpoint.note");
     std::fs::write(&note_file, &note).unwrap();
     let (ok, text) = verify(&[
@@ -718,7 +712,7 @@ async fn a_witnessed_bundle_opens_only_artifacts_and_dates_the_record() {
     ]);
     assert!(ok && text.contains("size: 3"), "{text}");
 
-    // T19: a PEP gets the bundle of position 1, `artifacts` open and nothing else
+    // T19
     let uri = format!("/access/v1/domains/{origin}/checkpoints/3/inclusion/1");
     assert_eq!(http(router(), &uri, false).await.0, 401);
     assert_eq!(
@@ -744,7 +738,7 @@ async fn a_witnessed_bundle_opens_only_artifacts_and_dates_the_record() {
     assert_eq!(disclosure.opened.keys().collect::<Vec<_>>(), ["artifacts"]);
     assert!(disclosure.withheld.contains_key("secret"));
 
-    // U21: it existed by the witness's cosignature, and not before it
+    // U21
     let now_s = wall() / 1000;
     let existed = |before: u64| {
         verify(&[
@@ -769,7 +763,7 @@ async fn a_witnessed_bundle_opens_only_artifacts_and_dates_the_record() {
     let (ok, text) = existed(now_s - 3_600);
     assert!(!ok && text.contains("reject: after"), "{text}");
 
-    // TI-RT5, P18, 5945: the metadata is fresh by the cosignature, not by its own iat
+    // TI-RT5, P18
     let metadata = DomainSigner::metadata(&signer, d).await.unwrap();
     let metadata_file = root.join("metadata.cose");
     std::fs::write(&metadata_file, &metadata).unwrap();

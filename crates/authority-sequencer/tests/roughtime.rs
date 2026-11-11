@@ -64,13 +64,11 @@ async fn roughtime_is_a_third_source_and_one_deviating_source_does_not_stop_comm
     clock.now().await.unwrap();
     assert_eq!(clock.deviating(), 0);
 
-    // one of three sources an hour off: the other two agree, the commit goes on
     let liar = twin(3_600);
     roughtime().sample(&[liar]).await;
     clock.now().await.unwrap();
     assert_eq!(clock.deviating(), 1);
 
-    // an answer under another key is no reading at all
     let mut forged = twin(0);
     forged.key = twin(0).key;
     assert!(read_roughtime(&forged).await.is_err());

@@ -231,7 +231,7 @@ pub(crate) async fn gossip(
             source,
             detected_at: now,
         };
-        // U9, HL-7: sev-1
+        // U9, HL-7
         tracing::error!(
             size = evidence.size,
             source = %evidence.source,

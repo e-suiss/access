@@ -60,7 +60,7 @@ fn d() -> String {
     format!("sha-256:{}", access_kernel::json::b64url_encode(&[7; 32]))
 }
 
-// U9, HL-7, P4: one witness, or none independent, is no "detectable" claim
+// U9, HL-7, P4
 #[tokio::test]
 async fn equivocation_is_claimed_detectable_only_with_compared_independent_witnesses() {
     for (ws, claim) in [

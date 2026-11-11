@@ -90,7 +90,7 @@ impl Checkpoints for PgCheckpoints {
             .next()
             .ok_or(InclusionError::Unknown)?;
         let envelope = RecordEnvelope::from_bytes(&record.envelope).map_err(down)?;
-        // §17.6.1 rule 5: lineage, dependency and consumption stay commitments
+        // §17.6.1 rule 5
         let disclosure = envelope.disclose(|name| name == OPENED).map_err(down)?;
         let leaves = leaf_hashes(&self.app, &id, 0, size).await.map_err(down)?;
         let path = inclusion(leaves.as_slice(), pos, size).map_err(|_| InclusionError::Unknown)?;

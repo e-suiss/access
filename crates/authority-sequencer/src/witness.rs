@@ -393,9 +393,7 @@ pub struct Roughtime {
 }
 
 fn nonce() -> Option<[u8; 32]> {
-    aws_lc_rs::rand::generate::<[u8; 32]>(&aws_lc_rs::rand::SystemRandom::new())
-        .ok()
-        .map(aws_lc_rs::rand::Random::expose)
+    access_crypto::random::bytes::<32>().ok()
 }
 
 /// One verified reading from `server`.

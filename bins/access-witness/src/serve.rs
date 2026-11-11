@@ -167,7 +167,7 @@ async fn add(State(w): State<Arc<Witness>>, headers: HeaderMap, body: Bytes) -> 
         time,
         note: format!("{note}{line}"),
     };
-    // OP-158 m.3 (d): on disk before the cosignature leaves
+    // OP-158 m.3 (d)
     if let Err(e) = chain.append(&entry) {
         return text(StatusCode::SERVICE_UNAVAILABLE, format!("{e}\n"));
     }
