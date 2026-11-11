@@ -396,6 +396,7 @@ mod tests {
                 "risk",
                 "posture",
                 "labels",
+                "basis",
                 "derived",
                 "party_consumption",
                 "open_require_action",
