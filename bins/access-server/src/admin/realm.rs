@@ -740,6 +740,28 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> RealmR
     ) -> Pending<'_, Written> {
         Box::pin(self.exercise_inner(write, caller))
     }
+
+    fn keep_review(&self, keep: access_http::api::ports::ReviewKeep) -> Pending<'_, Option<bool>> {
+        Box::pin(self.keep_inner(keep))
+    }
+}
+
+impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms<P> {
+    /// OP-157 m.3 (w), m.6 (a): the reviewer's keep, a `review.kept` audit record.
+    async fn keep_inner(
+        &self,
+        k: access_http::api::ports::ReviewKeep,
+    ) -> Result<Option<bool>, Unavailable> {
+        let Some(place) = self.locate(&k.slug).await? else {
+            return Ok(None);
+        };
+        let ids = self.ids.key().ok_or(Unavailable)?;
+        self.admin(&ids)
+            .keep_review(place, &k.review, &k.grant, k.kid)
+            .await
+            .map(Some)
+            .map_err(|e| unavailable(&e))
+    }
 }
 
 /// The `audit.read` event of a channel B read (OP-44, U53).

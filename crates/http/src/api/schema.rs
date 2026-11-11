@@ -447,11 +447,36 @@ fn schemas() -> Value {
         },
         "Review": {
             "type": "object",
-            "description": "An access review campaign, a view and never a queue (IDP-39 (3), OP-157 m.3 (w)); its lane names its members when it serves it.",
+            "description": "An access review campaign, a view and never a queue (IDP-39 (3), OP-157 m.3 (w)): its period and scope, and when its next period starts while it is live. It writes no authority.",
+            "required": ["name", "period_days", "scope", "status", "started_at", "version"],
+            "properties": {
+                "name": { "type": "string" },
+                "period_days": { "type": "integer", "minimum": 7, "maximum": 366 },
+                "scope": { "type": "string", "enum": ["manager_team"] },
+                "status": { "type": "string", "enum": ["live", "closed"] },
+                "started_at": { "type": "string", "format": "date-time" },
+                "next_run": { "type": ["string", "null"], "format": "date-time" },
+                "version": { "type": "integer", "minimum": 1 },
+            },
         },
         "ReviewItem": {
             "type": "object",
-            "description": "One Grant of a campaign, as the reviewer may see it (OP-157 m.3 (w)); its lane names its members when it serves it.",
+            "description": "One Grant of a campaign, as the reviewer may see it (OP-157 m.3 (w)): a live Grant in the reviewer's own lineage, with how many Grants derive from it. `remove` names the reviewer's own revokeGrant and the basis it is signed on; a keep records review.kept and writes no authority.",
+            "required": ["review", "grant", "holder", "actions", "resource", "since", "delegable", "derived", "remove"],
+            "properties": {
+                "review": { "type": "string" },
+                "grant": { "type": "string" },
+                "holder": { "type": "object" },
+                "actions": { "type": "array", "items": { "type": "object" } },
+                "resource": { "type": "object" },
+                "valid_until": { "type": ["string", "null"], "format": "date-time" },
+                "since": { "type": "string" },
+                "issued_by": { "type": ["string", "null"] },
+                "delegable": { "type": "boolean" },
+                "derived": { "type": "integer", "minimum": 0 },
+                "remove": { "type": "object" },
+                "kept": { "type": "boolean" },
+            },
         },
         "OffboardingPreview": {
             "type": "object",
@@ -766,6 +791,9 @@ fn body_of(row: &Route) -> &'static str {
         (_, Some((_, Shape::List(_)))) => "Page",
         (_, Some((_, Shape::Draft))) => "IntentDraft",
         (_, Some((_, Shape::Write { .. } | Shape::Offboarding))) => "WriteResult",
+        // OP-157 m.3 (w)
+        (_, Some((_, Shape::ReviewItems))) => "Page",
+        (_, Some((_, Shape::ReviewKeep))) => "ReviewItem",
         (_, Some((kind, Shape::Get))) => match kind {
             ResourceKind::Clients => "Client",
             ResourceKind::Groups => "Group",
@@ -899,9 +927,15 @@ fn operation(row: &Route) -> Value {
     ) {
         (Some((_, super::realm::Shape::Draft)), _)
         | (_, Some((_, super::platform::Shape::Draft))) => Some("DraftRequest"),
-        (Some((_, super::realm::Shape::Write { .. } | super::realm::Shape::Offboarding)), _) => {
-            Some("WriteBody")
-        }
+        (
+            Some((
+                _,
+                super::realm::Shape::Write { .. }
+                | super::realm::Shape::Offboarding
+                | super::realm::Shape::ReviewKeep,
+            )),
+            _,
+        ) => Some("WriteBody"),
         (Some((_, super::realm::Shape::Planned(_))), _) if write => Some("WriteBody"),
         (_, Some((super::ports::PlatformKind::Tenants, super::platform::Shape::Create))) => {
             Some("TenantCreate")

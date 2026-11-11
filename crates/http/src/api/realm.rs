@@ -18,6 +18,8 @@ mod handlers;
 pub mod jobs;
 // OP-157 m.3 (v)
 pub mod offboarding;
+// OP-157 m.3 (w)
+pub mod review;
 
 use access_identity_admin::AdminError;
 use access_identity_admin::domain::Invalid;
@@ -1509,6 +1511,11 @@ pub enum Shape {
     /// V9, OP-157 m.4 (b): an offboarding's commit, the caller's signed Exercises in order with
     /// one explicit choice for every channel (OP-157 m.3 (v)).
     Offboarding,
+    /// V10, OP-157 m.4 (b): a campaign's items for the reading account alone (OP-157 m.3 (w)).
+    ReviewItems,
+    /// V10, OP-157 m.4 (b): the reviewer's keep, signed with the reviewer's AIS; no Exercise
+    /// (OP-157 m.3 (w), m.6 (a)).
+    ReviewKeep,
 }
 
 const CLIENT_PATCH: &[&str] = &[
@@ -1781,11 +1788,16 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "clearBreakglassAccount" => (ResourceKind::BreakglassAccounts, w(false)),
         "listBreakglassDrills" => (ResourceKind::BreakglassDrills, Shape::List(&[])),
         "listBreakglassReviews" => (ResourceKind::BreakglassReviews, Shape::List(&[])),
-        "listReviews" => (ResourceKind::Reviews, Shape::Planned("Page")),
-        "scheduleReview" | "closeReview" => (ResourceKind::Reviews, Shape::Planned("WriteResult")),
-        "getReview" => (ResourceKind::Reviews, Shape::Planned("Declared")),
-        "listReviewItems" => (ResourceKind::ReviewItems, Shape::Planned("Page")),
-        "keepReviewItem" => (ResourceKind::ReviewItems, Shape::Planned("WriteResult")),
+        // OP-157 m.3 (w), m.6 (a)
+        "listReviews" => (
+            ResourceKind::Reviews,
+            Shape::List(&["name", "status", "scope"]),
+        ),
+        "scheduleReview" => (ResourceKind::Reviews, CREATE),
+        "closeReview" => (ResourceKind::Reviews, w(false)),
+        "getReview" => (ResourceKind::Reviews, Shape::Get),
+        "listReviewItems" => (ResourceKind::ReviewItems, Shape::ReviewItems),
+        "keepReviewItem" => (ResourceKind::ReviewItems, Shape::ReviewKeep),
         // OP-157 m.3 (v), m.6 (a)
         "previewOffboarding" => (ResourceKind::OffboardingPreviews, Shape::Get),
         "commitOffboarding" => (ResourceKind::OffboardingPreviews, Shape::Offboarding),

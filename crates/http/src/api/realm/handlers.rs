@@ -139,6 +139,18 @@ pub async fn serve<E: Env>(
             Some(k) => super::offboarding::commit(&ctx, k, &body).await,
             None => Err(&codes::NOT_FOUND),
         },
+        // OP-157 m.3 (w)
+        Shape::ReviewItems => match (&ctx.caller, key) {
+            (Caller::Read(reader), Some(review)) => {
+                let k = format!("{review}:{}", reader.token.subject);
+                list(&ctx, kind, Some(k), &[], &uri).await
+            }
+            _ => Err(&codes::NOT_FOUND),
+        },
+        Shape::ReviewKeep => match key {
+            Some(k) => super::review::keep(&ctx, &k, &body).await,
+            None => Err(&codes::NOT_FOUND),
+        },
         // OP-154 m.3 (f)
         Shape::RevokeAll => match key {
             Some(k) => super::jobs::revoke_all(&ctx, k, &body).await,
@@ -344,6 +356,10 @@ async fn draft<E: Env>(ctx: &Ctx<E>, raw: &[u8]) -> Result<Response, &'static Co
     // OP-157 m.3 (v)
     if matches!(shape, Shape::Offboarding) {
         return super::offboarding::draft(ctx, operation.operation_id, request).await;
+    }
+    // OP-157 m.3 (w)
+    if matches!(shape, Shape::ReviewKeep) {
+        return super::review::draft(ctx, operation.operation_id, request);
     }
     // TN-125, OP-154 m.3 (f)
     if matches!(shape, Shape::JobCreate | Shape::RevokeAll) {

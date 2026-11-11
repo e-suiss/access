@@ -794,6 +794,57 @@ where
             .map(|c| c.map(crate::admin::offboarding::departing))
             .map_err(|e| unavailable(&e))
     }
+
+    async fn review_items(
+        &self,
+        domain: Digest,
+        reviewer: Id,
+    ) -> Result<Vec<access_identity_admin::ports::TeamGrant>, Unavailable> {
+        // OP-157 m.3 (w)
+        self.domains
+            .review_items(domain, reviewer)
+            .await
+            .map(|items| {
+                items
+                    .into_iter()
+                    .map(|r| access_identity_admin::ports::TeamGrant {
+                        grant: r.grant,
+                        holder: r.holder,
+                        actions: r.actions,
+                        resource: r.resource,
+                        validity: r.validity,
+                        since: r.since,
+                        issued_by: match r.basis {
+                            access_kernel::meta::GrantBasis::Holding(h) => Some(h.holder),
+                            access_kernel::meta::GrantBasis::Anchor(_) => None,
+                        },
+                        delegable: r.delegable,
+                        derived: r.derived,
+                        via: r.via,
+                    })
+                    .collect()
+            })
+            .map_err(|e| unavailable(&e))
+    }
+
+    async fn key_party(&self, domain: Digest, kid: [u8; 32]) -> Result<Option<Id>, Unavailable> {
+        use access_authority_core::keys::{AsOf, KeyState};
+        // OP-157 m.3 (w), m.6 (a)
+        match self
+            .domains
+            .lookup_keys(domain, &[kid], AsOf::Head, false)
+            .await
+        {
+            Ok(answer) => Ok(answer
+                .lookup
+                .keys
+                .into_iter()
+                .find(|e| e.kid == kid && e.state == KeyState::Active)
+                .map(|e| e.party)),
+            Err(CoreError::Protocol(_)) => Ok(None),
+            Err(e) => Err(unavailable(&e)),
+        }
+    }
 }
 
 impl<K, B, S, C> crate::bootstrap::MetaExercises for Plane<K, B, S, C>

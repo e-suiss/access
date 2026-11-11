@@ -464,6 +464,28 @@ pub trait RealmResources: Send + Sync {
         let _ = (write, caller);
         Box::pin(async { Err(Unavailable) })
     }
+
+    /// V10, OP-157 m.4 (b): records the reviewer's keep of one campaign item as a
+    /// `review.kept` identity audit record; no Exercise and no authority (OP-157 m.3 (w),
+    /// m.6 (a)). `None` when there is no such realm, `Some(false)` when the item is not one of
+    /// the signer's. None by default.
+    fn keep_review(&self, keep: ReviewKeep) -> Pending<'_, Option<bool>> {
+        let _ = keep;
+        Box::pin(async { Err(Unavailable) })
+    }
+}
+
+/// A reviewer's keep of one campaign item (OP-157 m.3 (w)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReviewKeep {
+    /// The realm's slug.
+    pub slug: String,
+    /// The campaign.
+    pub review: String,
+    /// The Grant, base64url.
+    pub grant: String,
+    /// The thumbprint of the Instance key that signed the keep.
+    pub kid: [u8; 32],
 }
 
 /// A read of one audit event's realm inclusion proof (OP-152 m.7 (d)).
