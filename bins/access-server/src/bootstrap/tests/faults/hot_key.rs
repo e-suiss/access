@@ -10,7 +10,7 @@ use super::super::authzen::{PEP, pdp};
 async fn fo_10_a_held_domain_answers_busy_and_never_allows() {
     let p = pdp("fo-10-hot").await;
     let head = p.w.domains.head(p.domain).await.unwrap().0;
-    let held = access_store::testing::hold_head(&p.w.db, p.domain.0)
+    let lock = access_store::testing::hold_head(&p.w.db, p.domain.0)
         .await
         .unwrap();
     let first = p.allowed(Mode::Commit).await;
@@ -34,7 +34,7 @@ async fn fo_10_a_held_domain_answers_busy_and_never_allows() {
     assert_eq!(a.headers["retry-after"], "1");
     assert!(v.get("decision").is_none(), "{v}");
     assert_eq!(p.w.domains.head(p.domain).await.unwrap().0, head);
-    drop(held);
+    drop(lock);
     assert_eq!(blocked.await.unwrap(), StatusCode::OK);
     p.w.domains.release().await;
 }

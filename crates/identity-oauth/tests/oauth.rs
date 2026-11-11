@@ -1700,7 +1700,7 @@ async fn with_the_identity_database_cut_off_only_local_verification_goes_on() {
         )
         .await;
     assert_eq!(r, Reply::Unavailable);
-    let revoke = Params::new(vec![("token".into(), refresh.clone().into())]).unwrap();
+    let revoke = Params::new(vec![("token".into(), refresh.clone())]).unwrap();
     let r = w
         .oauth
         .revoke(&w.realm, &revoke, Some(&basic(CONFIDENTIAL, SECRET)))
@@ -1751,6 +1751,15 @@ async fn with_the_identity_database_cut_off_only_local_verification_goes_on() {
 // U35, EP-3, MD-7, OP-21, OP-32, OP-61, §13.7.9, §17.5.1, Ek B 5701
 #[tokio::test(flavor = "multi_thread")]
 async fn measured_revocation_reaches_another_node_within_the_cluster_budget() {
+    async fn introspect(oauth: &OAuth<TestEnv>, realm: &Realm, token: &str) -> Value {
+        let p = Params::new(vec![("token".into(), token.into())]).unwrap();
+        let authorization = basic(CONFIDENTIAL, SECRET);
+        body(
+            &oauth.introspect(realm, &p, Some(&authorization)).await,
+            200,
+        )["active"]
+            .clone()
+    }
     let w = world().await;
     let env = w.oauth.env();
     let node_b = OAuth::new(TestEnv {
@@ -1769,15 +1778,6 @@ async fn measured_revocation_reaches_another_node_within_the_cluster_budget() {
         },
     });
     let realm_b = node_b.realm(HOST, None).await.unwrap().unwrap();
-    async fn introspect(oauth: &OAuth<TestEnv>, realm: &Realm, token: &str) -> Value {
-        let p = Params::new(vec![("token".into(), token.into())]).unwrap();
-        let authorization = basic(CONFIDENTIAL, SECRET);
-        body(
-            &oauth.introspect(realm, &p, Some(&authorization)).await,
-            200,
-        )["active"]
-            .clone()
-    }
     let n = 40;
     let mut same = Vec::with_capacity(n);
     let mut cluster = Vec::with_capacity(n);
@@ -1799,7 +1799,7 @@ async fn measured_revocation_reaches_another_node_within_the_cluster_budget() {
         let access = t["access_token"].as_str().unwrap().to_owned();
         let refresh = t["refresh_token"].as_str().unwrap().to_owned();
         assert_eq!(introspect(&node_b, &realm_b, &access).await, true);
-        let revoke = Params::new(vec![("token".into(), refresh.into())]).unwrap();
+        let revoke = Params::new(vec![("token".into(), refresh)]).unwrap();
         let start = std::time::Instant::now();
         let done = w
             .oauth
@@ -1808,14 +1808,14 @@ async fn measured_revocation_reaches_another_node_within_the_cluster_budget() {
         assert_eq!(body(&done, 200), serde_json::json!({}));
         let committed = start.elapsed();
         assert_eq!(introspect(&w.oauth, &w.realm, &access).await, false);
-        same.push(start.elapsed().saturating_sub(committed).as_micros() as u64);
+        same.push(u64::try_from(start.elapsed().saturating_sub(committed).as_micros()).unwrap());
         let at_b = std::time::Instant::now();
         assert_eq!(
             introspect(&node_b, &realm_b, &access).await,
             false,
             "the first read after the revocation"
         );
-        cluster.push((committed + at_b.elapsed()).as_micros() as u64);
+        cluster.push(u64::try_from((committed + at_b.elapsed()).as_micros()).unwrap());
     }
     let summary = |mut v: Vec<u64>| {
         v.sort_unstable();
@@ -1838,7 +1838,11 @@ async fn measured_revocation_reaches_another_node_within_the_cluster_budget() {
             "profile": if cfg!(debug_assertions) { "debug" } else { "release" },
         },
     });
-    println!("measure {report}");
+    std::io::Write::write_all(
+        &mut std::io::stdout(),
+        format!("measure {report}\n").as_bytes(),
+    )
+    .unwrap();
     assert!(
         report["cluster_revoke_to_inactive"]["p99_us"]
             .as_u64()

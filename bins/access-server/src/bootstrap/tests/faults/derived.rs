@@ -71,8 +71,8 @@ async fn fo_05_with_derived_down_commits_go_on_and_a_list_is_never_fresher_than_
     );
     tokio::time::sleep(std::time::Duration::from_millis(1_100)).await;
     let later = p.now().await;
-    let published = publisher.publish(p.domain, later).await.unwrap();
-    assert_eq!(published.first().map(|l| l.as_of), Some(head));
+    let lists = publisher.publish(p.domain, later).await.unwrap();
+    assert_eq!(lists.first().map(|l| l.as_of), Some(head));
     let r = crate::status::routes(p.w.db.app.clone())
         .oneshot(
             Request::get(format!(

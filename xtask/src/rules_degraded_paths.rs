@@ -172,10 +172,10 @@ fn scan_rust(rel_path: &str, src: &str) -> Vec<Violation> {
             }
         }
         let source = raw.get(i).copied().unwrap_or_default();
-        if let Some(why) = error_branch_allow(line, source) {
-            if !allowlisted(rel_path, "error-allow") {
-                out.push(violation(rel_path, n, format!("{why}: {WHY}")));
-            }
+        if let Some(why) = error_branch_allow(line, source)
+            && !allowlisted(rel_path, "error-allow")
+        {
+            out.push(violation(rel_path, n, format!("{why}: {WHY}")));
         }
     }
     for l in &lexed.strings {
@@ -207,7 +207,7 @@ fn scan_text(rel_path: &str, text: &str, comment: &str) -> Vec<Violation> {
             .filter(|a| !a.is_empty())
         {
             let negated = NEGATIONS.contains(&prev.to_ascii_lowercase().as_str());
-            prev = atom.to_owned();
+            atom.clone_into(&mut prev);
             if negated {
                 continue;
             }
