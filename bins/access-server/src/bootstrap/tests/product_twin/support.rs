@@ -707,11 +707,11 @@ async fn revoking_support_ends_only_the_operators_access_and_every_use_names_the
 
     // §8.16, TN-71
     let exercise = b64url_encode(&allowed.exercise().0);
-    let uses = d.hub("activity", &person).await;
-    let used = uses
+    let activity = d.hub("activity", &person).await;
+    let used = activity
         .iter()
         .find(|u| u["exercise"] == exercise.as_str())
-        .unwrap_or_else(|| panic!("{uses:?}"));
+        .unwrap_or_else(|| panic!("{activity:?}"));
     let grant = b64url_encode(&h.grant.0);
     assert_eq!(used["by_viewer"], false);
     assert_eq!(used["basis"]["grant"], grant.as_str());

@@ -107,7 +107,7 @@ mod tests {
     #[test]
     fn a_template_naming_a_reserved_or_protected_action_is_reported() {
         let good = "pub const ELIGIBLE: [IdpAction; 1] = [IdpAction::AccountRead];\npub const READ_ONLY: [IdpAction; 1] = [IdpAction::AccountRead];\npub const PROTECTED: [IdpAction; 4] = [IdpAction::AccountEmailChange, IdpAction::AccountExport, IdpAction::AccountDelete, IdpAction::AccountMfaChange];";
-        assert!(violations(good, CATALOG_TEXT).is_empty());
+        assert_eq!(violations(good, CATALOG_TEXT), Vec::<String>::new());
         let reserved = good.replace(
             "ELIGIBLE: [IdpAction; 1] = [IdpAction::AccountRead]",
             "ELIGIBLE: [IdpAction; 2] = [IdpAction::AccountRead, IdpAction::AccountMfaChange]",
@@ -122,6 +122,6 @@ mod tests {
     #[test]
     fn the_repository_templates_pass() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-        assert!(check(&root).unwrap().is_empty());
+        assert_eq!(check(&root).unwrap().len(), 0);
     }
 }
