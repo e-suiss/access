@@ -21,3 +21,17 @@ fail-fast = false
 
 [profile.ci.junit]
 path = "junit.xml"
+
+# OP-158 m.3 (n): the failover tests share one replicated cell (scripts/pg-ha.sh)
+[test-groups]
+pg-ha = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'test(pg_ha)'
+test-group = 'pg-ha'
+slow-timeout = { period = "60s", terminate-after = 5 }
+
+[[profile.ci.overrides]]
+filter = 'test(pg_ha)'
+test-group = 'pg-ha'
+slow-timeout = { period = "60s", terminate-after = 5 }
