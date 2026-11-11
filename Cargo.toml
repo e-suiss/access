@@ -5,7 +5,7 @@ members = ["crates/*", "bins/*", "services/*", "services/linux-client/module", "
 exclude = ["bins/access-gw-kerberos"]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.99"
 license = "Apache-2.0"
@@ -14,15 +14,15 @@ publish = false
 
 # F-3, SA-35
 [workspace.dependencies]
-access-kernel = { package = "esuiss-access-kernel", path = "crates/kernel", version = "=0.4.0", default-features = false }
-suiss-crypto = { package = "esuiss-crypto", path = "crates/suiss-crypto", version = "=0.4.0", default-features = false }
+access-kernel = { package = "esuiss-access-kernel", path = "crates/kernel", version = "=0.5.0", default-features = false }
+suiss-crypto = { package = "esuiss-crypto", path = "crates/suiss-crypto", version = "=0.5.0", default-features = false }
 access-crypto = { path = "crates/crypto", default-features = false }
 access-telemetry = { path = "crates/telemetry", default-features = false }
 access-http = { path = "crates/http", default-features = false }
-suiss-sandbox = { package = "esuiss-sandbox", path = "crates/suiss-sandbox", version = "=0.4.0", default-features = false }
-suiss-restriction = { package = "esuiss-restriction", path = "crates/suiss-restriction", version = "=0.4.0", default-features = false }
-suiss-ledger = { package = "esuiss-ledger", path = "crates/suiss-ledger", version = "=0.4.0", default-features = false }
-suiss-retention = { package = "esuiss-retention", path = "crates/suiss-retention", version = "=0.4.0", default-features = false }
+suiss-sandbox = { package = "esuiss-sandbox", path = "crates/suiss-sandbox", version = "=0.5.0", default-features = false }
+suiss-restriction = { package = "esuiss-restriction", path = "crates/suiss-restriction", version = "=0.5.0", default-features = false }
+suiss-ledger = { package = "esuiss-ledger", path = "crates/suiss-ledger", version = "=0.5.0", default-features = false }
+suiss-retention = { package = "esuiss-retention", path = "crates/suiss-retention", version = "=0.5.0", default-features = false }
 access-store = { path = "crates/store", default-features = false }
 access-internal-api = { path = "crates/internal-api", default-features = false }
 access-parse = { path = "crates/parse", default-features = false }
@@ -52,11 +52,11 @@ access-identity-saml = { path = "crates/identity-saml", default-features = false
 access-edge-core = { path = "crates/edge-core", default-features = false }
 access-identity-directory = { path = "crates/identity-directory", default-features = false }
 access-authority-ingest = { path = "crates/authority-ingest", default-features = false }
-access-sdk = { package = "esuiss-access-sdk", path = "sdks/rust/access", version = "=0.4.0", default-features = false }
+access-sdk = { package = "esuiss-access-sdk", path = "sdks/rust/access", version = "=0.5.0", default-features = false }
 access-experience = { path = "services/experience", default-features = false }
 # OP-155 m.3 (q), Ek B 5004
 saml-idp-suite = { path = "tools/saml-idp-suite", default-features = false }
-access-verifier = { package = "esuiss-access-verifier", path = "sdks/rust/verifier", version = "=0.4.0", default-features = false }
+access-verifier = { package = "esuiss-access-verifier", path = "sdks/rust/verifier", version = "=0.5.0", default-features = false }
 
 # F-2
 secrecy = { version = "0.10.3", default-features = false }
