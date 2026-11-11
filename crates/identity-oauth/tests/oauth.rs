@@ -1653,6 +1653,101 @@ async fn introspection_and_revocation() {
     );
 }
 
+// OP-45, U39, HL-22, RR-25, MD-8, G50, EP-2, EP-3, EP-4, EP-6, OPI-3, Ek B 5706, 6005
+#[tokio::test(flavor = "multi_thread")]
+async fn with_the_identity_database_cut_off_only_local_verification_goes_on() {
+    use access_identity_oauth::domain::jwt::{SKEW_MS, verify_local};
+    use access_identity_oauth::ports::oauth::TokenSigner as _;
+    let w = world().await;
+    let code = w.code(CONFIDENTIAL).await;
+    let t = body(
+        &w.token(
+            &[
+                ("grant_type", "authorization_code"),
+                ("code", &code),
+                ("redirect_uri", CB),
+                ("code_verifier", VERIFIER),
+            ],
+            Some(&basic(CONFIDENTIAL, SECRET)),
+        )
+        .await,
+        200,
+    );
+    let access = t["access_token"].as_str().unwrap().to_owned();
+    let refresh = t["refresh_token"].as_str().unwrap().to_owned();
+    let live = w.introspect(&access).await;
+    assert_eq!(live["active"], true);
+    let aud = live["aud"].as_str().unwrap().to_owned();
+    let exp_ms = u64::try_from(live["exp"].as_i64().unwrap()).unwrap() * 1000;
+    let jwks = SignerKeys::new(w.socket.clone())
+        .jwks(w.realm.realm)
+        .await
+        .unwrap();
+    let issuer = w.realm.issuer.as_str().to_owned();
+    assert!(verify_local(jwks.as_bytes(), &access, &issuer, &aud, now()).is_some());
+
+    access_store::testing::refuse_connections(&w.db, true)
+        .await
+        .unwrap();
+    // EP-3, OPI-3: the answer a moment ago is no evidence now; active=false, never 503
+    assert_eq!(w.introspect(&access).await["active"], false);
+    assert_eq!(w.introspect(&refresh).await["active"], false);
+    // EP-2, G50: 503 + Retry-After, never invalid_grant
+    let r = w
+        .token(
+            &[("grant_type", "refresh_token"), ("refresh_token", &refresh)],
+            Some(&basic(CONFIDENTIAL, SECRET)),
+        )
+        .await;
+    assert_eq!(r, Reply::Unavailable);
+    let revoke = Params::new(vec![("token".into(), refresh.clone().into())]).unwrap();
+    let r = w
+        .oauth
+        .revoke(&w.realm, &revoke, Some(&basic(CONFIDENTIAL, SECRET)))
+        .await;
+    assert_eq!(
+        r,
+        Reply::Unavailable,
+        "no revocation is taken while it cannot be kept"
+    );
+    // EP-6, U39, HL-22: the resource server's own check goes on within the lifetime, no window
+    assert!(verify_local(jwks.as_bytes(), &access, &issuer, &aud, now()).is_some());
+    assert!(verify_local(jwks.as_bytes(), &access, &issuer, &aud, exp_ms + SKEW_MS).is_some());
+    assert!(
+        verify_local(
+            jwks.as_bytes(),
+            &access,
+            &issuer,
+            &aud,
+            exp_ms + SKEW_MS + 1
+        )
+        .is_none(),
+        "the declared lifetime ends it"
+    );
+    assert!(
+        verify_local(
+            jwks.as_bytes(),
+            &access,
+            &issuer,
+            "https://other.example",
+            now()
+        )
+        .is_none()
+    );
+
+    access_store::testing::refuse_connections(&w.db, false)
+        .await
+        .unwrap();
+    assert_eq!(w.introspect(&access).await["active"], true);
+    let r = w
+        .token(
+            &[("grant_type", "refresh_token"), ("refresh_token", &refresh)],
+            Some(&basic(CONFIDENTIAL, SECRET)),
+        )
+        .await;
+    assert_eq!(body(&r, 200)["token_type"], "DPoP");
+}
+
 // §10.4.6, G57, MD-7, IDP-24
 #[tokio::test]
 async fn logout_ends_the_session_and_notifies_clients() {

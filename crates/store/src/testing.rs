@@ -1045,3 +1045,35 @@ pub async fn clock_text(db: &TestDb) -> Result<String, TestDbError> {
         .await?
         .unwrap_or_default())
 }
+
+/// Cuts the database off as an outage would (OP-158 m.3 (t), §16.7.1): no new connection is
+/// accepted and every open one is ended, so every pool's next statement fails. `false` lets
+/// connections in again. Other databases of the cluster are untouched.
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn refuse_connections(db: &TestDb, refuse: bool) -> Result<(), TestDbError> {
+    let mut c = PgConnection::connect_with(&db.admin.clone().database("postgres"))
+        .await
+        .at("connect admin")?;
+    let allow = if refuse { "false" } else { "true" };
+    exec(
+        &mut c,
+        format!(
+            "ALTER DATABASE \"{}\" WITH ALLOW_CONNECTIONS {allow}",
+            db.name.replace('"', "")
+        ),
+        "allow connections",
+    )
+    .await?;
+    if refuse {
+        sqlx::query(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
+        )
+        .bind(&db.name)
+        .execute(&mut c)
+        .await
+        .at("terminate")?;
+    }
+    Ok(())
+}

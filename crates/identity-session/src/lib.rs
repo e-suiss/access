@@ -51,14 +51,24 @@ pub enum SessionError {
     Risk(#[from] RiskError),
 }
 
+/// OP-45 rule 4, EP-1: the identity database cannot answer. Nobody is signed in, registered or
+/// refreshed and nothing is revoked until it answers; the page says "Sign-in isn't available
+/// right now" (`login.degraded`), never an allow.
+pub const DEGRADED: Problem = Problem {
+    status: 503,
+    code: "degraded-identity",
+    title: "Sign-in isn't available right now",
+    retry_after_s: Some(1),
+};
+
 impl SessionError {
-    /// The RFC 9457 problem. Storage and capacity failures shed with `503 + Retry-After` and
-    /// never authenticate (G48, G50).
+    /// The RFC 9457 problem. A database that cannot answer is [`DEGRADED`]; other dependency and
+    /// capacity failures shed with `503 + Retry-After`; none ever authenticates (G48, G50).
     #[must_use]
     pub fn problem(&self) -> Problem {
         match self {
-            Self::Store(_)
-            | Self::Notify(_)
+            Self::Store(_) | Self::Account(AccountError::Store(_)) => DEGRADED,
+            Self::Notify(_)
             | Self::WebAuthn(WebAuthnError::Registry(_))
             | Self::Risk(RiskError::Store(_) | RiskError::Account(AccountError::Store(_))) => {
                 unavailable(1)

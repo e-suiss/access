@@ -3,7 +3,10 @@
 //! RP-initiated logout with back-channel logout. Everything is decided against the primary
 //! (Δ = 0, MD-7); when the database, the signer or trusted time cannot answer, the answer is
 //! `503 + Retry-After`, never `invalid_grant` (G50, EP-2), except introspection, which answers
-//! `active: false` (MD-8).
+//! `active: false` (MD-8). While the identity database is down no token is issued, refreshed or
+//! revoked here; tokens already signed are checked only locally by resource servers within their
+//! declared lifetime (`domain::jwt::verify_local`), and no surface of this server opens a window
+//! (OP-45, EP-6, U39).
 
 mod approval;
 mod authority;

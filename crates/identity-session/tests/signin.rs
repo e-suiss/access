@@ -1248,7 +1248,7 @@ async fn required_mfa_without_a_second_factor_never_signs_in() {
     );
 }
 
-// G48, MD-8
+// G48, MD-8, OP-45
 #[tokio::test]
 async fn login_fails_closed_when_the_database_is_unreachable() {
     let e = env(11, "is-k").await;
@@ -1269,7 +1269,12 @@ async fn login_fails_closed_when_the_database_is_unreachable() {
         err,
         SessionError::Store(_) | SessionError::Account(_)
     ));
-    assert_eq!(err.problem().status, 503);
+    // OP-45, EP-1, Ek B 5736
+    let p = err.problem();
+    assert_eq!(
+        (p.status, p.code, p.retry_after_s),
+        (503, "degraded-identity", Some(1))
+    );
     let r = ref_of(&flow);
     let err = e
         .with(async |a| {

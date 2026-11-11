@@ -450,5 +450,40 @@ pub fn realm_algorithms() -> BTreeSet<Algorithm> {
     [Algorithm::Es256, Algorithm::Ed25519].into_iter().collect()
 }
 
+/// The resource server's own check of a realm access token (`at+jwt`) with the realm JWKS it
+/// already holds: signature, `iss`, its audience and times with [`SKEW_MS`]. No database,
+/// introspection or network is asked, so it answers the same while the identity database is
+/// down; the bound is the token's declared lifetime, never a window (§13.11 EP-4, EP-6, U39,
+/// HL-22, OP-45 rule 1). `None` is DENY.
+#[must_use]
+pub fn verify_local(
+    jwks: &[u8],
+    token: &str,
+    issuer: &str,
+    audience: &str,
+    now_ms: u64,
+) -> Option<Json> {
+    use access_kernel::verify::jws::{ClaimRules, Origin, check_claims, verify_compact};
+    let keys = realm_key_set(jwks).ok()?;
+    let v = verify_compact(
+        &access_crypto::AwsLcBackend,
+        token,
+        &keys,
+        crate::domain::tokens::ACCESS_TYP,
+        Origin::Native,
+    )
+    .ok()?;
+    check_claims(
+        &v.payload,
+        &ClaimRules {
+            issuer,
+            audience,
+            now: now_ms,
+            skew_ms: SKEW_MS,
+        },
+    )
+    .ok()
+}
+
 #[cfg(test)]
 mod tests;
