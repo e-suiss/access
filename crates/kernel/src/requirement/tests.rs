@@ -242,3 +242,50 @@ fn a_distinct_surface_term_is_unmet_until_proofs_carry_a_surface() {
         Ok(surfaces)
     );
 }
+
+// L0-EVAL-26a, SEC10, SEC20, OP-158 m.19 (c)
+#[test]
+fn a_recover_contribution_of_the_actor_party_counts_and_any_other_does_not() {
+    let actor_party = Id([1; 16]);
+    let digest = Digest([9; 32]);
+    let ctx = Context {
+        now: 10,
+        actor_instance: Some(Id([2; 16])),
+        actor_party: Some(actor_party),
+        intent_digest: &digest,
+        resources: &[],
+    };
+    let term = |class: &str| RequirementTerm {
+        proof_kind: ProofKind::Contribution,
+        class: alloc::string::String::from(class),
+        count: 1,
+        binding: Binding::IntentDigest,
+        freshness_ms: None,
+        independence: Independence::DistinctInstance,
+        consumption: Consumption::SingleUse,
+        source: None,
+        assurance: BTreeMap::new(),
+    };
+    let proof = |class: &str, instance: u8| Proof {
+        id: Id([instance; 16]),
+        kind: ProofKind::Contribution,
+        class: alloc::string::String::from(class),
+        position: 1,
+        time: 1,
+        party: actor_party,
+        instance: Id([instance; 16]),
+        issuer: actor_party,
+        binding: ProofBinding {
+            actor_instance: None,
+            intent_digest: Some(digest),
+            resource: None,
+        },
+        assurance: BTreeMap::new(),
+        consumed: false,
+        surface: None,
+    };
+    let recover = crate::recovery::RECOVER;
+    assert!(matches(&term(recover), &proof(recover, 3), &ctx));
+    assert!(!matches(&term(recover), &proof(recover, 2), &ctx));
+    assert!(!matches(&term("approve"), &proof("approve", 3), &ctx));
+}

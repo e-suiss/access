@@ -158,6 +158,8 @@ Vectors: `decision.json`: `allow-assurance-<dimension>-at-floor` and `require-as
 
 <a id="L0-EVAL-26"></a>**L0-EVAL-26. Count and independence.** A term needs `count` matching proofs (1 if not written). If the term has `independence`, the chosen proofs MUST all differ in the named field: `party`, `instance` or `issuer`, and a `contribution` proof whose `instance` is the actor Instance never matches it: an actor does not approve its own Exercise.
 
+<a id="L0-EVAL-26a"></a>**L0-EVAL-26a. Recovery contributions.** A `contribute` of class `recover` is allowed only from an Instance whose key thumbprint is one of the Genesis recovery entry's keys; otherwise it is refused with `meta-not-authorized`. Because a `recover` contribution therefore always comes from a recovery key, its independence rests on key custody (distinct keys on distinct devices or offline, never held by the provider), not on distinct persons: such a proof is not excluded for coming from the actor's Party, so a sole root recovers with `threshold` of its own entry keys. A `recover` contribution from the actor Instance itself still never matches.
+
 <a id="L0-EVAL-27"></a>**L0-EVAL-27. Choosing proofs.** Among all sets of `count` matching proofs from the current pool that meet the independence rule, the evaluator chooses one set as follows:
 
 1. the set whose latest proof has the earliest `position`;

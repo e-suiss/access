@@ -325,6 +325,63 @@ fn recovery_vectors_match() {
         r.step(id, &["L0-META-36"], (actor, actor), basis, &payload);
     }
     assert!(r.run.state.get(&crate::recovery::recovered_key()).is_some());
+    // L0-EVAL-26a, SEC20, OP-158 m.19 (c)
+    let device = PublicKey::Ed25519(
+        ed25519_dalek::SigningKey::from_bytes(&[0x31; 32])
+            .verifying_key()
+            .to_bytes(),
+    );
+    let other = PublicKey::Ed25519(
+        ed25519_dalek::SigningKey::from_bytes(&[0x32; 32])
+            .verifying_key()
+            .to_bytes(),
+    );
+    let mut keyed = entry(&[ROOT], &[1, 2]);
+    keyed
+        .keys
+        .insert(crate::verify::key_scope::thumbprint(&device));
+    let mut k = run_with(Some(&keyed));
+    k.cases = r.cases;
+    let (inside, outside) = (Id([0x41; 16]), Id([0x42; 16]));
+    for (id, key) in [(inside, &device), (outside, &other)] {
+        k.run.state.apply(&[(
+            super::key(kind::INSTANCE, &id),
+            Some(
+                InstanceState {
+                    party: ROOT,
+                    key: key.clone(),
+                    since: 1,
+                    successor: None,
+                    ended: None,
+                }
+                .to_value(),
+            ),
+        )]);
+    }
+    let give = Payload::Contribute {
+        target: Digest([0x99; 32]),
+        class: String::from(crate::recovery::RECOVER),
+    };
+    let holding = ExerciseBasis::Holding(HoldingRef {
+        grant: Id([0x51; 16]),
+        holder: ROOT,
+        since: 0,
+    });
+    k.step(
+        "recover-contribution-from-an-entry-key",
+        &["L0-EVAL-26a", "L0-META-30"],
+        (ROOT, inside),
+        holding,
+        &give,
+    );
+    k.step(
+        "recover-contribution-from-another-key-is-refused",
+        &["L0-EVAL-26a", "L0-META-30"],
+        (ROOT, outside),
+        holding,
+        &give,
+    );
+    let r = k;
     golden_in(
         "recovery/1",
         "meta.json",

@@ -72,9 +72,10 @@ def matches_without_source(term, proof, evaluation):
     # OP-157 m.3 (b), §13.7.3: a distinct-surface term counts only proofs with a surface path
     if independence_key(term) == "surface" and "surface" not in proof:
         return False
-    # L0-EVAL-26, SEC10, OP-157 m.3 (b)
+    # L0-EVAL-26, SEC10, OP-157 m.3 (b); L0-EVAL-26a, OP-158 m.19 (c)
+    own_party = evaluation.get("actor_party") == proof["party"] and proof["class"] != "recover"
     if "independence" in term and proof["kind"] == "contribution" and (
-        evaluation.get("actor_instance") == proof["instance"] or evaluation.get("actor_party") == proof["party"]
+        evaluation.get("actor_instance") == proof["instance"] or own_party
     ):
         return False
     return True

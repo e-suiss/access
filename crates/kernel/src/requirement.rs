@@ -184,9 +184,11 @@ pub fn matches(term: &RequirementTerm, proof: &Proof, ctx: &Context<'_>) -> bool
     });
     let usable = term.consumption == Consumption::Reusable || !proof.consumed;
     // L0-EVAL-26, OP-141 m.29, SEC10, OP-157 m.3 (b)
+    // L0-EVAL-26a, SEC20, OP-158 m.19 (c)
+    let own_party = ctx.actor_party == Some(proof.party) && proof.class != crate::recovery::RECOVER;
     let own = term.independence != Independence::None
         && proof.kind == ProofKind::Contribution
-        && (ctx.actor_instance == Some(proof.instance) || ctx.actor_party == Some(proof.party));
+        && (ctx.actor_instance == Some(proof.instance) || own_party);
     // OP-157 m.3 (b), §13.7.3
     let surface = term.independence != Independence::DistinctSurface || proof.surface.is_some();
     !own && surface

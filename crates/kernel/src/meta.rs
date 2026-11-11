@@ -3436,6 +3436,17 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             out.expansion = true;
         }
         Payload::Contribute { target, class } => {
+            // L0-EVAL-26a, SEC20, OP-158 m.19 (c)
+            if class == crate::recovery::RECOVER {
+                let entry = recovery_entry(view)?;
+                let key = read::<InstanceState>(view, kind::INSTANCE, &actor.instance)?.key;
+                if !entry
+                    .keys
+                    .contains(&crate::verify::key_scope::thumbprint(&key))
+                {
+                    return Err(MetaError::NotAuthorized);
+                }
+            }
             out.effects.push((
                 exercise_key(kind::CONTRIBUTION, &ctx.exercise),
                 Some(

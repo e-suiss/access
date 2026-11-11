@@ -1175,6 +1175,14 @@ class Apply:
 
     def contribute(self, body):
         # L0-META-30
+        # L0-EVAL-26a, SEC20, OP-158 m.19 (c)
+        if body["class"] == "recover":
+            entry = self.state.get(encode(["recovery_entry"]))
+            if entry is None:
+                refuse("meta-not-authorized")
+            instance = self.live("instance", self.instance)
+            if not any(same(thumbprint(instance["key"]), k) for k in entry["keys"]):
+                refuse("meta-not-authorized")
         self.write("contribution", [HASH_ALG_SHA256, self.exercise], {
             "target": body["target"],
             "class": body["class"],
