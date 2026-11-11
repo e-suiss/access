@@ -6,7 +6,7 @@ use axum::http::StatusCode;
 use super::super::management::send;
 use super::{form, identity};
 
-// FO-18, OP-45, EP-1, EP-2, EP-3, G50, MD-8, §16.7.1, §17.7.2, Ek B 6002, 6003, 6005
+// FO-18, FO-15, OP-45, EP-1, EP-2, EP-3, G50, MD-8, §16.7.1, §17.7.2, Ek B 6002, 6003, 6005
 #[tokio::test(flavor = "multi_thread")]
 async fn fo_18_with_the_identity_database_cut_off_nothing_is_issued_and_introspection_is_inactive()
 {
