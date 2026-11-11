@@ -378,8 +378,7 @@ async fn with_recover_contributions(
     send(core, again, ROOT_KEY).await.unwrap()
 }
 
-// §13.6, FR-2, FR-3, SEC20, SEC21, SEC22, U16, L0-META-36, OP-158 m.3 (m), m.7 (c),
-// Ek B 5764, 5908, 6022, 6023, 6121, 6140
+// SEC20, SEC21, SEC22, U16, L0-META-36, OP-158 m.7 (c), Ek B 5764, 5908, 6022, 6023, 6121, 6140
 #[tokio::test]
 async fn a_recovery_counts_only_entry_keys_and_rebinds_on_its_witness_heads() {
     let db = fresh().await.unwrap();
@@ -420,7 +419,7 @@ async fn a_recovery_counts_only_entry_keys_and_rebinds_on_its_witness_heads() {
     );
     assert_eq!(state_of(&db, d, &binding_key()).await.unwrap(), before);
 
-    // FR-3, arm (i)
+    // FR-3
     let done = with_recover_contributions(
         &mut core,
         &db,
@@ -454,7 +453,7 @@ async fn a_recovery_counts_only_entry_keys_and_rebinds_on_its_witness_heads() {
             .is_some()
     );
 
-    // §13.6 notification, Ek B 5883
+    // §13.6, Ek B 5883
     let outbox =
         access_store::authority::read_outbox(&db.app, &DomainId::from_bytes(d.0), (0, 0), 500)
             .await
@@ -485,7 +484,7 @@ async fn a_recovery_counts_only_entry_keys_and_rebinds_on_its_witness_heads() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// §13.6 arm (ii), U24, SEC22, FR-0, OP-158 m.3 (m), Ek B 6023, 6024
+// §13.6, U24, SEC22, FR-0, OP-158 m.3 (m), Ek B 6023, 6024
 #[tokio::test]
 async fn a_domain_without_a_replica_recovers_with_its_lost_suffix_declared() {
     let db = fresh().await.unwrap();

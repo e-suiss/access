@@ -138,7 +138,7 @@ fn head(d: &Digest, size: u64, root: [u8; 32], seconds: u64) -> WitnessHead {
     WitnessHead::verified(d, &note, &vkey).unwrap()
 }
 
-// SEC21, SEC22, FR-1…FR-3, U24, §13.6 arms and fork, Ek B 6022, 6023, 6024
+// SEC21, SEC22, FR-1, FR-2, FR-3, U24, §13.6, Ek B 6022, 6023, 6024
 #[test]
 fn the_plan_takes_arm_one_two_or_the_reproduced_branch() {
     let d = Digest(suiss_crypto::digest::sha256(b"domain"));
@@ -179,7 +179,7 @@ fn the_plan_takes_arm_one_two_or_the_reproduced_branch() {
         plan(&stale, &roots, true, now + 3_600_001_000),
         Err(PlanError::NoWitness)
     );
-    // FR-2: a witness that gave no head leaves the quorum incomplete
+    // FR-2
     let missing = [Some(head(&d, 5, roots[5], at)), None];
     assert_eq!(plan(&missing, &roots, true, now).unwrap().arm, Arm::Lossy);
     let none = prefix_roots(&[]).unwrap();

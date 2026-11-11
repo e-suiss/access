@@ -148,7 +148,7 @@ async fn the_recovering_side_plans_from_real_witnesses_and_the_exported_records(
     .unwrap();
     assert_eq!((row.size, out.independent), (size, 1), "{out:?}");
 
-    // FR-1: the honest provider's export, past the witnessed checkpoint
+    // FR-1
     let body = commit_export(
         &p,
         &router,
@@ -183,7 +183,7 @@ async fn the_recovering_side_plans_from_real_witnesses_and_the_exported_records(
         a
     };
 
-    // FR-2, FR-3, arm (i): the replica reproduces the witnesses' highest checkpoint
+    // FR-2, FR-3
     let (ok, plan, err) = recover(&args(&["--replica"]));
     assert!(ok, "{err}");
     assert_eq!(plan["n"], row.size.to_string(), "{plan}");
@@ -191,7 +191,7 @@ async fn the_recovering_side_plans_from_real_witnesses_and_the_exported_records(
     assert_eq!(plan["arm"], "i");
     assert_eq!(plan["quorum"], "complete");
 
-    // U24, FR-0: no replica, the recovery still plans (arm ii)
+    // U24, FR-0
     let (ok, plan, err) = recover(&args(&[]));
     assert!(ok, "{err}");
     assert_eq!(
@@ -199,7 +199,7 @@ async fn the_recovering_side_plans_from_real_witnesses_and_the_exported_records(
         (Some("ii"), Some(row.size.to_string().as_str()))
     );
 
-    // FR-2: a witness that does not answer leaves the quorum incomplete, never guessed
+    // FR-2, PR-2
     own.kill().unwrap();
     let (ok, plan, err) = recover(&args(&["--replica", "--discover"]));
     assert!(ok, "{err}");
