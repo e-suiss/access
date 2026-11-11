@@ -2,6 +2,7 @@
 
 pub mod accounts;
 pub mod approver;
+pub mod artifacts;
 pub mod binding;
 pub mod breach;
 pub mod breakglass;
@@ -20,6 +21,7 @@ pub mod privacy;
 pub mod registration;
 pub mod sealing;
 pub mod signal;
+pub mod support;
 pub mod vault;
 
 use access_crypto::opaque_id::IdKey;
