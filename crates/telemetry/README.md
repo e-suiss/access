@@ -46,7 +46,8 @@ Every metric name starts with `access_`. The section column is the row of the op
 | `access_argon2_queue_depth` | gauge | | Argon2 semaphore queue depth |
 | `access_argon2_wait_seconds` | histogram | | Argon2 permit wait |
 | `access_http_responses_total` | counter | `status` | 503/429 rates |
-| `access_db_pool_in_use`, `access_db_pool_idle`, `access_db_pool_max` | gauge | `pool` | Pool queue depth |
+| `access_db_pool_in_use`, `access_db_pool_idle`, `access_db_pool_max` | gauge | `pool` | Pool occupancy |
+| `access_pool_queue_depth` | gauge | `pool` | Pool queue depth: requests waiting in the application for the `critical`, `admin` or `sequencer` pool |
 | `access_signer_call_duration_seconds` | histogram | `plane`, `outcome` | Signer queue latency (residual risk signal) |
 | `access_sign_in_factor_total` | counter | `factor` | Factor distribution (residual risk signal) |
 | `access_passkey_conditional_ui_total` | counter | `stage`, `outcome` | Passkey conditional UI (the `assertion` stage the server sees) |

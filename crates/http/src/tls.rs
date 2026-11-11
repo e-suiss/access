@@ -41,6 +41,7 @@ use tokio::sync::Semaphore;
 use tokio_rustls::TlsAcceptor;
 
 use crate::adp::adapters::Pep;
+use crate::forwarded::TrustedProxies;
 
 /// Most TLS handshakes in progress at once (OP-36, PD).
 pub const HANDSHAKES: usize = 256;
@@ -571,7 +572,29 @@ pub async fn serve(
     app: Router,
     shutdown: impl Future<Output = ()>,
 ) -> io::Result<()> {
-    serve_as(listener, config, app, Listener::Public, shutdown).await
+    serve_behind(listener, config, app, TrustedProxies::default(), shutdown).await
+}
+
+/// [`serve`] behind `proxies`: a request from one of them carries the client address its
+/// `X-Forwarded-For` names as [`crate::login::Peer`] (§17.9.6, OP-158 m.3 (v)).
+///
+/// # Errors
+/// The listener's accept error.
+pub async fn serve_behind(
+    listener: TcpListener,
+    config: Arc<ServerConfig>,
+    app: Router,
+    proxies: TrustedProxies,
+    shutdown: impl Future<Output = ()>,
+) -> io::Result<()> {
+    serve_as(
+        listener,
+        config,
+        app,
+        (Listener::Public, Arc::new(proxies)),
+        shutdown,
+    )
+    .await
 }
 
 /// Serves `app` on the mTLS listener until `shutdown` resolves (OP-155 m.3 (m)): each request
@@ -592,7 +615,10 @@ pub async fn serve_mtls(
         listener,
         config,
         app,
-        Listener::Mtls { public_port },
+        (
+            Listener::Mtls { public_port },
+            Arc::new(TrustedProxies::default()),
+        ),
         shutdown,
     )
     .await
@@ -630,12 +656,21 @@ pub fn public_authority(host: &str, public_port: Option<u16>) -> String {
     }
 }
 
-/// Drops forwarded certificate headers (OP-155 m.3 (k)) and, on the mTLS listener, gives the
-/// request the public listener's `Host`.
-fn inbound(mut req: axum::extract::Request, listener: Listener) -> axum::extract::Request {
+/// Drops forwarded certificate headers (OP-155 m.3 (k)), names the client address (from
+/// `X-Forwarded-For` only behind a trusted proxy, §17.9.6) and drops that header, and, on the
+/// mTLS listener, gives the request the public listener's `Host`.
+fn inbound(
+    mut req: axum::extract::Request,
+    listener: Listener,
+    peer: std::net::IpAddr,
+    proxies: &TrustedProxies,
+) -> axum::extract::Request {
     for name in FORWARDED_CERT_HEADERS {
         req.headers_mut().remove(*name);
     }
+    let client = proxies.client(peer, req.headers());
+    req.headers_mut().remove(crate::forwarded::X_FORWARDED_FOR);
+    req.extensions_mut().insert(crate::login::Peer(client));
     if let Listener::Mtls { public_port } = listener {
         let host = req
             .headers()
@@ -656,7 +691,7 @@ async fn serve_as(
     listener: TcpListener,
     config: Arc<ServerConfig>,
     app: Router,
-    mode: Listener,
+    (mode, proxies): (Listener, Arc<TrustedProxies>),
     shutdown: impl Future<Output = ()>,
 ) -> io::Result<()> {
     let acceptor = TlsAcceptor::from(config);
@@ -674,6 +709,7 @@ async fn serve_as(
         };
         let acceptor = acceptor.clone();
         let app = app.clone();
+        let proxies = proxies.clone();
         let watcher = graceful.watcher();
         tokio::spawn(async move {
             let tls = match tokio::time::timeout(HANDSHAKE_TIMEOUT, acceptor.accept(tcp)).await {
@@ -693,9 +729,10 @@ async fn serve_as(
             {
                 return;
             }
-            let app = app
-                .layer(Extension(crate::login::Peer(peer.ip())))
-                .layer(tower::util::MapRequestLayer::new(move |r| inbound(r, mode)));
+            let ip = peer.ip();
+            let app = app.layer(tower::util::MapRequestLayer::new(move |r| {
+                inbound(r, mode, ip, &proxies)
+            }));
             let app = if matches!(mode, Listener::Mtls { .. }) {
                 // OP-155 m.3 (m)
                 match mtls_chain(tls.get_ref().1) {

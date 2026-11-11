@@ -35,6 +35,10 @@ pub mod tls;
 pub mod transparency;
 // OP-158 m.3 (v)
 pub mod quota;
+// OP-158 m.3 (v)
+pub mod layers;
+// OP-158 m.3 (v)
+pub mod forwarded;
 
 use std::time::Duration;
 
@@ -56,6 +60,9 @@ pub struct Limits {
     pub max_body_bytes: usize,
     /// Whole-request timeout (§14.6: 10 s).
     pub request_timeout: Duration,
+    /// The listener's admission: its lane and per-address rate (SA-27, OP-53). Only the
+    /// outermost [`harden`] of a listener sets it, so nothing is counted twice.
+    pub admission: Option<layers::Admission>,
 }
 
 impl Default for Limits {
@@ -63,7 +70,17 @@ impl Default for Limits {
         Self {
             max_body_bytes: 256 * 1024,
             request_timeout: Duration::from_secs(10),
+            admission: None,
         }
+    }
+}
+
+impl Limits {
+    /// These limits as the outermost of a listener admitting under `admission`.
+    #[must_use]
+    pub const fn admitting(mut self, admission: layers::Admission) -> Self {
+        self.admission = Some(admission);
+        self
     }
 }
 
@@ -105,12 +122,28 @@ pub fn router(security_txt: SecurityTxt, limits: Limits, api: Router) -> Router 
 /// Wraps routes in the shared outer stack. Apply it last: axum layers cover only
 /// routes added before them.
 pub fn harden(routes: Router, limits: Limits) -> Router {
-    routes
-        .layer(RequestBodyLimitLayer::new(limits.max_body_bytes))
+    // SA-27, GHSA-84jc-3hj2-hwc7
+    let routes = match limits.admission {
+        Some(a) => routes.layer(axum::middleware::from_fn_with_state(
+            layers::Lane::new(&a),
+            layers::lane,
+        )),
+        None => routes,
+    };
+    let routes = routes
         .layer(TimeoutLayer::with_status_code(
             StatusCode::SERVICE_UNAVAILABLE,
             limits.request_timeout,
         ))
+        .layer(RequestBodyLimitLayer::new(limits.max_body_bytes));
+    let routes = match limits.admission {
+        Some(a) => routes.layer(axum::middleware::from_fn_with_state(
+            std::sync::Arc::new(layers::ClientRate::new(a.per_second, a.burst)),
+            layers::client_rate,
+        )),
+        None => routes,
+    };
+    routes
         // IDI-11, P-ID-5
         .layer(axum::middleware::from_fn(edge::confine))
         // TN-113

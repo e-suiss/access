@@ -338,6 +338,15 @@ fn echo() -> Router {
             }),
         )
         .route(
+            "/peer",
+            get(
+                |peer: Option<Extension<access_http::login::Peer>>, h: axum::http::HeaderMap| async move {
+                    let ip = peer.map_or_else(|| "none".to_owned(), |Extension(p)| p.0.to_string());
+                    format!("{ip} {}", h.contains_key("x-forwarded-for"))
+                },
+            ),
+        )
+        .route(
             "/forwarded",
             get(|h: axum::http::HeaderMap| async move {
                 access_http::tls::FORWARDED_CERT_HEADERS
@@ -464,4 +473,59 @@ async fn a_forwarded_certificate_header_never_reaches_a_route() {
     let public = Server { addr, roots, stop };
     assert_eq!(request(&public, None, &head).await.as_deref(), Some("0"));
     let _ = public.stop.send(());
+}
+
+/// A public listener behind `proxies`.
+async fn start_behind(proxies: &[&str]) -> Server {
+    let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()]).unwrap();
+    let config = server_config(
+        cert.cert.pem().as_bytes(),
+        cert.signing_key.serialize_pem().as_bytes(),
+        None,
+    )
+    .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    tokio::spawn(access_http::tls::serve_behind(
+        listener,
+        config,
+        echo(),
+        access_http::forwarded::TrustedProxies::parse(proxies).unwrap(),
+        async {
+            let _ = stopped.await;
+        },
+    ));
+    let mut roots = RootCertStore::empty();
+    roots.add(cert.cert.der().clone()).unwrap();
+    Server { addr, roots, stop }
+}
+
+// §17.9.6, OP-148, OP-158 m.3 (v)
+#[tokio::test]
+async fn x_forwarded_for_names_the_client_only_behind_a_trusted_proxy() {
+    let head = "GET /peer HTTP/1.1\r\nHost: localhost\r\nX-Forwarded-For: 198.51.100.7\r\nConnection: close\r\n\r\n";
+    let direct = start_behind(&[]).await;
+    assert_eq!(
+        request(&direct, None, head).await.as_deref(),
+        Some("127.0.0.1 false")
+    );
+    let _ = direct.stop.send(());
+    let behind = start_behind(&["127.0.0.0/8"]).await;
+    assert_eq!(
+        request(&behind, None, head).await.as_deref(),
+        Some("198.51.100.7 false")
+    );
+    let spoofed = "GET /peer HTTP/1.1\r\nHost: localhost\r\nX-Forwarded-For: 198.51.100.7, 127.0.0.9\r\nConnection: close\r\n\r\n";
+    assert_eq!(
+        request(&behind, None, spoofed).await.as_deref(),
+        Some("198.51.100.7 false")
+    );
+    let _ = behind.stop.send(());
+    let elsewhere = start_behind(&["10.0.0.0/8"]).await;
+    assert_eq!(
+        request(&elsewhere, None, head).await.as_deref(),
+        Some("127.0.0.1 false")
+    );
+    let _ = elsewhere.stop.send(());
 }

@@ -282,3 +282,107 @@ async fn an_http2_authority_is_the_host() {
     let r = app.oneshot(h1).await.unwrap();
     assert_eq!(body_string(r).await, "other.test");
 }
+
+fn admitting(in_flight: usize, queue: usize, per_second: u64, burst: u64) -> Limits {
+    Limits {
+        max_body_bytes: 16,
+        ..Limits::default()
+    }
+    .admitting(access_http::layers::Admission {
+        lane: "critical",
+        in_flight,
+        queue,
+        per_second,
+        burst,
+    })
+}
+
+fn from(ip: [u8; 4]) -> axum::Extension<access_http::login::Peer> {
+    axum::Extension(access_http::login::Peer(std::net::IpAddr::from(ip)))
+}
+
+// SA-27, OP-36, OP-53, MD-8
+#[tokio::test]
+async fn a_full_lane_sheds_and_never_admits() {
+    let gate = std::sync::Arc::new(tokio::sync::Notify::new());
+    let entered = std::sync::Arc::new(tokio::sync::Notify::new());
+    let (g, e) = (gate.clone(), entered.clone());
+    let app = harden(
+        axum::Router::new().route(
+            "/slow",
+            axum::routing::get(move || {
+                let (g, e) = (g.clone(), e.clone());
+                async move {
+                    e.notify_one();
+                    g.notified().await;
+                    "done"
+                }
+            }),
+        ),
+        admitting(1, 0, 1_000, 1_000),
+    )
+    .layer(from([192, 0, 2, 1]));
+    let first = tokio::spawn(
+        app.clone()
+            .oneshot(Request::get("/slow").body(Body::empty()).unwrap()),
+    );
+    tokio::time::timeout(std::time::Duration::from_secs(5), entered.notified())
+        .await
+        .unwrap();
+    let shed = app
+        .clone()
+        .oneshot(Request::get("/slow").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(shed.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(shed.headers()["retry-after"], "1");
+    assert!(body_string(shed).await.contains("\"reason\":\"shed\""));
+    gate.notify_one();
+    let done = tokio::time::timeout(std::time::Duration::from_secs(5), first)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(done.status(), StatusCode::OK);
+}
+
+// SA-27, OP-35
+#[tokio::test]
+async fn an_address_over_its_rate_is_refused_before_its_body_is_read() {
+    let app = |ip| {
+        harden(
+            axum::Router::new().route(
+                "/echo",
+                axum::routing::post(|body: String| async move { body }),
+            ),
+            admitting(16, 16, 1, 1),
+        )
+        .layer(from(ip))
+    };
+    let shared = app([192, 0, 2, 7]);
+    let ok = shared
+        .clone()
+        .oneshot(Request::post("/echo").body(Body::from("a")).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), StatusCode::OK);
+    let refused = shared
+        .clone()
+        .oneshot(
+            Request::post("/echo")
+                .body(Body::from(vec![b'a'; 64]))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), StatusCode::TOO_MANY_REQUESTS);
+    let other = app([192, 0, 2, 8])
+        .oneshot(
+            Request::post("/echo")
+                .body(Body::from(vec![b'a'; 64]))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(other.status(), StatusCode::PAYLOAD_TOO_LARGE);
+}
