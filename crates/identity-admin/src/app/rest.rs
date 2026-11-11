@@ -338,6 +338,9 @@ pub enum Op {
     PutApprovalInline,
     /// `putApprovalBatch`: `idp.realm.approval_batch`, or `approval_batch_close` (OP-157 m.3 (m)).
     PutApprovalBatch,
+    /// `commitOffboarding`: the caller's signed offboarding Exercises, one explicit choice per
+    /// channel (OP-157 m.3 (v)).
+    CommitOffboarding,
 }
 
 impl Op {
@@ -495,6 +498,7 @@ impl Op {
             "putDelegatedAdmin" => Self::PutDelegatedAdmin,
             "putApprovalInline" => Self::PutApprovalInline,
             "putApprovalBatch" => Self::PutApprovalBatch,
+            "commitOffboarding" => Self::CommitOffboarding,
             _ => return None,
         })
     }
@@ -2217,6 +2221,7 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             only(m, &["enabled"])?;
             Change::ApprovalBatch(flag(m, "enabled")?)
         }
+        Op::CommitOffboarding => return Err(Invalid::NotYetServed),
         Op::ResendRelay => {
             only(m, &[])?;
             Change::RelayResend(super::relay::event_id(key_of(key)?)?)
