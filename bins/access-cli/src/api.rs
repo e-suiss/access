@@ -420,6 +420,13 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "putApprovalInline" => IdpAction::RealmApprovalInline,
         "putApprovalBatch" => IdpAction::RealmApprovalBatch,
         "reviewBreakglassUse" => IdpAction::OrgBreakglassReview,
+        // OP-158 m.3 (a)
+        "putResidency" => IdpAction::RealmResidency,
+        "putDrProfile" => IdpAction::RealmDrProfile,
+        "putRateLimit" => IdpAction::RealmRateLimit,
+        "putCryptoProfile" => IdpAction::RealmCryptoProfile,
+        "putHashProfile" => IdpAction::RealmHashProfile,
+        "putAuditTier" => IdpAction::RealmAuditTier,
         _ => return None,
     })
 }

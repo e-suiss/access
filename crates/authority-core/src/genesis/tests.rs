@@ -281,6 +281,16 @@ fn idp_actions_carry_their_consequence_tiers() {
         (IdpAction::RealmApprovalInlineClose, Tier::Ct1),
         (IdpAction::RealmApprovalBatch, Tier::Ct2),
         (IdpAction::RealmApprovalBatchClose, Tier::Ct1),
+        // OP-158 m.3 (a)
+        (IdpAction::RealmRehome, Tier::Ct3),
+        (IdpAction::RealmResidency, Tier::Ct3),
+        (IdpAction::RealmDrProfile, Tier::Ct3),
+        (IdpAction::RealmDrProfileClose, Tier::Ct1),
+        (IdpAction::RealmRateLimit, Tier::Ct2),
+        (IdpAction::RealmCryptoProfile, Tier::Ct2),
+        (IdpAction::RealmHashProfile, Tier::Ct1),
+        (IdpAction::RealmAuditTier, Tier::Ct2),
+        (IdpAction::RealmAuditTierClose, Tier::Ct1),
     ] {
         assert_eq!(tier(a), t, "{}", a.label());
     }

@@ -15,8 +15,8 @@ use access_kernel::schema::{ActionSchema, EffectClass, Spp, action_digest};
 pub const RESOURCE_NAMESPACE: &str = "idp";
 
 /// Version of every `idp.*` catalog (OP-153 m.3 (a), m.25 (b), OP-154 m.3 (a), OP-155 m.3 (a),
-/// OP-156 m.3 (a), OP-157 m.3 (a)).
-pub const CATALOG_VERSION: u64 = 7;
+/// OP-156 m.3 (a), OP-157 m.3 (a), OP-158 m.3 (a)).
+pub const CATALOG_VERSION: u64 = 8;
 
 /// The `idp.*` action namespaces, one SPP each (OP-141 m.35, OP-153 m.3 (a), OP-154 m.3 (a),
 /// OP-155 m.3 (a), OP-156 m.3 (a), OP-157 m.3 (a)).
@@ -502,11 +502,27 @@ pub enum IdpAction {
     /// Another Party's review of one break-glass use as a drill, an emergency or a misuse; it
     /// grants nothing (OP-157 m.3 (h), m.4 (b)): CT1.
     OrgBreakglassReview,
+    /// Declares the realm's residency; changing it is a cell move (CMP-26, OP-158 m.3 (a), (o)): reserved, CT3.
+    RealmResidency,
+    /// Declares the async DR profile (RPO > 0), which lowers the guarantee (OP-58, OP-158 m.3 (a), (r)): reserved, CT3.
+    RealmDrProfile,
+    /// Returns the realm to the synchronous DR class; narrowing, CT1.
+    RealmDrProfileClose,
+    /// Sets the realm's `rate_limit_rps` (OP-35, OP-158 m.3 (a), (v)): CT2.
+    RealmRateLimit,
+    /// Sets the realm's crypto profile; the FIPS profile narrows the algorithm set (CR-15, CR-36, OP-158 m.3 (a), (y)): CT2.
+    RealmCryptoProfile,
+    /// Raises the realm's hash profile; it is never lowered (OP-33, OP-158 m.3 (a)): narrowing, CT1.
+    RealmHashProfile,
+    /// Sets the realm's cold audit tier target and hot window, at least 30 days (OP-37, OP-158 m.3 (a), (w)): CT2.
+    RealmAuditTier,
+    /// Closes the realm's cold audit tier target; narrowing, CT1.
+    RealmAuditTierClose,
 }
 
 impl IdpAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 201] = [
+    pub const ALL: [Self; 209] = [
         Self::ClientRegister,
         Self::ClientUpdate,
         Self::ClientRetire,
@@ -708,10 +724,18 @@ impl IdpAction {
         Self::RealmApprovalBatch,
         Self::RealmApprovalBatchClose,
         Self::OrgBreakglassReview,
+        Self::RealmResidency,
+        Self::RealmDrProfile,
+        Self::RealmDrProfileClose,
+        Self::RealmRateLimit,
+        Self::RealmCryptoProfile,
+        Self::RealmHashProfile,
+        Self::RealmAuditTier,
+        Self::RealmAuditTierClose,
     ];
 
     /// The catalog version that first declared it (OP-153 m.3 (a), OP-154 m.3 (a), OP-155
-    /// m.3 (a), OP-156 m.3 (a), OP-157 m.3 (a)).
+    /// m.3 (a), OP-156 m.3 (a), OP-157 m.3 (a), OP-158 m.3 (a)).
     #[must_use]
     #[expect(
         clippy::too_many_lines,
@@ -719,6 +743,14 @@ impl IdpAction {
     )]
     pub const fn since(self) -> u64 {
         match self {
+            Self::RealmResidency
+            | Self::RealmDrProfile
+            | Self::RealmDrProfileClose
+            | Self::RealmRateLimit
+            | Self::RealmCryptoProfile
+            | Self::RealmHashProfile
+            | Self::RealmAuditTier
+            | Self::RealmAuditTierClose => 8,
             Self::AccountSigninMethodChange
             | Self::AccountMfaChange
             | Self::AccountPhoneChange
@@ -932,6 +964,14 @@ impl IdpAction {
             | Self::RealmArgon2
             | Self::RealmRpId
             | Self::RealmRehome
+            | Self::RealmResidency
+            | Self::RealmDrProfile
+            | Self::RealmDrProfileClose
+            | Self::RealmRateLimit
+            | Self::RealmCryptoProfile
+            | Self::RealmHashProfile
+            | Self::RealmAuditTier
+            | Self::RealmAuditTierClose
             | Self::RealmBranding
             | Self::RealmKeyPolicy
             | Self::RealmKeyRotate
@@ -1287,6 +1327,14 @@ impl IdpAction {
             Self::RealmApprovalBatch => "approval_batch",
             Self::RealmApprovalBatchClose => "approval_batch_close",
             Self::OrgBreakglassReview => "breakglass_review",
+            Self::RealmResidency => "residency",
+            Self::RealmDrProfile => "dr_profile",
+            Self::RealmDrProfileClose => "dr_profile_close",
+            Self::RealmRateLimit => "rate_limit",
+            Self::RealmCryptoProfile => "crypto_profile",
+            Self::RealmHashProfile => "hash_profile",
+            Self::RealmAuditTier => "audit_tier",
+            Self::RealmAuditTierClose => "audit_tier_close",
         }
     }
 
@@ -1372,7 +1420,10 @@ impl IdpAction {
             | Self::RealmDelegatedAdminClose
             | Self::RealmApprovalInlineClose
             | Self::RealmApprovalBatchClose
-            | Self::OrgBreakglassReview => EffectClass::Reversible,
+            | Self::OrgBreakglassReview
+            | Self::RealmDrProfileClose
+            | Self::RealmHashProfile
+            | Self::RealmAuditTierClose => EffectClass::Reversible,
             _ => EffectClass::Irreversible,
         }
     }
@@ -1412,6 +1463,8 @@ impl IdpAction {
                 | Self::AccountInvite
                 | Self::AccountApiKeyCreate
                 | Self::AccountTokenLongLived
+                | Self::RealmResidency
+                | Self::RealmDrProfile
         )
     }
 
