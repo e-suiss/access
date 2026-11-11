@@ -32,8 +32,7 @@ unknown = "when the synchronous standby is promoted"
 missing = "the head until a primary answers"
 safe_default = "commit stops and nothing is answered as allowed; no acknowledged record is lost (FA-1)"
 text = "outcome-not_confirmed_checking"
-tests = ["bins/access-server/src/bootstrap/tests/faults/database.rs::fo_02_with_the_authority_database_gone_nothing_commits_and_nothing_is_allowed"]
-pending = "the promote itself: lane W7's scripts/pg-ha.sh suite"
+tests = ["bins/access-server/src/bootstrap/tests/faults/database.rs::fo_02_with_the_authority_database_gone_nothing_commits_and_nothing_is_allowed", "crates/store/tests/failover.rs::pg_ha_u32_every_acknowledged_record_survives_a_promote_after_sigkill", "crates/store/tests/failover.rs::pg_ha_sa_47_a_partitioned_old_primary_acknowledges_nothing_after_the_promote"]
 
 [[failure]]
 id = "FO-03"
@@ -44,8 +43,7 @@ unknown = "whether the lost region's last records reached a replica"
 missing = "the suffix after the last fenced head"
 safe_default = "no promote without fence proof; the domain takes no commit; the way back is domain.recover"
 text = "status-access_unavailable"
-tests = []
-pending = "lane W7's fence and cell seal tests"
+tests = ["crates/authority-core/tests/commit/leader_gate.rs::op_54_rl12_an_unplanned_continuation_needs_a_fence_proof_and_the_lost_head", "crates/authority-core/tests/commit/leader_gate.rs::ti_2_a_sealed_cell_appends_nothing_and_the_target_continues_at_the_next_epoch"]
 
 [[failure]]
 id = "FO-04"
@@ -179,8 +177,7 @@ unknown = "when the standby is promoted"
 missing = "the session store"
 safe_default = "writes answer 503 with Retry-After, never invalid_grant"
 text = "login-unavailable"
-tests = []
-pending = "lane W7's identity pool failover test on scripts/pg-ha.sh"
+tests = ["crates/store/tests/failover.rs::pg_ha_op_26_the_pool_follows_the_writable_host_and_evicts_the_old_one", "bins/access-server/src/bootstrap/tests/faults/identity_db.rs::fo_18_with_the_identity_database_cut_off_nothing_is_issued_and_introspection_is_inactive"]
 
 [[failure]]
 id = "FO-16"
@@ -191,8 +188,8 @@ unknown = "when a standby returns"
 missing = "durable writes"
 safe_default = "writes answer 503 with Retry-After; reads and signed-token checks go on"
 text = "login-unavailable"
-tests = []
-pending = "lane W7's standby loss test on scripts/pg-ha.sh"
+tests = ["crates/store/tests/failover.rs::pg_ha_opi_4_one_standby_or_a_local_security_connection_is_refused"]
+pending = "a runtime test that SIGSTOPs both standbys on scripts/pg-ha.sh and reads 503 at the token endpoint"
 
 [[failure]]
 id = "FO-17"
@@ -225,8 +222,7 @@ unknown = "which writes of the loss window are gone"
 missing = "identity writes after the last copy"
 safe_default = "a DR promote only under a declared RPO>0 profile, then every session and refresh epoch rises"
 text = "login-degraded"
-tests = []
-pending = "lane W7's dr-promote test"
+tests = ["bins/access-server/src/bootstrap/tests/management/dr.rs::hl_31_an_async_dr_promote_signs_everyone_out_and_declares_its_rpo"]
 
 [[failure]]
 id = "FO-20"

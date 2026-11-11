@@ -276,6 +276,8 @@ async fn refused(app: &Pool, domain: Digest, why: &MoveError) -> MoveError {
         MoveError::Uncovered(_) => "head-not-covered",
         _ => "diverged",
     };
+    // §17.8.2, OP-158 m.3 (n)
+    access_telemetry::signals::INTEGRITY_ALARMS.incr(["unfenced_promote"]);
     tracing::error!(
         event = "failover.fence.missing",
         reason,
