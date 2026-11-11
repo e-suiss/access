@@ -1846,9 +1846,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "getDurability" => (ResourceKind::Durability, Shape::Planned("Declared")),
         // OP-158 m.4 (b) (W11)
         "getRateLimits" => (ResourceKind::RateLimits, Shape::Get),
-        "putResidency" | "putDrProfile" => {
-            (Settings, Shape::Planned("WriteResult"))
-        }
+        "putResidency" => (Settings, Shape::Planned("WriteResult")),
+        // OP-158 m.3 (r)
+        "putDrProfile" => (Settings, w(true)),
         // OP-157 m.4 (a)
         "listCaseSystems" => (
             ResourceKind::CaseSystems,

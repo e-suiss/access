@@ -2679,7 +2679,9 @@ impl Change {
             // OP-157 m.3 (w)
             Self::Review(r) => r.check(),
             // OP-158 m.4 (a)
-            Self::Rehome(_) | Self::Residency(_) | Self::DrProfile(_) => Err(Invalid::NotYetServed),
+            Self::Rehome(_) | Self::Residency(_) => Err(Invalid::NotYetServed),
+            // OP-158 m.3 (r)
+            Self::DrProfile(_) => Ok(()),
             // OP-157 m.3 (m)
             Self::ApprovalInline(_)
             | Self::ApprovalBatch(_)

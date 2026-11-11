@@ -831,9 +831,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::ApprovalBatch(_)
             | Change::AuditTier(_)
             | Change::CryptoProfile(_)
-            | Change::RateLimit(_) => {}
+            | Change::RateLimit(_)
+            | Change::DrProfile(_) => {}
             // OP-158 m.4 (a)
-            Change::Rehome(_) | Change::Residency(_) | Change::DrProfile(_) => {
+            Change::Rehome(_) | Change::Residency(_) => {
                 return Err(Invalid::NotYetServed.into());
             }
             // OP-33, OP-158 m.3 (a), m.6 (b)
@@ -1657,8 +1658,13 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         let mut secret = None;
         let done = match change {
             // OP-158 m.4 (a)
-            Change::Rehome(_) | Change::Residency(_) | Change::DrProfile(_) => {
+            Change::Rehome(_) | Change::Residency(_) => {
                 return Err(Invalid::NotYetServed.into());
+            }
+            // OP-29, HL-31, OP-158 m.3 (r)
+            Change::DrProfile(p) => {
+                access_store::cells::put_dr_profile(t, bound, p.map(|p| p.rpo_s)).await?;
+                true
             }
             // CR-15, CR-36, OP-158 m.3 (y)
             Change::CryptoProfile(c) => {
