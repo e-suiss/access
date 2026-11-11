@@ -137,7 +137,7 @@ No hard limit is ever part of a product promise. Each one names the honest wordi
 | RR-27 | Bugs in async/HTTP layer outside formal scope | Engineering | Tool maturity | `ci:nightly/test-full` |
 | RR-28 | Kerberos C FFI introduces memory-unsafe code | Gateway owner | Kerberos compatibility; isolated process | `ci:weekly/kerberos-asan` |
 | RR-29 | Phishable authentication factors (TOTP, push, SMS) | The domain (factor policy); identity plane | Regulation and user reality; CT2+ needs a phishing-resistant factor | `metric:access_sign_in_factor_total` |
-| RR-30 | Post-authentication token or session theft, including DPoP key misuse | Identity plane; RS | Passkeys are out of scope here; DPoP and DBSC narrow it | `audit:session.device_mismatch` |
+| RR-30 | Post-authentication token or session theft, including DPoP key misuse | Identity plane; RS | A passkey protects the sign-in, not the session after it; DPoP and DBSC narrow it | `audit:session.device_mismatch` |
 | RR-31 | HSM/KMS throughput and quota correlation | Provider operator | Hardware and cloud reality | `metric:access_signer_call_duration_seconds`, `alert:AccessSignerSlow` |
 | RR-32 | Missing post-quantum support in WebAuthn | Standards bodies; identity plane (watching) | No standard exists | `none-declared` |
 | RR-33 | Unclear CRA classification and manufacturer scope | Suiss management | Decision pending; preparation follows the Class I default | `none-declared` |

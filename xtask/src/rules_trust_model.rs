@@ -40,7 +40,7 @@ pub(crate) const REQUIRED: &[&str] = &[
 #[serde(deny_unknown_fields)]
 pub(crate) struct Component {
     pub(crate) id: String,
-    pub(crate) component: String,
+    pub(crate) name: String,
     pub(crate) trust: String,
     pub(crate) not_trusted: String,
     pub(crate) blast_radius: String,
@@ -86,7 +86,7 @@ pub(crate) fn violations(
             out.push(violation(format!("{}: duplicate component", c.id)));
         }
         for (field, value) in [
-            ("component", &c.component),
+            ("name", &c.name),
             ("trust", &c.trust),
             ("not_trusted", &c.not_trusted),
             ("blast_radius", &c.blast_radius),
@@ -101,14 +101,22 @@ pub(crate) fn violations(
             out.push(violation(format!("{}: names no catalog row", c.id)));
         }
         for r in c.rows.iter().filter(|r| !ids.contains(*r)) {
-            out.push(violation(format!("{}: row {r} is not in the catalog", c.id)));
+            out.push(violation(format!(
+                "{}: row {r} is not in the catalog",
+                c.id
+            )));
         }
         for t in c.tests.iter().filter(|t| !link_ok(t)) {
-            out.push(violation(format!("{}: test link {t:?} does not resolve", c.id)));
+            out.push(violation(format!(
+                "{}: test link {t:?} does not resolve",
+                c.id
+            )));
         }
     }
     for id in REQUIRED.iter().filter(|id| !seen.contains(**id)) {
-        out.push(violation(format!("component {id} is missing (§13.2, SA-7)")));
+        out.push(violation(format!(
+            "component {id} is missing (§13.2, SA-7)"
+        )));
     }
     out
 }
@@ -131,7 +139,7 @@ mod tests {
                 .iter()
                 .map(|id| Component {
                     id: (*id).to_owned(),
-                    component: "c".into(),
+                    name: "c".into(),
                     trust: "t".into(),
                     not_trusted: "n".into(),
                     blast_radius: "b".into(),
@@ -163,10 +171,19 @@ mod tests {
             .into_iter()
             .map(|v| v.message)
             .collect();
-        assert!(found.iter().any(|m| m.contains("`never` is empty")), "{found:?}");
+        assert!(
+            found.iter().any(|m| m.contains("`never` is empty")),
+            "{found:?}"
+        );
         assert!(found.iter().any(|m| m.contains("XX-9")), "{found:?}");
-        assert!(found.iter().any(|m| m.contains("does not resolve")), "{found:?}");
-        assert!(found.iter().any(|m| m.contains("co-tenant is missing")), "{found:?}");
+        assert!(
+            found.iter().any(|m| m.contains("does not resolve")),
+            "{found:?}"
+        );
+        assert!(
+            found.iter().any(|m| m.contains("co-tenant is missing")),
+            "{found:?}"
+        );
     }
 
     // SEC5, OP-159 m.3 (gg)

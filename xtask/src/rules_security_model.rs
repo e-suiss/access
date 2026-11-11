@@ -77,7 +77,13 @@ pub(crate) struct Signals {
 fn names_after(text: &str, key: &str) -> BTreeSet<String> {
     text.lines()
         .filter_map(|l| l.trim_start().strip_prefix(key))
-        .filter_map(|rest| rest.trim().trim_matches('"').split('"').next().map(str::to_owned))
+        .filter_map(|rest| {
+            rest.trim()
+                .trim_matches('"')
+                .split('"')
+                .next()
+                .map(str::to_owned)
+        })
         .filter(|s| !s.is_empty())
         .collect()
 }
@@ -89,7 +95,9 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     for e in entries.filter_map(Result::ok) {
         let p = e.path();
         if p.is_dir() {
-            if p.file_name().is_some_and(|n| n == "target" || n == "node_modules") {
+            if p.file_name()
+                .is_some_and(|n| n == "target" || n == "node_modules")
+            {
                 continue;
             }
             rust_files(&p, out);
@@ -199,7 +207,11 @@ pub(crate) fn row_violations(
     for n in 1..=10 {
         let id = format!("DL-{n}");
         if !catalog.rules.iter().any(|r| r.id == id) {
-            out.push(violation(GUARANTEES, "SEC1", format!("{id} is missing (§13.1)")));
+            out.push(violation(
+                GUARANTEES,
+                "SEC1",
+                format!("{id} is missing (§13.1)"),
+            ));
         }
     }
     // RT28
@@ -233,7 +245,9 @@ pub(crate) fn row_violations(
             bad("`none-declared` stands alone");
         }
         for s in rr.signal.iter().filter(|s| !signal_ok(s, known)) {
-            bad(&format!("signal {s:?} names no existing alert, event, metric or CI job"));
+            bad(&format!(
+                "signal {s:?} names no existing alert, event, metric or CI job"
+            ));
         }
     }
     out
@@ -241,11 +255,7 @@ pub(crate) fn row_violations(
 
 fn table(out: &mut String, head: &[&str], rows: &[Vec<String>]) {
     let _ = writeln!(out, "| {} |", head.join(" | "));
-    let _ = writeln!(
-        out,
-        "|{}",
-        head.iter().map(|_| "---|").collect::<String>()
-    );
+    let _ = writeln!(out, "|{}", head.iter().map(|_| "---|").collect::<String>());
     for r in rows {
         let cells: Vec<String> = r.iter().map(|c| cell(c)).collect();
         let _ = writeln!(out, "| {} |", cells.join(" | "));
@@ -256,7 +266,6 @@ fn class_name(c: Option<&str>) -> &'static str {
     match c {
         Some("BS") => "Guaranteed by semantics",
         Some("UDC") => "Under declared capability",
-        Some("NG") => "Not guaranteed",
         Some("PU") => "Physically unsatisfiable",
         Some("NG/PU") => "Not guaranteed / physically unsatisfiable",
         _ => "Not guaranteed",
@@ -269,7 +278,8 @@ pub(crate) fn render(root: &Path) -> Result<String, String> {
     let catalog = catalog::load(root)?;
     let model = trust_model::load(root)?;
     let claims = catalog::claims_rows(root)?;
-    let proofs: Proofs = toml::from_str(&read(root, PROOFS)?).map_err(|e| format!("{PROOFS}: {e}"))?;
+    let proofs: Proofs =
+        toml::from_str(&read(root, PROOFS)?).map_err(|e| format!("{PROOFS}: {e}"))?;
     let (flows, trees) = pasta::load(root)?;
 
     let mut out = String::new();
@@ -285,12 +295,20 @@ risk and how it is watched. Every row comes from the machine-readable catalogs i
     let _ = writeln!(out, "## Verdict\n\n**{VERDICT}.** {VERDICT_TEXT}\n");
 
     out.push_str("## Declared limits\n\n");
-    out.push_str("Each limit is classed in the guarantee matrix and owned as a residual risk below.\n\n");
+    out.push_str(
+        "Each limit is classed in the guarantee matrix and owned as a residual risk below.\n\n",
+    );
     let dl: Vec<Vec<String>> = catalog
         .rules
         .iter()
         .filter(|r| r.family == "DL")
-        .map(|r| vec![r.id.clone(), r.title.clone(), class_name(r.class.as_deref()).to_owned()])
+        .map(|r| {
+            vec![
+                r.id.clone(),
+                r.title.clone(),
+                class_name(r.class.as_deref()).to_owned(),
+            ]
+        })
         .collect();
     table(&mut out, &["ID", "Limit", "Class"], &dl);
 
@@ -305,7 +323,7 @@ the attributable lever that contains it.\n\n",
         .iter()
         .map(|c| {
             vec![
-                c.component.clone(),
+                c.name.clone(),
                 c.trust.clone(),
                 c.not_trusted.clone(),
                 c.blast_radius.clone(),
@@ -316,7 +334,14 @@ the attributable lever that contains it.\n\n",
         .collect();
     table(
         &mut out,
-        &["Component", "Trusted with", "Never trusted with", "Blast radius", "Never", "Containment"],
+        &[
+            "Component",
+            "Trusted with",
+            "Never trusted with",
+            "Blast radius",
+            "Never",
+            "Containment",
+        ],
         &tm,
     );
 
@@ -361,7 +386,11 @@ replaces a claim the product must not make.\n\n",
             ]
         })
         .collect();
-    table(&mut out, &["ID", "Risk", "Owner", "Why accepted", "Signal"], &rr);
+    table(
+        &mut out,
+        &["ID", "Risk", "Owner", "Why accepted", "Signal"],
+        &rr,
+    );
     out.push_str(
         "\nA signal is an alert (`alert:`), a logged event (`event:`, `audit:`), a metric \
 (`metric:`) or a CI job (`ci:<workflow>/<job>`); `none-declared` means no signal is declared yet.\n",
@@ -378,9 +407,9 @@ attack tree in [`threat/trees/`](threat/trees) whose every leaf names a threat r
     let fl: Vec<Vec<String>> = flows
         .values()
         .map(|p| {
-            let leaves = trees.get(&p.flow).map_or(0, |t| {
-                t.node.iter().filter(|n| n.gate == "leaf").count()
-            });
+            let leaves = trees
+                .get(&p.flow)
+                .map_or(0, |t| t.node.iter().filter(|n| n.gate == "leaf").count());
             vec![p.title.clone(), leaves.to_string()]
         })
         .collect();
@@ -408,10 +437,19 @@ outside it (HL-15, HL-16).\n\n",
             } else {
                 "stated, not yet proved"
             };
-            vec![t.claim.clone(), format!("`{}`", t.name), t.rule.clone(), status.to_owned()]
+            vec![
+                t.claim.clone(),
+                format!("`{}`", t.name),
+                t.rule.clone(),
+                status.to_owned(),
+            ]
         })
         .collect();
-    table(&mut out, &["Property of AccessAlgebra", "Theorem", "Rule", "Status"], &fs);
+    table(
+        &mut out,
+        &["Property of AccessAlgebra", "Theorem", "Rule", "Status"],
+        &fs,
+    );
 
     out.push_str("\n## Conformance and certification\n\n");
     out.push_str(
@@ -425,6 +463,116 @@ service, and an audit of Access is never sold as a Suiss certificate.\n",
     Ok(out)
 }
 
+/// The PEP conformance runner's sources and manifest (P2, B9, §9.17).
+const SUITE: &str = "bins/access-pep-conformance";
+/// Where a certification or assessment product route would be declared (D3, §18.12).
+const OPENAPI: &str = "sdks/openapi";
+const CLIENT_CRATES: &[&str] = &["reqwest", "ureq", "isahc", "curl", "surf", "attohttpc"];
+const LOOPBACK: &[&str] = &["127.0.0.1", "localhost", "[::1]"];
+
+/// Whether `host` is loopback or a reserved example name (RFC 2606).
+fn offline_host(host: &str) -> bool {
+    let name = host.split(':').next().unwrap_or(host);
+    LOOPBACK.contains(&host)
+        || LOOPBACK.contains(&name)
+        || name.ends_with(".example")
+        || name == "example"
+}
+
+/// Pure scan of one source text of the suite: every URL literal names a loopback or example
+/// host, and no text names a Suiss domain.
+pub(crate) fn suite_text_violations(rel: &str, text: &str) -> Vec<Violation> {
+    let mut out = Vec::new();
+    for (n, line) in text.lines().enumerate() {
+        let lower = line.to_ascii_lowercase();
+        for scheme in ["http://", "https://"] {
+            let mut rest = lower.as_str();
+            while let Some(at) = rest.find(scheme) {
+                let after = rest
+                    .get(at.saturating_add(scheme.len())..)
+                    .unwrap_or_default();
+                let host: String = after
+                    .chars()
+                    .take_while(|c| {
+                        c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']')
+                    })
+                    .collect();
+                if !host.is_empty() && !host.starts_with('{') && !offline_host(&host) {
+                    out.push(violation(
+                        rel,
+                        "P2",
+                        format!(
+                            "line {}: the conformance suite names a network host {host:?}",
+                            n.saturating_add(1)
+                        ),
+                    ));
+                }
+                rest = after;
+            }
+        }
+        if lower.contains("suiss.com") || lower.contains("suiss.ch") || lower.contains("esuiss.") {
+            out.push(violation(
+                rel,
+                "B9",
+                format!(
+                    "line {}: the conformance suite names a Suiss domain",
+                    n.saturating_add(1)
+                ),
+            ));
+        }
+    }
+    out
+}
+
+/// P2, B9, D3, OP-159 m.3 (gg): the suite runs without a Suiss account or network, and no API
+/// declares a certification or assessment route.
+pub(crate) fn endorsement_violations(root: &Path) -> Result<Vec<Violation>, String> {
+    let mut out = Vec::new();
+    let mut files = Vec::new();
+    rust_files(&root.join(SUITE).join("src"), &mut files);
+    files.sort();
+    for f in &files {
+        let rel = f.strip_prefix(root).unwrap_or(f).display().to_string();
+        let text = std::fs::read_to_string(f).map_err(|e| format!("{rel}: {e}"))?;
+        out.extend(suite_text_violations(&rel, &text));
+    }
+    let manifest = format!("{SUITE}/Cargo.toml");
+    let text = read(root, &manifest)?;
+    for line in text.lines() {
+        let name = line.split('=').next().unwrap_or_default().trim();
+        if CLIENT_CRATES.contains(&name) {
+            out.push(violation(
+                &manifest,
+                "P2",
+                format!("the conformance suite depends on the HTTP client {name}"),
+            ));
+        }
+    }
+    if let Ok(entries) = std::fs::read_dir(root.join(OPENAPI)) {
+        for e in entries.filter_map(Result::ok) {
+            let p = e.path();
+            if p.extension().is_none_or(|x| x != "json") {
+                continue;
+            }
+            let rel = p.strip_prefix(root).unwrap_or(&p).display().to_string();
+            let text = std::fs::read_to_string(&p).map_err(|e| format!("{rel}: {e}"))?;
+            for part in text.split('"').skip(1).step_by(2) {
+                let lower = part.to_ascii_lowercase();
+                if part.starts_with('/')
+                    && (lower.contains("certification") || lower.contains("assessment"))
+                {
+                    out.push(violation(
+                        &rel,
+                        "D3",
+                        format!("route {part} offers certification or assessment"),
+                    ));
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
 fn covered(root: &Path, catalog: &Catalog) -> Result<BTreeSet<String>, String> {
     let config = catalog::load_config(root)?;
     let cov = catalog::coverage(root, catalog, &config)?;
@@ -434,6 +582,7 @@ fn covered(root: &Path, catalog: &Catalog) -> Result<BTreeSet<String>, String> {
 pub(crate) fn check(root: &Path) -> Result<Vec<Violation>, String> {
     let catalog = catalog::load(root)?;
     let mut out = row_violations(&catalog, &covered(root, &catalog)?, &signals(root)?);
+    out.extend(endorsement_violations(root)?);
     let want = render(root)?;
     match std::fs::read_to_string(root.join(FILE)) {
         Ok(have) if have == want => {}
@@ -512,10 +661,42 @@ mod tests {
             .into_iter()
             .map(|v| v.message)
             .collect();
-        assert!(found.iter().any(|m| m.contains("DL-7 is missing")), "{found:?}");
-        assert!(found.iter().any(|m| m.contains("needs an owner")), "{found:?}");
-        assert!(found.iter().any(|m| m.contains("access_made_up")), "{found:?}");
-        assert!(found.iter().any(|m| m.contains("HL-1: no forbidden-claims row")), "{found:?}");
+        assert!(
+            found.iter().any(|m| m.contains("DL-7 is missing")),
+            "{found:?}"
+        );
+        assert!(
+            found.iter().any(|m| m.contains("needs an owner")),
+            "{found:?}"
+        );
+        assert!(
+            found.iter().any(|m| m.contains("access_made_up")),
+            "{found:?}"
+        );
+        assert!(
+            found
+                .iter()
+                .any(|m| m.contains("HL-1: no forbidden-claims row")),
+            "{found:?}"
+        );
+    }
+
+    // P2, B9, §9.17, OP-159 m.3 (gg)
+    #[test]
+    fn the_conformance_suite_names_only_loopback_and_example_hosts() {
+        let ok = "let u = format!(\"http://{addr}\"); let r = \"https://rs.example/doors/1\"; let l = \"http://127.0.0.1:8080/x\";";
+        assert!(suite_text_violations("a.rs", ok).is_empty());
+        let bad =
+            "let u = \"https://conformance.suiss.com/report\";\nlet v = \"https://evil.test/\";";
+        let found: Vec<String> = suite_text_violations("a.rs", bad)
+            .into_iter()
+            .map(|v| v.message)
+            .collect();
+        assert_eq!(found.len(), 3, "{found:?}");
+        let root = crate::workspace_root();
+        let committed =
+            endorsement_violations(&root).unwrap_or_else(|e| vec![violation(SUITE, "P2", e)]);
+        assert!(committed.is_empty(), "{committed:?}");
     }
 
     // SEC1, SEC5, OP-159 m.3 (gg)

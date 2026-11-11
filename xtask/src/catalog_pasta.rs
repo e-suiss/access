@@ -91,8 +91,11 @@ fn read<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, String> {
     toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
+/// The PASTA flows and the attack trees, by flow name.
+pub(crate) type Flows = (BTreeMap<String, Pasta>, BTreeMap<String, Tree>);
+
 /// Every flow file and every tree file, by flow name.
-pub(crate) fn load(root: &Path) -> Result<(BTreeMap<String, Pasta>, BTreeMap<String, Tree>), String> {
+pub(crate) fn load(root: &Path) -> Result<Flows, String> {
     let mut flows = BTreeMap::new();
     let mut trees = BTreeMap::new();
     for (dir, is_tree) in [(PASTA_DIR, false), (TREE_DIR, true)] {
@@ -172,14 +175,19 @@ pub(crate) fn violations(
         }
         let names: Vec<&str> = p.stage.iter().map(|s| s.name.as_str()).collect();
         if names != STAGES {
-            bad(format!("stages must be the seven PASTA stages in order, found {names:?}"));
+            bad(format!(
+                "stages must be the seven PASTA stages in order, found {names:?}"
+            ));
         }
         for s in &p.stage {
             if s.summary.trim().is_empty() {
                 bad(format!("stage {} has no summary", s.name));
             }
             for r in s.refs.iter().filter(|r| !known(r)) {
-                bad(format!("stage {}: {r} is not a catalog or threat row", s.name));
+                bad(format!(
+                    "stage {}: {r} is not a catalog or threat row",
+                    s.name
+                ));
             }
         }
         if !p
@@ -236,7 +244,9 @@ pub(crate) fn violations(
                     }
                     match &n.threat {
                         Some(th) if threats.contains(th) => {}
-                        Some(th) => bad(format!("{}: threat {th} is not in the threat model", n.id)),
+                        Some(th) => {
+                            bad(format!("{}: threat {th} is not in the threat model", n.id));
+                        }
                         None => bad(format!("{}: leaf names no threat row", n.id)),
                     }
                     if n.tests.is_empty() && n.limits.is_empty() {
@@ -389,10 +399,19 @@ mod tests {
             .into_iter()
             .map(|v| v.message)
             .collect();
-        assert!(found.iter().any(|m| m.contains("saml is missing")), "{found:?}");
-        assert!(found.iter().any(|m| m.contains("seven PASTA stages")), "{found:?}");
+        assert!(
+            found.iter().any(|m| m.contains("saml is missing")),
+            "{found:?}"
+        );
+        assert!(
+            found.iter().any(|m| m.contains("seven PASTA stages")),
+            "{found:?}"
+        );
         assert!(found.iter().any(|m| m.contains("TH-99")), "{found:?}");
-        assert!(found.iter().any(|m| m.contains("test or a declared limit")), "{found:?}");
+        assert!(
+            found.iter().any(|m| m.contains("test or a declared limit")),
+            "{found:?}"
+        );
         assert!(found.iter().any(|m| m.contains("AB-1")), "{found:?}");
     }
 }

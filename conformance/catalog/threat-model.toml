@@ -19,7 +19,10 @@ stride = ["S"]
 linddun = []
 rows = ["N-41", "N-45"]
 refs = ["§13.7.3"]
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/aitm.rs::a_passkey_sign_in_through_a_reverse_proxy_is_refused",
+  "bins/access-server/src/bootstrap/tests/aitm.rs::password_and_totp_through_a_reverse_proxy_hand_over_the_session",
+]
 
 [[threat]]
 id = "TH-3"

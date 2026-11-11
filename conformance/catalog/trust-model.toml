@@ -1,6 +1,6 @@
 # §13.2, SA-7, SEC5, OP-159 m.3 (gg)
 #
-# component     the component as the trust model names it
+# name          the component as the trust model names it
 # trust         what it is trusted with
 # not_trusted   what it is never trusted with
 # blast_radius  the widest result when it is fully malicious
@@ -11,7 +11,7 @@
 
 [[component]]
 id = "anchor-root"
-component = "Anchor root (sole or joint)"
+name = "Anchor root (sole or joint)"
 trust = "Being the source of authority within its own Anchor scope"
 not_trusted = "Authority of another Anchor or domain"
 blast_radius = "Everything in its own scope, within the rootTerms requirements"
@@ -22,40 +22,46 @@ tests = []
 
 [[component]]
 id = "recover-entry"
-component = "rootTerms domain.recover entry"
+name = "rootTerms domain.recover entry"
 trust = "Replacing the provider binding through forced recovery"
 not_trusted = "Writing Grants, Acceptances or policy"
 blast_radius = "Replacing the provider binding; a rollback attempt citing an old checkpoint fails the evaluator-side guard"
 never = "Write authority state other than domain.recover; act from an anonymous request"
 containment = "Evaluator-side witness and replica checkpoint guard, witness and replica before ack, separate custody"
 rows = ["SEC20", "SEC22", "SEC23"]
-tests = []
+tests = [
+  "crates/authority-core/tests/commit/domain_scope.rs::a_recovery_needs_its_entry_and_passes_the_rollback_guard",
+]
 
 [[component]]
 id = "provider"
-component = "Access provider (evaluator)"
+name = "Access provider (evaluator)"
 trust = "Producing decisions to the spec and keeping the records"
 not_trusted = "Owning authority"
 blast_radius = "Wrong ALLOW or DENY, denial of service, equivocation, lost suffix"
 never = "Produce an Exercise on an actor's behalf without an AIS; own authority; rewrite history undetectably when a witness exists"
 containment = "domain.handover or domain.recover; detection by re-evaluation"
 rows = ["INV-29", "PI-7", "DL-4", "N-13", "U9", "U13"]
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/durability/replay.rs::an_export_verifies_without_suiss_and_a_decision_a_faulty_evaluator_recorded_is_found",
+]
 
 [[component]]
 id = "provider-operator"
-component = "Provider operator (including Suiss-hosted)"
+name = "Provider operator (including Suiss-hosted)"
 trust = "Running the provider"
 not_trusted = "Being counted as root, custodian or surface owner"
 blast_radius = "The provider's radius, plus DL-1 when it is also custodian and DL-2 when it also serves the surface"
 never = "Hold authority not granted at genesis; impersonate Parties whose keys it does not hold"
 containment = "Separation of duties and user-gated custody"
 rows = ["INV-29", "DL-1", "DL-2", "SEC17", "SEC19", "N-16"]
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/operator_breakglass.rs::sec19_operator_database_sessions_are_recorded_once",
+]
 
 [[component]]
 id = "provider-signing-key"
-component = "Provider signing key"
+name = "Provider signing key"
 trust = "Signing receipts, PAPs, checkpoints and metadata"
 not_trusted = "Authority (custody attestation)"
 blast_radius = "Forged current PAPs, receipts and tokens within each verifier's local acceptance ceiling until the recovery record reaches it"
@@ -66,7 +72,7 @@ tests = []
 
 [[component]]
 id = "identity-plane"
-component = "Identity plane (issuer and custodian)"
+name = "Identity plane (issuer and custodian)"
 trust = "Issuing authentication, authenticator-binding and identity-binding Claims, as far as each is accepted"
 not_trusted = "Creating authority"
 blast_radius = "Impersonation up to the authority Parties already hold in the accepted subject class; designation changes when custodial"
@@ -77,7 +83,7 @@ tests = []
 
 [[component]]
 id = "external-idp"
-component = "External IdP"
+name = "External IdP"
 trust = "The use it is accepted for"
 not_trusted = "Any other use"
 blast_radius = "Impersonation within the accepted subject class; selection within existing rule-shaped Grant ceilings"
@@ -88,29 +94,33 @@ tests = []
 
 [[component]]
 id = "claim-issuer"
-component = "HR or claim issuer (subject selection)"
+name = "HR or claim issuer (subject selection)"
 trust = "Selection facts"
 not_trusted = "Being a grantor"
 blast_radius = "The holder set of rule-shaped Grants that already exist, within their ceilings"
 never = "Exceed a Grant ceiling, reserved actions or budget"
 containment = "Cutoff as an affirmative disqualify"
 rows = ["INV-16", "SEC9"]
-tests = []
+tests = [
+  "crates/authority-core/tests/commit/policy_engine.rs::a_mass_selections_new_holders_need_an_approval_from_ct2",
+]
 
 [[component]]
 id = "schema-publisher"
-component = "Schema publisher"
+name = "Schema publisher"
 trust = "The meaning of its namespace, as far as the exact accepted digest"
 not_trusted = "Versions or mappings that were not accepted"
 blast_radius = "The rendering and meaning of the accepted digest; mislabelling a pinned mapping"
 never = "Change scope with a digest that was not accepted; drop a reserved flag silently"
 containment = "Revoke the schema-definition Acceptance (fails closed as schema-not-accepted)"
 rows = ["EI-16"]
-tests = []
+tests = [
+  "crates/authority-core/tests/compat.rs::only_a_mapping_the_publisher_declared_can_be_pinned",
+]
 
 [[component]]
 id = "foreign-domain"
-component = "Foreign domain"
+name = "Foreign domain"
 trust = "Evidence of authority within a foreign-authority Acceptance"
 not_trusted = "Local authority"
 blast_radius = "Up to the bridging Grant ceiling"
@@ -121,7 +131,7 @@ tests = []
 
 [[component]]
 id = "pep"
-component = "PEP"
+name = "PEP"
 trust = "Enforcing the decision before the effect (declared)"
 not_trusted = "Being an actor"
 blast_radius = "The effects it physically controls, which it could do without Access"
@@ -132,18 +142,20 @@ tests = []
 
 [[component]]
 id = "offline-verifier"
-component = "Offline verifier"
+name = "Offline verifier"
 trust = "Following the contract (declared)"
 not_trusted = "The accuracy of its reports"
 blast_radius = "Contracts in its own audience, up to horizon and slice"
 never = "Spend a slice a second time centrally; obtain a new contract after its profile Acceptance is revoked"
 containment = "Revoke the predicate-input Acceptance; issuer-side refusal"
 rows = ["SEC13", "PI-12", "DL-3"]
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/product_twin/seams/serve.rs::a_pos_terminal_refuses_offline_once_its_slice_is_spent",
+]
 
 [[component]]
 id = "executor"
-component = "Executor"
+name = "Executor"
 trust = "Asking at continuation and declaring stop"
 not_trusted = "The truth of an effect (a Claim)"
 blast_radius = "Continuing running work; false attestation"
@@ -154,7 +166,7 @@ tests = []
 
 [[component]]
 id = "approval-surface"
-component = "Approval Surface"
+name = "Approval Surface"
 trust = "Faithful rendering and collecting the user's act (declared)"
 not_trusted = "Detecting from the record that the rendering was faithful"
 blast_radius = "Collecting assertions from its own users for a different intent (DL-2)"
@@ -165,7 +177,7 @@ tests = []
 
 [[component]]
 id = "relay"
-component = "Relay or SSF transmitter"
+name = "Relay or SSF transmitter"
 trust = "Delivery (best effort)"
 not_trusted = "Any security decision"
 blast_radius = "Delayed, lost or forged events"
@@ -176,7 +188,7 @@ tests = []
 
 [[component]]
 id = "work"
-component = "Work or coordinator"
+name = "Work or coordinator"
 trust = "Gates and attention management"
 not_trusted = "Satisfying an Access requirement"
 blast_radius = "Misrouting approval requests; bombarding approvers"
@@ -187,29 +199,33 @@ tests = []
 
 [[component]]
 id = "agent"
-component = "One, agent or model"
+name = "One, agent or model"
 trust = "Exercising within its own Instance and Mandate"
 not_trusted = "Being a source of instructions"
 blast_radius = "Everything within Grant, Mandate and budget"
 never = "Grant, widen or approve without the user's Instance"
 containment = "Mandate revoke, instance.terminate, suspend"
 rows = ["DL-6", "PI-11", "RR-12"]
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/product_twin/one.rs::one_acts_for_the_person_only_within_what_the_person_gave_it",
+]
 
 [[component]]
 id = "witness"
-component = "Witness"
+name = "Witness"
 trust = "Co-signing checkpoints faithfully"
 not_trusted = "Authority"
 blast_radius = "False co-signatures; hiding equivocation when it is the only witness"
 never = "Change authority state"
 containment = "Witness diversity (at least two); the domain replaces the witness"
 rows = ["SI-12", "HL-7", "SEC23"]
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/durability/checkpoint.rs::real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation",
+]
 
 [[component]]
 id = "protocol-governance"
-component = "Protocol governance"
+name = "Protocol governance"
 trust = "Publishing the core spec and meta-schema"
 not_trusted = "Taking effect in a domain on its own"
 blast_radius = "Publishing a bad core version"
@@ -220,7 +236,7 @@ tests = []
 
 [[component]]
 id = "party-controller"
-component = "Party controller"
+name = "Party controller"
 trust = "Managing the Party's key state and issuer designation"
 not_trusted = "Authority (controller is not authority)"
 blast_radius = "The Party's Instance setup and issuer designation"
@@ -231,18 +247,20 @@ tests = []
 
 [[component]]
 id = "realm-signing-key"
-component = "Realm JOSE or SAML signing key (identity plane)"
+name = "Realm JOSE or SAML signing key (identity plane)"
 trust = "Signing authentication results for its own realm's relying parties"
 not_trusted = "Signing authority artefacts; any other realm"
 blast_radius = "Golden SAML or forged ID tokens for any user at every relying party of the realm until rotation; on the Access side only as far as the authentication use"
 never = "Create authority; write a Grant or Acceptance; be valid at another realm's relying party"
 containment = "Key rotation and removal from the JWKS (key_epoch increment), issuer cutoff, HSM or signer process"
 rows = ["HL-35", "INV-15", "SI-3", "SEC18", "SEC9", "G46"]
-tests = []
+tests = [
+  "crates/authority-core/tests/ingest.rs::a_dropped_realm_key_signs_nothing_admitted_after_its_cutoff",
+]
 
 [[component]]
 id = "operational-key"
-component = "Operational signing key (domain-scoped, separate signer process)"
+name = "Operational signing key (domain-scoped, separate signer process)"
 trust = "Signing its own domain's PAP, receipt and checkpoint excerpts within its lifetime"
 not_trusted = "Another domain; changing the binding"
 blast_radius = "Forged PAPs and receipts in its own domain, within the key lifetime and each verifier's local ceiling"
@@ -253,18 +271,20 @@ tests = []
 
 [[component]]
 id = "binding-key"
-component = "Binding key (HSM, quorum)"
+name = "Binding key (HSM, quorum)"
 trust = "Signing the Domain Metadata binding and operational key delegation"
 not_trusted = "Everyday signing"
 blast_radius = "The provider signing key's radius plus operational key authorisation"
 never = "Be used without quorum (HSM policy)"
 containment = "domain.recover; HSM quorum change"
 rows = ["U25", "N-26", "HL-34"]
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/durability/handover.rs::a_binding_re_anchor_double_signs_rotates_the_binding_and_re_signs_no_record",
+]
 
 [[component]]
 id = "legacy-gateway"
-component = "LDAP, Kerberos, RADIUS or WS-Fed gateway process"
+name = "LDAP, Kerberos, RADIUS or WS-Fed gateway process"
 trust = "Turning a legacy protocol bind into an identity plane authentication event"
 not_trusted = "Authority; credentials other than passwords"
 blast_radius = "Passwords of users who bind through it (it sees cleartext); forged authentication for that realm"
@@ -275,7 +295,7 @@ tests = []
 
 [[component]]
 id = "scim-client"
-component = "SCIM client (inbound provisioning)"
+name = "SCIM client (inbound provisioning)"
 trust = "The subject-selection and identity-binding attributes declared in its Acceptance"
 not_trusted = "Being a grantor"
 blast_radius = "As for an HR or claim issuer: selection within existing rule-shaped Grant ceilings; stale positive Claims"
@@ -286,18 +306,20 @@ tests = []
 
 [[component]]
 id = "parser-worker"
-component = "Parser worker (SAML/XML and, where needed, BER or CBOR; isolated process)"
+name = "Parser worker (SAML/XML and, where needed, BER or CBOR; isolated process)"
 trust = "Turning input into a normalised structure"
 not_trusted = "Deciding a signature verification result alone; key material"
 blast_radius = "Accepting a forged assertion through XSW-class misparsing in the realm it serves; crashing (denial of service)"
 never = "Reach the signer or the main process memory (separate process, no network syscalls)"
 containment = "Restart the worker; XSW regression corpus; roll back the parser version"
 rows = ["RR-20"]
-tests = []
+tests = [
+  "bins/access-parser-worker/src/saml_tests.rs::idi_8_xsw_corpus_is_refused",
+]
 
 [[component]]
 id = "co-tenant"
-component = "Co-tenant (another tenant or workload on the same physical host)"
+name = "Co-tenant (another tenant or workload on the same physical host)"
 trust = "Nothing"
 not_trusted = "Everything"
 blast_radius = "Secret leakage through microarchitectural side channels (DL-10)"
@@ -308,7 +330,7 @@ tests = []
 
 [[component]]
 id = "support-staff"
-component = "Support staff (support access)"
+name = "Support staff (support access)"
 trust = "Reading and acting within the support Grant the user gave"
 not_trusted = "Producing an AIS on the user's behalf (no impersonation)"
 blast_radius = "The scope and duration of the support Grant"

@@ -85,7 +85,9 @@ fn usage() -> ExitCode {
     eprintln!("  interop-table      regenerate conformance/interop/COMPATIBILITY.md from lab.toml");
     eprintln!("  seam-dependencies  regenerate conformance/seams/DEPENDENCIES.md (PI-14)");
     eprintln!("  calibrate          measure password hashing on this host (OP-146 m.4 (f))");
-    eprintln!("  security-model     regenerate conformance/SECURITY-MODEL.md; --check only compares");
+    eprintln!(
+        "  security-model     regenerate conformance/SECURITY-MODEL.md; --check only compares"
+    );
     ExitCode::FAILURE
 }
 

@@ -2040,7 +2040,10 @@ status = "canonical"
 class = "NG"
 stage = 14
 title = "Merkle index reveals position"
-tests = []
+tests = [
+  "bins/access-server/src/bootstrap/tests/durability/checkpoint.rs::a_witnessed_bundle_opens_only_artifacts_and_dates_the_record",
+  "crates/identity-audit/tests/audit.rs::each_realm_proves_its_events_in_its_own_tree",
+]
 
 [[rule]]
 id = "HL-11"
@@ -2050,7 +2053,10 @@ status = "canonical"
 class = "NG"
 stage = 14
 title = "Status list herd privacy bounded by list size"
-tests = []
+tests = [
+  "crates/authority-core/tests/commit.rs::a_token_names_its_status_list_entry",
+  "crates/authority-core/tests/status.rs::entries_are_unique_and_lists_roll_over",
+]
 
 [[rule]]
 id = "HL-12"
@@ -2282,7 +2288,9 @@ status = "canonical"
 class = "NG"
 stage = 14
 title = "Leaked realm signing key enables Golden SAML-style forgery"
-tests = []
+tests = [
+  "crates/authority-core/tests/ingest.rs::a_dropped_realm_key_signs_nothing_admitted_after_its_cutoff",
+]
 
 [[rule]]
 id = "HL-36"
@@ -2292,7 +2300,10 @@ status = "canonical"
 class = "NG"
 stage = 14
 title = "Client identity takeover via expired or resold CIMD domain"
-tests = []
+tests = [
+  "crates/identity-oauth/tests/cimd.rs::a_domain_the_policy_drops_retires_its_clients",
+  "crates/identity-oauth/tests/cimd.rs::an_authority_change_asks_again_and_a_visual_one_only_warns",
+]
 
 [[rule]]
 id = "HL-37"
