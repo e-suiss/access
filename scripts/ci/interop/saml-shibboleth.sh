@@ -2,7 +2,8 @@
 # T42, IDP-40, OP-155 m.3 (q), Ek B 4934, 5100: Shibboleth SP 3 (Debian's libapache2-mod-shib
 # behind Apache) as the service provider. It loads the signed Access metadata through its
 # signature filter, then must open a session for a real Access response posted to its ACS and
-# must refuse the tampered one.
+# must refuse the tampered one. The container has no systemd-tmpfiles, so the listener's socket
+# directory is made by hand.
 #
 #   scripts/ci/interop/saml-shibboleth.sh <artifact dir>
 set -euo pipefail
@@ -53,6 +54,7 @@ XML
 CONF
     echo "Listen 8080" >/etc/apache2/ports.conf
     a2enmod shib >/dev/null
+    install -d -o _shibd -g _shibd /run/shibboleth
     shibd -f
     apache2ctl start
     for _ in $(seq 1 30); do curl -fs -o /dev/null http://127.0.0.1:8080/ && break; sleep 1; done
