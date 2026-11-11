@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access_ops.cell_profile (version, cell, region, class, durability, dedicated_to)\n         SELECT COALESCE((SELECT max(version) FROM access_ops.cell_profile), 0) + 1, $1, $2, $3, $4, $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "97ff06154d55d57643704739b76bb1700f97d3a9c145839866e5c5c9f98e7fae"
+}

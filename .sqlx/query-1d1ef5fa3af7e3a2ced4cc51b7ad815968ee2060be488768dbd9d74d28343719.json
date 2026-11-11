@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.realm_residency (tenant_id, realm_id, version, region, class, domain_id, decision_pos)\n         SELECT $1, $2,\n                COALESCE((SELECT max(version) FROM access.realm_residency\n                           WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,\n                $3, $4, $5, $6",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1d1ef5fa3af7e3a2ced4cc51b7ad815968ee2060be488768dbd9d74d28343719"
+}

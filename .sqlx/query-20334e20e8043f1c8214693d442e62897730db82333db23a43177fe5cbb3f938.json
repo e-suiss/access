@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT region, class FROM access.realm_residency\n          WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "region",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.realm_residency",
+            "name": "region"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "class",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.realm_residency",
+            "name": "class"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "20334e20e8043f1c8214693d442e62897730db82333db23a43177fe5cbb3f938"
+}

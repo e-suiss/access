@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.realms SET governing_domain_id = $4\n          WHERE tenant_id = $1 AND realm_id = $2 AND governing_domain_id = $3 AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bb7e5673d1c2dd198a059e79436378702b0594a0d44055c20b9ab3d5413d7372"
+}

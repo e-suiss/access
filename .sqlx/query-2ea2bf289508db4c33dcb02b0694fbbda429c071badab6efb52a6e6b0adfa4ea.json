@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.side, e.from_domain, e.to_domain, e.decision_pos FROM access.rehome_ends e\n          WHERE e.tenant_id = $1 AND e.realm_id = $2\n            AND NOT EXISTS (SELECT 1 FROM access.realm_rehomes h\n                             WHERE h.tenant_id = $1\n                               AND ((h.from_domain = e.domain_id AND h.from_pos = e.decision_pos)\n                                 OR (h.to_domain = e.domain_id AND h.to_pos = e.decision_pos)))\n          ORDER BY e.created_at, e.decision_pos",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "side",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.rehome_ends",
+            "name": "side"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "from_domain",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.rehome_ends",
+            "name": "from_domain"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "to_domain",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.rehome_ends",
+            "name": "to_domain"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.rehome_ends",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2ea2bf289508db4c33dcb02b0694fbbda429c071badab6efb52a6e6b0adfa4ea"
+}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.rehome_ends\n           (tenant_id, realm_id, side, from_domain, to_domain, domain_id, decision_pos, nonce, intent_digest)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n         ON CONFLICT (tenant_id, domain_id, decision_pos) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "200a562506d86f5a8f9eddc98cd3dd4e9f047979960421d05ccab8ca4d3a1cf7"
+}

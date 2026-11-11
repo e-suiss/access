@@ -69,6 +69,7 @@ pub mod org_sso;
 pub mod orgs;
 pub mod passkeys;
 pub mod payment;
+pub mod placement;
 pub mod platform;
 pub mod privacy;
 pub mod projections;

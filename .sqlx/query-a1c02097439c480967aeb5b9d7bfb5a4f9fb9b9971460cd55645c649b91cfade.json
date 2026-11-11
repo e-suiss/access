@@ -1,0 +1,74 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT cell, region, class, durability, dedicated_to FROM access_ops.cell_profile\n          ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cell",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.cell_profile",
+            "name": "cell"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "region",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.cell_profile",
+            "name": "region"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "class",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.cell_profile",
+            "name": "class"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "durability",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.cell_profile",
+            "name": "durability"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "dedicated_to",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access_ops.cell_profile",
+            "name": "dedicated_to"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "a1c02097439c480967aeb5b9d7bfb5a4f9fb9b9971460cd55645c649b91cfade"
+}

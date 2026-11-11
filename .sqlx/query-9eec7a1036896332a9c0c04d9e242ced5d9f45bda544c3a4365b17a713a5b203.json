@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT access.domain_tenant($1) AS tenant",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9eec7a1036896332a9c0c04d9e242ced5d9f45bda544c3a4365b17a713a5b203"
+}

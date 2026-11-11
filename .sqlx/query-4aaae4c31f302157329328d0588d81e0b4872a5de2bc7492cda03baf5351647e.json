@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT cell, dedicated, version FROM access.placement\n          WHERE tenant_id = $1 AND subject_kind = $2 AND subject = $3 ORDER BY version",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cell",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.placement",
+            "name": "cell"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "dedicated",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.placement",
+            "name": "dedicated"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.placement",
+            "name": "version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4aaae4c31f302157329328d0588d81e0b4872a5de2bc7492cda03baf5351647e"
+}
