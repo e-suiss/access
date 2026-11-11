@@ -82,7 +82,7 @@ export const test = base.extend<{ pageErrors: string[]; mock: LoginMock; webauth
       page.on("console", (message) => {
         const text = message.text();
         const refusal =
-          /^Failed to load resource: the server responded with a status of 4[0-9][0-9] /;
+          /^Failed to load resource: the server responded with a status of (4[0-9][0-9]|503) /;
         if (message.type() === "error" && !refusal.test(text)) errors.push(text);
       });
       page.on("pageerror", (error) => {

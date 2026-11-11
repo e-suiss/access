@@ -167,3 +167,33 @@ test("a completed sign-in continues the SAML or WS-Federation flow that sent it,
     mock.submissions.length = 0;
   }
 });
+
+// OP-45, §8.13, §17.7.2, Ek B 5736
+test("with the identity database down the page says sign-in isn't available, not that the details are wrong", async ({
+  page,
+  mock,
+}) => {
+  mock.flowsDown = {
+    status: 503,
+    body: {
+      type: "urn:suiss:access:problem:degraded-identity",
+      title: "Sign-in isn't available right now",
+      status: 503,
+    },
+  };
+  await page.goto("/");
+  const alert = page.getByRole("alert");
+  await expect(alert).toHaveText(
+    "Sign-in isn't available right now. Things already allowed keep working within their limits.",
+  );
+  await expect(alert).toHaveAttribute("data-message-id", "login.degraded");
+  await expect(page.getByLabel("Email or username")).toHaveCount(0);
+  await expect(page.getByText(neutral)).toHaveCount(0);
+
+  mock.flowsDown = {
+    status: 503,
+    body: { type: "urn:suiss:access:problem:unavailable", status: 503 },
+  };
+  await page.goto("/");
+  await expect(page.getByRole("alert")).toHaveAttribute("data-message-id", "login.unavailable");
+});

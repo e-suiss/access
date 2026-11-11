@@ -9,10 +9,13 @@ import { StepView } from "./StepView.js";
 type State =
   | { readonly phase: "loading" }
   | { readonly phase: "ready"; readonly ui: LoginUi }
-  | { readonly phase: "failed" };
+  | { readonly phase: "failed" }
+  | { readonly phase: "degraded" };
 
 const expired: Message = { id: "flow.expired", text: "", severity: "error" };
 const unavailable: Message = { id: "login.unavailable", text: "", severity: "error" };
+// OP-45, §8.13
+const degraded: Message = { id: "login.degraded", text: "", severity: "error" };
 const stopped: Message = { id: "page.email_wait_stopped", text: "", severity: "error" };
 
 /** TN-102: the link wait polls with a growing pause and gives up after the link's lifetime. */
@@ -58,7 +61,7 @@ export function SignIn({ kind }: { readonly kind: FlowKind }) {
       const answer = await createFlow(kind);
       if (answer.kind === "ui")
         show(message === null ? answer.ui : withMessage(answer.ui, message));
-      else setState({ phase: "failed" });
+      else setState({ phase: answer.kind === "degraded" ? "degraded" : "failed" });
     },
     [show, kind],
   );
@@ -76,6 +79,12 @@ export function SignIn({ kind }: { readonly kind: FlowKind }) {
           const ui = current.current;
           if (ui === null) setState({ phase: "failed" });
           else show(withMessage(ui, unavailable));
+          break;
+        }
+        case "degraded": {
+          const ui = current.current;
+          if (ui === null) setState({ phase: "degraded" });
+          else show(withMessage(ui, degraded));
           break;
         }
       }
@@ -176,6 +185,11 @@ export function SignIn({ kind }: { readonly kind: FlowKind }) {
       {state.phase === "failed" && (
         <p role="alert" data-message-id={unavailable.id}>
           {t(unavailable.id)}
+        </p>
+      )}
+      {state.phase === "degraded" && (
+        <p role="alert" data-message-id={degraded.id}>
+          {t(degraded.id)}
         </p>
       )}
     </div>

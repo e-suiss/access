@@ -185,6 +185,8 @@ export class LoginMock {
   /** `GET /v1/login/messages`: the realm's text overrides (OP-153 m.22 (k)). */
   messages: Canned = { status: 200, body: { overrides: {} } };
   theme = "";
+  /** OP-45: when set, every flow request answers this problem (the identity database is down). */
+  flowsDown: Canned | undefined = undefined;
   private identifier = "";
 
   async install(page: Page): Promise<void> {
@@ -266,6 +268,13 @@ export class LoginMock {
     const request = route.request();
     const url = new URL(request.url());
     this.requests.push(`${request.method()} ${url.pathname}`);
+    if (this.flowsDown !== undefined)
+      return route.fulfill({
+        status: this.flowsDown.status,
+        contentType: "application/problem+json",
+        headers: { "Retry-After": "1" },
+        body: JSON.stringify(this.flowsDown.body ?? {}),
+      });
     if (request.method() === "POST" && url.pathname.endsWith("/v1/login/flows")) {
       const created = request.postData();
       const kind = created === null ? undefined : (JSON.parse(created) as { kind?: string }).kind;
