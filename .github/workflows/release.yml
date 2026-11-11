@@ -299,6 +299,20 @@ jobs:
       # OP-68, B20
       - name: Release notes
         run: git cliff --latest --strip all > "$RUNNER_TEMP/notes.md"
+      # U49, F-7, SA-39, OP-158 m.3 (j): not continue-on-error; without witnesses the notes say partial
+      - name: Release checkpoint
+        env:
+          RELEASE_CHECKPOINTS: ${{ vars.RELEASE_CHECKPOINTS }}
+          RELEASE_ORIGIN: ${{ vars.RELEASE_ORIGIN }}
+          RELEASE_LOG_VKEY: ${{ vars.RELEASE_LOG_VKEY }}
+          RELEASE_COSIGNERS: ${{ vars.RELEASE_COSIGNERS }}
+        run: |
+          listing="$RUNNER_TEMP/release-checkpoints.json"
+          if [ -n "$RELEASE_CHECKPOINTS" ]; then
+            curl --fail --silent --show-error --proto '=https' "$RELEASE_CHECKPOINTS" -o "$listing"
+            cargo build --locked -p esuiss-access-verify --bin access-verify
+          fi
+          ACCESS_VERIFY=target/debug/access-verify python3 -I .github/scripts/release-checkpoint.py "$listing" "$RUNNER_TEMP/notes.md"
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
