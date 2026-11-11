@@ -1198,6 +1198,13 @@ dependencies = [
 [[package]]
 name = "access-witness"
 version = "0.5.0"
+dependencies = [
+ "axum",
+ "esuiss-access-kernel",
+ "esuiss-crypto",
+ "esuiss-ledger",
+ "tokio",
+]
 
 [[package]]
 name = "adler2"

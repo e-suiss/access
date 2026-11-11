@@ -1,6 +1,6 @@
 [package]
 name = "access-witness"
-description = "Open Access witness (§16.6, OP-158 m.3 (d)): checks a domain's checkpoint consistency, cosigns it and gossips cosigns to find equivocation."
+description = "Access witness (§16.6, CMP-6, T17): cosigns a domain's checkpoints only after a consistency proof from its last cosigned base, keeps its own hash-chained state and answers gossip."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,8 +8,17 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
-# OP-158 m.3 (dd): public crates only (`dependency-direction`)
+[[bin]]
+name = "access-witness"
+path = "src/main.rs"
+
+# OP-158 m.3 (dd): public crates only (`dependency-direction`); its state is its own files
 [dependencies]
+access-kernel = { workspace = true }
+suiss-crypto = { workspace = true, features = ["verify", "signer"] }
+suiss-ledger = { workspace = true }
+axum = { workspace = true, features = ["http1", "tokio"] }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 
 [lints]
 workspace = true
