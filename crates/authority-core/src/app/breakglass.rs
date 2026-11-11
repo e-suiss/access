@@ -11,15 +11,18 @@
 
 use std::collections::BTreeSet;
 
+use access_internal_api::events::{Detail, Event, Kind, Source, Subject};
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
-use access_kernel::meta::{self, ExerciseBasis, GrantBasis, GrantContent, GrantState, kind};
+use access_kernel::meta::{
+    self, Actor, AnchorScope, AnchorState, ExerciseBasis, GrantBasis, GrantContent, GrantState,
+    InstanceState, Payload, Root, kind,
+};
 use access_kernel::model::{
     ActionRef, ActionSet, AuthoritySet, Binding, CanonicalAuthority, ConstraintSet, Consumption,
     DelegationTerms, Id, Independence, ProofKind, PurposeRef, RequirementTerm, ResourceSelector,
     SubjectSelector, Window,
 };
-use suiss_crypto::dcbor::Value;
 
 use crate::CoreError;
 use crate::app::Authority;
@@ -300,7 +303,115 @@ pub fn drill_overdue(last_drill: Option<u64>, since: u64, now: u64) -> bool {
     now.saturating_sub(last_drill.unwrap_or(since).max(since)) > DRILL_EVERY_MS
 }
 
+/// The `breakglass.used` notices of a use, one per subject Party (OP-157 m.3 (h), TN-71).
+///
+/// # Errors
+/// [`CoreError::Protocol`] `breakglass-notice` without a subject or an actor: the commit is
+/// refused rather than written without its notice.
+pub fn notices(
+    req: &Request,
+    used: &Use,
+    actor: Option<Actor>,
+    subjects: &BTreeSet<Id>,
+    (exercise, now): (Digest, u64),
+) -> Result<Vec<Event>, CoreError> {
+    let actor = actor.ok_or(CoreError::Protocol("breakglass-notice"))?;
+    if subjects.is_empty() {
+        return Err(CoreError::Protocol("breakglass-notice"));
+    }
+    Ok(subjects
+        .iter()
+        .map(|p| Event {
+            kind: Kind::BreakglassUsed,
+            domain: req.domain,
+            source: Source::Exercise(exercise),
+            subject: Subject::Party(*p),
+            at: now,
+            detail: Detail::Breakglass {
+                grant: used.grant,
+                actor: actor.party,
+                approvals: used.approvals,
+                until: req.intent.validity.until,
+                drill: used.drill,
+            },
+        })
+        .collect())
+}
+
+fn state<T: Canonical>(rows: Vec<crate::ports::Row>) -> Option<T> {
+    rows.into_iter()
+        .next()
+        .and_then(|(_, v, _)| v)
+        .and_then(|v| T::from_value(&v).ok())
+}
+
 impl<L: DomainLog, R: Reader, B: BindingPort, S: Salts> Authority<L, R, B, S> {
+    /// The notices of committing `req` as Exercise `exercise` when it uses a break-glass Grant;
+    /// none for any other request (TN-71, OP-157 m.3 (h)).
+    pub(crate) async fn breakglass_notices(
+        &self,
+        req: &Request,
+        actor: Option<Actor>,
+        exercise: Digest,
+        now: u64,
+    ) -> Result<Vec<Event>, CoreError> {
+        let Some(used) = self.breakglass(req).await? else {
+            return Ok(Vec::new());
+        };
+        let subjects = self.subjects(req, &used).await?;
+        notices(req, &used, actor, &subjects, (exercise, now))
+    }
+
+    /// Whose account a use acts on: the Instance's or departing Party of the meta-action, the
+    /// intent's recipient, or else the Party of the self-anchor the Grant rests on or that
+    /// Anchor's roots.
+    async fn subjects(&self, req: &Request, used: &Use) -> Result<BTreeSet<Id>, CoreError> {
+        match &req.payload {
+            Some(
+                Payload::InstanceTerminate { instance } | Payload::InstanceRecover { instance, .. },
+            ) => {
+                let i: Option<InstanceState> =
+                    state(self.fetch(&[meta::key(kind::INSTANCE, instance)]).await?);
+                return Ok(i.map(|i| i.party).into_iter().collect());
+            }
+            Some(Payload::PartyDepart { party, .. }) => return Ok(BTreeSet::from([*party])),
+            _ => {}
+        }
+        if let Some(r) = req.intent.recipient {
+            return Ok(BTreeSet::from([r]));
+        }
+        let mut at = used.grant;
+        for _ in 0..meta::MAX_LINEAGE {
+            let g: Option<GrantState> = state(self.fetch(&[meta::key(kind::GRANT, &at)]).await?);
+            match g.map(|g| g.content.basis) {
+                Some(GrantBasis::Holding(h)) => at = h.grant,
+                Some(GrantBasis::Anchor(a)) => {
+                    let a: Option<AnchorState> =
+                        state(self.fetch(&[meta::key(kind::ANCHOR, &a)]).await?);
+                    return Ok(match a {
+                        Some(
+                            AnchorState {
+                                scope: AnchorScope::Party(p),
+                                ..
+                            }
+                            | AnchorState {
+                                root: Root::Sole(p),
+                                ..
+                            },
+                        ) => BTreeSet::from([p]),
+                        Some(AnchorState {
+                            root: Root::Joint { parties, .. },
+                            ..
+                        }) => parties,
+                        None => BTreeSet::new(),
+                    });
+                }
+                None => return Ok(BTreeSet::new()),
+            }
+        }
+        Ok(BTreeSet::new())
+    }
+
     /// The break-glass use `req` is, read from the Grant it names (G29).
     pub(crate) async fn breakglass(&self, req: &Request) -> Result<Option<Use>, CoreError> {
         let ExerciseBasis::Holding(h) = req.basis else {
@@ -309,12 +420,8 @@ impl<L: DomainLog, R: Reader, B: BindingPort, S: Salts> Authority<L, R, B, S> {
         if !matches!(&req.intent.purpose, Some(PurposeRef::Code(c)) if c == PURPOSE || c == DRILL) {
             return Ok(None);
         }
-        let rows = self.fetch(&[meta::key(kind::GRANT, &h.grant)]).await?;
-        let grant = rows
-            .into_iter()
-            .next()
-            .and_then(|(_, v, _)| v)
-            .and_then(|v: Value| GrantState::from_value(&v).ok());
+        let grant: Option<GrantState> =
+            state(self.fetch(&[meta::key(kind::GRANT, &h.grant)]).await?);
         Ok(of(req, grant.as_ref()))
     }
 }

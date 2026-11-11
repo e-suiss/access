@@ -3,6 +3,7 @@
 //! action, within its own time limit, and only a declared exemption lifts a blocking rule.
 
 use access_authority_core::app::breakglass::{self, Setup};
+use access_internal_api::events::{Detail, Event, Kind, Source, Subject};
 
 use super::*;
 
@@ -314,6 +315,17 @@ fn hardware_sign_in(d: Digest, subject: Id, digest: Digest) -> Vec<u8> {
     )
 }
 
+/// The `breakglass.used` event written with the record at `pos`, if any.
+async fn notice_at(db: &TestDb, d: Digest, pos: u64) -> Option<Event> {
+    access_store::authority::read_outbox(&db.app, &DomainId::from_bytes(d.0), (0, 0), 1_000)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|o| o.pos == pos)
+        .filter_map(|o| Event::from_bytes(&o.event).ok())
+        .find(|e| e.kind == Kind::BreakglassUsed)
+}
+
 // G29, INV-28, TN-93, §12.3.8, §13.7.3, OP-157 m.3 (h), Ek B 5488, 5534, 5653, 5663
 #[tokio::test]
 async fn only_a_breakglass_grant_with_its_approvals_acts_and_within_its_own_limit() {
@@ -380,6 +392,32 @@ async fn only_a_breakglass_grant_with_its_approvals_acts_and_within_its_own_limi
     )
     .await;
     allowed(&used);
+    // TN-71, Ek B 5539
+    let notice = notice_at(&db, d, used.record.unwrap()).await.unwrap();
+    assert_eq!(notice.subject, Subject::Party(ROOT));
+    assert_eq!(notice.source, Source::Exercise(used.exercise.unwrap()));
+    assert!(matches!(
+        notice.detail,
+        Detail::Breakglass {
+            actor: BOB,
+            approvals: 2,
+            drill: false,
+            ..
+        }
+    ));
+    let alone_again = send(
+        &mut core,
+        wipe_request(d, 20, bg, Some(breakglass::PURPOSE)),
+        BOB_KEY,
+    )
+    .await
+    .unwrap();
+    assert_eq!(alone_again.decision.outcome, Outcome::RequireAction);
+    assert!(
+        notice_at(&db, d, alone_again.record.unwrap())
+            .await
+            .is_none()
+    );
 
     // §13.7.3, Ek B 5663
     let mut long = wipe_request(d, 25, bg, Some(breakglass::PURPOSE));

@@ -157,6 +157,13 @@ impl<C: Clock + Send + Sync> Fanout<C> {
                         self.device_ended(router, tenant, domain, &i.0, e.at)
                             .await?;
                     }
+                    // OP-157 m.3 (h), (aa)
+                    if e.kind == Kind::BreakglassUsed {
+                        store::advance_domain_cursor(&self.db.app, domain, (r.pos, r.idx))
+                            .await
+                            .map_err(down)?;
+                        continue;
+                    }
                     let mut ready = authority_ready(&e, &r.event_id);
                     // OP-22, OP-156 m.3 (j)
                     position(&mut ready.payload, Position::authority(r.pos, r.idx));

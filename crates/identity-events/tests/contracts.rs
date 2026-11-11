@@ -329,7 +329,12 @@ fn an_event_without_its_position_does_not_meet_the_contract() {
 #[test]
 fn built_events_meet_the_contracts() {
     let mut built = Vec::new();
-    for (i, kind) in Kind::ALL.into_iter().enumerate() {
+    // OP-157 m.3 (aa)
+    for (i, kind) in Kind::ALL
+        .into_iter()
+        .enumerate()
+        .filter(|(_, k)| *k != Kind::BreakglassUsed)
+    {
         built.push(positioned(authority_ready(&sample(kind), &[i as u8; 32])));
     }
     // OP-150 m.3 (m), MUST-NEVER-13

@@ -1613,7 +1613,15 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 window: &window,
                 raised,
             };
-            let derived = self.derived(req, &resolved, exercise, now).await?;
+            let mut derived = self.derived(req, &resolved, exercise, now).await?;
+            // TN-71, OP-157 m.3 (h)
+            if allowed {
+                for e in self.breakglass_notices(req, actor, exercise, now).await? {
+                    derived
+                        .decision
+                        .push(e.to_bytes().map_err(|_| CoreError::Protocol("event"))?);
+                }
+            }
             let items = self.items(inc, &shape, &evaluation, &snapshot, &resolved, &derived)?;
             match self.leader.commit(now, &items).await {
                 Ok(Committed::Appended(positions)) => {

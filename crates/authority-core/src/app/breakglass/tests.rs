@@ -4,6 +4,7 @@ use access_kernel::combinator::{Capacity, Mode};
 use access_kernel::intent::{ContextRefs, IntentEnvelope};
 use access_kernel::meta::{GrantBasis, GrantState, HoldingRef};
 use access_kernel::model::{ActionRef, Id, ResourceRef, Structural};
+use suiss_crypto::dcbor::Value;
 
 use super::*;
 
@@ -212,4 +213,52 @@ fn an_exemption_on_the_subjects_own_restriction_does_not_count() {
         ..crate::restrict::Facts::default()
     };
     assert!(!ordinary.exempt_under(&domain));
+}
+
+// TN-71, OP-157 m.3 (h), Ek B 5539
+#[test]
+fn a_use_without_a_subject_or_an_actor_has_no_notice_and_no_commit() {
+    let g = Id([5; 16]);
+    let req = request(g, Some(PURPOSE));
+    let used = Use {
+        grant: g,
+        drill: false,
+        approvals: 2,
+    };
+    let actor = Actor {
+        party: Id([2; 16]),
+        instance: Id([6; 16]),
+    };
+    let at = (Digest([8; 32]), 7);
+    assert!(matches!(
+        notices(&req, &used, Some(actor), &BTreeSet::new(), at),
+        Err(CoreError::Protocol("breakglass-notice"))
+    ));
+    assert!(matches!(
+        notices(&req, &used, None, &BTreeSet::from([Id([1; 16])]), at),
+        Err(CoreError::Protocol("breakglass-notice"))
+    ));
+    let sent = notices(
+        &req,
+        &used,
+        Some(actor),
+        &BTreeSet::from([Id([1; 16]), Id([3; 16])]),
+        at,
+    )
+    .unwrap();
+    assert_eq!(sent.len(), 2);
+    for e in &sent {
+        assert_eq!(e.kind, Kind::BreakglassUsed);
+        assert_eq!(
+            e.detail,
+            Detail::Breakglass {
+                grant: g,
+                actor: actor.party,
+                approvals: 2,
+                until: req.intent.validity.until,
+                drill: false,
+            }
+        );
+        assert_eq!(Event::from_bytes(&e.to_bytes().unwrap()).unwrap(), *e);
+    }
 }

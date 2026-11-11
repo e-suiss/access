@@ -33,11 +33,14 @@ pub enum Kind {
     PartyDisabled,
     /// An admitted `party_compromise` Claim (OP-149 m.7, SI-9).
     PartyCompromised,
+    /// A break-glass Grant was used on the subject's account: its notice is written with the
+    /// decision, and the identity plane delivers it (OP-157 m.3 (h)).
+    BreakglassUsed,
 }
 
 impl Kind {
     /// Every kind, in order.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::AuthorityRevoked,
         Self::AuthorityNarrowed,
         Self::AuthorityExpired,
@@ -48,6 +51,7 @@ impl Kind {
         Self::AcceptanceChanged,
         Self::PartyDisabled,
         Self::PartyCompromised,
+        Self::BreakglassUsed,
     ];
 
     /// The event name; the type URN is `urn:suiss:access:event:<name>`.
@@ -64,6 +68,7 @@ impl Kind {
             Self::AcceptanceChanged => "acceptance-changed",
             Self::PartyDisabled => "party.disabled",
             Self::PartyCompromised => "party.compromised",
+            Self::BreakglassUsed => "breakglass.used",
         }
     }
 
@@ -189,6 +194,19 @@ pub enum Detail {
         declared_at: u64,
         /// Digest of the declaring Claim.
         evidence: Digest,
+    },
+    /// `breakglass.used`: who used which break-glass Grant, with how many approvals, until when.
+    Breakglass {
+        /// The Grant used.
+        grant: Id,
+        /// The acting Party.
+        actor: Id,
+        /// How many approvals the Grant asks for.
+        approvals: u64,
+        /// When the use's intent ends, Unix ms.
+        until: u64,
+        /// Whether the use is a drill.
+        drill: bool,
     },
 }
 
@@ -382,6 +400,19 @@ impl Event {
                 m.push((text("declared_at"), Value::Unsigned(*declared_at)));
                 m.push((text("evidence"), bytes(&evidence.0)));
             }
+            Detail::Breakglass {
+                grant,
+                actor,
+                approvals,
+                until,
+                drill,
+            } => {
+                m.push((text("grant"), bytes(&grant.0)));
+                m.push((text("actor"), bytes(&actor.0)));
+                m.push((text("approvals"), Value::Unsigned(*approvals)));
+                m.push((text("until"), Value::Unsigned(*until)));
+                m.push((text("drill"), Value::Bool(*drill)));
+            }
         }
         Value::Map(m)
     }
@@ -448,6 +479,16 @@ impl Event {
                     evidence: Digest(as_bytes(get(&map, "evidence")?)?),
                 }
             }
+            Kind::BreakglassUsed => Detail::Breakglass {
+                grant: Id(as_bytes(get(&map, "grant")?)?),
+                actor: Id(as_bytes(get(&map, "actor")?)?),
+                approvals: as_u64(get(&map, "approvals")?)?,
+                until: as_u64(get(&map, "until")?)?,
+                drill: match get(&map, "drill")? {
+                    Value::Bool(b) => *b,
+                    _ => return Err(Malformed),
+                },
+            },
             _ => Detail::None,
         };
         Ok(Self {
@@ -481,6 +522,13 @@ mod tests {
                     window_from: 1,
                     declared_at: 2,
                     evidence: Digest([6; 32]),
+                },
+                Kind::BreakglassUsed => Detail::Breakglass {
+                    grant: Id([2; 16]),
+                    actor: Id([3; 16]),
+                    approvals: 2,
+                    until: 10,
+                    drill: false,
                 },
                 _ => Detail::None,
             };
