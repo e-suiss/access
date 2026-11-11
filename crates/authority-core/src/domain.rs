@@ -494,6 +494,26 @@ pub(crate) fn lineage_hops_at(
     }
 }
 
+/// The subcode that refuses a `projection.issue` on a holding whose lineage the application
+/// has ended or lapsed at `now`: a closed case or an ended commitment anywhere above it, which
+/// the Kernel's record status does not show (EI-5, OP-157 m.11, m.19 (c)).
+fn projected_lapse(
+    view: &Snapshot,
+    payload: &Payload,
+    basis: ExerciseBasis,
+    now: u64,
+) -> Option<&'static str> {
+    let (Payload::ProjectionIssue { .. }, ExerciseBasis::Holding(h)) = (payload, basis) else {
+        return None;
+    };
+    let (hops, _) = lineage_hops_at(view, &h.grant, Some(now))?;
+    hops.iter().find_map(|hop| match hop.status {
+        HopStatus::Active => None,
+        HopStatus::Revoked => Some("ended/revoked"),
+        HopStatus::Lapsed => Some("ended/lapsed"),
+    })
+}
+
 /// The live `schema-definition` Acceptances of `namespace`: their SPPs (OP-141 m.35 (e)).
 fn live_spps(view: &Snapshot, namespace: &str, now: u64) -> Vec<Spp> {
     let ids = match view.get(&access_kernel::schema::schemas_key(namespace)) {
@@ -1707,6 +1727,8 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 // MD-9, TN-71, OP-157 m.3 (c)
                 let support =
                     crate::app::templates::support::admissible(snapshot, payload, req.basis, now);
+                // EI-5, OP-157 m.11, m.19 (c)
+                let lapsed = projected_lapse(snapshot, payload, req.basis, now);
                 let missing_scans = snapshot.missing_scans();
                 if !missing_scans.is_empty() {
                     return Pass::NeedScans(missing_scans);
@@ -1723,6 +1745,18 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     };
                     return Pass::Done(Evaluation {
                         decision: deny(class, reason, Resolver::Actor),
+                        effects: Vec::new(),
+                        draws: Vec::new(),
+                        releases: Vec::new(),
+                        expansion: false,
+                        action: None,
+                        foreign: None,
+                        agency: Vec::new(),
+                    });
+                }
+                if let Some(subcode) = lapsed {
+                    return Pass::Done(Evaluation {
+                        decision: deny(BlockerClass::Ended, subcode, Resolver::Root),
                         effects: Vec::new(),
                         draws: Vec::new(),
                         releases: Vec::new(),

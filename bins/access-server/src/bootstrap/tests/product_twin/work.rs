@@ -798,3 +798,123 @@ async fn another_coordinator_ends_authority_the_same_way() {
 async fn another_coordinator_asks_the_same_way() {
     eligible_set("q16-other-elig", "other-coordinator").await;
 }
+
+/// The agent's `projection.issue` of `authority` on `basis` for a resource server, decided
+/// and signed by the authority plane over `SoftHSM`.
+async fn project(
+    c: &Coordinator,
+    agent: &Actor,
+    authority: &CanonicalAuthority,
+    basis: ExerciseBasis,
+) -> access_internal_api::projections::TokenProjection {
+    use access_internal_api::projections::{
+        Confirmation, Projections as _, TokenKind, TokenProfile, TokenProjectionRequest,
+    };
+    use access_kernel::validity::{ProfileClass, ProfileVariant};
+    const RS: &str = "https://deliver.access.test/api";
+    let now = server_time(&c.s.w.db.app).await.unwrap();
+    let mut bounds = authority.clone();
+    bounds.constraints.validity = Window {
+        from: now.max(authority.constraints.validity.from),
+        until: now + 120_000,
+    };
+    let payload = Payload::ProjectionIssue {
+        bounds,
+        audience: BTreeSet::from([String::from(RS)]),
+        class: ProfileClass::Online,
+        variant: ProfileVariant::OnlineStrict,
+        max_staleness_ms: None,
+        offline_slice: None,
+    };
+    let validity = Window {
+        from: now - 60_000,
+        until: now + 600_000,
+    };
+    let intent = self_signed_intent(&payload, agent.party, validity).unwrap();
+    let nonce = access_crypto::random::bytes::<16>().unwrap().to_vec();
+    let ais = Seam::ais(
+        &agent.key,
+        &Statement {
+            domain: c.s.domain,
+            nonce: nonce.clone(),
+            intent: intent_digest(&intent).unwrap(),
+            mode: Mode::Commit,
+            pep: String::from(IDENTITY_PEP),
+            capacity: Capacity::Own,
+            basis,
+            iat: now,
+            exercise: None,
+        },
+    );
+    let issued =
+        c.s.w
+            .plane
+            .issue(TokenProjectionRequest {
+                domain: c.s.domain,
+                nonce,
+                intent,
+                payload: payload.to_bytes().unwrap(),
+                basis,
+                capacity: Capacity::Own,
+                ais,
+                pep: String::from(IDENTITY_PEP),
+                issuer: format!("https://access.test/realms/{SLUG}"),
+                client_id: String::from("deliver-console"),
+                kind: TokenKind::Bounds,
+                target: None,
+                confirmation: Confirmation::DpopJkt(thumbprint(&agent.key.public_key())),
+                resources: vec![String::from(RS)],
+                family: None,
+                profile: TokenProfile::default(),
+            })
+            .await
+            .unwrap();
+    schedule(&c.s.signer);
+    issued
+}
+
+// EI-5, E14, §7.9.5.4, OP-157 m.11, m.19 (c), OP-153 m.3 (gg)
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_grant_whose_commitment_ended_is_never_projected() {
+    use access_internal_api::projections::TokenProjection;
+    let c = Coordinator::open("s-commit-projection", "work").await;
+    let acceptance = c.accept_commitments().await;
+    let principal = c.s.actor().await;
+    let agent = c.s.actor().await;
+    let commitment = digest();
+    let content = c.scoped(&principal, &agent, acceptance);
+    let (exercise, since) = c
+        .scoped_commit(
+            &principal,
+            Payload::GrantIssue(content.clone()),
+            Some(commitment),
+        )
+        .await
+        .unwrap();
+    let basis = holding(
+        meta::object_id(&exercise, kind::GRANT, 0),
+        agent.party,
+        since,
+    );
+    c.commitment(agent.party, &commitment, true).await;
+    let active = project(&c, &agent, &content.authority, basis).await;
+    assert!(matches!(active, TokenProjection::Issued(_)), "{active:?}");
+
+    // EI-5
+    c.commitment(agent.party, &commitment, false).await;
+    let ended = project(&c, &agent, &content.authority, basis).await;
+    assert!(
+        matches!(&ended, TokenProjection::Denied { decision, .. }
+            if decision.blockers.iter().any(|b| b.subcode.as_deref() == Some("ended/revoked"))),
+        "{ended:?}"
+    );
+
+    // E14
+    c.commitment(agent.party, &commitment, true).await;
+    let again = project(&c, &agent, &content.authority, basis).await;
+    assert!(
+        matches!(&again, TokenProjection::Denied { decision, .. }
+            if decision.blockers.iter().any(|b| b.subcode.as_deref() == Some("ended/revoked"))),
+        "{again:?}"
+    );
+}
