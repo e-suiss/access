@@ -184,6 +184,8 @@ export interface components {
             depth: "default" | "expert" | "audit";
             /** @description The domains as seen. */
             domains: components["schemas"]["DomainStatus"][];
+            /** @description Inventory hygiene beside Changes (§8.17.12, XI-19): suggestions only; nothing changes until the reader acts. */
+            hygiene?: components["schemas"]["HygieneRow"][];
             /** @description Always includes `hub.not_shown_unconnected`; `status.access_unavailable` when no domain answered, `status.notifications_delayed` when Relay is behind (§8.13). */
             notices: string[];
             /** @description Anchors the reader roots. */
@@ -210,6 +212,29 @@ export interface components {
             realm?: string;
             /** @description The reader's Party. */
             viewer: string;
+        };
+        HygieneRow: {
+            /** @description How many delegations. */
+            count: number;
+            /** @constant */
+            derived: true;
+            /** @description DomainID. */
+            domain: string;
+            /** @description The Grants. */
+            grants: string[];
+            /** @enum {string} */
+            kind: "unused" | "expiring" | "broad";
+            /** @description The reader's label of the domain; present only with more than one domain (IA-6). */
+            label?: string;
+            /**
+             * @description Whose record the row is (XI-1).
+             * @enum {string}
+             */
+            owner: "access" | "executor" | "verifier" | "relay" | "pay";
+            /** @constant */
+            suggestion: "hygiene.suggestion";
+            /** @enum {string} */
+            text: "hygiene.unused" | "hygiene.expiring" | "hygiene.broad";
         };
         /** @enum {string} */
         Kind: "inventory" | "activity" | "changes";

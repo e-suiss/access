@@ -374,6 +374,13 @@
             },
             "type": "array"
           },
+          "hygiene": {
+            "description": "Inventory hygiene beside Changes (§8.17.12, XI-19): suggestions only; nothing changes until the reader acts.",
+            "items": {
+              "$ref": "#/components/schemas/HygieneRow"
+            },
+            "type": "array"
+          },
           "notices": {
             "description": "Always includes `hub.not_shown_unconnected`; `status.access_unavailable` when no domain answered, `status.notifications_delayed` when Relay is behind (§8.13).",
             "items": {
@@ -462,6 +469,75 @@
         "required": [
           "viewer",
           "reads"
+        ],
+        "type": "object"
+      },
+      "HygieneRow": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "description": "How many delegations.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "derived": {
+            "const": true
+          },
+          "domain": {
+            "description": "DomainID.",
+            "type": "string"
+          },
+          "grants": {
+            "description": "The Grants.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "unused",
+              "expiring",
+              "broad"
+            ],
+            "type": "string"
+          },
+          "label": {
+            "description": "The reader's label of the domain; present only with more than one domain (IA-6).",
+            "type": "string"
+          },
+          "owner": {
+            "description": "Whose record the row is (XI-1).",
+            "enum": [
+              "access",
+              "executor",
+              "verifier",
+              "relay",
+              "pay"
+            ],
+            "type": "string"
+          },
+          "suggestion": {
+            "const": "hygiene.suggestion"
+          },
+          "text": {
+            "enum": [
+              "hygiene.unused",
+              "hygiene.expiring",
+              "hygiene.broad"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "owner",
+          "kind",
+          "count",
+          "grants",
+          "text",
+          "suggestion",
+          "derived"
         ],
         "type": "object"
       },

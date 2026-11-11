@@ -409,6 +409,7 @@ pub fn assemble(viewer: &str, depth: Depth, now: u64, domains: &[DomainReads]) -
         notices: vec![String::from(texts::NOT_SHOWN)],
         attention: None,
         delivery: None,
+        hygiene: Vec::new(),
     };
     for d in domains {
         let label = d.domain.label.as_ref().filter(|_| show);
@@ -468,6 +469,8 @@ pub fn assemble(viewer: &str, depth: Depth, now: u64, domains: &[DomainReads]) -
         );
         hub.changes
             .extend(of(Kind::Changes).iter().filter_map(|v| change(v, at)));
+        // §8.17.12, OP-157 m.3 (w)
+        hub.hygiene.extend(hygiene::rows(of(Kind::Inventory), at));
     }
     if hub
         .domains
@@ -572,6 +575,8 @@ pub fn show_delivery(hub: &mut Hub, d: Delivery) {
 }
 
 pub mod attention;
+// OP-157 m.4 (g)
+pub mod hygiene;
 
 #[cfg(test)]
 mod tests;

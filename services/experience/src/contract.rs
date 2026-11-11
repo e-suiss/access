@@ -487,6 +487,35 @@ pub struct Hub {
     /// row's status; authority does not wait on delivery (INV-24, E30).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delivery: Option<Delivery>,
+    /// V10, OP-157 m.4 (b): inventory hygiene beside Changes (§8.17.12, XI-19): suggestions
+    /// only; nothing changes until the reader acts.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hygiene: Vec<HygieneRow>,
+}
+
+/// One hygiene suggestion of one domain (§8.17.12, XI-19, OP-157 m.3 (w)): how many
+/// delegations are unused, expiring or broad, and which. It offers no action of its own.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HygieneRow {
+    /// `DomainID`.
+    pub domain: String,
+    /// The reader's domain label.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// Owner.
+    pub owner: Owner,
+    /// `unused`, `expiring` or `broad`.
+    pub kind: String,
+    /// How many.
+    pub count: u64,
+    /// The Grants.
+    pub grants: Vec<String>,
+    /// The text key, `hygiene.<kind>`.
+    pub text: String,
+    /// `hygiene.suggestion`: nothing changes until the reader acts.
+    pub suggestion: String,
+    /// Always derived.
+    pub derived: bool,
 }
 
 /// Whether notifications wait for Relay (OP-156 m.11 (e)).
@@ -786,6 +815,23 @@ fn rows() -> Map<String, Value> {
         ),
     );
     m.insert(
+        "HygieneRow".into(),
+        object(
+            &json!({
+                "domain": text("DomainID."),
+                "label": label(),
+                "owner": owner(),
+                "kind": { "type": "string", "enum": ["unused", "expiring", "broad"] },
+                "count": uint("How many delegations."),
+                "grants": list(&json!({ "type": "string" }), "The Grants."),
+                "text": { "type": "string", "enum": ["hygiene.unused", "hygiene.expiring", "hygiene.broad"] },
+                "suggestion": { "const": "hygiene.suggestion" },
+                "derived": { "const": true },
+            }),
+            &["domain", "owner", "kind", "count", "grants", "text", "suggestion", "derived"],
+        ),
+    );
+    m.insert(
         "Hub".into(),
         object(
             &json!({
@@ -816,6 +862,7 @@ fn rows() -> Map<String, Value> {
                     }),
                     &["owner", "delayed"],
                 ),
+                "hygiene": list(&r("HygieneRow"), "Inventory hygiene beside Changes (§8.17.12, XI-19): suggestions only; nothing changes until the reader acts."),
             }),
             &["as_of", "depth", "domains", "show_domains", "acting_for_you", "shared_from_you", "your_authority", "roots", "activity", "changes", "notices"],
         ),
