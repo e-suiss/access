@@ -31,6 +31,8 @@ pub mod vault;
 pub mod workloads;
 // OP-157 m.3 (v)
 pub mod offboarding;
+// OP-157 m.3 (w)
+pub mod review;
 
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::adapters::pg::PgTx;
@@ -824,10 +826,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::SessionPolicy(_)
             | Change::ExtensionPolicy(_)
             | Change::SupportArtifactPolicy(_)
-            | Change::Review(_)
             | Change::DelegatedAdmin(_)
             | Change::ApprovalInline(_)
             | Change::ApprovalBatch(_) => {}
+            // OP-157 m.3 (w)
+            Change::Review(r) => review::current(t, r).await?,
             // OP-157 m.3 (h)
             Change::Breakglass(m) => breakglass::current_mark(t, m).await?,
             Change::BreakglassReview(r) => breakglass::current_review(t, r).await?,
@@ -1642,9 +1645,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 .await?;
                 true
             }
+            // OP-157 m.3 (w)
+            Change::Review(r) => review::write(t, bound, r).await?,
             // OP-157 m.4 (a)
-            Change::Review(_)
-            | Change::DelegatedAdmin(_)
+            Change::DelegatedAdmin(_)
             | Change::ApprovalInline(_)
             | Change::ApprovalBatch(_) => return Err(Invalid::NotYetServed.into()),
             Change::ClientRegister(c) | Change::ClientUpdate(c) => {

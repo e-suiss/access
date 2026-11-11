@@ -3141,6 +3141,18 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 items: super::breakglass::drills(t).await?,
                 last: None,
             },
+            // OP-157 m.3 (w)
+            (Kind::Reviews, _) => {
+                let now = t.server_time().await?;
+                Read {
+                    items: super::review::list(t, key, now).await?,
+                    last: None,
+                }
+            }
+            (Kind::ReviewItems, Some(k)) => Read {
+                items: self.review_items_view(t, k).await?.unwrap_or_default(),
+                last: None,
+            },
             // OP-156 m.3 (p)
             (Kind::LinuxHosts, _) => Read {
                 items: super::linux::list(t, key).await?,
@@ -3411,10 +3423,9 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             },
             // OP-157 m.4 (a)
             (Kind::Deliveries | Kind::SsoPreview, None)
-            | (
-                Kind::SupportGrants | Kind::Reviews | Kind::ReviewItems | Kind::OffboardingPreviews,
-                _,
-            ) => Read::default(),
+            | (Kind::SupportGrants | Kind::ReviewItems | Kind::OffboardingPreviews, _) => {
+                Read::default()
+            }
             (Kind::Settings, _) => {
                 let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
                 let p = resources::policies(t).await?;

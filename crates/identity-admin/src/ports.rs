@@ -211,6 +211,28 @@ pub trait Instances: Send + Sync {
         let _ = (domain, party);
         async { Err(Unavailable(String::from("offboarding"))) }
     }
+
+    /// V10, OP-157 m.4 (b): the live Grants in `reviewer`'s lineage in `domain`, a campaign's
+    /// items (IDP-39 (3), OP-157 m.3 (w)).
+    fn review_items(
+        &self,
+        domain: Digest,
+        reviewer: Id,
+    ) -> impl Future<Output = Result<Vec<TeamGrant>, Unavailable>> + Send {
+        let _ = (domain, reviewer);
+        async { Err(Unavailable(String::from("review"))) }
+    }
+
+    /// V10, OP-157 m.4 (b): the Party whose live Instance holds key `kid` in `domain` now;
+    /// `None` when no live Instance holds it.
+    fn key_party(
+        &self,
+        domain: Digest,
+        kid: [u8; 32],
+    ) -> impl Future<Output = Result<Option<Id>, Unavailable>> + Send {
+        let _ = (domain, kid);
+        async { Err(Unavailable(String::from("key-lookup"))) }
+    }
 }
 
 /// A workload's first Instance (OP-154 m.3 (d)): the key the realm issuer's
@@ -418,4 +440,30 @@ pub struct Departing {
     pub derived: Vec<(Id, Id)>,
     /// Rule-shaped holdings whose episode ended.
     pub ended: Vec<EndedByRule>,
+}
+
+/// One Grant of a reviewer's team (IDP-39 (3), OP-157 m.3 (w)): a live Grant in the reviewer's
+/// lineage, as the campaign shows it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TeamGrant {
+    /// The Grant.
+    pub grant: Id,
+    /// Who holds it.
+    pub holder: access_kernel::model::SubjectSelector,
+    /// What it allows.
+    pub actions: Vec<access_kernel::model::ActionRef>,
+    /// On what.
+    pub resource: access_kernel::model::ResourceSelector,
+    /// When.
+    pub validity: access_kernel::model::Window,
+    /// The position it was issued at.
+    pub since: u64,
+    /// The holding's holder it was issued from; `None` when issued under an Anchor.
+    pub issued_by: Option<Id>,
+    /// Whether it may be passed on.
+    pub delegable: bool,
+    /// How many live Grants derive from it.
+    pub derived: u64,
+    /// The basis the reviewer revokes it on.
+    pub via: access_kernel::meta::ExerciseBasis,
 }
