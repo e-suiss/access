@@ -24,6 +24,9 @@ mod policy_engine;
 mod self_restriction;
 #[path = "commit/sod.rs"]
 mod sod;
+// OP-158 m.3 (v)
+#[path = "commit/quota.rs"]
+mod quota;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
@@ -4654,7 +4657,9 @@ async fn a_foreign_pap_holds_a_bridging_grant() {
     let leader = Leader::acquire(log, b, EventKey::new(Secret::new([5; 32])))
         .await
         .unwrap();
-    let reader = PgReader::new(db.app.clone(), DomainId::from_bytes(b.0));
+    // OP-158 m.3 (v): the test steps its clock an hour ahead and back
+    let reader =
+        PgReader::new(db.app.clone(), DomainId::from_bytes(b.0)).with_quotas(quota::CLOCK_STEPS);
     let mut core: Core = Authority::new(leader, reader, binding(), Counter(0), b);
     onboard(&mut core, b, ROOT, ROOT_KEY, (1, 2)).await;
     onboard(&mut core, b, ALICE, ALICE_KEY, (3, 4)).await;

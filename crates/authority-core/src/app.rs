@@ -13,7 +13,7 @@ use access_kernel::claim::{self, ClaimState, Disposition};
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::codec::decision_value;
 use access_kernel::combinator::{
-    Blocker, BlockerClass, Decision, Mode, Outcome, Position, Rejection, Remediation, Resolver,
+    Blocker, BlockerClass, Decision, Mode, Outcome, Position, Remediation, Resolver,
 };
 use access_kernel::digest::Digest;
 use access_kernel::fold::Effect;
@@ -37,6 +37,9 @@ use proofs::Resolved as Proofs;
 pub const MAX_PASSES: usize = 32;
 /// Evaluations of one request when serial validation refuses its batch (§17.1.1 step 9, PD).
 pub const MAX_RETRIES: usize = 3;
+/// The reason of a hot domain or key's refusal after [`MAX_RETRIES`]: "busy — retry", a
+/// protocol rejection with no record and no ALLOW (§16.7, OP-36, OP-158 m.3 (v)).
+pub const BUSY: &str = "busy";
 
 /// What the PEP gets back.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1649,6 +1652,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             Ok(open) => open,
             Err(done) => return Ok(*done),
         };
+        // OP-158 m.3 (v)
+        self.draw_quota(req, now).await?;
         // OP-157 m.3 (r), C18
         let bodies = Box::pin(self.pinned_bodies(req)).await?;
         for _ in 0..MAX_RETRIES {
@@ -1768,7 +1773,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 Err(e) => return Err(e.into()),
             }
         }
-        Err(CoreError::Rejected(Rejection::Fuel))
+        // §16.7, OP-36, OP-158 m.3 (v)
+        Err(CoreError::Unavailable(BUSY))
     }
 
     /// The Claim records of a request (L2-CLM-4).
@@ -2274,6 +2280,8 @@ pub mod offboarding;
 pub mod compat;
 // OP-157 m.4 (d)
 pub mod review;
+// OP-158 m.4 (f)
+pub mod quota;
 
 pub use ingest::{Ingested, Lane, Lanes, Turn, lane_of};
 pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};

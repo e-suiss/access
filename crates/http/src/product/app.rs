@@ -79,7 +79,7 @@ fn failed(e: &CoreError) -> Reply {
     match e {
         CoreError::Protocol(code) => Reply::Bad(code),
         CoreError::AasBinding(_) => Reply::Bad("aas-binding"),
-        CoreError::Limited => Reply::Limited,
+        CoreError::Limited | CoreError::Quota(_) => Reply::Limited,
         _ => Reply::Unavailable(crate::adp::app::unavailable_reason(e)),
     }
 }

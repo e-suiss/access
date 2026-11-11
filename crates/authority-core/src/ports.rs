@@ -199,6 +199,16 @@ pub trait Reader {
         let _ = (iss, kid);
         std::future::ready(Err(CoreError::Unavailable("key-cutoff")))
     }
+    /// Draws one widening commit of this domain at `now` from its own and its tenant's quota
+    /// (layer B, OP-158 m.3 (v)); the refusing counter when over. A reader without counters
+    /// refuses as unavailable, never admits (MD-8).
+    fn take_quota(
+        &self,
+        now: u64,
+    ) -> impl Future<Output = Result<Option<crate::app::quota::Refusal>, CoreError>> + Send {
+        let _ = now;
+        std::future::ready(Err(CoreError::Unavailable("quota")))
+    }
 }
 
 /// A projection contract still open at some time (§5.4).

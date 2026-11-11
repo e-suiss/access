@@ -220,6 +220,7 @@ pub(crate) fn respond(reply: Reply, headers: &HeaderMap) -> Response {
     match &reply {
         Reply::Protocol(code, _) => drop(PROTOCOL_REJECTIONS.incr(["adp", code])),
         Reply::Limited => drop(PROTOCOL_REJECTIONS.incr(["adp", "rate-limited"])),
+        Reply::Quota(_) => drop(PROTOCOL_REJECTIONS.incr(["adp", "quota-exceeded"])),
         _ => {}
     }
     let mut response = match reply {
@@ -249,13 +250,22 @@ pub(crate) fn respond(reply: Reply, headers: &HeaderMap) -> Response {
             "Nonce Conflict",
         )
         .into_response(),
-        Reply::Unavailable(reason) => Problem::new(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "unavailable",
-            "Service Unavailable",
-        )
-        .with_reason(reason)
-        .into_response(),
+        Reply::Unavailable(reason) => {
+            let busy = reason == Some(access_authority_core::app::BUSY);
+            let mut r = Problem::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "unavailable",
+                "Service Unavailable",
+            )
+            .with_reason(reason)
+            .into_response();
+            // §16.7, OP-36
+            if busy {
+                r.headers_mut()
+                    .insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
+            }
+            r
+        }
         // OP-35, OP-141 m.23
         Reply::Limited => Problem::new(
             StatusCode::TOO_MANY_REQUESTS,
@@ -263,6 +273,16 @@ pub(crate) fn respond(reply: Reply, headers: &HeaderMap) -> Response {
             "Too Many Requests",
         )
         .into_response(),
+        // T27, OP-158 m.3 (v)
+        Reply::Quota(reason) => {
+            let mut r = crate::problem::codes::durability::QUOTA_EXCEEDED
+                .problem()
+                .with_reason(Some(reason))
+                .into_response();
+            r.headers_mut()
+                .insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
+            r
+        }
     };
     // L1-ADP-4
     if let Some(id) = headers.get(&REQUEST_ID) {

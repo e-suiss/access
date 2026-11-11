@@ -76,13 +76,25 @@ pub use vault::ReleaseBasis;
 pub struct PgReader {
     pool: Pool,
     domain: DomainId,
+    quotas: crate::app::quota::Quotas,
 }
 
 impl PgReader {
-    /// A reader of `domain` over `pool`.
+    /// A reader of `domain` over `pool`, with the product commit quotas (OP-158 m.3 (v)).
     #[must_use]
-    pub const fn new(pool: Pool, domain: DomainId) -> Self {
-        Self { pool, domain }
+    pub fn new(pool: Pool, domain: DomainId) -> Self {
+        Self {
+            pool,
+            domain,
+            quotas: crate::app::quota::Quotas::default(),
+        }
+    }
+
+    /// The same reader under `quotas`.
+    #[must_use]
+    pub const fn with_quotas(mut self, quotas: crate::app::quota::Quotas) -> Self {
+        self.quotas = quotas;
+        self
     }
 }
 
@@ -97,6 +109,29 @@ fn row(r: StateRow) -> Result<Row, CoreError> {
 }
 
 impl Reader for PgReader {
+    // OP-158 m.3 (v), MD-8
+    async fn take_quota(&self, now: u64) -> Result<Option<crate::app::quota::Refusal>, CoreError> {
+        use crate::app::quota::Refusal;
+        use access_store::quota::{CommitRefusal, Rate, take_commit};
+        let rate = |r: crate::app::quota::Rate| Rate {
+            per_second: r.per_second,
+            burst: r.burst,
+        };
+        Ok(take_commit(
+            &self.pool,
+            &self.domain,
+            now,
+            rate(self.quotas.tenant),
+            rate(self.quotas.domain),
+        )
+        .await?
+        .map(|r| match r {
+            CommitRefusal::Suspended => Refusal::Suspended,
+            CommitRefusal::Tenant => Refusal::Tenant,
+            CommitRefusal::Domain => Refusal::Domain,
+        }))
+    }
+
     async fn fetch(&self, keys: &[Vec<u8>]) -> Result<Vec<Row>, CoreError> {
         let rows = state_of(&self.pool, &self.domain, keys).await?;
         keys.iter()

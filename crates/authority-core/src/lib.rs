@@ -54,6 +54,10 @@ pub enum CoreError {
     /// Over a rate limit (§13.7.4): no record, the nonce is not consumed (OP-141 m.23).
     #[error("rate limited")]
     Limited,
+    /// Over a tenant or domain quota, or on billing hold: no record, the nonce is not consumed
+    /// (T27, TN-1, OP-158 m.3 (v)).
+    #[error("quota exceeded: {}", .0.reason())]
+    Quota(crate::app::quota::Refusal),
 }
 
 impl CoreError {
@@ -68,6 +72,7 @@ impl CoreError {
             Self::Passes => "too-many-passes",
             Self::Sequencer(_) | Self::Store(_) | Self::Unavailable(_) => "unavailable",
             Self::Limited => "rate-limited",
+            Self::Quota(_) => "quota-exceeded",
         }
     }
 

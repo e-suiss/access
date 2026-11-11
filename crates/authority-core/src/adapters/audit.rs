@@ -37,6 +37,7 @@ pub const fn is_rejection(e: &CoreError) -> bool {
             | CoreError::Nonce
             | CoreError::Passes
             | CoreError::Limited
+            | CoreError::Quota(_)
     )
 }
 
