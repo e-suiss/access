@@ -101,6 +101,9 @@ The bootstrap prints, and keeps in the `bootstrap` volume as `bootstrap.json`:
 - `test_user.totp`: the user's authenticator app, enrolled through the realm's own TOTP enrollment when the plan's `[test_user]` names a `totp_seed_file` (both shipped plans do). The seed is random, written in base32 to that file in the bootstrap volume (`/var/lib/access/bootstrap/test-user-totp`, owner-only) and never printed; the summary gives the file and the code's parameters (`SHA1`, 6 digits, 30-second steps). With the password, a code from it answers the hosted login's `second_factor` step (`{"method": "totp", "fields": {"totp_code": "…"}}`), which a browser test can do without the passkey's token
 - `test_user.allowed`: what an Exercise the user is allowed to make names. The `work` catalog also publishes `commit` (parameters `ledger`, a text, and `declaration`, a digest), granted to the user's Party under an approval requirement: the first `commit` is answered `REQUIRE_ACTION`, and one `approve` contribution by the same user on the hosted Approval Surface turns it into an `ALLOW` with a signed receipt. `action` and `params` go into the intent; `resource` names the resources the Grant covers, a `namespace` (`work.ledger`) and the `path_prefix` (`led_`) their first path element starts with, so an entry of `intent.resources` is `{"namespace": "work.ledger", "path": ["led_main"]}`; `basis` is the user's holding, and `contribution.basis` is the holding the approval is contributed under. The plan's `[sample]` section sets both with `resource_namespace` and `resource_path_prefix`. With `step_up = "aal2"` in `[sample]` (the Work plan has it, the default plan does not), the Grant also asks for the user's fresh AAL2 authentication bound to their device Instance: the first `commit` then leaves two terms unmet, the approval and an `authentication` Claim (a product shows this as its step-up), and the one passkey assertion on the Approval Surface meets both; the summary says `step_up = "aal2"`, the approval's redirect carries the Claim as `claim`, and the product passes it as `{"claim_ref": …}` beside `{"contribution": …}` when it commits again
 - `compromise`: the Party (`issuer`) whose unsigned `party_compromise` Claims the `acme` realm accepts over a PEP certificate, and the realm's `domain`
+- `support_operator`: the support operator `support@acme.example` ("Mehmet Y.", signing in with the same password you chose), owner of the "Acme Support" organization, with the realm's case system `local-desk` and an open case `4411` of the test user. The case system is its own issuer Party; its signed `support_case` Claim holds for a week and a later day's run states a new one. The operator can ask the test user for support access straight away
+- `breakglass_account`: `oncall@acme.example`, owner of the "Acme Security" organization and marked as a break-glass account. It has no password and signs in only with a hardware passkey you add. It and the test user each hold a pre-issued break-glass Grant (`grants`: changing an account's second factor, after two approvals from different people), and the test user may review break-glass uses in the console
+- `review_schedule`: the `local-review` access review, every 90 days over each manager's team. The test user manages the sample agent's Grant, so `items` is 1 and the console's review screen shows it. When a period starts, each manager gets a `review_campaign` notice with the count and a link to that screen
 
 ### Sign in without a browser
 
@@ -147,6 +150,23 @@ docker compose -f deploy/compose/access.yaml run --rm local-client approve \
 `--intent <file>` reads the intent from a file instead. With `--request <file>`, a typed authority request your product already built for its own `REQUIRE_ACTION` (`require_action` naming the same intent), the client only pushes and approves it and prints the contribution; the product then commits again with that contribution as its proof. A request for an intent nothing waits for is `approval-request-changed`; a key that is not the user's passkey is refused at sign-in.
 
 ### What the Approval Surface shows
+
+`access-local-client push`, with the same options except `--request`, stops after the push: it prints the `request_uri`, `redirect_uri` and `state` that `GET /v1/approve` names, so a browser signed in as the test user can open the request itself.
+
+`access-local-client support-episode` runs one support access episode: the operator signs in with its password and asks for view access for the open case, the test user signs in with the passkey and gives exactly what was asked with the device key, and the operator's own device key views the account for the test user through the PEP certificate. Afterwards the test user's `/account/support` page lists the access and the Activity shows the view under the operator's name:
+
+```sh
+docker compose -f deploy/compose/access.yaml run --rm local-client support-episode \
+  --issuer https://access-server:8443/realms/acme --api https://access-server:8443 \
+  --ca /var/lib/access/certs/ca.crt --cert /var/lib/access/certs/pep.crt --key /var/lib/access/certs/pep.key \
+  --hsm-module /usr/lib/softhsm/libsofthsm2.so --hsm-token access-server \
+  --hsm-pin-file /var/lib/access/secrets/hsm-access-server --domain <test_user.allowed.domain> \
+  --operator support@acme.example --operator-password-env BOOTSTRAP_TEST_PASSWORD \
+  --operator-device-key access/bootstrap/support-operator-device --operator-party <support_operator.party> \
+  --identifier test@acme.example --subject <test_user.subject> --party <test_user.party> \
+  --passkey access/bootstrap/test-user-passkey --device-key access/bootstrap/test-user-device \
+  --case-system local-desk --case 4411
+```
 
 The hosted page at `/v1/approve` shows the request exactly as the decision point rendered it from the accepted Action Schema, so the digest the approver signs is the digest of what they saw. Beside it: the capacity the approver approves in, what is still needed in words anyone can check ("1 more · not the requester · a different person"; two approvals by the same person count as one), what approving does and doesn't do, the concrete act ("Confirm with your passkey"), and the requester's note, shown second. A request whose render can't be shown faithfully, whose attached body doesn't match the digest in the intent, or that the viewer isn't eligible to approve has no button. `GET /consent` sends the browser to the same page; consent is never a form post.
 
