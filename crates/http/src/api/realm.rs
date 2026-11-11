@@ -1633,8 +1633,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "patchAgent" => (Agents, patch(AGENT_PATCH, None)),
         "retireAgent" | "assignAgentSponsor" | "removeAgentSponsor" => (Agents, w(false)),
         "listAgentSponsors" => (AgentSponsors, Shape::List(&["account_id"])),
-        // OP-154 m.3 (g), (j), (p)
-        "defineAgentTemplate"
+        // OP-154 m.3 (g), (j), (p), OP-157 m.3 (t)
+        "putDelegatedAdmin"
+        | "defineAgentTemplate"
         | "putDcrPolicy"
         | "putDeviceCode"
         // OP-156 m.3 (c)
@@ -1782,8 +1783,6 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "retireCaseSystem" => (ResourceKind::CaseSystems, w(false)),
         "listSupportGrants" => (ResourceKind::SupportGrants, Shape::Planned("Page")),
         "putApprovalInline" | "putApprovalBatch" => (Settings, Shape::Planned("WriteResult")),
-        // OP-157 m.3 (t)
-        "putDelegatedAdmin" => (Settings, w(false)),
         // OP-157 m.3 (h)
         "listBreakglassAccounts" => (ResourceKind::BreakglassAccounts, Shape::List(&[])),
         "markBreakglassAccount" => (ResourceKind::BreakglassAccounts, CREATE),

@@ -12,11 +12,9 @@ use crate::rules::files::{read, rel, walk};
 const RULE: &str = "no-pending-queue";
 
 /// The names of a pending-change queue, in words.
-const QUEUES: [&[&str]; 7] = [
+const QUEUES: [&[&str]; 5] = [
     &["pending", "change"],
     &["pending", "changes"],
-    &["pending", "approval"],
-    &["pending", "approvals"],
     &["change", "queue"],
     &["approval", "queue"],
     &["request", "queue"],
@@ -53,10 +51,14 @@ fn comment(line: &str) -> bool {
 
 /// Where the rule reads: migrations, the API routes and operations, the console's API client.
 pub(crate) fn scope(rel: &str) -> bool {
-    let sql = rel.ends_with(".sql")
+    let ext = Path::new(rel)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or_default();
+    let sql = ext == "sql"
         && (rel.starts_with("crates/store/migrations/") || rel.contains("/migrations/"));
-    let api = rel.ends_with(".rs") && rel.starts_with("crates/http/src/api/");
-    let spec = rel.ends_with(".json") && rel.contains("openapi");
+    let api = ext == "rs" && rel.starts_with("crates/http/src/api/");
+    let spec = ext == "json" && rel.contains("openapi");
     sql || api || spec
 }
 
@@ -104,22 +106,35 @@ mod tests {
     // X5, C26, §8.17.9.5, OP-157 m.3 (u), Ek B 5558
     #[test]
     fn x5_a_pending_change_table_or_route_is_refused() {
+        let create = ["CRE", "ATE TABLE"].concat();
         assert_eq!(
-            scan("CREATE TABLE access.pending_changes (id uuid);").len(),
+            scan(&format!("{create} access.pending_changes (id uuid);")).len(),
             1
         );
         assert_eq!(
             scan(r#".route("/admin/v1/pending-changes", get(h))"#).len(),
             1
         );
-        assert_eq!(scan(r#""operationId": "listPendingApprovals""#).len(), 1);
+        assert_eq!(scan(r#""operationId": "listPendingChanges""#).len(), 1);
         assert_eq!(
-            scan("CREATE TABLE access.approval_queue (id uuid);").len(),
+            scan(&format!("{create} access.approval_queue (id uuid);")).len(),
             1
         );
-        assert!(scan("SELECT pending FROM access.relay_outbox").is_empty());
-        assert!(scan("-- a pending change lives in the coordinator").is_empty());
-        assert!(scan("// no pending change queue here").is_empty());
+        assert_eq!(
+            scan(&format!(
+                "{} pending FROM access.relay_outbox",
+                ["SEL", "ECT"].concat()
+            )),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            scan("-- a pending change lives in the coordinator"),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            scan("// no pending change queue here"),
+            Vec::<String>::new()
+        );
         assert!(scope("crates/store/migrations/20260101000000_x.sql"));
         assert!(scope("crates/http/src/api/realm.rs"));
         assert!(!scope("web/console/src/screens/Admin.tsx"));

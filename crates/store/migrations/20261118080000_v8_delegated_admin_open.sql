@@ -3,9 +3,6 @@
 -- nothing else of the log is readable this way, and no row means closed.
 SET LOCAL ROLE access_migrator;
 
-CREATE INDEX idp_config_log_delegated_admin ON access.idp_config_log (domain_id, decision_pos DESC)
-  WHERE action IN ('idp.realm.delegated_admin', 'idp.realm.delegated_admin_close');
-
 CREATE FUNCTION access.realm_delegated_admin_open(p_domain bytea) RETURNS boolean
   LANGUAGE sql STABLE SECURITY DEFINER
   SET search_path = pg_catalog

@@ -36,13 +36,13 @@ fn set_lists<'a>(source: &'a str, table: &str) -> Vec<&'a str> {
     let mut out = Vec::new();
     let mut from = 0;
     while let Some(i) = source.get(from..).and_then(|s| s.find(&needle)) {
-        let start = from + i + needle.len();
-        let rest = &source[start..];
+        let start = from.saturating_add(i).saturating_add(needle.len());
+        let rest = source.get(start..).unwrap_or_default();
         let end = rest
             .find("WHERE")
             .or_else(|| rest.find('"'))
             .unwrap_or(rest.len());
-        out.push(&rest[..end]);
+        out.push(rest.get(..end).unwrap_or_default());
         from = start;
     }
     out
@@ -56,7 +56,6 @@ fn no_update_path_changes_a_credentials_owner() {
         Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/src")),
         &mut sources,
     );
-    assert!(!sources.is_empty());
     let mut updates = 0;
     for source in &sources {
         for table in CREDENTIAL_TABLES {

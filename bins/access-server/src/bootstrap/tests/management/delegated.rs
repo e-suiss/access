@@ -110,7 +110,7 @@ async fn a_new_admin_grant_waits_for_the_realm_flag_and_closing_does_not_reach_b
             .await,
     );
 
-    // OP-157 m.3 (t): closing never reaches the Grants already issued
+    // OP-157 m.3 (t)
     let target = c.issue_to_founder().await;
     let revoke = serde_json::json!({ "grant_revoke": { "grant": b64url_encode(&target.0) } });
     let done = c

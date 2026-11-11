@@ -1799,7 +1799,9 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .await?
                     .ok_or(Invalid::UpstreamSubjectLinked)?
             }
-            Change::AccountDelete(_)
+            // TN-114, OP-157 m.3 (t)
+            Change::DelegatedAdmin(_)
+            | Change::AccountDelete(_)
             | Change::BreakglassReview(_)
             | Change::RelayResend(_)
             | Change::AccountImport(_)

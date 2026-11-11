@@ -1,5 +1,5 @@
 //! Separation of duties on the real store (§2.4, §5.9, §13.7.3, SEC10, OP-157 m.3 (u)): where a
-//! domain declares SoD, the requester's own contribution does not count; where it does not, the
+//! domain declares it, the requester's own contribution does not count; where it does not, the
 //! actor's own suffices.
 
 use access_authority_core::app::delegated;
