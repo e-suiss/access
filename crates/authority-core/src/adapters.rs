@@ -593,6 +593,10 @@ pub struct Domains<K, B: Binding, S: Salts, C> {
     standing_down: std::sync::atomic::AtomicBool,
     /// The advisory decision cache; the commit path never reads it (§9.7A.4, TI-5).
     advisory: crate::app::cache::AdvisoryCache,
+    /// The semantic versions this process evaluates; the leader gate (OP-56).
+    semantics: access_kernel::verify::key_scope::SpecVersions,
+    /// Set by a planned shutdown: no lease is taken again (OP-31).
+    stepped_down: std::sync::atomic::AtomicBool,
 }
 
 impl<K: Keys, B: Binding, S: Salts, C> Domains<K, B, S, C> {
@@ -631,6 +635,8 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             lanes: crate::app::Lanes::default(),
             standing_down: std::sync::atomic::AtomicBool::new(false),
             advisory: crate::app::cache::AdvisoryCache::new(),
+            semantics: access_authority_sequencer::gate::supported(),
+            stepped_down: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -659,6 +665,17 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
     #[must_use]
     pub fn advisory_counts(&self) -> crate::app::cache::Counts {
         self.advisory.counts()
+    }
+
+    /// Leads only domains whose activated semantic versions `semantics` covers (OP-56, G64); the
+    /// build's own versions by default.
+    #[must_use]
+    pub fn with_semantics(
+        mut self,
+        semantics: access_kernel::verify::key_scope::SpecVersions,
+    ) -> Self {
+        self.semantics = semantics;
+        self
     }
 
     /// Every domain this leads rings `bell` after a durable commit (OP-156 m.3 (j)).
@@ -691,6 +708,25 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         }
     }
 
+    /// OP-56, OP-31, §17.4.1: the leader gate before a lease is taken.
+    async fn gate(&self, id: &DomainId) -> Result<(), CoreError> {
+        if self.stepped_down.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(CoreError::Unavailable("stepping-down"));
+        }
+        match access_authority_sequencer::gate::check(
+            &self.setup.sequencer,
+            &self.setup.app,
+            id,
+            &self.semantics,
+        )
+        .await
+        {
+            Ok(None) => Ok(()),
+            Ok(Some(refusal)) => Err(CoreError::Unavailable(refusal.reason())),
+            Err(_) => Err(CoreError::Unavailable("leader-gate")),
+        }
+    }
+
     async fn lead(&self, domain: Digest) -> Result<Led<B, S, C>, CoreError> {
         // OP-46, OP-157 m.3 (j)
         if self.standing_down() {
@@ -705,6 +741,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         let tenant = domain_tenant(&s.sequencer, &id)
             .await?
             .ok_or(CoreError::Unavailable("unknown-domain"))?;
+        self.gate(&id).await?;
         let key = s.keys.event_key(&domain)?;
         let tokens = s.keys.token_key(&domain)?;
         let pseudonyms = s.keys.pseudonym_key(&domain)?;
@@ -1885,6 +1922,15 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             epoch_changed("fold_diverged");
             let _ = led.core.release().await;
         }
+    }
+
+    /// The graceful step-down of a planned shutdown (OP-31, §17.4.10): no new lease is taken,
+    /// the batch in flight on each domain finishes, and every lease is released so the next
+    /// leader takes over without waiting for it to expire.
+    pub async fn step_down(&self) {
+        self.stepped_down
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        self.release().await;
     }
 
     /// Releases every held lease, for a planned shutdown (OP-31).
