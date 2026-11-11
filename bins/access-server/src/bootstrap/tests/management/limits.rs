@@ -104,12 +104,7 @@ async fn a_realm_rate_limit_is_committed_and_bounds_its_identity_routes() {
             .iter()
             .any(|e| { e["kind"] == "quota-exceeded" && e["last_hour"].as_u64() >= Some(1) })
     );
-    assert!(
-        !view["usage"]["top_consumers"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
+    assert_ne!(view["usage"]["top_consumers"].as_array().unwrap().len(), 0);
     assert_eq!(view["usage"]["threshold_percent"], 80);
 
     let zero = c

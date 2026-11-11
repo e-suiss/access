@@ -833,9 +833,9 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::CryptoProfile(_)
             | Change::RateLimit(_) => {}
             // OP-158 m.4 (a)
-            Change::Rehome(_)
-            | Change::Residency(_)
-            | Change::DrProfile(_) => return Err(Invalid::NotYetServed.into()),
+            Change::Rehome(_) | Change::Residency(_) | Change::DrProfile(_) => {
+                return Err(Invalid::NotYetServed.into());
+            }
             // OP-33, OP-158 m.3 (a), m.6 (b)
             Change::HashProfileSet(p) => {
                 let now = t.realm_crypto().await?;
@@ -1657,9 +1657,9 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         let mut secret = None;
         let done = match change {
             // OP-158 m.4 (a)
-            Change::Rehome(_)
-            | Change::Residency(_)
-            | Change::DrProfile(_) => return Err(Invalid::NotYetServed.into()),
+            Change::Rehome(_) | Change::Residency(_) | Change::DrProfile(_) => {
+                return Err(Invalid::NotYetServed.into());
+            }
             // CR-15, CR-36, OP-158 m.3 (y)
             Change::CryptoProfile(c) => {
                 t.put_realm_crypto(bound, Some(c.fips), None).await?;

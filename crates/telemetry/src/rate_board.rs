@@ -245,7 +245,11 @@ impl RateBoard {
             .into_iter()
             .take(TOP)
             .map(|(k, requests)| ConsumerView {
-                consumer: k.iter().take(8).map(|b| format!("{b:02x}")).collect(),
+                consumer: k.iter().take(8).fold(String::new(), |mut s, b| {
+                    use std::fmt::Write as _;
+                    let _ = write!(s, "{b:02x}");
+                    s
+                }),
                 requests,
             })
             .collect();
@@ -322,8 +326,8 @@ mod tests {
             }]
         );
         let later = board.view("realm:acme", t + 25 * HOUR_MS);
-        assert!(later.top_consumers.is_empty());
+        assert_eq!(later.top_consumers, Vec::new());
         assert_eq!(later.events.first().map(|e| e.last_day), Some(0));
-        assert!(board.view("realm:other", t).buckets.is_empty());
+        assert_eq!(board.view("realm:other", t).buckets, Vec::new());
     }
 }
