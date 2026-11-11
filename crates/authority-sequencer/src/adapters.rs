@@ -281,6 +281,12 @@ impl SourcesClock {
 }
 
 impl SourcesClock {
+    /// How many sources the last reading left out (TI-RT2: one of three may deviate).
+    #[must_use]
+    pub const fn deviating(&self) -> usize {
+        self.combiner.deviating()
+    }
+
     /// The sources' trusted time without the witness gate: the checkpointer keeps signing
     /// while the gate is closed, so that a later cosignature can reopen it (TI-RT2).
     ///

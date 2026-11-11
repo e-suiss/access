@@ -25,6 +25,8 @@ tracing = { workspace = true, features = ["std"] }
 [dev-dependencies]
 access-crypto = { workspace = true, features = ["testing"] }
 access-store = { workspace = true, features = ["testing"] }
+# OP-158 m.3 (k): the local Roughtime twin
+suiss-crypto = { workspace = true, features = ["pkcs11", "testing"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]
