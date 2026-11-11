@@ -135,6 +135,8 @@ fn an_upstream_group_mapping_is_protected_and_the_flag_does_not_open_it() {
     use access_internal_api::idp::IdpAction;
     assert!(IdpAction::UpstreamMapping.reserved());
     assert!(IdpAction::SamlSpMapping.reserved());
+    // OP-157 m.19 (d)
+    assert!(IdpAction::MapperSet.reserved());
     let mapper = set(&[action("idp.upstream", "mapping")], &[]);
     assert!(!needs_open(&issue(mapper), None));
 }

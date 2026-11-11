@@ -1387,6 +1387,7 @@ impl IdpAction {
                 | Self::UpstreamRegister
                 | Self::UpstreamMapping
                 | Self::UpstreamUpdate
+                | Self::MapperSet
                 | Self::RealmKeyPolicy
                 | Self::RealmKeyRotate
                 | Self::AccountDelete

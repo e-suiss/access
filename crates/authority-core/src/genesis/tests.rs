@@ -111,11 +111,12 @@ fn idp_actions_carry_their_consequence_tiers() {
     assert_eq!(tier(IdpAction::RealmRehome), Tier::Ct3);
     assert_eq!(tier(IdpAction::UpstreamRegister), Tier::Ct3);
     assert_eq!(tier(IdpAction::UpstreamMapping), Tier::Ct3);
+    // OP-157 m.3 (t), m.19 (d)
+    assert_eq!(tier(IdpAction::MapperSet), Tier::Ct3);
     assert_eq!(tier(IdpAction::ClientRegister), Tier::Ct2);
     assert_eq!(tier(IdpAction::ClientUpdate), Tier::Ct2);
     assert_eq!(tier(IdpAction::CimdPolicy), Tier::Ct2);
     assert_eq!(tier(IdpAction::RealmJoseAlg), Tier::Ct2);
-    assert_eq!(tier(IdpAction::MapperSet), Tier::Ct2);
     assert_eq!(tier(IdpAction::ClientRetire), Tier::Ct1);
     assert_eq!(tier(IdpAction::RealmArgon2), Tier::Ct1);
     // TN-118, TN-106, §13.2, §13.7.1, OP-73

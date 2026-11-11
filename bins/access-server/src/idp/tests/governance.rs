@@ -601,3 +601,180 @@ async fn a_scheduled_rotation_writes_no_exercise_and_its_policy_is_a_reserved_ex
     assert!(IdpAction::GatewayKeytabEmergency.schema().reserved);
     assert!(IdpAction::SamlCertEmergency.schema().reserved);
 }
+
+/// A Grant to `holder` on the realm's `idp.*` resources over `actions`.
+fn idp_grant(
+    d: Digest,
+    slug: &str,
+    holder: Id,
+    actions: access_kernel::model::ActionSet,
+) -> Payload {
+    use access_kernel::model::{
+        AuthoritySet, CanonicalAuthority, ConstraintSet, DelegationTerms, ResourceSelector,
+        Structural, SubjectSelector,
+    };
+    Payload::GrantIssue(access_kernel::meta::GrantContent {
+        basis: access_kernel::meta::GrantBasis::Anchor(meta::object_id(
+            &d,
+            kind::ANCHOR,
+            IDP_ANCHOR,
+        )),
+        holder: SubjectSelector::Party(holder),
+        authority: CanonicalAuthority {
+            authority: AuthoritySet {
+                actions,
+                resource: ResourceSelector::Structural(Structural {
+                    namespace: String::from(access_internal_api::idp::RESOURCE_NAMESPACE),
+                    prefix: vec![String::from(slug)],
+                    kind: None,
+                    attrs: std::collections::BTreeMap::new(),
+                }),
+                params: std::collections::BTreeMap::new(),
+                recipient: None,
+                purpose: None,
+            },
+            constraints: ConstraintSet {
+                validity: Window {
+                    from: 0,
+                    until: u64::MAX / 2,
+                },
+                conditions: BTreeSet::new(),
+                budget: BTreeSet::new(),
+            },
+            delegation: DelegationTerms::default(),
+            requirements: BTreeSet::new(),
+        },
+        agency: BTreeSet::from([Capacity::Own]),
+        named: None,
+    })
+}
+
+/// The root's core meta-action write `payload` on the idp anchor.
+fn root_write(d: Digest, nonce: u8, payload: Payload) -> access_internal_api::idp::Submission {
+    let intent = access_kernel::intent::IntentEnvelope {
+        provenance: std::collections::BTreeMap::new(),
+        action: meta::core_action(payload.action()),
+        resources: vec![access_kernel::model::ResourceRef {
+            namespace: String::from("access.party"),
+            path: vec![String::from("p")],
+            incarnation: 0,
+        }],
+        params: std::collections::BTreeMap::new(),
+        opaque: std::collections::BTreeMap::from([(
+            String::from(meta::PAYLOAD_PARAM),
+            payload.digest().unwrap(),
+        )]),
+        recipient: None,
+        purpose: None,
+        context: access_kernel::intent::ContextRefs::default(),
+        validity: Window {
+            from: NOW,
+            until: NOW + HOUR,
+        },
+    };
+    let digest = intent_digest(&intent).unwrap();
+    access_internal_api::idp::Submission {
+        domain: d,
+        nonce: vec![nonce; 16],
+        ais: sign(&statement(d, &[nonce; 16], digest, idp_anchor(d)), ROOT_KEY),
+        intent,
+        payload: Some(Box::new(payload)),
+        basis: idp_anchor(d),
+        capacity: Capacity::Own,
+        contributions: Vec::new(),
+        pep: String::from(PEP),
+        actor: None,
+    }
+}
+
+// §8.17.9.8, TN-117, X20, OP-157 m.3 (t), m.19 (d), Ek B 5453
+#[tokio::test]
+async fn a_claim_mapper_is_reserved_and_a_namespace_grant_does_not_reach_it() {
+    use access_internal_api::idp::IdpAction;
+    use access_kernel::meta::HoldingRef;
+    use access_kernel::model::ActionSet;
+    let w = World::new().await;
+    let (tenant, realm, d) = w.realm("mapper-reserved").await;
+    onboard(&w.plane, d, ROOT, ROOT_KEY).await;
+    onboard(&w.plane, d, ALICE, ALICE_KEY).await;
+    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let alice = t
+        .insert_subject("active", "realm-kek:1", &[9; 40])
+        .await
+        .unwrap();
+    assert!(
+        access_store::idp::bind_subject_party(&mut t, &alice, &ALICE.0)
+            .await
+            .unwrap()
+    );
+    t.commit().await.unwrap();
+    let mapper = IdpAction::MapperSet;
+    let catalog = access_internal_api::idp::spp(mapper.namespace(), ROOT).catalog_digest();
+    let held = |nonce: u8, actions: ActionSet| {
+        let w = &w;
+        async move {
+            let applied = w
+                .admin()
+                .meta(
+                    (tenant, realm),
+                    root_write(d, nonce, idp_grant(d, "mapper-reserved", ALICE, actions)),
+                )
+                .await;
+            let Ok(Applied::Written {
+                exercise, position, ..
+            }) = applied
+            else {
+                panic!("the root's Grant was not written: {applied:?}");
+            };
+            ExerciseBasis::Holding(HoldingRef {
+                grant: meta::object_id(&exercise, kind::GRANT, 0),
+                holder: ALICE,
+                since: position,
+            })
+        }
+    };
+    let set = |nonce: u8, basis: ExerciseBasis| Proposal {
+        subject: Some(alice),
+        ..proposal(
+            (tenant, realm),
+            Change::MapperSet {
+                claim: ClaimName::parse("nick").unwrap(),
+                source: Some(Attribute::parse("nickname").unwrap()),
+            },
+            nonce,
+            basis,
+            1,
+        )
+    };
+
+    // L0-ALG-30, §13.7.1
+    let namespace = held(
+        0x40,
+        ActionSet {
+            exact: BTreeSet::new(),
+            prefix: BTreeSet::from([(String::from(mapper.namespace()), catalog)]),
+        },
+    )
+    .await;
+    assert!(!matches!(
+        exercise(&w, &set(0x41, namespace), ALICE_KEY).await,
+        Ok(Applied::Written { .. } | Applied::AlreadyWritten { .. })
+    ));
+    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    assert_eq!(
+        access_store::idp::mappers(&mut t).await.unwrap(),
+        Vec::new()
+    );
+    t.commit().await.unwrap();
+
+    let named = held(
+        0x42,
+        ActionSet {
+            exact: BTreeSet::from([mapper.action_ref()]),
+            prefix: BTreeSet::new(),
+        },
+    )
+    .await;
+    written(&exercise(&w, &set(0x43, named), ALICE_KEY).await.unwrap());
+    assert!(IdpAction::MapperSet.reserved());
+}
