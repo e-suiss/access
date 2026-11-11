@@ -3,7 +3,9 @@
 
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
-use access_kernel::verify::key_scope::{Hybrid, KeyUsage, SpecVersions, VerifierCaps};
+use access_kernel::verify::key_scope::{
+    Declarations, Hybrid, KeyUsage, Mmd, SpecVersions, VerifierCaps, Witness,
+};
 use suiss_crypto::cose::Algorithm;
 use suiss_crypto::dcbor::{self, Limits, Value};
 
@@ -187,7 +189,82 @@ fn template_value(t: &Template) -> Value {
     if let Some(d) = &t.discovery {
         entries.push(("discovery", Value::Bytes(d.clone())));
     }
+    entries.push(("declared", declared_value(&t.declared)));
     map(entries)
+}
+
+// OP-158 m.3 (b), (d), m.6 (e)
+fn declared_value(d: &Declarations) -> Value {
+    let mut entries = vec![(
+        "witnesses",
+        Value::Array(
+            d.witnesses
+                .iter()
+                .map(|w| {
+                    map(vec![
+                        ("name", Value::text(&w.name)),
+                        ("key", w.key.to_value()),
+                        ("alg", Value::int(w.algorithm.cose())),
+                        ("operator", Value::text(&w.operator)),
+                        ("independent", Value::Bool(w.independent)),
+                    ])
+                })
+                .collect(),
+        ),
+    )];
+    if let Some(m) = d.mmd {
+        entries.push((
+            "mmd",
+            map(vec![
+                ("authority_ms", Value::Unsigned(m.authority_ms)),
+                ("identity_ms", Value::Unsigned(m.identity_ms)),
+            ]),
+        ));
+    }
+    map(entries)
+}
+
+fn text_of(v: Option<&Value>) -> Result<String, FrameError> {
+    match v {
+        Some(Value::Text(t)) if !t.is_empty() && t.len() <= 255 => Ok(t.clone()),
+        _ => Err(FrameError::Malformed),
+    }
+}
+
+fn uint_of(v: Option<&Value>) -> Result<u64, FrameError> {
+    match v {
+        Some(Value::Unsigned(n)) => Ok(*n),
+        _ => Err(FrameError::Malformed),
+    }
+}
+
+fn declared_of(v: Option<&Value>) -> Result<Declarations, FrameError> {
+    let Some(v) = v else {
+        return Ok(Declarations::default());
+    };
+    let mut d = Declarations::default();
+    if let Some(Value::Array(ws)) = v.get("witnesses") {
+        for w in ws {
+            let key = w
+                .get("key")
+                .and_then(|k| <suiss_crypto::cose::PublicKey as Canonical>::from_value(k).ok())
+                .ok_or(FrameError::Malformed)?;
+            d.witnesses.push(Witness::new(
+                text_of(w.get("name"))?,
+                key,
+                alg(w.get("alg").ok_or(FrameError::Malformed)?)?,
+                text_of(w.get("operator"))?,
+                matches!(w.get("independent"), Some(Value::Bool(true))),
+            ));
+        }
+    }
+    if let Some(m) = v.get("mmd") {
+        d.mmd = Some(Mmd::new(
+            uint_of(m.get("authority_ms"))?,
+            uint_of(m.get("identity_ms"))?,
+        ));
+    }
+    Ok(d)
 }
 
 fn alg(v: &Value) -> Result<Algorithm, FrameError> {
@@ -229,6 +306,7 @@ fn template_of(v: &Value) -> Result<Template, FrameError> {
             Some(_) => return Err(FrameError::Malformed),
         },
         discovery: v.get("discovery").map(|d| bytes(Some(d))).transpose()?,
+        declared: declared_of(v.get("declared"))?,
     })
 }
 

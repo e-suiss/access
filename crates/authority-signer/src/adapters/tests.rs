@@ -30,6 +30,7 @@ fn template() -> Template {
         caps: None,
         hybrid: None,
         discovery: None,
+        declared: crate::domain::declared_default(),
     }
 }
 

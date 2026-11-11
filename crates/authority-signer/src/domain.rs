@@ -46,6 +46,9 @@ pub struct Template {
     pub hybrid: Option<Hybrid>,
     /// Discovery fields, opaque to the Kernel.
     pub discovery: Option<Vec<u8>>,
+    /// The Stage 13 declarations the metadata publishes: the domain's witnesses and its MMD
+    /// (OP-158 m.3 (b), (d), m.6 (e)).
+    pub declared: access_kernel::verify::key_scope::Declarations,
 }
 
 /// The binding key a domain's metadata names (T20).
@@ -94,7 +97,7 @@ pub fn metadata(
         caps: template.caps.clone(),
         hybrid: template.hybrid,
         discovery: template.discovery.clone(),
-        declared: access_kernel::verify::key_scope::Declarations::default(),
+        declared: template.declared.clone(),
     }
 }
 
@@ -125,5 +128,16 @@ pub fn default_template(domain: Digest) -> Template {
         caps: None,
         hybrid: None,
         discovery: None,
+        declared: declared_default(),
     }
+}
+
+/// What a new domain declares (§17.6.3, T16, OP-38, OP-158 m.3 (c)): the authority checkpoint
+/// interval as its MMD, the identity audit's 1 s; no witnesses until the root names them.
+#[must_use]
+pub fn declared_default() -> access_kernel::verify::key_scope::Declarations {
+    let mut d = access_kernel::verify::key_scope::Declarations::default();
+    // T16, OP-38
+    d.mmd = Some(access_kernel::verify::key_scope::Mmd::new(60_000, 1_000));
+    d
 }

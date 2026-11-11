@@ -1027,6 +1027,7 @@ dependencies = [
  "esuiss-access-kernel",
  "esuiss-access-sdk",
  "esuiss-crypto",
+ "esuiss-ledger",
  "serde",
  "serde_json",
  "thiserror",
