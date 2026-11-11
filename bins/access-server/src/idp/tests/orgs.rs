@@ -480,6 +480,29 @@ async fn home_realm_discovery_needs_a_verified_uncontested_domain() {
     );
 }
 
+// TN-90, OP-129 m.2, OP-153 m.3 (o)
+#[tokio::test]
+async fn the_domain_watch_schedules_and_claims_its_slot_through_the_jobs_table() {
+    let (w, _, _, _) = Box::pin(ready("org-domain-watch")).await;
+    let now = 1_800_000_000_000;
+    crate::orgs::tick(
+        (&w.db.app, &w.db.router),
+        &Probe::default(),
+        "watch-test",
+        now,
+    )
+    .await
+    .unwrap();
+    crate::orgs::tick(
+        (&w.db.app, &w.db.router),
+        &Probe::default(),
+        "watch-test",
+        now,
+    )
+    .await
+    .unwrap();
+}
+
 /// The outside world a domain verification reads, as a test sets it.
 #[derive(Default)]
 struct Probe {

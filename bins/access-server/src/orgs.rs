@@ -19,7 +19,7 @@ use access_store::jobs::{claim_kind, complete, schedule};
 use access_store::tenancy::routes;
 
 /// The watch's job kind.
-pub(crate) const DOMAINS: &str = "org-domains";
+pub(crate) const DOMAINS: &str = "org_domains";
 
 /// How often a node schedules and claims a watch pass (PD).
 pub(crate) const INTERVAL: Duration = Duration::from_mins(10);
