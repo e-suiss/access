@@ -25,7 +25,7 @@ use access_identity_webauthn::domain::rp::{RelyingParty, RpId};
 use access_store::Pool;
 use access_store::identity::{RealmId, TenantId, TenantTx};
 use access_store::tenancy::realm_tenant;
-use suiss_crypto::envelope::{Dek, EnvelopeError, Kek};
+use suiss_crypto::envelope::{Dek, DekCache, EnvelopeError, Kek};
 use suiss_crypto::pkcs11::{HsmAead, HsmKek, KeyStore};
 use zeroize::Zeroizing;
 
@@ -65,11 +65,40 @@ pub(crate) fn kek_id(realm: &[u8; 16]) -> String {
     kek_label(realm).replace('/', ":")
 }
 
-/// A token KEK behind a lock: a PKCS#11 session serves one caller at a time.
+/// A token KEK behind a lock: a PKCS#11 session serves one caller at a time. Unwrapped DEKs
+/// are kept for [`DEK_CACHE_TTL_MS`], so a sign-in does not ask the token to unwrap the same
+/// subject key again (CR-32 m.2, OP-135 m.5, OP-158 m.3 (y)).
 struct LockedKek {
     id: String,
     inner: Mutex<HsmKek>,
     pepper: HsmAead,
+    cache: Mutex<DekCache>,
+    clock: fn() -> u64,
+}
+
+/// How long an unwrapped DEK stays cached (CR-32 m.2; PD 5 minutes): a shredded key's last
+/// cached copy is gone at most this long after its row was shredded.
+pub(crate) const DEK_CACHE_TTL_MS: u64 = suiss_crypto::envelope::CACHE_TTL_MS;
+
+/// How many unwrapped DEKs one realm keeps at once (CR-32 m.2; PD).
+pub(crate) const DEK_CACHE_MAX: usize = 4096;
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+}
+
+impl LockedKek {
+    fn new(id: String, kek: HsmKek, pepper: HsmAead, clock: fn() -> u64) -> Self {
+        Self {
+            id,
+            inner: Mutex::new(kek),
+            pepper,
+            cache: Mutex::new(DekCache::new(DEK_CACHE_TTL_MS, DEK_CACHE_MAX)),
+            clock,
+        }
+    }
 }
 
 impl Kek for LockedKek {
@@ -85,10 +114,10 @@ impl Kek for LockedKek {
     }
 
     fn unwrap(&self, wrapped: &[u8]) -> Result<Dek, EnvelopeError> {
-        self.inner
-            .lock()
-            .map_err(|_| EnvelopeError::Wrap)?
-            .unwrap(wrapped)
+        let mut cache = self.cache.lock().map_err(|_| EnvelopeError::Wrap)?;
+        let inner = self.inner.lock().map_err(|_| EnvelopeError::Wrap)?;
+        let dek = cache.get(&*inner, wrapped, (self.clock)())?;
+        Ok(Dek::from_secret(Secret::new(*dek.secret().expose())))
     }
 
     fn pepper(&self, context: &[u8], plaintext: &[u8]) -> Result<(u16, Vec<u8>), EnvelopeError> {
@@ -211,11 +240,12 @@ impl RealmKeks {
             .aead(&pepper)
             .or_else(|_| self.keys.generate_aead(&pepper))
             .map_err(|e| e.to_string())?;
-        let kek = Arc::new(LockedKek {
-            inner: Mutex::new(self.keys.kek(&label).map_err(|e| e.to_string())?),
-            id: kek_id(realm),
+        let kek = Arc::new(LockedKek::new(
+            kek_id(realm),
+            self.keys.kek(&label).map_err(|e| e.to_string())?,
             pepper,
-        });
+            now_ms,
+        ));
         loaded.insert(*realm, kek.clone());
         Ok(kek)
     }
@@ -434,5 +464,54 @@ impl Kits for HsmKits {
             .map_err(|_| Unavailable)?
             .insert(key, (settings, kit.clone()));
         Ok(kit)
+    }
+}
+
+#[cfg(test)]
+mod dek_cache_tests {
+    #![allow(clippy::unwrap_used, reason = "test code")]
+
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use super::*;
+
+    static NOW: AtomicU64 = AtomicU64::new(1_000);
+
+    fn clock() -> u64 {
+        NOW.load(Ordering::SeqCst)
+    }
+
+    // CR-32, OP-135, OP-158
+    #[test]
+    fn a_sign_in_unwraps_a_subject_key_once_until_it_expires() {
+        let (module, token) = crate::testing::hsm("dek-cache");
+        let keys = KeyStore::open(
+            &module,
+            &token,
+            &Secret::new(String::from("1234-test-only")),
+        )
+        .unwrap();
+        let kek = keys.generate_kek("access/realm-kek/test").unwrap();
+        let pepper = keys.generate_aead("access/realm-pepper/test").unwrap();
+        let locked = LockedKek::new("access:realm-kek:test".into(), kek, pepper, clock);
+        let dek = Dek::generate().unwrap();
+        let wrapped = locked.wrap(&dek).unwrap();
+        assert!(
+            locked
+                .unwrap(&wrapped)
+                .unwrap()
+                .secret()
+                .ct_eq(dek.secret())
+        );
+        keys.destroy_kek("access/realm-kek/test").unwrap();
+        assert!(
+            locked
+                .unwrap(&wrapped)
+                .unwrap()
+                .secret()
+                .ct_eq(dek.secret())
+        );
+        NOW.fetch_add(DEK_CACHE_TTL_MS, Ordering::SeqCst);
+        assert!(locked.unwrap(&wrapped).is_err());
     }
 }

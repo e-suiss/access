@@ -1,5 +1,6 @@
 //! HTTP adapter of [`RelayPort`] (E42, OP-146 m.4 (b)): one HTTPS `POST` per event, `CloudEvents`
-//! structured mode, `Idempotency-Key` = event id (OP-63). The bearer credential is read from a
+//! structured mode, `Idempotency-Key` = event id (OP-63), over a pool of kept-alive
+//! connections, so an event does not open a connection of its own (OP-158 m.3 (y), OP-72). The bearer credential is read from a
 //! secret file and re-read when it rotates (CR-35, OP-129 m.3); client certificates for mTLS
 //! come with the operator's [`rustls::ClientConfig`] (OP-136). Only `https` is accepted.
 
@@ -20,6 +21,14 @@ use crate::notify::ports::RelayPort;
 
 /// Largest response head read.
 const MAX_HEAD: usize = 16 * 1024;
+
+/// Largest response body read before a connection goes back to the pool.
+const MAX_BODY: usize = 64 * 1024;
+
+/// Idle connections kept per adapter (OP-158 m.3 (y); PD).
+pub const POOL_MAX: usize = 8;
+
+type Connection = Box<tokio_rustls::client::TlsStream<TcpStream>>;
 
 /// A Relay intake URL that is not `https://host[:port]/path`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -96,6 +105,16 @@ pub struct HttpRelay {
     connector: TlsConnector,
     token: Mutex<SecretFile>,
     timeout: Duration,
+    idle: Mutex<Vec<Connection>>,
+    opened: std::sync::atomic::AtomicU64,
+}
+
+/// How one exchange on a connection ended.
+enum Exchanged {
+    /// An answer; the connection may carry the next event.
+    Answer(Result<(), SendFailure>, Option<Connection>),
+    /// The connection failed before any answer byte: a kept-alive connection the peer closed.
+    Stale,
 }
 
 impl HttpRelay {
@@ -109,7 +128,43 @@ impl HttpRelay {
             connector: TlsConnector::from(config.tls),
             endpoint: config.endpoint,
             timeout: config.timeout,
+            idle: Mutex::new(Vec::new()),
+            opened: std::sync::atomic::AtomicU64::new(0),
         })
+    }
+
+    /// Connections opened so far.
+    #[must_use]
+    pub fn connections_opened(&self) -> u64 {
+        self.opened.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    fn pooled(&self) -> Option<Connection> {
+        self.idle
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .pop()
+    }
+
+    fn keep(&self, connection: Connection) {
+        let mut idle = self
+            .idle
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if idle.len() < POOL_MAX {
+            idle.push(connection);
+        }
+    }
+
+    async fn connect(&self) -> Option<Connection> {
+        let name = ServerName::try_from(self.endpoint.host.clone()).ok()?;
+        let tcp = TcpStream::connect((self.endpoint.host.as_str(), self.endpoint.port))
+            .await
+            .ok()?;
+        let tls = self.connector.connect(name, tcp).await.ok()?;
+        self.opened
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Some(Box::new(tls))
     }
 
     fn token(&self) -> Secret<String> {
@@ -132,7 +187,7 @@ impl HttpRelay {
         let body = event.body();
         let head = format!(
             "POST {} HTTP/1.1\r\nHost: {}:{}\r\nContent-Type: application/cloudevents+json; charset=utf-8\r\n\
-             Content-Length: {}\r\nIdempotency-Key: {}\r\nConnection: close\r\nAuthorization: Bearer ",
+             Content-Length: {}\r\nIdempotency-Key: {}\r\nConnection: keep-alive\r\nAuthorization: Bearer ",
             self.endpoint.path,
             self.endpoint.host,
             self.endpoint.port,
@@ -157,43 +212,98 @@ impl HttpRelay {
             retry_after_ms: None,
         };
         let request = self.request(event).ok_or(transient)?;
-        let name = ServerName::try_from(self.endpoint.host.clone()).map_err(|_| transient)?;
-        let tcp = TcpStream::connect((self.endpoint.host.as_str(), self.endpoint.port))
-            .await
-            .map_err(|_| transient)?;
-        let mut tls = self
-            .connector
-            .connect(name, tcp)
-            .await
-            .map_err(|_| transient)?;
-        tls.write_all(&request).await.map_err(|_| transient)?;
-        tls.flush().await.map_err(|_| transient)?;
+        if let Some(pooled) = self.pooled() {
+            match Self::on(pooled, &request).await {
+                Exchanged::Answer(result, back) => {
+                    if let Some(c) = back {
+                        self.keep(c);
+                    }
+                    return result;
+                }
+                Exchanged::Stale => {}
+            }
+        }
+        let fresh = self.connect().await.ok_or(transient)?;
+        match Self::on(fresh, &request).await {
+            Exchanged::Answer(result, back) => {
+                if let Some(c) = back {
+                    self.keep(c);
+                }
+                result
+            }
+            Exchanged::Stale => Err(transient),
+        }
+    }
+
+    /// One request and its answer on `tls`; the connection comes back when the answer was
+    /// read to its end and the peer keeps it open.
+    async fn on(mut tls: Connection, request: &[u8]) -> Exchanged {
+        let transient = SendFailure::Transient {
+            retry_after_ms: None,
+        };
+        if tls.write_all(request).await.is_err() || tls.flush().await.is_err() {
+            return Exchanged::Stale;
+        }
         let mut buf = Vec::with_capacity(1024);
         let mut chunk = [0_u8; 1024];
         loop {
-            let n = tls.read(&mut chunk).await.map_err(|_| transient)?;
-            if n == 0 {
-                return Err(transient);
-            }
+            let n = match tls.read(&mut chunk).await {
+                Ok(0) | Err(_) if buf.is_empty() => return Exchanged::Stale,
+                Ok(0) | Err(_) => return Exchanged::Answer(Err(transient), None),
+                Ok(n) => n,
+            };
             buf.extend_from_slice(chunk.get(..n).unwrap_or(&[]));
             let mut headers = [httparse::EMPTY_HEADER; 32];
             let mut resp = httparse::Response::new(&mut headers);
             match resp.parse(&buf) {
-                Ok(httparse::Status::Complete(_)) => {
-                    let status = resp.code.ok_or(transient)?;
-                    let retry_after_ms = resp
-                        .headers
-                        .iter()
-                        .find(|h| h.name.eq_ignore_ascii_case("retry-after"))
-                        .and_then(|h| core::str::from_utf8(h.value).ok())
-                        .and_then(|v| v.trim().parse::<u64>().ok())
+                Ok(httparse::Status::Complete(head)) => {
+                    let Some(status) = resp.code else {
+                        return Exchanged::Answer(Err(transient), None);
+                    };
+                    let header = |name: &str| {
+                        resp.headers
+                            .iter()
+                            .find(|h| h.name.eq_ignore_ascii_case(name))
+                            .and_then(|h| core::str::from_utf8(h.value).ok())
+                            .map(str::trim)
+                    };
+                    let retry_after_ms = header("retry-after")
+                        .and_then(|v| v.parse::<u64>().ok())
                         .and_then(|s| s.checked_mul(1000));
-                    return classify(status, retry_after_ms);
+                    let closes =
+                        header("connection").is_some_and(|v| v.eq_ignore_ascii_case("close"));
+                    let length = header("content-length").and_then(|v| v.parse::<usize>().ok());
+                    let result = classify(status, retry_after_ms);
+                    let back = match length {
+                        Some(len) if !closes && len <= MAX_BODY => {
+                            Self::drain(&mut tls, buf.len().saturating_sub(head), len)
+                                .await
+                                .then_some(tls)
+                        }
+                        _ => None,
+                    };
+                    return Exchanged::Answer(result, back);
                 }
                 Ok(httparse::Status::Partial) if buf.len() < MAX_HEAD => {}
-                _ => return Err(transient),
+                _ => return Exchanged::Answer(Err(transient), None),
             }
         }
+    }
+
+    /// Reads the rest of a body of `len` bytes, `have` of which came with the head.
+    async fn drain(tls: &mut Connection, have: usize, len: usize) -> bool {
+        let mut left = len.saturating_sub(have);
+        if have > len {
+            return false;
+        }
+        let mut chunk = [0_u8; 1024];
+        while left > 0 {
+            match tls.read(&mut chunk).await {
+                Ok(0) | Err(_) => return false,
+                Ok(n) => left = left.saturating_sub(n),
+            }
+        }
+        true
     }
 }
 

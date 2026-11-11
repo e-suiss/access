@@ -1245,6 +1245,126 @@ async fn the_https_adapter_posts_and_classifies() {
     }
 }
 
+/// An HTTPS Relay double that keeps each connection open and answers every request on it,
+/// counting the connections it accepted.
+async fn keepalive_server() -> (RelayServer, Arc<std::sync::atomic::AtomicUsize>) {
+    use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
+    let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()]).unwrap();
+    let der: CertificateDer<'static> = cert.cert.der().clone();
+    let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der()));
+    let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+    let server = rustls::ServerConfig::builder_with_provider(provider.clone())
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(vec![der.clone()], key)
+        .unwrap();
+    let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(server));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let accepted = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counted = accepted.clone();
+    let heads = Arc::new(Mutex::new(Vec::new()));
+    let seen = heads.clone();
+    tokio::spawn(async move {
+        loop {
+            let (tcp, _) = listener.accept().await.unwrap();
+            counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let acceptor = acceptor.clone();
+            let seen = seen.clone();
+            tokio::spawn(async move {
+                let mut s = acceptor.accept(tcp).await.unwrap();
+                let mut buf = Vec::new();
+                let mut chunk = [0_u8; 4096];
+                loop {
+                    let Some(end) = buf.windows(4).position(|w| w == b"\r\n\r\n") else {
+                        match s.read(&mut chunk).await {
+                            Ok(0) | Err(_) => return,
+                            Ok(n) => buf.extend_from_slice(&chunk[..n]),
+                        }
+                        continue;
+                    };
+                    let head = String::from_utf8_lossy(&buf[..end]).into_owned();
+                    let len: usize = head
+                        .lines()
+                        .find_map(|l| l.strip_prefix("Content-Length: "))
+                        .unwrap()
+                        .parse()
+                        .unwrap();
+                    while buf.len() < end + 4 + len {
+                        let n = s.read(&mut chunk).await.unwrap();
+                        buf.extend_from_slice(&chunk[..n]);
+                    }
+                    buf.drain(..end + 4 + len);
+                    seen.lock().unwrap().push(head);
+                    s.write_all(b"HTTP/1.1 202 Accepted\r\nContent-Length: 2\r\n\r\nok")
+                        .await
+                        .unwrap();
+                }
+            });
+        }
+    });
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(der).unwrap();
+    let tls = rustls::ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    (
+        RelayServer {
+            endpoint: RelayEndpoint::parse(&format!("https://localhost:{port}/v1/events"))
+                .unwrap(),
+            tls: Arc::new(tls),
+            heads,
+        },
+        accepted,
+    )
+}
+
+// OP-158, OP-72, E42
+#[tokio::test]
+async fn the_courier_reuses_kept_alive_connections() {
+    let (srv, accepted) = keepalive_server().await;
+    let token = token_file("pool");
+    let relay = HttpRelay::new(HttpRelayConfig {
+        endpoint: srv.endpoint.clone(),
+        tls: srv.tls.clone(),
+        token_file: token.clone(),
+        timeout: Duration::from_secs(5),
+    })
+    .unwrap();
+    std::fs::remove_file(&token).unwrap();
+    for _ in 0..5 {
+        assert_eq!(relay.send(&sample_event()).await, Ok(()));
+    }
+    assert_eq!(relay.connections_opened(), 1);
+    assert_eq!(accepted.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(srv.heads.lock().unwrap().len(), 5);
+}
+
+// OP-158, E42 m.5
+#[tokio::test]
+async fn a_closed_kept_alive_connection_is_replaced() {
+    let srv = relay_server("202 Accepted", "").await;
+    let token = token_file("stale");
+    let relay = HttpRelay::new(HttpRelayConfig {
+        endpoint: srv.endpoint.clone(),
+        tls: srv.tls.clone(),
+        token_file: token.clone(),
+        timeout: Duration::from_secs(5),
+    })
+    .unwrap();
+    std::fs::remove_file(&token).unwrap();
+    for _ in 0..3 {
+        assert_eq!(relay.send(&sample_event()).await, Ok(()));
+    }
+    assert_eq!(srv.heads.lock().unwrap().len(), 3);
+    assert_eq!(relay.connections_opened(), 3);
+}
+
 // E42 m.5, TI-9
 #[tokio::test]
 async fn an_unreachable_relay_is_transient() {
