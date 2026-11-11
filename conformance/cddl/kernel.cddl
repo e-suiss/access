@@ -18,6 +18,8 @@ hash-alg = -16
 ;   COSE_Sign1 AIS bytes as received         "access/ais/v1"
 ;   COSE_Sign1 Claim bytes as received       "access/claim/v1"
 ;   policy-content (RestrictionPolicy version) "access/policy/v1"
+;   [system, case] (purpose-ref case)       "access/case-ref/v1"
+;   compat-mapping (compat-mapping.cddl)     "access/compat-mapping/v1"
 ;   receipt (decision receipt payload)       "access/receipt/v1"
 ;   COSE_Sign1 PAP bytes as signed           "access/pap/v1"
 ;   pap-holder                               "access/holder/v1"
@@ -64,7 +66,9 @@ resource-ref = {
   incarnation: uint,
 }
 
-purpose-ref = { code: ident } / { work: digest } / { aim: digest }
+; OP-157 m.3 (b): `case` is the "access/case-ref/v1" digest of dCBOR([system, case]); the Kernel
+; holds no case number (TN-73).
+purpose-ref = { code: ident } / { work: digest } / { aim: digest } / { case: digest }
 
 ; ---------------------------------------------------------------- selectors
 
@@ -162,7 +166,8 @@ requirement-term = {
   ? count: uint .ge 2,
   ? binding: "actor_instance" / "intent_digest" / "resource",
   ? freshness_ms: uint,
-  ? independence: { distinct: "party" / "instance" / "issuer" },
+  ; OP-157 m.3 (b): "surface" counts distinct (surface_profile, surface origin) pairs (§13.7.3).
+  ? independence: { distinct: "party" / "instance" / "issuer" / "surface" },
   ? consumption: "single_use",
   ? source: subject-selector,
   ? assurance: assurance,
@@ -669,6 +674,7 @@ acceptance-content = {
   ? quota: { count: uint .ge 1, window_s: uint .ge 1 },
   ? spp: spp,
   ? pinned: pinned-issuer,
+  ? mappings: [+ digest],           ; OP-157 m.3 (r): pinned mapping digests, schema-definition only
 }
 
 ; OP-150: the carrier key set of an issuer identified by a pinned key set (§9.13): the `iss`
@@ -707,6 +713,17 @@ action-schema = {
 
 ; OP-141 m.27: Cedar source against Access's published schema; `requirements` resolves the
 ; `@require` references of its forbid policies.
+; OP-157 m.3 (n): policy defaults; each key has one tightening direction (ct3_delay_s and
+; mapping_probation_days grow, approval_surfaces, breakglass_review_h and support_max_min shrink).
+; An unknown key does not decode.
+policy-defaults = {
+  ? approval_surfaces: [+ tstr .size (1..255)],
+  ? breakglass_review_h: uint,
+  ? ct3_delay_s: uint,
+  ? mapping_probation_days: uint,
+  ? support_max_min: uint,
+}
+
 policy-content = {
   schema: "access/restriction/v1",
   source: tstr,
@@ -742,7 +759,7 @@ meta-payload =
   / { acceptance_establish: acceptance-content }
   / { acceptance_amend: { acceptance: id, content: acceptance-content } }
   / { acceptance_revoke: { acceptance: id } }
-  / { policy_set: { ? policy: id, content: policy-content } }
+  / { policy_set: { ? policy: id, content: policy-content, ? defaults: policy-defaults } }
   / { policy_retire: { policy: id } }
   / { claim_issue: { subject: party-ref, class: ident, value: equality-value, ? validity: time-window, ? bound_intent: digest, ? supersedes: id } }
   / { contribute: { target: digest, class: ident } }

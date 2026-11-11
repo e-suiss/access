@@ -173,6 +173,7 @@ fn cases() -> Vec<(&'static str, Payload)> {
         (
             "policy_set",
             Payload::PolicySet {
+                defaults: None,
                 policy: None,
                 content: json_value(&json!({
                     "schema": "access/restriction/v1",

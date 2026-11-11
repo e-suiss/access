@@ -1,0 +1,21 @@
+; Access compatibility mapping, version 1 (RFC 8610; OP-157 m.3 (b), (r), §9.13.4, E10, PI-19).
+; Deterministic CBOR (RFC 8949 §4.2.1). The names this file does not define are those of
+; kernel.cddl. A publisher's `compatibility` declaration carries the mapping; its identity is
+; mapping_digest = SHA-256("access/compat-mapping/v1" || 0x00 || dCBOR(compat-mapping)).
+; A domain uses a mapping only after pinning that digest in the `mappings` of a
+; `schema-definition` Acceptance with a reserved `acceptance.amend` (C18), and only when the
+; relation is non-broadening. The operations are a closed algebra (INV-8): no free function and
+; no external call. They turn a `to`-version intent into a `from`-version intent, in order.
+
+compat-mapping = {
+  from: action-ref,                 ; the old version
+  to: action-ref,                   ; the new version: same namespace and name
+  relation: "representation-equivalent" / "narrowing" / "broadening" / "incompatible",
+  ops: [* mapping-op],              ; at most 64, applied in order
+}
+
+mapping-op = { rename: { from: ident, to: ident } }
+  / { enum: { field: ident, values: { + tstr .size (1..255) => tstr .size (1..255) } } }
+  / { constant: { field: ident, value: equality-value } }
+  / { scale: { field: ident, factor: uint .ge 2 } }   ; exact unit factor, integer fields only
+  / { drop: { field: ident } }                        ; authority-opaque fields only

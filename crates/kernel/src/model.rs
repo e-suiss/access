@@ -55,6 +55,8 @@ pub enum PurposeRef {
     Work(Digest),
     /// Opaque `AimRef`.
     Aim(Digest),
+    /// A support case: the `access/case-ref/v1` digest of `(system, case)` (OP-157 m.3 (b), TN-73).
+    Case(Digest),
 }
 
 /// Value compared by equality only.
@@ -275,6 +277,8 @@ pub enum Independence {
     DistinctInstance,
     /// Distinct issuers.
     DistinctIssuer,
+    /// Distinct approval surfaces: `surface_profile` and surface origin (OP-157 m.3 (b), §13.7.3).
+    DistinctSurface,
 }
 
 /// Consumption of a requirement term (OP-109 m.3).

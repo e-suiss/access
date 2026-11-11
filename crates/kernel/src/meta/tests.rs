@@ -1915,6 +1915,7 @@ fn meta_vectors_match() {
             (ROOT, ROOT),
             meta,
             &Payload::PolicySet {
+                defaults: None,
                 policy: None,
                 content: policy(Value::text("domain"), RESTRICTION_SCHEMA),
             },
@@ -1926,6 +1927,7 @@ fn meta_vectors_match() {
         (ROOT, ROOT),
         meta,
         &Payload::PolicySet {
+            defaults: None,
             policy: Some(object_id(&set_policy, kind::POLICY, 0)),
             content: policy(tagged("party", ALICE.to_value()), RESTRICTION_SCHEMA),
         },
@@ -1936,6 +1938,7 @@ fn meta_vectors_match() {
         (ROOT, ROOT),
         meta,
         &Payload::PolicySet {
+            defaults: None,
             policy: None,
             content: policy(Value::text("domain"), "cedar"),
         },
@@ -2726,6 +2729,7 @@ fn every_payload_round_trips() {
         },
         Payload::AcceptanceRevoke { acceptance: g },
         Payload::PolicySet {
+            defaults: None,
             policy: Some(h),
             content: policy,
         },
@@ -3346,6 +3350,7 @@ fn policies_of_a_target_are_indexed_together() {
     let mut r = Run::new();
     let meta = ExerciseBasis::Anchor(meta_anchor(&DOMAIN));
     let policy = |source: &str| Payload::PolicySet {
+        defaults: None,
         policy: None,
         content: map([
             ("schema", Some(Value::text(RESTRICTION_SCHEMA))),
@@ -3362,4 +3367,101 @@ fn policies_of_a_target_are_indexed_together() {
             object_id(&second, kind::POLICY, 0)
         ])
     );
+}
+
+// OP-157 m.3 (b), (n)
+#[test]
+fn policy_defaults_are_refused_until_the_kernel_applies_them() {
+    let mut r = Run::new();
+    let meta = ExerciseBasis::Anchor(meta_anchor(&DOMAIN));
+    let set = |defaults: Option<PolicyDefaults>| Payload::PolicySet {
+        defaults,
+        policy: None,
+        content: map([
+            ("schema", Some(Value::text(RESTRICTION_SCHEMA))),
+            ("source", Some(Value::text("deny a"))),
+            ("target", Some(Value::text("domain"))),
+        ]),
+    };
+    let tighter = PolicyDefaults {
+        ct3_delay_s: Some(172_800),
+        ..PolicyDefaults::default()
+    };
+    let refused = r.act(ROOT, ROOT, meta, &set(Some(tighter.clone())));
+    assert!(matches!(refused, Err(MetaError::DefaultUnknown)));
+    assert_eq!(MetaError::DefaultUnknown.code(), "policy-default-unknown");
+    assert!(r.act(ROOT, ROOT, meta, &set(None)).is_ok());
+    let payload = set(Some(tighter));
+    assert_eq!(Payload::from_value(&payload.to_value()), Ok(payload));
+}
+
+// OP-157 m.3 (n), OP-108 m.4
+#[test]
+fn policy_defaults_name_only_known_keys() {
+    let all = PolicyDefaults {
+        ct3_delay_s: Some(86_400),
+        mapping_probation_days: Some(14),
+        approval_surfaces: Some(BTreeSet::from([
+            "suiss-approval-surface".to_string(),
+            "suiss-approver-sdk".to_string(),
+        ])),
+        breakglass_review_h: Some(72),
+        support_max_min: Some(60),
+    };
+    assert_eq!(PolicyDefaults::from_value(&all.to_value()), Ok(all.clone()));
+    let keys: Vec<String> = match all.to_value() {
+        Value::Map(m) => m
+            .iter()
+            .filter_map(|(k, _)| match k {
+                Value::Text(t) => Some(t.clone()),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    assert_eq!(keys, POLICY_DEFAULT_KEYS.map(String::from).to_vec());
+    let unknown = map([("quorum", Some(Value::Unsigned(1)))]);
+    assert_eq!(
+        PolicyDefaults::from_value(&unknown),
+        Err(ModelError::Unknown)
+    );
+    assert_eq!(
+        PolicyDefaults::from_value(&Value::Map(Vec::new())),
+        Err(ModelError::Range)
+    );
+}
+
+// OP-157 m.3 (b), (r), C18
+#[test]
+fn only_a_schema_definition_acceptance_pins_mappings() {
+    let pins = set_value([Digest([7; 32]).to_value()]);
+    let mut c = acceptance(CAROL, "predicate-input", "kyc");
+    c.push(("mappings", Some(pins)));
+    assert_eq!(acceptance_content(&map(c)), Err(ModelError::Shape));
+}
+
+// OP-157 m.3 (b), OP-1
+#[test]
+fn kernel_0_4_0_meta_payloads_decode_unchanged() {
+    extern crate std;
+    let doc: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../conformance/vectors/core/1/meta.json"
+    ))
+    .unwrap();
+    let mut decoded = 0;
+    for case in doc["cases"].as_array().unwrap() {
+        let hex = case["payload"].as_str().unwrap();
+        let bytes: Vec<u8> = (0..hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+            .collect();
+        if let Ok(p) = Payload::from_bytes(&bytes) {
+            assert_eq!(p.to_bytes().unwrap(), bytes, "{}", case["id"]);
+            if let Payload::PolicySet { defaults, .. } = &p {
+                assert!(defaults.is_none());
+            }
+            decoded += 1;
+        }
+    }
+    assert!(decoded >= 50, "{decoded}");
 }

@@ -115,7 +115,8 @@
       "oneOf": [
         { "$ref": "#/$defs/single_code" },
         { "$ref": "#/$defs/single_work" },
-        { "$ref": "#/$defs/single_aim" }
+        { "$ref": "#/$defs/single_aim" },
+        { "$ref": "#/$defs/single_case" }
       ]
     },
     "single_code": {
@@ -129,6 +130,10 @@
     "single_aim": {
       "type": "object", "required": ["aim"], "additionalProperties": false,
       "properties": { "aim": { "$ref": "#/$defs/digest" } }
+    },
+    "single_case": {
+      "type": "object", "required": ["case"], "additionalProperties": false,
+      "properties": { "case": { "$ref": "#/$defs/digest" } }
     },
     "param_value": {
       "oneOf": [

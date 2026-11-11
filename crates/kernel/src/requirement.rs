@@ -181,7 +181,10 @@ pub fn matches(term: &RequirementTerm, proof: &Proof, ctx: &Context<'_>) -> bool
     let own = term.independence != Independence::None
         && proof.kind == ProofKind::Contribution
         && ctx.actor_instance == Some(proof.instance);
-    !own && proof.kind == term.proof_kind
+    // OP-157 m.3 (b), §13.7.3
+    let surface = term.independence != Independence::DistinctSurface;
+    !own && surface
+        && proof.kind == term.proof_kind
         && proof.class == term.class
         && bound
         && fresh
@@ -207,7 +210,7 @@ fn independence_key(proof: &Proof, independence: Independence) -> Option<Id> {
     match independence {
         Independence::None => None,
         Independence::DistinctParty => Some(proof.party),
-        Independence::DistinctInstance => Some(proof.instance),
+        Independence::DistinctInstance | Independence::DistinctSurface => Some(proof.instance),
         Independence::DistinctIssuer => Some(proof.issuer),
     }
 }

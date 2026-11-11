@@ -13,6 +13,7 @@ pub mod binding;
 pub mod claim;
 pub mod codec;
 pub mod combinator;
+pub mod compat;
 pub mod contribution;
 pub mod digest;
 pub mod fold;

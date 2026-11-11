@@ -724,6 +724,10 @@ impl Out {
                 self.key("aim");
                 self.digest(d);
             }
+            PurposeRef::Case(d) => {
+                self.key("case");
+                self.digest(d);
+            }
         }
         self.0.push('}');
     }

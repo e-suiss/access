@@ -80,7 +80,7 @@
           "type": "object",
           "required": ["distinct"],
           "additionalProperties": false,
-          "properties": { "distinct": { "type": "string", "enum": ["party", "instance", "issuer"] } }
+          "properties": { "distinct": { "type": "string", "enum": ["party", "instance", "issuer", "surface"] } }
         },
         "consumption": { "const": "single_use" },
         "source": { "$ref": "#/$defs/subject_selector" },

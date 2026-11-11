@@ -189,6 +189,7 @@ impl Seam {
         )
         .unwrap();
         self.root(Payload::PolicySet {
+            defaults: None,
             policy: None,
             content,
         })

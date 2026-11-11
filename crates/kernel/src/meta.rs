@@ -296,6 +296,8 @@ pub enum Payload {
         policy: Option<Id>,
         /// Content.
         content: Value,
+        /// Policy defaults (OP-157 m.3 (n)); absent in 0.4.0 payloads.
+        defaults: Option<PolicyDefaults>,
     },
     /// `policy_retire`.
     PolicyRetire {
@@ -495,6 +497,9 @@ pub enum MetaError {
     /// A release would exceed the draw or reuses a ground (TI-RT8, OP-141 m.28 (f)).
     #[error("release exceeds draw")]
     ReleaseExceedsDraw,
+    /// A policy default this Kernel does not apply (OP-157 m.3 (n)).
+    #[error("policy default unknown")]
+    DefaultUnknown,
 }
 
 impl MetaError {
@@ -514,6 +519,7 @@ impl MetaError {
             Self::Depth => "meta-depth",
             Self::Corrupt => "meta-corrupt",
             Self::ReleaseExceedsDraw => "meta-release-exceeds-draw",
+            Self::DefaultUnknown => "policy-default-unknown",
         }
     }
 }
@@ -956,11 +962,16 @@ impl Canonical for Payload {
                 "acceptance_revoke",
                 map([("acceptance", Some(acceptance.to_value()))]),
             ),
-            Self::PolicySet { policy, content } => (
+            Self::PolicySet {
+                policy,
+                content,
+                defaults,
+            } => (
                 "policy_set",
                 map([
                     ("policy", policy.as_ref().map(Canonical::to_value)),
                     ("content", Some(content.clone())),
+                    ("defaults", defaults.as_ref().map(PolicyDefaults::to_value)),
                 ]),
             ),
             Self::PolicyRetire { policy } => {
@@ -1132,6 +1143,10 @@ impl Canonical for Payload {
             "policy_set" => Self::PolicySet {
                 policy: f.opt("policy").map(id).transpose()?,
                 content: policy_content(f.req("content")?)?,
+                defaults: f
+                    .opt("defaults")
+                    .map(PolicyDefaults::from_value)
+                    .transpose()?,
             },
             "policy_retire" => Self::PolicyRetire {
                 policy: id(f.req("policy")?)?,
@@ -1250,6 +1265,13 @@ fn acceptance_content(v: &Value) -> Result<Value, ModelError> {
         }
         crate::claim::check_pinned(p)?;
     }
+    // OP-157 m.3 (b), (r)
+    if let Some(m) = f.opt("mappings") {
+        if !schema {
+            return Err(ModelError::Shape);
+        }
+        set_of(m, true, <Digest as Canonical>::from_value)?;
+    }
     crate::codec::assurance(f.opt("assurance_floor"))?;
     Window::from_value(f.req("validity")?)?;
     f.opt("ingest_until").map(uint).transpose()?;
@@ -1263,6 +1285,81 @@ fn acceptance_content(v: &Value) -> Result<Value, ModelError> {
     }
     f.done()?;
     Ok(v.clone())
+}
+
+/// Policy defaults carried by `policy_set` (OP-157 m.3 (n)). Each key has one tightening
+/// direction; an unknown key does not decode (OP-108 m.4).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PolicyDefaults {
+    /// CT3 effect delay in seconds; larger is tighter.
+    pub ct3_delay_s: Option<u64>,
+    /// Mapping probation in days; larger is tighter.
+    pub mapping_probation_days: Option<u64>,
+    /// Accepted approval surface profiles; smaller is tighter.
+    pub approval_surfaces: Option<BTreeSet<String>>,
+    /// Break-glass review deadline in hours; smaller is tighter.
+    pub breakglass_review_h: Option<u64>,
+    /// Longest support access in minutes; smaller is tighter.
+    pub support_max_min: Option<u64>,
+}
+
+/// The policy default keys this version defines (OP-157 m.3 (n)).
+pub const POLICY_DEFAULT_KEYS: [&str; 5] = [
+    "approval_surfaces",
+    "breakglass_review_h",
+    "ct3_delay_s",
+    "mapping_probation_days",
+    "support_max_min",
+];
+
+impl Canonical for PolicyDefaults {
+    fn to_value(&self) -> Value {
+        map([
+            (
+                "approval_surfaces",
+                self.approval_surfaces
+                    .as_ref()
+                    .map(|s| set_value(s.iter().map(|t| Value::text(t)))),
+            ),
+            (
+                "breakglass_review_h",
+                self.breakglass_review_h.map(Value::Unsigned),
+            ),
+            ("ct3_delay_s", self.ct3_delay_s.map(Value::Unsigned)),
+            (
+                "mapping_probation_days",
+                self.mapping_probation_days.map(Value::Unsigned),
+            ),
+            ("support_max_min", self.support_max_min.map(Value::Unsigned)),
+        ])
+    }
+
+    fn from_value(v: &Value) -> Result<Self, ModelError> {
+        let mut f = Fields::of(v)?;
+        if f.is_empty() {
+            return Err(ModelError::Range);
+        }
+        let d = Self {
+            approval_surfaces: f
+                .opt("approval_surfaces")
+                .map(|s| {
+                    set_of(s, true, |x| {
+                        let t = crate::codec::text(x)?;
+                        if t.is_empty() {
+                            return Err(ModelError::Range);
+                        }
+                        Ok(String::from(t))
+                    })
+                })
+                .transpose()?,
+            breakglass_review_h: f.opt("breakglass_review_h").map(uint).transpose()?,
+            ct3_delay_s: f.opt("ct3_delay_s").map(uint).transpose()?,
+            mapping_probation_days: f.opt("mapping_probation_days").map(uint).transpose()?,
+            support_max_min: f.opt("support_max_min").map(uint).transpose()?,
+        };
+        f.done()?;
+        Ok(d)
+    }
 }
 
 /// The one restriction schema of this version (OP-141 m.27 (a)).
@@ -3040,7 +3137,15 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             a.ended = Some(end(ctx.pos, EndedHow::Revoked));
             set(&mut out, kind::ACCEPTANCE, acceptance, a.to_value());
         }
-        Payload::PolicySet { policy, content } => {
+        Payload::PolicySet {
+            policy,
+            content,
+            defaults,
+        } => {
+            // OP-157 m.3 (b), (n)
+            if defaults.is_some() {
+                return Err(MetaError::DefaultUnknown);
+            }
             policy_content(content).map_err(MetaError::Malformed)?;
             out.requirements = domain_root(ctx, view)?;
             let id = match policy {

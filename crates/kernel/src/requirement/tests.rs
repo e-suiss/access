@@ -222,3 +222,20 @@ fn fuel_runs_out() {
     );
     assert!(resolve(&set, &proofs, &ctx(), &mut Fuel(3)).is_ok());
 }
+
+// OP-157 m.3 (b), §13.7.3
+#[test]
+fn a_distinct_surface_term_is_unmet_until_proofs_carry_a_surface() {
+    let surfaces = term(1, Independence::DistinctSurface, Consumption::Reusable);
+    assert_eq!(
+        run(
+            core::slice::from_ref(&surfaces),
+            &[proof(1, 1, 1), proof(2, 2, 2)]
+        ),
+        vec![Outcome::Unmet(1)]
+    );
+    assert_eq!(
+        RequirementTerm::from_value(&surfaces.to_value()),
+        Ok(surfaces)
+    );
+}

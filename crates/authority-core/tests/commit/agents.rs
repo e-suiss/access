@@ -204,6 +204,7 @@ fn set_pattern(d: Digest, nonce: u8, p: &Pattern) -> Request {
         nonce,
         ExerciseBasis::Anchor(meta::meta_anchor(&d)),
         Payload::PolicySet {
+            defaults: None,
             policy: None,
             content: patterns::content(p).unwrap(),
         },

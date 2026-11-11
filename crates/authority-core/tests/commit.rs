@@ -3411,7 +3411,11 @@ fn policy_set(
         d,
         nonce,
         ExerciseBasis::Anchor(meta::meta_anchor(&d)),
-        Payload::PolicySet { policy, content },
+        Payload::PolicySet {
+            policy,
+            content,
+            defaults: None,
+        },
     )
 }
 

@@ -437,6 +437,7 @@ async fn a_regulatory_template_is_enforced_on_the_decision_path() {
     // §10.3.4
     let (sca, _) =
         p.s.root(Payload::PolicySet {
+            defaults: None,
             policy: None,
             content: Template::Psd2Sca.content(&install).unwrap(),
         })
@@ -458,6 +459,7 @@ async fn a_regulatory_template_is_enforced_on_the_decision_path() {
 
     // U62, MD-11
     p.s.root(Payload::PolicySet {
+        defaults: None,
         policy: None,
         content: Template::TrGkd.content(&install).unwrap(),
     })

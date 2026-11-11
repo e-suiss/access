@@ -114,7 +114,7 @@ fn eq_text(v: &EqValue) -> String {
 fn purpose_text(p: &PurposeRef) -> String {
     match p {
         PurposeRef::Code(c) => c.clone(),
-        PurposeRef::Work(d) | PurposeRef::Aim(d) => hex(&d.0),
+        PurposeRef::Work(d) | PurposeRef::Aim(d) | PurposeRef::Case(d) => hex(&d.0),
     }
 }
 

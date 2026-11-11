@@ -315,6 +315,50 @@ fn first_contact_examples_meet_the_cddl() {
     check_examples("first-contact-token.json");
 }
 
+// OP-157 m.3 (b), (r), §9.13.4, INV-8
+#[test]
+fn compat_mapping_examples_are_the_kernels() {
+    use access_kernel::codec::Canonical;
+    use access_kernel::compat::Mapping;
+    check_examples("compat-mapping.json");
+    let doc: Json = serde_json::from_str(&read("cddl/examples/compat-mapping.json")).unwrap();
+    for case in doc["cases"].as_array().unwrap() {
+        let value = value_sorted(&edn::parse(case["edn"].as_str().unwrap()));
+        assert_eq!(
+            Mapping::from_value(&value).is_ok(),
+            case["valid"].as_bool().unwrap(),
+            "{}: the Kernel and the CDDL disagree",
+            case["id"]
+        );
+    }
+}
+
+// OP-157 m.3 (j), OP-46, G63
+#[test]
+fn breakglass_directive_examples_meet_the_cddl() {
+    check_examples("breakglass-directive.json");
+    check_examples("breakglass-trail.json");
+}
+
+// OP-157 m.3 (x), CR-29
+#[test]
+fn ceremony_examples_meet_the_cddl() {
+    check_examples("ceremony-permit.json");
+    check_examples("ceremony-transcript.json");
+}
+
+// OP-157 m.3 (m), SEC26
+#[test]
+fn approval_inline_examples_meet_the_cddl() {
+    check_examples("approval-inline.json");
+}
+
+// OP-157 m.3 (s), P2
+#[test]
+fn conformance_profile_examples_meet_both_schemas() {
+    check_examples("conformance-profile.json");
+}
+
 // IDP-40, F23, OP-155 m.3 (q)
 #[test]
 fn interop_profile_examples_meet_both_schemas() {

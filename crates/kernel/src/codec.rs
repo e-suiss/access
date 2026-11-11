@@ -408,6 +408,7 @@ impl Canonical for PurposeRef {
             Self::Code(c) => tagged("code", Value::text(c)),
             Self::Work(d) => tagged("work", d.to_value()),
             Self::Aim(d) => tagged("aim", d.to_value()),
+            Self::Case(d) => tagged("case", d.to_value()),
         }
     }
 
@@ -416,6 +417,7 @@ impl Canonical for PurposeRef {
             ("code", c) => Ok(Self::Code(ident(c)?)),
             ("work", d) => Ok(Self::Work(Canonical::from_value(d)?)),
             ("aim", d) => Ok(Self::Aim(Canonical::from_value(d)?)),
+            ("case", d) => Ok(Self::Case(Canonical::from_value(d)?)),
             _ => Err(ModelError::Unknown),
         }
     }
@@ -925,10 +927,11 @@ const CONSUMPTIONS: [(&str, Consumption); 2] = [
     ("reusable", Consumption::Reusable),
     ("single_use", Consumption::SingleUse),
 ];
-const DISTINCT: [(&str, Independence); 3] = [
+const DISTINCT: [(&str, Independence); 4] = [
     ("party", Independence::DistinctParty),
     ("instance", Independence::DistinctInstance),
     ("issuer", Independence::DistinctIssuer),
+    ("surface", Independence::DistinctSurface),
 ];
 
 impl Canonical for RequirementTerm {

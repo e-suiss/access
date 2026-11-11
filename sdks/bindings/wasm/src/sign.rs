@@ -315,6 +315,7 @@ pub(crate) fn describe_intent(bytes: &[u8]) -> Result<String, Refused> {
         Some(PurposeRef::Code(c)) => format!("{{\"code\":{}}}", q(c)),
         Some(PurposeRef::Work(d)) => format!("{{\"work\":{}}}", b(&d.0)),
         Some(PurposeRef::Aim(d)) => format!("{{\"aim\":{}}}", b(&d.0)),
+        Some(PurposeRef::Case(d)) => format!("{{\"case\":{}}}", b(&d.0)),
     };
     Ok(format!(
         "{{\"digest\":{},\"action\":{{\"namespace\":{},\"name\":{},\"major\":{}}},\"resources\":[{}],\"params\":{{{}}},\"opaque\":[{}],\"recipient\":{},\"purpose\":{purpose},\"validity\":{{\"from\":{},\"until\":{}}}}}",
