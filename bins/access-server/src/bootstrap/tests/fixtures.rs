@@ -129,6 +129,45 @@ async fn the_bootstrap_makes_the_stage_twelve_fixtures_once_through_their_exerci
     );
     t.commit().await.unwrap();
 
+    // OP-157 m.3 (w), m.18, Ek B 5565
+    let keks = crate::login::RealmKeks::new(w.keys.clone());
+    let inputs = crate::reviews::Inputs {
+        app: &w.db.app,
+        router: &w.db.router,
+        keks: &keks,
+        ids: &ids,
+        console: Some("https://manage.access.test"),
+    };
+    let now = server_time(&w.db.app).await.unwrap();
+    let sent = crate::reviews::step(&*w.domains, &inputs, "fixtures", now)
+        .await
+        .unwrap();
+    assert_eq!(sent, 1, "the manager of one item is told once");
+    let notices = identity_events_until(
+        &w.db,
+        "relay.message.review_campaign.v1",
+        |q| !q.is_empty(),
+        "the period's notice",
+    )
+    .await;
+    assert_eq!(notices.len(), 1);
+    assert_eq!(
+        crate::reviews::step(&*w.domains, &inputs, "fixtures", now + 60_000)
+            .await
+            .unwrap(),
+        0,
+        "a period is announced once"
+    );
+    let next = now + 90 * 86_400_000;
+    assert_eq!(
+        crate::reviews::step(&*w.domains, &inputs, "fixtures", next)
+            .await
+            .unwrap(),
+        1,
+        "the next period is announced again"
+    );
+    w.domains.release().await;
+
     // OP-69
     schedule(&signer);
     let second = serde_json::to_value(w.run(&fixtures_plan()).await).unwrap();

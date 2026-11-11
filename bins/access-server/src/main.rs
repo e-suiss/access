@@ -43,6 +43,7 @@ mod product;
 mod proxy;
 mod relay;
 mod retention;
+mod reviews;
 mod risk;
 mod saml;
 mod scim;
@@ -1753,6 +1754,7 @@ async fn serve(
     let edge_keks = keks.clone();
     let scim_keks = keks.clone();
     let hr_keks = keks.clone();
+    let review_keks = keks.clone();
     // OP-155 m.3 (c), (e), (f)
     let saml = Arc::new(saml::Saml::new(
         all.app.clone(),
@@ -1811,6 +1813,7 @@ async fn serve(
         scim_ids,
     )?;
     let directive_router = router_pool.clone();
+    let review_router = router_pool.clone();
     let realms = identity(config, router_pool, app.clone(), prepared.tls_names.clone()).await?;
     // OP-67 m.3, OP-138
     background.jwks.set(true);
@@ -1858,6 +1861,16 @@ async fn serve(
     };
     // SEC19, OP-157 m.3 (k)
     let watching_operators = tokio::spawn(directives::watch_sessions(product_app.clone()));
+    // OP-157 m.3 (w), m.18
+    let reviewing = tokio::spawn(reviews::run(
+        domains.clone(),
+        (product_app.clone(), review_router),
+        (review_keks, cell_ids.clone()),
+        (
+            config.suiss.as_ref().map(|s| s.management_api.clone()),
+            holder()?,
+        ),
+    ));
     // OP-38, OP-44, CMP-6, T16
     let led = domains.clone();
     let checkpointing = checkpoints::Checkpointers::start(
@@ -2126,6 +2139,7 @@ async fn serve(
         d.abort();
     }
     watching_operators.abort();
+    reviewing.abort();
     renewing.stop().await;
     scim_outbound.stop().await;
     domains.release().await;
