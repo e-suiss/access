@@ -1,0 +1,161 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT * FROM (\n                SELECT DISTINCT ON (exercise) exercise, version, state, drill, grant_id, actor,\n                       subject, used_at_ms, due_at_ms, classification, reviewer, decision_pos\n                  FROM access.breakglass_reviews\n                 WHERE tenant_id = $1 AND realm_id = $2\n                 ORDER BY exercise, version DESC) latest\n              ORDER BY used_at_ms DESC, exercise",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exercise",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.breakglass_reviews",
+            "name": "exercise"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.breakglass_reviews",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.breakglass_reviews",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "drill",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.breakglass_reviews",
+            "name": "drill"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "grant_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.breakglass_reviews",
+            "name": "grant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "actor",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.breakglass_reviews",
+            "name": "actor"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "subject",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.breakglass_reviews",
+            "name": "subject"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "used_at_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.breakglass_reviews",
+            "name": "used_at_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "due_at_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.breakglass_reviews",
+            "name": "due_at_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "classification",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.breakglass_reviews",
+            "name": "classification"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "reviewer",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.breakglass_reviews",
+            "name": "reviewer"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.breakglass_reviews",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "5859bb2369451a4b6f88bea5791125ed7bae3acc33a6ff58dbd9ba2b30fc7546"
+}

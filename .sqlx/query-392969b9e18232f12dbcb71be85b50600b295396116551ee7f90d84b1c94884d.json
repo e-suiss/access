@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.breakglass_reviews (tenant_id, realm_id, exercise, version, state,\n                    drill, grant_id, actor, subject, used_at_ms, due_at_ms, classification,\n                    reviewer, domain_id, decision_pos)\n             VALUES ($1, $2, $3, $4, 'reviewed', $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Int8",
+        "Bool",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Int8",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "392969b9e18232f12dbcb71be85b50600b295396116551ee7f90d84b1c94884d"
+}

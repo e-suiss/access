@@ -14,6 +14,7 @@ pub mod authority;
 pub mod authority_checkpoint;
 pub mod backchannel;
 pub mod bodies;
+pub mod breakglass;
 pub mod certificate;
 pub mod challenges;
 pub mod ciba;
