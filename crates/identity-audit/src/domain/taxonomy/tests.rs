@@ -102,9 +102,6 @@ const UNPRODUCED: &[&str] = &[
     "upgrade.activated",
     "drill.restore",
     "identity.degraded",
-    "kek.rotated",
-    "binding.cloned",
-    "mds.refreshed",
 ];
 
 // OP-41, OP-47, §17.8.1

@@ -274,12 +274,12 @@ impl HashProfile {
         Ok(next)
     }
 
-    /// The stable name (`standard`, `high_memory`).
+    /// The stable name `idp.realm.hash_profile` stores (`canonical`, `high-memory`).
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
-            Self::Standard => "standard",
-            Self::HighMemory => "high_memory",
+            Self::Standard => "canonical",
+            Self::HighMemory => "high-memory",
         }
     }
 
@@ -287,8 +287,8 @@ impl HashProfile {
     #[must_use]
     pub fn parse(name: &str) -> Option<Self> {
         match name {
-            "standard" => Some(Self::Standard),
-            "high_memory" => Some(Self::HighMemory),
+            "canonical" => Some(Self::Standard),
+            "high-memory" => Some(Self::HighMemory),
             _ => None,
         }
     }

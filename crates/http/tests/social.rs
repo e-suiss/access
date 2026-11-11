@@ -484,6 +484,9 @@ async fn env(seed: u8, slug: &str) -> Env {
         auth: AuthPolicy::DEFAULT,
         lifetimes: SessionPolicy::DEFAULT,
         signin: RealmSignin::default(),
+        hash: access_identity_account::domain::password::HashPolicy::Argon2(
+            access_identity_account::domain::password::Argon2Params::CANONICAL,
+        ),
     });
     let clock = TestClock(Arc::new(AtomicU64::new(T0)));
     let entry = RealmEntry {

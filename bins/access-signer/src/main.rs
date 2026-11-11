@@ -2,6 +2,7 @@
 //! HSM, locks itself down and serves the signer crate over a Unix socket (OP-62).
 
 mod ceremony;
+mod clone;
 mod config;
 mod hsm_log;
 
@@ -178,6 +179,52 @@ fn ceremony_command(args: &[OsString]) -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             ceremony::refused(&error);
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `access-signer binding-clone ...` (CR-30): only while the ceremony has the binding keys
+/// activated, with each step journaled.
+fn clone_command(args: &[OsString]) -> ExitCode {
+    let step = match clone::step(args) {
+        Ok(step) => step,
+        Err(error) => {
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("access-signer: {error}");
+            }
+            return ExitCode::FAILURE;
+        }
+    };
+    let Some(config) = configured() else {
+        return ExitCode::FAILURE;
+    };
+    let (Some(hsm), Some(ceremony)) = (&config.hsm, &config.ceremony) else {
+        return ExitCode::FAILURE;
+    };
+    if activated(ceremony).is_none() {
+        return ExitCode::FAILURE;
+    }
+    let callers = config
+        .callers
+        .iter()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join("+");
+    let done = open_hsm(hsm).and_then(|(store, kek)| {
+        drop(kek);
+        let journal = hsm_log::Journal::open(
+            &config.vault.join("hsm-usage.log"),
+            &format!("uid:{callers}"),
+        )
+        .map_err(|e| e.to_string())?;
+        clone::run(&store, &journal, &step).map_err(|e| e.to_string())
+    });
+    match done {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            tracing::error!(%error, "binding key not cloned (CR-30)");
             ExitCode::FAILURE
         }
     }
@@ -460,10 +507,11 @@ fn main() -> ExitCode {
         [] => false,
         [a] if a == "init" => true,
         [a, rest @ ..] if a == "ceremony" => return ceremony_command(rest),
+        [a, rest @ ..] if a == "binding-clone" => return clone_command(rest),
         _ => {
             #[allow(clippy::print_stderr)]
             {
-                eprintln!("usage: access-signer [init | ceremony ...]");
+                eprintln!("usage: access-signer [init | ceremony ... | binding-clone ...]");
             }
             return ExitCode::FAILURE;
         }

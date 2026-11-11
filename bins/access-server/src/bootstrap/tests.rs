@@ -2607,3 +2607,5 @@ mod faults;
 mod reshred;
 // OP-158 m.4 (b)
 mod kek_rotation;
+// OP-158 m.4 (b)
+mod realm_crypto;

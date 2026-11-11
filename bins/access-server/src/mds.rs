@@ -130,6 +130,23 @@ impl Metadata {
             .await
             .map_err(|e| WebAuthnError::MdsSource(e.to_string()))?;
         self.held.replace(blob).await?;
+        let target = format!("fido-mds:{serial}");
+        // OP-41, OP-148
+        access_store::operational::record_operational(
+            app,
+            &access_store::operational::OperationalEvent {
+                event_type: "mds.refreshed",
+                occurred_at_ms: now_s.saturating_mul(1000),
+                tenant: None,
+                domain: None,
+                actor: "access-server:fido-mds",
+                target: &target,
+                reason: "",
+                correlation: &target,
+            },
+        )
+        .await
+        .map_err(|e| WebAuthnError::MdsSource(e.to_string()))?;
         tracing::info!(serial, "FIDO metadata refreshed (OP-148)");
         Ok(Refreshed::Fetched(serial))
     }

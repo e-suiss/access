@@ -253,6 +253,7 @@ macro_rules! signin {
         let notifier_realm = $kit.realm();
         let notifier = $self.messages.notifier(&notifier_realm);
         let link_base = format!("{}/login/link#", $kit.issuer);
+        let realm_hasher = $self.hasher.for_policy($kit.hash);
         let $auth = ::access_identity_session::app::Auth {
             db: &db,
             realm: $kit.realm(),
@@ -263,7 +264,7 @@ macro_rules! signin {
             notifier: &notifier,
             link_base: &link_base,
             gate: &$self.gate,
-            hasher: &$self.hasher,
+            hasher: &realm_hasher,
             hooks: &*$self.hooks,
             passkeys: ::access_identity_session::app::Passkeys {
                 registry: &registry,

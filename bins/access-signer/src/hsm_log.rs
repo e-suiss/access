@@ -21,6 +21,9 @@ use zeroize::Zeroizing;
 /// The audit taxonomy name of a journal line.
 pub(crate) const AUDIT_EVENT: &str = "signer.hsm_used";
 
+/// CR-30, OP-158 m.3 (y): the journal line of a binding key copied to or from the DR token.
+pub(crate) const AUDIT_EVENT_BINDING_CLONED: &str = "binding.cloned";
+
 /// Why the journal is unusable.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum JournalError {
@@ -86,6 +89,23 @@ impl Journal {
         op: &str,
         count: u64,
     ) -> Result<(), JournalError> {
+        self.line(AUDIT_EVENT, purpose, key, op, count)
+    }
+
+    /// CR-30: writes the [`AUDIT_EVENT_BINDING_CLONED`] line of `op` (`export` or `import`) on
+    /// the binding key `key`.
+    pub(crate) fn cloned(&self, key: &str, op: &str) -> Result<(), JournalError> {
+        self.line(AUDIT_EVENT_BINDING_CLONED, "binding", key, op, 1)
+    }
+
+    fn line(
+        &self,
+        event: &str,
+        purpose: &str,
+        key: &str,
+        op: &str,
+        count: u64,
+    ) -> Result<(), JournalError> {
         let mut head = self.head.lock().map_err(|_| JournalError::Io)?;
         let (seq, prev) = *head;
         let at = std::time::SystemTime::now()
@@ -95,7 +115,7 @@ impl Journal {
             "purpose={purpose},key={key},op={op},caller={},count={count}",
             self.caller
         );
-        let body = format!("{seq} {at} {AUDIT_EVENT} {fields}");
+        let body = format!("{seq} {at} {event} {fields}");
         let mut input = prev.to_vec();
         input.extend(body.as_bytes());
         let hash = sha256(&input);
@@ -109,15 +129,19 @@ impl Journal {
             .map_err(|_| JournalError::Io)?;
         *head = (seq.checked_add(1).ok_or(JournalError::Chain)?, hash);
         drop(head);
-        tracing::info!(
-            event = "signer.hsm_used",
-            purpose,
-            key,
-            op,
-            caller = %self.caller,
-            count,
-            "HSM operation"
-        );
+        if event == AUDIT_EVENT {
+            tracing::info!(
+                event = "signer.hsm_used",
+                purpose,
+                key,
+                op,
+                caller = %self.caller,
+                count,
+                "HSM operation"
+            );
+        } else {
+            tracing::info!(audit = event, key, op, caller = %self.caller, "binding key cloned (CR-30)");
+        }
         Ok(())
     }
 }

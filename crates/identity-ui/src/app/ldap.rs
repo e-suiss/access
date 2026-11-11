@@ -139,9 +139,10 @@ where
                 correlation: b.correlation,
                 at_ms: tx.server_time().await?,
             };
+            let hasher = self.hasher.for_policy(kit.hash);
             let out = ldap::issue(
                 &mut tx,
-                &self.hasher,
+                &hasher,
                 &SystemEntropy,
                 &notifier,
                 subject,

@@ -380,6 +380,7 @@ struct Settings {
     push: bool,
     sms: bool,
     spc: bool,
+    crypto: access_store::realm_crypto::RealmCrypto,
 }
 
 /// A kit and the settings it was built from.
@@ -443,6 +444,8 @@ impl HsmKits {
         // OP-156 m.3 (f), (g)
         let sms = t.sms_otp_enabled().await.map_err(|_| Unavailable)?;
         let spc = t.spc_enabled().await.map_err(|_| Unavailable)?;
+        // OP-158 m.3 (y), m.6 (b)
+        let crypto = t.realm_crypto().await.map_err(|_| Unavailable)?;
         t.commit().await.map_err(|_| Unavailable)?;
         Ok(Settings {
             signin,
@@ -452,6 +455,7 @@ impl HsmKits {
             push,
             sms,
             spc,
+            crypto,
         })
     }
 
@@ -531,8 +535,19 @@ impl HsmKits {
             },
             lifetimes: self.lifetimes,
             signin,
+            hash: hash_policy(&settings.crypto)?,
         })
     }
+}
+
+/// CR-15, CR-36, OP-158 m.3 (y), m.6 (b): the realm's password hash policy; an unknown stored
+/// profile refuses the kit rather than hashing weaker.
+fn hash_policy(
+    c: &access_store::realm_crypto::RealmCrypto,
+) -> Result<access_identity_account::domain::password::HashPolicy, String> {
+    use access_identity_account::domain::password::{HashPolicy, HashProfile};
+    let profile = HashProfile::parse(&c.hash_profile).ok_or("hash profile")?;
+    Ok(HashPolicy::of(profile, c.fips))
 }
 
 /// The base a realm issuer host sits under when the deployment's is not given: its parent for

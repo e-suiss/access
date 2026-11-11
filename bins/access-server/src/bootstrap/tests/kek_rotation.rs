@@ -110,6 +110,17 @@ async fn a_realm_kek_rotation_rewraps_inside_the_token_and_resumes() {
     assert_eq!(done.rotation.rewrapped, u64::try_from(before).unwrap());
     assert_eq!(under(&c, &first).await, 0);
     assert_eq!(under(&c, &second).await, before);
+    // OP-41
+    let audited = access_store::operational::operational_rows(&c.w.db.checkpointer, 10_000)
+        .await
+        .unwrap();
+    assert_eq!(
+        audited
+            .iter()
+            .filter(|r| r.event_type == "kek.rotated" && r.target == second)
+            .count(),
+        1
+    );
 
     let old = c.w.keys.kek(&kek_label_at(&realm, 1)).unwrap();
     let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)

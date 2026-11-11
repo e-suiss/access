@@ -898,7 +898,7 @@ pub(super) async fn admin_write(
     );
     let nonce = access_crypto::random::bytes::<16>().unwrap();
     let ais = c.browser.ais(domain, &nonce, digest, Mode::Commit, basis);
-    let method = if path.ends_with("recovery-policy") {
+    let method = if path.ends_with("recovery-policy") || operation.starts_with("put") {
         Method::PUT
     } else {
         Method::POST

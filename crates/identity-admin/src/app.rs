@@ -829,14 +829,23 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::DelegatedAdmin(_)
             | Change::ApprovalInline(_)
             | Change::ApprovalBatch(_)
-            | Change::AuditTier(_) => {}
+            | Change::AuditTier(_)
+            | Change::CryptoProfile(_) => {}
             // OP-158 m.4 (a)
             Change::Rehome(_)
             | Change::Residency(_)
             | Change::DrProfile(_)
-            | Change::RateLimit(_)
-            | Change::CryptoProfile(_)
-            | Change::HashProfileSet(_) => return Err(Invalid::NotYetServed.into()),
+            | Change::RateLimit(_) => return Err(Invalid::NotYetServed.into()),
+            // OP-33, OP-158 m.3 (a), m.6 (b)
+            Change::HashProfileSet(p) => {
+                let now = t.realm_crypto().await?;
+                if p.profile.name() != now.hash_profile
+                    && !(p.profile == crate::domain::resilience::HashProfile::HighMemory
+                        && now.hash_profile == "canonical")
+                {
+                    return Err(Invalid::HashProfileDowngrade.into());
+                }
+            }
             // OP-157 m.3 (w)
             Change::Review(r) => review::current(t, r).await?,
             // OP-157 m.3 (h)
@@ -1651,9 +1660,18 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::Rehome(_)
             | Change::Residency(_)
             | Change::DrProfile(_)
-            | Change::RateLimit(_)
-            | Change::CryptoProfile(_)
-            | Change::HashProfileSet(_) => return Err(Invalid::NotYetServed.into()),
+            | Change::RateLimit(_) => return Err(Invalid::NotYetServed.into()),
+            // CR-15, CR-36, OP-158 m.3 (y)
+            Change::CryptoProfile(c) => {
+                t.put_realm_crypto(bound, Some(c.fips), None).await?;
+                true
+            }
+            // OP-33, OP-158 m.3 (a), m.6 (b)
+            Change::HashProfileSet(p) => {
+                t.put_realm_crypto(bound, None, Some(p.profile.name()))
+                    .await?;
+                true
+            }
             // OP-158 m.3 (w)
             Change::AuditTier(tier) => {
                 let row = tier.as_ref().map(|x| access_store::audit_tier::RealmTier {

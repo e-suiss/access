@@ -162,12 +162,14 @@ impl HashMetrics {
     }
 }
 
-/// The password hashing service.
+/// The password hashing service. [`Hasher::for_policy`] gives a realm's view of it: the same
+/// semaphore and counters, hashing under that realm's policy.
 pub struct Hasher {
     config: HasherConfig,
     semaphore: Arc<Semaphore>,
-    metrics: HashMetrics,
+    metrics: Arc<HashMetrics>,
     legacy_idp: Option<Arc<dyn LegacyIdp>>,
+    policy: Option<HashPolicy>,
 }
 
 impl Hasher {
@@ -177,8 +179,22 @@ impl Hasher {
         Self {
             semaphore: Arc::new(Semaphore::new(config.permits.max(1))),
             config,
-            metrics: HashMetrics::default(),
+            metrics: Arc::new(HashMetrics::default()),
             legacy_idp: None,
+            policy: None,
+        }
+    }
+
+    /// This service hashing under a realm's `policy` (§10.2.1, CR-15, CR-36, OP-158 m.3 (y)):
+    /// [`Hasher::hash`] and [`Hasher::verify`] then follow it, on the shared semaphore.
+    #[must_use]
+    pub fn for_policy(&self, policy: HashPolicy) -> Self {
+        Self {
+            config: self.config,
+            semaphore: Arc::clone(&self.semaphore),
+            metrics: Arc::clone(&self.metrics),
+            legacy_idp: self.legacy_idp.clone(),
+            policy: Some(policy),
         }
     }
 
@@ -197,7 +213,7 @@ impl Hasher {
 
     /// The counters.
     #[must_use]
-    pub const fn metrics(&self) -> &HashMetrics {
+    pub fn metrics(&self) -> &HashMetrics {
         &self.metrics
     }
 
@@ -280,6 +296,9 @@ impl Hasher {
         password: &Password,
         salt: [u8; 16],
     ) -> Result<Secret<String>, AccountError> {
+        if let Some(policy) = self.policy {
+            return self.hash_as(policy, password, salt).await;
+        }
         let params = self.config.params;
         let password = password.clone();
         self.run(move || password::hash(&params, &password, &salt))
@@ -295,6 +314,9 @@ impl Hasher {
         password: &Password,
         phc: Secret<String>,
     ) -> Result<Verification, AccountError> {
+        if let Some(policy) = self.policy {
+            return self.verify_as(policy, password, phc).await;
+        }
         let params = self.config.params;
         let password = password.clone();
         self.run(move || password::verify(&password, &phc, &params))
@@ -468,6 +490,38 @@ mod cpu_tests {
             h.metrics().hash_cpu_ns() > 1_000_000,
             "{}",
             h.metrics().hash_cpu_ns()
+        );
+    }
+}
+
+#[cfg(test)]
+mod view_tests {
+    #![allow(clippy::unwrap_used, reason = "test code")]
+
+    use super::*;
+    use crate::domain::password::HashProfile;
+
+    // CR-15, OP-158
+    #[tokio::test]
+    async fn a_realm_view_hashes_under_its_policy_on_the_shared_pool() {
+        let h = Hasher::new(HasherConfig::sized(Argon2Params::CANONICAL, 2, None));
+        let fips = h.for_policy(HashPolicy::of(HashProfile::Standard, true));
+        let pw = Password::new("correct horse battery").unwrap();
+        let salt = access_crypto::random::bytes::<16>().unwrap();
+        let phc = fips.hash(&pw, salt).await.unwrap();
+        assert!(phc.expose().starts_with("$pbkdf2-sha256$i=600000$"));
+        assert!(fips.verify(&pw, phc.clone()).await.unwrap().matched);
+        assert!(
+            h.hash(&pw, salt)
+                .await
+                .unwrap()
+                .expose()
+                .starts_with("$argon2id$")
+        );
+        assert_eq!(
+            h.metrics().hashes(),
+            3,
+            "the view counts on the shared counters"
         );
     }
 }

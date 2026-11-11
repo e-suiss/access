@@ -1742,7 +1742,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "rotateSshCa"
         | "replaceSshCa"
         // OP-157 m.3 (g)
-        | "putSupportArtifactPolicy" => (Settings, w(false)),
+        | "putSupportArtifactPolicy"
+        | "putCryptoProfile"
+        | "putHashProfile" => (Settings, w(false)),
         "revokeAllAgentInstances" => (Agents, Shape::RevokeAll),
         // OP-154 m.3 (t)
         "listVaultResources" => (
@@ -1836,8 +1838,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         // OP-158 m.4 (a)
         "getPlacement" => (ResourceKind::Placement, Shape::Planned("Declared")),
         "getDurability" => (ResourceKind::Durability, Shape::Planned("Declared")),
-        "putResidency" | "putDrProfile" | "putRateLimit" | "putCryptoProfile"
-        | "putHashProfile" => (Settings, Shape::Planned("WriteResult")),
+        "putResidency" | "putDrProfile" | "putRateLimit" => {
+            (Settings, Shape::Planned("WriteResult"))
+        }
         // OP-157 m.4 (a)
         "listCaseSystems" => (
             ResourceKind::CaseSystems,

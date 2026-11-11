@@ -105,6 +105,8 @@ pub mod review;
 pub mod kek;
 // OP-158 m.3 (y)
 pub mod mds;
+// OP-158 m.3 (y)
+pub mod realm_crypto;
 
 #[cfg(feature = "testing")]
 pub mod testing;

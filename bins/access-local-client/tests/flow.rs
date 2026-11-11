@@ -254,6 +254,9 @@ fn kit(entry: &RealmEntry) -> RealmKit {
         auth: AuthPolicy::DEFAULT,
         lifetimes: SessionPolicy::DEFAULT,
         signin: access_identity_session::domain::realm_policy::RealmSignin::default(),
+        hash: access_identity_account::domain::password::HashPolicy::Argon2(
+            access_identity_account::domain::password::Argon2Params::CANONICAL,
+        ),
     }
 }
 

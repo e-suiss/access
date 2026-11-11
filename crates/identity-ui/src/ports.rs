@@ -54,6 +54,9 @@ pub struct RealmKit {
     /// The realm's stored sign-in policy: registration rules, enumeration mode and e-mail reuse
     /// (TN-132, OP-153 m.3 (g), (i), (j)).
     pub signin: access_identity_session::domain::realm_policy::RealmSignin,
+    /// What the realm hashes passwords and recovery secrets with: Argon2id at its profile, or
+    /// PBKDF2 under the FIPS profile (OP-158 m.3 (y), m.6 (b)).
+    pub hash: access_identity_account::domain::password::HashPolicy,
 }
 
 impl RealmKit {

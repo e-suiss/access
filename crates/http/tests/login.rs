@@ -516,6 +516,9 @@ fn kit(tenant: TenantId, realm: RealmId, seed: u8, auth: AuthPolicy) -> RealmKit
         auth,
         lifetimes: SessionPolicy::DEFAULT,
         signin: access_identity_session::domain::realm_policy::RealmSignin::default(),
+        hash: access_identity_account::domain::password::HashPolicy::Argon2(
+            access_identity_account::domain::password::Argon2Params::CANONICAL,
+        ),
     }
 }
 

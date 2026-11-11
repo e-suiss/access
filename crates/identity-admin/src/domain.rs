@@ -2679,12 +2679,9 @@ impl Change {
             // OP-157 m.3 (w)
             Self::Review(r) => r.check(),
             // OP-158 m.4 (a)
-            Self::Rehome(_)
-            | Self::Residency(_)
-            | Self::DrProfile(_)
-            | Self::RateLimit(_)
-            | Self::CryptoProfile(_)
-            | Self::HashProfileSet(_) => Err(Invalid::NotYetServed),
+            Self::Rehome(_) | Self::Residency(_) | Self::DrProfile(_) | Self::RateLimit(_) => {
+                Err(Invalid::NotYetServed)
+            }
             // OP-157 m.3 (m)
             Self::ApprovalInline(_)
             | Self::ApprovalBatch(_)
@@ -2723,7 +2720,9 @@ impl Change {
             | Self::ProtectionMode { .. }
             | Self::AccountCanary(_)
             | Self::AccountDelete(_)
-            | Self::AuditTier(_) => Ok(()),
+            | Self::AuditTier(_)
+            | Self::CryptoProfile(_)
+            | Self::HashProfileSet(_) => Ok(()),
         }
     }
 

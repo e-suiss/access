@@ -105,6 +105,24 @@ pub(crate) async fn rotate(
         t.commit().await?;
         moved = moved.saturating_add(here);
         if done {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX));
+            // OP-41, OP-138
+            access_store::operational::record_operational(
+                app,
+                &access_store::operational::OperationalEvent {
+                    event_type: "kek.rotated",
+                    occurred_at_ms: now,
+                    tenant: Some(*tenant.as_bytes()),
+                    domain: None,
+                    actor: "access-server:rotate-kek",
+                    target: &rotation.to_kek,
+                    reason: "",
+                    correlation: &rotation.from_kek,
+                },
+            )
+            .await?;
             tracing::info!(
                 to = %rotation.to_kek,
                 rewrapped = rotation.rewrapped.saturating_add(moved),

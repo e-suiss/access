@@ -185,6 +185,15 @@ async fn the_blob_is_fetched_verified_cached_and_never_rolled_back() {
     );
     assert_eq!(twin.hits.load(Ordering::SeqCst), 1);
     assert_eq!(first.current(NOW).await.unwrap().serial, 7);
+    // OP-41
+    let audited = access_store::operational::operational_rows(&db.checkpointer, 100)
+        .await
+        .unwrap();
+    assert!(
+        audited
+            .iter()
+            .any(|r| r.event_type == "mds.refreshed" && r.target == "fido-mds:7")
+    );
     assert_eq!(
         first.refresh(&db.app, &outbound, NOW).await.unwrap(),
         Refreshed::Held(7)
