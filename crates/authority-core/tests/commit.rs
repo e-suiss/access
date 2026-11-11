@@ -16,6 +16,8 @@ mod containment;
 mod mandate;
 #[path = "commit/policy_engine.rs"]
 mod policy_engine;
+#[path = "commit/self_restriction.rs"]
+mod self_restriction;
 #[path = "commit/sod.rs"]
 mod sod;
 

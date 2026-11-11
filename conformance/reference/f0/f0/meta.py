@@ -37,7 +37,7 @@ from .codec import (
 )
 from . import p256
 from .keyscope import check_binding_key, thumbprint
-from .polarity import policy_narrows
+from .polarity import is_forbid, policy_narrows, statements
 from .validity import VARIANT_CLASS
 
 
@@ -926,10 +926,24 @@ class Apply:
         self.end("acceptance", body["acceptance"], acceptance, "revoked")
         return False
 
+    def own_anchor_target(self, target):
+        # L0-META-27a: the root of a self-anchor sets a policy on that self-anchor
+        if "anchor" not in self.basis or self.basis["anchor"] == self.meta_anchor_id():
+            return False
+        if not (isinstance(target, dict) and list(target) == ["anchor"] and target["anchor"] == self.basis["anchor"]):
+            return False
+        _, anchor = self.basis_anchor()
+        self.require_root(anchor)
+        if not (isinstance(anchor["scope"], dict) and "party" in anchor["scope"]):
+            refuse("meta-basis")
+        return True
+
     def policy_set(self, body):
         # L0-META-27, L0-META-29
-        self.meta_root()
         target = body["content"]["target"]
+        own = self.own_anchor_target(target)
+        if not own:
+            self.meta_root()
         if "policy" in body:
             old = self.live("policy", body["policy"])
             policy_id = body["policy"]
@@ -950,6 +964,10 @@ class Apply:
         # SI-18, SEC8, OP-157 m.3 (n)
         if "defaults" in body:
             expansion = self.set_defaults(body["defaults"]) or expansion
+        # L0-META-27a: only narrowing, without defaults
+        if own and (expansion or "defaults" in body or (
+                "policy" not in body and not all(is_forbid(st) for st in statements(body["content"]["source"])))):
+            refuse("meta-not-within")
         return expansion
 
     def set_defaults(self, defaults):

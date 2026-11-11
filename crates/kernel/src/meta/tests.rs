@@ -2607,6 +2607,7 @@ fn meta_vectors_match() {
             },
         );
     }
+    self_anchor_steps(&mut r);
     let json = format!(
         "{{\n \"rule\": \"OP-141\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"meta.apply\",\n {},\n \"cases\": [\n{}\n ]\n}}\n",
         field(&["L0-META-1", "L0-META-2"]),
@@ -2617,6 +2618,113 @@ fn meta_vectors_match() {
         include_str!("../../../../conformance/vectors/core/1/meta.json"),
         &json,
     );
+}
+
+/// DAN restricting his own self-anchor (OP-157 m.11 (e), OP-158 m.3 (b), Ek B 5515).
+#[allow(clippy::too_many_lines, reason = "one scripted run")]
+fn self_anchor_steps(r: &mut Recorder) {
+    use alloc::format;
+    const DAN: Id = Id([0x51; 16]);
+    let registered = r
+        .step(
+            "self-anchor-register",
+            &["L0-META-22"],
+            (DAN, DAN),
+            ExerciseBasis::Public(Id([9; 16])),
+            &Payload::PartyRegister {
+                party: DAN,
+                root: Root::Sole(DAN),
+                actor_kind: ActorKind::Human,
+            },
+        )
+        .unwrap();
+    let own = object_id(&registered, kind::ANCHOR, 0);
+    let basis = ExerciseBasis::Anchor(own);
+    let on = |target: Value, source: &str| {
+        map([
+            ("schema", Some(Value::text(RESTRICTION_SCHEMA))),
+            ("source", Some(Value::text(source))),
+            ("target", Some(target)),
+        ])
+    };
+    let mine = || tagged("anchor", own.to_value());
+    let forbid = "forbid(principal, action, resource) when { context.breakglass };";
+    let set = r
+        .step(
+            "self-anchor-restricts-itself",
+            &["L0-META-27a", "L0-META-28"],
+            (DAN, DAN),
+            basis,
+            &Payload::PolicySet {
+                policy: None,
+                content: on(mine(), forbid),
+                defaults: None,
+            },
+        )
+        .unwrap();
+    let p = object_id(&set, kind::POLICY, 0);
+    for (id, actor, content, policy, defaults) in [
+        (
+            "self-anchor-permit-refused",
+            DAN,
+            on(mine(), "permit(principal, action, resource);"),
+            None,
+            None,
+        ),
+        (
+            "self-anchor-other-target-refused",
+            DAN,
+            on(tagged("party", DAN.to_value()), forbid),
+            None,
+            None,
+        ),
+        (
+            "self-anchor-not-its-root",
+            CAROL,
+            on(mine(), forbid),
+            None,
+            None,
+        ),
+        (
+            "self-anchor-defaults-refused",
+            DAN,
+            on(mine(), forbid),
+            None,
+            Some(PolicyDefaults {
+                ct3_delay_s: Some(172_800),
+                ..PolicyDefaults::default()
+            }),
+        ),
+        (
+            "self-anchor-amend-drops-forbid-refused",
+            DAN,
+            on(mine(), ""),
+            Some(p),
+            None,
+        ),
+        (
+            "self-anchor-amend-adds-forbid",
+            DAN,
+            on(
+                mine(),
+                &format!("{forbid}\nforbid(principal, action, resource);"),
+            ),
+            Some(p),
+            None,
+        ),
+    ] {
+        r.step(
+            id,
+            &["L0-META-27a", "L0-META-28"],
+            (actor, actor),
+            basis,
+            &Payload::PolicySet {
+                policy,
+                content,
+                defaults,
+            },
+        );
+    }
 }
 
 fn term(count: u64) -> RequirementTerm {

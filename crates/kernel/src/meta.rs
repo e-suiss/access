@@ -3280,7 +3280,12 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             defaults,
         } => {
             policy_content(content).map_err(MetaError::Malformed)?;
-            out.requirements = domain_root(ctx, view)?;
+            // OP-157 m.11 (e), OP-158 m.3 (b), TN-71
+            let own = own_anchor_target(ctx, view, content)?;
+            out.requirements = match &own {
+                Some(req) => req.clone(),
+                None => domain_root(ctx, view)?,
+            };
             let id = match policy {
                 Some(p) => {
                     let s: ContentState = read(view, kind::POLICY, p)?;
@@ -3312,6 +3317,14 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                 let (effects, loosens) = defaults_effects(view, d);
                 out.effects.extend(effects);
                 out.expansion |= loosens;
+            }
+            // OP-157 m.11 (e), OP-158 m.3 (b)
+            if own.is_some()
+                && (out.expansion
+                    || defaults.is_some()
+                    || (policy.is_none() && !forbid_only(content)))
+            {
+                return Err(MetaError::NotWithin);
             }
             set(
                 &mut out,
@@ -3877,6 +3890,41 @@ fn select(
         out.effects.push((k, Some(ids_value(&set_of))));
     }
     Ok(())
+}
+
+/// The root requirements of a self-anchor whose root sets a policy on that self-anchor: the
+/// basis is the self-anchor and the policy targets `{"anchor": A}` (OP-157 m.11 (e), OP-158
+/// m.3 (b)). `None` for every other basis or target, which the meta-anchor root decides.
+fn own_anchor_target(
+    ctx: &Context<'_>,
+    view: &dyn View,
+    content: &Value,
+) -> Result<Option<BTreeSet<RequirementTerm>>, MetaError> {
+    let ExerciseBasis::Anchor(a) = ctx.basis else {
+        return Ok(None);
+    };
+    if a == meta_anchor(&ctx.domain)
+        || content.get("target")
+            != Some(&Value::Map(alloc::vec![(
+                Value::text("anchor"),
+                a.to_value()
+            )]))
+    {
+        return Ok(None);
+    }
+    let (anchor, req) = root_power(view, &a, &ctx.actor)?;
+    if !matches!(anchor.scope, AnchorScope::Party(_)) {
+        return Err(MetaError::Basis);
+    }
+    Ok(Some(req))
+}
+
+/// Whether every statement of a policy's source is a `forbid` (OP-157 m.3 (b)).
+fn forbid_only(content: &Value) -> bool {
+    match content.get("source") {
+        Some(Value::Text(source)) => statements(source).iter().all(|s| is_forbid(s)),
+        _ => false,
+    }
 }
 
 fn domain_root(ctx: &Context<'_>, view: &dyn View) -> Result<BTreeSet<RequirementTerm>, MetaError> {
