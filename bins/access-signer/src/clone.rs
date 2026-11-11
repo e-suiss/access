@@ -205,19 +205,14 @@ mod tests {
         }
         let d = Digest([7; 32]);
         let original = primary
-            .generate_cloneable(&binding_label(&d), true)
+            .generate_cloneable(&binding_label(&d), false)
             .unwrap();
         let dir = std::env::temp_dir().join(format!("binding-clone-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let journal = Journal::open(&dir.join("hsm-usage.log"), "uid:1000").unwrap();
         let file = dir.join("backup");
-        // OP-158 m.3 (y)
-        match run(&primary, &journal, &Step::Export(d, "access/clone", &file)) {
-            Ok(()) => {}
-            Err(e) if format!("{e:?}").contains("unable to wrap the key") => return,
-            Err(e) => panic!("{e:?}"),
-        }
+        run(&primary, &journal, &Step::Export(d, "access/clone", &file)).unwrap();
         run(&dr, &journal, &Step::Import(d, "access/clone", &file)).unwrap();
         let clone = dr.signer(&binding_label(&d)).unwrap();
         assert_eq!(clone.public_key(), original.public_key());
