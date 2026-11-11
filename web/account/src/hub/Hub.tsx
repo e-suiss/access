@@ -596,6 +596,19 @@ export function Hub({
         <section aria-label={t("hub.changes")} data-testid="changes">
           <h3>{t("hub.changes")}</h3>
           <p className="notice">{t("hub.changes_note")}</p>
+          {hub.hygiene.length > 0 && (
+            <section data-testid="hygiene" aria-label={t("hygiene.suggestion")}>
+              <p className="notice">{t("hygiene.suggestion")}</p>
+              <ul className="rows">
+                {hub.hygiene.map((h) => (
+                  <li key={h.kind} className="row">
+                    {t(h.text, { count: String(h.count) })}
+                    <Owner asOf={hub.asOf} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {hub.changes.length === 0 && <p>{t("hub.empty")}</p>}
           <ul className="rows">
             {hub.changes.map((c) => (

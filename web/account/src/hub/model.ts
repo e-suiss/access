@@ -111,6 +111,15 @@ export interface ChangeRow {
 export type Read =
   { readonly kind: "answered"; readonly results: readonly Json[] } | { readonly kind: "unknown" };
 
+/** One counted hygiene suggestion (§8.17.12, OP-157 m.3 (w)). */
+export interface HygieneRow {
+  readonly kind: "unused" | "expiring" | "broad";
+  readonly text: "hygiene.unused" | "hygiene.expiring" | "hygiene.broad";
+  readonly count: number;
+}
+
+const HYGIENE = ["unused", "expiring", "broad"] as const;
+
 export interface Hub {
   readonly asOf: number;
   readonly status: "domain.current" | "domain.unreachable";
@@ -120,6 +129,8 @@ export interface Hub {
   readonly roots: readonly RootRow[];
   readonly activity: readonly ActivityRow[];
   readonly changes: readonly ChangeRow[];
+  /** §8.17.12, XI-19: suggestions only; nothing changes until the viewer acts. */
+  readonly hygiene: readonly HygieneRow[];
   /** Always says what is not shown (§8.17.7.2). */
   readonly notices: readonly string[];
 }
@@ -334,6 +345,11 @@ export function assemble(
     roots: [] as RootRow[],
     activity: [] as ActivityRow[],
     changes: [] as ChangeRow[],
+    hygiene: HYGIENE.map((kind) => ({
+      kind,
+      text: `hygiene.${kind}` as const,
+      count: of(inventory).filter((v) => v["type"] === "hygiene" && v[kind] === true).length,
+    })).filter((h) => h.count > 0),
     notices: unknown
       ? ["hub.not_shown_unconnected", "hub.some_unknown"]
       : ["hub.not_shown_unconnected"],

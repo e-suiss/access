@@ -186,3 +186,20 @@ test("Activity is a record of uses and Changes are information only", async ({ p
   await expect(changes).toContainText("A delegation ended");
   await expect(changes.getByRole("button")).toHaveCount(0);
 });
+
+// XI-19, §8.17.12, OP-157 m.3 (w): hygiene is a counted suggestion and offers no action
+test("hygiene is shown beside Changes and asks for nothing", async ({ page, bff }) => {
+  bff.searches.set("inventory", [
+    holding("g-given"),
+    { type: "hygiene", grant: "g-given", unused: true, expiring: false, broad: true },
+    { type: "hygiene", grant: "g-other", unused: true, expiring: false, broad: false },
+  ]);
+  await setUp(page, bff);
+  await page.getByRole("link", { name: "Changes" }).click();
+  const hygiene = page.getByTestId("hygiene");
+  await expect(hygiene).toContainText("2 delegations not used for 90 days");
+  await expect(hygiene).toContainText("1 broad delegations");
+  await expect(hygiene).not.toContainText("end within 7 days");
+  await expect(hygiene).toContainText("Nothing changes until you act");
+  await expect(hygiene.getByRole("button")).toHaveCount(0);
+});
