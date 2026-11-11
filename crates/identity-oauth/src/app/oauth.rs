@@ -596,7 +596,12 @@ impl<E: Env> OAuth<E> {
                 };
                 keys = fresh;
             }
-            let endpoint = realm.issuer.endpoint(req.endpoint);
+            // OP-155 m.3 (k)
+            let endpoint = if client.profile.fapi2 {
+                String::from(realm.issuer.as_str())
+            } else {
+                realm.issuer.endpoint(req.endpoint)
+            };
             let rules = AssertionRules {
                 client_id: &client.id,
                 issuer: realm.issuer.as_str(),

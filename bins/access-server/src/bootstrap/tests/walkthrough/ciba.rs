@@ -306,12 +306,17 @@ impl Desk {
 
     /// The client's `private_key_jwt` assertion for the realm.
     fn assertion(&self, c: &CibaClient) -> String {
+        Self::assertion_to(c, &self.user.issuer)
+    }
+
+    /// The client's `private_key_jwt` assertion naming `aud`.
+    fn assertion_to(c: &CibaClient, aud: &str) -> String {
         let now_s = now_ms() / 1000;
         es256(
             &c.key,
             "JWT",
             &json!({
-                "iss": c.id, "sub": c.id, "aud": self.user.issuer, "iat": now_s,
+                "iss": c.id, "sub": c.id, "aud": aud, "iat": now_s,
                 "exp": now_s + 60, "jti": b64url_encode(&nonce()),
             }),
         )
@@ -393,7 +398,17 @@ impl Desk {
         c: &CibaClient,
         pairs: &[(String, String)],
     ) -> (u16, JsonValue) {
-        let assertion = self.assertion(c);
+        self.bc_authorize_as(c, pairs, &self.user.issuer).await
+    }
+
+    /// `POST /bc-authorize` by `c` with `pairs`, its assertion naming `aud`.
+    pub(super) async fn bc_authorize_as(
+        &self,
+        c: &CibaClient,
+        pairs: &[(String, String)],
+        aud: &str,
+    ) -> (u16, JsonValue) {
+        let assertion = Self::assertion_to(c, aud);
         let mut all: Vec<(&str, &str)> = pairs
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
@@ -897,4 +912,30 @@ async fn an_aas_over_another_material_value_does_not_answer_the_request() {
         (400, Some("authorization_pending"))
     );
     d.close().await;
+}
+
+// OP-155 m.3 (k), §10.4.5
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_fapi_client_assertion_names_only_the_issuer() {
+    let d = Desk::open("p8-ciba-assertion-aud", false).await;
+    let client = d.ciba_client("Mail agent", false).await;
+    let fapi = d.ciba_client("Bank agent", true).await;
+    let (_, held) = d.agent_grant().await;
+    let intent = d.intent_json("main").await;
+    let mut ex = d.exercise(&intent, held);
+    assert!(matches!(d.ask(&mut ex), Step::Wait(_)));
+    d.ciba_on(false, &[]).await;
+    let endpoint = format!("{}/bc-authorize", d.user.issuer);
+    let hint = d.hint_token(&fapi).await;
+    let params = d.ciba_params(&ex, &intent, ("login_hint_token", &hint), None);
+    let (status, body) = d.bc_authorize_as(&fapi, &params, &endpoint).await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (401, Some("invalid_client")),
+        "{body}"
+    );
+    let hint = d.hint_token(&client).await;
+    let params = d.ciba_params(&ex, &intent, ("login_hint_token", &hint), None);
+    let (status, body) = d.bc_authorize_as(&client, &params, &endpoint).await;
+    assert_ne!(status, 401, "{body}");
 }
