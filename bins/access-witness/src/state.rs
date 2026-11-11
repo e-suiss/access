@@ -1,102 +1,52 @@
-//! The witness's own state, one append-only file per log (OP-158 m.3 (d), OP-73): every line
-//! is `<chain hash> <entry>`, the chain hash being SHA-256 over the previous one and the entry,
-//! so a changed or dropped line breaks the chain and the witness refuses to start. A line is
-//! on disk (fsync) before the cosignature it records leaves the process.
+//! The witness's own state (OP-158 m.3 (d), OP-73): per log an append-only file of
+//! `witness-state-entry` links, one deterministic CBOR entry in hex per line, each naming the
+//! SHA-256 of the previous one, so a changed or dropped line breaks the chain and the witness
+//! refuses to start. A line is on disk (fsync) before the cosignature it records leaves the
+//! process. Checkpoints refused as contradicting the base are kept in a second append-only
+//! file as evidence (U9, HL-7).
 
 use std::fs::{File, OpenOptions};
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use access_kernel::digest::Digest;
-use access_kernel::json::{b64url_decode, b64url_encode};
-use suiss_crypto::note::{Checkpoint, base64_decode, base64_encode, parse_note};
-use suiss_ledger::checkpoint::witness::LogState;
+use access_kernel::json::b64url_encode;
+use suiss_crypto::note::{Checkpoint, parse_note};
+use suiss_ledger::checkpoint::witness::{LogState, StateEntry};
 
-const CONTEXT: &str = "access-witness/state/v1 ";
-
-/// One entry of a log's chain.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Entry {
-    /// A checkpoint was cosigned; `note` holds the log's signature and this witness's.
-    Cosigned {
-        /// Tree size.
-        size: u64,
-        /// Root.
-        root: [u8; 32],
-        /// Cosignature time, seconds.
-        time: u64,
-        /// The cosigned note.
-        note: String,
-    },
-    /// The current binding is fenced above `size` (U11).
-    Fence {
-        /// Largest size it may still sign.
-        size: u64,
-    },
-    /// A checkpoint that contradicts the base, kept as evidence (U9, HL-7).
-    Equivocation {
-        /// The refused note as received.
-        note: String,
-    },
+fn hex(b: &[u8]) -> String {
+    use std::fmt::Write as _;
+    b.iter().fold(String::new(), |mut s, x| {
+        let _ = write!(s, "{x:02x}");
+        s
+    })
 }
 
-impl Entry {
-    fn text(&self) -> String {
-        match self {
-            Self::Cosigned {
-                size,
-                root,
-                time,
-                note,
-            } => format!(
-                "cosigned {size} {} {time} {}",
-                base64_encode(root),
-                b64url_encode(note.as_bytes())
-            ),
-            Self::Fence { size } => format!("fence {size}"),
-            Self::Equivocation { note } => {
-                format!("equivocation {}", b64url_encode(note.as_bytes()))
-            }
-        }
+fn unhex(t: &str) -> Option<Vec<u8>> {
+    if !t.len().is_multiple_of(2) {
+        return None;
     }
-
-    fn parse(text: &str) -> Option<Self> {
-        let mut w = text.split(' ');
-        let entry = match w.next()? {
-            "cosigned" => Self::Cosigned {
-                size: w.next()?.parse().ok()?,
-                root: base64_decode(w.next()?).ok()?.try_into().ok()?,
-                time: w.next()?.parse().ok()?,
-                note: String::from_utf8(b64url_decode(w.next()?).ok()?).ok()?,
-            },
-            "fence" => Self::Fence {
-                size: w.next()?.parse().ok()?,
-            },
-            "equivocation" => Self::Equivocation {
-                note: String::from_utf8(b64url_decode(w.next()?).ok()?).ok()?,
-            },
-            _ => return None,
-        };
-        w.next().is_none().then_some(entry)
-    }
+    (0..t.len())
+        .step_by(2)
+        .map(|i| {
+            t.get(i..i.checked_add(2)?)
+                .and_then(|p| u8::from_str_radix(p, 16).ok())
+        })
+        .collect()
 }
 
-fn link(previous: &[u8; 32], entry: &str) -> [u8; 32] {
-    let mut data = Vec::with_capacity(previous.len().saturating_add(entry.len()));
-    data.extend_from_slice(previous);
-    data.extend_from_slice(entry.as_bytes());
-    suiss_crypto::digest::sha256(&data)
-}
-
-/// One log's chain: its file, the head hash and what it says.
+/// One log's chain.
 pub(crate) struct Chain {
     file: File,
-    head: [u8; 32],
+    evidence_file: PathBuf,
+    domain: Digest,
+    next_seq: u64,
+    prev: [u8; 32],
     /// The witness's view.
     pub(crate) log: LogState,
-    /// The last cosigned note.
-    pub(crate) latest: Option<String>,
-    /// Equivocation evidence entries.
+    /// The last cosigned entry.
+    pub(crate) latest: Option<StateEntry>,
+    /// Refused checkpoints kept as evidence.
     pub(crate) evidence: usize,
 }
 
@@ -105,19 +55,30 @@ pub(crate) fn path(dir: &Path, domain: &Digest) -> PathBuf {
     dir.join(format!("{}.chain", b64url_encode(&domain.0)))
 }
 
+fn open_append(p: &Path) -> Result<File, String> {
+    OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(p)
+        .map_err(|e| format!("{}: {e}", p.display()))
+}
+
+fn read(p: &Path) -> Result<String, String> {
+    match std::fs::read_to_string(p) {
+        Ok(t) => Ok(t),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(e) => Err(format!("{}: {e}", p.display())),
+    }
+}
+
 impl Chain {
-    /// Opens or creates the chain of `domain` and checks every line.
+    /// Opens or creates the chain of `domain` and checks every link.
     pub(crate) fn open(dir: &Path, domain: &Digest) -> Result<Self, String> {
         let p = path(dir, domain);
-        let text = match std::fs::read_to_string(&p) {
-            Ok(t) => t,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-            Err(e) => return Err(format!("{}: {e}", p.display())),
-        };
-        let mut head = suiss_crypto::digest::sha256(
-            format!("{CONTEXT}{}", b64url_encode(&domain.0)).as_bytes(),
-        );
-        let (mut base, mut fence, mut latest, mut evidence) = (None, None, None, 0_usize);
+        let text = read(&p)?;
+        let mut prev = [0_u8; 32];
+        let (mut base, mut fence, mut latest) = (None, None, None);
+        let mut next_seq = 0_u64;
         for (n, line) in text.lines().enumerate() {
             let broken = || {
                 format!(
@@ -126,70 +87,121 @@ impl Chain {
                     n.saturating_add(1)
                 )
             };
-            let (hash, entry_text) = line.split_once(' ').ok_or_else(broken)?;
-            let next = link(&head, entry_text);
-            if base64_decode(hash).ok().as_deref() != Some(next.as_slice()) {
+            let entry = unhex(line)
+                .and_then(|b| StateEntry::from_bytes(&b).ok())
+                .ok_or_else(broken)?;
+            if entry.seq != next_seq || entry.prev != prev || entry.domain != domain.0 {
                 return Err(broken());
             }
-            head = next;
-            match Entry::parse(entry_text).ok_or_else(broken)? {
-                Entry::Cosigned {
-                    size, root, note, ..
-                } => {
-                    base = Some((size, root));
-                    latest = Some(note);
-                }
-                Entry::Fence { size } => fence = Some(size),
-                Entry::Equivocation { .. } => evidence = evidence.saturating_add(1),
+            prev = entry.hash().map_err(|_| broken())?;
+            next_seq = next_seq.checked_add(1).ok_or_else(broken)?;
+            if let Some(f) = entry.fence {
+                fence = Some(fence.map_or(f, |g: u64| g.min(f)));
+            }
+            if entry.note.is_some() {
+                base = Some((entry.size, entry.root));
+                latest = Some(entry);
             }
         }
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&p)
-            .map_err(|e| format!("{}: {e}", p.display()))?;
+        let evidence_file = dir.join(format!("{}.refused", b64url_encode(&domain.0)));
+        let evidence = read(&evidence_file)?.lines().count();
         Ok(Self {
-            file,
-            head,
+            file: open_append(&p)?,
+            evidence_file,
+            domain: *domain,
+            next_seq,
+            prev,
             log: LogState::resume(base, fence),
             latest,
             evidence,
         })
     }
 
-    /// Appends `entry` and syncs it to disk before returning.
-    pub(crate) fn append(&mut self, entry: &Entry) -> Result<(), String> {
-        let text = entry.text();
-        let next = link(&self.head, &text);
-        let line = format!("{} {text}\n", base64_encode(&next));
+    fn append(&mut self, mut entry: StateEntry) -> Result<StateEntry, String> {
+        entry.seq = self.next_seq;
+        entry.prev = self.prev;
+        entry.domain = self.domain.0;
+        let bytes = entry.to_bytes().map_err(|e| format!("state: {e}"))?;
         self.file
-            .write_all(line.as_bytes())
+            .write_all(format!("{}\n", hex(&bytes)).as_bytes())
             .and_then(|()| self.file.sync_all())
             .map_err(|e| format!("state: {e}"))?;
-        self.head = next;
-        match entry {
-            Entry::Cosigned {
-                size, root, note, ..
-            } => {
-                let cp =
-                    Checkpoint::parse(&parse_note(note).map_err(|e| format!("state: {e}"))?.body)
-                        .map_err(|e| format!("state: {e}"))?;
-                if (cp.size, cp.root) != (*size, *root) {
-                    return Err("state: entry does not match its note".into());
-                }
-                self.log.cosigned(&cp).map_err(|e| format!("state: {e}"))?;
-                self.latest = Some(note.clone());
-            }
-            Entry::Fence { size } => self.log.fence_at(*size),
-            Entry::Equivocation { .. } => self.evidence = self.evidence.saturating_add(1),
+        self.prev = suiss_crypto::digest::sha256(&bytes);
+        self.next_seq = self.next_seq.saturating_add(1);
+        Ok(entry)
+    }
+
+    /// Records the cosignature of `cp` under `binding`, `note` holding the log's signature and
+    /// this witness's, and syncs it before returning.
+    pub(crate) fn cosigned(
+        &mut self,
+        cp: &Checkpoint,
+        binding: [u8; 32],
+        at: u64,
+        note: String,
+    ) -> Result<(), String> {
+        let body = Checkpoint::parse(&parse_note(&note).map_err(|e| format!("state: {e}"))?.body)
+            .map_err(|e| format!("state: {e}"))?;
+        if (body.size, body.root) != (cp.size, cp.root) {
+            return Err("state: entry does not match its note".into());
         }
+        let mut probe = self.log;
+        probe.cosigned(cp).map_err(|e| format!("state: {e}"))?;
+        let entry = self.append(StateEntry {
+            seq: 0,
+            domain: self.domain.0,
+            size: cp.size,
+            root: cp.root,
+            binding,
+            at,
+            prev: [0; 32],
+            note: Some(note),
+            fence: None,
+        })?;
+        self.log = probe;
+        self.latest = Some(entry);
+        Ok(())
+    }
+
+    /// Fences `binding` above `size` (U11).
+    pub(crate) fn fence(&mut self, binding: [u8; 32], size: u64, at: u64) -> Result<(), String> {
+        let (base, root) = self.log.base().unwrap_or((0, [0; 32]));
+        self.append(StateEntry {
+            seq: 0,
+            domain: self.domain.0,
+            size: base,
+            root,
+            binding,
+            at,
+            prev: [0; 32],
+            note: None,
+            fence: Some(size),
+        })?;
+        self.log.fence_at(size);
+        Ok(())
+    }
+
+    /// Keeps a checkpoint that contradicts the base as evidence.
+    pub(crate) fn refused(&mut self, note: &str) -> Result<(), String> {
+        let mut f = open_append(&self.evidence_file)?;
+        f.write_all(format!("{}\n", hex(note.as_bytes())).as_bytes())
+            .and_then(|()| f.sync_all())
+            .map_err(|e| format!("evidence: {e}"))?;
+        self.evidence = self.evidence.saturating_add(1);
         Ok(())
     }
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "test code")]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    reason = "test code"
+)]
 mod tests {
+    use suiss_crypto::note::base64_encode;
+
     use super::*;
 
     fn dir(name: &str) -> PathBuf {
@@ -206,42 +218,44 @@ mod tests {
         )
     }
 
-    // OP-158 m.3 (d), OP-73
+    fn cp(size: u64, root: [u8; 32]) -> Checkpoint {
+        Checkpoint::parse(&parse_note(&note(size, root)).unwrap().body).unwrap()
+    }
+
+    // OP-158 m.3 (d), U11, OP-73
     #[test]
     fn the_chain_replays_and_refuses_a_changed_line() {
         let d = dir("chain");
         let domain = Digest([5; 32]);
         let mut c = Chain::open(&d, &domain).unwrap();
         assert_eq!(c.log.base(), None);
-        c.append(&Entry::Cosigned {
-            size: 3,
-            root: [1; 32],
-            time: 9,
-            note: note(3, [1; 32]),
-        })
-        .unwrap();
-        c.append(&Entry::Fence { size: 8 }).unwrap();
-        c.append(&Entry::Equivocation {
-            note: note(3, [2; 32]),
-        })
-        .unwrap();
+        c.cosigned(&cp(3, [1; 32]), [9; 32], 7, note(3, [1; 32]))
+            .unwrap();
+        c.fence([9; 32], 8, 8).unwrap();
+        c.refused(&note(3, [2; 32])).unwrap();
         drop(c);
         let c = Chain::open(&d, &domain).unwrap();
         assert_eq!(c.log.base(), Some((3, [1; 32])));
         assert_eq!(c.log.fence(), Some(8));
         assert_eq!(c.evidence, 1);
-        assert_eq!(c.latest.as_deref(), Some(note(3, [1; 32]).as_str()));
+        assert_eq!(
+            c.latest.as_ref().unwrap().note.as_deref(),
+            Some(note(3, [1; 32]).as_str())
+        );
         let p = path(&d, &domain);
         let text = std::fs::read_to_string(&p).unwrap();
-        std::fs::write(&p, text.replace("fence 8", "fence 9")).unwrap();
+        let lines: Vec<&str> = text.lines().collect();
+        let mut first = StateEntry::from_bytes(&unhex(lines[0]).unwrap()).unwrap();
+        first.at += 1;
+        let changed = hex(&first.to_bytes().unwrap());
+        std::fs::write(&p, format!("{changed}\n{}\n", lines[1])).unwrap();
+        assert!(Chain::open(&d, &domain).is_err());
+        std::fs::write(&p, format!("{}\n", lines[1])).unwrap();
         assert!(
             Chain::open(&d, &domain)
                 .err()
                 .unwrap()
                 .contains("chain broken")
         );
-        let lines: Vec<&str> = text.lines().collect();
-        std::fs::write(&p, format!("{}\n{}\n", lines[0], lines[2])).unwrap();
-        assert!(Chain::open(&d, &domain).is_err());
     }
 }

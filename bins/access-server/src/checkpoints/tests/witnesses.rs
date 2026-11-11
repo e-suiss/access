@@ -121,12 +121,31 @@ impl Witness {
         Target::new(&self.url, &self.vkey, operator, "Suiss").unwrap()
     }
 
-    fn chain(&self, domain: Digest) -> String {
-        std::fs::read_to_string(self.state.join(format!(
-            "{}.chain",
-            access_kernel::json::b64url_encode(&domain.0)
-        )))
-        .unwrap_or_default()
+    /// The sizes the witness's own state file says it cosigned, in order.
+    fn cosigned(&self, domain: Digest) -> Vec<u64> {
+        let name = access_kernel::json::b64url_encode(&domain.0);
+        let text =
+            std::fs::read_to_string(self.state.join(format!("{name}.chain"))).unwrap_or_default();
+        text.lines()
+            .map(|l| {
+                let bytes: Vec<u8> = (0..l.len())
+                    .step_by(2)
+                    .map(|i| u8::from_str_radix(&l[i..i + 2], 16).unwrap())
+                    .collect();
+                suiss_ledger::checkpoint::witness::StateEntry::from_bytes(&bytes).unwrap()
+            })
+            .filter(|e| e.note.is_some())
+            .map(|e| e.size)
+            .collect()
+    }
+
+    /// How many checkpoints the witness refused as contradicting its base.
+    fn refused(&self, domain: Digest) -> usize {
+        let name = access_kernel::json::b64url_encode(&domain.0);
+        std::fs::read_to_string(self.state.join(format!("{name}.refused")))
+            .unwrap_or_default()
+            .lines()
+            .count()
     }
 }
 
@@ -417,7 +436,7 @@ async fn real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation() {
     assert_eq!(kept.iter().filter(|c| c.independent).count(), 1);
     assert_eq!(witnessed_through(&db.app, &log.id).await.unwrap(), 2);
     assert_eq!(board().witnessed(&d), 2);
-    assert!(independent.chain(d).contains(" cosigned 2 "));
+    assert_eq!(independent.cosigned(d), [2]);
     assert_eq!(
         std::fs::read_dir(sink.join(access_kernel::json::b64url_encode(&d.0)))
             .unwrap()
@@ -493,11 +512,7 @@ async fn real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation() {
     .unwrap();
     assert_eq!((row.size, out.independent), (7, 1), "{out:?}");
     assert_eq!(board().wait(d, 7, Duration::from_millis(10)).await, Ok(7));
-    let chain = independent.chain(d);
-    assert!(
-        chain.contains(" cosigned 5 ") && chain.contains(" cosigned 7 "),
-        "{chain}"
-    );
+    assert_eq!(independent.cosigned(d), [2, 5, 7]);
 
     // U9, HL-7
     let elsewhere = root.join("elsewhere");
@@ -521,51 +536,62 @@ async fn real_witnesses_cosign_fence_off_a_dead_one_and_expose_equivocation() {
     .await
     .unwrap();
     let forged = format!("{text}\n{}", noted.line);
-    let metadata = DomainSigner::metadata(&signer, d).await.unwrap();
     let third_target = third.target("Other Witness Ltd");
     access_authority_sequencer::witness::add_checkpoint(
         &third_target,
-        (0, &[]),
+        &d,
+        (None, &[]),
         &forged,
         &noted.excerpt,
-        &metadata,
     )
     .await
     .unwrap();
+    let real_body = Checkpoint::parse(&parse_note(&real.note).unwrap().body).unwrap();
     let refused = access_authority_sequencer::witness::add_checkpoint(
         &publisher.targets[1],
-        (7, &[]),
+        &d,
+        (Some((7, real_body.root)), &[]),
         &forged,
         &noted.excerpt,
-        &metadata,
     )
     .await;
     assert_eq!(
         refused,
-        Err(access_authority_sequencer::witness::WitnessError::Conflict(
-            7
+        Err(access_authority_sequencer::witness::WitnessError::Said(
+            suiss_ledger::checkpoint::witness::Refused::Inconsistent,
+            409
         ))
     );
-    assert!(own.chain(d).contains(" equivocation "));
+    assert_eq!(own.refused(d), 1);
     let monitored = Publisher {
         targets: vec![independent.target("Example Witness Ltd"), third_target],
         sinks: vec![],
     };
     assert!(gossip(&monitored, pools, d, wall()).await >= 1);
     assert!(equivocations(&db.app, &log.id).await.unwrap() >= 1);
+    let monitor = root.join("monitor.conf");
+    std::fs::write(
+        &monitor,
+        format!(
+            "domain {}\nwitness {} {}\nwitness {} {}\n",
+            access_kernel::json::b64url_encode(&d.0),
+            independent.url,
+            independent.vkey,
+            third.url,
+            third.vkey
+        ),
+    )
+    .unwrap();
     let out = Command::new(witness_bin())
-        .args([
-            "monitor",
-            &access_kernel::json::b64url_encode(&d.0),
-            &independent.url,
-            &independent.vkey,
-            &third.url,
-            &third.vkey,
-        ])
+        .args(["monitor", monitor.to_str().unwrap()])
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(3), "{out:?}");
-    assert!(String::from_utf8_lossy(&out.stdout).contains("equivocation size 7"));
+    let printed = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        printed.contains("equivocation size 7") && printed.contains("\nproof "),
+        "{printed}"
+    );
 
     // TI-RT2
     log.push(&db, 1, wall() + 120_000).await;
@@ -755,8 +781,8 @@ async fn a_witnessed_bundle_opens_only_artifacts_and_dates_the_record() {
     std::fs::write(&bundle_file, &bundle).unwrap();
     let decoded =
         suiss_crypto::dcbor::decode(&bundle, suiss_crypto::dcbor::Limits::CEILING).unwrap();
-    let Some(suiss_crypto::dcbor::Value::Bytes(disclosure)) = decoded.get("disclosure") else {
-        panic!("disclosure");
+    let Some(suiss_crypto::dcbor::Value::Bytes(disclosure)) = decoded.get("record") else {
+        panic!("record");
     };
     let disclosure = access_kernel::record::Disclosure::from_bytes(disclosure).unwrap();
     assert_eq!(disclosure.opened.keys().collect::<Vec<_>>(), ["artifacts"]);

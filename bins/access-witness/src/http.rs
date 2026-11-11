@@ -1,5 +1,5 @@
 //! A small HTTP/1.1 client for gossip: one request per connection, plain `http://` (the
-//! answers are signed notes, verified after reading; OP-158 m.6 proposal (a)).
+//! answers are signed, verified after reading; OP-158 m.6 proposal).
 
 use std::time::Duration;
 
@@ -24,7 +24,7 @@ pub(crate) fn split(url: &str) -> Result<(String, String), String> {
 }
 
 /// `GET url + path`: the status and the body.
-pub(crate) async fn get(url: &str, path: &str) -> Result<(u16, String), String> {
+pub(crate) async fn get(url: &str, path: &str) -> Result<(u16, Vec<u8>), String> {
     let (host, prefix) = split(url)?;
     let target = format!("{}{path}", prefix.trim_end_matches('/'));
     let request = format!("GET {target} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n");
@@ -33,7 +33,7 @@ pub(crate) async fn get(url: &str, path: &str) -> Result<(u16, String), String> 
         .map_err(|_| format!("{url}: timed out"))?
 }
 
-async fn exchange(host: &str, request: &[u8]) -> Result<(u16, String), String> {
+async fn exchange(host: &str, request: &[u8]) -> Result<(u16, Vec<u8>), String> {
     let mut s = tokio::net::TcpStream::connect(host)
         .await
         .map_err(|e| format!("{host}: {e}"))?;
@@ -43,14 +43,16 @@ async fn exchange(host: &str, request: &[u8]) -> Result<(u16, String), String> {
         .read_to_end(&mut raw)
         .await
         .map_err(|e| e.to_string())?;
-    let text = String::from_utf8(raw).map_err(|_| "answer is not UTF-8".to_owned())?;
-    let (head, body) = text
-        .split_once("\r\n\r\n")
+    let at = raw
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
         .ok_or_else(|| "malformed answer".to_owned())?;
+    let (head, body) = raw.split_at(at);
+    let head = std::str::from_utf8(head).map_err(|_| "malformed answer".to_owned())?;
     let status = head
         .split(' ')
         .nth(1)
         .and_then(|c| c.parse::<u16>().ok())
         .ok_or_else(|| "malformed status line".to_owned())?;
-    Ok((status, body.to_owned()))
+    Ok((status, body.get(4..).unwrap_or_default().to_vec()))
 }

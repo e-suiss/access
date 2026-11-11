@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use access_authority_sequencer::checkpoint::SignedCheckpoint;
 use access_authority_sequencer::witness::{
-    Target, WitnessError, add_checkpoint, board, cross_check, latest,
+    Base, Target, WitnessError, add_checkpoint, board, cross_check, latest,
 };
 use access_kernel::digest::Digest;
 use access_store::Pool;
@@ -20,7 +20,7 @@ use access_store::witness::{
 };
 use suiss_crypto::note::{Checkpoint, parse_note};
 use suiss_ledger::checkpoint::proof::consistency;
-use suiss_ledger::checkpoint::witness::equivocates;
+use suiss_ledger::checkpoint::witness::{Refused, equivocates};
 
 /// The declared witnesses and sinks.
 #[derive(Clone, Debug, Default)]
@@ -42,16 +42,12 @@ pub(crate) struct Published {
     pub(crate) failed: Vec<(String, WitnessError)>,
 }
 
-async fn proof(
+async fn leaves_of(
     app: &Pool,
     domain: &DomainId,
     leaves: &mut Option<Vec<[u8; 32]>>,
-    old: u64,
     size: u64,
-) -> Result<Vec<[u8; 32]>, WitnessError> {
-    if old == 0 || old >= size {
-        return Ok(Vec::new());
-    }
+) -> Result<(), WitnessError> {
     if leaves.is_none() {
         *leaves = Some(
             leaf_hashes(app, domain, 0, size)
@@ -59,37 +55,62 @@ async fn proof(
                 .map_err(|_| WitnessError::Unreachable)?,
         );
     }
+    Ok(())
+}
+
+/// The base `old` of the tree of `size` and the consistency proof from it.
+async fn base_and_proof(
+    app: &Pool,
+    domain: &DomainId,
+    leaves: &mut Option<Vec<[u8; 32]>>,
+    old: u64,
+    size: u64,
+) -> Result<(Option<Base>, Vec<[u8; 32]>), WitnessError> {
+    if old == 0 {
+        return Ok((None, Vec::new()));
+    }
+    if old > size {
+        return Err(WitnessError::Conflict(old));
+    }
+    leaves_of(app, domain, leaves, size).await?;
     let all = leaves.as_deref().unwrap_or_default();
-    consistency(all, old, size).map_err(|_| WitnessError::Conflict(old))
+    let root = suiss_ledger::checkpoint::proof::Leaves::subtree(all, 0, old)
+        .map_err(|_| WitnessError::Conflict(old))?;
+    let p = consistency(all, old, size).map_err(|_| WitnessError::Conflict(old))?;
+    Ok((Some((old, root)), p))
 }
 
 async fn one(
     target: &Target,
     app: &Pool,
-    domain: &DomainId,
+    domain: (&Digest, &DomainId),
     signed: &SignedCheckpoint,
 ) -> Result<(String, u64), WitnessError> {
+    let (d, id) = domain;
     let size = signed.checkpoint.size;
     let mut leaves = None;
-    let mut old = witness_base(app, domain, &target.vkey)
+    let mut old = witness_base(app, id, &target.vkey)
         .await
         .map_err(|_| WitnessError::Unreachable)?;
     for _ in 0..2 {
-        let p = proof(app, domain, &mut leaves, old, size).await?;
-        match add_checkpoint(
-            target,
-            (old, &p),
-            &signed.note,
-            &signed.excerpt,
-            &signed.metadata,
-        )
-        .await
-        {
-            Err(WitnessError::Conflict(n)) if n != old && n <= size => old = n,
+        let (base, p) = base_and_proof(app, id, &mut leaves, old, size).await?;
+        match add_checkpoint(target, d, (base, &p), &signed.note, &signed.excerpt).await {
+            Err(WitnessError::Said(Refused::Inconsistent, _)) => {
+                // §16.6
+                let held = match latest(target, d).await {
+                    Ok((entry, _)) => entry.size,
+                    Err(WitnessError::Refused(404)) => 0,
+                    Err(e) => return Err(e),
+                };
+                if held == old || held > size {
+                    return Err(WitnessError::Said(Refused::Inconsistent, 409));
+                }
+                old = held;
+            }
             other => return other,
         }
     }
-    Err(WitnessError::Conflict(old))
+    Err(WitnessError::Said(Refused::Inconsistent, 409))
 }
 
 /// Publishes `signed`, appended as `row`, of `domain` whose newest record is `recorded_at`.
@@ -104,7 +125,7 @@ pub(crate) async fn publish(
     for target in p.targets.clone() {
         let (app, signed) = (app.clone(), signed.clone());
         set.spawn(async move {
-            let got = one(&target, &app, &id, &signed).await;
+            let got = one(&target, &app, (&domain, &id), &signed).await;
             (target, got)
         });
     }
@@ -192,7 +213,7 @@ pub(crate) async fn gossip(
     let mut seen: Vec<(String, Checkpoint, String)> = Vec::new();
     for t in &p.targets {
         match latest(t, &domain).await {
-            Ok(note) => {
+            Ok((_, note)) => {
                 if let Some(cp) = body(&note) {
                     seen.push((t.url.clone(), cp, note));
                 }

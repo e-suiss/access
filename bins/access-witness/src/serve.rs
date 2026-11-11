@@ -1,10 +1,9 @@
-//! The witness's HTTP surface (C2SP `tlog-witness`, §16.6 witness protocol):
-//! - `POST /add-checkpoint`: the body is `old <size>`, the consistency proof and the signed
-//!   note; the `Suiss-Key-Excerpt` and `Suiss-Domain-Metadata` headers carry the excerpt and
-//!   the signed Domain Metadata (base64url). `200` answers the cosignature line, `409` the
-//!   size the witness holds (`text/x.tlog.size`), `422` a proof that does not verify, `403` a
-//!   key that is not the current binding's or a fenced binding, `404` an unknown log.
-//! - `GET /checkpoint/{domain}`: the last cosigned note, for gossip and monitors (§9.16).
+//! The witness's HTTP surface (`witness.cddl`, §16.6 witness protocol):
+//! - `POST /cosign`: a `cosign-request`; the answer is a `cosign-response`, `200` with the
+//!   cosignature or `400`/`403`/`409`/`422` with the refusal. A request whose base is not the
+//!   one the witness holds is `inconsistent`; the log reads `/gossip` and retries from it.
+//! - `GET /gossip/{domain}`: the last cosigned head as a `gossip-entry` with its note, for
+//!   monitors and the log (§9.16).
 //! - `GET /info`: the cosigner name, its verifier key and the operator (SI-12).
 
 use std::collections::BTreeMap;
@@ -13,26 +12,25 @@ use std::sync::Arc;
 use axum::Router;
 use axum::body::Bytes;
 use axum::extract::{Path, State};
-use axum::http::{HeaderMap, StatusCode, header};
+use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
-use suiss_crypto::note::{Checkpoint, parse_note};
+use suiss_crypto::note::parse_note;
 use suiss_crypto::signer::{SoftSigner, cosign};
-use suiss_ledger::checkpoint::witness::{Refusal, parse_add_checkpoint};
+use suiss_ledger::checkpoint::witness::{
+    CosignRequest, CosignResponse, Cosignature, GossipEntry, Refusal, Refused,
+};
 use tokio::sync::Mutex;
 
 use crate::config::{Config, origin};
-use crate::state::{Chain, Entry};
-use crate::verify::{Refused, checkpoint};
+use crate::state::Chain;
+use crate::verify::checkpoint;
 
-/// Largest request body (C2SP note bound plus the proof).
-pub(crate) const MAX_BODY: usize = 300 * 1024;
+/// Largest request body: the note, the excerpt and a binding-change record.
+pub(crate) const MAX_BODY: usize = 1_200 * 1024;
 
-/// Excerpt header.
-pub(crate) const EXCERPT: &str = "suiss-key-excerpt";
-
-/// Domain Metadata header.
-pub(crate) const METADATA: &str = "suiss-domain-metadata";
+/// The CBOR media type.
+pub(crate) const CBOR: &str = "application/cbor";
 
 /// What every handler shares.
 pub(crate) struct Witness {
@@ -61,150 +59,136 @@ impl Witness {
     }
 }
 
-fn text(status: StatusCode, body: String) -> Response {
-    (
-        status,
-        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
-        body,
-    )
-        .into_response()
+fn cbor(status: StatusCode, r: &CosignResponse) -> Response {
+    match r.to_bytes() {
+        Ok(b) => (status, [(header::CONTENT_TYPE, CBOR)], b).into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
 }
 
-fn size(n: u64) -> Response {
-    (
-        StatusCode::CONFLICT,
-        [(header::CONTENT_TYPE, "text/x.tlog.size")],
-        format!("{n}\n"),
-    )
-        .into_response()
+fn refuse(r: Refused) -> Response {
+    let status = match r {
+        Refused::Malformed => StatusCode::BAD_REQUEST,
+        Refused::UnknownKey | Refused::Fenced => StatusCode::FORBIDDEN,
+        Refused::Inconsistent => StatusCode::CONFLICT,
+        _ => StatusCode::UNPROCESSABLE_ENTITY,
+    };
+    cbor(status, &CosignResponse::Refused(r))
 }
 
-fn header_bytes(h: &HeaderMap, name: &str) -> Option<Vec<u8>> {
-    h.get(name)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| access_kernel::json::b64url_decode(v).ok())
-}
-
-fn now_s() -> u64 {
+fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
+        .ok()
+        .and_then(|d| u64::try_from(d.as_millis()).ok())
+        .unwrap_or_default()
 }
 
-async fn add(State(w): State<Arc<Witness>>, headers: HeaderMap, body: Bytes) -> Response {
-    let Ok(body) = std::str::from_utf8(&body) else {
-        return text(StatusCode::BAD_REQUEST, "not UTF-8\n".into());
+async fn cosign_request(State(w): State<Arc<Witness>>, body: Bytes) -> Response {
+    let Ok(req) = CosignRequest::from_bytes(&body) else {
+        return refuse(Refused::Malformed);
     };
-    let Ok((old, proof, note)) = parse_add_checkpoint(body) else {
-        return text(StatusCode::BAD_REQUEST, "malformed request\n".into());
+    let o = origin(&access_kernel::digest::Digest(req.domain));
+    let (Some(log), Some(chain)) = (w.config.logs.get(&o), w.chains.get(&o)) else {
+        return refuse(Refused::UnknownKey);
     };
-    let Some(cp_origin) = parse_note(note)
-        .ok()
-        .and_then(|n| Checkpoint::parse(&n.body).ok())
-        .map(|c| c.origin)
-    else {
-        return text(StatusCode::BAD_REQUEST, "malformed checkpoint\n".into());
-    };
-    let (Some(log), Some(chain)) = (w.config.logs.get(&cp_origin), w.chains.get(&cp_origin)) else {
-        return text(StatusCode::NOT_FOUND, "unknown log\n".into());
-    };
-    let (Some(excerpt), Some(metadata)) = (
-        header_bytes(&headers, EXCERPT),
-        header_bytes(&headers, METADATA),
-    ) else {
-        return text(
-            StatusCode::BAD_REQUEST,
-            "excerpt and metadata required\n".into(),
-        );
-    };
-    let cp = match checkpoint(log, note, &excerpt, &metadata) {
-        Ok(cp) => cp,
-        Err(Refused::Malformed(what)) => return text(StatusCode::BAD_REQUEST, format!("{what}\n")),
-        Err(Refused::Key(why)) => return text(StatusCode::FORBIDDEN, format!("{why}\n")),
+    // U11
+    if req.binding_change.is_some() {
+        return refuse(Refused::UnknownKey);
+    }
+    let (cp, binding) = match checkpoint(log, &req.note, &req.excerpt) {
+        Ok(v) => v,
+        Err(crate::verify::Refused::Malformed) => return refuse(Refused::Malformed),
+        Err(crate::verify::Refused::Key) => return refuse(Refused::UnknownKey),
     };
     let mut chain = chain.lock().await;
-    match chain.log.check(old, &proof, &cp) {
+    if req.base != chain.log.base() {
+        return refuse(Refused::Inconsistent);
+    }
+    let old = req.base.map_or(0, |(s, _)| s);
+    match chain.log.check(old, &req.consistency, &cp) {
         Ok(()) => {}
-        Err(Refusal::Conflict(n)) => return size(n),
-        Err(Refusal::Backwards) => return size(chain.log.size()),
         Err(Refusal::Equivocation) => {
             // U9, HL-7
-            let held = chain.log.size();
-            if let Err(e) = chain.append(&Entry::Equivocation {
-                note: note.to_owned(),
-            }) {
-                return text(StatusCode::SERVICE_UNAVAILABLE, format!("{e}\n"));
+            if let Err(e) = chain.refused(&req.note) {
+                return (StatusCode::SERVICE_UNAVAILABLE, e).into_response();
             }
-            return size(held);
+            return refuse(Refused::Inconsistent);
         }
-        Err(Refusal::Inconsistent(_)) => {
-            return text(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "proof does not verify\n".into(),
-            );
-        }
-        Err(Refusal::Fenced(n)) => {
-            return text(
-                StatusCode::FORBIDDEN,
-                format!("binding fenced at size {n}\n"),
-            );
-        }
-        Err(_) => return text(StatusCode::FORBIDDEN, "refused\n".into()),
+        Err(r) => return refuse(Refused::of(r)),
     }
-    let time = now_s();
-    let Ok(parsed) = parse_note(note) else {
-        return text(StatusCode::BAD_REQUEST, "malformed note\n".into());
+    let Ok(parsed) = parse_note(&req.note) else {
+        return refuse(Refused::Malformed);
     };
-    let Ok((_, line)) = cosign(&w.signer, &w.config.name, time, &parsed.body) else {
-        return text(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "cosigner unavailable\n".into(),
-        );
+    let at = now_ms();
+    let Ok((_, line)) = cosign(&w.signer, &w.config.name, at / 1000, &parsed.body) else {
+        return (StatusCode::SERVICE_UNAVAILABLE, "cosigner unavailable").into_response();
     };
-    let entry = Entry::Cosigned {
-        size: cp.size,
-        root: cp.root,
-        time,
-        note: format!("{note}{line}"),
+    let Ok((cosignature, _)) = Cosignature::from_line(&line) else {
+        return (StatusCode::INTERNAL_SERVER_ERROR, "cosignature").into_response();
     };
     // OP-158 m.3 (d)
-    if let Err(e) = chain.append(&entry) {
-        return text(StatusCode::SERVICE_UNAVAILABLE, format!("{e}\n"));
+    if let Err(e) = chain.cosigned(&cp, binding, at, format!("{}{line}", req.note)) {
+        return (StatusCode::SERVICE_UNAVAILABLE, e).into_response();
     }
-    text(StatusCode::OK, line)
+    cbor(StatusCode::OK, &CosignResponse::Cosigned(cosignature))
 }
 
-async fn latest(State(w): State<Arc<Witness>>, Path(domain): Path<String>) -> Response {
+async fn gossip(State(w): State<Arc<Witness>>, Path(domain): Path<String>) -> Response {
     let Some(d) = access_kernel::json::b64url_decode(&domain)
         .ok()
         .and_then(|b| <[u8; 32]>::try_from(b).ok())
     else {
-        return text(StatusCode::BAD_REQUEST, "bad domain\n".into());
+        return StatusCode::BAD_REQUEST.into_response();
     };
     let Some(chain) = w.chains.get(&origin(&access_kernel::digest::Digest(d))) else {
-        return text(StatusCode::NOT_FOUND, "unknown log\n".into());
+        return StatusCode::NOT_FOUND.into_response();
     };
-    match chain.lock().await.latest.clone() {
-        Some(note) => text(StatusCode::OK, note),
-        None => text(StatusCode::NOT_FOUND, "nothing cosigned yet\n".into()),
+    let Some(latest) = chain.lock().await.latest.clone() else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let Some(cosigned) = latest.note else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let mine = format!("\u{2014} {} ", w.config.name);
+    let Some((cosignature, _)) = cosigned
+        .lines()
+        .rev()
+        .find(|l| l.starts_with(&mine))
+        .and_then(|l| Cosignature::from_line(l).ok())
+    else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+    let entry = GossipEntry {
+        witness: w.config.name.clone(),
+        domain: d,
+        size: latest.size,
+        root: latest.root,
+        cosignature,
+        note: Some(cosigned),
+    };
+    match entry.to_bytes() {
+        Ok(b) => ([(header::CONTENT_TYPE, CBOR)], b).into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
 async fn info(State(w): State<Arc<Witness>>) -> Response {
-    text(
-        StatusCode::OK,
+    (
+        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
         format!(
             "name {}\nvkey {}\noperator {}\n",
             w.config.name, w.vkey, w.config.operator
         ),
     )
+        .into_response()
 }
 
 /// The witness router.
 pub(crate) fn router(w: Arc<Witness>) -> Router {
     Router::new()
-        .route("/add-checkpoint", post(add))
-        .route("/checkpoint/{domain}", get(latest))
+        .route("/cosign", post(cosign_request))
+        .route("/gossip/{domain}", get(gossip))
         .route("/info", get(info))
         .layer(axum::extract::DefaultBodyLimit::max(MAX_BODY))
         .with_state(w)

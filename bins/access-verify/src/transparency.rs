@@ -4,6 +4,8 @@
 //! within Δ. Only the cosigners passed with `--cosigners` count; the log's own signature never
 //! dates anything.
 
+use std::fmt::Write as _;
+
 use access_kernel::codec::Canonical as _;
 use access_kernel::record::Disclosure;
 use suiss_crypto::dcbor::{self, Limits, Value};
@@ -23,9 +25,8 @@ fn reject(reason: &str) -> Outcome {
     Outcome::Reject(reason.to_owned())
 }
 
-/// The checkpoint and the trusted cosignature times of `note`.
-fn cosigned(o: &Options, note: &str) -> Result<Result<(Checkpoint, Vec<u64>), Outcome>, Usage> {
-    let log = Verifier::parse(o.text("log")?).map_err(|_| Usage("--log: not a vkey".into()))?;
+/// The `--cosigners`: one or more witness verifier keys.
+fn keys(o: &Options) -> Result<Vec<Verifier>, Usage> {
     let cosigners = o
         .words("cosigners")
         .iter()
@@ -34,6 +35,13 @@ fn cosigned(o: &Options, note: &str) -> Result<Result<(Checkpoint, Vec<u64>), Ou
     if cosigners.is_empty() || cosigners.iter().any(|c| !c.is_cosigner()) {
         return Err(Usage("--cosigners: one or more witness vkeys".into()));
     }
+    Ok(cosigners)
+}
+
+/// The checkpoint and the trusted cosignature times of `note`.
+fn cosigned(o: &Options, note: &str) -> Result<Result<(Checkpoint, Vec<u64>), Outcome>, Usage> {
+    let log = Verifier::parse(o.text("log")?).map_err(|_| Usage("--log: not a vkey".into()))?;
+    let cosigners = keys(o)?;
     Ok(
         match verify_checkpoint(&PureBackend, note, o.text("origin")?, &log, &cosigners) {
             Ok((cp, accepted)) => {
@@ -53,20 +61,47 @@ fn get<'a>(v: &'a Value, name: &str) -> Option<&'a Value> {
     v.get(name)
 }
 
+/// The `cosignatures` of a bundle as note lines, for the `--cosigners` whose names match.
+fn lines(v: &Value, cosigners: &[Verifier]) -> Option<String> {
+    let Value::Array(items) = v else {
+        return None;
+    };
+    let mut out = String::new();
+    for c in items {
+        let (Some(Value::Text(name)), Some(Value::Unsigned(ts)), Some(Value::Bytes(sig))) =
+            (c.get("name"), c.get("timestamp"), c.get("signature"))
+        else {
+            return None;
+        };
+        let Some(key) = cosigners.iter().find(|k| k.name() == name) else {
+            continue;
+        };
+        let mut raw = key.id().to_be_bytes().to_vec();
+        raw.extend_from_slice(&ts.to_be_bytes());
+        raw.extend_from_slice(sig);
+        let _ = writeln!(
+            out,
+            "\u{2014} {name} {}",
+            suiss_crypto::note::base64_encode(&raw)
+        );
+    }
+    Some(out)
+}
+
 pub(crate) fn existed(o: &Options) -> Result<Outcome, Usage> {
     let Ok(bundle) = dcbor::decode(&o.file("bundle")?, Limits::CEILING) else {
         return Ok(reject("bundle"));
     };
     let (
         Some(Value::Text(note)),
-        Some(Value::Bytes(disclosure)),
-        Some(Value::Unsigned(size)),
+        Some(Value::Bytes(record)),
         Some(Value::Array(path)),
+        Some(cosignatures),
     ) = (
         get(&bundle, "checkpoint"),
-        get(&bundle, "disclosure"),
-        get(&bundle, "size"),
-        get(&bundle, "path"),
+        get(&bundle, "record"),
+        get(&bundle, "inclusion"),
+        get(&bundle, "cosignatures"),
     )
     else {
         return Ok(reject("bundle"));
@@ -78,16 +113,17 @@ pub(crate) fn existed(o: &Options) -> Result<Outcome, Usage> {
             _ => None,
         })
         .collect();
-    let (Some(path), Ok(disclosure)) = (path, Disclosure::from_bytes(disclosure)) else {
+    let (Some(path), Ok(disclosure)) = (path, Disclosure::from_bytes(record)) else {
         return Ok(reject("bundle"));
     };
-    let (cp, times) = match cosigned(o, note)? {
+    let cosigners = keys(o)?;
+    let Some(extra) = lines(cosignatures, &cosigners) else {
+        return Ok(reject("bundle"));
+    };
+    let (cp, times) = match cosigned(o, &format!("{note}{extra}"))? {
         Ok(v) => v,
         Err(out) => return Ok(out),
     };
-    if cp.size != *size {
-        return Ok(reject("size"));
-    }
     if disclosure
         .verify_inclusion(cp.size, &path, &cp.root)
         .is_err()

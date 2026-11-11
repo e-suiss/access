@@ -8,8 +8,10 @@
 //! access-witness keygen <key file> <name>   new Ed25519 key (mode 0600); prints the vkey
 //! access-witness vkey <key file> <name>     prints the vkey of an existing key
 //! access-witness serve <config file>        serves; prints `listening <addr>`
-//! access-witness monitor <domain> <url> <vkey> [<url> <vkey>]…
-//!                                           compares the witnesses' latest cosigned checkpoints
+//! access-witness monitor <config file>     compares the witnesses' latest cosigned heads
+//! access-witness fence <config file> <domain> <size>
+//!                                           while stopped: cosign nothing above <size> under
+//!                                           the binding it last cosigned (U11)
 //! ```
 //!
 //! Exit status: 0 ok, 1 failure, 2 usage, 3 equivocation found.
@@ -32,7 +34,7 @@ use suiss_crypto::note::Verifier;
 use suiss_crypto::secret::Secret;
 use suiss_crypto::signer::{Signer as _, SoftSigner};
 
-const USAGE: &str = "usage: access-witness keygen <key file> <name> | vkey <key file> <name> | serve <config file> | monitor <domain> <url> <vkey> [<url> <vkey>]...\n";
+const USAGE: &str = "usage:\naccess-witness serve <config>\naccess-witness monitor <config>\naccess-witness keygen <key file> <name>\naccess-witness vkey <key file> <name>\naccess-witness fence <config> <domain> <size>\n";
 
 fn out(text: &str) -> bool {
     let mut o = std::io::stdout().lock();
@@ -101,6 +103,31 @@ async fn serve(path: &Path) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// Fences the binding `domain` was last cosigned under at `size` (U11): run while the witness
+/// is stopped; it reads the fence from its chain when it starts.
+fn fence(path: &Path, domain: &str, size: &str) -> Result<String, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let config = config::parse(&text)?;
+    let d = access_kernel::json::b64url_decode(domain)
+        .ok()
+        .and_then(|b| <[u8; 32]>::try_from(b).ok())
+        .map(access_kernel::digest::Digest)
+        .ok_or("domain: not a base64url DomainID")?;
+    let size: u64 = size.parse().map_err(|_| "size: not a number")?;
+    if !config.logs.contains_key(&config::origin(&d)) {
+        return Err("domain: not a log of this witness".into());
+    }
+    let mut chain = state::Chain::open(&config.state, &d)?;
+    let binding = chain.latest.as_ref().map_or([0; 32], |e| e.binding);
+    let at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|t| u64::try_from(t.as_millis()).ok())
+        .unwrap_or_default();
+    chain.fence(binding, size, at)?;
+    Ok(format!("fenced {size}\n"))
+}
+
 fn run(args: &[String]) -> Result<ExitCode, String> {
     let words: Vec<&str> = args.iter().map(String::as_str).collect();
     match words.as_slice() {
@@ -128,12 +155,18 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
             rt.block_on(serve(Path::new(config)))?;
             Ok(ExitCode::SUCCESS)
         }
-        ["monitor", domain, pairs @ ..] if !pairs.is_empty() && pairs.len() % 2 == 0 => {
+        ["monitor", config] => {
+            let text = std::fs::read_to_string(config).map_err(|e| format!("{config}: {e}"))?;
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .map_err(|e| e.to_string())?;
-            let report = rt.block_on(monitor::run(domain, pairs))?;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .ok()
+                .and_then(|d| u64::try_from(d.as_millis()).ok())
+                .unwrap_or_default();
+            let report = rt.block_on(monitor::run(&text, now))?;
             let code = match report.status {
                 monitor::Status::Consistent => ExitCode::SUCCESS,
                 monitor::Status::Unreachable => ExitCode::FAILURE,
@@ -145,8 +178,21 @@ fn run(args: &[String]) -> Result<ExitCode, String> {
                 ExitCode::FAILURE
             })
         }
+        ["fence", config, domain, size] => {
+            let line = fence(Path::new(config), domain, size)?;
+            Ok(if out(&line) {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            })
+        }
+        ["--help" | "-h" | "help"] => Ok(if out(USAGE) {
+            ExitCode::SUCCESS
+        } else {
+            ExitCode::FAILURE
+        }),
         _ => {
-            let _ = out(USAGE);
+            let _ = std::io::stderr().lock().write_all(USAGE.as_bytes());
             Ok(ExitCode::from(2))
         }
     }

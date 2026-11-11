@@ -180,31 +180,88 @@ fn same_size_other_root_is_equivocation() {
     assert!(!equivocates(&a, &a.clone()));
 }
 
-// CMP-6, T17
+// CMP-6, T17, OP-158 m.3 (d)
 #[test]
-fn the_add_checkpoint_body_round_trips() {
-    use witness::{WireError, add_checkpoint, parse_add_checkpoint};
-    let note = "o\n2\nAAAA\n\n— o abcd\n";
-    let body = add_checkpoint(7, &[[1; 32], [2; 32]], note);
+fn witness_messages_round_trip_in_deterministic_cbor() {
+    use witness::{
+        BindingChange, CosignRequest, CosignResponse, Cosignature, GossipEntry, Refused,
+        StateEntry, WireError,
+    };
+    let req = CosignRequest {
+        domain: [7; 32],
+        note: String::from("o\n2\nAAAA\n\n\u{2014} o abcd\n"),
+        excerpt: vec![1, 2],
+        base: Some((1, [3; 32])),
+        consistency: vec![[4; 32]],
+        binding_change: Some(BindingChange {
+            position: 5,
+            record: vec![9],
+            inclusion: vec![[6; 32]],
+        }),
+    };
     assert_eq!(
-        parse_add_checkpoint(&body).unwrap(),
-        (7, vec![[1; 32], [2; 32]], note)
+        CosignRequest::from_bytes(&req.to_bytes().unwrap()).unwrap(),
+        req
     );
+    let bare = CosignRequest {
+        base: None,
+        binding_change: None,
+        ..req.clone()
+    };
     assert_eq!(
-        parse_add_checkpoint(&add_checkpoint(0, &[], note))
-            .unwrap()
-            .0,
-        0
+        CosignRequest::from_bytes(&bare.to_bytes().unwrap()).unwrap(),
+        bare
     );
-    for bad in [
-        "old 07\n\nx",
-        "old x\n\nx",
-        "new 1\n\nx",
-        "old 1\nzz\n\nx",
-        "old 1",
-    ] {
-        assert_eq!(parse_add_checkpoint(bad), Err(WireError), "{bad}");
-    }
+    let c = Cosignature {
+        name: String::from("w.example"),
+        timestamp: 1_767_225_000,
+        signature: [0x5c; 64],
+    };
+    let ok = CosignResponse::Cosigned(c.clone());
+    assert_eq!(
+        CosignResponse::from_bytes(&ok.to_bytes().unwrap()).unwrap(),
+        ok
+    );
+    let refused = CosignResponse::Refused(Refused::Fenced);
+    let bytes = refused.to_bytes().unwrap();
+    assert_eq!(
+        bytes,
+        [
+            0xa1, 0x67, b'r', b'e', b'f', b'u', b's', b'e', b'd', 0x66, b'f', b'e', b'n', b'c',
+            b'e', b'd'
+        ]
+    );
+    assert_eq!(CosignResponse::from_bytes(&bytes).unwrap(), refused);
+    assert_eq!(
+        Cosignature::from_line(&c.line(77)).unwrap(),
+        (c.clone(), 77)
+    );
+    let g = GossipEntry {
+        witness: String::from("w.example"),
+        domain: [7; 32],
+        size: 2,
+        root: [8; 32],
+        cosignature: c,
+        note: Some(String::from("n\n")),
+    };
+    assert_eq!(GossipEntry::from_bytes(&g.to_bytes().unwrap()).unwrap(), g);
+    let e = StateEntry {
+        seq: 0,
+        domain: [7; 32],
+        size: 2,
+        root: [8; 32],
+        binding: [9; 32],
+        at: 3,
+        prev: [0; 32],
+        note: None,
+        fence: Some(4),
+    };
+    assert_eq!(StateEntry::from_bytes(&e.to_bytes().unwrap()).unwrap(), e);
+    assert_ne!(
+        e.hash().unwrap(),
+        StateEntry { at: 4, ..e.clone() }.hash().unwrap()
+    );
+    assert_eq!(CosignResponse::from_bytes(&[0xa0]), Err(WireError));
 }
 
 // K15

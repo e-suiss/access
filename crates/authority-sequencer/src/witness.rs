@@ -1,8 +1,8 @@
 //! The provider's side of the witness protocol and of trusted time (§16.6 witness protocol,
 //! CMP-6, T17, SEC23, TI-RT2, OP-158 m.3 (c), (d), (k)):
-//! - each declared witness gets every checkpoint as a C2SP `add-checkpoint` request with the
-//!   consistency proof from the size it last cosigned, and its cosignature is verified before
-//!   it is kept;
+//! - each declared witness gets every checkpoint as a `cosign-request` (`witness.cddl`) with
+//!   the consistency proof from the head it last cosigned, and its cosignature is verified
+//!   before it is kept;
 //! - [`Board`] holds what this process knows of each led domain's witnessed size and the
 //!   out-of-cycle checkpoints commits wait for (coalesced, OP-38);
 //! - a cosignature time earlier than the checkpoint's newest record marks the leader unhealthy
@@ -17,6 +17,7 @@ use std::time::{Duration, Instant};
 use access_kernel::digest::Digest;
 use suiss_crypto::note::{Verifier, verify_note};
 use suiss_crypto::sig::PureBackend;
+use suiss_ledger::checkpoint::witness::{CosignRequest, CosignResponse, GossipEntry, Refused};
 use suiss_ledger::time::{Sample, TimeError, UNCERTAINTY_MS, check_against_witness};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::sync::Notify;
@@ -26,12 +27,6 @@ pub const EXCHANGE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The longest an SEC23 answer waits for its covering cosignature (OP-158 m.3 (e), PD).
 pub const ACK_WAIT: Duration = Duration::from_secs(2);
-
-/// Excerpt header of an `add-checkpoint` request.
-pub const EXCERPT_HEADER: &str = "Suiss-Key-Excerpt";
-
-/// Domain Metadata header of an `add-checkpoint` request.
-pub const METADATA_HEADER: &str = "Suiss-Domain-Metadata";
 
 const MAX_ANSWER: u64 = 512 * 1024;
 
@@ -45,9 +40,12 @@ pub enum WitnessError {
     /// It holds another base size (C2SP `409`).
     #[error("witness is at size {0}")]
     Conflict(u64),
-    /// It refused with this status.
+    /// It answered this status without a refusal it names.
     #[error("refused with {0}")]
     Refused(u16),
+    /// It refused, naming why (`cosign-refusal`), with this status.
+    #[error("refused: {}", .0.name())]
+    Said(Refused, u16),
     /// The answer is malformed or its cosignature does not verify under the declared key.
     #[error("cosignature")]
     Cosignature,
@@ -145,105 +143,108 @@ async fn exchange(
     url: &str,
     method: &str,
     path: &str,
-    headers: &[(&str, &str)],
-    body: &str,
-) -> Result<(u16, String), WitnessError> {
+    body: &[u8],
+) -> Result<(u16, Vec<u8>), WitnessError> {
     let (host, prefix) = split(url).map_err(WitnessError::Declaration)?;
     let target = format!("{}{path}", prefix.trim_end_matches('/'));
     let mut request = format!(
-        "{method} {target} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\nContent-Length: {}\r\n",
+        "{method} {target} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\nContent-Type: application/cbor\r\nContent-Length: {}\r\n\r\n",
         body.len()
-    );
-    for (k, v) in headers {
-        request.push_str(k);
-        request.push_str(": ");
-        request.push_str(v);
-        request.push_str("\r\n");
-    }
-    request.push_str("\r\n");
-    request.push_str(body);
+    )
+    .into_bytes();
+    request.extend_from_slice(body);
     let io = async {
         let mut s = tokio::net::TcpStream::connect(host.as_str()).await.ok()?;
-        s.write_all(request.as_bytes()).await.ok()?;
+        s.write_all(&request).await.ok()?;
         let mut raw = Vec::new();
         s.take(MAX_ANSWER).read_to_end(&mut raw).await.ok()?;
-        String::from_utf8(raw).ok()
+        Some(raw)
     };
-    let text = tokio::time::timeout(EXCHANGE_TIMEOUT, io)
+    let raw = tokio::time::timeout(EXCHANGE_TIMEOUT, io)
         .await
         .ok()
         .flatten()
         .ok_or(WitnessError::Unreachable)?;
-    let (head, rest) = text
-        .split_once("\r\n\r\n")
+    let at = raw
+        .windows(4)
+        .position(|w| w == b"\r\n\r\n")
         .ok_or(WitnessError::Cosignature)?;
-    let status = head
-        .split(' ')
-        .nth(1)
+    let (head, rest) = raw.split_at(at);
+    let status = std::str::from_utf8(head)
+        .ok()
+        .and_then(|h| h.split(' ').nth(1))
         .and_then(|c| c.parse::<u16>().ok())
         .ok_or(WitnessError::Cosignature)?;
-    Ok((status, rest.to_owned()))
+    Ok((status, rest.get(4..).unwrap_or_default().to_vec()))
 }
 
-/// Sends `note` to `target` with the consistency `proof` from base size `old`; the verified
-/// cosignature line and its time in seconds.
+/// A witness's base: the size and root it last cosigned.
+pub type Base = (u64, [u8; 32]);
+
+/// Asks `target` to cosign `note` of `domain`, extending its `base` by the consistency
+/// `proof` (`witness.cddl` `cosign-request`); the verified cosignature line and its time in
+/// seconds.
 ///
 /// # Errors
-/// [`WitnessError`]; [`WitnessError::Conflict`] names the base the witness holds.
+/// [`WitnessError`]; [`WitnessError::Refused`] with the witness's status.
 pub async fn add_checkpoint(
     target: &Target,
-    (old, proof): (u64, &[[u8; 32]]),
+    domain: &Digest,
+    (base, proof): (Option<Base>, &[[u8; 32]]),
     note: &str,
     excerpt: &[u8],
-    metadata: &[u8],
 ) -> Result<(String, u64), WitnessError> {
-    let body = suiss_ledger::checkpoint::witness::add_checkpoint(old, proof, note);
-    let excerpt = access_kernel::json::b64url_encode(excerpt);
-    let metadata = access_kernel::json::b64url_encode(metadata);
-    let (status, answer) = exchange(
-        &target.url,
-        "POST",
-        "/add-checkpoint",
-        &[
-            ("Content-Type", "text/plain; charset=utf-8"),
-            (EXCERPT_HEADER, &excerpt),
-            (METADATA_HEADER, &metadata),
-        ],
-        &body,
-    )
-    .await?;
-    match status {
-        200 => {
-            let time = target.verify(note, &answer)?;
-            Ok((answer, time))
+    let body = CosignRequest {
+        domain: domain.0,
+        note: note.to_owned(),
+        excerpt: excerpt.to_vec(),
+        base,
+        consistency: proof.to_vec(),
+        binding_change: None,
+    }
+    .to_bytes()
+    .map_err(|_| WitnessError::Cosignature)?;
+    let (status, answer) = exchange(&target.url, "POST", "/cosign", &body).await?;
+    match CosignResponse::from_bytes(&answer) {
+        Ok(CosignResponse::Cosigned(c)) if status == 200 => {
+            let line = c.line(target.verifier.id());
+            let time = target.verify(note, &line)?;
+            Ok((line, time))
         }
-        409 => answer
-            .trim()
-            .parse::<u64>()
-            .map_or(Err(WitnessError::Refused(409)), |n| {
-                Err(WitnessError::Conflict(n))
-            }),
-        other => Err(WitnessError::Refused(other)),
+        Ok(CosignResponse::Refused(r)) => Err(WitnessError::Said(r, status)),
+        _ => Err(WitnessError::Refused(status)),
     }
 }
 
-/// The latest cosigned note `target` holds for `domain` (gossip, §9.16).
+/// The latest head `target` cosigned for `domain`, its cosignature verified over the note it
+/// carries (gossip, §9.16): the entry and the cosigned note.
 ///
 /// # Errors
 /// [`WitnessError`].
-pub async fn latest(target: &Target, domain: &Digest) -> Result<String, WitnessError> {
-    let path = format!(
-        "/checkpoint/{}",
-        access_kernel::json::b64url_encode(&domain.0)
-    );
-    match exchange(&target.url, "GET", &path, &[], "").await? {
-        (200, note) => {
-            verify_note(&PureBackend, &note, std::slice::from_ref(&target.verifier))
-                .map_err(|_| WitnessError::Cosignature)?;
-            Ok(note)
-        }
-        (other, _) => Err(WitnessError::Refused(other)),
+pub async fn latest(
+    target: &Target,
+    domain: &Digest,
+) -> Result<(GossipEntry, String), WitnessError> {
+    let path = format!("/gossip/{}", access_kernel::json::b64url_encode(&domain.0));
+    let (status, body) = exchange(&target.url, "GET", &path, &[]).await?;
+    if status != 200 {
+        return Err(WitnessError::Refused(status));
     }
+    let entry = GossipEntry::from_bytes(&body).map_err(|_| WitnessError::Cosignature)?;
+    let note = entry.note.clone().ok_or(WitnessError::Cosignature)?;
+    let (n, accepted) = verify_note(&PureBackend, &note, std::slice::from_ref(&target.verifier))
+        .map_err(|_| WitnessError::Cosignature)?;
+    let cp =
+        suiss_crypto::note::Checkpoint::parse(&n.body).map_err(|_| WitnessError::Cosignature)?;
+    let covered = (cp.size, cp.root) == (entry.size, entry.root)
+        && entry.domain == domain.0
+        && accepted
+            .iter()
+            .any(|a| a.timestamp == Some(entry.cosignature.timestamp));
+    if !covered {
+        return Err(WitnessError::Cosignature);
+    }
+    Ok((entry, note))
 }
 
 #[derive(Default)]
