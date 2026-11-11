@@ -243,15 +243,21 @@ pub struct Use {
 }
 
 /// The break-glass use `req` is, given the state of the Grant it names: a holding of a live
-/// break-glass Grant and an intent carrying `break_glass` or `drill`; `None` for any other
-/// request, whatever purpose it declares.
+/// break-glass Grant that names the intent's action, and an intent carrying `break_glass` or
+/// `drill`; `None` for any other request, whatever purpose it declares.
 #[must_use]
 pub fn of(req: &Request, grant: Option<&GrantState>) -> Option<Use> {
     let ExerciseBasis::Holding(h) = req.basis else {
         return None;
     };
     let g = grant.filter(|g| g.ended.is_none())?;
-    if !is_breakglass(&g.content.authority.authority) {
+    let a = &g.content.authority.authority;
+    // OP-157 m.19 (b)
+    let named =
+        a.actions.exact.iter().any(|n| {
+            n.namespace == req.intent.action.namespace && n.name == req.intent.action.name
+        });
+    if !is_breakglass(a) || !named {
         return None;
     }
     let drill = match &req.intent.purpose {

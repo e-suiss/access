@@ -1064,10 +1064,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if used.is_some() && span > breakglass::USE_MAX_MS {
             return Err(CoreError::Protocol("intent-validity"));
         }
+        // OP-157 m.19 (b)
         if tier != access_kernel::tier::Tier::Ct3
             || evaluation.decision.outcome != Outcome::Allow
             || req.payload.is_none()
-            || used.is_some()
+            || (used.is_some() && evaluation.breakglass)
         {
             return Ok(());
         }

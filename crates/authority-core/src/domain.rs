@@ -245,6 +245,8 @@ pub struct Evaluation {
     pub foreign: Option<Vec<u8>>,
     /// The agency chain of an allowed Exercise made for another Party (OP-149 m.11).
     pub agency: Vec<AgencyLink>,
+    /// The allow met the own terms of the break-glass Grant it used (G29, OP-157 m.19 (b)).
+    pub breakglass: bool,
 }
 
 /// A budget draw: counter key, limit, demand and the unit of an `amount` term.
@@ -492,6 +494,35 @@ pub(crate) fn lineage_hops_at(
             GrantBasis::Holding(h) => at = h.grant,
         }
     }
+}
+
+/// Puts the own terms of the break-glass Grant a meta-Exercise uses onto its hop: the
+/// requirements of every Grant of its lineage, the Grant's validity and the lineage's status.
+/// Implicit powers decide a meta-action, so without this a holding's approvals would never be
+/// asked for; returns whether the hop now carries them (G29, TN-93, OP-157 m.19 (b)).
+fn breakglass_terms(view: &Snapshot, req: &Request, now: u64, hop: &mut Hop) -> bool {
+    let ExerciseBasis::Holding(h) = req.basis else {
+        return false;
+    };
+    let Some(g) = read::<GrantState>(view, kind::GRANT, &h.grant) else {
+        return false;
+    };
+    if crate::app::breakglass::of(req, Some(&g)).is_none() {
+        return false;
+    }
+    hop.authority.constraints.validity = g.content.authority.constraints.validity;
+    match lineage_hops_at(view, &h.grant, Some(now)) {
+        Some((lineage, _)) => {
+            for l in lineage {
+                if hop.status == HopStatus::Active {
+                    hop.status = l.status;
+                }
+                hop.authority.requirements.extend(l.authority.requirements);
+            }
+        }
+        None => hop.status = HopStatus::Revoked,
+    }
+    true
 }
 
 /// The subcode that refuses a `projection.issue` on a holding whose lineage the application
@@ -1548,6 +1579,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             action: None,
             foreign: None,
             agency: Vec::new(),
+            breakglass: false,
         });
     }
     // OP-141 m.35 (e), (f)
@@ -1574,6 +1606,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     action: None,
                     foreign: None,
                     agency: Vec::new(),
+                    breakglass: false,
                 });
             }
         }
@@ -1584,6 +1617,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
     let mut draws = Vec::new();
     let mut releases = Vec::new();
     let mut expansion = false;
+    let mut own_terms = matches!(req.basis, ExerciseBasis::Holding(_));
     // L0-META-30
     let contribute = matches!(req.payload, Some(Payload::Contribute { .. }));
     if let Some(payload) = req.payload.as_ref().filter(|_| contribute) {
@@ -1601,6 +1635,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 action: None,
                 foreign: None,
                 agency: Vec::new(),
+                breakglass: false,
             });
         };
         let ctx = meta::Context {
@@ -1625,6 +1660,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     action: None,
                     foreign: None,
                     agency: Vec::new(),
+                    breakglass: false,
                 });
             }
         }
@@ -1666,6 +1702,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     action: None,
                     foreign: None,
                     agency: Vec::new(),
+                    breakglass: false,
                 });
             }
         }
@@ -1687,6 +1724,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 action: None,
                 foreign: None,
                 agency: Vec::new(),
+                breakglass: false,
             });
         };
         let ctx = meta::Context {
@@ -1719,6 +1757,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     action: None,
                     foreign: None,
                     agency: Vec::new(),
+                    breakglass: false,
                 });
             }
             Ok(out) => {
@@ -1752,6 +1791,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                         action: None,
                         foreign: None,
                         agency: Vec::new(),
+                        breakglass: false,
                     });
                 }
                 if let Some(subcode) = lapsed {
@@ -1764,6 +1804,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                         action: None,
                         foreign: None,
                         agency: Vec::new(),
+                        breakglass: false,
                     });
                 }
                 if !admissible {
@@ -1780,6 +1821,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                         action: None,
                         foreign: None,
                         agency: Vec::new(),
+                        breakglass: false,
                     });
                 }
                 // OP-153 m.10 (e), OP-152 m.5 (a)
@@ -1802,6 +1844,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                             action: None,
                             foreign: None,
                             agency: Vec::new(),
+                            breakglass: false,
                         });
                     }
                 }
@@ -1825,6 +1868,8 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     })
                 } else {
                     let mut hop = exact_hop(&req.intent, None, out.requirements);
+                    // G29, TN-93, OP-157 m.19 (b)
+                    own_terms = breakglass_terms(snapshot, req, now, &mut hop);
                     // OP-143 m.12
                     if let (
                         Some(Payload::ProjectionIssue {
@@ -2039,6 +2084,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             action: schema,
             foreign: None,
             agency: Vec::new(),
+            breakglass: false,
         });
     }
     // E49, OP-154 m.3 (x)
@@ -2106,6 +2152,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 action: schema,
                 foreign: foreign_pap,
                 agency: agency(req.capacity, actor.as_ref(), mandate.as_ref(), allowed),
+                breakglass: allowed && breakglass && own_terms,
             })
         }
         Err(r) => Pass::Rejected(r),

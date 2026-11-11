@@ -568,3 +568,164 @@ fn time_locked(r: &Response) -> bool {
             .iter()
             .any(|b| b.subcode.as_deref() == Some("time-lock"))
 }
+
+/// A CT3 widening of Grant `target` by ROOT on `basis`: it adds the reserved `shop:wipe` to
+/// `shop:read`, declaring `purpose`.
+fn widen(
+    d: Digest,
+    nonce: u8,
+    (target, basis): (Id, ExerciseBasis),
+    purpose: Option<&str>,
+    proofs: Vec<ProofRef>,
+) -> Request {
+    let mut r = meta_request(
+        d,
+        nonce,
+        basis,
+        Payload::GrantAmend {
+            grant: target,
+            authority: authority(vec![action("shop", "read"), wipe()], selector("shop")),
+            agency: BTreeSet::from([Capacity::Own]),
+            named: None,
+        },
+    );
+    r.intent.purpose = purpose.map(|p| access_kernel::model::PurposeRef::Code(p.to_owned()));
+    r.intent.validity = Window {
+        from: NOW - 1_000,
+        until: NOW + 3_600_000,
+    };
+    with_proofs(r, proofs)
+}
+
+// G29, TN-93, §12.3.8, §13.7.3, OP-157 m.3 (h), m.19 (b), Ek B 5663
+#[tokio::test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the root, the bare holding, the unnamed holding and the approved use read together"
+)]
+async fn a_breakglass_basis_skips_the_time_lock_only_with_its_own_approvals() {
+    let db = fresh().await.unwrap();
+    let (g, index) = three_approvers(None);
+    let (mut core, d) = core_of(&db, g).await;
+    let mut setup = wipe_setup(d);
+    setup.holders = BTreeSet::from([ROOT, BOB]);
+    setup.actions.insert(action("access", "grant_amend"));
+    let grants = setup.grants().unwrap();
+    let own = grants
+        .iter()
+        .find(|c| c.holder == SubjectSelector::Party(ROOT))
+        .unwrap()
+        .clone();
+    let issued = send(&mut core, issue(d, 10, own.clone()), ROOT_KEY)
+        .await
+        .unwrap();
+    allowed(&issued);
+    let bg = holding_of(&issued, ROOT);
+    let mut unnamed = own;
+    unnamed.authority.authority.actions.exact = BTreeSet::from([wipe()]);
+    let other = send(&mut core, issue(d, 11, unnamed), ROOT_KEY)
+        .await
+        .unwrap();
+    allowed(&other);
+    let bg_wipe_only = holding_of(&other, ROOT);
+    let reader = send(
+        &mut core,
+        issue(
+            d,
+            12,
+            GrantContent {
+                basis: GrantBasis::Anchor(shop_anchor(d)),
+                holder: SubjectSelector::Party(CAROL),
+                authority: authority(vec![action("shop", "read")], selector("shop")),
+                agency: BTreeSet::from([Capacity::Own]),
+                named: None,
+            },
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&reader);
+    let target = meta::object_id(&reader.exercise.unwrap(), kind::GRANT, 0);
+
+    // §13.7.3
+    let on_root = send(
+        &mut core,
+        widen(
+            d,
+            20,
+            (target, ExerciseBasis::Anchor(shop_anchor(d))),
+            None,
+            Vec::new(),
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    assert!(time_locked(&on_root), "{on_root:?}");
+
+    // G29, TN-93
+    let alone = send(
+        &mut core,
+        widen(d, 21, (target, bg), Some(breakglass::PURPOSE), Vec::new()),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    assert_eq!(alone.decision.outcome, Outcome::RequireAction, "{alone:?}");
+    assert!(!time_locked(&alone), "{alone:?}");
+    assert!(
+        alone
+            .decision
+            .unmet
+            .iter()
+            .any(|u| u.term.class == breakglass::APPROVAL),
+        "{alone:?}"
+    );
+    let unnamed = send(
+        &mut core,
+        widen(
+            d,
+            22,
+            (target, bg_wipe_only),
+            Some(breakglass::PURPOSE),
+            Vec::new(),
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    assert!(time_locked(&unnamed), "{unnamed:?}");
+
+    // §12.3.8, OP-142
+    let ask = widen(d, 23, (target, bg), Some(breakglass::PURPOSE), Vec::new());
+    let digest = access_kernel::intent::intent_digest(&ask.intent).unwrap();
+    let shown = access_kernel::render::digest(
+        &access_kernel::render::of(None, &ask.intent, access_kernel::render::DEFAULT_LOCALE)
+            .unwrap(),
+    )
+    .unwrap();
+    let asked = send(&mut core, ask.clone(), ROOT_KEY).await.unwrap();
+    assert_eq!(asked.decision.outcome, Outcome::RequireAction, "{asked:?}");
+    let mut proofs = Vec::new();
+    for ((party, at, inst), key, nonce) in [
+        ((ALICE, index[0], 4), ALICE_KEY, 30),
+        ((CAROL, index[2], 8), CAROL_KEY, 31),
+    ] {
+        let given = send(
+            &mut core,
+            breakglass_approval(d, (party, at, inst), nonce, digest, shown),
+            key,
+        )
+        .await
+        .unwrap();
+        allowed(&given);
+        proofs.push(ProofRef::Contribution(given.exercise.unwrap()));
+    }
+    let used = send(&mut core, with_proofs(ask, proofs), ROOT_KEY)
+        .await
+        .unwrap();
+    allowed(&used);
+    assert!(notice_at(&db, d, used.record.unwrap()).await.is_some());
+    fold_check(&db.sequencer, d).await.unwrap();
+}
