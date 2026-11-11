@@ -97,6 +97,13 @@ pub enum Owner {
     Q13,
     /// Stage 11 Q20: One's cloud key permission.
     Q20,
+    /// Stage 12 V2: support access requests, the person's support settings and support
+    /// artifacts (OP-157 m.2).
+    V2,
+    /// Stage 12 V6: the Approval Surface and `/consent` (OP-157 m.2).
+    V6,
+    /// Stage 12 V7: in-notification and batch approval (OP-157 m.2).
+    V7,
 }
 
 /// One route.
@@ -1331,6 +1338,97 @@ pub const ROUTES: &[Route] = &[
         "/v1/me/handles/{handle}/retire",
         "retireHandle",
         "Retires a handle: it is no longer shown or listed in the DID document.",
+    ),
+    planned(
+        Owner::V2,
+        Verb::Post,
+        "/v1/support/requests",
+        "createSupportRequest",
+        "A support operator's request for support access: {subject, case, scope, minutes}. Access sends the person a support_access_request invitation; the operator never opens the person's trusted page, and only the person's own S1 grants access (OP-157 m.3 (f)).",
+    ),
+    planned(
+        Owner::V2,
+        Verb::Get,
+        "/v1/support/requests",
+        "listSupportRequests",
+        "The person's open support access requests: who asks, for which case, which scope and for how long.",
+    ),
+    planned(
+        Owner::V2,
+        Verb::Post,
+        "/v1/support/requests/{request}/decline",
+        "declineSupportRequest",
+        "The person declines a support access request; nothing is granted.",
+    ),
+    planned(
+        Owner::V2,
+        Verb::Post,
+        "/v1/support/artifacts",
+        "uploadSupportArtifact",
+        "Uploads a support artifact for a case: HAR, JSON or a text log only, redacted on upload and sealed under its own key; an image or video answers 415 artifact-format-refused (idp.account.artifact_upload, OP-157 m.3 (g)).",
+    ),
+    planned(
+        Owner::V2,
+        Verb::Get,
+        "/v1/support/artifacts/{artifact}",
+        "getSupportArtifact",
+        "Reads one redacted support artifact under a separate idp.account.artifact_read Grant (CT2).",
+    ),
+    planned(
+        Owner::V2,
+        Verb::Get,
+        "/v1/me/support-access",
+        "listSupportAccess",
+        "The person's support access: active and ended support Grants with operator, organization, case, scope and end time (U57, OP-157 m.3 (f)).",
+    ),
+    planned(
+        Owner::V2,
+        Verb::Post,
+        "/v1/me/support-access/{grant}/revoke",
+        "revokeSupportAccess",
+        "The person revokes a support Grant; only that Grant and its cascade end, the person's sessions are untouched (OP-157 m.3 (c)).",
+    ),
+    planned(
+        Owner::V2,
+        Verb::Put,
+        "/v1/me/support-block",
+        "putSupportBlock",
+        "Turns Block support access on, a CT1 narrowing policy.set on the person's self-anchor, or off as the person's own Exercise (OP-157 m.3 (c)).",
+    ),
+    planned(
+        Owner::V7,
+        Verb::Post,
+        "/v1/approve/batch",
+        "startBatchApproval",
+        "Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in a realm that opened idp.realm.approval_batch (OP-157 m.3 (m)).",
+    ),
+    planned(
+        Owner::V7,
+        Verb::Post,
+        "/v1/approve/batch/{flow}",
+        "finishBatchApproval",
+        "Finishes a batch approval with one assertion per item; any item outside the batch rules refuses the whole batch with approval-batch-invalid.",
+    ),
+    planned(
+        Owner::V7,
+        Verb::Post,
+        "/v1/approve/inline",
+        "answerInlineApproval",
+        "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key (surface_profile suiss-approver-sdk); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m)).",
+    ),
+    planned(
+        Owner::V6,
+        Verb::Get,
+        "/consent",
+        "getConsent",
+        "The MCP authorization server's consent step: redirects to the Approval Surface (/v1/approve); consent is an AAS bound to its grant_ref (OP-157 m.3 (l), §11.6).",
+    ),
+    planned(
+        Owner::V6,
+        Verb::Post,
+        "/consent",
+        "postConsent",
+        "Answers 405: consent is never a form post outside the Approval Surface.",
     ),
 ];
 

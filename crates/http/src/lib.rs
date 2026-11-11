@@ -27,6 +27,7 @@ mod security_txt;
 pub mod ssf;
 pub mod ssh;
 pub mod stage11;
+pub mod stage12;
 pub mod status;
 pub mod tls;
 

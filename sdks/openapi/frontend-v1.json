@@ -4733,6 +4733,318 @@
           }
         }
       }
+    },
+    "/v1/support/requests": {
+      "post": {
+        "operationId": "createSupportRequest",
+        "summary": "A support operator's request for support access: {subject, case, scope, minutes}. Access sends the person a support_access_request invitation; the operator never opens the person's trusted page, and only the person's own S1 grants access (OP-157 m.3 (f)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      },
+      "get": {
+        "operationId": "listSupportRequests",
+        "summary": "The person's open support access requests: who asks, for which case, which scope and for how long.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/support/requests/{request}/decline": {
+      "post": {
+        "operationId": "declineSupportRequest",
+        "summary": "The person declines a support access request; nothing is granted.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "request",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/support/artifacts": {
+      "post": {
+        "operationId": "uploadSupportArtifact",
+        "summary": "Uploads a support artifact for a case: HAR, JSON or a text log only, redacted on upload and sealed under its own key; an image or video answers 415 artifact-format-refused (idp.account.artifact_upload, OP-157 m.3 (g)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/support/artifacts/{artifact}": {
+      "get": {
+        "operationId": "getSupportArtifact",
+        "summary": "Reads one redacted support artifact under a separate idp.account.artifact_read Grant (CT2).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/me/support-access": {
+      "get": {
+        "operationId": "listSupportAccess",
+        "summary": "The person's support access: active and ended support Grants with operator, organization, case, scope and end time (U57, OP-157 m.3 (f)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/me/support-access/{grant}/revoke": {
+      "post": {
+        "operationId": "revokeSupportAccess",
+        "summary": "The person revokes a support Grant; only that Grant and its cascade end, the person's sessions are untouched (OP-157 m.3 (c)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "grant",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/me/support-block": {
+      "put": {
+        "operationId": "putSupportBlock",
+        "summary": "Turns Block support access on, a CT1 narrowing policy.set on the person's self-anchor, or off as the person's own Exercise (OP-157 m.3 (c)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/approve/batch": {
+      "post": {
+        "operationId": "startBatchApproval",
+        "summary": "Starts a CT1 batch approval of at most 10 requests of one requester and one action class, each shown and each with its own AAS; only in a realm that opened idp.realm.approval_batch (OP-157 m.3 (m)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/approve/batch/{flow}": {
+      "post": {
+        "operationId": "finishBatchApproval",
+        "summary": "Finishes a batch approval with one assertion per item; any item outside the batch rules refuses the whole batch with approval-batch-invalid.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "flow",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/approve/inline": {
+      "post": {
+        "operationId": "answerInlineApproval",
+        "summary": "An approver device's in-notification CT1 answer (approval-inline.cddl): the device rebuilt the canonical render with the Kernel, compared render_digest and signed H(AAS) with its device key (surface_profile suiss-approver-sdk); only in a realm that opened idp.realm.approval_inline (OP-157 m.3 (m)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/consent": {
+      "get": {
+        "operationId": "getConsent",
+        "summary": "The MCP authorization server's consent step: redirects to the Approval Surface (/v1/approve); consent is an AAS bound to its grant_ref (OP-157 m.3 (l), §11.6).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      },
+      "post": {
+        "operationId": "postConsent",
+        "summary": "Answers 405: consent is never a form post outside the Approval Surface.",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
     }
   },
   "components": {
