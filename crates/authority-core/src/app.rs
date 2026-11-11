@@ -1082,6 +1082,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 _ => None,
             })
             .unwrap_or(meta::CT3_DELAY_DEFAULT_S);
+        // SI-18, CR-8, §15.4, OP-158 m.3 (b)
+        let delay = if matches!(req.payload, Some(Payload::VersionActivate { .. })) {
+            delay.max(access_kernel::version::DOWNGRADE_DELAY_MS / 1_000)
+        } else {
+            delay
+        };
         let opened = if open {
             match self.reader.nonce_opened(&req.nonce).await? {
                 Some(pos) => self.reader.recorded_at(pos).await?.unwrap_or(now),
@@ -1160,6 +1166,47 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 Replay::New => Ok(false),
             },
         )
+    }
+
+    /// Closes an AIS issued before the domain's last forced recovery whose nonce the continuing
+    /// lineage does not hold; a known nonce re-commits (TI-RT3, U28, SEC22 R1 (c), §9.6).
+    async fn pre_recovery(
+        &self,
+        inc: &Incoming,
+        evaluation: &mut Evaluation,
+        open: bool,
+    ) -> Result<(), CoreError> {
+        let Some(sign1) = &inc.ais else {
+            return Ok(());
+        };
+        let key = access_kernel::recovery::recovered_key();
+        let recovered_at = self
+            .fetch(std::slice::from_ref(&key))
+            .await?
+            .into_iter()
+            .find_map(|(_, v, _)| v.as_ref().and_then(access_kernel::recovery::recovered_at));
+        let Some(at) = recovered_at else {
+            return Ok(());
+        };
+        let msg = cose::parse_sign1(sign1).map_err(|e| CoreError::Ais(AisError::Signature(e)))?;
+        let payload = msg.payload.ok_or(CoreError::Protocol("ais"))?;
+        let iat = access_kernel::ais::Statement::from_bytes(&payload)
+            .map_err(|_| CoreError::Protocol("ais"))?
+            .iat;
+        if access_kernel::fold::pre_recovery(iat, at, open) {
+            let subcode = access_kernel::recovery::PRE_RECOVERY
+                .strip_prefix("nonce-closed/")
+                .unwrap_or(access_kernel::recovery::PRE_RECOVERY);
+            evaluation.decision = crate::domain::deny(
+                BlockerClass::NonceClosed,
+                subcode,
+                access_kernel::combinator::Resolver::Actor,
+            );
+            evaluation.effects.clear();
+            evaluation.draws.clear();
+            evaluation.releases.clear();
+        }
+        Ok(())
     }
 
     /// The PAP of an allowed `projection.issue` (L2-PAP-1, OP-143 m.11): its digest for the
@@ -1626,6 +1673,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             let (tier, render, render_bytes) = rendered(req, &evaluation)?;
             self.delegation_gate(req, &mut evaluation).await?;
             self.tiered(req, &mut evaluation, open, now).await?;
+            self.pre_recovery(inc, &mut evaluation, open).await?;
             self.recovery_rules(req, actor, &mut evaluation, tier, now)
                 .await?;
             self.approval(req, actor, &resolved, &mut evaluation, &exercise, now)

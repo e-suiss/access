@@ -323,7 +323,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         },
                         assurance: c.assurance.clone(),
                         consumed: false,
-                        surface: None,
+                        // §13.7.3, OP-157 m.8 (l), OP-158 m.3 (b)
+                        surface: c.surface_path,
                     });
                     out.contributions.insert(id, (k, c));
                 }

@@ -125,6 +125,8 @@ pub struct Approved {
     pub assurance: BTreeMap<String, u64>,
     /// Its `auth_time`.
     pub auth_time: u64,
+    /// The surface path the approval came through, when its statement names an origin.
+    pub surface_path: Option<Digest>,
 }
 
 /// The statement is the actor's, for this request's nonce and capacity, within the tier's
@@ -360,6 +362,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             statement: h,
             assurance: crate::requirements::contribution_assurance(&bound.assurance, &act),
             auth_time: bound.time,
+            // §13.7.3, OP-157 m.8 (l), OP-158 m.3 (b)
+            surface_path: act
+                .surface_origin
+                .as_deref()
+                .and_then(|o| access_kernel::aas::surface_path(&act.surface_profile, o).ok()),
         };
         let key = meta::exercise_key(kind::CONTRIBUTION, exercise);
         for (k, v) in &mut evaluation.effects {
@@ -370,6 +377,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 c.statement = Some(approved.statement);
                 c.assurance = approved.assurance.clone();
                 c.auth_time = Some(approved.auth_time);
+                c.surface_path = approved.surface_path;
                 *value = c.to_value();
             }
         }

@@ -12,6 +12,10 @@ mod agents;
 mod breakglass;
 #[path = "commit/containment.rs"]
 mod containment;
+#[path = "commit/distinct_surface.rs"]
+mod distinct_surface;
+#[path = "commit/domain_scope.rs"]
+mod domain_scope;
 #[path = "commit/mandate.rs"]
 mod mandate;
 #[path = "commit/policy_engine.rs"]
