@@ -1000,3 +1000,175 @@ phrases = [
 negation = true
 sources = ["MUST-NEVER-7", "§7.9.9.4"]
 honest = "Access holds no money, writes no ledger and coordinates no transaction; Pay and Money own execution, holds and settlement."
+# OP-157 m.4 (a): one row group per Stage 12 lane; each lane refines its own rows' phrases.
+[[claim]]
+id = "v1-support-acts-as-user"
+scope = "all"
+phrases = [
+  "support logs in as you", "support signs in as you", "support sees everything",
+  "support has full access to your account", "support can change your password",
+]
+negation = true
+sources = ["MD-9", "TN-70", "TN-71", "MUST-NEVER-19", "§8.16"]
+honest = "Support access is a Grant you give for one case and a limited time; the operator acts under their own name, and sign-in methods, payments and email stay out of reach."
+
+[[claim]]
+id = "v2-support-artifact-redaction"
+scope = "all"
+phrases = [
+  "screenshots are redacted automatically", "automatic screenshot redaction",
+  "videos are redacted automatically", "access keeps the raw har",
+]
+negation = true
+sources = ["TN-74", "§8.16"]
+honest = "Text artefacts (HAR, JSON, logs) are redacted on upload and the raw content is never kept; images and video are refused because they can't be redacted automatically."
+
+[[claim]]
+id = "v3-breakglass-superuser"
+scope = "all"
+phrases = [
+  "break-glass account can do anything", "break-glass accounts can do anything",
+  "break-glass skips approvals", "break-glass superuser", "break-glass is exempt from audit",
+]
+negation = true
+sources = ["INV-28", "SI-22", "G29", "TN-93", "§12.3.8"]
+honest = "A break-glass flag carries no authority; emergency access is a pre-issued reserved Grant that needs two approvals, is recorded and is reviewed afterwards."
+
+[[claim]]
+id = "v4-kill-switch"
+scope = "all"
+phrases = [
+  "disable all access with one click", "turn off all authorizations", "emergency off switch",
+  "one-click shutdown of authority",
+]
+negation = true
+sources = ["CI-13", "SI-4", "§6.6"]
+honest = "Containment is a narrowing Exercise by a Party allowed to restrict; it is recorded and attributable, and nothing changes authority without an Exercise."
+
+[[claim]]
+id = "v5-emergency-admin"
+scope = "all"
+phrases = [
+  "emergency admin", "standing emergency account", "built-in root account", "break-glass password",
+]
+negation = true
+sources = ["OP-54-RL10", "G63", "OP-46", "§17.7.3"]
+honest = "There is no standing emergency admin; the operator break-glass tool is offline, M-of-N, single-use for 15 minutes, and never makes an authority decision."
+
+[[claim]]
+id = "v6-independent-approver"
+scope = "ui"
+phrases = ["independent approver", "independently approved", "independent approval"]
+negation = true
+sources = ["§8.17.6", "SEC10", "U7"]
+honest = "Name the requirement: \"not the requester\", \"a different person\", \"a different device\" or \"a different approval app\"."
+
+[[claim]]
+id = "v6-approval-ui-owner"
+scope = "all"
+phrases = [
+  "access owns the approval ui", "access owns your approval ui",
+  "the notification is the approval", "the agent's summary is the approval",
+]
+negation = true
+sources = ["E32", "PI-17", "U7", "§9.14"]
+honest = "An approval is the full canonical render bound to the AAS on an accepted surface; notifications and agent text are invitations only."
+
+[[claim]]
+id = "v7-approve-all"
+scope = "all"
+phrases = ["approve all", "approve everything", "one tap approves everything"]
+negation = true
+sources = ["§8.17.11", "SEC26", "TN-100"]
+honest = "Batch approval is CT1 only, at most 10 visible items of one requester and one action class: \"Approve these 4 requests\"."
+
+[[claim]]
+id = "v7-reputation-score"
+scope = "all"
+phrases = [
+  "global reputation", "approver reputation", "access ranks your approvers", "access scores your users",
+]
+negation = true
+sources = ["MUST-NEVER-8", "§8.6"]
+honest = "Access gives the coordinator facts (class, amount, reserved, budget ratio) and no score, rank or urgency."
+
+[[claim]]
+id = "v8-auto-migrate-admin"
+scope = "all"
+phrases = [
+  "auto-migrate admin", "admin roles migrate automatically", "roles upgrade automatically",
+  "grants move to the new role version automatically",
+]
+negation = true
+sources = ["TN-114", "§12.5.2", "C28"]
+honest = "A role version change is an explicit, visible grant.amend; nothing moves to v2 by itself."
+
+[[claim]]
+id = "v8-approver-seat"
+scope = "all"
+phrases = [
+  "approvers need a seat", "approver seat", "approver licence", "approver license",
+  "license required to approve",
+]
+negation = true
+sources = ["§8.17.9.5", "C26"]
+honest = "Approving needs no seat or licence; anyone the requirement makes eligible can approve."
+
+[[claim]]
+id = "v8-pending-queue"
+scope = "all"
+phrases = ["pending changes queue", "access queues your changes", "change approval queue in access"]
+negation = true
+sources = ["X5", "C26", "§8.17.9.5"]
+honest = "Governance quorum lives in the coordinator: the first request gets REQUIRE_ACTION and Access keeps no pending-change queue."
+
+[[claim]]
+id = "v9-silent-offboarding"
+scope = "all"
+phrases = ["offboarding revokes everything automatically", "offboarding with default choices", "one-click offboarding"]
+negation = true
+sources = ["IDP-35", "TN-75", "§8.17.9.6"]
+honest = "Offboarding asks for an explicit choice for every channel; \"Offboarded\" shows only after the departure Exercise commits."
+
+[[claim]]
+id = "v10-review-renews-access"
+scope = "all"
+phrases = ["keeping a grant renews it", "review approval extends access", "the campaign grants access"]
+negation = true
+sources = ["IDP-39 (3)", "§8.17.12", "LFP-18"]
+honest = "A review is a view: Keep records an attestation and writes no authority; Remove is the reviewer's own grant.revoke Exercise."
+
+[[claim]]
+id = "v11-solver-narrows"
+scope = "all"
+phrases = ["the solver proves it narrows", "smt proves the policy narrows", "the solver lowers the tier"]
+negation = true
+sources = ["INV-27", "SEC8", "SI-18"]
+honest = "The structural rule in the Kernel decides polarity; the solver can only raise a change to broadening, never lower it."
+
+[[claim]]
+id = "v12-conformance-certified"
+scope = "all"
+phrases = [
+  "conformance certified", "access certified", "certified access provider",
+  "conformance is endorsement", "conformance means endorsement",
+]
+negation = true
+sources = ["P2", "D3", "§9.1"]
+honest = "A conformance profile run is a published test result for named vectors; conformance is not endorsement."
+
+[[claim]]
+id = "v12-mapping-verified"
+scope = "all"
+phrases = ["access verifies the mapping", "access verifies the meaning", "mappings apply automatically"]
+negation = true
+sources = ["PI-19", "E10", "§9.13.4"]
+honest = "The publisher declares the mapping; Access can't verify its meaning, and only a pinned, non-broadening mapping is applied."
+
+[[claim]]
+id = "v13-single-key-ceremony"
+scope = "all"
+phrases = ["one administrator can use the binding key", "single-person key ceremony", "the binding key needs one approval"]
+negation = true
+sources = ["CR-29", "§10.1.7"]
+honest = "The binding key is used only with a k-of-n (default 2-of-3) ceremony permit, recorded in a signed transcript."
