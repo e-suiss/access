@@ -2684,8 +2684,7 @@ impl Change {
             | Self::DrProfile(_)
             | Self::RateLimit(_)
             | Self::CryptoProfile(_)
-            | Self::HashProfileSet(_)
-            | Self::AuditTier(_) => Err(Invalid::NotYetServed),
+            | Self::HashProfileSet(_) => Err(Invalid::NotYetServed),
             // OP-157 m.3 (m)
             Self::ApprovalInline(_)
             | Self::ApprovalBatch(_)
@@ -2723,7 +2722,8 @@ impl Change {
             | Self::UpstreamRetire(_)
             | Self::ProtectionMode { .. }
             | Self::AccountCanary(_)
-            | Self::AccountDelete(_) => Ok(()),
+            | Self::AccountDelete(_)
+            | Self::AuditTier(_) => Ok(()),
         }
     }
 

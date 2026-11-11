@@ -1837,7 +1837,7 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "getPlacement" => (ResourceKind::Placement, Shape::Planned("Declared")),
         "getDurability" => (ResourceKind::Durability, Shape::Planned("Declared")),
         "putResidency" | "putDrProfile" | "putRateLimit" | "putCryptoProfile"
-        | "putHashProfile" | "putAuditTier" => (Settings, Shape::Planned("WriteResult")),
+        | "putHashProfile" => (Settings, Shape::Planned("WriteResult")),
         // OP-157 m.4 (a)
         "listCaseSystems" => (
             ResourceKind::CaseSystems,
@@ -1847,7 +1847,7 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "retireCaseSystem" => (ResourceKind::CaseSystems, w(false)),
         "listSupportGrants" => (ResourceKind::SupportGrants, Shape::Planned("Page")),
         // OP-157 m.3 (m)
-        "putApprovalInline" | "putApprovalBatch" => (Settings, w(true)),
+        "putApprovalInline" | "putApprovalBatch" | "putAuditTier" => (Settings, w(true)),
         // OP-157 m.3 (h)
         "listBreakglassAccounts" => (ResourceKind::BreakglassAccounts, Shape::List(&[])),
         "markBreakglassAccount" => (ResourceKind::BreakglassAccounts, CREATE),

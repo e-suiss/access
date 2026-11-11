@@ -828,15 +828,15 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::SupportArtifactPolicy(_)
             | Change::DelegatedAdmin(_)
             | Change::ApprovalInline(_)
-            | Change::ApprovalBatch(_) => {}
+            | Change::ApprovalBatch(_)
+            | Change::AuditTier(_) => {}
             // OP-158 m.4 (a)
             Change::Rehome(_)
             | Change::Residency(_)
             | Change::DrProfile(_)
             | Change::RateLimit(_)
             | Change::CryptoProfile(_)
-            | Change::HashProfileSet(_)
-            | Change::AuditTier(_) => return Err(Invalid::NotYetServed.into()),
+            | Change::HashProfileSet(_) => return Err(Invalid::NotYetServed.into()),
             // OP-157 m.3 (w)
             Change::Review(r) => review::current(t, r).await?,
             // OP-157 m.3 (h)
@@ -1653,8 +1653,16 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::DrProfile(_)
             | Change::RateLimit(_)
             | Change::CryptoProfile(_)
-            | Change::HashProfileSet(_)
-            | Change::AuditTier(_) => return Err(Invalid::NotYetServed.into()),
+            | Change::HashProfileSet(_) => return Err(Invalid::NotYetServed.into()),
+            // OP-158 m.3 (w)
+            Change::AuditTier(tier) => {
+                let row = tier.as_ref().map(|x| access_store::audit_tier::RealmTier {
+                    hot_days: x.hot_days,
+                    target: x.target.clone(),
+                });
+                access_store::audit_tier::put_realm_tier(t, bound, row.as_ref()).await?;
+                true
+            }
             // OP-157 m.3 (e)
             Change::CaseSystem(c) => support::write(t, bound, c).await?,
             // OP-157 m.3 (g)

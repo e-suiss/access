@@ -136,6 +136,11 @@ pub(crate) async fn gate(app: &Pool, cold: Option<&FileCold>) -> Result<(), Stri
         )
     };
     if let Some(g) = pending_reshred(app).await.map_err(|e| e.to_string())? {
+        tracing::error!(
+            event = "restore.reshred.pending",
+            generation = g,
+            "server stays closed"
+        );
         return Err(closed(g));
     }
     let Some(cold) = cold else {
@@ -145,6 +150,11 @@ pub(crate) async fn gate(app: &Pool, cold: Option<&FileCold>) -> Result<(), Stri
         return Ok(());
     }
     let g = mark_restored(app).await.map_err(|e| e.to_string())?;
+    tracing::error!(
+        event = "restore.reshred.pending",
+        generation = g,
+        "server stays closed"
+    );
     Err(closed(g))
 }
 
@@ -195,6 +205,27 @@ pub(crate) async fn reshred(app: &Pool, cold: &FileCold) -> Result<Reshred, Stri
     }
     if let Some(g) = pending_reshred(app).await.map_err(|e| e.to_string())? {
         mark_reshredded(app, g).await.map_err(|e| e.to_string())?;
+        let target = format!("restore:{g}");
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()
+            .and_then(|d| u64::try_from(d.as_millis()).ok())
+            .unwrap_or(0);
+        access_store::operational::record_operational(
+            app,
+            &access_store::operational::OperationalEvent {
+                occurred_at_ms: now,
+                tenant: None,
+                domain: None,
+                event_type: "restore.reshredded",
+                actor: "reshred",
+                target: &target,
+                reason: "",
+                correlation: "restore",
+            },
+        )
+        .await
+        .map_err(|e| e.to_string())?;
         out.generation = Some(g);
     }
     Ok(out)

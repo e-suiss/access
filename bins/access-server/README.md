@@ -258,7 +258,7 @@ While serving, the process also runs, each stopping with the server:
   opened ahead once a day by one node of the cell;
 - the daily tenant analytics, and the release of management API `Idempotency-Key` answers after
   24 hours (cleared in place, never deleted);
-- the audit checkpointer: every 500 ms the identity audit log and the authority operational
+- the audit checkpointer: twice a second the identity audit log and the authority operational
   stream are integrated into their Merkle trees and signed by the identity signer's cell key;
   each identity checkpoint then goes to the cold tier and the declared hooks, the tree's full
   tiles are written, and each ended year is frozen as static tiles in the cold tier;

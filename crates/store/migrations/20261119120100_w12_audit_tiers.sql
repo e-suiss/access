@@ -16,6 +16,35 @@ ALTER TABLE access.realms ADD CONSTRAINT realms_audit_hot_days_check
   CHECK (audit_hot_days BETWEEN 30 AND 3660) NOT VALID;
 ALTER TABLE access.realms VALIDATE CONSTRAINT realms_audit_hot_days_check;
 
+-- OP-158 m.3 (a), (w): a realm's idp.realm.audit_tier, one version per committed change; the
+-- latest is in force. A closed tier (audit_tier_close) leaves both values null: the tenant's
+-- window applies and the cell's cold tier keeps the copies.
+CREATE TABLE access.idp_audit_tiers (
+  tenant_id uuid NOT NULL,
+  realm_id uuid NOT NULL,
+  version bigint NOT NULL CHECK (version > 0),
+  hot_days integer CHECK (hot_days BETWEEN 30 AND 3660),
+  target text CHECK (octet_length(target) BETWEEN 1 AND 512),
+  domain_id bytea NOT NULL CHECK (octet_length(domain_id) = 32),
+  decision_pos bigint NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CHECK ((hot_days IS NULL) = (target IS NULL)),
+  PRIMARY KEY (tenant_id, realm_id, version),
+  FOREIGN KEY (tenant_id, realm_id) REFERENCES access.realms (tenant_id, realm_id)
+);
+ALTER TABLE access.idp_audit_tiers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE access.idp_audit_tiers FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON access.idp_audit_tiers FROM PUBLIC;
+CREATE POLICY rows ON access.idp_audit_tiers AS PERMISSIVE USING (true);
+CREATE POLICY tenant_scope ON access.idp_audit_tiers AS RESTRICTIVE TO access_app
+  USING (tenant_id = (SELECT access.tenant_scope()) AND realm_id = (SELECT access.realm_scope()))
+  WITH CHECK (tenant_id = (SELECT access.tenant_scope()) AND realm_id = (SELECT access.realm_scope()));
+CREATE TRIGGER append_only_row BEFORE UPDATE OR DELETE ON access.idp_audit_tiers
+  FOR EACH ROW EXECUTE FUNCTION access.reject_mutation();
+CREATE TRIGGER append_only_truncate BEFORE TRUNCATE ON access.idp_audit_tiers
+  FOR EACH STATEMENT EXECUTE FUNCTION access.reject_mutation();
+GRANT SELECT, INSERT ON access.idp_audit_tiers TO access_app;
+
 -- OP-73 m.4: one row per partition moved; the copy's root and digest are what the cold tier is
 -- checked against
 CREATE TABLE access_ops.audit_tier_moves (
@@ -174,8 +203,14 @@ BEGIN
   LOOP
     partition := leaf.name;
     SELECT l.tenant, l.month INTO tenant_id, month FROM access.audit_leaf(leaf.name) l;
-    SELECT greatest(coalesce(max(t.audit_hot_days), 90), coalesce(max(r.audit_hot_days), 0)) INTO hot
-      FROM access.tenants t LEFT JOIN access.realms r ON r.tenant_id = t.tenant_id
+    SELECT greatest(coalesce(max(t.audit_hot_days), 90), coalesce(max(r.audit_hot_days), 0),
+                    coalesce(max(v.hot_days), 0)) INTO hot
+      FROM access.tenants t
+      LEFT JOIN access.realms r ON r.tenant_id = t.tenant_id
+      LEFT JOIN LATERAL (
+        SELECT a.hot_days FROM access.idp_audit_tiers a
+         WHERE a.tenant_id = r.tenant_id AND a.realm_id = r.realm_id
+         ORDER BY a.version DESC LIMIT 1) v ON true
      WHERE audit_partitions_due.tenant_id IS NULL OR t.tenant_id = audit_partitions_due.tenant_id;
     CONTINUE WHEN (month + interval '1 month')::date + hot > current_date;
     EXECUTE format('SELECT count(*) FROM access.%I', leaf.name) INTO rows;

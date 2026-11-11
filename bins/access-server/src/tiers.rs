@@ -16,8 +16,10 @@ use access_identity_export::adapters::cold_file::FileCold;
 use access_identity_export::domain::cold::ColdParquet;
 use access_store::Pool;
 use access_store::StoreError;
+use access_store::audit_tier::Moved;
 use access_store::ephemeral::close_days;
 use access_store::jobs::{claim_kind, complete, schedule};
+use access_store::operational::{OperationalEvent, record_operational};
 
 /// The ephemeral close job kind.
 pub(crate) const CLOSE: &str = "partitions.close";
@@ -46,11 +48,11 @@ pub(crate) struct Tick {
 async fn close(archive: &Pool, out: &mut Tick) -> bool {
     match close_days(archive).await {
         Ok(closed) => {
-            if !closed.is_empty() {
+            for partition in &closed {
                 tracing::info!(
-                    event = "partitions.closed",
-                    closed = closed.len(),
-                    "ephemeral protocol partitions closed (OP-73 m.7)"
+                    event = "ephemeral.partition.dropped",
+                    %partition,
+                    "ephemeral protocol partition closed (OP-73 m.7)"
                 );
             }
             out.closed.extend(closed);
@@ -63,7 +65,34 @@ async fn close(archive: &Pool, out: &mut Tick) -> bool {
     }
 }
 
-async fn tier(archive: &Pool, cold: &Path, out: &mut Tick) -> bool {
+/// Writes `audit.tier_moved` for a moved partition to the operational audit stream (OP-44).
+async fn audited(app: &Pool, moved: &Moved, now_ms: u64) -> Result<(), StoreError> {
+    let root = moved
+        .root
+        .iter()
+        .take(8)
+        .fold(String::from("root:"), |mut s, b| {
+            use std::fmt::Write as _;
+            let _ = write!(s, "{b:02x}");
+            s
+        });
+    record_operational(
+        app,
+        &OperationalEvent {
+            occurred_at_ms: now_ms,
+            tenant: moved.tenant,
+            domain: None,
+            event_type: "audit.tier_moved",
+            actor: "archive",
+            target: &moved.partition,
+            reason: "",
+            correlation: &root,
+        },
+    )
+    .await
+}
+
+async fn tier(app: &Pool, archive: &Pool, (cold, now_ms): (&Path, u64), out: &mut Tick) -> bool {
     let store = FileCold {
         root: cold.to_path_buf(),
     };
@@ -75,7 +104,17 @@ async fn tier(archive: &Pool, cold: &Path, out: &mut Tick) -> bool {
             out.kept_hot = out
                 .kept_hot
                 .saturating_add(u32::try_from(run.failed.len()).unwrap_or(u32::MAX));
-            out.moved.extend(run.moved.into_iter().map(|m| m.partition));
+            for m in run.moved {
+                tracing::info!(
+                    event = "audit.partition.detached",
+                    partition = %m.partition,
+                    "audit partition moved to the cold tier (OP-73 m.4)"
+                );
+                if let Err(error) = audited(app, &m, now_ms).await {
+                    tracing::error!(%error, partition = %m.partition, "audit.tier_moved not recorded");
+                }
+                out.moved.push(m.partition);
+            }
             true
         }
         Err(error) => {
@@ -117,7 +156,7 @@ pub(crate) async fn tick(
             // OP-73 m.4, m.7; OP-158 m.3 (w)
             let done = match (kind, cold) {
                 (CLOSE, _) => close(archive, &mut out).await,
-                (_, Some(dir)) => tier(archive, dir, &mut out).await,
+                (_, Some(dir)) => tier(app, archive, (dir, now_ms), &mut out).await,
                 (_, None) => false,
             };
             if done && complete(app, job.id, worker).await? {

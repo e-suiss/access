@@ -69,7 +69,7 @@ fn targets(dir: &std::path::Path) -> Targets {
                 root: dir.to_path_buf(),
             },
         }),
-        hooks: Vec::new(),
+        ..Targets::default()
     }
 }
 

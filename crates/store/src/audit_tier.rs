@@ -202,3 +202,72 @@ pub async fn moves(archive: &PgPool) -> Result<Vec<Moved>, StoreError> {
         })
         .collect()
 }
+
+/// A realm's audit tier as `idp.realm.audit_tier` set it (OP-158 m.3 (a), (w)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RealmTier {
+    /// Days the hot window keeps.
+    pub hot_days: u32,
+    /// The cold tier target the realm declared.
+    pub target: String,
+}
+
+/// Writes the next version of the realm's audit tier; `None` closes it (`audit_tier_close`).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn put_realm_tier(
+    t: &mut crate::identity::TenantTx,
+    bound: &crate::idp::Bound,
+    tier: Option<&RealmTier>,
+) -> Result<(), StoreError> {
+    let realm = t.realm().ok_or(StoreError::Range)?;
+    let hot = tier
+        .map(|x| i32::try_from(x.hot_days).map_err(|_| StoreError::Range))
+        .transpose()?;
+    sqlx::query!(
+        "INSERT INTO access.idp_audit_tiers
+           (tenant_id, realm_id, version, hot_days, target, domain_id, decision_pos)
+         SELECT $1, $2,
+                COALESCE((SELECT max(version) FROM access.idp_audit_tiers
+                           WHERE tenant_id = $1 AND realm_id = $2), 0) + 1,
+                $3, $4, $5, $6",
+        Uuid::from_bytes(*t.tenant.as_bytes()),
+        Uuid::from_bytes(*realm.as_bytes()),
+        hot,
+        tier.map(|x| x.target.as_str()),
+        bound.domain().as_bytes().as_slice(),
+        bound.raw_position(),
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(())
+}
+
+/// The realm's audit tier in force, `None` when it was never set or is closed.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn realm_tier(
+    t: &mut crate::identity::TenantTx,
+) -> Result<Option<RealmTier>, StoreError> {
+    let realm = t.realm().ok_or(StoreError::Range)?;
+    let row = sqlx::query!(
+        "SELECT hot_days, target FROM access.idp_audit_tiers
+          WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+        Uuid::from_bytes(*t.tenant.as_bytes()),
+        Uuid::from_bytes(*realm.as_bytes()),
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    Ok(match row {
+        Some(r) => match (r.hot_days, r.target) {
+            (Some(h), Some(target)) => Some(RealmTier {
+                hot_days: u32::try_from(h).map_err(|_| StoreError::Corrupt)?,
+                target,
+            }),
+            _ => None,
+        },
+        None => None,
+    })
+}

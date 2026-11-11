@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT hot_days, target FROM access.idp_audit_tiers\n          WHERE tenant_id = $1 AND realm_id = $2 ORDER BY version DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "hot_days",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.idp_audit_tiers",
+            "name": "hot_days"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "target",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_audit_tiers",
+            "name": "target"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "d4e6bed36e2b26cf95189568ff76a5bd3f2b3939c1854202a147c574728f86fc"
+}

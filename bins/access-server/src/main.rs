@@ -1935,7 +1935,11 @@ async fn serve(
             authority_signer: config.signer.clone().ok_or("no signer")?,
             holder: holder()?,
             // OP-37, U52
-            publication: publication::Targets::from_config(config, &prepared.outbound)?,
+            publication: publication::Targets::from_config(
+                config,
+                &prepared.outbound,
+                product_app.clone(),
+            )?,
         },
         move || led.led(),
     );
