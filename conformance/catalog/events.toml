@@ -828,6 +828,8 @@ plane = "signer"
 severity = "info"
 since = "unreleased"
 fields = ["domain", "realm", "kid", "trigger"]
+ocsf = "entity_management"
+
 # OP-46, OP-157 m.3 (j), (k): V5
 [[event]]
 name = "operator.epoch_floor.raised"
