@@ -10,6 +10,8 @@
 mod agents;
 #[path = "commit/breakglass.rs"]
 mod breakglass;
+#[path = "commit/containment.rs"]
+mod containment;
 #[path = "commit/policy_engine.rs"]
 mod policy_engine;
 

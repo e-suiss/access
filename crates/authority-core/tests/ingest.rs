@@ -7,6 +7,9 @@
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
+#[path = "ingest/compromise.rs"]
+mod compromise;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
