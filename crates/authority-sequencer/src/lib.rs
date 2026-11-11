@@ -3,8 +3,10 @@
 
 pub mod adapters;
 pub mod app;
+pub mod cell;
 pub mod checkpoint;
 pub mod domain;
+pub mod gate;
 pub mod ports;
 pub mod witness;
 

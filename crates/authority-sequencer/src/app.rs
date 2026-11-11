@@ -11,6 +11,8 @@ use suiss_ledger::doorbell::{Bell, Gate, Ring};
 use suiss_ledger::fence::{Cursor, Fence};
 use suiss_ledger::sequencer::{Head, Sequencer};
 
+pub mod group;
+
 use crate::SequencerError;
 use crate::domain::{
     Bound, Item, Outcome, check_effects, check_last, head_of, independent, nonces, replay, rows,

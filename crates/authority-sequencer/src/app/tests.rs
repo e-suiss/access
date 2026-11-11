@@ -30,6 +30,7 @@ struct State {
     head: Option<HeadRow>,
     nonces: Vec<NonceRow>,
     fail_next_commit: bool,
+    commits: usize,
 }
 
 struct MemLog(Mutex<State>);
@@ -121,6 +122,7 @@ impl DomainLog for MemLog {
         s.records.extend(batch.records.iter().cloned());
         s.nonces.extend(batch.nonces.iter().cloned());
         s.head = Some(batch.head.clone());
+        s.commits += 1;
         Ok(())
     }
 }
@@ -241,4 +243,135 @@ async fn genesis_cannot_be_appended() {
         l.commit(20, &[g]).await,
         Err(SequencerError::Genesis)
     ));
+}
+
+fn with_rw(tag: &str, reads: &[&[u8]], writes: &[&[u8]]) -> Item {
+    let mut i = item(tag);
+    i.reads = reads.iter().map(|k| (k.to_vec(), 0)).collect();
+    i.writes = writes.iter().map(|k| k.to_vec()).collect();
+    i
+}
+
+// OP-9, T7, PI-23, TI-7, Ek B 5755
+#[tokio::test]
+async fn op_9_independent_commits_share_one_batch_and_change_nothing_else() {
+    use super::group::Grouped;
+    let groups = vec![
+        vec![with_rw("a", &[b"x"], &[b"x"])],
+        vec![
+            with_rw("b1", &[b"y"], &[b"y"]),
+            with_rw("b2", &[b"y2"], &[]),
+        ],
+        vec![with_rw("c", &[b"z"], &[b"z"])],
+    ];
+    let (log, d) = MemLog::with_genesis();
+    let mut grouped = Leader::acquire(log, d, key()).await.unwrap();
+    let out = grouped.commit_group(20, &groups).await.unwrap();
+    let positions: Vec<Vec<u64>> = out
+        .into_iter()
+        .map(|g| match g {
+            Grouped::Done(Outcome::Appended(p)) => p,
+            other => panic!("{other:?}"),
+        })
+        .collect();
+    assert_eq!(positions, vec![vec![1], vec![2, 3], vec![4]]);
+    assert_eq!(
+        grouped.log.state().commits,
+        1,
+        "one transaction, one WAL flush"
+    );
+
+    let (log, _) = MemLog::with_genesis();
+    let mut alone = Leader::acquire(log, d, key()).await.unwrap();
+    let all: Vec<Item> = groups.iter().flatten().cloned().collect();
+    alone.commit(20, &all).await.unwrap();
+    let leaves = |l: &Leader<MemLog>| -> Vec<[u8; 32]> {
+        l.log.state().records.iter().map(|r| r.leaf_hash).collect()
+    };
+    assert_eq!(
+        leaves(&grouped),
+        leaves(&alone),
+        "grouping changes no record"
+    );
+    assert_eq!(grouped.head(), alone.head());
+}
+
+// PI-23, TI-7, OP-9
+#[tokio::test]
+async fn pi_23_a_member_reading_an_earlier_members_write_is_handed_back() {
+    use super::group::Grouped;
+    let (log, d) = MemLog::with_genesis();
+    let mut l = Leader::acquire(log, d, key()).await.unwrap();
+    let mut again = item("n2");
+    again.nonce = Some(crate::domain::NonceUse {
+        nonce: b"same".to_vec(),
+        actor: b"a".to_vec(),
+        intent_digest: [5; 32],
+        outcome: String::from("deny"),
+        render_digest: None,
+        tier: None,
+    });
+    let mut first = item("n1");
+    first.nonce = again.nonce.clone();
+    let out = l
+        .commit_group(
+            20,
+            &[
+                vec![with_rw("w", &[], &[b"k"])],
+                vec![with_rw("r", &[b"k"], &[])],
+                vec![first],
+                vec![again],
+                vec![with_rw("free", &[b"other"], &[])],
+            ],
+        )
+        .await
+        .unwrap();
+    assert!(matches!(&out[0], Grouped::Done(Outcome::Appended(p)) if p == &[1]));
+    assert!(matches!(
+        &out[1],
+        Grouped::Refused(SequencerError::BatchConflict(_))
+    ));
+    assert!(matches!(&out[2], Grouped::Done(Outcome::Appended(p)) if p == &[2]));
+    assert!(matches!(
+        &out[3],
+        Grouped::Refused(SequencerError::NonceRepeated)
+    ));
+    assert!(matches!(&out[4], Grouped::Done(Outcome::Appended(p)) if p == &[3]));
+    assert_eq!(l.log.state().commits, 1);
+}
+
+// OP-9, TI-6: a group that fails to commit acknowledges nobody and steps the leader down
+#[tokio::test]
+async fn op_9_a_failed_group_acknowledges_none_of_its_members() {
+    let (log, d) = MemLog::with_genesis();
+    log.state().fail_next_commit = true;
+    let mut l = Leader::acquire(log, d, key()).await.unwrap();
+    assert!(
+        l.commit_group(20, &[vec![item("a")], vec![item("b")]])
+            .await
+            .is_err()
+    );
+    assert_eq!(l.head().pos, 0);
+    assert!(matches!(
+        l.commit_group(21, &[vec![item("c")]]).await,
+        Err(SequencerError::SteppedDown)
+    ));
+}
+
+// OP-9: at most 64 commits join a group, and none waits more than 2 ms for others
+#[tokio::test]
+async fn op_9_a_group_closes_at_64_or_after_2_ms() {
+    use super::group::{GROUP_MAX, GROUP_WAIT, gather};
+    let (tx, mut rx) = tokio::sync::mpsc::channel(256);
+    for i in 0..100u32 {
+        tx.send(i).await.unwrap();
+    }
+    assert_eq!(gather(&mut rx).await.len(), GROUP_MAX);
+    assert_eq!(gather(&mut rx).await.len(), 36);
+    tx.send(7).await.unwrap();
+    let started = std::time::Instant::now();
+    assert_eq!(gather(&mut rx).await, vec![7]);
+    assert!(started.elapsed() >= GROUP_WAIT);
+    drop(tx);
+    assert!(gather(&mut rx).await.is_empty());
 }
