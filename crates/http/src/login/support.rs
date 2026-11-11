@@ -209,7 +209,7 @@ where
     let reply = s
         .login
         .hosted
-        .support_requests(&s.authority, &entry, &jar.browser())
+        .support_requests(&s.authority, &s.pep, &entry, &jar.browser())
         .await;
     send(reply, &headers).await
 }
@@ -295,7 +295,11 @@ where
 {
     let entry = entry!(s, p, uri, headers, false);
     let jar = Jar::of(&headers, peer);
-    let reply = s.login.hosted.support_access(&entry, &jar.browser()).await;
+    let reply = s
+        .login
+        .hosted
+        .support_access(&s.authority, &s.pep, &entry, &jar.browser())
+        .await;
     send(reply, &headers).await
 }
 

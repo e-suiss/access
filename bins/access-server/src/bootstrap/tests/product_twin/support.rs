@@ -1346,6 +1346,7 @@ async fn support_access_is_asked_given_used_seen_and_revoked_on_the_persons_own_
     let row = &rows[0];
     assert_eq!(row["operator"], "Mehmet Y.", "{row}");
     assert!(row["give"].is_object(), "{row}");
+    assert_eq!(row["give"]["pep"], IDENTITY_PEP, "{row}");
     let taken = give_body(&d, &operator, row, |_| {});
     let (status, got) = f
         .send(
@@ -1464,6 +1465,7 @@ async fn support_access_is_asked_given_used_seen_and_revoked_on_the_persons_own_
     assert_eq!(given_row["operator"], "Mehmet Y.");
     assert_eq!(given_row["organization"], "Acme Support");
     assert_eq!(given_row["case"], "4411");
+    assert_eq!(given_row["revoke"]["pep"], IDENTITY_PEP, "{given_row}");
     let activity = d.hub("activity", &person.actor).await;
     let exercise = b64url_encode(&read.exercise().0);
     let used = activity

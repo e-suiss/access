@@ -484,6 +484,7 @@ where
     pub async fn support_requests<A: SupportAuthority>(
         &self,
         authority: &A,
+        pep: &str,
         entry: &RealmEntry,
         b: &Browser<'_>,
     ) -> Reply {
@@ -533,7 +534,7 @@ where
                 )
             {
                 match self
-                    .draft(authority, domain, (person, system.issuer), row, now)
+                    .draft(authority, (domain, pep), (person, system.issuer), row, now)
                     .await
                 {
                     Ok(Some(give)) => {
@@ -563,7 +564,7 @@ where
     async fn draft<A: SupportAuthority>(
         &self,
         authority: &A,
-        domain: Digest,
+        (domain, pep): (Digest, &str),
         (person, issuer): ([u8; 16], [u8; 16]),
         row: &SupportRequestRow,
         now: u64,
@@ -609,7 +610,45 @@ where
             "payload": b64url_encode(&p),
             "intent": b64url_encode(&i),
             "basis": { "anchor": b64url_encode(&anchor.0) },
+            "pep": pep,
             "until": rfc3339(validity.until),
+        })))
+    }
+
+    /// The person's `grant.revoke` of `grant`, as their device signs it: payload, intent and
+    /// basis.
+    async fn revoke_draft<A: SupportAuthority>(
+        authority: &A,
+        (domain, pep): (Digest, &str),
+        person: [u8; 16],
+        grant: [u8; 16],
+        now: u64,
+    ) -> Result<Option<Value>, Reply> {
+        let facts = authority
+            .facts(domain, Id(person), Id(person))
+            .await
+            .map_err(|_| unavailable())?;
+        let Some(anchor) = facts.anchor else {
+            return Ok(None);
+        };
+        let payload = Payload::GrantRevoke { grant: Id(grant) };
+        let window = Window {
+            from: now.saturating_sub(60_000),
+            until: now.saturating_add(10 * 60_000),
+        };
+        let Some(intent) =
+            access_internal_api::instances::self_signed_intent(&payload, Id(person), window)
+        else {
+            return Err(unavailable());
+        };
+        let (Ok(p), Ok(i)) = (payload.to_bytes(), intent.to_bytes()) else {
+            return Err(unavailable());
+        };
+        Ok(Some(json!({
+            "payload": b64url_encode(&p),
+            "intent": b64url_encode(&i),
+            "basis": { "anchor": b64url_encode(&anchor.0) },
+            "pep": pep,
         })))
     }
 
@@ -798,7 +837,13 @@ where
     /// `GET /v1/me/support-access` (U57, SI-21, OP-157 m.3 (f)): the support access the person
     /// gave, active and ended, with the operator, their organization, the case, the scope and
     /// the end: what the Activity rows of a support Grant are attributed with.
-    pub async fn support_access(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    pub async fn support_access<A: SupportAuthority>(
+        &self,
+        authority: &A,
+        pep: &str,
+        entry: &RealmEntry,
+        b: &Browser<'_>,
+    ) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -815,23 +860,48 @@ where
             let blocked = t.support_blocked(subject).await?;
             let mut out = Vec::new();
             for row in rows {
-                if !matches!(row.answer, Some((Answer::Granted { .. }, _))) {
+                let Some((Answer::Granted { grant, .. }, _)) = &row.answer else {
                     continue;
-                }
+                };
                 let n = model::names(&mut t, &*kit.kek, &row, &kit.name)
                     .await
                     .map_err(|_| access_store::StoreError::Corrupt)?;
-                out.push(Self::row_json(&kit, &row, &n, now));
+                let active = state(&row, now) == "active";
+                out.push((
+                    Self::row_json(&kit, &row, &n, now),
+                    active.then_some((row.subject_party, *grant)),
+                ));
             }
             t.commit().await?;
-            Ok::<_, access_store::StoreError>((out, blocked))
+            Ok::<_, access_store::StoreError>((out, blocked, now))
         };
-        match read.await {
-            Ok((access, blocked)) => {
-                Reply::json(200, json!({ "access": access, "blocked": blocked }))
+        let Ok((rows, blocked, now)) = read.await else {
+            return unavailable();
+        };
+        let mut access = Vec::with_capacity(rows.len());
+        let mut domain = None;
+        for (mut v, revocable) in rows {
+            if let Some((person, grant)) = revocable {
+                let d = match domain {
+                    Some(d) => d,
+                    None => match governing(&self.db, &kit).await {
+                        Ok(d) => *domain.insert(d),
+                        Err(r) => return r,
+                    },
+                };
+                match Self::revoke_draft(authority, (d, pep), person, grant, now).await {
+                    Ok(Some(r)) => {
+                        if let Value::Object(o) = &mut v {
+                            o.insert(String::from("revoke"), r);
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(r) => return r,
+                }
             }
-            Err(_) => unavailable(),
+            access.push(v);
         }
+        Reply::json(200, json!({ "access": access, "blocked": blocked }))
     }
 
     /// `POST /v1/me/support-access/{grant}/revoke` (§8.16 #11): the person's own `grant.revoke`
