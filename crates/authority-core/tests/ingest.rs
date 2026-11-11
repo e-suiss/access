@@ -1811,3 +1811,110 @@ async fn narrowing_claims_take_their_own_lane_through_the_ledger() {
     ));
     domains.release().await;
 }
+
+/// A `checkpoint` Claim of `d` for a tree of `size` with `root`, its body travelling with it.
+fn checkpoint_claim(d: Digest, size: u64, root: [u8; 32], origin: &str) -> ClaimSubmission {
+    use access_authority_sequencer::checkpoint::CLAIM_CONTEXT;
+    let cp = suiss_crypto::note::Checkpoint {
+        origin: origin.to_owned(),
+        size,
+        root,
+        extensions: vec![format!("issued_at {NOW}")],
+    };
+    let text = cp.to_body().unwrap();
+    let line = format!(
+        "\u{2014} {origin} {}\n",
+        suiss_crypto::note::base64_encode(&[0, 0, 0, 1, 7, 7, 7])
+    );
+    let body = dcbor::encode(
+        &Value::Map(vec![
+            (Value::text("note"), Value::text(&format!("{text}\n{line}"))),
+            (Value::text("excerpt"), Value::Bytes(vec![1])),
+            (Value::text("trigger"), Value::text("interval")),
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap();
+    let digest = suiss_crypto::digest::context_digest(CLAIM_CONTEXT, &body);
+    let s = statement(
+        d,
+        ALICE,
+        ALICE,
+        access_kernel::claim::CHECKPOINT,
+        EqValue::Bytes(digest.0.to_vec()),
+    );
+    let mut sub = signed(&s, ALICE_KEY);
+    sub.body = Some(body);
+    sub
+}
+
+// SEC21, SEC22, OP-158 m.3 (c), m.6 (j)
+#[tokio::test]
+async fn an_admitted_checkpoint_claim_is_the_witness_head_the_rollback_guard_reads() {
+    use access_kernel::claim::ClaimState;
+    use access_kernel::fold::{Guard, GuardError, rollback_guard};
+    use access_kernel::recovery::{witness_head, witness_head_key};
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(
+        &db,
+        vec![acceptance(
+            ALICE,
+            "predicate-input",
+            &["checkpoint"],
+            vec![],
+        )],
+    )
+    .await;
+    let origin = access_authority_sequencer::checkpoint::origin(&d);
+    let root = suiss_crypto::digest::sha256(b"the witnessed tree");
+    let sub = checkpoint_claim(d, 7, root, &origin);
+    let ClaimVerdict::Admitted { claim, .. } = core.ingest(&sub, NOW).await.unwrap().verdict else {
+        panic!("admitted");
+    };
+    let id = DomainId::from_bytes(d.0);
+    let rows = access_store::authority::state_of(
+        &db.app,
+        &id,
+        &[meta::key(kind::CLAIM, &claim), witness_head_key(&claim)],
+    )
+    .await
+    .unwrap();
+    let get = |k: &[u8]| {
+        rows.iter()
+            .find(|r| r.key == k)
+            .and_then(|r| r.value.as_deref())
+            .map(|v| dcbor::decode(v, Limits::CEILING).unwrap())
+    };
+    let state = ClaimState::from_value(&get(&meta::key(kind::CLAIM, &claim)).unwrap()).unwrap();
+    let head = witness_head(&state, get(&witness_head_key(&claim)).as_ref(), NOW).unwrap();
+    assert_eq!((head.size, head.root), (7, root));
+    assert_eq!(
+        rollback_guard(&[Some(head)], Some(7), (7, root), false, NOW),
+        Ok(Guard::Pass)
+    );
+    assert_eq!(
+        rollback_guard(&[Some(head)], Some(7), (5, root), false, NOW),
+        Err(GuardError::Rollback)
+    );
+
+    let mut bare = checkpoint_claim(d, 8, root, &origin);
+    bare.body = None;
+    let mut tampered = checkpoint_claim(d, 8, root, &origin);
+    if let Some(b) = tampered.body.as_mut() {
+        let last = b.len() - 1;
+        b[last] ^= 1;
+    }
+    let elsewhere = checkpoint_claim(d, 8, root, "sha-256:AAAA");
+    for (sub, code) in [
+        (bare, "claim-body"),
+        (tampered, "claim-body-digest"),
+        (elsewhere, "claim-body"),
+    ] {
+        assert_eq!(
+            core.ingest(&sub, NOW).await.unwrap().verdict,
+            ClaimVerdict::Rejected {
+                code: code.to_owned()
+            }
+        );
+    }
+}

@@ -46,6 +46,9 @@ pub struct NewClaim {
     pub pos: u64,
     /// The quota draw of an admitted Claim: counter key and limit (OP-141 m.21 (a)).
     pub draw: Option<(Vec<u8>, u64)>,
+    /// State entries its class writes beside it once admitted: a `checkpoint` Claim's
+    /// `witness_head` (OP-158 m.6 (j)).
+    pub beside: Vec<(Vec<u8>, Value)>,
 }
 
 /// The proofs of one request.
@@ -598,6 +601,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             disposition,
             pos,
             draw,
+            beside: Vec::new(),
         });
         Ok(())
     }

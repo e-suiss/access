@@ -244,6 +244,12 @@ pub fn verify(
     Ok((cp, ext))
 }
 
+/// Digest context of a `checkpoint` Claim body: the Claim's value (OP-158 m.6 (j)).
+pub const CLAIM_CONTEXT: &str = "access/checkpoint-claim/v1";
+
+/// The `checkpoint-trigger` words.
+pub const TRIGGERS: [&str; 4] = ["interval", "records", "heartbeat", "out-of-cycle"];
+
 /// What made a checkpoint (`checkpoint.cddl` `checkpoint-trigger`).
 #[must_use]
 pub const fn trigger(due: suiss_ledger::checkpoint::cadence::Due) -> &'static str {
@@ -277,7 +283,7 @@ pub fn claim_body(signed: &SignedCheckpoint, trigger: &str) -> Result<Vec<u8>, C
 
 /// The State entry an accepted `checkpoint` Claim `claim` writes for the rollback guard R*:
 /// key `dCBOR(["witness_head", claim])`, value `dCBOR(checkpoint-ref)` `{size, root}`
-/// (`kernel.cddl`, SEC21, OP-158 m.6).
+/// (`kernel.cddl`, SEC21, OP-158 m.6 (j)).
 ///
 /// # Errors
 /// [`CheckpointError::Extension`] when it cannot be encoded.
@@ -285,24 +291,12 @@ pub fn witness_head_entry(
     claim: &access_kernel::model::Id,
     cp: &Checkpoint,
 ) -> Result<(Vec<u8>, Vec<u8>), CheckpointError> {
-    use suiss_crypto::dcbor::Value;
-    let key = dcbor::encode(
-        &Value::Array(vec![
-            Value::text("witness_head"),
-            Value::Bytes(claim.0.to_vec()),
-        ]),
-        Limits::CEILING,
-    )
-    .map_err(|_| CheckpointError::Extension)?;
-    let value = dcbor::encode(
-        &Value::Map(vec![
-            (Value::text("size"), Value::Unsigned(cp.size)),
-            (Value::text("root"), Digest(cp.root).to_value()),
-        ]),
-        Limits::CEILING,
-    )
-    .map_err(|_| CheckpointError::Extension)?;
-    Ok((key, value))
+    use access_kernel::codec::Canonical as _;
+    let head = access_kernel::recovery::CheckpointRef::new(cp.size, Digest(cp.root));
+    Ok((
+        access_kernel::recovery::witness_head_key(claim),
+        head.to_bytes().map_err(|_| CheckpointError::Extension)?,
+    ))
 }
 
 #[cfg(test)]

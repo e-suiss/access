@@ -1803,6 +1803,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                             .supersedes
                             .map(|s| (claim::successor_key(&s, &c.id), Some(c.id.to_value()))),
                     )
+                    // OP-158 m.6 (j)
+                    .chain(c.beside.iter().map(|(k, v)| (k.clone(), Some(v.clone()))))
                     .collect(),
                 )
             } else {

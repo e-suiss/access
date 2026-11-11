@@ -74,6 +74,8 @@ struct Verified {
     external: bool,
     /// Signed by a dropped realm key after its issuer cutoff: held (§13.7.7, SEC9).
     cut_off: bool,
+    /// The head a `checkpoint` Claim states (OP-158 m.6 (j)).
+    head: Option<access_kernel::recovery::CheckpointRef>,
 }
 
 type Checked = Result<Verified, Refusal>;
@@ -140,6 +142,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     disposition,
                     pos,
                     draw,
+                    beside: v
+                        .head
+                        .iter()
+                        .map(|h| (access_kernel::recovery::witness_head_key(&id), h.to_value()))
+                        .collect(),
                 }],
                 ..Resolved::default()
             };
@@ -343,7 +350,13 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if let Err(r) = signal_body(&statement, body) {
             return Ok(Err(r));
         }
+        // OP-158 m.3 (c), m.6 (j)
+        let head = match checkpoint_head(&statement, body, &self.domain) {
+            Ok(h) => h,
+            Err(r) => return Ok(Err(r)),
+        };
         Ok(Ok(Verified {
+            head,
             cut_off: false,
             statement,
             instance,
@@ -402,7 +415,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 Ok(d) => d,
                 Err(e) => return Ok(Err(Refusal(e.code()))),
             };
+            if m.statement.class == claim::CHECKPOINT {
+                return Ok(Err(Refusal::CARRIER));
+            }
             return Ok(Ok(Verified {
+                head: None,
                 cut_off: carrier::past_cutoff(m.statement.issued_at, cutoff),
                 statement: m.statement,
                 instance: None,
@@ -592,6 +609,51 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             _ => false,
         })
     }
+}
+
+/// The head a `checkpoint` Claim states (§9.16, OP-158 m.3 (c), m.6 (j)): its value is the
+/// digest of its body `{note, excerpt, trigger}` under
+/// `access_authority_sequencer::checkpoint::CLAIM_CONTEXT`, and the note is a checkpoint of
+/// this domain's log. A `checkpoint` Claim without its body is refused, so no head is admitted
+/// that the State cannot carry.
+fn checkpoint_head(
+    s: &Statement,
+    body: Option<&[u8]>,
+    domain: &access_kernel::digest::Digest,
+) -> Result<Option<access_kernel::recovery::CheckpointRef>, Refusal> {
+    use access_authority_sequencer::checkpoint::{CLAIM_CONTEXT, TRIGGERS, origin};
+    if s.class != claim::CHECKPOINT {
+        return Ok(None);
+    }
+    let (Some(EqValue::Bytes(d)), Some(bytes)) = (&s.value, body) else {
+        return Err(Refusal("claim-body"));
+    };
+    if suiss_crypto::digest::context_digest(CLAIM_CONTEXT, bytes)
+        .0
+        .as_slice()
+        != d.as_slice()
+    {
+        return Err(Refusal("claim-body-digest"));
+    }
+    let v = suiss_crypto::dcbor::decode(bytes, suiss_crypto::dcbor::Limits::CEILING)
+        .map_err(|_| Refusal("claim-body"))?;
+    let (Some(Value::Text(note)), Some(Value::Bytes(_)), Some(Value::Text(trigger)), Value::Map(m)) =
+        (v.get("note"), v.get("excerpt"), v.get("trigger"), &v)
+    else {
+        return Err(Refusal("claim-body"));
+    };
+    if m.len() != 3 || !TRIGGERS.contains(&trigger.as_str()) {
+        return Err(Refusal("claim-body"));
+    }
+    let cp = suiss_crypto::note::parse_note(note)
+        .ok()
+        .and_then(|n| suiss_crypto::note::Checkpoint::parse(&n.body).ok())
+        .filter(|cp| cp.origin == origin(domain))
+        .ok_or(Refusal("claim-body"))?;
+    Ok(Some(access_kernel::recovery::CheckpointRef::new(
+        cp.size,
+        access_kernel::digest::Digest(cp.root),
+    )))
 }
 
 /// A signal-source Claim's body, when it travels, is one of `product-seam.cddl` under the

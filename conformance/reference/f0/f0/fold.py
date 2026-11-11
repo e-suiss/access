@@ -11,14 +11,15 @@ class FoldError(Exception):
 
 
 def _claim_key(key):
-    # L2-REC-2: a claim record writes only claim, member and successor keys
+    # L2-REC-2, OP-158 m.6 (j): a claim record writes only claim, member, successor and
+    # witness_head keys
     from .codec import decode_canonical
 
     try:
         k = decode_canonical(key)
     except Exception:
         return False
-    return isinstance(k, list) and len(k) > 0 and k[0] in ("claim", "member", "successor")
+    return isinstance(k, list) and len(k) > 0 and k[0] in ("claim", "member", "successor", "witness_head")
 
 
 def effects(record):
