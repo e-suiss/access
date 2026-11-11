@@ -1,0 +1,19 @@
+{
+  "cases": [
+    {
+      "cbor": "a26361636ba56261741b0000019b76d1804064726f6f7458200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b6473697a650866646f6d61696e58200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a677265706c6963616c61636d652d7265706c6963616373696758405d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d",
+      "edn": "{\"ack\": {\"domain\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"replica\": \"acme-replica\", \"size\": 8, \"root\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b', \"at\": 1767225000000}, \"sig\": h'5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d'}",
+      "id": "ack",
+      "valid": true
+    },
+    {
+      "edn": "{\"ack\": {\"domain\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"replica\": \"acme-replica\", \"size\": 8, \"at\": 1}, \"sig\": h'5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d5d'}",
+      "id": "no-root",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "mirror.cddl"
+  ],
+  "contract": "signed-replica-ack"
+}

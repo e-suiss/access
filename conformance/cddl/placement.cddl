@@ -1,0 +1,32 @@
+; Placement Directory, version 1 (RFC 8610; OP-158 m.3 (n), (o), CMP-26, OP-30, T28, TI-17).
+; Deterministic CBOR. The directory routes only: it is never a decision input and not on the
+; protocol path; a cell refuses a domain it is not the leader for. Times are Unix milliseconds.
+
+placement-entry = {
+  subject: { domain: bstr .size 32 } / { realm: bstr .size 16 } / { tenant: tstr .size (1..64) },
+  cell: cell-name,
+  since: uint,
+  ? dedicated: true,
+}
+
+cell-name = tstr .regexp "[a-z0-9][a-z0-9-]{0,62}"
+
+; Moving a domain between cells: the source seals at (q, e), the target replays to the same root
+; and accepts at (q, e + 1); then the placement changes.
+cell-seal = {
+  domain: bstr .size 32,
+  cell: cell-name,
+  position: uint,
+  epoch: uint,
+  root: bstr .size 32,
+  at: uint,
+}
+
+cell-accept = {
+  domain: bstr .size 32,
+  cell: cell-name,
+  position: uint,
+  epoch: uint .ge 1,
+  root: bstr .size 32,
+  at: uint,
+}

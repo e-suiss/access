@@ -1,0 +1,19 @@
+{
+  "cases": [
+    {
+      "cbor": "a56261741b0000019b76d18428646c617374a264726f6f7458200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b6473697a65182866646f6d61696e58200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a6870726f76696465726b6f6c642e6578616d706c656966726f7a656e5f61741b0000019b76d18040",
+      "edn": "{\"domain\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"provider\": \"old.example\", \"last\": {\"size\": 40, \"root\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b'}, \"frozen_at\": 1767225000000, \"at\": 1767225001000}",
+      "id": "no-write",
+      "valid": true
+    },
+    {
+      "edn": "{\"domain\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"provider\": \"old.example\", \"last\": {\"size\": 40, \"root\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b'}, \"at\": 1}",
+      "id": "no-freeze",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "handover.cddl"
+  ],
+  "contract": "no-write-statement"
+}

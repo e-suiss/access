@@ -155,6 +155,84 @@ fn approval_act_statement_examples_meet_the_cddl() {
     check_examples("approval-act-statement.json");
 }
 
+// OP-158 m.3 (c), T16
+#[test]
+fn checkpoint_claim_examples_meet_the_cddl() {
+    check_examples("checkpoint-claim.json");
+}
+
+// OP-158 m.3 (c), CMP-6
+#[test]
+fn checkpoint_body_examples_meet_the_cddl() {
+    check_examples("checkpoint-body.json");
+}
+
+// OP-158 m.3 (d), U11
+#[test]
+fn witness_cosign_examples_meet_the_cddl() {
+    check_examples("witness.json");
+}
+
+// OP-158 m.3 (d), U9, HL-7
+#[test]
+fn equivocation_examples_meet_the_cddl() {
+    check_examples("equivocation.json");
+}
+
+// OP-158 m.3 (b), P18, SEC25
+#[test]
+fn inclusion_bundle_examples_meet_the_cddl() {
+    check_examples("inclusion-bundle.json");
+}
+
+// OP-158 m.3 (f), T21
+#[test]
+fn mirror_frame_examples_meet_the_cddl() {
+    check_examples("mirror.json");
+}
+
+// OP-158 m.3 (e), TI-13
+#[test]
+fn replica_ack_examples_meet_the_cddl() {
+    check_examples("replica-ack.json");
+}
+
+// OP-158 m.3 (g), AP-14
+#[test]
+fn export_frame_examples_meet_the_cddl() {
+    check_examples("export.json");
+}
+
+// OP-158 m.3 (l), U27
+#[test]
+fn handover_statement_examples_meet_the_cddl() {
+    check_examples("handover.json");
+}
+
+// OP-158 m.3 (i), TI-RT1, G32
+#[test]
+fn divergence_set_examples_meet_the_cddl() {
+    check_examples("divergence.json");
+}
+
+// OP-158 m.3 (i), TI-RT4
+#[test]
+fn snapshot_examples_meet_the_cddl() {
+    check_examples("snapshot.json");
+}
+
+// OP-158 m.3 (o), CMP-26
+#[test]
+fn placement_examples_meet_the_cddl() {
+    check_examples("placement.json");
+}
+
+// OP-158 m.3 (q), OP-56
+#[test]
+fn compatibility_manifest_examples_meet_the_cddl() {
+    check_examples("upgrade.json");
+}
+
 // §9.9, OP-150 m.2
 #[test]
 fn token_exercise_examples_meet_the_cddl() {

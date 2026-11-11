@@ -1,0 +1,19 @@
+{
+  "cases": [
+    {
+      "cbor": "a4647769726581656164702d3166736368656d61a2636d61781b0000126d68cef990636d696e1b0000126d68ccfdc06772656c6561736565302e362e306973656d616e74696373a264636f7265016b6d6574615f736368656d6101",
+      "edn": "{\"release\": \"0.6.0\", \"semantics\": {\"core\": 1, \"meta_schema\": 1}, \"schema\": {\"min\": 20261119000000, \"max\": 20261119130000}, \"wire\": [\"adp-1\"]}",
+      "id": "rolling",
+      "valid": true
+    },
+    {
+      "edn": "{\"release\": \"0.6.0\", \"semantics\": {\"core\": 1, \"meta_schema\": 1}, \"schema\": {\"min\": 1, \"max\": 2}, \"wire\": []}",
+      "id": "no-wire",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "upgrade.cddl"
+  ],
+  "contract": "compatibility-manifest"
+}

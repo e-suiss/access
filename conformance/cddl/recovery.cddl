@@ -1,0 +1,34 @@
+; Forced recovery and divergence, version 1 (RFC 8610; OP-158 m.3 (b), (h), (i), (m), §13.6,
+; SEC21, SEC22, TI-RT1, G32, G33). Deterministic CBOR; uses kernel.cddl. The recovery entry and
+; the `domain_recover` input are kernel.cddl `recovery-entry` and `recover-input`.
+
+recovery-request = {
+  entry: recovery-entry,
+  input: recover-input,
+}
+
+; What a re-evaluation found: records whose recorded outcome differs from the replayed one, or
+; whose fold differs. Signed by the replaying party; it never stops an exit (G32).
+divergence-set = {
+  domain: domain-id,
+  range: { from: uint, to: uint },
+  items: [+ divergence-item],
+  evaluator: tstr .size (1..255),     ; build identity of the replaying evaluator
+  at: trusted-time,
+}
+
+divergence-item = {
+  position: uint,
+  exercise: digest,
+  kind: "fold" / "re-evaluation",
+  recorded: "allow" / "deny" / "require_action",
+  replayed: "allow" / "deny" / "require_action",
+}
+
+; The provider-signed `divergence_notice` Claim body: the set's digest and the quarantine the
+; root or Security Party may set (the provider writes no restriction).
+divergence-notice = {
+  set: digest,
+  items: uint .ge 1,
+  suggested: quarantine-pattern,
+}

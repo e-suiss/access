@@ -1,0 +1,19 @@
+{
+  "cases": [
+    {
+      "cbor": "a766646f6d61696e58200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a667265636f726441a168706f736974696f6e0769696e636c7573696f6e8158200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b6a636865636b706f696e74646e6f74656b636f6e73697374656e6379a364706174688158200d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d67746f5f726f6f7458200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b67746f5f73697a650c6c636f7369676e61747572657381a3646e616d656f7769746e6573732e6578616d706c65697369676e617475726558405c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c6974696d657374616d701a6955b6a8",
+      "edn": "{\"domain\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"position\": 7, \"record\": h'a1', \"checkpoint\": \"note\", \"cosignatures\": [{\"name\": \"witness.example\", \"timestamp\": 1767225000, \"signature\": h'5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c'}], \"inclusion\": [h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b'], \"consistency\": {\"to_size\": 12, \"to_root\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b', \"path\": [h'0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d']}}",
+      "id": "after-handover",
+      "valid": true
+    },
+    {
+      "edn": "{\"domain\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"position\": 7, \"record\": h'a1', \"checkpoint\": \"note\", \"cosignatures\": [], \"inclusion\": []}",
+      "id": "no-cosignature",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "inclusion-bundle.cddl"
+  ],
+  "contract": "inclusion-bundle"
+}

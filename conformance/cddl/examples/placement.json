@@ -1,0 +1,25 @@
+{
+  "cases": [
+    {
+      "cbor": "a36463656c6c6c65752d63656e7472616c2d316573696e63651b0000019b76d18040677375626a656374a166646f6d61696e58200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a",
+      "edn": "{\"subject\": {\"domain\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a'}, \"cell\": \"eu-central-1\", \"since\": 1767225000000}",
+      "id": "domain",
+      "valid": true
+    },
+    {
+      "cbor": "a46463656c6c6e61636d652d6465646963617465646573696e636501677375626a656374a16674656e616e7468746e745f61636d6569646564696361746564f5",
+      "edn": "{\"subject\": {\"tenant\": \"tnt_acme\"}, \"cell\": \"acme-dedicated\", \"since\": 1, \"dedicated\": true}",
+      "id": "dedicated",
+      "valid": true
+    },
+    {
+      "edn": "{\"subject\": {\"domain\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a'}, \"cell\": \"EU Central\", \"since\": 1}",
+      "id": "bad-cell",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "placement.cddl"
+  ],
+  "contract": "placement-entry"
+}

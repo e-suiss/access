@@ -1,0 +1,20 @@
+{
+  "cases": [
+    {
+      "cbor": "a56261741b0000019b76d18040656974656d7381a5646b696e646d72652d6576616c756174696f6e686578657263697365822f58200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b68706f736974696f6e04687265636f7264656465616c6c6f77687265706c617965646464656e796572616e6765a262746f096466726f6d0066646f6d61696e822f58200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a696576616c7561746f726966302d707974686f6e",
+      "edn": "{\"domain\": [-16, h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a'], \"range\": {\"from\": 0, \"to\": 9}, \"items\": [{\"position\": 4, \"exercise\": [-16, h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b'], \"kind\": \"re-evaluation\", \"recorded\": \"allow\", \"replayed\": \"deny\"}], \"evaluator\": \"f0-python\", \"at\": 1767225000000}",
+      "id": "re-evaluation",
+      "valid": true
+    },
+    {
+      "edn": "{\"domain\": [-16, h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a'], \"range\": {\"from\": 0, \"to\": 9}, \"items\": [], \"evaluator\": \"f0-python\", \"at\": 1}",
+      "id": "empty",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "kernel.cddl",
+    "recovery.cddl"
+  ],
+  "contract": "divergence-set"
+}

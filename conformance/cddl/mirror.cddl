@@ -1,0 +1,30 @@
+; Replica Mirror, version 1 (RFC 8610; OP-158 m.3 (e), (f), §16.6.1, T21, CMP-21, TI-13).
+; `GET /v1/domains/{domain}/mirror?from=<size>` answers a CBOR sequence (RFC 8742) of frames,
+; long-polled and resumable from any size. A replica checks size, root and consistency, appends
+; the records to its own files and answers a signed `replica-ack`; without a verified ack no
+; SEC23 acknowledgement is given. Times are Unix milliseconds.
+
+mirror-frame = { record: mirror-record }
+             / { checkpoint: { note: tstr .size (1..65536), cosignatures: [* bstr .size (1..1024)] } }
+             / { redaction: { position: uint, dek: bstr .size 32 } }
+             / { heartbeat: { size: uint, at: uint } }
+
+mirror-record = {
+  position: uint,
+  envelope: bstr .size (1..1048576),
+  ? body: bstr .size (1..1048576),
+}
+
+replica-ack = {
+  domain: bstr .size 32,
+  replica: tstr .size (1..255),
+  size: uint,
+  root: bstr .size 32,
+  at: uint,
+}
+
+; Ed25519 over the ack's dCBOR bytes with the key the domain declares for the replica.
+signed-replica-ack = {
+  ack: replica-ack,
+  sig: bstr .size 64,
+}

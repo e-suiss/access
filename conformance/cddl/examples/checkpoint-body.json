@@ -1,0 +1,19 @@
+{
+  "cases": [
+    {
+      "cbor": "a764726f6f7458200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b6473697a65182a666f726967696e78337368612d3235363a43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f686d6574616461746178337368612d3235363a43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f6876657273696f6e7378337368612d3235363a43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f696973737565645f61741b0000019b76d182346b7265636f726465645f61741b0000019b76d18040",
+      "edn": "{\"origin\": \"sha-256:CgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgo\", \"size\": 42, \"root\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b', \"recorded_at\": 1767225000000, \"versions\": \"sha-256:CgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgo\", \"metadata\": \"sha-256:CgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgo\", \"issued_at\": 1767225000500}",
+      "id": "body",
+      "valid": true
+    },
+    {
+      "edn": "{\"origin\": \"example.com/log\", \"size\": 42, \"root\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b', \"recorded_at\": 1, \"versions\": \"sha-256:CgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgo\", \"issued_at\": 2}",
+      "id": "raw-origin",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "checkpoint.cddl"
+  ],
+  "contract": "checkpoint-body"
+}

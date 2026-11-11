@@ -1,0 +1,22 @@
+; Cooperative handover statements, version 1 (RFC 8610; OP-158 m.3 (l), §16.6, U27, PI-15).
+; Deterministic CBOR. Both are inline proof Claims of the handover batch whose position h is the
+; `domain_handover` record (kernel.cddl handover-input). Times are Unix milliseconds.
+
+; The outgoing provider: it wrote nothing after C_k and froze the domain at `frozen_at`.
+no-write-statement = {
+  domain: bstr .size 32,
+  provider: tstr .size (1..255),
+  last: { size: uint, root: bstr .size 32 },
+  frozen_at: uint,
+  at: uint,
+}
+
+; The incoming provider: it folded the export up to C_k, reproduced its root and passed the
+; provider conformance profile.
+continuation-statement = {
+  domain: bstr .size 32,
+  provider: tstr .size (1..255),
+  from: { size: uint, root: bstr .size 32 },
+  conformance: bstr .size 32,         ; digest of the passing conformance profile run
+  at: uint,
+}

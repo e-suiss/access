@@ -1,0 +1,19 @@
+{
+  "cases": [
+    {
+      "cbor": "a3646e6f746578367368612d3235363a43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f4b43676f203432676578636572707441d2677472696767657269686561727462656174",
+      "edn": "{\"note\": \"sha-256:CgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgo 42\", \"excerpt\": h'd2', \"trigger\": \"heartbeat\"}",
+      "id": "heartbeat",
+      "valid": true
+    },
+    {
+      "edn": "{\"note\": \"x\", \"excerpt\": h'd2', \"trigger\": \"sometimes\"}",
+      "id": "unknown-trigger",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "checkpoint.cddl"
+  ],
+  "contract": "checkpoint-claim"
+}

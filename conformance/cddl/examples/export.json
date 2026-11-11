@@ -1,0 +1,25 @@
+{
+  "cases": [
+    {
+      "cbor": "a166686561646572a5656368756e6b1927106572616e6765a262746f096466726f6d0066646f6d61696e58200a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a6f6578706f72745f657865726369736558200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b6f7265706c61795f636f76657261676566646967657374",
+      "edn": "{\"header\": {\"domain\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"range\": {\"from\": 0, \"to\": 9}, \"export_exercise\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b', \"replay_coverage\": \"digest\", \"chunk\": 10000}}",
+      "id": "header",
+      "valid": true
+    },
+    {
+      "cbor": "a1667265636f7264a368656e76656c6f706541a168706f736974696f6e0368726564616374656458200b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "edn": "{\"record\": {\"position\": 3, \"envelope\": h'a1', \"redacted\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b'}}",
+      "id": "redacted",
+      "valid": true
+    },
+    {
+      "edn": "{\"header\": {\"domain\": h'0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a', \"range\": {\"from\": 0, \"to\": 9}, \"export_exercise\": h'0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b', \"replay_coverage\": \"full\", \"chunk\": 10001}}",
+      "id": "chunk-too-big",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "export.cddl"
+  ],
+  "contract": "export-frame"
+}

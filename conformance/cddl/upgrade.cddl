@@ -1,0 +1,14 @@
+; Compatibility manifest, version 1 (RFC 8610; OP-158 m.3 (q), OP-56, G64).
+; `access-server upgrade-check --to <manifest>` compares the running release with this manifest
+; and exits 0 when a rolling upgrade is possible, 3 when it needs a recreate and 4 when a
+; feature stays off until the activation record. Deterministic CBOR.
+
+compatibility-manifest = {
+  release: tstr .regexp "[0-9]{1,4}\\.[0-9]{1,4}\\.[0-9]{1,6}",
+  semantics: { core: uint, meta_schema: uint },  ; the Kernel semantics the release decides
+  schema: { min: uint, max: uint },              ; migration versions it reads and writes
+  wire: [+ tstr .size (1..64)],                  ; wire contract versions it speaks
+  ? features: [+ tstr .size (1..64)],            ; features that wait for `version_activate`
+}
+
+upgrade-verdict = 0 / 3 / 4

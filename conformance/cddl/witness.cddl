@@ -1,0 +1,65 @@
+; Witness protocol, version 1 (RFC 8610; OP-158 m.3 (d), §16.6, U9, U11, HL-7, SI-12).
+; Deterministic CBOR. A witness keeps, per domain, the last (size, root) it cosigned in an
+; append-only, hash-chained local file; it cosigns a checkpoint only when the consistency proof
+; from that base verifies and the signing key is the current binding's operational key. It
+; learns a new binding from the inclusion proof of a `domain_handover` or `domain_recover`
+; record and does not cosign a size above that record under the old binding (fencing).
+; Times are Unix milliseconds.
+
+; A request to cosign `note` (checkpoint.cddl), extending the witness's base by `consistency`.
+cosign-request = {
+  domain: bstr .size 32,
+  note: tstr .size (1..65536),
+  excerpt: bstr .size (1..4096),
+  ? base: { size: uint, root: bstr .size 32 },
+  consistency: [* bstr .size 32],
+  ? binding_change: binding-change,
+}
+
+; The handover or recovery record that moves the binding, and its inclusion in `note`.
+binding-change = {
+  position: uint,
+  record: bstr .size (1..1048576),
+  inclusion: [* bstr .size 32],
+}
+
+; tlog-cosignature/v1: the witness key name, the cosigning time in seconds and the Ed25519
+; signature; or the reason the witness refused.
+cosign-response = cosignature / { refused: cosign-refusal }
+
+cosignature = {
+  name: tstr .size (1..255),
+  timestamp: uint,
+  signature: bstr .size 64,
+}
+
+cosign-refusal = "inconsistent" / "unknown-key" / "fenced" / "older-than-base" / "malformed"
+
+; What a monitor pulls from every declared witness: its latest cosigned head of a domain.
+gossip-entry = {
+  witness: tstr .size (1..255),
+  domain: bstr .size 32,
+  size: uint,
+  root: bstr .size 32,
+  cosignature: cosignature,
+}
+
+; Two cosigned heads of one size with different roots: signed evidence of a split view.
+equivocation-proof = {
+  domain: bstr .size 32,
+  size: uint,
+  first: gossip-entry,
+  second: gossip-entry,
+  found_at: uint,
+}
+
+; One link of the witness's local state file; hash = SHA-256(dCBOR(entry)).
+witness-state-entry = {
+  seq: uint,
+  domain: bstr .size 32,
+  size: uint,
+  root: bstr .size 32,
+  binding: bstr .size 32,             ; kid of the binding the cosigned checkpoint was under
+  at: uint,
+  prev: bstr .size 32,                ; 32 zero bytes for the first
+}

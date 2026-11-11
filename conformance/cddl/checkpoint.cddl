@@ -1,0 +1,31 @@
+; Authority checkpoint, version 1 (RFC 8610; OP-158 m.3 (c), §16.6, T16, CMP-6).
+; The checkpoint is a C2SP tlog-checkpoint signed note: the body lines are the origin, the tree
+; size in decimal, the RFC 9162 root hash in standard base64 and the Access extension lines
+; "recorded_at <uint>", "versions sha-256:<b64url>", "metadata sha-256:<b64url>" and
+; "issued_at <uint>", in that order; then an empty line and one signature line per key. This
+; file is the grammar of the body read as a map, and of the `checkpoint` Claim the log ingests.
+; Cosignatures are tlog-cosignature/v1 (witness.cddl). Times are Unix milliseconds.
+
+checkpoint-body = {
+  origin: checkpoint-text-digest,     ; "sha-256:" and the base64url DomainID
+  size: uint,
+  root: bstr .size 32,
+  recorded_at: uint,
+  versions: checkpoint-text-digest,
+  ? metadata: checkpoint-text-digest, ; absent before OP-152 m.5 (h)
+  issued_at: uint,
+}
+
+checkpoint-text-digest = tstr .regexp "sha-256:[A-Za-z0-9_-]{43}"
+
+; What made the checkpoint: 60 s or 1 000 records, whichever is first; a heartbeat when nothing
+; changed; out of cycle for a SEC23 commit. Pending out-of-cycle requests coalesce into one.
+checkpoint-trigger = "interval" / "records" / "heartbeat" / "out-of-cycle"
+
+; The `checkpoint` Claim body: the signed note as published and the binding-signed excerpt of
+; the operational key that signed it.
+checkpoint-claim = {
+  note: tstr .size (1..65536),
+  excerpt: bstr .size (1..4096),
+  trigger: checkpoint-trigger,
+}

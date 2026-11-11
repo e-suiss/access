@@ -1,0 +1,25 @@
+{
+  "cases": [
+    {
+      "cbor": "a1667265636f7264a268656e76656c6f706541a168706f736974696f6e07",
+      "edn": "{\"record\": {\"position\": 7, \"envelope\": h'a1'}}",
+      "id": "record",
+      "valid": true
+    },
+    {
+      "cbor": "a169686561727462656174a26261741b0000019b76d180406473697a6508",
+      "edn": "{\"heartbeat\": {\"size\": 8, \"at\": 1767225000000}}",
+      "id": "heartbeat",
+      "valid": true
+    },
+    {
+      "edn": "{\"record\": {\"position\": 7, \"envelope\": h'a1'}, \"heartbeat\": {\"size\": 8, \"at\": 1}}",
+      "id": "two-kinds",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "mirror.cddl"
+  ],
+  "contract": "mirror-frame"
+}

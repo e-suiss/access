@@ -1,0 +1,18 @@
+; Verified snapshot, version 1 (RFC 8610; OP-158 m.3 (i), TI-RT4).
+; Deterministic CBOR. A cold start uses a snapshot only when its root matches a known checkpoint
+; and a sampled fold check passes; otherwise it folds from Genesis. Times are Unix milliseconds.
+
+snapshot = {
+  domain: bstr .size 32,
+  pos: uint,
+  root: bstr .size 32,
+  state_digest: bstr .size 32,        ; SHA-256 of the sorted state at pos
+  at: uint,
+}
+
+; Ed25519 over the snapshot's dCBOR bytes with the domain's operational key.
+signed-snapshot = {
+  snapshot: snapshot,
+  kid: bstr .size 32,
+  sig: bstr .size 64,
+}

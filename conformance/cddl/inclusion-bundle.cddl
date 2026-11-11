@@ -1,0 +1,20 @@
+; Inclusion bundle, version 1 (RFC 8610; OP-158 m.3 (b), §9.10, P18, SEC25, U12, U27).
+; Deterministic CBOR. What a verifier needs to accept an artefact signed by a superseded key:
+; the exact record content, its inclusion in the cited checkpoint N_cited (or C_k), that
+; checkpoint with its cosignatures and, after a handover, the consistency path to C_{h+1}.
+
+inclusion-bundle = {
+  domain: bstr .size 32,
+  position: uint,
+  record: bstr .size (1..1048576),    ; the record envelope as committed
+  checkpoint: tstr .size (1..65536),  ; the signed note of the cited checkpoint
+  cosignatures: [+ bundle-cosignature],
+  inclusion: [* bstr .size 32],
+  ? consistency: { to_size: uint, to_root: bstr .size 32, path: [* bstr .size 32] },
+}
+
+bundle-cosignature = {
+  name: tstr .size (1..255),
+  timestamp: uint,
+  signature: bstr .size 64,
+}

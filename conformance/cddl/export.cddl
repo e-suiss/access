@@ -1,0 +1,29 @@
+; Record Export Package, version 2 (RFC 8610; OP-158 m.3 (g), AP-14, TN-79).
+; `POST /v1/domains/{domain}/exports` is an `access.audit.export` Exercise; the package is a
+; CBOR sequence (RFC 8742) of frames in one stream: one header, then records in chunks of at
+; most 10 000, the checkpoints, versions, schemas and Claims they need, and one end frame.
+; A full export is always possible; billing, quota or plan state never closes it.
+
+export-frame = { header: export-header }
+             / { record: export-record }
+             / { checkpoint: tstr .size (1..65536) }
+             / { versions: bstr .size (1..65536) }
+             / { schema: bstr .size (1..1048576) }
+             / { claim: bstr .size (1..1048576) }
+             / { end: { records: uint, size: uint, root: bstr .size 32 } }
+
+export-header = {
+  domain: bstr .size 32,
+  range: { from: uint, to: uint },
+  export_exercise: bstr .size 32,     ; the ExerciseID of the export
+  replay_coverage: "full" / "digest", ; "digest" when a record in range is redacted
+  chunk: uint .le 10000,
+}
+
+; A record with its AIS; a redacted record carries its body digest instead of the body.
+export-record = {
+  position: uint,
+  envelope: bstr .size (1..1048576),
+  ? body: bstr .size (1..1048576),
+  ? redacted: bstr .size 32,
+}

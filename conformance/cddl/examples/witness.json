@@ -1,0 +1,25 @@
+{
+  "cases": [
+    {
+      "cbor": "a3646e616d656f7769746e6573732e6578616d706c65697369676e617475726558405c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c6974696d657374616d701a6955b6a8",
+      "edn": "{\"name\": \"witness.example\", \"timestamp\": 1767225000, \"signature\": h'5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c'}",
+      "id": "cosigned",
+      "valid": true
+    },
+    {
+      "cbor": "a167726566757365646666656e636564",
+      "edn": "{\"refused\": \"fenced\"}",
+      "id": "fenced",
+      "valid": true
+    },
+    {
+      "edn": "{\"refused\": \"busy\"}",
+      "id": "unknown-refusal",
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "witness.cddl"
+  ],
+  "contract": "cosign-response"
+}
