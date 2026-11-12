@@ -2,8 +2,12 @@ import base64
 import hashlib
 import json
 
+import cbor2
+
 from .codec import (
     Rejection,
+    check_bool,
+    check_tstr,
     check_digest,
     check_ident_map,
     check_list,
@@ -75,7 +79,8 @@ def check_binding_scope(value):
 
 
 def check_superseded(value):
-    check_map(value, {"at": check_digest, "cited": check_digest})
+    # OP-159 m.3 (i)
+    check_map(value, {"at": check_digest, "cited": check_digest}, {"cause": check_text_in("re-anchor", "handover", "recovery")})
 
 
 def check_binding_key(value):
@@ -124,6 +129,37 @@ def check_caps(value):
         check_unit(unit)
 
 
+def check_name(value):
+    check_tstr(value)
+    if not 1 <= len(value.encode("utf-8")) <= 255:
+        fail("name length")
+
+
+def check_witness(value):
+    check_map(value, {"name": check_name, "key": check_public_key, "alg": check_cose_alg, "operator": check_name, "independent": check_bool})
+
+
+def check_replica(value):
+    check_map(value, {"name": check_name, "key": check_public_key, "operator": check_name, "independent": check_bool})
+
+
+def check_residency(value):
+    check_map(value, {"region": check_name, "class": check_text_in("regional", "multi-region-sync")})
+
+
+def check_mmd(value):
+    check_map(value, {"authority_ms": check_uint, "identity_ms": check_uint})
+
+
+def check_pq_reanchor(value):
+    check_map(value, {"size": check_uint, "time": check_uint, "witnesses": check_list(check_name, nonempty=True, is_set=True)})
+
+
+def check_hosting(value):
+    sharing = check_text_in("shared", "dedicated")
+    check_map(value, {"hsm_partition": sharing, "compute": sharing})
+
+
 def check_domain_metadata(value):
     # CR-58 m.3
     check_map(value, {
@@ -141,6 +177,18 @@ def check_domain_metadata(value):
         "caps": check_caps,
         "hybrid": check_text_in("classic", "both", "pq"),
         "discovery": check_bytes(),
+        # OP-158 m.3 (b), OP-159 m.3 (b)
+        "witnesses": check_list(check_witness, nonempty=True, is_set=True),
+        "replicas": check_list(check_replica, nonempty=True, is_set=True),
+        "durability": check_text_in("replicated", "single-node"),
+        "residency": check_residency,
+        "mmd": check_mmd,
+        "recovery": check_text_in("available", "not-available"),
+        "ceremony_transcript": check_digest,
+        "pq_reanchor": check_pq_reanchor,
+        "hosting": check_hosting,
+        "crypto_profile": check_text_in("standard", "fips"),
+        "fips_module": check_bool,
     })
     kids = [binding["kid"] for binding in value["binding"]]
     if len(set(kids)) != len(kids):
@@ -227,10 +275,31 @@ def hybrid_admits(policy, alg):
     return (alg in ML_DSA_NAMES) == (policy == "pq")
 
 
-def operational_key(metadata_bytes, domain_bytes, excerpt_bytes, usage, iat, ml_dsa=False, admits=None):
+def classical_retired(metadata, alg):
+    # CR-45 RA-7, OP-159 m.3 (h)
+    return (
+        alg not in ML_DSA_NAMES
+        and alg not in metadata["algorithms"]
+        and any(a in ML_DSA_NAMES for a in metadata["algorithms"])
+        and "pq_reanchor" in metadata
+    )
+
+
+def cose_alg(data):
+    try:
+        message = cbor2.loads(data)
+        return cbor2.loads(message.value[0]).get(1)
+    except Exception:
+        return None
+
+
+def operational_key(metadata_bytes, domain_bytes, excerpt_bytes, usage, iat, ml_dsa=False, admits=None, evidence=None):
     metadata = decode_payload(metadata_bytes, check_domain_metadata)
     domain = decode_payload(domain_bytes, check_digest)
     bindings = {binding["kid"]: binding for binding in metadata["binding"]}
+    # CR-45 RA-7, OP-159 m.3 (h)
+    if classical_retired(metadata, cose_alg(excerpt_bytes)):
+        raise KeyScopeError("pq-anchor-missing")
     # CR-58 m.5, CR-55 m.6
     try:
         kid, payload = verify_sign1(
@@ -239,14 +308,21 @@ def operational_key(metadata_bytes, domain_bytes, excerpt_bytes, usage, iat, ml_
             metadata["algorithms"],
             {kid: binding["key"] for kid, binding in bindings.items()},
             key_algs={kid: binding["alg"] for kid, binding in bindings.items()},
+            ml_dsa=ml_dsa,
         )
     except CoseError as error:
         raise KeyScopeError(COSE_ERROR_NAMES.get(error.name, f"cose:{error.name}"))
     excerpt = decode_payload(payload, check_key_excerpt)
     binding = bindings[kid]
-    # CR-58 m.6
+    # CR-58 m.6, L0-SIG-80, OP-159 m.3 (i)
     if "superseded" in binding:
-        raise KeyScopeError("superseded")
+        superseded = binding["superseded"]
+        if evidence is not None:
+            accepted = evidence(binding)
+        else:
+            accepted = superseded.get("cause") == "re-anchor" and iat <= metadata["issued_at"]
+        if not accepted:
+            raise KeyScopeError("superseded")
     # CR-58 m.5, HL-8
     if not any(same(domain, scoped) for scoped in binding_scope_domains(binding, metadata)):
         raise KeyScopeError("outside-binding-scope")
@@ -259,6 +335,9 @@ def operational_key(metadata_bytes, domain_bytes, excerpt_bytes, usage, iat, ml_
         raise KeyScopeError("thumbprint")
     policy = metadata.get("hybrid", "classic")
     admitted = hybrid_admits(policy, key["alg"]) if admits is None else admits(key["alg"])
+    # CR-45 RA-7, OP-159 m.3 (h)
+    if classical_retired(metadata, key["alg"]):
+        raise KeyScopeError("pq-anchor-missing")
     # SAI-40, CR-58 m.5, L0-SIG-8, L0-SIG-75a
     if (
         key["alg"] not in metadata["algorithms"]
