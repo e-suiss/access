@@ -2,6 +2,8 @@
 //! pinned cvc5 running as a separate process. Never on the request path and never in the Kernel.
 
 mod pin;
+#[cfg(unix)]
+pub mod sibling;
 mod solver;
 
 use std::collections::{BTreeMap, BTreeSet};
