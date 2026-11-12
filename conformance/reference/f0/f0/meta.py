@@ -36,7 +36,7 @@ from .codec import (
     same,
 )
 from . import p256
-from .keyscope import check_binding_key, check_spec_versions, thumbprint
+from .keyscope import check_binding_key, check_replica, check_spec_versions, check_witness, thumbprint
 from . import fold as fold_rules
 from . import version_check
 from .polarity import is_forbid, policy_narrows, statements
@@ -300,10 +300,18 @@ def check_int_any(value):
         refuse("meta-malformed")
 
 
+def check_root_sets(value):
+    # OP-158 m.11 5984, OP-159 m.3 (j)
+    check_map(value, {}, {
+        "witnesses": check_list(check_witness, nonempty=True, is_set=True),
+        "replicas": check_list(check_replica, nonempty=True, is_set=True),
+    })
+
+
 PAYLOADS = {
-    "anchor_create": ({"scope": check_scope, "root": check_root}, {"root_terms": check_requirement_set}),
+    "anchor_create": ({"scope": check_scope, "root": check_root}, {"root_terms": check_requirement_set, "sets": check_root_sets}),
     "anchor_transfer": ({"anchor": check_id, "root": check_root, "disposition": check_disposition}, {}),
-    "anchor_amend": ({"anchor": check_id}, {"root": check_root, "root_terms": check_requirement_set}),
+    "anchor_amend": ({"anchor": check_id}, {"root": check_root, "root_terms": check_requirement_set, "sets": check_root_sets}),
     "anchor_retire": ({"anchor": check_id, "disposition": check_disposition}, {}),
     "party_register": ({"party": check_id, "root": check_root, "actor_kind": check_text_in(*ACTOR_KINDS)}, {}),
     "party_depart": ({"party": check_id, "disposition": check_disposition}, {}),
@@ -600,7 +608,8 @@ class Apply:
         anchor_id, anchor = self.basis_anchor()
         self.require_root(anchor)
         scope = body["scope"]
-        if scope == "domain" or not scope_within(scope, anchor["scope"]):
+        # OP-159 m.3 (j)
+        if scope == "domain" or not scope_within(scope, anchor["scope"]) or "sets" in body:
             refuse("meta-not-within")
         value = {"scope": scope, "root": body["root"], "since": self.pos}
         if "root_terms" in body:
@@ -767,6 +776,16 @@ class Apply:
             value["root_terms"] = body["root_terms"]
             if not body["root_terms"]:
                 del value["root_terms"]
+        # OP-158 m.11 5984, OP-159 m.3 (j)
+        if "sets" in body:
+            if anchor_id != self.meta_anchor_id():
+                refuse("meta-not-within")
+            old = anchor.get("sets", {})
+            for member in ("witnesses", "replicas"):
+                expansion = expansion or not is_subset(old.get(member, []), body["sets"].get(member, []))
+            value["sets"] = body["sets"]
+            if not body["sets"]:
+                del value["sets"]
         self.write("anchor", anchor_id, value)
         return expansion
 
