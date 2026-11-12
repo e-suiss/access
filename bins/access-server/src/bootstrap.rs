@@ -17,6 +17,7 @@ mod catalog;
 mod durability;
 mod governance;
 pub(crate) mod local;
+mod pq_profile;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -176,6 +177,7 @@ struct PlanFile {
     witnesses: Option<durability::WitnessesFile>,
     replica: Option<durability::ReplicaFile>,
     second_provider: Option<durability::SecondProviderFile>,
+    pq_profile: Option<pq_profile::PqProfileFile>,
 }
 
 /// `[test_user]` as written: the password is never in the plan file itself unless the operator
@@ -824,6 +826,8 @@ impl Plan {
             second_provider: file.second_provider.as_ref(),
         }
         .check(&file.tenants)?;
+        // OP-159 m.4 (a)
+        pq_profile::check(file.pq_profile.as_ref(), &file.tenants)?;
         // OP-157 m.4 (a), m.6 (i)
         let (support_operator, breakglass_account, review_schedule) = governance::Fixtures {
             support_operator: file.support_operator,
