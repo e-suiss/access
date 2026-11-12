@@ -210,9 +210,7 @@ async fn configure(cluster: &Cluster, extra: &[Extra], rt: &mut Runtime) {
         fapi2: true,
         ..ClientProfileRow::default()
     };
-    for config in ["access-fapi2.json", "access-fapi2-ms.json"] {
-        profiles(cluster, extra, config, &row).await;
-    }
+    profiles(cluster, extra, "access-fapi2-ms.json", &row).await;
 
     // OP-155 m.3 (l)
     let ciba = read("access-ciba.json");
