@@ -1175,7 +1175,48 @@ impl RealmKeyring {
     }
 }
 
+/// The JWS algorithm of a realm signing profile's parameter set (OP-159 m.3 (o)).
+const fn pq_alg(alg: access_identity_admin::domain::assurance::MlDsa) -> JwsAlg {
+    use access_identity_admin::domain::assurance::MlDsa;
+    match alg {
+        MlDsa::MlDsa44 => JwsAlg::MlDsa44,
+        MlDsa::MlDsa65 => JwsAlg::MlDsa65,
+        MlDsa::MlDsa87 => JwsAlg::MlDsa87,
+    }
+}
+
 impl RealmKeys for RealmKeyring {
+    // OP-159 m.3 (d)
+    async fn pq_ready(
+        &self,
+        alg: access_identity_admin::domain::assurance::MlDsa,
+    ) -> Result<bool, Unavailable> {
+        self.signer
+            .pq_ready(pq_alg(alg))
+            .await
+            .map_err(|_| Unavailable(String::from("identity-signer")))
+    }
+
+    // CR-41, OP-159 m.3 (o)
+    async fn pq_open(
+        &self,
+        realm: RealmId,
+        alg: access_identity_admin::domain::assurance::MlDsa,
+    ) -> Result<(), Unavailable> {
+        self.signer
+            .pq_open(realm, pq_alg(alg))
+            .await
+            .map_err(|_| Unavailable(String::from("identity-signer")))
+    }
+
+    // OP-159 m.3 (a)
+    async fn pq_close(&self, realm: RealmId) -> Result<(), Unavailable> {
+        self.signer
+            .pq_close(realm)
+            .await
+            .map_err(|_| Unavailable(String::from("identity-signer")))
+    }
+
     // MD-6, OP-155 m.3 (d)
     async fn saml_open(&self, realm: RealmId, p256: bool) -> Result<(), Unavailable> {
         crate::saml::open_key(self.signer.socket(), realm, p256)

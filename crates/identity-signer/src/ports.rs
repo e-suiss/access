@@ -78,6 +78,43 @@ pub trait KeyFactory {
     }
 }
 
+/// A boxed factory is the factory it holds, so a deployment picks its custody at start-up.
+impl<F: KeyFactory + ?Sized> KeyFactory for Box<F> {
+    fn generate(&mut self, alg: JwsAlg) -> Result<Generated, SignError> {
+        (**self).generate(alg)
+    }
+
+    fn load(&mut self, alg: JwsAlg, sealed: &[u8]) -> Result<Box<dyn Signer + Send>, SignError> {
+        (**self).load(alg, sealed)
+    }
+
+    fn pq_ready(&mut self, alg: JwsAlg) -> bool {
+        (**self).pq_ready(alg)
+    }
+
+    fn generate_rsa_id(&mut self) -> Result<(RsaIdKey, Vec<u8>), SignError> {
+        (**self).generate_rsa_id()
+    }
+
+    fn load_rsa_id(&mut self, sealed: &[u8]) -> Result<RsaIdKey, SignError> {
+        (**self).load_rsa_id(sealed)
+    }
+
+    fn seal_document(
+        &mut self,
+        doc: &suiss_crypto::secret::Secret<Vec<u8>>,
+    ) -> Result<Vec<u8>, SignError> {
+        (**self).seal_document(doc)
+    }
+
+    fn open_document(
+        &mut self,
+        sealed: &[u8],
+    ) -> Result<suiss_crypto::secret::Secret<Vec<u8>>, SignError> {
+        (**self).open_document(sealed)
+    }
+}
+
 /// Why the vault failed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("vault")]
