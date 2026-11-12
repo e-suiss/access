@@ -547,3 +547,27 @@ fn generated_algebra_cases_are_canonical_and_mixed() {
     assert!(ops.values().all(|n| *n > 300));
     assert!(truths > 200, "too few true answers: {truths}");
 }
+
+fn words(path: &str) -> String {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    std::fs::read_to_string(root.join(path))
+        .unwrap()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+// HL-12, INV-8, CR-50
+#[test]
+fn cross_implementation_agreement_is_claimed_only_as_far_as_the_vectors_and_the_drt() {
+    let readme = words("conformance/lean/README.md");
+    assert!(readme.contains(
+        "This is a differential test: it shows the Kernel and the model agree on the inputs tried, not on every input."
+    ));
+    assert!(readme.contains("how closely the Kernel follows a model is shown by the vectors and the differential test, not proved."));
+    let release = words(".github/workflows/semantics-release.yml");
+    assert!(release.contains("The DRT is a differential test, not a proof."));
+    for text in [&readme, &release] {
+        assert!(!text.to_lowercase().contains("formally verified"));
+    }
+}
