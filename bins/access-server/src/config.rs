@@ -1344,6 +1344,7 @@ impl Config {
             expires: OffsetDateTime::now_utc()
                 .saturating_add(Duration::days(i64::from(self.security_txt_valid_days))),
             policy: self.security_policy.clone(),
+            canonical: self.issuer.as_deref().and_then(SecurityTxt::canonical_for),
             preferred_languages: Some("en, tr".to_owned()),
         }
     }

@@ -22,6 +22,7 @@ fn security_txt() -> SecurityTxt {
         contacts: vec!["https://github.com/e-suiss/access/security/advisories/new".into()],
         expires: datetime!(2027-04-01 00:00 UTC),
         policy: Some("https://github.com/e-suiss/access/security/policy".into()),
+        canonical: SecurityTxt::canonical_for("https://access.example/realms/acme"),
         preferred_languages: Some("en, tr".into()),
     }
 }
@@ -63,6 +64,21 @@ async fn security_txt_has_required_fields() {
     let body = body_string(response).await;
     assert!(body.contains("Contact: https://github.com/e-suiss/access/security/advisories/new\n"));
     assert!(body.contains("Expires: 2027-04-01T00:00:00Z\n"));
+    assert!(body.contains("Policy: https://github.com/e-suiss/access/security/policy\n"));
+    assert!(body.contains("Canonical: https://access.example/.well-known/security.txt\n"));
+    assert!(body.contains("Preferred-Languages: en, tr\n"));
+}
+
+// SA-14, OP-159 m.3 (jj)
+#[test]
+fn security_txt_canonical_is_the_issuer_origin() {
+    assert_eq!(
+        SecurityTxt::canonical_for("https://id.example:8443").as_deref(),
+        Some("https://id.example:8443/.well-known/security.txt")
+    );
+    assert_eq!(SecurityTxt::canonical_for("http://id.example"), None);
+    assert_eq!(SecurityTxt::canonical_for("https://u@id.example"), None);
+    assert_eq!(SecurityTxt::canonical_for("https:///x"), None);
 }
 
 // SA-21, R-3, RAUTHY-006

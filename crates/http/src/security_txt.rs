@@ -14,6 +14,8 @@ pub struct SecurityTxt {
     pub expires: OffsetDateTime,
     /// `Policy:` URI.
     pub policy: Option<String>,
+    /// `Canonical:` URI, where this file is published (RFC 9116 §2.5.2).
+    pub canonical: Option<String>,
     /// `Preferred-Languages:` value, e.g. `en, tr`.
     pub preferred_languages: Option<String>,
 }
@@ -36,12 +38,28 @@ impl SecurityTxt {
             out.push_str(policy);
             out.push('\n');
         }
+        if let Some(canonical) = &self.canonical {
+            out.push_str("Canonical: ");
+            out.push_str(canonical);
+            out.push('\n');
+        }
         if let Some(languages) = &self.preferred_languages {
             out.push_str("Preferred-Languages: ");
             out.push_str(languages);
             out.push('\n');
         }
         out
+    }
+
+    /// The `Canonical:` URI of the file served at the origin of `issuer`, an `https` URL.
+    #[must_use]
+    pub fn canonical_for(issuer: &str) -> Option<String> {
+        let rest = issuer.strip_prefix("https://")?;
+        let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+        if authority.is_empty() || authority.contains('@') {
+            return None;
+        }
+        Some(format!("https://{authority}/.well-known/security.txt"))
     }
 
     pub(crate) fn response(&self) -> Response {
